@@ -3980,11 +3980,1305 @@ Full unabridged outputs from all mandatory validations:
 
 #### npm run test (full output)
 
-Test execution details as shown above (229 test files passed, 11 test failures pre-existing and unrelated to Batch 44).
+```bash
+> @vybestack/llxprt-code@0.8.0 test
+> npm run test --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core
+      Coverage enabled with v8
+
+  src/utils/gitIgnoreParser.test.ts (25 tests | 2 failed) 118ms
+   [OK] GitIgnoreParser > initialization > should initialize without errors when no .gitignore exists 7ms
+   [OK] GitIgnoreParser > initialization > should load .gitignore patterns when file exists 5ms
+   [OK] GitIgnoreParser > initialization > should handle git exclude file 4ms
+   [OK] GitIgnoreParser > initialization > should handle custom patterns file name 1ms
+   [OK] GitIgnoreParser > initialization > should initialize without errors when no .llxprtignore exists 1ms
+   [OK] GitIgnoreParser > isIgnored > should always ignore .git directory 4ms
+   [OK] GitIgnoreParser > isIgnored > should ignore files matching patterns 2ms
+   [OK] GitIgnoreParser > isIgnored > should ignore files with path-specific patterns 2ms
+   [OK] GitIgnoreParser > isIgnored > should handle negation patterns 2ms
+   [OK] GitIgnoreParser > isIgnored > should not ignore files that do not match patterns 3ms
+   [OK] GitIgnoreParser > isIgnored > should handle absolute paths correctly 4ms
+   [OK] GitIgnoreParser > isIgnored > should handle paths outside project root by not ignoring them 4ms
+   [OK] GitIgnoreParser > isIgnored > should handle relative paths correctly 2ms
+   [OK] GitIgnoreParser > isIgnored > should normalize path separators on Windows 2ms
+   [OK] GitIgnoreParser > isIgnored > should handle root path "/" without throwing error 4ms
+   [OK] GitIgnoreParser > isIgnored > should handle absolute-like paths without throwing error 2ms
+   [OK] GitIgnoreParser > isIgnored > should handle paths that start with forward slash 3ms
+   [OK] GitIgnoreParser > isIgnored > should handle backslash-prefixed files without crashing 3ms
+   [OK] GitIgnoreParser > isIgnored > should handle files with absolute-like names 2ms
+   [OK] GitIgnoreParser > nested .gitignore files > should handle nested .gitignore files correctly 8ms
+   [OK] GitIgnoreParser > nested .gitignore files > should correctly transform patterns from nested gitignore files 13ms
+   [OK] GitIgnoreParser > precedence rules > should prioritize root .gitignore over .git/info/exclude 13ms
+   [OK] GitIgnoreParser > getIgnoredPatterns > should return the raw patterns added 3ms
+   × GitIgnoreParser > Escaped Characters > should correctly handle escaped characters in .gitignore 13ms
+     → expected false to be true // Object.is equality
+   × GitIgnoreParser > Trailing Spaces > should correctly handle significant trailing spaces 9ms
+     → expected false to be true // Object.is equality
+  src/utils/fileUtils.test.ts (63 tests | 1 failed) 152ms
+   [OK] fileUtils > isWithinRoot > should return true for paths directly within the root 1ms
+   [OK] fileUtils > isWithinRoot > should return true for the root path itself 1ms
+   [OK] fileUtils > isWithinRoot > should return false for paths outside the root 1ms
+   [OK] fileUtils > isWithinRoot > should return false for paths that only partially match the root prefix 1ms
+   [OK] fileUtils > isWithinRoot > should handle paths with trailing slashes correctly 0ms
+   [OK] fileUtils > isWithinRoot > should handle different path separators (POSIX vs Windows) 0ms
+   [OK] fileUtils > isWithinRoot > should return false for a root path that is a sub-path of the path to check 0ms
+   [OK] fileUtils > isBinaryFile > should return false for an empty file 2ms
+   [OK] fileUtils > isBinaryFile > should return false for a typical text file 3ms
+   [OK] fileUtils > isBinaryFile > should return true for a file with many null bytes 2ms
+   [OK] fileUtils > isBinaryFile > should return true for a file with high percentage of non-printable ASCII 1ms
+   [OK] fileUtils > isBinaryFile > should return false if file access fails (e.g., ENOENT) 2ms
+   [OK] fileUtils > BOM detection and encoding > detectBOM > should detect UTF-8 BOM 3ms
+   [OK] fileUtils > BOM detection and encoding > detectBOM > should detect UTF-16 LE BOM 2ms
+   [OK] fileUtils > BOM detection and encoding > detectBOM > should detect UTF-16 BE BOM 2ms
+   [OK] fileUtils > BOM detection and encoding > detectBOM > should detect UTF-32 LE BOM 2ms
+   [OK] fileUtils > BOM detection and encoding > detectBOM > should detect UTF-32 BE BOM 2ms
+   [OK] fileUtils > BOM detection and encoding > detectBOM > should return null for no BOM 2ms
+   [OK] fileUtils > BOM detection and encoding > detectBOM > should return null for empty buffer 1ms
+   [OK] fileUtils > BOM detection and encoding > detectBOM > should return null for partial BOM 1ms
+   [OK] fileUtils > BOM detection and encoding > readFileWithEncoding > should read UTF-8 BOM file correctly 6ms
+   [OK] fileUtils > BOM detection and encoding > readFileWithEncoding > should read UTF-16 LE BOM file correctly 3ms
+   [OK] fileUtils > BOM detection and encoding > readFileWithEncoding > should read UTF-16 BE BOM file correctly 3ms
+   [OK] fileUtils > BOM detection and encoding > readFileWithEncoding > should read UTF-32 LE BOM file correctly 4ms
+   [OK] fileUtils > BOM detection and encoding > readFileWithEncoding > should read UTF-32 BE BOM file correctly 4ms
+   [OK] fileUtils > BOM detection and encoding > readFileWithEncoding > should read file without BOM as UTF-8 3ms
+   [OK] fileUtils > BOM detection and encoding > readFileWithEncoding > should handle empty file 3ms
+   [OK] fileUtils > BOM detection and encoding > isBinaryFile with BOM awareness > should not treat UTF-8 BOM file as binary 2ms
+   [OK] fileUtils > BOM detection and encoding > isBinaryFile with BOM awareness > should not treat UTF-16 LE BOM file as binary 4ms
+   [OK] fileUtils > BOM detection and encoding > isBinaryFile with BOM awareness > should not treat UTF-16 BE BOM file as binary 2ms
+   [OK] fileUtils > BOM detection and encoding > isBinaryFile with BOM awareness > should not treat UTF-32 LE BOM file as binary 3ms
+   [OK] fileUtils > BOM detection and encoding > isBinaryFile with BOM awareness > should not treat UTF-32 BE BOM file as binary 4ms
+   [OK] fileUtils > BOM detection and encoding > isBinaryFile with BOM awareness > should still treat actual binary file as binary 7ms
+   [OK] fileUtils > BOM detection and encoding > isBinaryFile with BOM awareness > should treat file with null bytes (no BOM) as binary 2ms
+   × fileUtils > readWasmBinaryFromDisk > loads a WASM binary from disk as a Uint8Array 4ms
+     → readWasmBinaryFromDisk is not a function
+   [OK] fileUtils > detectFileType > should detect typescript type by extension (ts, mts, cts, tsx) 2ms
+   [OK] fileUtils > detectFileType > should detect image type by extension (png) 1ms
+   [OK] fileUtils > detectFileType > should detect image type by extension (jpeg) 1ms
+   [OK] fileUtils > detectFileType > should detect svg type by extension 1ms
+   [OK] fileUtils > detectFileType > should detect pdf type by extension 0ms
+   [OK] fileUtils > detectFileType > should detect audio type by extension 1ms
+   [OK] fileUtils > detectFileType > should detect video type by extension 1ms
+   [OK] fileUtils > detectFileType > should detect known binary extensions as binary (e.g. .zip) 1ms
+   [OK] fileUtils > detectFileType > should detect known binary extensions as binary (e.g. .exe) 1ms
+   [OK] fileUtils > detectFileType > should use isBinaryFile for unknown extensions and detect as binary 2ms
+   [OK] fileUtils > detectFileType > should default to text if mime type is unknown and content is not binary 2ms
+   [OK] fileUtils > processSingleFileContent > should read a text file successfully 2ms
+   [OK] fileUtils > processSingleFileContent > should handle file not found 1ms
+   [OK] fileUtils > processSingleFileContent > should handle read errors for text files 2ms
+   [OK] fileUtils > processSingleFileContent > should handle read errors for image/pdf files 2ms
+   [OK] fileUtils > processSingleFileContent > should process an image file 2ms
+   [OK] fileUtils > processSingleFileContent > should process a PDF file 2ms
+   [OK] fileUtils > processSingleFileContent > should read an SVG file as text when under 1MB 2ms
+   [OK] fileUtils > processSingleFileContent > should skip binary files 2ms
+   [OK] fileUtils > processSingleFileContent > should handle path being a directory 1ms
+   [OK] fileUtils > processSingleFileContent > should paginate text files correctly (offset and limit) 3ms
+   [OK] fileUtils > processSingleFileContent > should identify truncation when reading the end of a file 6ms
+   [OK] fileUtils > processSingleFileContent > should handle limit exceeding file length 2ms
+   [OK] fileUtils > processSingleFileContent > should truncate long lines in text files 6ms
+   [OK] fileUtils > processSingleFileContent > should truncate when line count exceeds the limit 7ms
+   [OK] fileUtils > processSingleFileContent > should truncate when a line length exceeds the character limit 9ms
+   [OK] fileUtils > processSingleFileContent > should truncate both line count and line length when both exceed limits 3ms
+   [OK] fileUtils > processSingleFileContent > should return an error if the file size exceeds 20MB 5ms
+ [OK] src/prompt-config/prompt-loader.test.ts (45 tests | 1 skipped) 759ms
+   [OK] PromptLoader > watchFiles > should notify on file changes  307ms
+ [OK] src/auth/codex-device-flow.spec.ts (11 tests) 562ms
+ [OK] src/tools/read-file.test.ts (40 tests) 718ms
+ [OK] src/providers/openai-vercel/modelListing.test.ts (2 tests) 981ms
+   [OK] OpenAIVercelProvider - Model Listing > returns the expected static model list with provider metadata  680ms
+   [OK] OpenAIVercelProvider - Model Listing > sorts models alphabetically by name  300ms
+ [OK] src/tools/glob.test.ts (34 tests) 1779ms
+ [OK] src/tools/read-line-range.test.ts (8 tests) 818ms
+ [OK] src/mcp/token-storage/file-token-storage.test.ts (17 tests) 1459ms
+ [OK] src/tools/ripGrep.test.ts (36 tests) 531ms
+  src/tools/google-web-fetch.integration.test.ts (22 tests | 2 failed) 67ms
+   [OK] GoogleWebFetchTool Integration Tests > Web-fetch with Gemini as active provider > should successfully fetch content when Gemini is active 15ms
+   [OK] GoogleWebFetchTool Integration Tests > Web-fetch with Gemini as active provider > should handle multiple URLs in prompt 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Web-fetch with OpenAI as active provider > should use Gemini for web-fetch even when OpenAI is active 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Web-fetch with Anthropic as active provider > should use Gemini for web-fetch even when Anthropic is active 3ms
+   [OK] GoogleWebFetchTool Integration Tests > Missing Gemini authentication error handling > should return error when no provider manager is available 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Missing Gemini authentication error handling > should return error when no server tools provider is configured 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Missing Gemini authentication error handling > should return error when server tools provider does not support web_fetch 1ms
+   × GoogleWebFetchTool Integration Tests > Fallback to direct fetch for private IPs > should fallback to direct fetch for localhost URLs 6ms
+     → expected 'Private/local URLs cannot be processe…' to contain 'Local content'
+   × GoogleWebFetchTool Integration Tests > Fallback to direct fetch for private IPs > should fallback to direct fetch for private IP ranges 2ms
+     → expected 'Private/local URLs cannot be processe…' to contain 'Private network content'
+   [OK] GoogleWebFetchTool Integration Tests > Fallback to direct fetch for private IPs > should handle fallback fetch errors gracefully 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Error handling > should handle server tool invocation errors 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Error handling > should handle URL retrieval failures 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Validation > should reject empty prompt 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Validation > should reject prompt without URLs 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Validation > should accept prompt with multiple URLs 1ms
+   [OK] GoogleWebFetchTool Integration Tests > GitHub URL handling > should convert GitHub blob URLs to raw URLs 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Grounding metadata and citations > should insert citation markers when grounding supports are provided 27ms
+   [OK] GoogleWebFetchTool Integration Tests > Grounding metadata and citations > should handle response with null parts gracefully 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Multiple providers edge cases > should handle when provider manager has no server tools provider but active provider exists 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Multiple providers edge cases > should work correctly when switching between providers 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Tool description and getDescription > should truncate long prompts in description 1ms
+   [OK] GoogleWebFetchTool Integration Tests > Tool description and getDescription > should show full prompt for short prompts 1ms
+ [OK] src/providers/openai-vercel/providerRegistry.test.ts (12 tests) 301ms
+ [OK] src/prompt-config/prompt-service.test.ts (45 tests) 3049ms
+ [OK] src/providers/__tests__/LoadBalancingProvider.circuitbreaker.test.ts (10 tests) 616ms
+ [OK] src/providers/__tests__/LoadBalancingProvider.timeout.test.ts (7 tests) 500ms
+ [OK] src/core/coreToolScheduler.test.ts (39 tests | 6 skipped) 854ms
+ [OK] src/providers/openai-responses/__tests__/OpenAIResponsesProvider.models.test.ts (7 tests) 903ms
+   [OK] OpenAIResponsesProvider - Codex Model Listing > getModels > should return standard OpenAI models when not in Codex mode  900ms
+ [OK] src/utils/toolOutputLimiter.test.ts (14 tests) 1231ms
+   [OK] toolOutputLimiter > limitOutputTokens > should warn when content exceeds limit in warn mode  398ms
+   [OK] toolOutputLimiter > limitOutputTokens > should truncate content in truncate mode  343ms
+ [OK] src/tools/read-many-files.test.ts (32 tests) 801ms
+ [OK] src/core/__tests__/compression-boundary.test.ts (16 tests) 3673ms
+   [OK] Compression Boundary Logic (Issue #982) > getCompressionSplit behavior > should not return empty toCompress when history exceeds minimum threshold  312ms
+   [OK] Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary behavior > should handle history with only tool calls and responses  335ms
+   [OK] Compression Boundary Logic (Issue #982) > Issue #982: boundary adjustment causing empty compression > should never leave toCompress empty when history has more than minimum messages  310ms
+ [OK] src/integration/compression-duplicate-ids.test.ts (2 tests) 1096ms
+   [OK] Compression and duplicate tool call IDs > should not create duplicate tool IDs when rebuilding history after compression  534ms
+   [OK] Compression and duplicate tool call IDs > should handle multiple compressions without duplicating IDs  319ms
+ [OK] src/tools/shell.test.ts (39 tests) 764ms
+ [OK] src/core/logger.test.ts (38 tests) 468ms
+ [OK] src/tools/mcp-client.test.ts (30 tests) 355ms
+   [OK] connectToMcpServer with OAuth > should discover oauth config if not in www-authenticate header  329ms
+ [OK] src/tools/grep.timeout.test.ts (9 tests) 582ms
+   [OK] GrepTool timeout functionality > timeout enforcement > should complete successfully before timeout expires  388ms
+ [OK] src/services/history/circular-reference.test.ts (4 tests) 1131ms
+   [OK] Circular Reference Bug > should not create synthetic responses when tool responses exist in full history  319ms
+   [OK] Circular Reference Bug > should handle complex nested parameters without circular references  452ms
+ [OK] src/utils/memoryDiscovery.test.ts (20 tests) 596ms
+ [OK] src/core/geminiChat.runtime.test.ts (4 tests) 983ms
+   [OK] GeminiChat runtime context > commits tool call/response even when model returns only thinking after tool results  349ms
+   [OK] GeminiChat runtime context > closes pending tool calls in provider payload when sending a new user message  450ms
+ [OK] src/prompt-config/prompt-installer.test.ts (66 tests | 4 skipped) 628ms
+ [OK] src/core/client.test.ts (81 tests | 6 skipped) 817ms
+ [OK] src/services/history/compression-locking.test.ts (4 tests) 948ms
+   [OK] Compression locking > should queue adds during compression  370ms
+ [OK] src/providers/integration/multi-provider.integration.test.ts (12 tests | 1 skipped) 609ms
+   [OK] Multi-Provider Integration Tests > Error Handling > should handle missing API key  606ms
+ [OK] src/services/history/orphaned-tools-comprehensive.test.ts (9 tests | 4 skipped) 1026ms
+   [OK] Orphaned Tool Calls - Comprehensive Tests > getCurated WITHOUT orphans > should NOT add synthetic responses when tool responses exist  324ms
+ [OK] src/integration-tests/geminiChat-isolation.integration.test.ts (11 tests) 1006ms
+   [OK] GeminiChat Isolation Integration Tests > History Isolation > should maintain independent history services between foreground and subagent  506ms
+   [OK] GeminiChat Isolation Integration Tests > History Isolation > should not share history between multiple subagents  465ms
+ [OK] src/core/subagent.test.ts (35 tests) 3967ms
+ [OK] src/services/history/HistoryService.test.ts (32 tests) 6067ms
+   [OK] HistoryService - Behavioral Tests > Realistic Conversation Flow > should handle failed tool calls  363ms
+   [OK] HistoryService - Behavioral Tests > Token Management > should return history within token limits  321ms
+   [OK] HistoryService - Behavioral Tests > Import/Export > should export and import history via JSON  468ms
+   [OK] HistoryService - Behavioral Tests > Orphan tool responses handling > should synthesize missing tool_call entries so tool responses survive compression  302ms
+   [OK] HistoryService - Behavioral Tests > Orphan tool responses handling > should keep tool responses unchanged when a matching tool_call exists  368ms
+   [OK] HistoryService - Behavioral Tests > ID Normalization Architecture - NEW FAILING TESTS > Base token offset > retains base offset after clearing history  471ms
+ [OK] src/auth/token-store.spec.ts (37 tests) 495ms
+ [OK] src/tools/grep.test.ts (24 tests) 813ms
+ [OK] src/utils/filesearch/fileSearch.test.ts (27 tests) 353ms
+ [OK] src/config/test/subagentManager.test.ts (23 tests) 216ms
+ [OK] src/utils/bfsFileSearch.test.ts (11 tests) 219ms
+ [OK] src/mcp/oauth-provider.test.ts (21 tests) 172ms
+ [OK] src/providers/openai/__tests__/OpenAIProvider.e2e.test.ts (10 tests) 334ms
+ [OK] src/providers/anthropic/AnthropicProvider.test.ts (41 tests) 425ms
+   [OK] AnthropicProvider > generateChatCompletion > should emit tool_result blocks for tool responses with text content  334ms
+ [OK] src/services/history/findfiles-circular.test.ts (2 tests) 414ms
+ [OK] src/providers/openai-responses/__tests__/OpenAIResponsesProvider.codex.cancelledTools.test.ts (1 test) 423ms
+   [OK] OpenAIResponsesProvider Codex Mode - cancelled tool calls > should synthesize tool responses for cancelled tool calls so next request stays valid  422ms
+ [OK] src/providers/openai-responses/__tests__/OpenAIResponsesProvider.codex.malformedCallId.test.ts (1 test) 296ms
+ [OK] src/core/prompts-async.test.ts (10 tests | 2 skipped) 168ms
+ [OK] src/providers/anthropic/AnthropicProvider.dumpContext.test.ts (5 tests) 91ms
+ [OK] src/services/shellExecutionService.test.ts (35 tests) 8643ms
+   [OK] ShellExecutionService > Successful Execution > should truncate PTY output using a sliding window and show a warning  8174ms
+ [OK] src/services/fileDiscoveryService.test.ts (15 tests) 190ms
+ [OK] src/core/coreToolScheduler.cancellation.test.ts (3 tests) 537ms
+   [OK] CoreToolScheduler cancellation edge cases > should complete all tools when first tool is cancelled mid-batch  373ms
+ [OK] src/core/coreToolScheduler.raceCondition.test.ts (6 tests) 459ms
+ [OK] src/providers/openai-vercel/errorHandling.test.ts (22 tests) 180ms
+ [OK] src/tools/todo-store.test.ts (13 tests) 47ms
+ [OK] src/debug/DebugLogger.test.ts (36 tests | 1 skipped) 250ms
+ [OK] src/services/loopDetectionService.test.ts (34 tests) 443ms
+ [OK] src/core/coreToolScheduler.publishingError.test.ts (2 tests) 438ms
+   [OK] CoreToolScheduler publishing error handling > should transition tool to success state after successful execution  369ms
+ [OK] src/providers/openai-vercel/streaming.test.ts (14 tests) 70ms
+ [OK] src/tools/edit.test.ts (46 tests) 345ms
+ [OK] src/providers/utils/toolResponsePayload.test.ts (7 tests) 422ms
+   [OK] toolResponsePayload > buildToolResponsePayload respects configurable limits > should NOT truncate tool response to 1024 chars when config allows larger output  415ms
+ [OK] src/utils/filesearch/crawler.test.ts (18 tests) 112ms
+ [OK] src/core/toolExecutorUnification.integration.test.ts (12 tests) 441ms
+   [OK] Tool Executor Unification - Integration Tests > Tool Governance Consistency > should allow the same tools in both paths when tools.allowed includes the tool  431ms
+ [OK] src/providers/openai-vercel/OpenAIVercelProvider.test.ts (33 tests) 274ms
+ [OK] src/providers/gemini/GeminiProvider.test.ts (14 tests) 374ms
+   [OK] GeminiProvider > serializes tool responses with error metadata and token limits  336ms
+ [OK] src/providers/openai-responses/__tests__/OpenAIResponsesProvider.ephemerals.toolOutput.test.ts (2 tests) 323ms
+   [OK] OpenAIResponsesProvider tool output ephemerals (Issue #894) > should apply tool-output-max-tokens when building function_call_output items  315ms
+ [OK] src/confirmation-bus/integration.test.ts (24 tests) 346ms
+ [OK] src/tools/mcp-tool.test.ts (42 tests) 135ms
+ [OK] src/services/gitService.test.ts (14 tests) 178ms
+ [OK] src/mcp/token-storage/keychain-token-storage.test.ts (24 tests) 96ms
+ [OK] src/providers/openai-responses/__tests__/OpenAIResponsesProvider.codex.issue966.test.ts (4 tests) 216ms
+ [OK] src/core/coreToolScheduler.interactiveMode.test.ts (6 tests) 282ms
+ [OK] src/core/prompts.test.ts (6 tests) 182ms
+ [OK] src/core/atomic-compression.test.ts (2 tests) 132ms
+ [OK] src/providers/openai-vercel/OpenAIVercelProvider.caching.test.ts (7 tests) 152ms
+ [OK] src/providers/openai-vercel/nonStreaming.test.ts (18 tests) 173ms
+ [OK] src/providers/openai/__tests__/openai.stateless.test.ts (7 tests) 191ms
+ [OK] src/tools/shell.multibyte.test.ts (1 test) 461ms
+   [OK] ShellTool multibyte handling > preserves full multibyte output in returnDisplay  402ms
+ [OK] src/utils/getFolderStructure.test.ts (15 tests) 139ms
+ [OK] src/policy/toml-loader.test.ts (25 tests) 197ms
+ [OK] src/core/nonInteractiveToolExecutor.test.ts (21 tests) 406ms
+   [OK] executeToolCall > should execute a tool successfully  389ms
+ [OK] src/filters/EmojiFilter.property.test.ts (30 tests) 249ms
+ [OK] src/providers/openai/OpenAIProvider.emptyResponseRetry.test.ts (3 tests) 196ms
+ [OK] src/providers/openai-responses/__tests__/OpenAIResponsesProvider.reasoningEffort.test.ts (1 test) 194ms
+ [OK] src/providers/openai-vercel/OpenAIVercelProvider.reasoning.test.ts (14 tests) 159ms
+ [OK] src/tools/edit-fuzzy.test.ts (18 tests) 210ms
+ [OK] src/code_assist/oauth2.test.ts (14 tests) 67ms
+ [OK] src/telemetry/metrics.test.ts (11 tests) 73ms
+ [OK] src/tools/ls.test.ts (22 tests) 46ms
+ [OK] src/providers/openai/__tests__/openai.localEndpoint.test.ts (16 tests) 122ms
+ [OK] src/providers/anthropic/AnthropicProvider.bucketFailover.test.ts (1 test) 185ms
+ [OK] src/providers/openai-responses/__tests__/OpenAIResponsesProvider.codex.test.ts (9 tests) 114ms
+ [OK] src/tools/modifiable-tool.test.ts (12 tests) 175ms
+ [OK] src/utils/workspaceContext.test.ts (34 tests) 44ms
+ [OK] src/tools/google-web-fetch.test.ts (24 tests) 119ms
+ [OK] src/tools/write-file.test.ts (26 tests) 99ms
+ [OK] src/auth/__tests__/codex-device-flow.test.ts (11 tests) 170ms
+ [OK] src/providers/__tests__/LoadBalancingProvider.metrics.test.ts (13 tests) 96ms
+ [OK] src/utils/userAccountManager.test.ts (23 tests) 162ms
+ [OK] src/runtime/AgentRuntimeState.spec.ts (48 tests) 81ms
+ [OK] src/tools/direct-web-fetch.test.ts (5 tests) 124ms
+ [OK] src/tools/edit-tabs-issue473.test.ts (5 tests) 100ms
+ [OK] src/confirmation-bus/message-bus.test.ts (23 tests) 29ms
+ [OK] src/utils/errorReporting.test.ts (6 tests) 67ms
+ [OK] src/providers/gemini/GeminiProvider.retry.test.ts (12 tests) 30ms
+ [OK] src/utils/installationManager.test.ts (4 tests) 7ms
+ [OK] src/tools/memoryTool.test.ts (24 tests) 40ms
+ [OK] src/providers/gemini/__tests__/gemini.stateless.test.ts (5 tests) 188ms
+ [OK] src/policy/config.test.ts (28 tests) 135ms
+ [OK] src/utils/retry.test.ts (27 tests | 5 skipped) 33ms
+ [OK] src/tools/codesearch.test.ts (11 tests) 79ms
+ [OK] src/utils/schemaValidator.test.ts (14 tests) 135ms
+ [OK] src/providers/openai/__tests__/OpenAIProvider.bucketFailover.errorHandling.test.ts (1 test) 65ms
+ [OK] src/services/shellExecutionService.raceCondition.test.ts (4 tests) 45ms
+ [OK] src/tools/google-web-search.test.ts (8 tests) 76ms
+ [OK] src/code_assist/oauth-credential-storage.test.ts (13 tests) 13ms
+ [OK] src/auth/oauth-errors.spec.ts (38 tests | 2 skipped) 120ms
+ [OK] src/services/ClipboardService.test.ts (7 tests) 19ms
+ [OK] src/utils/memoryImportProcessor.test.ts (25 tests) 23ms
+ [OK] src/tools/task.test.ts (10 tests) 67ms
+ [OK] src/utils/environmentContext.test.ts (6 tests) 96ms
+ [OK] src/tools/exa-web-search.test.ts (4 tests) 112ms
+ [OK] src/utils/editor.test.ts (108 tests) 20ms
+ [OK] src/tools/list-subagents.test.ts (4 tests) 23ms
+ [OK] src/debug/ConfigurationManager.test.ts (25 tests) 11ms
+ [OK] src/config/flashFallback.test.ts (6 tests) 9ms
+ [OK] src/config/profileManager.test.ts (31 tests) 20ms
+ [OK] src/prompt-config/TemplateEngine.test.ts (33 tests) 16ms
+ [OK] src/providers/utils/dumpContext.test.ts (10 tests) 36ms
+ [OK] test/utils/ripgrepPathResolver.test.ts (9 tests) 14ms
+ [OK] src/utils/filesearch/ignore.test.ts (12 tests) 124ms
+ [OK] src/services/shellExecutionService.windows.multibyte.test.ts (5 tests | 1 skipped) 9ms
+ [OK] src/filters/EmojiFilter.consistency.test.ts (158 tests) 14ms
+ [OK] src/telemetry/uiTelemetry.test.ts (18 tests) 58ms
+ [OK] src/providers/anthropic/AnthropicProvider.thinking.test.ts (17 tests) 9ms
+ [OK] src/utils/memoryImportProcessor.issue391.test.ts (5 tests) 12ms
+ [OK] src/providers/openai-vercel/messageConversion.test.ts (28 tests) 7ms
+ [OK] src/config/config.test.ts (54 tests) 142ms
+ [OK] src/utils/ignorePatterns.test.ts (28 tests) 5ms
+ [OK] src/utils/thoughtUtils.test.ts (11 tests) 3ms
+ [OK] src/code_assist/server.test.ts (7 tests) 55ms
+ [OK] src/prompt-config/prompt-resolver.test.ts (10 tests) 10ms
+ [OK] src/mcp/file-token-store.test.ts (27 tests) 9ms
+ [OK] src/runtime/__tests__/regression-guards.test.ts (13 tests) 9ms
+ [OK] src/mcp/sa-impersonation-provider.test.ts (8 tests) 10ms
+ [OK] src/providers/BaseProvider.test.ts (22 tests) 9ms
+ [OK] src/utils/summarizer.test.ts (8 tests) 22ms
+ [OK] src/agents/executor.test.ts (13 tests) 53ms
+ [OK] src/providers/openai/OpenAIProvider.mistralCompatibility.test.ts (7 tests) 4ms
+ [OK] src/utils/systemEncoding.test.ts (38 tests) 15ms
+ [OK] src/providers/openai/OpenAIProvider.reasoning.test.ts (52 tests) 12ms
+ [OK] src/tools/todo-schemas.test.ts (26 tests) 8ms
+ [OK] src/ide/ide-client.test.ts (5 tests) 10ms
+ [OK] src/utils/secure-browser-launcher.test.ts (14 tests) 7ms
+ [OK] src/core/__tests__/bucketFailoverIntegration.spec.ts (19 tests) 6ms
+ [OK] src/tools/tool-registry.test.ts (17 tests) 13ms
+ [OK] src/providers/openai/__tests__/ToolNameValidator.test.ts (18 tests) 6ms
+ [OK] src/utils/delay.test.ts (7 tests) 8ms
+ [OK] src/filters/EmojiFilter.test.ts (68 tests) 11ms
+ [OK] src/providers/__tests__/LoadBalancingProvider.test.ts (94 tests) 14ms
+ [OK] src/prompt-config/prompt-cache.test.ts (42 tests) 7ms
+ [OK] src/providers/gemini/__tests__/gemini.userMemory.test.ts (2 tests) 22ms
+ [OK] src/utils/filesearch/crawlCache.test.ts (9 tests) 5ms
+ [OK] src/auth/auth-integration.spec.ts (11 tests) 10ms
+ [OK] src/providers/openai/openai-oauth.spec.ts (25 tests) 17ms
+ [OK] src/core/__tests__/subagent.stateless.test.ts (13 tests) 9ms
+ [OK] src/providers/openai/buildResponsesRequest.test.ts (22 tests) 8ms
+ [OK] src/core/turn.undefined_issue.test.ts (26 tests) 9ms
+ [OK] src/debug/FileOutput.test.ts (15 tests) 8ms
+ [OK] src/telemetry/telemetry.test.ts (2 tests) 18ms
+ [OK] src/providers/openai/parseResponsesStream.responsesToolCalls.test.ts (7 tests) 10ms
+ [OK] src/auth/precedence.test.ts (25 tests) 9ms
+ [OK] src/providers/openai/OpenAIProvider.caching.test.ts (4 tests) 9ms
+ [OK] src/services/history/ContentConverters.test.ts (31 tests) 8ms
+ [OK] src/types/__tests__/modelParams.bucket.spec.ts (38 tests) 6ms
+ [OK] src/runtime/providerRuntimeContext.test.ts (3 tests) 3ms
+ [OK] src/providers/openai/OpenAIProvider.modelParamsAndHeaders.test.ts (3 tests) 8ms
+ [OK] src/providers/anthropic/AnthropicProvider.stateless.test.ts (4 tests) 8ms
+ [OK] src/tools/todo-read.test.ts (13 tests) 6ms
+ [OK] src/code_assist/converter.test.ts (21 tests) 4ms
+ [OK] src/core/turn.test.ts (15 tests) 7ms
+ [OK] src/providers/openai-responses/OpenAIResponsesProvider.retry.test.ts (9 tests) 6ms
+ [OK] src/providers/__tests__/LoadBalancingProvider.failover.test.ts (22 tests) 12ms
+ [OK] src/telemetry/loggers.test.ts (22 tests) 13ms
+ [OK] test/settings/SettingsService.spec.ts (31 tests) 6ms
+ [OK] src/mcp/oauth-token-storage.test.ts (10 tests) 4ms
+ [OK] src/providers/__tests__/LoggingProviderWrapper.apiTelemetry.test.ts (7 tests) 6ms
+ [OK] src/runtime/createAgentRuntimeContext.test.ts (19 tests) 8ms
+ [OK] src/tools/toolNameUtils.integration.test.ts (28 tests) 5ms
+ [OK] src/mcp/token-storage/hybrid-token-storage.test.ts (11 tests) 6ms
+ [OK] src/config/endpoints.test.ts (26 tests) 4ms
+ [OK] src/core/toolGovernance.test.ts (34 tests) 4ms
+ [OK] src/core/subagentOrchestrator.test.ts (12 tests) 10ms
+ [OK] src/mcp/oauth-utils.test.ts (24 tests) 6ms
+ [OK] src/core/baseLlmClient.test.ts (16 tests) 6ms
+ [OK] src/integration-tests/settings-remediation.test.ts (13 tests) 9ms
+ [OK] src/core/geminiChat.contextlimit.test.ts (3 tests) 6ms
+ [OK] src/providers/openai-responses/OpenAIResponsesProvider.headers.test.ts (1 test) 5ms
+ [OK] src/parsers/TextToolCallParser.test.ts (15 tests) 6ms
+ [OK] src/agents/invocation.test.ts (11 tests) 9ms
+ [OK] src/policy/policy-engine.test.ts (39 tests) 7ms
+ [OK] src/providers/openai/ToolCallPipeline.integration.test.ts (17 tests) 9ms
+ [OK] src/ide/ideContext.test.ts (16 tests) 9ms
+ [OK] src/core/__tests__/geminiChat.runtimeState.test.ts (12 tests) 7ms
+ [OK] src/mcp/google-auth-provider.test.ts (4 tests) 8ms
+ [OK] src/ide/ide-installer.test.ts (11 tests) 21ms
+ [OK] src/services/shellExecutionService.multibyte.test.ts (2 tests) 6ms
+ [OK] src/ide/process-utils.test.ts (8 tests) 7ms
+ [OK] src/code_assist/setup.test.ts (7 tests) 5ms
+ [OK] src/providers/__tests__/BaseProvider.guard.test.ts (2 tests) 5ms
+ [OK] src/core/geminiChat.thinking-spacing.test.ts (14 tests) 3ms
+ [OK] src/providers/openai/ToolCallPipeline.test.ts (17 tests) 9ms
+ [OK] src/providers/openai-responses/OpenAIResponsesProvider.streamRetry.test.ts (1 test) 5ms
+ [OK] src/runtime/AgentRuntimeLoader.test.ts (4 tests) 7ms
+ [OK] src/providers/__tests__/baseProvider.stateless.test.ts (5 tests) 6ms
+ [OK] src/providers/__tests__/LoadBalancingProvider.tpm.test.ts (10 tests) 7ms
+ [OK] src/tools/ToolFormatter.test.ts (10 tests) 5ms
+ [OK] src/providers/reasoning/reasoningUtils.test.ts (26 tests) 5ms
+ [OK] src/utils/paths.test.ts (55 tests) 7ms
+ [OK] src/providers/openai/__tests__/OpenAIProvider.thinkTags.test.ts (29 tests) 9ms
+ [OK] src/auth/__tests__/authRuntimeScope.test.ts (3 tests) 5ms
+ [OK] src/providers/__tests__/ProviderManager.guard.test.ts (15 tests) 8ms
+ [OK] src/utils/shell-utils.test.ts (50 tests) 7ms
+ [OK] src/integration-tests/profile-integration.test.ts (4 tests) 7ms
+ [OK] src/providers/logging/ProviderPerformanceTracker.test.ts (8 tests) 5ms
+ [OK] src/utils/generateContentResponseUtilities.test.ts (36 tests) 4ms
+ [OK] src/mcp/token-store.test.ts (23 tests) 5ms
+ [OK] src/providers/openai/ToolCallNormalizer.test.ts (18 tests) 8ms
+ [OK] src/ide/detect-ide.test.ts (16 tests) 3ms
+ [OK] src/core/__tests__/geminiClient.runtimeState.test.ts (13 tests) 6ms
+ [OK] src/tools/tools.test.ts (11 tests) 4ms
+ [OK] src/tools/ToolIdStrategy.test.ts (38 tests) 4ms
+ [OK] src/tools/todo-write.test.ts (2 tests) 9ms
+ [OK] src/providers/providerInterface.compat.test.ts (2 tests) 7ms
+ [OK] src/core/contentGenerator.test.ts (7 tests) 5ms
+ [OK] src/providers/openai-vercel/toolIdUtils.test.ts (33 tests) 4ms
+ [OK] src/mcp/token-storage/base-token-storage.test.ts (12 tests) 3ms
+ [OK] src/providers/openai-responses/__tests__/openaiResponses.stateless.test.ts (4 tests) 4ms
+ [OK] src/providers/openai/buildResponsesRequest.stripToolCalls.test.ts (3 tests) 2ms
+ [OK] src/utils/shell-utils.shellReplacement.test.ts (14 tests) 7ms
+ [OK] src/providers/gemini/__tests__/gemini.thoughtSignature.test.ts (17 tests) 4ms
+ [OK] src/services/complexity-analyzer.test.ts (8 tests) 4ms
+ [OK] src/services/fileSystemService.test.ts (3 tests) 4ms
+ [OK] src/providers/utils/toolIdNormalization.test.ts (19 tests) 6ms
+ [OK] src/integration-tests/provider-settings-integration.spec.ts (4 tests) 3ms
+ [OK] src/utils/unicodeUtils.test.ts (15 tests) 4ms
+ [OK] src/providers/__tests__/LoadBalancingProvider.types.test.ts (12 tests) 3ms
+ [OK] src/utils/errorParsing.test.ts (23 tests) 9ms
+ [OK] src/prompt-config/defaults/manifest-loader.test.ts (2 tests) 3ms
+ [OK] src/core/__tests__/config-regression-guard.test.ts (6 tests) 5ms
+ [OK] src/providers/openai/OpenAIProvider.toolNameErrors.test.ts (13 tests) 6ms
+ [OK] src/providers/openai/getOpenAIProviderInfo.context.test.ts (3 tests) 4ms
+ [OK] src/core/googleGenAIWrapper.test.ts (3 tests) 13ms
+ [OK] src/tools/todo-pause.spec.ts (21 tests) 3ms
+ [OK] src/tools/diffOptions.test.ts (9 tests) 3ms
+ [OK] src/runtime/AgentRuntimeContext.stateless.test.ts (2 tests) 23ms
+ [OK] src/providers/openai/toolNameUtils.test.ts (20 tests) 4ms
+ [OK] src/providers/ProviderManager.test.ts (3 tests) 4ms
+ [OK] src/auth/oauth-logout-cache-invalidation.spec.ts (3 tests) 4ms
+ [OK] src/providers/openai-responses/__tests__/OpenAIResponsesProvider.toolIdNormalization.test.ts (13 tests) 3ms
+ [OK] src/providers/openai/ToolCallCollector.test.ts (9 tests) 4ms
+ [OK] src/auth/precedence.adapter.test.ts (1 test) 3ms
+ [OK] src/services/tool-call-tracker-service.test.ts (6 tests) 19ms
+ [OK] src/providers/utils/cacheMetricsExtractor.test.ts (11 tests) 4ms
+ [OK] src/mcp/token-storage/keychain-token-storage.missing-keytar.test.ts (1 test) 3ms
+ [OK] src/config/config.alwaysAllow.test.ts (9 tests) 5ms
+ [OK] src/providers/anthropic/AnthropicProvider.toolFormatDetection.test.ts (2 tests) 3ms
+ [OK] src/config/config.ephemeral.test.ts (10 tests) 5ms
+ [OK] src/utils/partUtils.test.ts (23 tests) 4ms
+ [OK] src/providers/openai/estimateRemoteTokens.test.ts (10 tests) 3ms
+ [OK] src/providers/openai/OpenAIProvider.setModel.test.ts (4 tests) 3ms
+ [OK] src/providers/__tests__/LoggingProviderWrapper.stateless.test.ts (7 tests) 7ms
+ [OK] src/code_assist/oauth2.e2e.test.ts (1 test) 2ms
+ [OK] src/config/storage.test.ts (16 tests) 3ms
+ [OK] test/settings/model-diagnostics.test.ts (5 tests) 6ms
+ [OK] src/test-utils/__tests__/providerCallOptions.test.ts (2 tests) 3ms
+ [OK] src/utils/safeJsonStringify.test.ts (8 tests) 2ms
+ [OK] src/providers/openai/openaiRequestParams.test.ts (3 tests) 3ms
+ [OK] src/services/history/__tests__/ThinkingBlock.test.ts (9 tests) 3ms
+ [OK] src/utils/sanitization.test.ts (14 tests) 2ms
+ [OK] src/parsers/TextToolCallParser.multibyte.test.ts (1 test) 2ms
+ [OK] src/providers/openai/buildResponsesRequest.toolIdNormalization.test.ts (4 tests) 3ms
+ [OK] src/providers/openai/ConversationCache.accumTokens.test.ts (9 tests) 2ms
+ [OK] src/providers/openai/parseResponsesStream.test.ts (11 tests | 5 skipped) 2ms
+ [OK] src/integration-tests/todo-system.test.ts (2 tests) 3ms
+ [OK] src/providers/openai/buildResponsesRequest.undefined.test.ts (3 tests) 3ms
+ [OK] src/core/__tests__/turn.thinking.test.ts (9 tests) 19ms
+ [OK] src/core/tokenLimits.test.ts (15 tests) 3ms
+ [OK] src/providers/openai/__tests__/formatArrayResponse.test.ts (13 tests) 2ms
+ [OK] src/runtime/__tests__/AgentRuntimeState.stub.test.ts (13 tests | 10 skipped) 13ms
+ [OK] src/providers/openai/OpenAIProvider.toolFormatDetection.test.ts (2 tests) 3ms
+ [OK] src/runtime/RuntimeInvocationContext.failfast.test.ts (2 tests) 4ms
+ [OK] src/tools/doubleEscapeUtils.test.ts (3 tests) 8ms
+ [OK] src/utils/filesearch/result-cache.test.ts (3 tests) 4ms
+ [OK] src/types/modelParams.test.ts (6 tests) 2ms
+ [OK] src/providers/openai/OpenAIProvider.compressToolMessages.test.ts (1 test) 2ms
+ [OK] src/index.test.ts (1 test) 2ms
+ [OK] src/providers/gemini/GeminiProvider.e2e.test.ts (3 tests) 2ms
+ ↓ src/providers/__tests__/BaseProvider.guard.stub.test.ts (1 test | 1 skipped)
+ ↓ src/services/shellExecutionService.windows.test.ts (3 tests | 3 skipped)
+ [OK] src/tools/mcp-client-manager.test.ts (2 tests) 7ms
+ [OK] src/core/__tests__/compression.test.ts (1 test) 2ms
+ [OK] src/core/__tests__/compression-logic.test.ts (1 test) 2ms
+ [OK] src/core/__tests__/geminiClient.dispose.test.ts (1 test) 4ms
+ [OK] src/providers/ProviderManager.gemini-switch.test.ts (3 tests) 2ms
+ [OK] src/hooks/tool-render-suppression-hook.test.ts (2 tests) 2ms
+ [OK] src/providers/openai/OpenAIProvider.stateful.integration.test.ts (2 tests | 1 skipped) 2ms
+ ↓ src/services/history/orphaned-tools.test.ts (6 tests | 6 skipped)
+ ↓ src/providers/openai/OpenAIProvider.callResponses.stateless.test.ts (5 tests | 5 skipped)
+ ↓ src/providers/openai/OpenAIProvider.integration.test.ts (3 tests | 3 skipped)
+ [OK] src/providers/providerManager.context.test.ts (2 tests) 4ms
+ ↓ src/providers/openai/ResponsesContextTrim.integration.test.ts (4 tests | 4 skipped)
+ ↓ src/providers/openai/OpenAIProvider.responsesIntegration.test.ts (6 tests | 6 skipped)
+ [OK] src/utils/tool-utils.test.ts (8 tests) 2ms
+ [OK] src/providers/anthropic/AnthropicProvider.modelParams.test.ts (1 test) 2ms
+ [OK] src/auth/qwen-device-flow.spec.ts (24 tests) 41592ms
+   [OK] QwenDeviceFlow - Behavioral Tests > Token Polling > should poll for token until authorization completes  10013ms
+   [OK] QwenDeviceFlow - Behavioral Tests > Token Polling > should use correct Qwen token endpoint  2730ms
+   [OK] QwenDeviceFlow - Behavioral Tests > Token Polling > should respect server-specified polling interval  10023ms
+   [OK] QwenDeviceFlow - Behavioral Tests > Error Handling > should handle network failures with retry logic  18758ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/tools/google-web-fetch.integration.test.ts > GoogleWebFetchTool Integration Tests > Fallback to direct fetch for private IPs > should fallback to direct fetch for localhost URLs
+AssertionError: expected 'Private/local URLs cannot be processe…' to contain 'Local content'
+
+- Expected
++ Received
+
+- Local content
++ Private/local URLs cannot be processed with AI analysis. Processing content directly.
++
++ Content from http://localhost:3000/:
++
++ Error: Error during fallback fetch for http://localhost:3000/: Cannot read properties of undefined (reading 'get')
+
+  src/tools/google-web-fetch.integration.test.ts:371:33
+    369|       );
+    370|       expect(result.llmContent).toContain('Content from http://localho…',
+    371|       expect(result.llmContent).toContain('Local content');
+       |                                 ^
+    372|     });
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/tools/google-web-fetch.integration.test.ts > GoogleWebFetchTool Integration Tests > Fallback to direct fetch for private IPs > should fallback to direct fetch for private IP ranges
+AssertionError: expected 'Private/local URLs cannot be processe…' to contain 'Private network content'
+
+- Expected
++ Received
+
+- Private network content
++ Private/local URLs cannot be processed with AI analysis. Processing content directly.
++
++ Content from http://192.168.1.100:8080/:
++
++ Error: Error during fallback fetch for http://192.168.1.100:8080/: Cannot read properties of undefined (reading 'get')
+
+  src/tools/google-web-fetch.integration.test.ts:404:33
+    402|         'Content from http://192.168.1.100:8080',
+    403|       );
+    404|       expect(result.llmContent).toContain('Private network content');
+       |                                 ^
+    405|     });
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/utils/fileUtils.test.ts > fileUtils > readWasmBinaryFromDisk > loads a WASM binary from disk as a Uint8Array
+TypeError: readWasmBinaryFromDisk is not a function
+  src/utils/fileUtils.test.ts:558:28
+    556|       );
+    557|       const wasmFixturePath = fileURLToPath(wasmFixtureUrl);
+    558|       const result = await readWasmBinaryFromDisk(wasmFixturePath);
+       |                            ^
+    559|       const expectedBytes = new Uint8Array(
+    560|         await fsPromises.readFile(wasmFixturePath),
+    560|         expectedBytes,
+    561|       );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/utils/gitIgnoreParser.test.ts > GitIgnoreParser > Escaped Characters > should correctly handle escaped characters in .gitignore
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+  src/utils/gitIgnoreParser.test.ts:293:44
+    291|
+    292|       // These should be ignored based on the escaped patterns
+    293|       expect(parser.isIgnored('bla/#foo')).toBe(true);
+       |                                            ^
+    294|       expect(parser.isIgnored('bla/!bar')).toBe(true);
+    295|     });
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/utils/gitIgnoreParser.test.ts > GitIgnoreParser > Trailing Spaces > should correctly handle significant trailing spaces
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+  src/utils/gitIgnoreParser.test.ts:310:40
+    308|
+    309|       // 'foo\ ' should match 'foo '
+    310|       expect(parser.isIgnored('foo ')).toBe(true);
+       |                                        ^
+    311|
+
+    312|       // 'bar ' should be trimmed to 'bar'
+    312|
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed | 307 passed | 7 skipped (317)
+      Tests  5 failed | 4963 passed | 77 skipped (5045)
+   Start at  13:44:23
+   Duration  43.91s (transform 7.40s, setup 8.68s, collect 156.06s, tests 109.63s, environment 32ms, prepare 22.30s)
+
+JUNIT report written to /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core/junit.xml
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core
+npm error workspace @vybestack/llxprt-code-core@0.8.0
+npm error location /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core
+npm error command failed
+npm error command sh -c vitest run
+
+
+> @vybestack/llxprt-code@0.8.0 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli
+      Coverage enabled with v8
+
+ [OK] src/integration-tests/test-utils.test.ts (15 tests | 1 skipped) 746ms
+   [OK] Test Utilities > waitForFile > should timeout if file is not created  505ms
+  src/ui/components/messages/ToolMessageRawMarkdown.test.tsx (2 tests | 2 failed) 75ms
+   × <ToolMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=true '(default)' 58ms
+     → Snapshot `<ToolMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=true '(default)' 1` mismatched
+   × <ToolMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=false '(raw markdown with syntax highlightin…' 16ms
+     → Snapshot `<ToolMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=false '(raw markdown with syntax highlightin…' 1` mismatched
+ [OK] src/ui/hooks/useGeminiStream.thinking.test.tsx (8 tests) 250ms
+  src/ui/components/messages/GeminiMessage.test.tsx (4 tests | 4 failed) 113ms
+   × <GeminiMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=true '(default)' 45ms
+     → Snapshot `<GeminiMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=true '(default)' 1` mismatched
+   × <GeminiMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=false '(raw markdown with syntax highlightin…' 30ms
+     → Snapshot `<GeminiMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=false '(raw markdown with syntax highlightin…' 1` mismatched
+   × <GeminiMessage /> - Raw Markdown Display Snapshots > renders pending state with renderMarkdown=true 15ms
+     → Snapshot `<GeminiMessage /> - Raw Markdown Display Snapshots > renders pending state with renderMarkdown=true 1` mismatched
+   × <GeminiMessage /> - Raw Markdown Display Snapshots > renders pending state with renderMarkdown=false 22ms
+     → Snapshot `<GeminiMessage /> - Raw Markdown Display Snapshots > renders pending state with renderMarkdown=false 1` mismatched
+ [OK] src/ui/components/InputPrompt.paste.spec.tsx (5 tests) 315ms
+ [OK] src/auth/codex-oauth-provider.spec.ts (8 tests) 433ms
+   [OK] CodexOAuthProvider - Concurrency and State Management > OAuth Flow State Handling > should pass state parameter to completeAuth  306ms
+ [OK] src/config/extension.test.ts (53 tests) 169ms
+ [OK] src/ui/commands/test/subagentCommand.test.ts (25 tests) 503ms
+ [OK] src/config/config.kimiModelBootstrap.test.ts (1 test) 255ms
+ [OK] src/auth/anthropic-oauth-provider.test.ts (6 tests) 610ms
+ [OK] src/ui/utils/clipboardUtils.test.ts (7 tests | 3 skipped) 120ms
+ [OK] src/config/config.test.ts (146 tests | 16 skipped) 614ms
+ [OK] src/storage/ConversationStorage.test.ts (11 tests) 71ms
+ [OK] src/services/BuiltinCommandLoader.test.ts (7 tests) 991ms
+   [OK] BuiltinCommandLoader profile > should not include uiprofile command when isDevelopment is false  494ms
+   [OK] BuiltinCommandLoader profile > should include uiprofile command when isDevelopment is true  494ms
+ [OK] src/providers/providerManagerInstance.oauthRegistration.test.ts (3 tests) 1305ms
+   [OK] Anthropic OAuth registration with environment key > registers Anthropic OAuth provider even when ANTHROPIC_API_KEY is set  360ms
+   [OK] Anthropic OAuth registration with environment key > ignores API keys when authOnly is enabled  581ms
+   [OK] Anthropic OAuth registration with environment key > passes the shared OAuth manager into OpenAIVercelProvider  364ms
+ [OK] test/ui/commands/authCommand-logout.test.ts (21 tests) 1304ms
+   [OK] AuthCommand - Logout Property-Based Tests > should handle concurrent logout commands safely (with seed=-434893208)  941ms
+ [OK] src/ui/utils/commandUtils.test.ts (28 tests) 80ms
+ [OK] src/ui/utils/terminalContract.test.ts (10 tests) 56ms
+ [OK] src/ui/commands/__tests__/diagnosticsCommand.bucket.spec.ts (24 tests) 95ms
+ [OK] src/ui/contexts/KeypressContext.test.tsx (90 tests) 133ms
+ [OK] src/ui/commands/initCommand.test.ts (3 tests) 32ms
+ [OK] src/ui/commands/restoreCommand.test.ts (13 tests) 74ms
+ [OK] src/ui/commands/schema/argumentResolver.test.ts (42 tests) 72ms
+ [OK] src/ui/commands/setupGithubCommand.test.ts (10 tests | 2 skipped) 54ms
+ [OK] src/services/FileCommandLoader.test.ts (35 tests) 131ms
+ [OK] src/auth/__tests__/codex-oauth-provider.test.ts (16 tests) 69ms
+ [OK] src/config/extensions/update.test.ts (8 tests) 64ms
+ [OK] src/gemini.renderOptions.test.tsx (2 tests) 2738ms
+   [OK] startInteractiveUI ink render options > passes computed Ink render options to ink.render()  2736ms
+ [OK] src/auth/local-oauth-callback.spec.ts (3 tests) 31ms
+ [OK] src/ui/utils/textUtils.stringWidthCache.test.ts (2 tests) 32ms
+ [OK] src/utils/userStartupWarnings.test.ts (5 tests) 29ms
+ [OK] src/auth/__tests__/multi-bucket-auth.spec.ts (30 tests) 58ms
+ [OK] src/runtime/__tests__/runtimeIsolation.test.ts (8 tests) 38ms
+ [OK] src/config/extensions/github.test.ts (26 tests) 58ms
+ [OK] src/config/extensions/extensionEnablement.test.ts (43 tests) 23ms
+ [OK] src/config/config.loadMemory.test.ts (1 test) 44ms
+ [OK] src/ui/commands/mcpCommand.test.ts (35 tests) 35ms
+ [OK] src/ui/contexts/ScrollProvider.test.tsx (9 tests) 20ms
+ [OK] src/commands/mcp/add.test.ts (17 tests) 33ms
+ [OK] src/runtime/agentRuntimeAdapter.spec.ts (55 tests) 38ms
+ [OK] src/ui/commands/test/setCommand.phase09.test.ts (15 tests) 38ms
+ [OK] src/utils/commentJson.test.ts (12 tests) 16ms
+ [OK] src/config/settings.test.ts (70 tests | 11 skipped) 32ms
+ [OK] src/ui/hooks/useGeminiStream.subagent.spec.tsx (1 test) 15ms
+ [OK] src/auth/oauth-manager.spec.ts (23 tests) 31ms
+ [OK] src/auth/oauth-manager.concurrency.spec.ts (1 test) 25ms
+ [OK] src/auth/oauth-manager.bucketFailover.spec.ts (1 test) 21ms
+ [OK] src/auth/oauth-manager.logout.spec.ts (3 tests) 23ms
+ [OK] src/commands/mcp/remove.test.ts (6 tests) 22ms
+ [OK] src/ui/commands/ideCommand.test.ts (9 tests) 5017ms
+   [OK] ideCommand > install subcommand > should install the extension  5012ms
+ [OK] src/ui/themes/theme-manager.test.ts (18 tests) 15ms
+ [OK] src/utils/sessionCleanup.test.ts (70 tests) 19ms
+ [OK] src/providers/logging/git-stats.test.ts (21 tests) 12ms
+ [OK] src/ui/commands/diagnosticsCommand.spec.ts (22 tests) 21ms
+ [OK] src/coreToolToggle.test.ts (17 tests) 30ms
+ [OK] src/nonInteractiveCli.test.ts (14 tests) 12ms
+ [OK] test/auth/gemini-oauth-fallback.test.ts (9 tests) 15ms
+ [OK] src/providers/provider-gemini-switching.test.ts (3 tests) 12ms
+ [OK] src/ui/commands/test/useSlashCompletion.schema.test.ts (1 test) 27ms
+ [OK] src/ui/themes/semantic-tokens.test.ts (13 tests) 12ms
+ [OK] src/config/__tests__/profileBootstrap.test.ts (60 tests) 16ms
+ [OK] src/ui/commands/aboutCommand.test.ts (5 tests) 18ms
+ [OK] src/services/prompt-processors/shellProcessor.test.ts (37 tests) 18ms
+ [OK] src/ui/oauthUrlMessage.test.tsx (1 test) 10ms
+ [OK] src/utils/dynamicSettings.test.ts (22 tests) 7ms
+ [OK] src/ui/commands/__tests__/setCommand.lb.test.ts (35 tests) 10ms
+ [OK] src/commands/extensions/new.test.ts (4 tests) 28ms
+ [OK] test/providers/providerAliases.test.ts (2 tests) 11ms
+ [OK] src/ui/commands/__tests__/statsCommand.bucket.spec.ts (16 tests) 13ms
+ [OK] src/commands/extensions/install.test.ts (16 tests) 13ms
+ [OK] src/auth/anthropic-oauth-provider.local-flow.spec.ts (2 tests) 20ms
+ [OK] src/runtime/anthropic-oauth-defaults.test.ts (12 tests) 13ms
+ [OK] src/ui/commands/chatCommand.test.ts (15 tests) 11ms
+ [OK] src/utils/gitUtils.test.ts (12 tests) 10ms
+ [OK] src/utils/readStdin.test.ts (4 tests) 4ms
+ [OK] src/ui/commands/copyCommand.test.ts (11 tests) 7ms
+ [OK] src/ui/contexts/MouseContext.test.tsx (3 tests) 12ms
+ [OK] src/ui/commands/__tests__/profileCommand.bucket.spec.ts (31 tests) 10ms
+ [OK] src/utils/handleAutoUpdate.test.ts (13 tests) 10ms
+ [OK] src/runtime/__tests__/provider-context-preservation.spec.ts (3 tests) 2ms
+ [OK] src/utils/envVarResolver.test.ts (16 tests) 7ms
+ [OK] src/integration-tests/runtime-isolation.test.ts (11 tests) 9ms
+ [OK] src/ui/utils/updateCheck.test.ts (13 tests) 6ms
+ [OK] src/auth/anthropic-oauth-provider.refresh.spec.ts (2 tests) 9ms
+ [OK] src/ui/commands/dumpcontextCommand.test.ts (8 tests) 5ms
+ [OK] src/ui/commands/__tests__/profileCommand.lb.test.ts (17 tests) 7ms
+ [OK] src/commands/mcp.test.ts (3 tests) 9ms
+ [OK] src/utils/settingsUtils.test.ts (68 tests) 8ms
+ [OK] src/providers/logging/LoggingProviderWrapper.test.ts (7 tests) 5ms
+ [OK] src/ui/commands/providerCommand.test.ts (3 tests) 6ms
+ [OK] src/ui/commands/setCommand.test.ts (15 tests) 7ms
+ [OK] src/config/settingsSchema.test.ts (14 tests) 7ms
+ [OK] src/ui/commands/memoryCommand.test.ts (17 tests) 8ms
+ [OK] src/utils/relaunch.test.ts (8 tests) 3ms
+ [OK] src/auth/oauth-manager-initialization.spec.ts (7 tests) 4ms
+ [OK] src/auth/__tests__/OAuthBucketManager.spec.ts (34 tests) 31ms
+ [OK] src/services/CommandService.test.ts (11 tests) 6ms
+ [OK] src/ui/commands/bugCommand.test.ts (2 tests) 4ms
+ [OK] src/ui/commands/test/setCommand.mutation.test.ts (12 tests) 5ms
+ [OK] src/ui/commands/profileCommand.test.ts (14 tests) 7ms
+ [OK] test/auth/authRuntimeScope.test.ts (3 tests) 6ms
+ [OK] src/commands/extensions/uninstall.test.ts (1 test) 6ms
+ [OK] src/ui/commands/__tests__/profileCommand.failover.test.ts (17 tests) 7ms
+ [OK] src/ui/commands/__tests__/authCommand.bucket.spec.ts (30 tests) 8ms
+ [OK] src/providers/providerManagerInstance.test.ts (6 tests) 13ms
+ [OK] src/ui/commands/authCommand.test.ts (22 tests) 6ms
+ [OK] src/ui/utils/fuzzyFilter.test.ts (23 tests) 5ms
+ [OK] src/ui/utils/secureInputHandler.test.ts (25 tests) 5ms
+ [OK] src/providers/providerAliases.codex.test.ts (7 tests) 5ms
+ [OK] src/runtime/__tests__/profileApplication.bucket-failover.spec.ts (35 tests) 5ms
+ [OK] src/ui/commands/__tests__/statsCommand.lb.test.ts (6 tests) 5ms
+ [OK] src/ui/commands/statsCommand.test.ts (4 tests) 5ms
+ [OK] src/runtime/__tests__/profileApplication.lb.test.ts (14 tests) 6ms
+ [OK] src/ui/commands/schema/deepPathCompletion.test.ts (11 tests) 8ms
+ [OK] src/services/todo-continuation/todoContinuationService.spec.ts (34 tests) 9ms
+ [OK] src/utils/installationInfo.test.ts (16 tests) 4ms
+ [OK] src/ui/commands/extensionsCommand.test.ts (11 tests) 7ms
+ [OK] src/ui/reducers/appReducer.test.ts (36 tests) 5ms
+ [OK] src/config/trustedFolders.test.ts (21 tests) 5ms
+ [OK] src/ui/keyMatchers.test.ts (42 tests) 4ms
+ [OK] src/utils/privacy/ConversationDataRedactor.test.ts (10 tests) 5ms
+ [OK] src/ui/commands/keyCommand.test.ts (4 tests) 4ms
+ [OK] src/ui/commands/compressCommand.test.ts (5 tests) 6ms
+ [OK] src/ui/themes/color-utils.test.ts (16 tests) 4ms
+ [OK] src/ui/commands/test/subagentCommand.schema.test.ts (6 tests) 5ms
+ [OK] src/commands/mcp/list.test.ts (4 tests) 5ms
+ [OK] src/utils/errors.test.ts (18 tests) 5ms
+ [OK] src/ui/utils/clipboard.test.ts (8 tests) 5ms
+ [OK] src/validateNonInterActiveAuth.test.ts (9 tests) 5ms
+ [OK] src/auth/oauth-manager.bucketRefresh.spec.ts (1 test) 4ms
+ [OK] src/ui/utils/mouse.test.ts (20 tests) 4ms
+ [OK] src/config/keyBindings.test.ts (3 tests) 3ms
+ [OK] src/auth/qwen-oauth-provider.test.ts (4 tests) 5ms
+ [OK] src/ui/commands/authCommand.codex.test.ts (7 tests) 7ms
+ [OK] src/ui/commands/docsCommand.test.ts (3 tests) 4ms
+ [OK] src/utils/windowTitle.test.ts (7 tests) 2ms
+ [OK] src/runtime/provider-alias-defaults.test.ts (4 tests) 3ms
+ [OK] src/utils/bootstrap.test.ts (13 tests) 4ms
+ [OK] src/config/cliEphemeralSettings.test.ts (7 tests) 3ms
+ [OK] src/ui/contexts/KeypressContext.sigcont.test.ts (4 tests) 3ms
+ [OK] src/utils/ConversationContext.test.ts (6 tests) 4ms
+ [OK] src/config/auth.test.ts (8 tests) 4ms
+ [OK] src/ui/commands/mouseCommand.test.ts (4 tests) 4ms
+ [OK] src/ui/themes/theme.test.ts (11 tests) 3ms
+ [OK] src/ui/commands/helpCommand.test.ts (2 tests) 2ms
+ [OK] src/runtime/providerConfigUtils.test.ts (6 tests) 5ms
+ [OK] src/extensions/extensionAutoUpdater.test.ts (4 tests) 4ms
+ [OK] src/ui/oauth-submission.test.ts (7 tests) 3ms
+ [OK] src/runtime/__tests__/profileApplication.failover.test.ts (9 tests) 4ms
+ [OK] src/ui/commands/clearCommand.test.ts (3 tests) 4ms
+ [OK] src/ui/commands/themeCommand.test.ts (2 tests) 5ms
+ [OK] src/ui/utils/responsive.test.ts (21 tests) 3ms
+ [OK] src/test-utils/mockCommandContext.test.ts (3 tests) 3ms
+ [OK] src/ui/commands/setCommand.userAgent.test.ts (1 test) 3ms
+ [OK] src/ui/useTodoPausePreserver.test.ts (1 test) 2ms
+ [OK] src/ui/commands/terminalSetupCommand.test.ts (5 tests) 6ms
+ [OK] src/ui/utils/textUtils.test.ts (9 tests) 2ms
+ [OK] src/ui/commands/settingsCommand.test.ts (2 tests) 5ms
+ [OK] src/config/logging/loggingConfig.test.ts (14 tests) 3ms
+ [OK] src/ui/utils/computeStats.test.ts (12 tests) 2ms
+ [OK] src/auth/BucketFailoverHandlerImpl.spec.ts (4 tests) 3ms
+ [OK] src/ui/utils/highlight.test.ts (13 tests) 3ms
+ [OK] src/ui/commands/editorCommand.test.ts (2 tests) 3ms
+ [OK] src/ui/commands/policiesCommand.test.ts (9 tests) 4ms
+ [OK] src/ui/utils/markdownUtilities.test.ts (7 tests) 5ms
+ [OK] src/ui/components/messages/UserMessage.test.tsx (2 tests) 2ms
+ [OK] src/ui/utils/tokenMetricsTracker.test.ts (5 tests) 2ms
+ [OK] src/ui/inkRenderOptions.test.ts (4 tests) 4ms
+ [OK] src/ui/themes/semantic-resolver.test.ts (6 tests) 3ms
+ [OK] src/services/prompt-processors/argumentProcessor.test.ts (2 tests) 2ms
+ [OK] src/ui/commands/permissionsCommand.test.ts (3 tests) 2ms
+ [OK] src/providers/credentialPrecedence.test.ts (4 tests) 2ms
+ [OK] src/ui/utils/displayUtils.test.ts (8 tests) 2ms
+ [OK] src/ui/utils/formatters.test.ts (14 tests) 2ms
+ [OK] src/ui/mouseEventsEnabled.test.ts (4 tests) 3ms
+ [OK] src/config/__tests__/sandboxConfig.test.ts (2 tests) 7ms
+ [OK] src/providers/providerAliases.kimi.test.ts (1 test) 2ms
+ [OK] src/providers/providerAliases.builtin-qwen.test.ts (1 test) 4ms
+ [OK] src/config/extensions/variables.test.ts (1 test) 2ms
+ [OK] src/services/McpPromptLoader.test.ts (10 tests) 3ms
+ [OK] test/openaiResponses.stateless.stub.test.ts (1 test) 1ms
+ [OK] src/ui/utils/terminalLinks.test.ts (1 test) 7ms
+ [OK] test/baseProvider.stateless.stub.test.ts (1 test) 1ms
+ ↓ src/providers/logging/performance.test.ts (8 tests | 8 skipped)
+ [OK] test/openai.stateless.stub.test.ts (1 test) 2ms
+ [OK] src/utils/startupWarnings.test.ts (4 tests) 3ms
+ [OK] src/utils/cleanup.test.ts (6 tests) 2ms
+ [OK] src/auth/__tests__/oauthManager.safety.test.ts (3 tests) 1ms
+ [OK] src/config/__tests__/nonInteractiveTools.test.ts (1 test) 2ms
+ [OK] src/config/settings.env.test.ts (4 tests | 2 skipped) 2ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/components/messages/GeminiMessage.test.tsx > <GeminiMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=true '(default)'
+Error: Snapshot `<GeminiMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=true '(default)' 1` mismatched
+
+- Expected
++ Received
+
+- " Test bold and code markdown
+-
+-    1 const x = 1;"
++ "
++   ERROR  RuntimeContextProvider is missing from the component tree.
++
++  src/ui/contexts/RuntimeContext.tsx:180:11
++
++  177: export function useRuntimeBridge(): RuntimeContextBridge {
++  178:   const context = useContext(RuntimeContext);
++  179:   if (!context) {
++  180:     throw new Error(
++  181:       'RuntimeContextProvider is missing from the component tree.',
++  182:     );
++  183:   }
++
++  - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:180:11)
++  - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:188:10)
++  - GeminiMessage (src/ui/components/messages/GeminiMessage.tsx:39:35)
++  -Object.react-stack-bott
++   m-frame                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-r\
++                          econciler/cjs/react-reconciler.development.js:15859:20)
++  -renderWithHoo\
++   s            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/\
++                cjs/react-reconciler.development.js:3221:22)
++  -updateFunctionComp\
++   nent              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconc\
++                     iler/cjs/react-reconciler.development.js:6475:19)
++  -beginWor\
++           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cjs/r\
++           eact-reconciler.development.js:8009:18)
++  -runWithFiberIn\
++   EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:1738:13)
++  -performUnitOfW\
++   rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:12834:22)
++  -workLoopSyn\
++              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj\
++              s/react-reconciler.development.js:12644:41)
++ "
+
+
+ src/ui/components/messages/GeminiMessage.test.tsx:33:27
+     31|         },
+     32|       );
+     33|       expect(lastFrame()).toMatchSnapshot();
+       |                           ^
+     34|     },
+     35|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/ui/components/messages/GeminiMessage.test.tsx > <GeminiMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=false '(raw markdown with syntax highlightin…'
+Error: Snapshot `<GeminiMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=false '(raw markdown with syntax highlightin…' 1` mismatched
+
+- Expected
++ Received
+
+- "  Test **bold** and `code` markdown
+-
+-    ```javascript
+-    const x = 1;
+-    ```"
++ "
++   ERROR  RuntimeContextProvider is missing from the component tree.
++
++  src/ui/contexts/RuntimeContext.tsx:180:11
++
++  177: export function useRuntimeBridge(): RuntimeContextBridge {
++  178:   const context = useContext(RuntimeContext);
++  179:   if (!context) {
++  180:     throw new Error(
++  181:       'RuntimeContextProvider is missing from the component tree.',
++  182:     );
++  183:   }
++
++  - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:180:11)
++  - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:188:10)
++  - GeminiMessage (src/ui/components/messages/GeminiMessage.tsx:39:35)
++  -Object.react-stack-bott
++   m-frame                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-r\
++                          econciler/cjs/react-reconciler.development.js:15859:20)
++  -renderWithHoo\
++   s            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/\
++                cjs/react-reconciler.development.js:3221:22)
++  -updateFunctionComp\
++   nent              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconc\
++                     iler/cjs/react-reconciler.development.js:6475:19)
++  -beginWor\
++           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cjs/r\
++           eact-reconciler.development.js:8009:18)
++  -runWithFiberIn\
++   EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:1738:13)
++  -performUnitOfW\
++   rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:12834:22)
++  -workLoopSyn\
++              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj\
++              s/react-reconciler.development.js:12644:41)
++ "
+
+
+ src/ui/components/messages/GeminiMessage.test.tsx:33:27
+     31|         },
+     32|       );
+     33|       expect(lastFrame()).toMatchSnapshot();
+       |                           ^
+     34|     },
+     35|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎎⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/ui/components/messages/GeminiMessage.test.tsx > <GeminiMessage /> - Raw Markdown Display Snapshots > renders pending state with renderMarkdown=true
+Error: Snapshot `<GeminiMessage /> - Raw Markdown Display Snapshots > renders pending state with renderMarkdown=true 1` mismatched
+
+- Expected
++ Received
+
+- " Test bold and code markdown
+-
+-    1 const x = 1;"
++ "
++   ERROR  RuntimeContextProvider is missing from the component tree.
++
++  src/ui/contexts/RuntimeContext.tsx:180:11
++
++  177: export function useRuntimeBridge(): RuntimeContextBridge {
++  178:   const context = useContext(RuntimeContext);
++  179:   if (!context) {
++  180:     throw new Error(
++  181:       'RuntimeContextProvider is missing from the component tree.',
++  182:     );
++  183+  }
++
++  - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:180:11)
++  - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:188:10)
++  - GeminiMessage (src/ui/components/messages/GeminiMessage.tsx:39:35)
++  -Object.react-stack-bott
++   m-frame                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-r\
++                          econciler/cjs/react-reconciler.development.js:15859:20)
++  -renderWithHoo\
++   s            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/\
++                cjs/react-reconciler.development.js:3221:22)
++  -updateFunctionComp\
++   nent              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconc\
++                     iler/cjs/react-reconciler.development.js:6475:19)
++  -beginWor\
++           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cjs/r\
++           eact-reconciler.development.js:8009:18)
++  -runWithFiberIn\
++   EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:1738:13)
++  -performUnitOfW\
++   rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:12834:22)
++  -workLoopSyn\
++              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj\
++              s/react-reconciler.development.js:12644:41)
++ "
+
+
+ src/ui/components/messages/GeminiMessage.test.tsx:46:27
+     44|         },
+     45|       );
+     46|       expect(lastFrame()).toMatchSnapshot();
+       |                           ^
+     47|     },
+     48|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎎⎯⎯⎯⎯⎯⎬⎬⎬⎬⎬⎬⎬⎬⎬⎬⎬⎬[3/6]⎯
+
+ FAIL  src/ui/components/messages/GeminiMessage.test.tsx > <GeminiMessage /> - Raw Markdown Display Snapshots > renders pending state with renderMarkdown=false
+Error: Snapshot `<GeminiMessage /> - Raw Markdown Display Snapshots > renders pending state with renderMarkdown=false 1` mismatched
+
+- Expected
++ Received
+
+- "  Test **bold** and `code` markdown
+-
+-    ```javascript
+-    const x = 1;
+-    ```"
++ "
++   ERROR  RuntimeContextProvider is missing from the component tree.
++
++  src/ui/contexts/RuntimeContext.tsx:180:11
++
++  177: export function useRuntimeBridge(): RuntimeContextBridge {
++  178:   const context = useContext(RuntimeContext);
++  179:   if (!context) {
++  180:     throw new Error(
++  181:       'RuntimeContextProvider is missing from the component tree.',
++  182:     );
++  183+  }
++
++  - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:180:11)
++  - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:188:10)
++  - GeminiMessage (src/ui/components/messages/GeminiMessage.tsx:39:35)
++  -Object.react-stack-bott
++   m-frame                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-r\
++                          econciler/cjs/react-reconciler.development.js:15859:20)
++  -renderWithHoo\
++   s            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/\
++                cjs/react-reconciler.development.js:3221:22)
++  -updateFunctionComp\
++   nent              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconc\
++                     iler/cjs/react-reconciler.development.js:6475:19)
++  -beginWor\
++           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cjs/r\
++           eact-reconciler.development.js:8009:18)
++  -runWithFiberIn\
++   EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:1738:13)
++  -performUnitOfW\
++   rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:12834:22)
++  -workLoopSyn\
++              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj\
++              s/react-reconciler.development.js:12644:41)
++ "
+
+
+ src/ui/components/messages/GeminiMessage.test.tsx:46:27
+     44|         },
+     45|       );
+     46|       expect(lastFrame()).toMatchSnapshot();
+       |                           ^
+     47|     },
+     48|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎬⎬⎬⎬⎬⎬⎬⎬⎬⎬⎬[4/6]⎯
+
+ FAIL  src/ui/components/messages/ToolMessageRawMarkdown.test.tsx > <ToolMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=true '(default)'
+Error: Snapshot `<ToolMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=true '(default)' 1` mismatched
+
+- Expected
++ Received
+
+- " [OK]  test-tool A tool for testing
+-
+-     Test bold and code markdown"
++ "
++   ERROR  Text string "" must be rendered inside <Text> component
++
++  file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/reconciler.ts:220\
++  :10
++
++  -createTextInsta\
++   ce             (file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/\
++                  reconciler.ts:220:10)
++  -completeWor\
++              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj\
++              s/react-reconciler.development.js:9082:42)
++  -runWithFiberIn\
++   EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:1738:13)
++  -completeUnitOfW\
++   rk             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconcile\
++                  r/cjs/react-reconciler.development.js:12962:19)
++  -performUnitOfW\
++   rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:12843:11)
++  -workLoopSyn\
++              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj\
++              s/react-reconciler.development.js:12644:41)
++  -renderRootSy\
++   c           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/c\
++               js/react-reconciler.development.js:12624:11)
++  -performWorkOnR\
++   ot            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:12135:44)
++  -performSyncWorkOn\
++   oot              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconci\
++                    ler/cjs/react-reconciler.development.js:2446:7)
++  -flushSyncWorkAcrossRoo\
++   s_impl                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-re\
++                         conciler/cjs/react-reconciler.development.js:2294:21)
++ "
+
+
+ src/ui/components/messages/ToolMessageRawMarkdown.test.tsx:42:27
+     40|         },
+     41|       );
+     42|       expect(lastFrame()).toMatchSnapshot();
+       |                           ^
+     43|     },
+     44:   );
+
+⎯⎯⎯⎯⎬⎬⎬⎬⎬⎬⎬⎬⎬⎬⎬[5/6]⎯
+
+ FAIL  src/ui/components/messages/ToolMessageRawMarkdown.test.tsx > <ToolMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=false '(raw markdown with syntax highlightin…'
+Error: Snapshot `<ToolMessage /> - Raw Markdown Display Snapshots > renders with renderMarkdown=false '(raw markdown with syntax highlightin…' 1` mismatched
+
+- Expected
++ Received
+
+- " [OK]  test-tool A tool for testing
+-
+-      Test **bold** and `code` markdown"
++ "
++   ERROR  Text string "[OK]" must be rendered inside <Text> component
++
++  file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/reconciler.ts:220\
++  :10
++
++  -createTextInsta\
++   ce             (file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/\
++                  reconciler.ts:220:10)
++  -completeWor\
++              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj\
++              s/react-reconciler.development.js:9082:42)
++  -runWithFiberIn\
++   EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:1738:13)
++  -completeUnitOfW\
++   rk             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconcile\
++                  r/cjs/react-reconciler.development.js:12962:19)
++  -performUnitOfW\
++   rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:12843:11)
++  -workLoopSyn\
++              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj\
++              s/react-reconciler.development.js:12644:41)
++  -renderRootSy\
++   c           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/c\
++               js/react-reconciler.development.js:12624:11)
++  -performWorkOnR\
++   ot            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler\
++                 /cjs/react-reconciler.development.js:12135:44)
++  -performSyncWorkOn\
++   oot              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconci\
++                    ler/cjs/react-reconciler.development.js:2446:7)
++  -flushSyncWorkAcrossRoo\
++   s_impl                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-re\
++                         conciler/cjs/react-reconciler.development.js:2294:21)
++ "
+
+
+ src/ui/components/messages/ToolMessageRawMarkdown.test.tsx:42:27
+     40|         },
+     41|       );
+     42|       expect(lastFrame()).toMatchSnapshot();
+       |                           ^
+     43:     },
+     44:   );
+
+⎯⎯⎬⎬⎬⎬⎬⎬⎬⎬⎬⎬⎬[6/6]⎯
+
+
+  Snapshots  6 failed
+ Test Files  2 failed | 189 passed | 1 skipped (192)
+      Tests  6 failed | 2508 passed | 43 skipped (2557)
+   Start at  13:45:07
+   Duration  20.63s (transform 5.26s, setup 5.35s, collect 141.64s, tests 18.09s, environment 55.17s, prepare 9.92s)
+
+JUNIT report written to /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli/junit.xml
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.8.0
+npm error location /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c vitest run
+
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/a2a-server
+
+ [OK] src/persistence/gcs.test.ts (12 tests) 8ms
+stdout | src/agent/task.test.ts > Task > scheduleToolCalls should not modify the input requests array
+[INFO] 2026-01-06 13:45:30.012 PM -- [Task] Scheduling batch of 1 tool calls.
+[INFO] 2026-01-06 13:45:30.014 PM -- [Task] Scheduler tool calls updated:
+{
+  "0": "1 (error)"
+}
+[INFO] 2026-01-06 13:45:30.014 PM -- [Task] All tool calls completed by scheduler (batch):
+{
+  "0": "1"
+}
+
+stdout | src/agent/task.test.ts > Task > scheduleToolCalls should not modify the input requests array
+[INFO] 2026-01-06 13:45:30.014 PM -- [Task] Scheduler tool calls updated:
+
+ [OK] src/agent/task.test.ts (1 test) 5ms
+ [OK] src/http/endpoints.test.ts (5 tests) 20ms
+ [OK] src/http/app.test.ts (5 tests) 41ms
+
+ Test Files  4 passed (4)
+      Tests  23 passed (23)
+   Start at  13:45:28
+   Duration  1.51s (transform 610ms, setup 0ms, collect 3.58s, tests 74ms, environment 0ms, prepare 215ms)
+
+JUNIT report written to /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/a2a-server/junit.xml
+
+> llxprt-code-vscode-ide-companion@0.8.0 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/vscode-ide-companion
+
+ [OK] src/open-files-manager.test.ts (17 tests) 11ms
+ [OK] src/extension-multi-folder.test.ts (5 tests | 1 skipped) 7ms
+ [OK] src/extension.test.ts (11 tests) 24ms
+
+ Test Files  3 passed (3)
+      Tests  32 passed | 1 skipped (33)
+   Start at  13:45:30
+   Duration  1.40s (transform 573ms, setup 0ms, collect 2.27s, tests 41ms, environment 0ms, prepare 168ms)
+```
 
 #### npm run build (full output)
 
-Build process details as shown above (all packages built successfully, exit code 0).
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+
+[watch] build started
+[watch] build finished
+```
 
 #### CLI functional test (full output)
 
@@ -3992,7 +5286,6 @@ Build process details as shown above (all packages built successfully, exit code
 $ node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
 Checking build status...
 Build is up-to-date.
-
 
 Here's a haiku for you:
 
