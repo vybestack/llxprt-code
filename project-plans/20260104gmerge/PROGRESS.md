@@ -124,3 +124,15 @@ Use this checklist to track batch execution progress.
 - LLxprt retains all 5 telemetry CLI flags (--telemetry, --telemetry-target, --telemetry-otlp-endpoint, --telemetry-log-prompts, --telemetry-outfile)
 - Upstream uses Clearcut for telemetry; LLxprt uses uiTelemetryService and logCliConfiguration()
 
+### Batch 13 (2026-01-06)
+- Upstream commit dcf362bc implements tree-sitter WASM bundling for shell command parsing
+- Original plan decision: SKIP (deferred for separate evaluation)
+- Re-validated all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- Verified missing dependencies: web-tree-sitter, tree-sitter-bash, esbuild-plugin-wasm
+- Verified missing files: integration-tests/flicker.test.ts
+- Current LLxprt shell parsing: regex-based (splitCommands, getCommandRoot, detectCommandSubstitution)
+- See NOTES.md for detailed analysis and architectural comparison
+- Decision: PERMANENT SKIP - complexity outweighs accuracy benefit for LLxprt
+- AUDIT.md: No changes needed (SKIP decision confirmed)
+

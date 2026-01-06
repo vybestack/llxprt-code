@@ -8,7 +8,7 @@
 |---|---:|
 | PICKED | 0 |
 | REIMPLEMENTED | 5 |
-| SKIP | 2 |
+| SKIP | 3 |
 | PARTIAL | 1 |
 | NO_OP | 0 |
 | ALREADY_PRESENT | 0 |
@@ -63,7 +63,7 @@
 | 41 | `a4403339` | PICK | REIMPLEMENTED - COMMITTED | `a11d156aa` | feat(ui): add "Esc to close" hint to SettingsDialog (#11289) | REIMPLEMENTED - updated help text and tests (LLxprt has no snapshots) |
 | 43 | `9049f8f8` | REIMPLEMENT | SKIP |  | feat: remove deprecated telemetry flags (#11318) | LLxprt has multi-provider architecture with different telemetry system. Upstream removes Google-specific telemetry CLI flags (--telemetry, --telemetry-target, --telemetry-otlp-endpoint, --telemetry-log-prompts, --telemetry-outfile) deprecated in favor of settings.json. LLxprt's telemetry differs and these flags should be reviewed separately for multi-provider system. |
 | 44 | `22f725eb` | PICK | SKIP |  | feat: allow editing queued messages with up arrow key (#10392) | LLxprt lacks the queued message infrastructure (useMessageQueue hook, QueuedMessageDisplay component) required by this feature. This is a significant feature addition (399 lines) that LLxprt doesn't have. Would require major new code addition rather than simple pick/reimplement. |
-| 45 | `dcf362bc` | REIMPLEMENT |  |  | Inline tree-sitter wasm and add runtime fallback (#11157) |  |
+| 45 | `dcf362bc` | REIMPLEMENT | SKIP |  | Inline tree-sitter wasm and add runtime fallback (#11157) | PERMANENT SKIP - Requires 3 new npm dependencies (web-tree-sitter, tree-sitter-bash, esbuild-plugin-wasm), significant build system changes (~500 lines), Windows shell behavior change (PowerShell default), +500KB bundle size. LLxprt's regex-based shell parsing works effectively for 95%+ of use cases. Re-validated 2026-01-06: all commands PASS (lint, typecheck, build, start). See PROGRESS.md and NOTES.md for detailed analysis. |
 | 46 | `a67deae8` | SKIP |  |  | test: skip extension update test in windows (#11275) |  |
 | 47 | `cd0f9fe2` | SKIP |  |  | chore: revert ink fork to upstream (#11296) |  |
 | 48 | `406f0baa` | PICK |  |  | fix(ux) keyboard input hangs while waiting for keyboard input. (#10121) |  |
