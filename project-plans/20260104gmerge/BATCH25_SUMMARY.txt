@@ -1,0 +1,4 @@
+Batch 25 Summary: SKIP (ARCHITECTURAL-DIFF)
+- commit: dd42893d
+- All validations PASSED
+- See NOTES.md for full details
