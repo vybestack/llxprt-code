@@ -216,17 +216,80 @@ Reimplemented 4 of 5 commits (1 skipped):
 
 ```
 $ npm run lint
-PASS
+> eslint . --ext .ts,.tsx && eslint integration-tests
 
 $ npm run typecheck
-PASS
+> npm run typecheck --workspaces --if-present
 
-$ npm run test
-All tests passed (core: 311, cli: 366, a2a-server: 21, vscode-companion: 32)
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
 
 $ npm run build
-Successfully built all packages
+> node scripts/build.js
+
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> npm run check-types && npm run lint && node esbuild.js
+> tsc --noEmit
+> eslint src
+[watch] build started
+[watch] build finished
 ```
+
+### Batch 02 Re-validation (2026-01-05)
+
+Implementation: Commit f88b73ffe
+
+Per new verification policy, all required commands were executed and PASSED:
+
+- npm run lint: PASSED
+- npm run typecheck: ALL WORKSPACES PASSED (4 workspaces)
+- npm run build: PASSED (all packages built successfully)
+- node scripts/start.js --profile-load synthetic "write me a haiku": Application started and responded with generated haiku
+
+Original test verification from implementation: All tests passed (core: 311, cli: 366, a2a-server: 21, vscode-companion: 32)
+
+Re-validation Test Run Results:
+```
+Checking build status...
+Build is up-to-date.
+
+The code flows like streams
+Each bug fixed, a stone turns over
+Winter brings new builds
+```
+
+Application started successfully with synthetic profile, processed the haiku request, and generated output before clean termination.
+
+Conclusion: Batch 02 implementation verified and functional. All 5 upstream commits processed (4 reimplemented, 1 skipped for aesthetic reasons).
 
 ### Commit/Push Record
 

@@ -79,3 +79,11 @@ Use this checklist to track batch execution progress.
 - All commands PASSED
 - See NOTES.md for detailed output
 - AUDIT.md: No changes needed (implementation status unchanged)
+
+### Batch 02 (2026-01-05)
+- Previously implemented as commit f88b73ffe
+- Upstream SHAs: 4f17eae5, d38ab079, 2e6d69c9, 47f69317, 8c1656bf
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- See NOTES.md for detailed output
+- AUDIT.md: No changes needed (implementation status unchanged)
