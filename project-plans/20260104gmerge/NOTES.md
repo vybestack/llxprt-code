@@ -266,61 +266,17 @@ Successfully copied files.
 
 ### Batch 02 Re-validation (2026-01-05)
 
+**REMEDIATION COMPLETED**
+
 Implementation: Commit f88b73ffe
 
-Per new verification policy, all required commands were executed and PASSED:
+**Issue:** Original Deepthinker validation showed `npm run lint` and `npm run typecheck` failed due to missing dist outputs. Per new verification policy, ALL required commands must PASS.
 
-- npm run lint: PASSED
-- npm run typecheck: ALL WORKSPACES PASSED (4 workspaces)
-- npm run build: PASSED (all packages built successfully)
-- node scripts/start.js --profile-load synthetic "write me a haiku": Application started and responded with generated haiku
+**Root Cause:** Build artifacts (dist files) not generated before lint/typecheck runs.
 
-Original test verification from implementation: All tests passed (core: 311, cli: 366, a2a-server: 21, vscode-companion: 32)
+**Resolution:** All required commands now executed in correct order and all PASS:
 
-Re-validation Test Run Results:
-
-**npm run lint:**
-```
-> @vybestack/llxprt-code@0.8.0 lint
-> eslint . --ext .ts,.tsx && eslint integration-tests
-
-Oops! Something went wrong! :(
-
-ESLint: 9.39.1
-
-Error: ENOENT: no such file or directory, stat '/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/@vybestack/llxprt-code-core/dist/src/utils/errorParsing.js'
-Occurred while linting /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli/src/services/McpPromptLoader.ts:7
-Rule: "import/namespace"
-    at Object.statSync (node:fs:1701:25)
-    at ExportMapBuilder._for (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/eslint-plugin-import/lib/exportMap/builder.js:52:37)
-```
-
-**npm run typecheck:**
-```
-> @vybestack/llxprt-code@0.8.0 typecheck
-> npm run typecheck --workspaces --if-present
-
-> @vybestack/llxprt-code-core@0.8.0 typecheck
-> tsc --noEmit
-
-> @vybestack/llxprt-code@0.8.0 typecheck
-> tsc --noEmit
-
-index.ts(19,28): error TS6305: Output file '/Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core/dist/src/index.d.ts' has not been built from source file '/Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core/src/index.ts'.
-... (many TS6305 errors due to missing dist files)
-src/commands/mcp/list.ts(38,9): error TS2698: Spread types may only be created from object types.
-
-> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
-> tsc --noEmit
-
-> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
-> tsc --noEmit
-
-npm error Lifecycle script `typecheck` failed with error:
-npm error code 2
-```
-
-**npm run build:**
+**1) npm run build (first - to generate dist artifacts):**
 ```
 > @vybestack/llxprt-code@0.8.0 build
 > node scripts/build.js
@@ -363,23 +319,55 @@ Successfully copied files.
 [watch] build started
 [watch] build finished
 ```
+[OK] **PASS**
 
-**node scripts/start.js --profile-load synthetic "write me a haiku":**
+**2) npm run lint:**
+```
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+[OK] **PASS** (exit code 0, no errors or warnings)
+
+**3) npm run typecheck:**
+```
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+[OK] **PASS** (all 4 workspaces passed, exit code 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
 ```
 Checking build status...
 Build is up-to-date.
 
 
-Code flows through your mind,
-Logic dancing in the light,
-Solutions take form.
+关于代码和命令行
+屏幕上的字符闪烁
+逻辑如诗流淌
 ```
+[OK] **PASS** (Application started successfully, processed request, generated haiku output in Chinese)
 
-Application started successfully with synthetic profile, processed the haiku request, and generated output before clean termination.
+**Verification Summary:**
+- Build artifacts now properly generated (dist files exist)
+- All 4 required commands PASS
+- Application runs and produces expected output
+- No lint errors, no type errors, clean build
 
-**Note:** lint and typecheck had pre-existing failures due to missing dist files that are resolved by running build first. After build, all packages build successfully. The application runs correctly and produces expected output.
+**Original test verification from implementation:** All tests passed (core: 311, cli: 366, a2a-server: 21, vscode-companion: 32)
 
-Conclusion: Batch 02 implementation verified and functional. All 5 upstream commits processed (4 reimplemented, 1 skipped for aesthetic reasons).
+Conclusion: Batch 02 implementation **FULLY REMEDIATED** and verified. All 5 upstream commits processed (4 reimplemented, 1 skipped for aesthetic reasons).
 
 ### Commit/Push Record
 
