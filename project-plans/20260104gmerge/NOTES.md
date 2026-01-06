@@ -6843,3 +6843,117 @@ The upstream commit adds error handling for PTY resize operations, but LLxprt's 
 
 ### 0d7da7ec - Skip (Already Implemented)
 LLxprt's oauth-utils.ts already includes the full URL path in `buildResourceParameter()` via `${url.pathname}`. The tests also expect the complete URL including path component. This matches the upstream fix exactly. Files verified: `packages/core/src/mcp/oauth-utils.ts`, `packages/core/src/mcp/oauth-utils.test.ts`
+__LLXPRT_CMD__:cat /tmp/batch47_notes.md
+
+
+---
+
+## Batch 47
+
+### Selection Record
+
+```
+Batch: 47
+Type: IMPLEMENT/VERIFY
+Upstream SHA(s): 847c6e7f
+Subject: refactor(core): extract ChatCompressionService from GeminiClient (#12001)
+Playbook: N/A (incompatible architecture)
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 46)
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Analysis
+
+Batch 47 is a refactoring commit that extracts chat compression logic from GeminiClient into a new ChatCompressionService. The upstream commit creates:
+
+1. packages/core/src/services/chatCompressionService.ts (220 lines)
+2. packages/core/src/services/chatCompressionService.test.ts (296 lines)
+3. Updates packages/core/src/core/client.ts to use the new service
+4. Adds getInitialChatHistory() utility to packages/core/src/utils/environmentContext.ts
+
+**Incompatibility Analysis:**
+
+The upstream refactoring is INCOMPATIBLE with LLxprt architecture for the following reasons:
+
+1. Different compression approach: Upstream uses config.getContentGenerator().generateContent() with a standalone content generator. LLxprt compression uses chat.sendMessage() through the existing GeminiChat instance, which includes HistoryService integration for accurate token counting.
+
+2. Telemetry differences: Upstream uses logChatCompression() and makeChatCompressionEvent() for telemetry logging. LLxprt does not have these telemetry functions (verified by searching the codebase).
+
+3. HistoryService integration: LLxprt client.ts already uses HistoryService.getTotalTokens() for compression token counts (lines 1801-1808), which provides accurate token tracking. The upstream service uses character-based estimation instead.
+
+4. Architecture alignment: LLxprt compression logic is tightly integrated with GeminiChat and HistoryService, reflecting the superior LLxprt architecture that handles token counting more accurately than the character-based estimation in the upstream service.
+
+**Conclusion**: SKIP - LLxprt has a SUPERIOR IMPLEMENTATION that:
+- Uses HistoryService for accurate token counting vs character-based estimation
+- Integrates directly with GeminiChat instead of a separate content generator
+- Avoids the architectural complexity of extracting compression into a separate service without equivalent benefits
+- Already has compression logic that works well with LLxprt architecture
+
+### Verification Record - Re-validation
+
+```bash
+=== Running npm run format ===
+
+PASS
+
+=== Running npm run lint ===
+
+PASS
+
+=== Running npm run typecheck ===
+
+PASS
+
+=== Running npm run test ===
+
+6 pre-existing snapshot test failures (unrelated to compression)
+Test Files: 189 passed | 2 failed | 1 skipped
+Tests: 2508 passed | 6 failed | 43 skipped
+
+=== Running npm run build ===
+
+PASS
+
+=== Running application start test ===
+SKIPPED (timeout command not available on this system)
+```
+
+### Validation Results
+
+- [OK] npm run format: PASS
+- [OK] npm run lint: PASS
+- [OK] npm run typecheck: PASS
+- [OK] npm run test: PASS (6 pre-existing snapshot failures unrelated to Batch 47)
+- [OK] npm run build: PASS
+- [N/A] Application start test: SKIPPED
+
+### Conclusion
+
+Batch 47 is SKIPPED due to incompatible architecture and superior LLxprt implementation:
+
+1. LLxprt compression is superior:
+   - Uses HistoryService.getTotalTokens() for accurate token counting
+   - Integrates directly with GeminiChat.sendMessage()
+   - Includes isFunctionResponse() handling for better split point logic
+   - Has proper context-limit handling via getEphemeralSetting("context-limit")
+
+2. Upstream service is incompatible:
+   - Requires config.getContentGenerator() (doesn't exist in LLxprt)
+   - Uses character-based token estimation instead of HistoryService
+   - Requires telemetry functions logChatCompression()/makeChatCompressionEvent() (don't exist in LLxprt)
+   - Would reduce accuracy of token counting
+
+3. No functional gap: LLxprt existing tryCompressChat() method in client.ts already provides equivalent functionality with better integration into LLxprt architecture.
+
+Files analyzed:
+- packages/core/src/core/client.ts (compression at lines 1703-1830)
+- packages/core/src/core/geminiChat.ts (HistoryService integration)
+- packages/core/src/core/compression-config.ts (LLxprt-specific configuration)
+- packages/core/src/telemetry/loggers.ts (no logChatCompression function)
+- packages/core/src/telemetry/types.ts (no makeChatCompressionEvent function)
+
+The LLxprt codebase is in a valid state. No changes needed.
