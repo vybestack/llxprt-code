@@ -5,12 +5,8 @@
  */
 
 import { getErrorMessage, isNodeError } from './errors.js';
-<<<<<<< HEAD
-import { URL } from 'url';
-=======
 import { URL } from 'node:url';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
->>>>>>> e72c00cf9 (fix(proxy): Add error handling to proxy agent creation (#11538))
 
 const PRIVATE_IP_RANGES = [
   /^10\./,
