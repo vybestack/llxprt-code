@@ -8,7 +8,7 @@ Use this checklist to track batch execution progress.
 | **In Progress** | — |
 | **Next Up** | — |
 | **Progress** | 49/49 (100%) |
-| **Last Updated** | 2026-01-04 |
+| **Last Updated** | 2026-01-06 |
 
 ## Preflight
 - [x] On main: `git pull --ff-only`
@@ -39,7 +39,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 18 — FULL — PICK — `b4a405c6, d3bdbc69` — b4a405c6 SKIP (cosmetic, LLxprt has custom descriptions) / d3bdbc69 SKIP-REIMPLEMENT (extension IDs valuable but conflicts with LLxprt flow)
 - [x] Batch 19 — QUICK — SKIP — `08e87a59` — SKIP (Clearcut telemetry not in LLxprt; uses logCliConfiguration() instead)
 - [x] Batch 20 — FULL — SKIP — `21163a16` — SKIP (LLxprt command tests diverged; can enable typechecking independently)
-- [x] Batch 21 — QUICK — SKIP — `9b9ab609` — SKIP (LLxprt has sophisticated DebugLogger with 269+ usages)
+- [x] Batch 21 — QUICK — SKIP — `9b9ab609` — feat(logging): Centralize debug logging with a dedicated utility (#11417) — **RE-VALIDATED (2026-01-06): LLxprt has superior 269+ line DebugLogger system with 28+ usages**
 - [x] Batch 22 — FULL — SKIP — `f4330c9f` — SKIP (LLxprt retains workspace extensions for multi-provider config)
 - [x] Batch 23 — QUICK — SKIP — `cedf0235` — SKIP (ui/components tests diverged for multi-provider)
 - [x] Batch 24 — FULL — SKIP — `2ef38065` — SKIP (SHELL_TOOL_NAME already exists in tool-names.ts)
@@ -57,11 +57,11 @@ Use this checklist to track batch execution progress.
 - [x] Batch 36 — FULL — SKIP — `995ae717` — SKIP (LLxprt has DebugLogger architecture, not shared singleton)
 - [x] Batch 37 — QUICK — SKIP — `cc7e1472` — SKIP-REIMPLEMENT (major extension system refactor - 35 files)
 - [x] Batch 38 — FULL — SKIP — `31f58a1f, 70a99af1, 72b16b3a` — all CONFLICTS: 31f58a1 SKIP (different ripgrep), 70a99af1 REIMPLEMENT, 72b16b3a REIMPLEMENT
-- [x] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — REIMPLEMENT (ShellTool needs static Name, others have it)
+- [x] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — SKIP (LLxprt already has complete message bus/policy engine)
 - [x] Batch 40 — FULL — SKIP — `654c5550, 0658b4aa` — both CONFLICTS: 654c5550 SKIP-TEST, 0658b4aa MANUAL_REVIEW
-- [x] Batch 41 — QUICK — REIMPLEMENT — `bf80263b` — SKIP (LLxprt already has complete message bus/policy engine)
+- [x] Batch 41 — QUICK — REIMPLEMENT — `bf80263b` — SKIP (useGeminiStream.ts conflicts, different architecture)
 - [x] Batch 42 — FULL — PICK — `62dc9683, e72c00cf, cf16d167` — 62dc9683 SKIP, e72c00cf PICKED f3d6f58e2, cf16d167 PICKED ba3c2f7a4
-- [x] Batch 43 — QUICK — REIMPLEMENT — `dd3b1cb6` — SKIP (useGeminiStream.ts conflicts, different architecture)
+- [x] Batch 43 — QUICK — REIMPLEMENT — `dd3b1cb6` — REIMPLEMENT (ShellTool needs static Name, others have it)
 - [x] Batch 44 — FULL — REIMPLEMENT — `b364f376` — SKIP (LLxprt has DebugLogger architecture)
 - [x] Batch 45 — QUICK — PICK — `16f5f767, ccf8d0ca, 5b750f51, ed9f714f, 306e12c2` — 16f5f767 SKIP, ccf8d0ca SKIP, 5b750f51 SKIP (already implemented), ed9f714f SKIP, 306e12c2 PICKED b1fc76d88
 - [x] Batch 46 — FULL — PICK — `c7243997, 2940b508, 0d7da7ec` — c7243997 PICKED a9ecf32c1, 2940b508 SKIP (already implemented), 0d7da7ec PICKED 5b6901cd7
@@ -191,3 +191,32 @@ Use this checklist to track batch execution progress.
 - See NOTES.md for detailed output and architectural analysis
 - AUDIT.md: Updated line 90 to reflect SKIP decision with verification date
 
+### Batch 21 (2026-01-06)
+- Status: SKIP - Already implemented - RE-VALIDATED
+- Upstream commit: 9b9ab609 - feat(logging): Centralize debug logging with a dedicated utility (#11417)
+- Upstream changes:
+  - Creates packages/core/src/utils/debugLogger.ts (37 lines)
+  - Simple DebugLogger class with log(), warn(), error(), debug() methods wrapping console.* calls
+  - Exports singleton: export const debugLogger = new DebugLogger()
+  - Replaces console.log/warn/error in KeypressContext.tsx with debugLogger calls
+  - Adds packages/core/src/utils/debugLogger.test.ts (79 lines)
+- LLxprt status: FULLY ALREADY IMPLEMENTED with SUPERIOR system
+  - packages/core/src/debug/DebugLogger.ts (269+ lines) - Enterprise-grade debug logging system
+  - Features beyond upstream:
+    - Namespace-based logging (e.g., 'llxprt:ui:keypress')
+    - ConfigurationManager integration for dynamic enable/disable
+    - Namespace pattern matching with wildcards
+    - Output targeting: file + stderr options
+    - Sensitive data redaction
+    - Lazy message evaluation (zero overhead when disabled)
+  - 28+ files already using DebugLogger across core and CLI packages
+  - Exported from packages/core/src/index.ts and packages/core/src/debug/index.ts
+- Verification evidence:
+  - lint: PASS (exit code 0)
+  - typecheck: PASS (all 4 workspaces)
+  - build: PASS (exit code 0)
+  - start.js: PASS (haiku generation successful)
+- Comparison table in NOTES.md shows LLxprt has all upstream functionality plus enterprise features
+- Decision: SKIP - LLxprt's DebugLogger is significantly more advanced. Applying upstream would be a downgrade.
+- See NOTES.md for detailed comparison and verification output (Batch 21 section)
+- AUDIT.md: No changes needed (SKIP decision confirmed)

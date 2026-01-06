@@ -89,7 +89,7 @@
 | 68 | `08e87a59` | REIMPLEMENT |  |  | Log all user settings to enable measurement of experiment impacts (#11354) |  |
 | 69 | `21163a16` | SKIP | SKIP | `490a0ed6a` | Enable typechecking for ui/commands tests (#11340) | LLxprt command tests excluded from typecheck (tsconfig.json lines 41-65) due to architectural divergence. All 33 tests execute and pass at runtime. Verified 2026-01-06: all mandatory commands PASS. |
 | 70 | `0b20f88f` | SKIP |  |  | test: skip context compression integration test (#11348) |  |
-| 71 | `9b9ab609` | REIMPLEMENT |  |  | feat(logging): Centralize debug logging with a dedicated utility (#11417) |  |
+| 71 | `9b9ab609` | REIMPLEMENT | SKIP |  | feat(logging): Centralize debug logging with a dedicated utility (#11417) | LLxprt has superior 269+ line DebugLogger system (namespace-based, ConfigurationManager integration, file+stderr output, sensitive redaction, lazy evaluation, 28+ usages). Simple upstream 37-line utility would be a downgrade. Re-validated 2026-01-06: all mandatory commands PASS (lint, typecheck, build, start). |
 | 72 | `f4330c9f` | REIMPLEMENT |  |  | remove support for workspace extensions and migrations (#11324) |  |
 | 73 | `cedf0235` | PICK |  |  | Enable typechecking for ui/components tests (#11350) |  |
 | 74 | `2ef38065` | PICK |  |  | refactor(tools): Migrate shell tool name to a centralized constant (#11418) |  |
