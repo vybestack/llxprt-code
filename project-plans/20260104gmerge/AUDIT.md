@@ -151,15 +151,15 @@
 | 131 | `f5e07d94` | SKIP |  |  | Docs: update for MCP template (#11561) |  |
 | 132 | `b364f376` | VERIFIED |  |  | refactor(logging): Centralize console logging with debugLogger (#11590) | VERIFIED - LLxprt has superior DebugLogger implementation (packages/core/src/debug/DebugLogger.ts). Upstream simple 30-line wrapper vs LLxprt 300+ line system with namespace filtering, lazy evaluation, log levels, redaction, file output, hot-reload. 293+ active instances. All validation commands PASS. |
 | 133 | `c6a59896` | SKIP |  |  | Add extensions logging (#11261) |  |
-| 134 | `16f5f767` | PICK |  |  | Test: use waitFor rather than wait (#11334) |  |
+| 134 | `16f5f767` | SKIP | | | Test: use waitFor rather than wait (#11334) | Already implemented - waitFor already used in InputPrompt.test.ts
 | 135 | `519bd57e` | SKIP |  |  | chore: WIP for todo aria labels (#11494) |  |
-| 136 | `ccf8d0ca` | PICK |  |  | Re-enable Ctrl+C integration test (#11357) |  |
+| 136 | `ccf8d0ca` | SKIP | | | Re-enable Ctrl+C integration test (#11357) | Incompatible TestRig API - LLxprt does not support settings parameter
 | 137 | `465f97a5` | SKIP |  |  | chore(ci): update PR check name (#11565) |  |
-| 138 | `5b750f51` | PICK |  |  | Disable CI for stable release setting (#11274) |  |
-| 139 | `ed9f714f` | PICK |  |  | Non-interactive MCP prompt commands (#11291) |  |
+| 138 | `5b750f51` | SKIP | | | Disable CI for stable release setting (#11274) | Feature does not exist - Codebase Investigator not in LLxprt
+| 139 | `ed9f714f` | SKIP | | | Non-interactive MCP prompt commands (#11291) | Architectural divergence - non-interactive CLI has different loader design
 | 140 | `cc3904f0` | SKIP |  |  | chore: todo aria labels (#11496) |  |
 | 141 | `c6a59896` | SKIP |  |  | Add extensions logging (#11261) |  |
-| 142 | `306e12c2` | PICK |  |  | Fix shift+tab input regression (#11349) |  |
+| 142 | `306e12c2` | SKIP | | | Fix shift+tab input regression (#11349) | Already implemented as b1fc76d88 (same PR #11634)
 | 143 | `c7243997` | PICK |  |  | Fix flaky BaseSelectionList test (#11337) |  |
 | 144 | `2940b508` | PICK |  |  | fix: Ignore correct errors thrown when resizing or scrolling an exited pty (#11440) |  |
 | 145 | `d1c913ed` | SKIP |  |  | Docs: update README for MCP prompts (#11467) |  |
