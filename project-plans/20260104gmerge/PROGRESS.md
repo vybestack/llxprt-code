@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 12 (1 commit - SKIPPED - feature doesn't exist in LLxprt) |
-| **In Progress** | — |
-| **Next Up** | Batch 13 |
-| **Progress** | 10/49 (20%) |
+| **Last Completed** | Batch 15 (3a1d3769 - EDIT_TOOL_NAME - PICKED as 8d4830129) |
+| **In Progress** | Batch 16 (f3ffaf09 copy delay DONE as a5ebeada6; 4 remaining commits pending) |
+| **Next Up** | Batch 16 completion (0ded546a, 659b0557, 4a0fcd05, 2b61ac53), then Batch 17 |
+| **Progress** | 15/49 (31%) - Note: Batch 13 SKIPPED, Batch 14 SKIPPED |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -22,7 +22,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 01 — QUICK — REIMPLEMENT — `b8df8b2a` — feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630)
 - [x] Batch 02 — FULL — PICK — `4f17eae5, d38ab079, 2e6d69c9, 47f69317, 8c1656bf` — feat(cli): Prevent queuing of slash and shell commands (#11094) / Update shell tool call colors for confirmed actions (#11126) / Fix --allowed-tools in non-interactive mode to do substring matching for parity with interactive mode. (#10944) / Add support for output-format stream-jsonflag for headless mode (#10883) / Don't always fall back on a git clone when installing extensions (#11229)
 - [x] Batch 03 — QUICK — PICK — `cfaa95a2` — feat(cli): Add nargs to yargs options (#11132)
-- [x] Batch 04 — FULL — REIMPLEMENT — `130f0a02` — chore(subagents): Remove legacy subagent code (#11175)
+- [x] Batch 04 — FULL — SKIP — `130f0a02` — chore(subagents): Remove legacy subagent code (#11175) — LLxprt has advanced SubAgentScope system, not applicable
 - [x] Batch 05 — QUICK — REIMPLEMENT — `c9c633be` — refactor: move `web_fetch` tool name to `tool-names.ts` (#11174)
 - [x] Batch 06 — FULL — PICK — `60420e52, a9083b9d, b734723d` — feat: Do not add trailing space on directory autocomplete (#11227) / include extension name in `gemini mcp list` command (#11263) / Update extensions install warning (#11149)
 - [x] Batch 07 — QUICK — REIMPLEMENT — `05930d5e` — fix(web-fetch): respect Content-Type header in fallback mechanism (#11284)
@@ -31,10 +31,10 @@ Use this checklist to track batch execution progress.
 - [x] Batch 10 — FULL — PICK — `c71b7491, 991bd373, a4403339` — fix: Add folder names in permissions dialog similar to the launch dialog (#11278) / fix(scripts): Improve deflake script isolation and unskip test (#11325) / feat(ui): add "Esc to close" hint to SettingsDialog (#11289)
 - [x] Batch 11 — QUICK — REIMPLEMENT — `9049f8f8` — feat: remove deprecated telemetry flags (#11318)
 - [x] Batch 12 — FULL — PICK — `22f725eb` — feat: allow editing queued messages with up arrow key (#10392)
-- [ ] Batch 13 — QUICK — REIMPLEMENT — `dcf362bc` — Inline tree-sitter wasm and add runtime fallback (#11157)
-- [ ] Batch 14 — FULL — PICK — `406f0baa, d42da871` — fix(ux) keyboard input hangs while waiting for keyboard input. (#10121) / fix(accessibility) allow line wrapper in screen reader mode  (#11317)
-- [ ] Batch 15 — QUICK — PICK — `3a1d3769` — Refactor `EditTool.Name` to use centralized `EDIT_TOOL_NAME` (#11343)
-- [ ] Batch 16 — FULL — PICK — `f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53` — fix: copy command delay in Linux handled (#6856) / fix(prompt): Make interactive command avoidance conditional (#11225) / feat(cli): Suppress slash command execution and suggestions in shell mode (#11380) / fix(scripts): Update get-release-version to use yargs parsing, handle a dynamically set package name (#11374) / feat: add missing visual cue for closing dialogs with Esc key (#11386)
+- [x] Batch 13 — QUICK — SKIP — `dcf362bc` — Inline tree-sitter wasm and add runtime fallback (#11157) — Deferred: complex build system change, needs separate evaluation
+- [x] Batch 14 — FULL — SKIP — `406f0baa, d42da871` — fix(ux) keyboard input hangs while waiting for keyboard input. (#10121) / fix(accessibility) allow line wrapper in screen reader mode  (#11317) — LLxprt already has KITTY_SEQUENCE_TIMEOUT_MS; different line wrapper approach
+- [x] Batch 15 — QUICK — PICK — `3a1d3769` — Refactor `EditTool.Name` to use centralized `EDIT_TOOL_NAME` (#11343) — COMMITTED as 8d4830129
+- [ ] Batch 16 — FULL — PICK — `f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53` — fix: copy command delay in Linux handled (#6856) COMMITTED as a5ebeada6 / fix(prompt): Make interactive command avoidance conditional (#11225) / feat(cli): Suppress slash command execution and suggestions in shell mode (#11380) / fix(scripts): Update get-release-version to use yargs parsing, handle a dynamically set package name (#11374) / feat: add missing visual cue for closing dialogs with Esc key (#11386)
 - [ ] Batch 17 — QUICK — PICK — `8da47db1, 7c086fe5, e4226b8a, 4d2a1111, 426d3614` — Enable/fix MCP command tests typechecking (#11281) / MCP docs/UI cleanup (#10943) / Update nag respects disableUpdateNag (#11269) / Case-insensitive @file suggestions (#11285) / Fix auth selection integration test (#11256)
 - [ ] Batch 18 — FULL — PICK — `b4a405c6, d3bdbc69` — Slash command descriptions style cleanup (#11330) / Extensions: add extension IDs (#11333)
 - [ ] Batch 19 — QUICK — REIMPLEMENT — `08e87a59` — Log all user settings to enable measurement of experiment impacts (#11354)
