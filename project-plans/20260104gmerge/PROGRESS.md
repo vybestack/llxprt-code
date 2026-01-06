@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 15 (3a1d3769 - EDIT_TOOL_NAME - PICKED as 8d4830129) |
-| **In Progress** | Batch 16 (f3ffaf09 copy delay DONE as a5ebeada6; 4 remaining commits pending) |
-| **Next Up** | Batch 16 completion (0ded546a, 659b0557, 4a0fcd05, 2b61ac53), then Batch 17 |
-| **Progress** | 15/49 (31%) - Note: Batch 13 SKIPPED, Batch 14 SKIPPED |
+| **Last Completed** | Batch 16 (3 PICKED, 2 SKIPPED) |
+| **In Progress** | — |
+| **Next Up** | Batch 17 |
+| **Progress** | 16/49 (33%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -34,7 +34,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 13 — QUICK — SKIP — `dcf362bc` — Inline tree-sitter wasm and add runtime fallback (#11157) — Deferred: complex build system change, needs separate evaluation
 - [x] Batch 14 — FULL — SKIP — `406f0baa, d42da871` — fix(ux) keyboard input hangs while waiting for keyboard input. (#10121) / fix(accessibility) allow line wrapper in screen reader mode  (#11317) — LLxprt already has KITTY_SEQUENCE_TIMEOUT_MS; different line wrapper approach
 - [x] Batch 15 — QUICK — PICK — `3a1d3769` — Refactor `EditTool.Name` to use centralized `EDIT_TOOL_NAME` (#11343) — COMMITTED as 8d4830129
-- [ ] Batch 16 — FULL — PICK — `f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53` — fix: copy command delay in Linux handled (#6856) COMMITTED as a5ebeada6 / fix(prompt): Make interactive command avoidance conditional (#11225) / feat(cli): Suppress slash command execution and suggestions in shell mode (#11380) / fix(scripts): Update get-release-version to use yargs parsing, handle a dynamically set package name (#11374) / feat: add missing visual cue for closing dialogs with Esc key (#11386)
+- [x] Batch 16 — FULL — PICK — `f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53` — f3ffaf09 PICKED a5ebeada6 / 0ded546a SKIP (PromptService architecture) / 659b0557 PICKED f6d41e648 / 4a0fcd05 SKIP (different release system) / 2b61ac53 PICKED 8b6f7643f
 - [ ] Batch 17 — QUICK — PICK — `8da47db1, 7c086fe5, e4226b8a, 4d2a1111, 426d3614` — Enable/fix MCP command tests typechecking (#11281) / MCP docs/UI cleanup (#10943) / Update nag respects disableUpdateNag (#11269) / Case-insensitive @file suggestions (#11285) / Fix auth selection integration test (#11256)
 - [ ] Batch 18 — FULL — PICK — `b4a405c6, d3bdbc69` — Slash command descriptions style cleanup (#11330) / Extensions: add extension IDs (#11333)
 - [ ] Batch 19 — QUICK — REIMPLEMENT — `08e87a59` — Log all user settings to enable measurement of experiment impacts (#11354)
