@@ -8,9 +8,9 @@
 |---|---:|
 | PICKED | 0 |
 | REIMPLEMENTED | 5 |
-| SKIP | 4 |
+| SKIP | 3 |
 | PARTIAL | 1 |
-| NO_OP | 0 |
+| NO_OP | 1 |
 | ALREADY_PRESENT | 0 |
 | DIVERGED | 0 |
 | MISSING | 0 |
@@ -117,7 +117,7 @@
 | 96 | `3c57e76c` | SKIP |  |  | chore(release): v0.11.0-preview.0 |  |
 | 97 | `61a71c4f` | PICK | SKIP |  | Testing: remove custom waitFor (#11327) | LLxprt requires custom waitFor implementation for ink component - architectural incompatibility. 2 of 3 Batch 35 commits applied, all mandatory commands PASS 2026-01-06. |
 | 98 | `d5a06d3c` | PICK | VERIFIED | `019f9daba` | Fix gitignore parser for trailing spaces (#11299) | Trailing spaces in gitignore patterns preserved - 21 insertions, 1 deletion. All mandatory commands PASS 2026-01-06. |
-| 99 | `995ae717` | SKIP | SKIP |  | refactor(logging): Centralize all console messaging to a shared logger (part 1) (#11537) | LLxprt has superior 269+ line DebugLogger system (namespace-based, ConfigurationManager integration, file+stderr output, sensitive redaction, lazy evaluation, 28+ usages). Simple upstream 37-line utility would be a downgrade. All mandatory commands PASS - verified 2026-01-06. |
+| 99 | `995ae717` | SKIP | NO_OP |  | refactor(logging): Centralize all console messaging to a shared logger (part 1) (#11537) | LLxprt has superior 269+ line DebugLogger system (namespace-based, ConfigurationManager integration, file+stderr output, sensitive redaction, lazy evaluation, 28+ usages). Simple upstream 37-line utility would be a downgrade. All mandatory commands PASS - verified 2026-01-06. |
 | 100 | `cc7e1472` | REIMPLEMENT |  |  | Pass whole extensions rather than just context files (#10910) |  |
 | 101 | `31f58a1f` | PICK |  |  | Fix Windows ripgrep detection (#11221) |  |
 | 102 | `70a99af1` | PICK |  |  | Fix shell auto-approval parsing (#11405) |  |
