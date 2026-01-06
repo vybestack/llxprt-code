@@ -179,7 +179,7 @@
 | 159 | `5be5575d` | SKIP |  |  | chore: use lower compression threshold for UI (#11473) |  |
 | 160 | `73b3211e` | SKIP |  |  | chore(ui): add footer to show current model (#11544) |  |
 | 161 | `8a725859` | SKIP |  |  | chore: require restart when compression threshold changes (#11545) |  |
-| 162 | `ce40a653` | PICK |  |  | feat: add summarization low token threshold to avoid overflow (#11433) |  |
+| 162 | `ce40a653` | SKIP | NO_OP | Alternative Valid Architecture | Make compression threshold editable in the UI. (#12317) | LLxprt uses object-based `model.chatCompression` API instead of upstream's simplified `model.compressionThreshold` number. Both provide identical functionality; LLxprt's approach is more extensible and aligns with LLxprt's architecture. Applying would be breaking API change with no functional benefit. |
 | 163 | `b1bbef43` | PICK |  |  | Allow continue on prompt if LoopDetection disabled (#11367) |  |
 | 164 | `44b3c974` | SKIP |  |  | fix: Improve quota error messaging (#11364) |  |
 | 165 | `e5161610` | SKIP |  |  | chore(release): v0.11.3 |  |
