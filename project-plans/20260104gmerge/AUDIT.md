@@ -234,3 +234,22 @@ Original decisions: All 3 commits marked as PICK. Analysis shows:
 | `60420e52` | PICK | **PICK** | Same logic in `packages/cli/src/ui/hooks/useCommandCompletion.tsx:223`; applies cleanly (no space when suggestion ends with `/` or `\\`) |
 | `a9083b9d` | PICK | **REIMPLEMENT** | LLxprt already attaches `extensionName` when merging MCP configs but output omits it (`packages/cli/src/commands/mcp/list.ts:121`) |
 | `b734723d` | PICK | **REIMPLEMENT** | LLxprt config differs (`llxprt-extension.json`), different warning text (`packages/cli/src/config/extension.ts:578`), no `--consent` option |
+
+### Batch 23 - VERIFIED SKIP
+
+Upstream commit: `cedf0235` - fix(cli): enable typechecking for ui/components tests (#11419)
+Status: SKIP (Already Applied via Architectural Divergence)
+
+Verification (2026-01-06):
+- npm run lint: PASS
+- npm run typecheck: PASS (all 4 workspaces)
+- npm run build: PASS
+- node scripts/start.js --profile-load synthetic "write me a haiku": PASS
+
+Root Cause: LLxprt's multi-provider architectural refactoring removed several ui/components test files. The typecheck enablement addressed by upstream commit cedf0235a is already achieved in LLxprt - no ui/components tests are excluded from typecheck in tsconfig.json.
+
+Impact: None - Batch 23's goal (enable typechecking for ui/components) is already met through LLxprt's architectural divergence.
+
+Evidence: Full analysis in project-plans/20260104gmerge/batch23-notes.md
+---
+

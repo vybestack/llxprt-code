@@ -2479,3 +2479,64 @@ No commit created (SKIP - architectural divergence requires manual review).
 - Decision: SKIP - Significant API change requires architectural review
 - Evidence: Full logging in project-plans/20260104gmerge/batch22-validation.txt
 - Recommendation: Separate cleanup of dead code from API simplification
+
+### Selection Record
+
+### Selection Record
+
+```
+Batch: 23
+Type: QUICK_SKIP
+Upstream SHA(s): cedf0235a
+Subject: fix(cli): enable typechecking for ui/components tests (#11419)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Execution Record
+
+```
+$ git cherry-pick cedf0235a
+(SKIPPED - Already verified)
+```
+
+### Verification Record
+
+**Mandatory Full Validation:**
+
+```bash
+$ npm run lint
+PASS (exit code 0)
+
+$ npm run typecheck
+PASS (all 4 workspaces: core, cli, a2a-server, test-utils)
+
+$ npm run build
+PASS (all packages built successfully)
+
+$ node scripts/start.js --profile-load synthetic "write me a haiku"
+PASS (synthetic profile loaded, haiku generated correctly)
+```
+
+### Status Documentation
+
+**VERIFIED - SKIP (Batch Already Applied via Architectural Divergence)**
+
+Batch 23 upstre am commit cedf0235a enables typechecking for ui/components tests. However, LLxprt already has ui/components typecheck enabled through architectural divergence - missing test files were removed during multi-provider refactoring, not excluded from typecheck.
+
+Key findings:
+- No ui/components tests excluded in LLxprt's tsconfig.json
+- Upstream commit cedf0235a not in LLxprt history
+- Typecheck passes completely (all 4 workspaces)
+- LLxprt has 5/10 ui/components test files from upstream
+- Missing tests removed during multi-provider architectural refactoring
+
+PROGRESS.md correctly identifies Batch 23 as QUICK_SKIP with note "ui/components tests diverged for multi-provider".
+
+All mandatory validation commands passed. See batch23-notes.md for detailed analysis.
+
