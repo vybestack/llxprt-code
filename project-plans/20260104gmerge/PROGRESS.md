@@ -56,7 +56,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 35 — QUICK — PICK — `49bde9fc, 61a71c4f, d5a06d3c` — 49bde9fc PICKED fffbb87ee, 61a71c4f SKIP (custom waitFor needed for ink), d5a06d3c PICKED 019f9daba
 - [x] Batch 36 — FULL — SKIP — `995ae717` — SKIP (LLxprt has DebugLogger architecture, not shared singleton)
 - [x] Batch 37 — QUICK — SKIP — `cc7e1472` — SKIP-NO_OP (architectural preference, same outcome achieved, re-validated 2026-01-06)
-- [x] Batch 38 — FULL — SKIP — `31f58a1f, 70a99af1, 72b16b3a` — all CONFLICTS: 31f58a1 SKIP (different ripgrep), 70a99af1 REIMPLEMENT, 72b16b3a REIMPLEMENT
+- [x] Batch 38 — FULL — VERIFIED — `31f58a1f, 70a99af1, 72b16b3a` — all VERIFIED NO_OP: superior implementations already exist - ripgrepPathResolver.ts, shell-utils.ts security model, generic PTY fallback — re-validated 2026-01-06
 - [x] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — SKIP (LLxprt already has complete message bus/policy engine)
 - [x] Batch 40 — FULL — SKIP — `654c5550, 0658b4aa` — both CONFLICTS: 654c5550 SKIP-TEST, 0658b4aa MANUAL_REVIEW
 - [x] Batch 41 — QUICK — REIMPLEMENT — `bf80263b` — SKIP (useGeminiStream.ts conflicts, different architecture)
