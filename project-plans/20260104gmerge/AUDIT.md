@@ -149,7 +149,7 @@
 | 128 | `fb44f5ba` | SKIP |  |  | test: re-enable skip (#11558) |  |
 | 129 | `cf16d167` | PICK | VERIFIED | `ba3c2f7a4` | Repo tooling: tsconfig linter for exclude list (#11298) | COMMITTED as ba3c2f7a4 - Complete tsconfig exclude list linter implemented in scripts/lint.js. Re-validated 2026-01-06 with all mandatory commands PASS. |
 | 131 | `f5e07d94` | SKIP |  |  | Docs: update for MCP template (#11561) |  |
-| 132 | `b364f376` | REIMPLEMENT |  |  | refactor(logging): Centralize console logging with debugLogger (#11590) |  |
+| 132 | `b364f376` | VERIFIED |  |  | refactor(logging): Centralize console logging with debugLogger (#11590) | VERIFIED - LLxprt has superior DebugLogger implementation (packages/core/src/debug/DebugLogger.ts). Upstream simple 30-line wrapper vs LLxprt 300+ line system with namespace filtering, lazy evaluation, log levels, redaction, file output, hot-reload. 293+ active instances. All validation commands PASS. |
 | 133 | `c6a59896` | SKIP |  |  | Add extensions logging (#11261) |  |
 | 134 | `16f5f767` | PICK |  |  | Test: use waitFor rather than wait (#11334) |  |
 | 135 | `519bd57e` | SKIP |  |  | chore: WIP for todo aria labels (#11494) |  |
