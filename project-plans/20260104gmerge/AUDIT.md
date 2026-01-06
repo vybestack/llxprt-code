@@ -123,7 +123,7 @@
 | 102 | `70a99af1` | PICK | VERIFIED | 2026-01-06 | Fix shell auto-approval parsing (#11527) | VERIFIED NO_OP - LLxprt has superior shell security model with splitCommands(), checkCommandPermissions(), and command substitution detection in shell-utils.ts. Chained command validation already built-in. All mandatory commands PASS. |
 | 103 | `723b8d33` | SKIP |  |  | chore: update jest config (#11409) |  |
 | 104 | `72b16b3a` | PICK | VERIFIED | 2026-01-06 | Fix macOS sandbox PTY spawn errors (#11539) | VERIFIED NOT APPLICABLE - LLxprt implements generic PTY fallback pattern in shellExecutionService.ts lines 63-74, which is more robust than macOS-specific posix_spawnp check. Current implementation handles all PTY errors. All mandatory commands PASS. |
-| 105 | `7dd2d8f7` | REIMPLEMENT |  |  | fix(tools): restore static tool names to fix configuration exclusions (#11551) |  |
+| 105 | `7dd2d8f7` | SKIP/NO_OP | 2026-01-06 |  | fix(tools): restore static tool names to fix configuration exclusions (#11551) | VERIFIED NO_OP - All tool classes in LLxprt already have static readonly Name property implemented (edit.ts, glob.ts, grep.ts, ls.ts, memoryTool.ts, read-file.ts, read-many-files.ts, ripGrep.ts, shell.ts, write-file.ts, plus 10+ additional tools). LLxprt's implementation is more comprehensive with centralized name constants in tool-names.ts. All mandatory commands PASS (lint, typecheck, build, start). |
 | 106 | `654c5550` | PICK |  |  | Add wasm read test (#11336) |  |
 | 107 | `fc4e10b5` | SKIP |  |  | Docs: update README for extensions search (#11441) |  |
 | 108 | `81772c42` | SKIP |  |  | chore: update changes to url (#11442) |  |

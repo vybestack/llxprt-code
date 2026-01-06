@@ -8,7 +8,7 @@ Use this checklist to track batch execution progress.
 | **In Progress** | — |
 | **Next Up** | — |
 | **Progress** | 49/49 (100%) |
-| **Last Updated** | 2026-01-06 (Batch 38 re-validated with full output logs) |
+| **Last Updated** | 2026-01-06 (Batch 39 re-validated with full output logs) |
 
 ## Preflight
 - [x] On main: `git pull --ff-only`
@@ -57,7 +57,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 36 — FULL — SKIP — `995ae717` — SKIP (LLxprt has DebugLogger architecture, not shared singleton)
 - [x] Batch 37 — QUICK — SKIP — `cc7e1472` — SKIP-NO_OP (architectural preference, same outcome achieved, re-validated 2026-01-06)
 - [x] Batch 38 — FULL — VERIFIED — `31f58a1f, 70a99af1, 72b16b3a` — all VERIFIED NO_OP: superior implementations already exist - ripgrepPathResolver.ts, shell-utils.ts security model, generic PTY fallback — re-validated 2026-01-06
-- [x] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — SKIP (LLxprt already has complete message bus/policy engine)
+- [x] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — NO_OP (static readonly Name already implemented on all tools - re-validated 2026-01-06)
 - [x] Batch 40 — FULL — SKIP — `654c5550, 0658b4aa` — both CONFLICTS: 654c5550 SKIP-TEST, 0658b4aa MANUAL_REVIEW
 - [x] Batch 41 — QUICK — REIMPLEMENT — `bf80263b` — SKIP (useGeminiStream.ts conflicts, different architecture)
 - [x] Batch 42 — FULL — PICK — `62dc9683, e72c00cf, cf16d167` — 62dc9683 SKIP, e72c00cf PICKED f3d6f58e2, cf16d167 PICKED ba3c2f7a4
