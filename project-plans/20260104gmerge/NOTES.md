@@ -3660,37 +3660,35 @@ These coexist with LLxprt's existing constants (e.g., `EDIT_TOOL`, `GREP_TOOL`, 
 
 ### Validation Results
 
+**REMEDIATION COMPLETED (2026-01-05) — All 4 required commands now PASS**
+
 #### 1) npm run lint
 ```bash
+__LLXPRT_CMD__:cd /Users/acoliver/projects/llxprt/branch-1/llxprt-code
+
 > @vybestack/llxprt-code@0.8.0 lint
 > eslint . --ext .ts,.tsx && eslint integration-tests
-
-Oops! Something went wrong! :(
-
-ESLint: 9.39.1
-
-Error: ENOENT: no such file or directory, stat '/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/@vybestack/llxprt-code-core/dist/src/tools/mcp-tool.js'
-Occurred while linting /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli/src/auth/codex-oauth-provider.spec.ts:7
-Rule: "import/namespace"
-    [...]
-Exit Code: 2
 ```
 
-**[OK] SKIP** — This ESLint error is unrelated to Batch 29 (it affects mcp-tool.js which is not part of this tool-names refactor). The issue is due to a missing compiled file and is a known build artifact issue, not a code problem introduced by Batch 29.
+**[OK] PASS** — ESLint completed successfully with exit code 0. No errors or warnings.
 
 #### 2) npm run typecheck
 ```bash
 > @vybestack/llxprt-code@0.8.0 typecheck
 > npm run typecheck --workspaces --if-present
 
+
 > @vybestack/llxprt-code-core@0.8.0 typecheck
 > tsc --noEmit
+
 
 > @vybestack/llxprt-code@0.8.0 typecheck
 > tsc --noEmit
 
+
 > @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
 > tsc --noEmit
+
 
 > @vybestack/llxprt-code-test-utils@0.8.0 typecheck
 > tsc --noEmit
@@ -3703,33 +3701,46 @@ Exit Code: 2
 > @vybestack/llxprt-code@0.8.0 build
 > node scripts/build.js
 
+
 > @vybestack/llxprt-code@0.8.0 generate
 > node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
 
+
 > @vybestack/llxprt-code-core@0.8.0 build
 > node ../../scripts/build_package.js
+
 Successfully copied files.
+
 
 > @vybestack/llxprt-code@0.8.0 build
 > node ../../scripts/build_package.js
+
 Successfully copied files.
+
 
 > @vybestack/llxprt-code-a2a-server@0.8.0 build
 > node ../../scripts/build_package.js
+
 Successfully copied files.
+
 
 > @vybestack/llxprt-code-test-utils@0.8.0 build
 > node ../../scripts/build_package.js
+
 Successfully copied files.
+
 
 > llxprt-code-vscode-ide-companion@0.8.0 build
 > npm run build:dev
 
+
 > llxprt-code-vscode-ide-companion@0.8.0 build:dev
 > npm run check-types && npm run lint && node esbuild.js
 
+
 > llxprt-code-vscode-ide-companion@0.8.0 check-types
 > tsc --noEmit
+
 
 > llxprt-code-vscode-ide-companion@0.8.0 lint
 > eslint src
@@ -3741,13 +3752,13 @@ Successfully copied files.
 
 #### 4) Runtime Test
 ```bash
-$ node scripts/start.js --profile-load synthetic "write me a haiku"
 Checking build status...
 Build is up-to-date.
 
-A tool writes code,
-Bugs fix and features grow,
-LLxprt helps build dreams.
+
+The code compiles now,
+Seventeen bright warnings stand,
+Phase two is complete.
 ```
 
 **[OK] PASS** — Runtime test executed successfully (exit code: 0)
@@ -3755,9 +3766,9 @@ LLxprt helps build dreams.
 ### Summary
 Batch 29 has been fully verified:
 - **Status**: VERIFIED (commit `fb8155a2b` already implements the upstream 23e52f0f refactoring)
+- **Lint**: PASS
 - **Typecheck**: PASS
 - **Build**: PASS
 - **Runtime Test**: PASS
-- **Lint**: SKIP (unrelated known issue existing in repo)
 
 The tool name centralization refactoring is complete and working correctly. LLxprt maintains its own comprehensive tool-names.ts with all constants, and includes upstream-style aliases for compatibility.

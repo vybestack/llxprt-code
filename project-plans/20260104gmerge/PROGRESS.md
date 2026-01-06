@@ -289,3 +289,21 @@ __LLXPRT_CMD__:cat progtemp.md
 - Decision: VERIFIED - Previously completed as 4af93653d (upstream 98eef9ba)
 - See NOTES.md for detailed verification output (Batch 28 section)
 - AUDIT.md: No changes needed (implementation status unchanged)
+
+### Batch 29 (2026-01-05)
+- Status: VERIFIED - Already implemented as commit fb8155a2b
+- Upstream commit: 23e52f0f - refactor(core): Centralize tool names to avoid circular dependencies - Edit, Grep, Read (#11434)
+- Implementation details:
+  * Added upstream-style tool name aliases for compatibility: EDIT_TOOL_NAME, GREP_TOOL_NAME, READ_MANY_FILES_TOOL_NAME, READ_FILE_TOOL_NAME
+  * All 4 aliases added to packages/core/src/tools/tool-names.ts
+  * Coexist with existing LLxprt constants (EDIT_TOOL, GREP_TOOL, READ_FILE_TOOL, etc.)
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- Verification evidence:
+  - lint: PASS (exit code 0) - Full eslint run completed without errors
+  - typecheck: PASS (all 4 workspaces typecheck successfully)
+  - build: PASS (exit code 0) - All packages built successfully
+  - start.js: PASS (application started, generated haiku output)
+- Previous validation incorrectly marked lint as SKIP due to missing dist files. Remediation completed 2026-01-05
+- See NOTES.md for detailed verification output (Batch 29 — RE-VALIDATION section, lines 3633+)
+- AUDIT.md: No changes needed (implementation status unchanged)
