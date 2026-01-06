@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 25 (Batches 21-25 all SKIPPED - LLxprt architectural differences) |
+| **Last Completed** | Batch 30 (3 PICKED/REIMPLEMENTED, 2 SKIPPED) |
 | **In Progress** | — |
-| **Next Up** | Batch 26 |
-| **Progress** | 25/49 (51%) |
+| **Next Up** | Batch 31 |
+| **Progress** | 30/49 (61%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -44,11 +44,11 @@ Use this checklist to track batch execution progress.
 - [x] Batch 23 — QUICK — SKIP — `cedf0235` — SKIP (ui/components tests diverged for multi-provider)
 - [x] Batch 24 — FULL — SKIP — `2ef38065` — SKIP (SHELL_TOOL_NAME already exists in tool-names.ts)
 - [x] Batch 25 — QUICK — SKIP — `dd42893d` — SKIP (config tests diverged for multi-provider architecture)
-- [ ] Batch 26 — FULL — REIMPLEMENT — `f22aa72c` — Making shell:true as default and adding -I to  grep (#11448)
-- [ ] Batch 27 — QUICK — PICK — `d065c3ca` — Enable typechecking for more test files (#11370)
-- [ ] Batch 28 — FULL — REIMPLEMENT — `98eef9ba` — fix: Update web_fetch tool definition to instruct the model to provid… (#11252)
-- [ ] Batch 29 — QUICK — PICK — `23e52f0f` — refactor(core): Centralize tool names to avoid circular dependencies - Edit, Grep, Read (#11434)
-- [ ] Batch 30 — FULL — PICK — `0fd9ff0f` — Fix type errors in UI hooks tests (#11346)
+- [x] Batch 26 — FULL — REIMPLEMENT — `f22aa72c` — REIMPLEMENTED as 81be4bd89 (shell:true default + -I grep flag)
+- [x] Batch 27 — QUICK — SKIP — `d065c3ca` — SKIP (test structure differs significantly)
+- [x] Batch 28 — FULL — PICK — `98eef9ba` — PICKED as 4af93653d (web_fetch tool definition update)
+- [x] Batch 29 — QUICK — REIMPLEMENT — `23e52f0f` — REIMPLEMENTED as fb8155a2b (tool name aliases for compatibility)
+- [x] Batch 30 — FULL — SKIP — `0fd9ff0f` — SKIP (UI hooks tests structure differs)
 - [ ] Batch 31 — QUICK — REIMPLEMENT — `c8518d6a` — refactor(tools): Move all tool names into tool-names.ts (#11493)
 - [ ] Batch 32 — FULL — REIMPLEMENT — `8731309d` — chore: do not retry the model request if the user has aborted the request (#11224)
 - [ ] Batch 33 — QUICK — PICK — `518a9ca3, d0ab6e99, 397e52da` — Fix gitignore parser for escaped chars (#11252) / Fix SettingsDialog race clearing settings (#11358) / Fix theme dialog escaping resetting theme (#11347)
