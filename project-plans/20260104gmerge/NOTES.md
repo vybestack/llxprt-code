@@ -2030,3 +2030,175 @@ Original implementation commit: `dcf347e21` (fix: ensure positional prompt argum
 
 Conclusion: Batch 03 implementation **ALREADY VERIFIED** and functional. No new commit needed, functionality predates upstream commit.
 
+__LLXPRT_CMD__:cat project-plans/20260104gmerge/batch09-revalidation-append.txt
+### Batch 09 Re-validation (2026-01-05)
+
+**VERIFIED - Already Implemented**
+
+Batch 09: upstream commit `937c15c6` - refactor: Remove deprecated --all-files flag (#11228)
+
+This batch removes the deprecated `--all-files` CLI flag and related code from the codebase.
+
+**Original Implementation:** Commit `a35cb3d6d` reimplement: refactor: Remove deprecated --all-files flag (#11228) (upstream 937c15c6)
+
+Per new verification policy, all required commands were executed in order:
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code 0, no errors or warnings)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (All packages built successfully including VSCode extension)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+The cursor blinks bright,
+Lines of code dance in the light,
+Digital world grows.
+```
+
+[OK] **VERIFY** (Application started successfully, loaded profile from synthetic, generated haiku)
+
+**Feature Verification:**
+
+Comprehensive searches confirmed complete removal of --all-files flag and related code:
+
+1. CLI flag removal:
+   - `--all-files` NOT found in packages/ directory
+   - `--all_files` NOT found in packages/ directory
+   - `--all-files` NOT found in docs/ directory
+
+2. Config properties removal:
+   - `allFiles` property removed from CliArgs interface (verified in git commit a35cb3d6d)
+   - Related search results only show unrelated uses in:
+     - `packages/core/src/utils/filesearch/result-cache.ts` - ResultCache constructor parameter
+     - `packages/core/src/utils/filesearch/fileSearch.ts` - FileSearch class property for file crawling
+     - Various function names and test utilities (not the removed allFiles CLI flag)
+
+3. FullContext removal:
+   - `getFullContext()` method removed from Config class (packages/core and packages/cli)
+   - `fullContext` property removed from Config class
+   - Only remaining unrelated method is `getIdeContextParts` in client.ts (different functionality)
+
+4. Documentation updates:
+   - `docs/cli/configuration.md` - --all-files references removed (verified in git commit)
+
+**Implementation Details (from commit a35cb3d6d):**
+
+Files modified (27 files):
+- docs/cli/configuration.md
+- packages/a2a-server/src/config/config.ts
+- packages/cli/src/config/config.ts
+- packages/cli/src/config/config.loadMemory.test.ts
+- packages/cli/src/nonInteractiveCli.ts
+- packages/cli/src/nonInteractiveCli.test.ts
+- packages/cli/src/ui/App.test.tsx
+- packages/cli/src/ui/hooks/useAutoAcceptIndicator.test.ts
+- packages/cli/src/ui/hooks/useGeminiStream.test.tsx
+- packages/cli/src/ui/hooks/useGeminiStream.integration.test.tsx
+- packages/cli/src/ui/hooks/useGeminiStream.subagent.spec.tsx
+- packages/cli/src/ui/hooks/useGeminiStream.thinking.test.tsx
+- packages/core/src/config/config.ts
+- packages/core/src/config/config.test.ts
+- packages/core/src/core/client.test.ts
+- packages/core/src/core/geminiChat.runtime.test.ts
+- packages/core/src/telemetry/loggers.test.ts
+- packages/core/src/tools/edit-fuzzy.test.ts
+- packages/core/src/tools/edit-tabs-issue473.test.ts
+- packages/core/src/tools/edit.test.ts
+- packages/core/src/tools/google-web-fetch.test.ts
+- packages/core/src/tools/shell.test.ts
+- packages/core/src/tools/write-file.test.ts
+- packages/core/src/utils/environmentContext.test.ts
+- packages/core/src/utils/environmentContext.ts
+- packages/core/src/utils/output-format.ts
+
+Changes summary: 211 insertions(+), 208 deletions(-)
+
+**Verification Summary:**
+
+- Batch 09 upstream commit `937c15c6` removes deprecated --all-files flag
+- LLxprt has this fully implemented via commit `a35cb3d6d` on 2026-01-05
+- All removed code (--all-files flag, allFiles property, fullContext property/method) confirmed absent
+- All test mocks updated to remove fullContext usage
+- Documentation updated to remove --all-files references
+- All verification commands PASS (build, lint, typecheck, application start)
+- Build artifacts properly generated (all dist files exist and are up-to-date)
+- Synthetic profile load verified working with haiku generation
+
+Conclusion: Batch 09 implementation **VERIFIED** and functional. No new commit needed, implementation already complete.
+---
