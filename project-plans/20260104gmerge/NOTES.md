@@ -3640,3 +3640,166 @@ Beauty in design
 - **Implemented:** 0 (all already present)
 
 All Batch 17 commits have been successfully verified as present in the codebase. All four mandatory validation commands (lint, typecheck, build, start.js) completed successfully. No additional implementation was required.
+__LLXPRT_CMD__:cat tmp_batch18_notes.md
+---
+
+## Batch 18 Re-validation (2026-01-06)
+
+**VERIFIED - Already SKIP'd**
+
+Batch 18 contains 2 commits from upstream:
+- b4a405c6 - Style slash command descriptions consistently (#11395)
+- d3bdbc69 - Add extension IDs (#11377)
+
+Current status from PROGRESS.md:
+- Both commits marked as SKIP during initial implementation
+- b4a405c6: SKIP (cosmetic, LLxprt has custom descriptions)
+- d3bdbc69: SKIP-REIMPLEMENT (extension IDs valuable but conflicts with LLxprt flow)
+
+Per new verification policy, all required commands were executed in order:
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code 0, no errors or warnings)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+Bits dance on the screen,
+Logic flows through silicon,
+Code creates the world.
+```
+
+[OK] **PASS** (exit code 0 - Application started successfully, processed request, generated haiku output)
+
+**Feature Analysis:**
+
+**Commit b4a405c6 - Slash command descriptions style cleanup (SKIP):**
+
+Upstream changes:
+- Changes description field from lowercase to title case in all slash commands
+- Example: 'show version info' → 'Show version info'
+- Modifies 28 files (aboutCommand.ts, authCommand.ts, bugCommand.ts, etc.)
+
+LLxprt analysis:
+- Verified LLxprt already has custom descriptions for slash commands
+- Found example in aboutCommand.ts: description: 'show version info' (lowercase)
+- LLxprt uses lowercase descriptions consistently across slash commands
+- Upstream's title case style is purely cosmetic
+- No functional impact - stylistic preference only
+- File verified: packages/cli/src/ui/commands/aboutCommand.ts
+
+Decision: SKIP - Purely cosmetic change. LLxprt has consistent lowercase style which is acceptable. Applying this would be a meaningless churn with no functional benefit.
+
+**Commit d3bdbc69 - Add extension IDs (SKIP-REIMPLEMENT):**
+
+Upstream changes:
+- Adds 'id' field to GeminiCLIExtension interface (SHA256 hash)
+- ID created by hashing installation source details
+- For GitHub repos: uses 'https://github.com/{owner}/{repo}' as hash input
+- For other sources: uses source URL or config name as hash input
+- Purpose: deduplicate extensions with conflicting names, obfuscate sensitive info
+- Modified files:
+  - packages/cli/src/config/extension.ts - Add ID generation logic
+  - packages/cli/src/config/extensions/github.ts - Helper URL parsing
+  - packages/core/src/config/config.ts - Add id field to GeminiCLIExtension
+  - packages/cli/src/config/extension.test.ts - 158 lines of new tests
+
+LLxprt analysis:
+- Verified GeminiCLIExtension interface exists: packages/core/src/config/config.ts
+  - Has: name, version, isActive, path, installMetadata, mcpServers, contextFiles, excludeTools
+  - Missing: id field
+- LLxprt extension system already exists with extensive customization
+- Extension ID generation would require significant integration with LLxprt's extension loading flow
+- Extension types and loading patterns have diverged from upstream
+- Marked as SKIP-REIMPLEMENT during initial implementation
+
+Decision: SKIP-REIMPLEMENT - Extension ID feature is valuable but conflicts with LLxprt's current extension flow. Would require significant implementation work to integrate properly. Defer to future enhancement.
+
+**Verification Summary:**
+
+- Batch 18 commit b4a405c6 - SKIP (cosmetic description styling - LLxprt has consistent lowercase style)
+- Batch 18 commit d3bdbc69 - SKIP-REIMPLEMENT (extension IDs - valuable but conflicts with LLxprt extension flow)
+- All verification commands PASS (lint, typecheck, build, application start)
+- Build artifacts properly generated
+- No changes needed - both commits correctly skipped during initial implementation
+
+Conclusion: Batch 18 implementation **FULLY VERIFIED**. Both commits appropriately skipped - b4a405c6 as purely cosmetic change with no functional impact, d3bdbc69 as a valuable feature that requires separate implementation work due to architectural divergence. LLxprt codebase passes all validation tests.
+
+---
