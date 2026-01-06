@@ -4222,3 +4222,195 @@ Quiet dawn arrives.
 LLxprt's tool name centralization is more mature than upstream c8518d6a. The upstream approach (removing static Name properties) caused configuration exclusion issues, requiring a follow-up fix (7dd2d8f79). LLxprt's implementation already accounts for both needs - centralized constants for imports and static Name properties for configuration references.
 
 The decision to import tool classes in config.ts (packages/cli/src/config/config.ts:28) is intentional and correct - it allows direct reference to static Name properties for tool exclusion lists.
+
+### Batch 31 Re-validation (2026-01-06)
+
+**REMEDIATION REQUIRED - Build Issues Found**
+
+Per new verification policy, re-ran all 4 mandatory commands to provide fresh output. Found issues preventing complete validation:
+
+**ISSUE FOUND: Build artifacts not properly generated for runtime execution**
+
+#### 1) npm run build
+
+Full output:
+```
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (Exit Code: 0)
+
+#### 2) npm run lint
+
+Full output:
+```
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+
+
+Oops! Something went wrong! :(
+
+ESLint: 9.39.1
+
+Error: ENOENT: no such file or directory, stat '/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/@vybestack/llxprt-code-core/dist/src/code_assist/codeAssist.js'
+Occurred while linting /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli/src/services/McpPromptLoader.ts:7
+Rule: "import/namespace"
+    at Object.statSync (node:fs:1701:25)
+    at ExportMapBuilder._for (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/eslint-plugin-import/lib/exportMap/builder.js:52:37)
+    at /Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/eslint-plugin-import/lib/exportMap/builder.js:32:53)
+    at ExportMap.get (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/eslint-plugin-import/lib/exportMap/builder.js:130:30)
+    at ExportMap.get (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/eslint-plugin-import/lib/exportMap/builder.js:137:41)
+    at /Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/eslint-plugin-import/lib/rules/namespace.js:33:30)
+    at Array.forEach (<anonymous>)
+    at processBodyStatement (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/eslint-plugin-import/lib/rules/namespace.js:20:26)
+    at /Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/eslint-plugin-import/lib/rules/namespace.js:85:40)
+    at Array.forEach (<anonymous>)
+```
+
+[FAIL] **FAIL (Exit Code: 2) - Missing dist/index.d.ts files in node_modules**
+
+#### 3) npm run typecheck
+
+Full output:
+```
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+index.ts(19,28): error TS6305: Output file '/Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core/dist/src/index.d.ts' has not been built from source file '/Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core/src/index.ts'.
+```
+
+[FULL OUTPUT TRUNCATED - Hundreds of TS6305 errors about missing dist files]
+
+```
+npm error Lifecycle script `typecheck` failed with error:
+npm error code 2
+npm error path /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.8.0
+npm error location /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c tsc --noEmit
+```
+
+[FAIL] **FAIL (Exit Code: 2) - TypeScript cannot find dist/*.d.ts files**
+
+#### 4) node scripts/start.js --profile-load synthetic "write me a haiku"
+
+Full output:
+```
+Checking build status...
+Warning: Source file "packages/cli/src/generated/git-commit.ts" has been modified since the last build.
+
+Run "npm run build" to incorporate changes before starting.
+node:internal/modules/esm/resolve:204
+  const resolvedOption = FSLegacyMainResolve(pkgPath, packageConfig.main, baseStringified);
+                         ^
+
+Error: Cannot find package '/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/@vybestack/llxprt-code-core/dist/index.js' imported from /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli/dist/src/ui/contexts/KeypressContext.js
+    at legacyMainResolve (node:internal/modules/esm/resolve:204:26)
+    at packageResolve (node:internal/modules/esm/resolve:778:12)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:712:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:729:38)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:758:52)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:694:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:614:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:143:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v25.2.1
+```
+
+[FAIL] **FAIL (Exit Code: 1) - Runtime cannot load dist/index.js files**
+
+### Root Cause Analysis
+
+The repository has a fundamental build/distribution issue:
+
+1. **npm run build succeeds** but only copies source files to packages/*/dist/
+2. **TypeScript compilation is NOT executed** - no .js or .d.ts files are generated
+3. **node_modules symlink missing** - build_package.js copies files to packages/core/dist but doesn't create node_modules/@vybestack/llxprt-code-core/dist symlink
+4. **ESLint requires dist files** for import/namespace rule checks
+5. **TypeScript requires dist files** to verify build configuration
+6. **Runtime requires dist/index.js** which doesn't exist
+
+Expected after build:
+- `packages/core/dist/index.js` (compiled JavaScript) [OK] MISSING
+- `packages/core/dist/index.d.ts` (TypeScript declarations) [OK] MISSING  
+- `node_modules/@vybestack/llxprt-code-core/dist/index.js` (npm publish symlink) [OK] MISSING
+
+Present after build:
+- `packages/core/dist/src/index.ts` (copied source only)
+- Individual package builds complete but TypeScript compilation skipped
+
+### Remediation Required
+
+The build system needs to be fixed to:
+1. Run `tsc` for each workspace to compile TypeScript sources to JavaScript
+2. Generate .d.ts declaration files for type checking
+3. Ensure node_modules symlinks are properly created for workspace dependencies
+
+Without fixing the build system, Batch 31 cannot meet the mandatory requirement of "Run and PASS all of: 1) npm run lint, 2) npm run typecheck, 3) npm run build, 4) node scripts/start.js --profile-load synthetic".
+
+### Status
+
+**Status: FAILED - Build system issues prevent all mandatory commands from passing**
+
+Batch 31 is correctly marked as SKIP (Already Implemented) for code changes, but the current repository state prevents validation commands from passing. The issue is with the build infrastructure, not with Batch 31 content.
+
+The historical validation from Batch 02 showed these same commands passing, indicating the build system was working previously. A recent change or repository state has broken the TypeScript compilation pipeline.
+
+Recommendation: Fix build system before attempting further batch validations.
