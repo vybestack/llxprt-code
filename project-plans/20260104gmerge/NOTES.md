@@ -2538,3 +2538,207 @@ LLxprt's telemetry system (verified across codebase):
 Conclusion: Batch 11 implementation **VERIFIED AS SKIP**. The upstream telemetry flag removal does not apply to LLxprt due to its multi-provider architecture and different telemetry infrastructure. LLxprt's telemetry system is distinct and should be reviewed/evolved independently.
 
 
+__LLXPRT_CMD__:cat tmp_batch12_validation.txt
+
+### Batch 12 Re-validation (2026-01-05)
+
+**VERIFIED - SKIP Confirmed**
+
+Batch 12 upstream commit 22f725eb allows editing queued messages with up arrow key. This feature requires message queue infrastructure (useMessageQueue hook, QueuedMessageDisplay component) that does not exist in LLxprt. Marked as SKIP during initial analysis.
+
+**Upstream Changes (22f725eb):**
+
+Feature to edit queued messages using up arrow key:
+- Adds `useMessageQueue` hook with `popAllMessages()` function
+- Adds `QueuedMessageDisplay` component for rendering queued messages
+- Implements up/down arrow editing flow in InputPrompt
+- Adds keyboard event handling for arrow navigation
+- 399 lines of new code across multiple files
+- Tests for QueuedMessageDisplay and InputPrompt queued editing
+
+**LLxprt Assessment - Missing Infrastructure:**
+
+Comprehensive search reveals LLxprt lacks the required infrastructure:
+```bash
+# Search for useMessageQueue hook
+$ find packages/cli -name "useMessageQueue.ts*"
+(no files found)
+
+# Search for QueuedMessageDisplay component  
+$ find packages/cli -name "QueuedMessageDisplay.tsx*"
+(no files found)
+
+# Search all TypeScript/TSX files for messageQueue-related code
+$ grep -r "useMessageQueue" packages/cli/src --include="*.ts" --include="*.tsx"
+(no results - only in documentation)
+
+$ grep -r "QueuedMessageDisplay" packages/cli/src --include="*.ts" --include="*.tsx"
+(no results)
+```
+
+**Related LLxprt Code (Divergent Architecture):**
+
+LLxprt has different message handling:
+- `packages/cli/src/ui/hooks/useConsoleMessages.ts` - Console message queue (internal to UI, different from user-editable queue)
+- `packages/cli/src/ui/App.tsx` - Message display logic (no queued editing feature)
+- `packages/cli/src/ui/AppContainer.tsx` - Does not exist (LLxprt uses different app container architecture)
+
+LLxprt's message system is fundamentally different:
+- Messages flow directly through App.tsx for display
+- No message queue infrastructure for user editing
+- QueuedMessageDisplay component does not exist
+- useMessageQueue hook does not exist
+- InputPrompt lacks arrow key editing flow for queued messages
+
+**Upstream File List (from upstream-0.10.0..0.11.3.json):**
+- packages/cli/src/ui/components/QueuedMessageDisplay.test.tsx
+- packages/cli/src/ui/components/QueuedMessageDisplay.tsx
+- packages/cli/src/ui/hooks/useMessageQueue.test.ts
+- packages/cli/src/ui/hooks/useMessageQueue.ts
+
+None of these files exist in LLxprt codebase.
+
+**Verification Results:**
+
+All mandatory validation commands PASS:
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code: 0, no errors or warnings)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code: 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code: 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+
+The cursor blinks bright,
+Code flows through the terminal,
+New worlds come to life.
+```
+
+[OK] **PASS** (exit code: 0 - Application started successfully, processed request, generated haiku output)
+
+**Feature Verification:**
+
+Verified that Batch 12 infrastructure does not exist in LLxprt:
+
+```bash
+# Verify no useMessageQueue hook exists
+$ find packages/cli -type f -name "*.ts*" | xargs grep -l "export.*useMessageQueue" 2>/dev/null
+(no results)
+
+# Verify no QueuedMessageDisplay component exists
+$ find packages/cli -type f -name "*.tsx" | xargs grep -l "QueuedMessageDisplay" 2>/dev/null
+(no results)
+
+# Verify InputPrompt lacks queue editing logic
+$ grep -n "up.*arrow\|queued.*edit" packages/cli/src/ui/components/InputPrompt.tsx
+(no results - no up arrow or queued editing logic)
+```
+
+LLxprt's message handling architecture:
+- Direct message flow through App.tsx
+- No user-editable message queue
+- Different UI components structure
+- No AppContainer.tsx component (different app architecture)
+
+**Architectural Difference Summary:**
+
+| Aspect | Upstream (Google gemini-cli) | LLxprt |
+|---|---|---|
+| Message Queue | useMessageQueue hook + queue state | useConsoleMessages (internal UI queue) |
+| Queue Display | QueuedMessageDisplay component | No equivalent component |
+| Queue Editing | Up/down arrow key navigation | No editing feature |
+| App Structure | AppContainer.tsx architecture | App.tsx architecture (different) |
+| Infrastructure | 399 lines of new code | Does not exist |
+
+**Verification Summary:**
+
+- Batch 12 upstream commit 22f725eb allows editing queued messages with up arrow key
+- LLxprt marks this as SKIP (missing required infrastructure)
+- useMessageQueue hook does not exist in LLxprt
+- QueuedMessageDisplay component does not exist in LLxprt
+- No message queue editing flow in InputPrompt
+- LLxprt uses different app architecture (no AppContainer.tsx)
+- All verification commands PASS (lint, typecheck, build, application start)
+- No changes needed - SKIP decision is correct due to missing infrastructure
+- This is a major feature addition (~399 lines) that LLxprt doesn't have
+
+Conclusion: Batch 12 implementation **VERIFIED AS SKIP**. The upstream queued message editing feature requires infrastructure (useMessageQueue hook, QueuedMessageDisplay component, message queue system) that does not exist in LLxprt. This is a significant feature addition rather than a simple pick/reimplement. Message queue editing functionality would need to be designed independently for LLxprt's different app architecture.
+
+---
