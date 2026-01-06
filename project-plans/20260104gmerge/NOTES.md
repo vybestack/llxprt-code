@@ -3203,3 +3203,139 @@ No commit created - BATCH ALREADY IMPLEMENTED. PROGRESS.md already documents com
 Existing implementation verified through re-validation with all mandatory commands passing.
 
 ---
+---
+
+## Batch 27
+
+### Selection Record
+
+```
+Batch: 27
+Type: PICK
+Upstream SHA(s): d065c3ca
+Subject: fix(cli): Enable typechecking for more test files (#11455)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Execution Record
+
+**d065c3ca - Enable typechecking for more test files**: NO_OP (Already Implemented)
+
+Upstream changes:
+- Removes 5 test files from tsconfig.json excludes:
+  * nonInteractiveCli.test.ts
+  * App.test.tsx
+  * SessionContext.test.tsx
+  * theme.test.ts
+  * validateNonInterActiveAuth.test.ts
+- Updates test files to use proper types:
+  * Import `Mock` and `MockInstance` types from 'vitest'
+  * Replace `vi.Mock` with `Mock` type
+  * Replace `vi.SpyInstance` with `MockInstance` type
+  * Add missing properties to test objects
+  * Use `makeFakeConfig()` helper instead of manual mock creation
+
+LLxprt comparison:
+
+**1) tsconfig.json excludes:**
+LLxprt's packages/cli/tsconfig.json DOES NOT exclude any of the 5 test files (they are included in typecheck).
+
+**2) Test type imports:**
+LLxprt uses alternative but equally valid approach for test typing:
+- Uses `ReturnType<typeof vi.fn>` and `ReturnType<typeof vi.spyOn>` for mock types
+- Uses explicit `Mock<() => string>` type annotations in App.test.tsx
+- All tests typecheck cleanly (typecheck PASS)
+
+**3) makeFakeConfig() helper:**
+LLxprt has makeFakeConfig() but doesn't export it from core package index. App.test.tsx uses detailed MockServerConfig interface with explicit Mock types instead. This is type-safe and works correctly.
+
+**4) SessionContext.test.tsx structure:**
+LLxprt's SessionMetrics type already includes AUTO_ACCEPT decision and files.totalLinesAdded/totalLinesRemoved. Test mocks don't include these but that's intentional and causes no type errors.
+
+**5) theme.test.ts type cast:**
+LLxprt doesn't have the specific test scenario that requires the `as CustomTheme` type cast.
+
+### Verification Record
+
+```bash
+$ npm run lint
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+[OK] **PASS** (exit code: 0, no errors or warnings)
+
+```bash
+$ npm run typecheck
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+[OK] **PASS** (all 4 workspaces passed, exit code: 0)
+
+All 5 test files that upstream enabled are already typechecked in LLxprt:
+- packages/cli/src/nonInteractiveCli.test.ts [OK] Typechecked
+- packages/cli/src/ui/App.test.tsx [OK] Typechecked
+- packages/cli/src/ui/contexts/SessionContext.test.tsx [OK] Typechecked
+- packages/cli/src/ui/themes/theme.test.ts [OK] Typechecked
+- packages/cli/src/validateNonInterActiveAuth.test.ts [OK] Typechecked
+
+```bash
+$ npm run build
+```
+[OK] **PASS** (exit code: 0)
+
+```bash
+$ node scripts/start.js --profile-load synthetic "write me a haiku"
+Checking build status...
+Build is up-to-date.
+
+I understand you'd like a haiku. Let me create one for you:
+
+Code flows through the wires,
+Digital silence between,
+New features emerge.
+```
+[OK] **PASS** (exit code: 0 - Application started successfully)
+
+### Feature Landing Verification
+
+All 5 test files are currently typechecked in LLxprt with no type errors.
+
+### Status Documentation
+
+Batch 27 commit: `d065c3ca` - NO_OP (Already Implemented)
+
+**Reasoning:**
+
+1. **tsconfig.json excludes**: LLxprt never excluded any of the 5 test files from typechecking
+2. **Test type imports**: LLxprt uses alternative but equally valid typing approach (ReturnType<typeof vi.fn>)
+3. **makeFakeConfig() usage**: LLxprt has it but doesn't export it; uses different but type-safe mock approach
+4. **SessionContext.test.tsx metrics**: Types already exist, test mocks intentionally don't require all properties
+5. **theme.test.ts type cast**: Not needed due to different test structure
+
+**Conclusion:** All functionality from upstream d065c3ca is either already present in LLxprt or implemented with an alternative, equally type-safe approach. All 5 test files are already typechecked. No type errors. All verification commands PASS.
+
+### Commit/Push Record
+
+No commit created - BATCH ALREADY IMPLEMENTED.
+
+Decision: VERIFIED - Implementation complete and validated. No changes needed.
+
+---

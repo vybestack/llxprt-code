@@ -45,7 +45,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 24 — FULL — SKIP — `2ef38065` — SKIP (SHELL_TOOL_NAME already exists in tool-names.ts)
 - [x] Batch 25 — QUICK — SKIP — `dd42893d` — SKIP (config tests diverged for multi-provider architecture)
 - [x] Batch 26 — FULL — REIMPLEMENT — `f22aa72c` — REIMPLEMENTED as 81be4bd89 (shell:true default + -I grep flag)
-- [x] Batch 27 — QUICK — SKIP — `d065c3ca` — SKIP (test structure differs significantly)
+- [x] Batch 27 — PICK — NO_OP — `d065c3ca` — VERIFIED (already implemented with alternative type-safe approach, all 5 test files typechecked)
 - [x] Batch 28 — FULL — PICK — `98eef9ba` — PICKED as 4af93653d (web_fetch tool definition update)
 - [x] Batch 29 — QUICK — REIMPLEMENT — `23e52f0f` — REIMPLEMENTED as fb8155a2b (tool name aliases for compatibility)
 - [x] Batch 30 — FULL — SKIP — `0fd9ff0f` — SKIP (UI hooks tests structure differs)
