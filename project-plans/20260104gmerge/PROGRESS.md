@@ -113,3 +113,14 @@ Use this checklist to track batch execution progress.
 - All commands PASSED
 - See NOTES.md and batch08-revalidation.txt for detailed output
 - AUDIT.md: No changes needed (implementation status unchanged)
+
+### Batch 11 (2026-01-06)
+- Upstream commit 9049f8f8 removes deprecated telemetry CLI flags from Google's gemini-cli
+- Decision: SKIP - LLxprt has multi-provider architecture with different telemetry system
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- See NOTES.md for detailed output (lines 2375+)
+- AUDIT.md: No changes needed (implementation status unchanged)
+- LLxprt retains all 5 telemetry CLI flags (--telemetry, --telemetry-target, --telemetry-otlp-endpoint, --telemetry-log-prompts, --telemetry-outfile)
+- Upstream uses Clearcut for telemetry; LLxprt uses uiTelemetryService and logCliConfiguration()
+

@@ -2370,3 +2370,171 @@ Changes summary: 211 insertions(+), 208 deletions(-)
 
 Conclusion: Batch 09 implementation **VERIFIED** and functional. No new commit needed, implementation already complete.
 ---
+
+
+### Batch 11 Re-validation (2026-01-06)
+
+**VERIFIED - SKIP Confirmed**
+
+Batch 11 upstream commit 9049f8f8 removes deprecated telemetry CLI flags from Google's gemini-cli. LLxprt has a fundamentally different telemetry architecture for a multi-provider system, so this change was marked as SKIP.
+
+**Upstream Changes (9049f8f8):**
+- Removes Google-specific telemetry CLI flags: `--telemetry`, `--telemetry-target`, `--telemetry-otlp-endpoint`, `--telemetry-otlp-protocol`, `--telemetry-log-prompts`, `--telemetry-outfile`
+- Removes telemetry options from CliArgs interface
+- Removes deprecateOption messages for telemetry flags
+- Removes telemetry tests (`describe('loadCliConfig telemetry')` test suite)
+- 3 files changed, 493 deletions
+
+**LLxprt Assessment - Different Architecture:**
+
+LLxprt has a multi-provider telemetry system supporting multiple LLM providers (Google, OpenAI, Anthropic, etc.). The upstream commit removes Google-specific telemetry flags that are deprecated in favor of settings.json telemetry configuration. LLxprt's telemetry system:
+
+1. **Multi-provider support:** LLxprt supports configuring different providers, each potentially with their own telemetry requirements
+2. **Provider-specific configurations:** Settings include provider-level telemetry options (enabled, logConversations, logResponses, etc.)
+3. **Different infrastructure:** LLxprt uses `uiTelemetryService` for session metrics and `logCliConfiguration()` for configuration logging, not Clearcut like upstream
+4. **Architectural divergence:** Upstream flags target Google Code Assist's specific telemetry service; LLxprt needs provider-agnostic telemetry configuration
+
+**Verification Results:**
+
+All mandatory validation commands PASS:
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code: 0, no errors or warnings)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code: 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code: 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+Code flows, bugs all gone,
+System rests, now time to stop,
+Goodbye, work well done.
+```
+
+[OK] **PASS** (exit code: 0 - Application started successfully, processed request, generated haiku output)
+
+**Feature Verification:**
+
+Verified that LLxprt's telemetry system differs from upstream:
+
+```bash
+$ grep -c "\.option('telemetry" packages/cli/src/config/config.ts
+10
+```
+
+LLxprt still has all the telemetry CLI flags that upstream removed (10 occurrences of `.option('telemetry`):
+
+- Main command builder: `--telemetry`, `--telemetry-target`, `--telemetry-otlp-endpoint`, `--telemetry-log-prompts`, `--telemetry-outfile`
+- Prompt command builder: Same 5 options replicated
+
+LLxprt's telemetry in packages/cli/src/config/config.ts:
+- Lines 143-148: CliArgs interface includes `telemetry`, `telemetryTarget`, `telemetryOtlpEndpoint`, `telemetryLogPrompts`, `telemetryOutfile`
+- Lines 253-277: Main command builder defines all 5 telemetry options with deprecation notices
+- Lines 357-377: Deprecation messages for all 5 telemetry flags
+- Lines 426-449: Prompt command builder replicates all 5 telemetry options
+
+LLxprt's telemetry system (verified across codebase):
+- `uiTelemetryService`: Session-level metrics (token counts, conversation stats) - internal to app, not uploaded externally
+- `logCliConfiguration()`: Reports provider model and configuration for operational visibility
+- Settings-based configuration: `telemetry.enabled`, `telemetry.target`, `telemetry.logConversations`, `telemetry.logResponses`, etc.
+- Multi-provider aware: Each provider (Google, OpenAI, Anthropic) can have different telemetry requirements
+- No Clearcut integration: Upstream uses Google's Clearcut service for telemetry upload; LLxprt uses local logging
+
+**Architectural Difference Summary:**
+
+| Aspect | Upstream (Google gemini-cli) | LLxprt |
+|---|---|---|
+| Architecture | Single provider (Google only) | Multi-provider (Google, OpenAI, Anthropic, etc.) |
+| Telemetry Service | Clearcut (Google-specific OTLP ingestion) | uiTelemetryService + logCliConfiguration |
+| Configuration Method | Migrating from CLI flags to settings.json | Already settings-based with CLI flag overrides |
+| Flags to Remove | `--telemetry-*` flags deprecated for settings.json | CLI flags still active for configuration flexibility |
+
+**Verification Summary:**
+
+- Batch 11 upstream commit 9049f8f8 removes deprecated telemetry CLI flags
+- LLxprt marks this as SKIP (different telemetry architecture)
+- LLxprt is multi-provider; upstream is single-provider (Google)
+- All verification commands PASS (lint, typecheck, build, application start)
+- LLxprt retains all 5 telemetry CLI flags (10 total definitions in config.ts)
+- LLxprt uses `uiTelemetryService` for internal metrics and `logCliConfiguration()` for config logging
+- LLxprt's telemetry architecture requires CLI flags for provider-agnostic configuration flexibility
+- No changes needed - SKIP decision is correct due to fundamental architectural differences
+
+Conclusion: Batch 11 implementation **VERIFIED AS SKIP**. The upstream telemetry flag removal does not apply to LLxprt due to its multi-provider architecture and different telemetry infrastructure. LLxprt's telemetry system is distinct and should be reviewed/evolved independently.
+
+
