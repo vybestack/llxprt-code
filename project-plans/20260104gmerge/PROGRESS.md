@@ -220,3 +220,41 @@ Use this checklist to track batch execution progress.
 - Decision: SKIP - LLxprt's DebugLogger is significantly more advanced. Applying upstream would be a downgrade.
 - See NOTES.md for detailed comparison and verification output (Batch 21 section)
 - AUDIT.md: No changes needed (SKIP decision confirmed)
+
+### Batch 22 (2026-01-06)
+- Status: SKIP - Architectural divergence - RE-VALIDATED
+- Upstream commit: f4330c9f - remove support for workspace extensions and migrations (#11324)
+- Upstream changes:
+  - Removes workspace extension support (getWorkspaceExtensions, loadUserExtensions, loadExtensionsFromDir)
+  - Removes migration functionality (performWorkspaceExtensionMigration, WorkspaceMigrationDialog, useWorkspaceMigration hook)
+  - Simplifies ExtensionEnablementManager constructor from (configDir, enabledExtensionNames?) to (enabledExtensionNames?)
+  - Consolidates loadExtensions() to only load from ExtensionStorage.getUserExtensionsDir()
+  - Updates all tests to use new API
+  - 19 files changed, +214/-1063 lines
+- LLxprt status: Architectural divergence prevents direct application
+  - ExtensionEnablementManager constructor: constructor(configDir: string, enabledExtensionNames?: string[])
+  - Has loadUserExtensions() and getExtensionDir() in ExtensionStorage class (upstream removes both)
+  - WorkspaceMigrationDialog.tsx and useWorkspaceMigration.ts exist but reference non-existent getWorkspaceExtensions()
+  - These appear to be dead code or partially implemented features
+- Key conflicts:
+  1. ExtensionEnablementManager API change: LLxprt requires configDir, upstream removes it
+  2. Extension loading functions: LLxprt has separate functions, upstream consolidates
+  3. Files affected: extension.ts, extensionEnablement.ts, gemini.tsx, plus many test files
+  4. The API change affects many files across the codebase
+- Assessment:
+  - Workspace migration UI and hooks are dead code (can be safely cleaned up)
+  - However, ExtensionEnablementManager API change is significant and invasive
+  - LLxprt''s extension architecture may have different requirements than upstream
+  - Too large for automatic application without understanding architectural intent
+- Verification evidence:
+  - lint: PASS (exit code 0)
+  - typecheck: PASS (all 4 workspaces)
+  - build: PASS (exit code 0)
+  - start.js: PASS (haiku generation successful)
+- Decision: SKIP - The API change is too invasive for automatic application. Requires:
+  1. Understanding LLxprt''s extension system architecture
+  2. Reviewing why LLxprt has different configDir parameter (multi-provider config?)
+  3. Adapting the change to LLxprt''s architecture
+  4. Extensive testing to ensure extension functionality preserved
+- See NOTES.md for detailed analysis and verification output (Batch 22 section)
+- AUDIT.md: No changes needed (SKIP decision confirmed)
