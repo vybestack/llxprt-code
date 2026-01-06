@@ -144,10 +144,10 @@
 | 123 | `af833c5e` | SKIP |  |  | chore(ci): update repo name (#11563) |  |
 | 124 | `e49f4673` | SKIP |  |  | Docs: update config list (#11546) |  |
 | 125 | `34439460` | SKIP |  |  | chore(ci): add retry for preview tests (#11562) |  |
-| 126 | `62dc9683` | PICK |  |  | MCP add array handling + tests (#11292) |  |
-| 127 | `e72c00cf` | PICK |  |  | Proxy agent error handling (#11310) |  |
+| 126 | `62dc9683` | PICK | VERIFIED |  | MCP add array handling + tests (#11292) | SKIP - LLxprt has superior `unknown-options-as-args` middleware approach. Both achieve same functional goal. Re-validated 2026-01-06 with all mandatory commands PASS. |
+| 127 | `e72c00cf` | PICK | VERIFIED | `f3d6f58e2` | Proxy agent error handling (#11310) | COMMITTED as f3d6f58e2 - Error handling for proxy agent creation in fetch.ts. Re-validated 2026-01-06 with all mandatory commands PASS. |
 | 128 | `fb44f5ba` | SKIP |  |  | test: re-enable skip (#11558) |  |
-| 129 | `cf16d167` | PICK |  |  | Repo tooling: tsconfig linter for exclude list (#11298) |  |
+| 129 | `cf16d167` | PICK | VERIFIED | `ba3c2f7a4` | Repo tooling: tsconfig linter for exclude list (#11298) | COMMITTED as ba3c2f7a4 - Complete tsconfig exclude list linter implemented in scripts/lint.js. Re-validated 2026-01-06 with all mandatory commands PASS. |
 | 130 | `dd3b1cb6` | REIMPLEMENT |  |  | feat(cli): continue request after disabling loop detection (#11416) |  |
 | 131 | `f5e07d94` | SKIP |  |  | Docs: update for MCP template (#11561) |  |
 | 132 | `b364f376` | REIMPLEMENT |  |  | refactor(logging): Centralize console logging with debugLogger (#11590) |  |
