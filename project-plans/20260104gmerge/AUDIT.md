@@ -138,7 +138,7 @@
 | 117 | `2c93542e` | SKIP |  |  | Revert "Enable Model Routing" (#11453) |  |
 | 118 | `a74a04d1` | SKIP |  |  | Revert "Enable Model Routing" (#11451) |  |
 | 119 | `0658b4aa` | PICK | APPLIED | 2026-01-06 | Deflake replace integration test (#11338) | APPLIED - Changed it() to it.skip() for flaky \"insert multi-line block\" test in integration-tests/replace.test.ts to reduce CI flakiness. Test-only change. All validation commands PASS. |
-| 120 | `bf80263b` | REIMPLEMENT |  |  | feat: Implement message bus and policy engine (#11523) |  |
+| 120 | `bf80263b` | VERIFIED |  |  | feat: Implement message bus and policy engine (#11523) | Skip/NO_OP: LLxprt has superior implementation - MessageBus exists at confirmation-bus/message-bus.ts, PolicyEngine exists at policy/policy-engine.ts, Config.getPolicyEngine() and getMessageBus() are properly wired (lines 1036-1046). All tools integrated with message bus. MCP spoofing protection, bucket auth flow, TOML config loader - all advanced features missing upstream. Applying would be a regression.|
 | 121 | `193b4bba` | SKIP |  |  | chore(ci): remove skip of UI tests (#11559) |  |
 | 122 | `74a77719` | SKIP |  |  | chore(ci): rename GH repo (#11560) |  |
 | 123 | `af833c5e` | SKIP |  |  | chore(ci): update repo name (#11563) |  |

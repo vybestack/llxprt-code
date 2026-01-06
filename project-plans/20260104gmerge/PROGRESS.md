@@ -59,7 +59,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 38 — FULL — VERIFIED — `31f58a1f, 70a99af1, 72b16b3a` — all VERIFIED NO_OP: superior implementations already exist - ripgrepPathResolver.ts, shell-utils.ts security model, generic PTY fallback — re-validated 2026-01-06
 - [x] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — NO_OP (static readonly Name already implemented on all tools - re-validated 2026-01-06)
 - [x] Batch 40 — FULL — APPLIED — `654c5550, 0658b4aa` — Add wasm read test, deflake replace — 654c5550 PARTIAL REIMPLEMENTATION (function does not exist, added test using dynamic import), 0658b4aa applied exactly — 2026-01-06
-- [x] Batch 41 — QUICK — REIMPLEMENT — `bf80263b` — SKIP (useGeminiStream.ts conflicts, different architecture)
+- [x] Batch 41 — VERIFIED — `bf80263b` — SKIP (ALREADY_EXISTS - LLxprt has superior message bus and policy engine implementation with advanced features like MCP spoofing protection, bucket auth flow, TOML config loader) | See NOTES.md
 - [x] Batch 42 — FULL — PICK — `62dc9683, e72c00cf, cf16d167` — 62dc9683 SKIP, e72c00cf PICKED f3d6f58e2, cf16d167 PICKED ba3c2f7a4
 - [x] Batch 43 — QUICK — REIMPLEMENT — `dd3b1cb6` — REIMPLEMENT (ShellTool needs static Name, others have it)
 - [x] Batch 44 — FULL — REIMPLEMENT — `b364f376` — SKIP (LLxprt has DebugLogger architecture)
