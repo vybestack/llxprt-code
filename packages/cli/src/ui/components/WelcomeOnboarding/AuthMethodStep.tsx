@@ -88,8 +88,9 @@ export const AuthMethodStep: React.FC<AuthMethodStepProps> = ({
         <Text bold color={Colors.AccentCyan}>
           Step 3 of 5: Choose Authentication Method
         </Text>
-        <Text> </Text>
-        <Text>How would you like to authenticate with {providerDisplay}?</Text>
+        <Text color={Colors.Foreground}>
+          How would you like to authenticate with {providerDisplay}?
+        </Text>
       </Box>
 
       {error && (

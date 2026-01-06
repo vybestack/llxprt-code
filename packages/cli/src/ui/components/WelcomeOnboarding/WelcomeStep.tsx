@@ -42,16 +42,20 @@ export const WelcomeStep: React.FC<WelcomeStepProps> = ({
         <Text bold color={Colors.AccentCyan}>
           Welcome to llxprt!
         </Text>
-        <Text> </Text>
-        <Text>{"Let's get you set up in just a few steps."}</Text>
-        <Text>
+        <Text color={Colors.Foreground}>
+          {' '}
+          {"Let's get you set up in just a few steps."}
+        </Text>
+        <Text color={Colors.Foreground}>
           {"You'll choose an AI provider and configure authentication"}
         </Text>
-        <Text>so llxprt can work its magic.</Text>
+        <Text color={Colors.Foreground}>so llxprt can work its magic.</Text>
       </Box>
 
       <Box flexDirection="column" marginBottom={1}>
-        <Text bold>What would you like to do?</Text>
+        <Text bold color={Colors.Foreground}>
+          What would you like to do?
+        </Text>
       </Box>
 
       <RadioButtonSelect

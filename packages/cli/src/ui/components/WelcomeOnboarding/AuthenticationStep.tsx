@@ -119,12 +119,18 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
             <Text color={Colors.AccentYellow}>
               <Spinner type="dots" />
             </Text>{' '}
-            Opening browser for OAuth authentication...
+            <Text color={Colors.Foreground}>
+              Opening browser for OAuth authentication...
+            </Text>
           </Text>
         </Box>
 
-        <Text>Please complete the authentication in your browser.</Text>
-        <Text>This window will update when done.</Text>
+        <Text color={Colors.Foreground}>
+          Please complete the authentication in your browser.
+        </Text>
+        <Text color={Colors.Foreground}>
+          This window will update when done.
+        </Text>
 
         <Box marginTop={1}>
           <Text color={Colors.Gray}>Press Esc to cancel and go back</Text>
@@ -149,18 +155,20 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
             <Text color={Colors.AccentYellow}>
               <Spinner type="dots" />
             </Text>{' '}
-            Validating API key...
+            <Text color={Colors.Foreground}>Validating API key...</Text>
           </Text>
         </Box>
       ) : (
         <>
           <Box marginBottom={1}>
-            <Text>Enter your {providerDisplay} API key:</Text>
+            <Text color={Colors.Foreground}>
+              Enter your {providerDisplay} API key:
+            </Text>
           </Box>
 
           <Box>
-            <Text>API Key: </Text>
-            <Text>{maskedValue}</Text>
+            <Text color={Colors.Foreground}>API Key: </Text>
+            <Text color={Colors.Foreground}>{maskedValue}</Text>
             <Text color={Colors.AccentCyan}>▌</Text>
           </Box>
         </>

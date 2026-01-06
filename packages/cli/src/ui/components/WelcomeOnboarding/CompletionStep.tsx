@@ -94,22 +94,23 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
         <Text bold color={Colors.AccentCyan}>
           Step 5 of 5: Save Your Profile
         </Text>
-        <Text> </Text>
         <Text bold color={Colors.AccentGreen}>
-          {'✓ Authentication complete!'}
+          [OK] Authentication complete!
         </Text>
       </Box>
 
       <Box flexDirection="column" marginBottom={1}>
-        <Text>Provider: {providerDisplay}</Text>
-        {model && <Text>Model: {model}</Text>}
-        <Text>Authentication: {authDisplay}</Text>
+        <Text color={Colors.Foreground}>Provider: {providerDisplay}</Text>
+        {model && <Text color={Colors.Foreground}>Model: {model}</Text>}
+        <Text color={Colors.Foreground}>Authentication: {authDisplay}</Text>
       </Box>
 
       {showProfilePrompt ? (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold>Save this setup as a profile</Text>
+            <Text bold color={Colors.Foreground}>
+              Save this setup as a profile
+            </Text>
           </Box>
 
           <Text color={Colors.Gray}>
@@ -127,11 +128,11 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
             )}
 
             {saving ? (
-              <Text>Saving profile...</Text>
+              <Text color={Colors.Foreground}>Saving profile...</Text>
             ) : (
               <Box>
-                <Text>Profile name: </Text>
-                <Text>{profileName}</Text>
+                <Text color={Colors.Foreground}>Profile name: </Text>
+                <Text color={Colors.Foreground}>{profileName}</Text>
                 <Text color={Colors.AccentCyan}>▌</Text>
               </Box>
             )}
@@ -146,7 +147,7 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
       ) : (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text>Try asking me something like:</Text>
+            <Text color={Colors.Foreground}>Try asking me something like:</Text>
             <Text color={Colors.AccentCyan}>
               {'"Explain how async/await works in JavaScript"'}
             </Text>

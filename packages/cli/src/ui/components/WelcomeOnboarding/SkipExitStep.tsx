@@ -30,21 +30,22 @@ export const SkipExitStep: React.FC<SkipExitStepProps> = ({
   return (
     <Box flexDirection="column">
       <Box flexDirection="column" marginBottom={1}>
-        <Text bold>Setup skipped</Text>
+        <Text bold color={Colors.Foreground}>
+          Setup skipped
+        </Text>
       </Box>
 
       <Box flexDirection="column" marginBottom={1}>
-        <Text>To configure llxprt manually:</Text>
-        <Text> </Text>
-        <Text>
+        <Text color={Colors.Foreground}>To configure llxprt manually:</Text>
+        <Text color={Colors.Foreground}>
           • Use <Text color={Colors.AccentCyan}>/auth &lt;provider&gt;</Text> to
           set up authentication
         </Text>
-        <Text>
+        <Text color={Colors.Foreground}>
           • Use <Text color={Colors.AccentCyan}>/provider</Text> to select your
           AI provider
         </Text>
-        <Text>
+        <Text color={Colors.Foreground}>
           • Type <Text color={Colors.AccentCyan}>/help</Text> for more commands
         </Text>
       </Box>

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { type LoadedSettings } from '../../config/settings.js';
 import {
@@ -14,6 +14,8 @@ import {
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 const debug = new DebugLogger('llxprt:ui:useWelcomeOnboarding');
+
+const PLACEHOLDER_MODEL_NAMES = new Set(['placeholder-model']);
 
 export type WelcomeStep =
   | 'welcome'
@@ -81,8 +83,68 @@ export const useWelcomeOnboarding = (
     isWelcomeCompleted(),
   );
 
-  // Only show welcome after folder trust is complete
-  const showWelcome = !welcomeCompleted && isFolderTrustComplete;
+  const isSystemDefaultModelName = useCallback((modelName: string): boolean => {
+    return PLACEHOLDER_MODEL_NAMES.has(modelName);
+  }, []);
+
+  const shouldSuppressWelcome = useMemo(() => {
+    // Always prefer showing onboarding until the user explicitly completes/skips it.
+    if (!isFolderTrustComplete || welcomeCompleted) {
+      return false;
+    }
+
+    // Non-interactive signals (CLI/env) that indicate the user already configured things.
+    // Keep this conservative: avoid treating system defaults as user configuration.
+
+    if (process.env.LLXPRT_PROFILE) {
+      debug.log('Welcome suppressed: LLXPRT_PROFILE environment variable set');
+      return true;
+    }
+
+    // If a provider is already active (typically set via CLI flags or prior usage),
+    // suppress welcome.
+    const providerManager = runtime.getCliProviderManager();
+    if (providerManager) {
+      try {
+        const providerName = providerManager.getActiveProviderName();
+        const hasActiveProvider =
+          providerManager.hasActiveProvider?.() ?? false;
+
+        if (providerName || hasActiveProvider) {
+          debug.log('Welcome suppressed: active provider configured');
+          return true;
+        }
+      } catch (error) {
+        debug.log('Could not check for active provider:', error);
+      }
+    }
+
+    try {
+      const activeModel = runtime.getActiveModelName();
+      if (activeModel && !isSystemDefaultModelName(activeModel)) {
+        debug.log('Welcome suppressed: active model configured');
+        return true;
+      }
+    } catch (error) {
+      debug.log('Could not check for active model:', error);
+    }
+
+    // Intentionally do NOT suppress based solely on defaultProfile. A profile can be
+    // present due to system defaults and should not skip onboarding unless the user
+    // has explicitly completed it.
+
+    return false;
+  }, [
+    isFolderTrustComplete,
+    isSystemDefaultModelName,
+    runtime,
+    welcomeCompleted,
+  ]);
+
+  // Show welcome after folder trust is complete unless it was completed/skipped,
+  // or we detect a non-interactive configuration state.
+  const showWelcome =
+    !welcomeCompleted && isFolderTrustComplete && !shouldSuppressWelcome;
 
   const [state, setState] = useState<WelcomeState>({
     step: 'welcome',
