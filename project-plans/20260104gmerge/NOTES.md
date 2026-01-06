@@ -3339,3 +3339,89 @@ No commit created - BATCH ALREADY IMPLEMENTED.
 Decision: VERIFIED - Implementation complete and validated. No changes needed.
 
 ---
+
+## Batch 28 — RE-VALIDATION — 98eef9ba
+
+### Upstream Commit Details
+
+**Commit:** `98eef9ba` - update web_fetch tool definition instructions
+**Date:** 2025-10-19
+**PR:** #11252
+
+### Change Summary
+
+Update web_fetch tool definition description to provide clearer instructions about valid URL formatting:
+- Old description: "Must contain as least one URL starting with http:// or https://."
+- New description: "All URLs to be fetched must be valid and complete, starting with \"http://\" or \"https://\", and be fully-formed with a valid hostname (e.g., a domain name like \"example.com\" or an IP address). For example, \"https://example.com/\" is valid, but \"example.com\" is not."
+
+**Diff:**
+```diff
+--- a/packages/core/src/tools/web-fetch.ts
++++ b/packages/core/src/tools/web-fetch.ts
+@@ -410,7 +410,7 @@ export class WebFetchTool extends BaseDeclarativeTool<\
+         properties: {\
+           prompt: {\
+             description:\
+-              'A comprehensive prompt that includes the URL(s) (up to 20) to fetch and specific instructions on how to process their content (e.g., "Summarize https://example.com/article and extract key points from https://another.com/data"). Must contain as least one URL starting with http:// or https://.',\
++              'A comprehensive prompt that includes the URL(s) (up to 20) to fetch and specific instructions on how to process their content (e.g., "Summarize https://example.com/article and extract key points from https://another.com/data"). All URLs to be fetched must be valid and complete, starting with "http://" or "https://", and be fully-formed with a valid hostname (e.g., a domain name like "example.com" or an IP address). For example, "https://example.com/" is valid, but "example.com" is not.',\
+             type: 'string',\
+           },\
+         },\
+```
+
+### LLxprt Implementation Status
+
+**Status:** ALREADY IMPLEMENTED
+
+LLxprt renamed `web-fetch.ts` → `google-web-fetch.ts` (LLxprt uses separate google-web-fetch and direct-web-fetch tools).
+
+Current description in `google-web-fetch.ts` (verified):
+```
+'A comprehensive prompt that includes the URL(s) (up to 20) to fetch and specific instructions on how to process their content (e.g., "Summarize https://example.com/article and extract key points from https://another.com/data"). All URLs to be fetched must be valid and complete, starting with "http://" or "https://", and be fully-formed with a valid hostname (e.g., a domain name like "example.com" or an IP address). For example, "https://example.com/" is valid, but "example.com" is not.'
+```
+
+This is **IDENTICAL** to the upstream change in 98eef9ba.
+
+### Batch 28 Re-Validation Record
+
+```bash
+$ npm run lint
+```
+[OK] **PASS** (exit code: 0, no errors or warnings)
+
+```bash
+$ npm run typecheck
+```
+[OK] **PASS** (all 4 workspaces passed, exit code: 0)
+
+```bash
+$ npm run build
+```
+[OK] **PASS** (exit code: 0)
+
+```bash
+$ node script/start.js --profile-load synthetic "write me a haiku"
+```
+[OK] **PASS** (exit code: 0 - Application started successfully)
+
+### Verification
+
+1. **Lint:** PASS ✓
+2. **Typecheck:** PASS ✓ (all 4 workspaces)
+3. **Build:** PASS ✓
+4. **Runtime test:** PASS ✓
+
+### Implementation Status
+
+Batch 28 upstream commit 98eef9ba - **ALREADY IMPLEMENTED** in LLxprt
+
+The URL format instruction update from upstream 98eef9ba has already been applied to LLxprt's `google-web-fetch.ts`. The description text is identical to the upstream change.
+
+No changes needed.
+
+### Status Documentation
+
+**Batch 28 commit:** `98eef9ba` - ALREADY IMPLEMENTED (no action needed)
+
+**Decision:** VERIFIED - Implementation complete and validated.
+

@@ -272,3 +272,20 @@ __LLXPRT_CMD__:cat progtemp.md
 - See NOTES.md for detailed output and technical analysis
 - Commit 81be4bd89 verified on 2026-01-06 with full validation
 - AUDIT.md: No changes needed (implementation status unchanged)
+
+
+### Batch 28 (2026-01-06)
+- Status: VERIFIED - Already implemented as commit 4af93653d
+- Upstream commit: 98eef9ba - update web_fetch tool definition instructions (#11252)
+- Implementation details:
+  * Updated web_fetch tool prompt description with clearer URL formatting instructions
+  * Applied to google-web-fetch.ts (LLxprt's equivalent of upstream web-fetch.ts)
+- Verification evidence:
+  - lint: PASS (exit code 0)
+  - typecheck: PASS (all 4 workspaces)
+  - build: PASS (exit code 0)
+  - start.js: PASS (haiku generation successful)
+  - The description text in google-web-fetch.ts is IDENTICAL to upstream change
+- Decision: VERIFIED - Previously completed as 4af93653d (upstream 98eef9ba)
+- See NOTES.md for detailed verification output (Batch 28 section)
+- AUDIT.md: No changes needed (implementation status unchanged)
