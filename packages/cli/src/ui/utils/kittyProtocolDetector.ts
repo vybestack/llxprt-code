@@ -35,7 +35,7 @@ export async function detectAndEnableKittyProtocol(): Promise<boolean> {
       // Issue #1020: Wrap setRawMode with try-catch for error safety
       try {
         process.stdin.setRawMode(true);
-      } catch (err) {
+      } catch (_err) {
         // If setRawMode fails, protocol detection cannot proceed
         detectionComplete = true;
         resolve(false);
@@ -64,7 +64,7 @@ export async function detectAndEnableKittyProtocol(): Promise<boolean> {
           if (!originalRawMode) {
             try {
               process.stdin.setRawMode(false);
-            } catch (err) {
+            } catch (_err) {
               // Restore failed, but protocol detection is complete
               // Log only in debug mode (if we had access to config)
             }
@@ -87,7 +87,7 @@ export async function detectAndEnableKittyProtocol(): Promise<boolean> {
 
     // Issue #1020: Add a minimal error handler for the protocol detection window
     // Since we're only temporarily switching to raw mode, we just need to prevent crashes
-    const handleDetectionError = (err: Error) => {
+    const handleDetectionError = (_err: Error) => {
       // Don't crash the process during protocol detection
       // Just log and continue
       if (!checkFinished) {
@@ -122,7 +122,7 @@ export async function detectAndEnableKittyProtocol(): Promise<boolean> {
         if (!originalRawMode) {
           try {
             process.stdin.setRawMode(false);
-          } catch {
+          } catch (_err) {
             // Ignore restore failures
           }
         }

@@ -69,8 +69,8 @@ export const SecureKeyInput: React.FC<SecureKeyInputProps> = ({
       // Ignore transient I/O errors
       const isEioError =
         err instanceof Error &&
-        ((err as any).code === 'EIO' ||
-          (err as any).errno === -5 ||
+        (('code' in err && err.code === 'EIO') ||
+          ('errno' in err && typeof err.errno === 'number' && err.errno === -5) ||
           err.message.includes('EIO'));
       if (!isEioError) {
         console.error('Stdin error in SecureKeyInput:', err);

@@ -161,7 +161,7 @@ export class StdinRawModeManager {
         } else {
           process.stdin.setRawMode(false);
         }
-      } catch (err) {
+      } catch (_err) {
         // setRawMode can fail during cleanup
         // Ignore and continue
       }
