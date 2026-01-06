@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 18 (2 SKIPPED - cosmetic and needs REIMPLEMENT) |
+| **Last Completed** | Batch 19 (SKIPPED - Clearcut telemetry not in LLxprt) |
 | **In Progress** | — |
-| **Next Up** | Batch 19 |
-| **Progress** | 18/49 (37%) |
+| **Next Up** | Batch 20 |
+| **Progress** | 19/49 (39%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -37,7 +37,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 16 — FULL — PICK — `f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53` — f3ffaf09 PICKED a5ebeada6 / 0ded546a SKIP (PromptService architecture) / 659b0557 PICKED f6d41e648 / 4a0fcd05 SKIP (different release system) / 2b61ac53 PICKED 8b6f7643f
 - [x] Batch 17 — QUICK — PICK — `8da47db1, 7c086fe5, e4226b8a, 4d2a1111, 426d3614` — 8da47db1 PICKED a4dc52cc8 / 7c086fe5 SKIP (McpStatus.tsx deleted) / e4226b8a PICKED 32c4504b6 / 4d2a1111 PICKED 5938d570f / 426d3614 PICKED afe58d996
 - [x] Batch 18 — FULL — PICK — `b4a405c6, d3bdbc69` — b4a405c6 SKIP (cosmetic, LLxprt has custom descriptions) / d3bdbc69 SKIP-REIMPLEMENT (extension IDs valuable but conflicts with LLxprt flow)
-- [ ] Batch 19 — QUICK — REIMPLEMENT — `08e87a59` — Log all user settings to enable measurement of experiment impacts (#11354)
+- [x] Batch 19 — QUICK — SKIP — `08e87a59` — SKIP (Clearcut telemetry not in LLxprt; uses logCliConfiguration() instead)
 - [ ] Batch 20 — FULL — PICK — `21163a16` — Enable typechecking for ui/commands tests (#11340)
 - [ ] Batch 21 — QUICK — REIMPLEMENT — `9b9ab609` — feat(logging): Centralize debug logging with a dedicated utility (#11417)
 - [ ] Batch 22 — FULL — REIMPLEMENT — `f4330c9f` — remove support for workspace extensions and migrations (#11324)
