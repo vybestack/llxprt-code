@@ -632,6 +632,140 @@ PASS
 Commit: `19c602897`
 Message: "reimplement: refactor: move web_fetch tool name to tool-names.ts (#11174) (upstream c9c633be)"
 
+### Re-validation Record (2026-01-05)
+
+**VERIFIED - Implementation Complete**
+
+Per new verification policy, all required commands were executed in order:
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code: 0, no errors)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code: 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code: 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+Code flows like stream,
+Bugs reveal hidden patterns,
+Logic finds its way.
+```
+
+[OK] **PASS** (exit code: 0 - Application started successfully, processed request, generated haiku output)
+
+**Feature Verification:**
+
+Verified that tool names are properly centralized using constants from tool-names.ts:
+
+```bash
+$ grep GOOGLE_WEB_FETCH_TOOL packages/core/src/tools/tool-names.ts
+export const GOOGLE_WEB_FETCH_TOOL = 'web_fetch';
+
+$ grep DIRECT_WEB_FETCH_TOOL packages/core/src/tools/tool-names.ts
+export const DIRECT_WEB_FETCH_TOOL = 'direct_web_fetch';
+
+$ grep "import.*GOOGLE_WEB_FETCH_TOOL" packages/core/src/tools/google-web-fetch.ts
+import { GOOGLE_WEB_FETCH_TOOL } from './tool-names.js';
+
+$ grep "GOOGLE_WEB_FETCH_TOOL" packages/core/src/tools/google-web-fetch.ts
+if (!supportedTools.includes(GOOGLE_WEB_FETCH_TOOL)) {
+
+$ grep "import.*DIRECT_WEB_FETCH_TOOL" packages/core/src/tools/direct-web-fetch.ts
+import { DIRECT_WEB_FETCH_TOOL } from './tool-names.js';
+
+$ grep "DIRECT_WEB_FETCH_TOOL" packages/core/src/tools/direct-web-fetch.ts
+static readonly Name = DIRECT_WEB_FETCH_TOOL;
+```
+
+All hardcoded 'web_fetch' and 'direct_web_fetch' strings have been replaced with centralized constants from tool-names.ts.
+
+**Verification Summary:**
+
+- Batch 05 upstream commit `c9c633be` moves web_fetch tool name to centralized tool-names.ts
+- LLxprt implementation `19c602897` successfully applied this refactor
+- Tool names now use GOOGLE_WEB_FETCH_TOOL and DIRECT_WEB_FETCH_TOOL constants
+- 2 files modified (google-web-fetch.ts, direct-web-fetch.ts)
+- All verification commands PASS (lint, typecheck, build, application start)
+- No functional changes - purely a refactor for code consistency
+- Build artifacts properly generated
+
+Conclusion: Batch 05 implementation **FULLY VERIFIED** and functional. Tool name centralization successfully implemented.
+
 ---
 
 ## Batch 03

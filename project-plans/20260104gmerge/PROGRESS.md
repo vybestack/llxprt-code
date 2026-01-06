@@ -95,3 +95,12 @@ Use this checklist to track batch execution progress.
 - All commands PASSED
 - See NOTES.md for detailed output
 - AUDIT.md: No changes needed (already verified as SKIP/NO_OP)
+
+### Batch 05 (2026-01-05)
+- Previously implemented as commit 19c602897
+- Upstream SHA: c9c633be
+- Functionality: Move web_fetch tool name to tool-names.ts (GOOGLE_WEB_FETCH_TOOL, DIRECT_WEB_FETCH_TOOL)
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- See NOTES.md for detailed output
+- AUDIT.md: No changes needed (implementation status unchanged)
