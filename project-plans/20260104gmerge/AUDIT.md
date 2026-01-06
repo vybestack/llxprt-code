@@ -94,7 +94,7 @@
 | 73 | `cedf0235` | PICK |  |  | Enable typechecking for ui/components tests (#11350) |  |
 | 74 | `2ef38065` | PICK |  |  | refactor(tools): Migrate shell tool name to a centralized constant (#11418) |  |
 | 75 | `dd42893d` | PICK |  |  | Enable typechecking for config tests (#11341) |  |
-| 76 | `f22aa72c` | REIMPLEMENT |  |  | Making shell:true as default and adding -I to  grep (#11448) |  |
+| 76 | `f22aa72c` | REIMPLEMENT | VERIFIED | `81be4bd89` | Making shell:true as default and adding -I to  grep (#11448) | Already implemented in LLxprt as 81be4bd89 - verified 2026-01-06 with all mandatory commands PASS (lint, typecheck, build, start) |
 | 77 | `d065c3ca` | PICK |  |  | Enable typechecking for more test files (#11370) |  |
 | 78 | `f425bd76` | SKIP |  |  | Rename component to "TodoTray" (#11469) |  |
 | 79 | `98eef9ba` | REIMPLEMENT |  |  | fix: Update web_fetch tool definition to instruct the model to provid… (#11252) |  |
