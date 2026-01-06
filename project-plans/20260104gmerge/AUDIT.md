@@ -124,7 +124,7 @@
 | 103 | `723b8d33` | SKIP |  |  | chore: update jest config (#11409) |  |
 | 104 | `72b16b3a` | PICK | VERIFIED | 2026-01-06 | Fix macOS sandbox PTY spawn errors (#11539) | VERIFIED NOT APPLICABLE - LLxprt implements generic PTY fallback pattern in shellExecutionService.ts lines 63-74, which is more robust than macOS-specific posix_spawnp check. Current implementation handles all PTY errors. All mandatory commands PASS. |
 | 105 | `7dd2d8f7` | SKIP/NO_OP | 2026-01-06 |  | fix(tools): restore static tool names to fix configuration exclusions (#11551) | VERIFIED NO_OP - All tool classes in LLxprt already have static readonly Name property implemented (edit.ts, glob.ts, grep.ts, ls.ts, memoryTool.ts, read-file.ts, read-many-files.ts, ripGrep.ts, shell.ts, write-file.ts, plus 10+ additional tools). LLxprt's implementation is more comprehensive with centralized name constants in tool-names.ts. All mandatory commands PASS (lint, typecheck, build, start). |
-| 106 | `654c5550` | PICK |  |  | Add wasm read test (#11336) |  |
+| 106 | `654c5550` | PICK | APPLIED | 2026-01-06 | Add wasm read test (#11336) | PARTIAL REIMPLEMENTATION - Function readWasmBinaryFromDisk does not exist in LLxprt fileUtils.ts; added test using dynamic import. Test-only change, no production impact. All validation commands PASS. |
 | 107 | `fc4e10b5` | SKIP |  |  | Docs: update README for extensions search (#11441) |  |
 | 108 | `81772c42` | SKIP |  |  | chore: update changes to url (#11442) |  |
 | 109 | `0e7b3951` | SKIP |  |  | feat: add shell defaults (#11373) |  |
@@ -137,7 +137,7 @@
 | 116 | `cb8f93ba` | SKIP |  |  | chore(ci): add integration tests to preview runner (#11438) |  |
 | 117 | `2c93542e` | SKIP |  |  | Revert "Enable Model Routing" (#11453) |  |
 | 118 | `a74a04d1` | SKIP |  |  | Revert "Enable Model Routing" (#11451) |  |
-| 119 | `0658b4aa` | PICK |  |  | Deflake replace integration test (#11338) |  |
+| 119 | `0658b4aa` | PICK | APPLIED | 2026-01-06 | Deflake replace integration test (#11338) | APPLIED - Changed it() to it.skip() for flaky \"insert multi-line block\" test in integration-tests/replace.test.ts to reduce CI flakiness. Test-only change. All validation commands PASS. |
 | 120 | `bf80263b` | REIMPLEMENT |  |  | feat: Implement message bus and policy engine (#11523) |  |
 | 121 | `193b4bba` | SKIP |  |  | chore(ci): remove skip of UI tests (#11559) |  |
 | 122 | `74a77719` | SKIP |  |  | chore(ci): rename GH repo (#11560) |  |
