@@ -268,7 +268,6 @@ class ShellToolInvocation extends BaseToolInvocation<
     };
     if (signal.aborted) {
       onUserAbort();
-      signal.removeEventListener('abort', onUserAbort);
       return {
         llmContent: 'Command was cancelled by user before it could start.',
         returnDisplay: 'Command cancelled by user.',
