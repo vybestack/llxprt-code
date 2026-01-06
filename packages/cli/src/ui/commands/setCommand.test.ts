@@ -114,7 +114,7 @@ describe('setCommand runtime integration', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, user-agent, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter, retries, retrywait, maxTurnsPerPrompt, authOnly, dumponerror, dumpcontext, prompt-caching, include-folder-structure, rate-limit-throttle, rate-limit-throttle-threshold, rate-limit-max-wait, reasoning.enabled, reasoning.includeInContext, reasoning.includeInResponse, reasoning.format, reasoning.stripFromContext, reasoning.effort, reasoning.maxTokens, enable-tool-prompts, tpm_threshold, timeout_ms, circuit_breaker_enabled, circuit_breaker_failure_threshold, circuit_breaker_failure_window_ms, circuit_breaker_recovery_timeout_ms',
+        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, user-agent, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter, retries, retrywait, maxTurnsPerPrompt, authOnly, dumponerror, dumpcontext, prompt-caching, include-folder-structure, rate-limit-throttle, rate-limit-throttle-threshold, rate-limit-max-wait, reasoning.enabled, reasoning.includeInContext, reasoning.includeInResponse, reasoning.format, reasoning.stripFromContext, reasoning.effort, reasoning.maxTokens, enable-tool-prompts, tpm_threshold, timeout_ms, circuit_breaker_enabled, circuit_breaker_failure_threshold, circuit_breaker_failure_window_ms, circuit_breaker_recovery_timeout_ms, task_default_timeout_ms, task_max_timeout_ms, shell_default_timeout_ms, shell_max_timeout_ms',
     });
   });
 
@@ -131,6 +131,85 @@ describe('setCommand runtime integration', () => {
       content:
         'compression-threshold must be a decimal between 0 and 1 (e.g., 0.7 for 70%)',
     });
+  });
+  it('validates task timeout settings', async () => {
+    const testCases = [
+      { key: 'task_default_timeout_ms', value: '90000' },
+      { key: 'task_max_timeout_ms', value: '180000' },
+      { key: 'shell_default_timeout_ms', value: '60000' },
+      { key: 'shell_max_timeout_ms', value: '300000' },
+    ];
+
+    for (const { key, value } of testCases) {
+      const result = await setCommand.action!(context, `${key} ${value}`);
+      expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+        key,
+        Number(value),
+      );
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content: expect.stringContaining(`'${key}'`),
+      });
+    }
+  });
+
+  it('validates task timeout settings with -1 for unlimited', async () => {
+    const testCases = [
+      { key: 'task_default_timeout_ms', value: '-1' },
+      { key: 'task_max_timeout_ms', value: '-1' },
+      { key: 'shell_default_timeout_ms', value: '-1' },
+      { key: 'shell_max_timeout_ms', value: '-1' },
+    ];
+
+    for (const { key, value } of testCases) {
+      const result = await setCommand.action!(context, `${key} ${value}`);
+      expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(key, -1);
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content: expect.stringContaining(`'${key}'`),
+      });
+    }
+  });
+
+  it('rejects invalid timeout settings', async () => {
+    const invalidCases = [
+      {
+        key: 'task_default_timeout_ms',
+        value: '-5',
+        expectedError:
+          'must be a positive integer in milliseconds or -1 for unlimited',
+      },
+      {
+        key: 'task_max_timeout_ms',
+        value: '0',
+        expectedError:
+          'must be a positive integer in milliseconds or -1 for unlimited',
+      },
+      {
+        key: 'shell_default_timeout_ms',
+        value: 'not-a-number',
+        expectedError:
+          'must be a positive integer in milliseconds or -1 for unlimited',
+      },
+      {
+        key: 'shell_max_timeout_ms',
+        value: '1.5',
+        expectedError:
+          'must be a positive integer in milliseconds or -1 for unlimited',
+      },
+    ];
+
+    for (const { key, value, expectedError } of invalidCases) {
+      const result = await setCommand.action!(context, `${key} ${value}`);
+      expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: expect.stringContaining(expectedError),
+      });
+    }
   });
 
   it('sets model parameters through runtime helper', async () => {
