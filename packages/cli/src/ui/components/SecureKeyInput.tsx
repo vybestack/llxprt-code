@@ -64,13 +64,32 @@ export const SecureKeyInput: React.FC<SecureKeyInputProps> = ({
       handleKeyPress(char, keyInfo);
     };
 
+    // Issue #1020: Add error handler to prevent EIO crashes
+    const handleError = (err: Error) => {
+      // Ignore transient I/O errors
+      const isEioError =
+        err instanceof Error &&
+        ((err as any).code === 'EIO' ||
+          (err as any).errno === -5 ||
+          err.message.includes('EIO'));
+      if (!isEioError) {
+        console.error('Stdin error in SecureKeyInput:', err);
+      }
+    };
+
     process.stdin.on('data', handleInput);
+    process.stdin.on('error', handleError);
     process.stdin.setRawMode(true);
     process.stdin.resume();
 
     return () => {
       process.stdin.off('data', handleInput);
-      process.stdin.setRawMode(false);
+      process.stdin.off('error', handleError);
+      try {
+        process.stdin.setRawMode(false);
+      } catch {
+        // Issue #1020: Ignore cleanup errors
+      }
       process.stdin.pause();
     };
   }, [handleKeyPress]);
