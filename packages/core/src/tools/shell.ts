@@ -44,6 +44,9 @@ import {
 
 export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
 
+const DEFAULT_SHELL_TIMEOUT_MS = 120_000;
+const MAX_SHELL_TIMEOUT_MS = 600_000;
+
 /**
  * Parses the `--allowed-tools` flag to determine which sub-commands of the
  * ShellTool are allowed. The flag can be provided multiple times.
@@ -125,6 +128,11 @@ export interface ShellToolParams {
    * Optional grep flags (e.g., -i for case-insensitive, -v for inverted)
    */
   grep_flags?: string[];
+
+  /**
+   * Optional timeout in milliseconds.
+   */
+  timeout_ms?: number;
 }
 
 class ShellToolInvocation extends BaseToolInvocation<
@@ -234,12 +242,46 @@ class ShellToolInvocation extends BaseToolInvocation<
 
     const strippedCommand = stripShellWrapper(this.params.command);
 
+    const ephemeralSettings = this.config.getEphemeralSettings();
+    const defaultTimeoutMs =
+      (ephemeralSettings.shell_default_timeout_ms as number | undefined) ??
+      DEFAULT_SHELL_TIMEOUT_MS;
+    const maxTimeoutMs =
+      (ephemeralSettings.shell_max_timeout_ms as number | undefined) ??
+      MAX_SHELL_TIMEOUT_MS;
+    const timeoutMs = this.resolveTimeoutMs(
+      this.params.timeout_ms,
+      defaultTimeoutMs,
+      maxTimeoutMs,
+    );
+    const timeoutController = new AbortController();
+    const timeoutId =
+      timeoutMs === undefined
+        ? null
+        : setTimeout(() => timeoutController.abort(), timeoutMs);
+
+    const onUserAbort = () => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      timeoutController.abort();
+    };
     if (signal.aborted) {
+      onUserAbort();
+      signal.removeEventListener('abort', onUserAbort);
       return {
         llmContent: 'Command was cancelled by user before it could start.',
         returnDisplay: 'Command cancelled by user.',
+        error: {
+          message: 'Command was cancelled by user before it could start.',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
       };
     }
+
+    signal.addEventListener('abort', onUserAbort, { once: true });
+
+    const combinedSignal = timeoutController.signal;
 
     const isWindows = os.platform() === 'win32';
     const tempFileName = `shell_pgrep_${crypto
@@ -335,7 +377,7 @@ class ShellToolInvocation extends BaseToolInvocation<
             lastUpdateTime = Date.now();
           }
         },
-        signal,
+        combinedSignal,
         this.config.getShouldUseNodePtyShell(),
         terminalColumns,
         terminalRows,
@@ -396,19 +438,33 @@ class ShellToolInvocation extends BaseToolInvocation<
           returnDisplayMessage = llmContent;
         }
       } else if (result.aborted) {
-        llmContent = 'Command was cancelled by user before it could complete.';
-        if (rawOutput && rawOutput.trim()) {
-          llmContent += ` Below is the output before it was cancelled:\n${rawOutput}`;
-        } else {
-          llmContent += ' There was no output before it was cancelled.';
-        }
+        const timeoutTriggered =
+          timeoutController.signal.aborted && !signal.aborted;
+        if (timeoutTriggered) {
+          llmContent = `Command timed out after ${timeoutMs ?? defaultTimeoutMs}ms (timeout_ms).`;
+          if (rawOutput && rawOutput.trim()) {
+            llmContent += ` Partial output:\n${rawOutput}`;
+          } else {
+            llmContent += ' There was no output before timeout.';
+          }
 
-        if (this.config.getDebugMode()) {
           returnDisplayMessage = llmContent;
-        } else if (filteredOutput && filteredOutput.trim()) {
-          returnDisplayMessage = filteredOutput;
         } else {
-          returnDisplayMessage = 'Command cancelled by user.';
+          llmContent =
+            'Command was cancelled by user before it could complete.';
+          if (rawOutput && rawOutput.trim()) {
+            llmContent += ` Below is the output before it was cancelled:\n${rawOutput}`;
+          } else {
+            llmContent += ' There was no output before it was cancelled.';
+          }
+
+          if (this.config.getDebugMode()) {
+            returnDisplayMessage = llmContent;
+          } else if (filteredOutput && filteredOutput.trim()) {
+            returnDisplayMessage = filteredOutput;
+          } else {
+            returnDisplayMessage = 'Command cancelled by user.';
+          }
         }
       } else {
         const finalError = result.error
@@ -457,7 +513,21 @@ class ShellToolInvocation extends BaseToolInvocation<
               type: ToolErrorType.SHELL_EXECUTE_ERROR,
             },
           }
-        : {};
+        : result?.aborted && timeoutController.signal.aborted && !signal.aborted
+          ? {
+              error: {
+                message: llmContent,
+                type: ToolErrorType.TIMEOUT,
+              },
+            }
+          : result?.aborted
+            ? {
+                error: {
+                  message: llmContent,
+                  type: ToolErrorType.EXECUTION_FAILED,
+                },
+              }
+            : {};
 
       // Remove runtime marker lines from model-facing content to reduce summarization cost
       const llmContentStripped = stripShellMarkers(llmContent);
@@ -516,10 +586,35 @@ class ShellToolInvocation extends BaseToolInvocation<
         ...executionError,
       };
     } finally {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      signal.removeEventListener('abort', onUserAbort);
       if (fs.existsSync(tempFilePath)) {
         fs.unlinkSync(tempFilePath);
       }
     }
+  }
+
+  private resolveTimeoutMs(
+    requestedTimeoutMs: number | undefined,
+    defaultTimeoutMs: number,
+    maxTimeoutMs: number,
+  ): number | undefined {
+    if (requestedTimeoutMs === -1 || defaultTimeoutMs === -1) {
+      return undefined;
+    }
+
+    const effectiveTimeout = requestedTimeoutMs ?? defaultTimeoutMs;
+    if (maxTimeoutMs === -1) {
+      return effectiveTimeout;
+    }
+
+    if (effectiveTimeout > maxTimeoutMs) {
+      return maxTimeoutMs;
+    }
+
+    return effectiveTimeout;
   }
 }
 
@@ -662,6 +757,11 @@ export class ShellTool extends BaseDeclarativeTool<
             type: 'string',
             description:
               '(OPTIONAL) Directory to run the command in, if not the project root directory. Must be relative to the project root directory and must already exist.',
+          },
+          timeout_ms: {
+            type: 'number',
+            description:
+              '(OPTIONAL) Timeout in milliseconds for command execution (-1 for unlimited).',
           },
         },
         required: ['command'],

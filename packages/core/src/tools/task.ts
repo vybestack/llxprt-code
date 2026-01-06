@@ -30,6 +30,9 @@ import { DebugLogger } from '../debug/DebugLogger.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
+const DEFAULT_TASK_TIMEOUT_MS = 60_000;
+const MAX_TASK_TIMEOUT_MS = 300_000;
+
 export interface TaskToolParams {
   subagent_name?: string;
   subagentName?: string;
@@ -46,6 +49,7 @@ export interface TaskToolParams {
   context?: Record<string, unknown>;
   context_vars?: Record<string, unknown>;
   contextVars?: Record<string, unknown>;
+  timeout_ms?: number;
 }
 
 interface TaskToolInvocationParams {
@@ -120,6 +124,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   ToolResult
 > {
   constructor(
+    private readonly config: Config,
     params: TaskToolParams,
     private readonly normalized: TaskToolInvocationParams,
     private readonly deps: TaskToolInvocationDeps,
@@ -131,13 +136,19 @@ class TaskToolInvocation extends BaseToolInvocation<
     return `Run subagent '${this.normalized.subagentName}' to accomplish: ${this.normalized.goalPrompt}`;
   }
 
-  private createLaunchRequest(): SubagentLaunchRequest {
+  private createLaunchRequest(timeoutMs?: number): SubagentLaunchRequest {
     const { subagentName, behaviourPrompts, toolWhitelist, outputSpec } =
       this.normalized;
 
     const launchRequest: SubagentLaunchRequest = {
       name: subagentName,
     };
+
+    if (timeoutMs !== undefined) {
+      launchRequest.runConfig = {
+        max_time_minutes: timeoutMs / 60_000,
+      };
+    }
 
     if (behaviourPrompts.length > 0) {
       launchRequest.behaviourPrompts = behaviourPrompts;
@@ -193,7 +204,15 @@ class TaskToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
+    const { timeoutMs, timeoutController, timeoutId, onUserAbort } =
+      this.createTimeoutControllers(signal);
+
     if (signal.aborted) {
+      onUserAbort();
+      signal.removeEventListener('abort', onUserAbort);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
       return this.createCancelledResult(
         'Task execution aborted before launch.',
       );
@@ -207,13 +226,17 @@ class TaskToolInvocation extends BaseToolInvocation<
         () =>
           `Failed to create orchestrator for '${this.normalized.subagentName}': ${error instanceof Error ? error.message : String(error)}`,
       );
+      signal.removeEventListener('abort', onUserAbort);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
       return this.createErrorResult(
         error,
         'Task tool could not initialize subagent orchestrator.',
       );
     }
 
-    const launchRequest = this.createLaunchRequest();
+    const launchRequest = this.createLaunchRequest(timeoutMs);
     taskLogger.debug(() => `Launching subagent '${launchRequest.name}'`);
 
     let launchResult:
@@ -247,15 +270,29 @@ class TaskToolInvocation extends BaseToolInvocation<
     if (signal.aborted) {
       abortHandler();
       removeAbortHandler();
+      signal.removeEventListener('abort', onUserAbort);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
       return this.createCancelledResult(
         'Task execution aborted before launch.',
       );
     }
 
     try {
-      launchResult = await orchestrator.launch(launchRequest, signal);
+      launchResult = await orchestrator.launch(
+        launchRequest,
+        timeoutController.signal,
+      );
     } catch (error) {
       removeAbortHandler();
+      signal.removeEventListener('abort', onUserAbort);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      if (this.isTimeoutError(signal, timeoutController, error)) {
+        return this.createTimeoutResult(timeoutMs, launchResult?.scope?.output);
+      }
       if (this.isAbortError(error) || aborted || signal.aborted) {
         return this.createCancelledResult('Task aborted during launch.');
       }
@@ -277,6 +314,10 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     const teardown = async () => {
       removeAbortHandler();
+      signal.removeEventListener('abort', onUserAbort);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
       try {
         await dispose();
       } catch {
@@ -340,6 +381,10 @@ class TaskToolInvocation extends BaseToolInvocation<
           scope.output,
         );
       }
+      if (this.isTimeoutError(signal, timeoutController)) {
+        await teardown();
+        return this.createTimeoutResult(timeoutMs, scope.output);
+      }
       const output = scope.output ?? {
         terminate_reason: SubagentTerminateMode.ERROR,
         emitted_vars: {},
@@ -368,6 +413,18 @@ class TaskToolInvocation extends BaseToolInvocation<
         },
       };
     } catch (error) {
+      if (this.isTimeoutError(signal, timeoutController, error)) {
+        await teardown();
+        return this.createTimeoutResult(timeoutMs, scope.output, agentId);
+      }
+      if (this.isAbortError(error) || aborted || signal.aborted) {
+        await teardown();
+        return this.createCancelledResult(
+          'Task execution aborted before completion.',
+          agentId,
+          scope.output,
+        );
+      }
       const result = this.createErrorResult(
         error,
         `Subagent '${this.normalized.subagentName}' failed during execution.`,
@@ -386,7 +443,8 @@ class TaskToolInvocation extends BaseToolInvocation<
     if (!error || typeof error !== 'object') {
       return false;
     }
-    return (error as { name?: string }).name === 'AbortError';
+    const result = (error as { name?: string }).name === 'AbortError';
+    return result;
   }
 
   private buildContextState(): ContextState {
@@ -453,7 +511,104 @@ class TaskToolInvocation extends BaseToolInvocation<
       },
       error: {
         message,
-        type: ToolErrorType.UNHANDLED_EXCEPTION,
+        type: ToolErrorType.EXECUTION_FAILED,
+      },
+    };
+  }
+
+  private createTimeoutControllers(signal: AbortSignal): {
+    timeoutMs?: number;
+    timeoutController: AbortController;
+    timeoutId: ReturnType<typeof setTimeout> | null;
+    onUserAbort: () => void;
+  } {
+    const settings = this.config.getEphemeralSettings?.() ?? {};
+    const defaultTimeoutMs =
+      (settings.task_default_timeout_ms as number | undefined) ??
+      DEFAULT_TASK_TIMEOUT_MS;
+    const maxTimeoutMs =
+      (settings.task_max_timeout_ms as number | undefined) ??
+      MAX_TASK_TIMEOUT_MS;
+
+    const timeoutMs = this.resolveTimeoutMs(
+      this.params.timeout_ms,
+      defaultTimeoutMs,
+      maxTimeoutMs,
+    );
+    const timeoutController = new AbortController();
+    const timeoutId =
+      timeoutMs === undefined
+        ? null
+        : setTimeout(() => timeoutController.abort(), timeoutMs);
+
+    const onUserAbort = () => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      timeoutController.abort();
+    };
+
+    signal.addEventListener('abort', onUserAbort, { once: true });
+
+    return { timeoutMs, timeoutController, timeoutId, onUserAbort };
+  }
+
+  private resolveTimeoutMs(
+    requestedTimeoutMs: number | undefined,
+    defaultTimeoutMs: number,
+    maxTimeoutMs: number,
+  ): number | undefined {
+    if (requestedTimeoutMs === -1 || defaultTimeoutMs === -1) {
+      return undefined;
+    }
+
+    const effectiveTimeout = requestedTimeoutMs ?? defaultTimeoutMs;
+    if (maxTimeoutMs === -1) {
+      return effectiveTimeout;
+    }
+
+    if (effectiveTimeout > maxTimeoutMs) {
+      return maxTimeoutMs;
+    }
+
+    return effectiveTimeout;
+  }
+
+  private isTimeoutError(
+    signal: AbortSignal,
+    timeoutController: AbortController,
+    error?: unknown,
+  ): boolean {
+    if (!timeoutController.signal.aborted || signal.aborted) {
+      return false;
+    }
+    if (!error) {
+      return true;
+    }
+    return this.isAbortError(error);
+  }
+
+  private createTimeoutResult(
+    timeoutMs: number | undefined,
+    output?: OutputObject,
+    agentId?: string,
+  ): ToolResult {
+    const message = `Task timed out after ${timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS}ms (timeout_ms).`;
+    return {
+      llmContent: message,
+      returnDisplay: message,
+      metadata: {
+        agentId: agentId ?? DEFAULT_AGENT_ID,
+        terminateReason: output?.terminate_reason,
+        emittedVars: output?.emitted_vars ?? {},
+        ...(output?.final_message
+          ? { finalMessage: output.final_message }
+          : {}),
+        timedOut: true,
+      },
+      error: {
+        message,
+        type: ToolErrorType.TIMEOUT,
       },
     };
   }
@@ -510,6 +665,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
               'Expected output variables the subagent must emit before completing.',
             additionalProperties: { type: 'string' },
           },
+          timeout_ms: {
+            type: 'number',
+            description:
+              'Optional timeout in milliseconds for the task execution (-1 for unlimited).',
+          },
           context: {
             type: 'object',
             description:
@@ -543,7 +703,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
 
   protected createInvocation(params: TaskToolParams): TaskToolInvocation {
     const normalized = this.normalizeParams(params);
-    return new TaskToolInvocation(params, normalized, {
+    return new TaskToolInvocation(this.config, params, normalized, {
       createOrchestrator: () => this.ensureOrchestrator(),
       getToolRegistry:
         typeof this.config.getToolRegistry === 'function'
