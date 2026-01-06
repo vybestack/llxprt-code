@@ -4339,3 +4339,190 @@ Commands executed in clean state:
 All mandatory commands PASS. The previous failure claims were based on incorrect artifact availability assertions. The build system correctly generates dist outputs through build_package.js and tsc compilation.
 
 ---
+
+---
+
+## Batch 32
+
+### Selection Record
+
+```
+Batch: 32
+Type: REIMPLEMENT (NO_OP - Already Implemented)
+Upstream SHA(s): 8731309d
+Subject: chore: do not retry the model request if the user has aborted the request (#11224)
+Playbook: project-plans/20260104gmerge/8731309d-plan.md
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 31 verified)
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Execution Record
+
+**NO_OP - Upstream commit 8731309d is already implemented in LLxprt**
+
+Upstream commit changes:
+1. **packages/core/src/utils/delay.ts** (NEW FILE):
+   - Adds abortable `delay()` function with optional `AbortSignal` parameter
+   - Implements `createAbortError()` factory function
+   - Handles signal abort events with proper cleanup
+
+2. **packages/core/src/utils/delay.test.ts** (NEW FILE):
+   - Comprehensive tests for abortable delay functionality
+   - 112 lines of test coverage
+
+3. **packages/core/src/utils/retry.ts**:
+   - Adds `signal?: AbortSignal` to `RetryOptions` interface
+   - Imports `delay` and `createAbortError` from new delay.ts module
+   - Checks `signal.aborted` at start of `retryWithBackoff()`
+   - Checks `signal.aborted` inside retry loop before each attempt
+   - Passes `signal` to all `delay()` calls
+   - Re-throws `AbortError` immediately when caught
+
+4. **packages/core/src/utils/retry.test.ts**:
+   - Adds test for "should abort the retry loop when the signal is aborted"
+   - Verifies retry stops immediately on abort
+
+5. **packages/core/src/core/geminiChat.ts**:
+   - Passes `signal: params.config?.abortSignal` to `retryWithBackoff()` options
+
+**LLxprt verification - Feature already present:**
+
+All upstream changes are already present in LLxprt codebase:
+- Abortable delay function with signal parameter exists in `delay.ts`
+- Signal parameter exists in `RetryOptions` interface in `retry.ts`
+- Retry loop checks signal and aborts when `signal.aborted` is true
+- All `delay()` calls pass the signal parameter
+- `AbortError` is caught and re-thrown immediately
+- `geminiChat.ts` passes `params.config?.abortSignal` through retry options
+
+**Implementation comparison:**
+
+| Feature | Upstream | LLxprt | Status |
+|---------|----------|--------|--------|
+| delay.ts (abortable delay) | NEW | EXISTS | MATCH |
+| delay.test.ts (tests) | NEW | EXISTS | MATCH |
+| RetryOptions.signal | ADD | EXISTS | MATCH |
+| signal passed to delay() | ADD | EXISTS | MATCH |
+| signal.aborted check | ADD | EXISTS | MATCH |
+| AbortError re-throw | ADD | EXISTS | MATCH |
+| geminiChat.ts signal pass | ADD | EXISTS | MATCH |
+
+All upstream changes are already present in LLxprt codebase. The abort signal for retry handling is fully implemented.
+
+### Verification Record
+
+Following new verification policy, all mandatory commands executed in correct order.
+
+#### 1) npm run build
+
+Full output:
+```
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (Exit Code: 0)
+
+#### 2) npm run lint
+
+Full output:
+```
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (Exit Code: 0, no errors or warnings)
+
+#### 3) npm run typecheck
+
+Full output:
+```
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (Exit Code: 0, all 4 workspaces passed)
+
+#### 4) node scripts/start.js --profile-load synthetic "write me a haiku"
+
+Full output (with timeout):
+```
+Checking build status...
+Build is up-to-date.
+
+Bytes flow through wires
+Silicon dreams come alive now
+Logic shapes our world
+
+[Process terminated after 25-second timeout as expected]
+```
+
+[OK] **PASS** (Application started successfully, processed request, generated haiku output, terminated cleanly on timeout)
+
+### Feature Landing Verification
+
+Verified that all upstream changes from commit 8731309d are already present in LLxprt.
+
+### Status Documentation
+
+Batch 32 commit: 8731309d - **NO_OP (Already Implemented)**
+
+Reason: All upstream changes are already present in LLxprt. No implementation required. Upstream feature is fully present in LLxprt.
+
+### Commit/Push Record
+
+No commit created (NO_OP - already implemented). AUDIT.md and PROGRESS.md updated.
+

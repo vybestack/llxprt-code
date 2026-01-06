@@ -101,7 +101,7 @@
 | 80 | `23e52f0f` | REIMPLEMENT | VERIFIED |  | refactor(core): Centralize tool names to avoid circular dependencies - Edit, Grep, Read (#11434) | Already implemented with tool name centralization in tool-names.ts. Historical commit 2e5f1252b confirms implementation. All mandatory commands PASS 2026-01-06 (lint, typecheck, build, runtime). |
 | 81 | `0fd9ff0f` | PICK |  |  | Fix type errors in UI hooks tests (#11346) |  |
 | 82 | `c8518d6a` | SKIP | VERIFIED |  | refactor(tools): Move all tool names into tool-names.ts (#11493) | Already implemented with better architecture. All mandatory commands PASS (lint, typecheck, build, start) - verified 2026-01-06. Previous failure notes were incorrect due to state issue. |
-| 83 | `8731309d` | REIMPLEMENT |  |  | chore: do not retry the model request if the user has aborted the request (#11224) |  |
+| 83 | `8731309d` | REIMPLEMENT | NO_OP | | chore: do not retry the model request if the user has aborted the request (#11224) | All upstream changes already present in LLxprt: delay.ts with abort support, RetryOptions.signal param, signal.aborted checks, delay signal passing, AbortError re-throw, geminiChat signal pass |
 | 84 | `cd76b0b2` | SKIP |  |  | Create Todo List Tab (#11430) |  |
 | 85 | `518a9ca3` | PICK |  |  | Fix gitignore parser for escaped chars (#11252) |  |
 | 86 | `71ecc401` | SKIP |  |  | feat: add activity-based tracking for memory monitor (#11363) |  |
