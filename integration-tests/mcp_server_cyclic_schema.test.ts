@@ -198,7 +198,11 @@ describe.skipIf(skipOnWindowsCi)(
 
     afterAll(() => {
       if (process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH) {
-        unlinkSync(process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH);
+        try {
+          unlinkSync(process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH);
+        } catch {
+          // File may not exist or already cleaned up
+        }
       }
 
       delete process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH;
