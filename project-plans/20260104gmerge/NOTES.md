@@ -3772,3 +3772,168 @@ Batch 29 has been fully verified:
 - **Runtime Test**: PASS
 
 The tool name centralization refactoring is complete and working correctly. LLxprt maintains its own comprehensive tool-names.ts with all constants, and includes upstream-style aliases for compatibility.
+---
+
+## Batch 29 - RE-VALIDATION ROUND 2 - 23e52f0f (2026-01-06)
+
+### Issue Discovery and Root Cause
+
+Deepthinker flagged two validation issues for Batch 29:
+1. `npm run lint` failed: Missing `node_modules/@vybestack/llxprt-code-core/dist/src/core/nonInteractiveToolExecutor.js`
+2. `npm run build` output showed TypeScript errors in `index.ts`
+
+**Root Cause Analysis:**
+The ESLint error was caused by incomplete workspace linking during the initial `npm install`. The TypeScript errors in `index.ts` were misleading build output when dist artifacts weren't properly generated.
+
+### Remediation Steps
+
+**Step 1: Ran npm install to fix workspace linking**
+```bash
+$ npm install
+> @vybestack/llxprt-code@0.8.0 postinstall
+> node scripts/postinstall.cjs
+
+Removed unsupported "peer" flags from package-lock.json
+
+removed 5 packages, and audited 1277 packages in 1s
+
+353 packages are looking for funding
+run `details> npm fund` for details
+
+1 high severity vulnerability
+
+To address all issues, run:
+npm audit fix
+
+Run `npm audit` for details.
+```
+
+This properly linked the @vybestack/llxprt-code-core workspace package, making dist files available to eslint-plugin-import.
+
+### Full Validation Outputs
+
+#### 1) npm run lint
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+**[OK] PASS** — ESLint completed successfully with exit code 0. No errors or warnings. The workspace linking issue has been resolved.
+
+#### 2) npm run typecheck
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+**[OK] PASS** — All 4 workspaces passed type checking (exit code: 0). No TypeScript errors found across all packages.
+
+#### 3) npm run build
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+**[OK] PASS** — Build completed successfully (exit code: 0). All 5 workspace packages built cleanly with no errors.
+
+#### 4) node scripts/start.js --profile-load synthetic "write me a haiku"
+```bash
+Checking build status...
+Build is up-to-date.
+
+Code flows through the mind,
+Bugs dance in the digital night,
+Debug brings the light.
+```
+
+**[OK] PASS** — Application started and executed successfully (exit code: 0). The synthetic profile loaded correctly and generated a haiku as requested.
+
+### Verification Summary
+
+Batch 29 has been fully remediated and re-validated:
+
+- **Status**: FIXED — All issues resolved, all 4 mandatory requirements PASS
+- **Lint**: PASS (exit code 0, no errors/warnings)
+- **Typecheck**: PASS (all 4 workspaces)
+- **Build**: PASS (all 5 workspace packages)
+- **Runtime Test**: PASS (application executes correctly)
+
+### Root Cause Details
+
+**The lint error:**
+```
+Error: ENOENT: no such file or directory, stat 'node_modules/@vybestack/llxprt-code-core/dist/src/core/nonInteractiveToolExecutor.js'
+```
+
+This was caused by incomplete symlinking between workspace packages after the initial npm install. The dist files existed in `packages/core/dist/` but weren't linked to `node_modules/@vybestack/llxprt-code-core/dist/`. Running `npm install` regenerated these links.
+
+**The TypeScript errors in build output:**
+These were not actual errors but transient issues caused by stale dist files. Running the full build sequence (which runs generate, then builds each workspace) regenerated all artifacts cleanly.
+
+### Implementation and File Changes
+
+**No code changes needed** for Batch 29 itself:
+
+- Batch 29 upstream commit `23e52f0f` centralizes Edit, Grep, and Read tool names
+- LLxprt already has this implemented via commit `fb8155a2b`
+- The validation issues were environmental, not implementation-related
+- All tool name constants in `packages/core/src/tools/tool-names.ts` are properly exported and used
+
+### Conclusion
+
+Batch 29 implementation is fully functional and validated. The remediation consisted of fixing workspace link artifacts, not modifying code. All mandatory validation commands now pass cleanly.
+
+**Time to remediate:** < 5 minutes (single npm install command)
+**Re-validation outcome:** 100% PASS (4/4 required commands)
+**Files modified in remediation:** 0 (environmental fix only)
+
+---

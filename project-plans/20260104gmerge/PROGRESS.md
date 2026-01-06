@@ -307,3 +307,13 @@ __LLXPRT_CMD__:cat progtemp.md
 - Previous validation incorrectly marked lint as SKIP due to missing dist files. Remediation completed 2026-01-05
 - See NOTES.md for detailed verification output (Batch 29 — RE-VALIDATION section, lines 3633+)
 - AUDIT.md: No changes needed (implementation status unchanged)
+### Batch 29 - Round 2 Remediation (2026-01-06)
+- Status: REMEDIATED - Fixed workspace linking issue
+- Deepthinker re-identified validation issues:
+  * lint failed: ENOENT error for @vybestack/llxprt-code-core/dist/src/core/nonInteractiveToolExecutor.js
+  * build showed TypeScript errors in index.ts
+- Root cause: Incomplete workspace package linking after npm install
+- Resolution: Ran `npm install` to regenerate workspace symlinks
+- Re-ran all 4 mandatory verification commands - ALL PASSED
+- See NOTES.md for full remediation details (Batch 29 - RE-VALIDATION ROUND 2 section)
+
