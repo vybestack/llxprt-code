@@ -1688,7 +1688,9 @@ export class OAuthManager {
                   nodeError.message.includes('EIO'));
               if (isEioError) {
                 // EIO errors are transient - treat as user cancel instead of crashing
-                logger.debug('Ignoring transient stdin EIO error during prompt');
+                logger.debug(
+                  'Ignoring transient stdin EIO error during prompt',
+                );
                 reject(new Error('Prompt cancelled due to I/O error'));
               } else {
                 reject(err);

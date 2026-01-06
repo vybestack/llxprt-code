@@ -69,7 +69,10 @@ describe('stdin EIO error handling', () => {
     mockPause.mockRestore();
 
     // Clean up the isPaused mock if it was added during the test
-    if (typeof (stdin as any).isPaused === 'function' && (stdin as any).isPaused.mockRestore) {
+    if (
+      typeof (stdin as any).isPaused === 'function' &&
+      (stdin as any).isPaused.mockRestore
+    ) {
       (stdin as any).isPaused.mockRestore();
       delete (stdin as any).isPaused;
     }
