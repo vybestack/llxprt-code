@@ -91,15 +91,15 @@ export const ephemeralSettingHelp: Record<string, string> = {
   circuit_breaker_recovery_timeout_ms:
     'Cooldown period before retrying after circuit opens in milliseconds (positive integer, default: 30000, load balancer only)',
 
-  // Tool timeout settings (Issue #920)
-  task_default_timeout_ms:
-    'Default timeout for task tool executions in milliseconds (default: 60000, -1 for unlimited)',
-  task_max_timeout_ms:
-    'Maximum timeout allowed for task tool executions in milliseconds (default: 300000, -1 for unlimited)',
-  shell_default_timeout_ms:
-    'Default timeout for shell tool executions in milliseconds (default: 60000, -1 for unlimited)',
-  shell_max_timeout_ms:
-    'Maximum timeout allowed for shell tool executions in milliseconds (default: 300000, -1 for unlimited)',
+  // Tool timeout settings (Issue #920, #1028)
+  task_default_timeout_seconds:
+    'Default timeout for task tool executions in seconds (default: 60, -1 for unlimited)',
+  task_max_timeout_seconds:
+    'Maximum timeout allowed for task tool executions in seconds (default: 300, -1 for unlimited)',
+  shell_default_timeout_seconds:
+    'Default timeout for shell tool executions in seconds (default: 120, -1 for unlimited)',
+  shell_max_timeout_seconds:
+    'Maximum timeout allowed for shell tool executions in seconds (default: 600, -1 for unlimited)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
@@ -475,20 +475,16 @@ export function parseEphemeralSettingValue(
   }
 
   if (
-    key === 'task_default_timeout_ms' ||
-    key === 'task_max_timeout_ms' ||
-    key === 'shell_default_timeout_ms' ||
-    key === 'shell_max_timeout_ms'
+    key === 'task_default_timeout_seconds' ||
+    key === 'task_max_timeout_seconds' ||
+    key === 'shell_default_timeout_seconds' ||
+    key === 'shell_max_timeout_seconds'
   ) {
     const numValue = parsedValue as number;
-    if (
-      typeof numValue !== 'number' ||
-      !Number.isInteger(numValue) ||
-      (numValue !== -1 && numValue <= 0)
-    ) {
+    if (typeof numValue !== 'number' || (numValue !== -1 && numValue <= 0)) {
       return {
         success: false,
-        message: `${key} must be a positive integer in milliseconds or -1 for unlimited`,
+        message: `${key} must be a positive number in seconds or -1 for unlimited`,
       };
     }
   }

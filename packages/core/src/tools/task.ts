@@ -30,8 +30,8 @@ import { DebugLogger } from '../debug/DebugLogger.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
-const DEFAULT_TASK_TIMEOUT_MS = 60_000;
-const MAX_TASK_TIMEOUT_MS = 300_000;
+const DEFAULT_TASK_TIMEOUT_SECONDS = 60;
+const MAX_TASK_TIMEOUT_SECONDS = 300;
 
 export interface TaskToolParams {
   subagent_name?: string;
@@ -49,7 +49,7 @@ export interface TaskToolParams {
   context?: Record<string, unknown>;
   context_vars?: Record<string, unknown>;
   contextVars?: Record<string, unknown>;
-  timeout_ms?: number;
+  timeout_seconds?: number;
 }
 
 interface TaskToolInvocationParams {
@@ -204,8 +204,13 @@ class TaskToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
-    const { timeoutMs, timeoutController, timeoutId, onUserAbort } =
-      this.createTimeoutControllers(signal);
+    const {
+      timeoutMs,
+      timeoutSeconds,
+      timeoutController,
+      timeoutId,
+      onUserAbort,
+    } = this.createTimeoutControllers(signal);
 
     if (signal.aborted) {
       onUserAbort();
@@ -291,7 +296,10 @@ class TaskToolInvocation extends BaseToolInvocation<
         clearTimeout(timeoutId);
       }
       if (this.isTimeoutError(signal, timeoutController, error)) {
-        return this.createTimeoutResult(timeoutMs, launchResult?.scope?.output);
+        return this.createTimeoutResult(
+          timeoutSeconds,
+          launchResult?.scope?.output,
+        );
       }
       if (this.isAbortError(error) || aborted || signal.aborted) {
         return this.createCancelledResult('Task aborted during launch.');
@@ -383,7 +391,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       }
       if (this.isTimeoutError(signal, timeoutController)) {
         await teardown();
-        return this.createTimeoutResult(timeoutMs, scope.output);
+        return this.createTimeoutResult(timeoutSeconds, scope.output);
       }
       const output = scope.output ?? {
         terminate_reason: SubagentTerminateMode.ERROR,
@@ -415,7 +423,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     } catch (error) {
       if (this.isTimeoutError(signal, timeoutController, error)) {
         await teardown();
-        return this.createTimeoutResult(timeoutMs, scope.output, agentId);
+        return this.createTimeoutResult(timeoutSeconds, scope.output, agentId);
       }
       if (this.isAbortError(error) || aborted || signal.aborted) {
         await teardown();
@@ -518,23 +526,27 @@ class TaskToolInvocation extends BaseToolInvocation<
 
   private createTimeoutControllers(signal: AbortSignal): {
     timeoutMs?: number;
+    timeoutSeconds?: number;
     timeoutController: AbortController;
     timeoutId: ReturnType<typeof setTimeout> | null;
     onUserAbort: () => void;
   } {
     const settings = this.config.getEphemeralSettings?.() ?? {};
-    const defaultTimeoutMs =
-      (settings.task_default_timeout_ms as number | undefined) ??
-      DEFAULT_TASK_TIMEOUT_MS;
-    const maxTimeoutMs =
-      (settings.task_max_timeout_ms as number | undefined) ??
-      MAX_TASK_TIMEOUT_MS;
+    const defaultTimeoutSeconds =
+      (settings.task_default_timeout_seconds as number | undefined) ??
+      DEFAULT_TASK_TIMEOUT_SECONDS;
+    const maxTimeoutSeconds =
+      (settings.task_max_timeout_seconds as number | undefined) ??
+      MAX_TASK_TIMEOUT_SECONDS;
 
-    const timeoutMs = this.resolveTimeoutMs(
-      this.params.timeout_ms,
-      defaultTimeoutMs,
-      maxTimeoutMs,
+    const timeoutSeconds = this.resolveTimeoutSeconds(
+      this.params.timeout_seconds,
+      defaultTimeoutSeconds,
+      maxTimeoutSeconds,
     );
+    // Convert seconds to milliseconds for setTimeout
+    const timeoutMs =
+      timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
     const timeoutController = new AbortController();
     const timeoutId =
       timeoutMs === undefined
@@ -550,25 +562,31 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     signal.addEventListener('abort', onUserAbort, { once: true });
 
-    return { timeoutMs, timeoutController, timeoutId, onUserAbort };
+    return {
+      timeoutMs,
+      timeoutSeconds,
+      timeoutController,
+      timeoutId,
+      onUserAbort,
+    };
   }
 
-  private resolveTimeoutMs(
-    requestedTimeoutMs: number | undefined,
-    defaultTimeoutMs: number,
-    maxTimeoutMs: number,
+  private resolveTimeoutSeconds(
+    requestedTimeoutSeconds: number | undefined,
+    defaultTimeoutSeconds: number,
+    maxTimeoutSeconds: number,
   ): number | undefined {
-    if (requestedTimeoutMs === -1 || defaultTimeoutMs === -1) {
+    if (requestedTimeoutSeconds === -1 || defaultTimeoutSeconds === -1) {
       return undefined;
     }
 
-    const effectiveTimeout = requestedTimeoutMs ?? defaultTimeoutMs;
-    if (maxTimeoutMs === -1) {
+    const effectiveTimeout = requestedTimeoutSeconds ?? defaultTimeoutSeconds;
+    if (maxTimeoutSeconds === -1) {
       return effectiveTimeout;
     }
 
-    if (effectiveTimeout > maxTimeoutMs) {
-      return maxTimeoutMs;
+    if (effectiveTimeout > maxTimeoutSeconds) {
+      return maxTimeoutSeconds;
     }
 
     return effectiveTimeout;
@@ -589,11 +607,11 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private createTimeoutResult(
-    timeoutMs: number | undefined,
+    timeoutSeconds: number | undefined,
     output?: OutputObject,
     agentId?: string,
   ): ToolResult {
-    const message = `Task timed out after ${timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS}ms (timeout_ms).`;
+    const message = `Task timed out after ${timeoutSeconds ?? DEFAULT_TASK_TIMEOUT_SECONDS}s (timeout_seconds).`;
     return {
       llmContent: message,
       returnDisplay: message,
@@ -665,10 +683,10 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
               'Expected output variables the subagent must emit before completing.',
             additionalProperties: { type: 'string' },
           },
-          timeout_ms: {
+          timeout_seconds: {
             type: 'number',
             description:
-              'Optional timeout in milliseconds for the task execution (-1 for unlimited).',
+              'Optional timeout in seconds for the task execution (-1 for unlimited).',
           },
           context: {
             type: 'object',
