@@ -10,6 +10,7 @@ import Spinner from 'ink-spinner';
 import type { SpinnerName } from 'cli-spinners';
 import { useStreamingContext } from '../contexts/StreamingContext.js';
 import { StreamingState } from '../types.js';
+import { Colors } from '../colors.js';
 import {
   SCREEN_READER_LOADING,
   SCREEN_READER_RESPONDING,
@@ -31,15 +32,15 @@ export const GeminiRespondingSpinner: React.FC<
   const isScreenReaderEnabled = useIsScreenReaderEnabled();
   if (streamingState === StreamingState.Responding) {
     return isScreenReaderEnabled ? (
-      <Text>{SCREEN_READER_RESPONDING}</Text>
+      <Text color={Colors.Foreground}>{SCREEN_READER_RESPONDING}</Text>
     ) : (
       <Spinner type={spinnerType} />
     );
   } else if (nonRespondingDisplay) {
     return isScreenReaderEnabled ? (
-      <Text>{SCREEN_READER_LOADING}</Text>
+      <Text color={Colors.Foreground}>{SCREEN_READER_LOADING}</Text>
     ) : (
-      <Text>{nonRespondingDisplay}</Text>
+      <Text color={Colors.Foreground}>{nonRespondingDisplay}</Text>
     );
   }
   return null;

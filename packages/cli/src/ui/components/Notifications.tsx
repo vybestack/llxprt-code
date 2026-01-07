@@ -7,6 +7,7 @@
 import { Box, Text, useIsScreenReaderEnabled } from 'ink';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { theme } from '../semantic-colors.js';
+import { Colors } from '../colors.js';
 import { StreamingState } from '../types.js';
 import { UpdateNotification } from './UpdateNotification.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
@@ -46,7 +47,7 @@ export const Notifications = ({
   return (
     <>
       {isScreenReaderEnabled && (
-        <Text>
+        <Text color={Colors.Foreground}>
           You are currently in screen reader-friendly view. To switch out, open{' '}
           {settingsPath} and remove the entry for {'"screenReader"'}.
         </Text>

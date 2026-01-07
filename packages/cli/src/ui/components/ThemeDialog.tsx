@@ -276,7 +276,11 @@ def fibonacci(n):
       <Box flexDirection="row">
         {/* Left Column: Selection */}
         <Box flexDirection="column" width="45%" paddingRight={2}>
-          <Text bold={currentFocusedSection === 'theme'} wrap="truncate">
+          <Text
+            bold={currentFocusedSection === 'theme'}
+            wrap="truncate"
+            color={Colors.Foreground}
+          >
             {currentFocusedSection === 'theme' ? '> ' : '  '}Select Theme{' '}
             <Text color={Colors.Gray}>{otherScopeModifiedMessage}</Text>
           </Text>
@@ -295,7 +299,11 @@ def fibonacci(n):
           {/* Scope Selection */}
           {showScopeSelection && (
             <Box marginTop={1} flexDirection="column">
-              <Text bold={currentFocusedSection === 'scope'} wrap="truncate">
+              <Text
+                bold={currentFocusedSection === 'scope'}
+                wrap="truncate"
+                color={Colors.Foreground}
+              >
                 {currentFocusedSection === 'scope' ? '> ' : '  '}Apply To
               </Text>
               <RadioButtonSelect
@@ -312,7 +320,9 @@ def fibonacci(n):
 
         {/* Right Column: Preview */}
         <Box flexDirection="column" width="55%" paddingLeft={2}>
-          <Text bold>Preview</Text>
+          <Text bold color={Colors.Foreground}>
+            Preview
+          </Text>
           {/* Get the Theme object for the highlighted theme, fall back to default if not found */}
           {previewContent}
         </Box>

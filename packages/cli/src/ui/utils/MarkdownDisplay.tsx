@@ -138,7 +138,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
         // Not a table, treat as regular text
         addContentBlock(
           <Box key={key}>
-            <Text wrap="wrap">
+            <Text color={Colors.Foreground} wrap="wrap">
               <RenderInline text={line} />
             </Text>
           </Box>,
@@ -177,7 +177,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       if (line.trim().length > 0) {
         addContentBlock(
           <Box key={key}>
-            <Text wrap="wrap">
+            <Text color={Colors.Foreground} wrap="wrap">
               <RenderInline text={line} />
             </Text>
           </Box>,
@@ -186,7 +186,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
     } else if (hrMatch) {
       addContentBlock(
         <Box key={key}>
-          <Text dimColor>---</Text>
+          <Text color={Colors.DimComment}>---</Text>
         </Box>,
       );
     } else if (headerMatch) {
@@ -226,7 +226,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           break;
         default:
           headerNode = (
-            <Text>
+            <Text color={Colors.Foreground}>
               <RenderInline text={headerText} />
             </Text>
           );

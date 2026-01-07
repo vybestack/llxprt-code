@@ -57,19 +57,21 @@ export function WorkspaceMigrationDialog(props: {
       >
         {failedExtensions.length > 0 ? (
           <>
-            <Text>
+            <Text color={Colors.Foreground}>
               The following extensions failed to migrate. Please try installing
               them manually. To see other changes, LLxprt Code must be
               restarted. Press {"'q'"} to quit.
             </Text>
             <Box flexDirection="column" marginTop={1} marginLeft={2}>
               {failedExtensions.map((failed) => (
-                <Text key={failed}>- {failed}</Text>
+                <Text key={failed} color={Colors.Foreground}>
+                  - {failed}
+                </Text>
               ))}
             </Box>
           </>
         ) : (
-          <Text>
+          <Text color={Colors.Foreground}>
             Migration complete. To see changes, LLxprt Code must be restarted.
             Press {"'q'"} to quit.
           </Text>
@@ -85,19 +87,25 @@ export function WorkspaceMigrationDialog(props: {
       borderColor={Colors.Gray}
       padding={1}
     >
-      <Text bold>Workspace-level extensions are deprecated{'\n'}</Text>
-      <Text>Would you like to install them at the user level?</Text>
-      <Text>
+      <Text bold color={Colors.Foreground}>
+        Workspace-level extensions are deprecated{'\n'}
+      </Text>
+      <Text color={Colors.Foreground}>
+        Would you like to install them at the user level?
+      </Text>
+      <Text color={Colors.Foreground}>
         The extension definition will remain in your workspace directory.
       </Text>
-      <Text>
+      <Text color={Colors.Foreground}>
         If you opt to skip, you can install them manually using the extensions
         install command.
       </Text>
 
       <Box flexDirection="column" marginTop={1} marginLeft={2}>
         {workspaceExtensions.map((extension) => (
-          <Text key={extension.name}>- {extension.name}</Text>
+          <Text key={extension.name} color={Colors.Foreground}>
+            - {extension.name}
+          </Text>
         ))}
       </Box>
       <Box marginTop={1}>

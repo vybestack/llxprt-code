@@ -12,7 +12,7 @@ export const RawMarkdownIndicator: React.FC = () => {
   const modKey = process.platform === 'darwin' ? 'option+m' : 'alt+m';
   return (
     <Box>
-      <Text>
+      <Text color={theme.text.primary}>
         raw markdown mode
         <Text color={theme.text.secondary}> ({modKey} to toggle) </Text>
       </Text>

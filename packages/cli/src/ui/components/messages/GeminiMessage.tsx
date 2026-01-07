@@ -48,9 +48,7 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
     <Box flexDirection="column">
       {model && (
         <Box marginBottom={0}>
-          <Text color={Colors.Gray} dimColor>
-            {model}
-          </Text>
+          <Text color={Colors.DimComment}>{model}</Text>
         </Box>
       )}
       {showThinking &&

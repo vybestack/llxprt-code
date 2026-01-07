@@ -89,8 +89,12 @@ export const ShellConfirmationDialog: React.FC<
       marginLeft={1}
     >
       <Box flexDirection="column" marginBottom={1}>
-        <Text bold>Shell Command Execution</Text>
-        <Text>A custom command wants to run the following shell commands:</Text>
+        <Text bold color={Colors.Foreground}>
+          Shell Command Execution
+        </Text>
+        <Text color={Colors.Foreground}>
+          A custom command wants to run the following shell commands:
+        </Text>
         <Box
           flexDirection="column"
           borderStyle="round"
@@ -112,7 +116,7 @@ export const ShellConfirmationDialog: React.FC<
       </Box>
 
       <Box marginBottom={1}>
-        <Text>Do you want to proceed?</Text>
+        <Text color={Colors.Foreground}>Do you want to proceed?</Text>
       </Box>
 
       <RadioButtonSelect items={options} onSelect={handleSelect} isFocused />

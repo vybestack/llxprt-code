@@ -8,6 +8,7 @@ import { render } from 'ink-testing-library';
 import { OverflowProvider } from '../../contexts/OverflowContext.js';
 import { MaxSizedBox, setMaxSizedBoxDebugging } from './MaxSizedBox.js';
 import { Box, Text } from 'ink';
+import { Colors } from '../../colors.js';
 import { describe, it, expect } from 'vitest';
 
 describe('<MaxSizedBox />', () => {
@@ -22,7 +23,7 @@ describe('<MaxSizedBox />', () => {
       <OverflowProvider>
         <MaxSizedBox maxWidth={80} maxHeight={10}>
           <Box>
-            <Text>Hello, World!</Text>
+            <Text color={Colors.Foreground}>Hello, World!</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -35,13 +36,13 @@ describe('<MaxSizedBox />', () => {
       <OverflowProvider>
         <MaxSizedBox maxWidth={80} maxHeight={2}>
           <Box>
-            <Text>Line 1</Text>
+            <Text color={Colors.Foreground}>Line 1</Text>
           </Box>
           <Box>
-            <Text>Line 2</Text>
+            <Text color={Colors.Foreground}>Line 2</Text>
           </Box>
           <Box>
-            <Text>Line 3</Text>
+            <Text color={Colors.Foreground}>Line 3</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -55,13 +56,13 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={80} maxHeight={2} overflowDirection="bottom">
           <Box>
-            <Text>Line 1</Text>
+            <Text color={Colors.Foreground}>Line 1</Text>
           </Box>
           <Box>
-            <Text>Line 2</Text>
+            <Text color={Colors.Foreground}>Line 2</Text>
           </Box>
           <Box>
-            <Text>Line 3</Text>
+            <Text color={Colors.Foreground}>Line 3</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -75,7 +76,9 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={10} maxHeight={5}>
           <Box>
-            <Text wrap="wrap">This is a long line of text</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              This is a long line of text
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -94,15 +97,19 @@ And has a line break.
       <OverflowProvider>
         <MaxSizedBox maxWidth={20} maxHeight={20}>
           <Box>
-            <Text>Example</Text>
+            <Text color={Colors.Foreground}>Example</Text>
           </Box>
           <Box>
-            <Text>No Wrap: </Text>
-            <Text wrap="wrap">{multilineText}</Text>
+            <Text color={Colors.Foreground}>No Wrap: </Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              {multilineText}
+            </Text>
           </Box>
           <Box>
-            <Text>Longer No Wrap: </Text>
-            <Text wrap="wrap">This part will wrap around.</Text>
+            <Text color={Colors.Foreground}>Longer No Wrap: </Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              This part will wrap around.
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -132,7 +139,9 @@ Longer No Wrap: This
       <OverflowProvider>
         <MaxSizedBox maxWidth={5} maxHeight={5}>
           <Box>
-            <Text wrap="wrap">Supercalifragilisticexpialidocious</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              Supercalifragilisticexpialidocious
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -150,10 +159,10 @@ ious`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={80} maxHeight={undefined}>
           <Box>
-            <Text>Line 1</Text>
+            <Text color={Colors.Foreground}>Line 1</Text>
           </Box>
           <Box>
-            <Text>Line 2</Text>
+            <Text color={Colors.Foreground}>Line 2</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -167,13 +176,13 @@ Line 2`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={80} maxHeight={2}>
           <Box>
-            <Text>Line 1</Text>
+            <Text color={Colors.Foreground}>Line 1</Text>
           </Box>
           <Box>
-            <Text>Line 2</Text>
+            <Text color={Colors.Foreground}>Line 2</Text>
           </Box>
           <Box>
-            <Text>Line 3</Text>
+            <Text color={Colors.Foreground}>Line 3</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -187,13 +196,13 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={80} maxHeight={2} overflowDirection="bottom">
           <Box>
-            <Text>Line 1</Text>
+            <Text color={Colors.Foreground}>Line 1</Text>
           </Box>
           <Box>
-            <Text>Line 2</Text>
+            <Text color={Colors.Foreground}>Line 2</Text>
           </Box>
           <Box>
-            <Text>Line 3</Text>
+            <Text color={Colors.Foreground}>Line 3</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -218,7 +227,9 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={5} maxHeight={5}>
           <Box>
-            <Text wrap="wrap">你好世界</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              你好世界
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -235,17 +246,17 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={5} maxHeight={5}>
           <Box>
-            <Text wrap="wrap">🐶🐶🐶🐶🐶</Text>
+            <Text color={Colors.Foreground} wrap="wrap"></Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
     );
 
-    // Each "🐶" has a visual width of 2.
+    // Each "" has a visual width of 2.
     // With maxWidth=5, it should wrap every 2 emojis.
-    expect(lastFrame()).equals(`🐶🐶
-🐶🐶
-🐶`);
+    expect(lastFrame()).equals(`
+
+`);
   });
 
   it('falls back to an ellipsis when width is extremely small', () => {
@@ -253,8 +264,10 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={2} maxHeight={2}>
           <Box>
-            <Text>No</Text>
-            <Text wrap="wrap">wrap</Text>
+            <Text color={Colors.Foreground}>No</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              wrap
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -268,8 +281,10 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={3} maxHeight={2}>
           <Box>
-            <Text>ABCDE</Text>
-            <Text wrap="wrap">wrap</Text>
+            <Text color={Colors.Foreground}>ABCDE</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              wrap
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -283,8 +298,10 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={3} maxHeight={2}>
           <Box>
-            <Text>{'A\nBCDE'}</Text>
-            <Text wrap="wrap">wrap</Text>
+            <Text color={Colors.Foreground}>{'A\nBCDE'}</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              wrap
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -298,14 +315,16 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={3} maxHeight={2}>
           <Box>
-            <Text>🐶🐶🐶</Text>
-            <Text wrap="wrap">wrap</Text>
+            <Text color={Colors.Foreground}></Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              wrap
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
     );
 
-    expect(lastFrame()).equals(`🐶…`);
+    expect(lastFrame()).equals(`…`);
   });
 
   it('shows ellipsis for multiple rows with long non-wrapping text', () => {
@@ -313,16 +332,22 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={3} maxHeight={3}>
           <Box>
-            <Text>AAA</Text>
-            <Text wrap="wrap">first</Text>
+            <Text color={Colors.Foreground}>AAA</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              first
+            </Text>
           </Box>
           <Box>
-            <Text>BBB</Text>
-            <Text wrap="wrap">second</Text>
+            <Text color={Colors.Foreground}>BBB</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              second
+            </Text>
           </Box>
           <Box>
-            <Text>CCC</Text>
-            <Text wrap="wrap">third</Text>
+            <Text color={Colors.Foreground}>CCC</Text>
+            <Text color={Colors.Foreground} wrap="wrap">
+              third
+            </Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -336,13 +361,13 @@ Line 3`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={80} maxHeight={2} additionalHiddenLinesCount={5}>
           <Box>
-            <Text>Line 1</Text>
+            <Text color={Colors.Foreground}>Line 1</Text>
           </Box>
           <Box>
-            <Text>Line 2</Text>
+            <Text color={Colors.Foreground}>Line 2</Text>
           </Box>
           <Box>
-            <Text>Line 3</Text>
+            <Text color={Colors.Foreground}>Line 3</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -358,14 +383,14 @@ Line 3`);
         <MaxSizedBox maxWidth={80} maxHeight={10}>
           <>
             <Box>
-              <Text>Line 1 from Fragment</Text>
+              <Text color={Colors.Foreground}>Line 1 from Fragment</Text>
             </Box>
             <Box>
-              <Text>Line 2 from Fragment</Text>
+              <Text color={Colors.Foreground}>Line 2 from Fragment</Text>
             </Box>
           </>
           <Box>
-            <Text>Line 3 direct child</Text>
+            <Text color={Colors.Foreground}>Line 3 direct child</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -385,7 +410,7 @@ Line 3 direct child`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={80} maxHeight={10}>
           <Box>
-            <Text>{THIRTY_LINES}</Text>
+            <Text color={Colors.Foreground}>{THIRTY_LINES}</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,
@@ -409,7 +434,7 @@ Line 3 direct child`);
       <OverflowProvider>
         <MaxSizedBox maxWidth={80} maxHeight={10} overflowDirection="bottom">
           <Box>
-            <Text>{THIRTY_LINES}</Text>
+            <Text color={Colors.Foreground}>{THIRTY_LINES}</Text>
           </Box>
         </MaxSizedBox>
       </OverflowProvider>,

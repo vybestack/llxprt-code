@@ -19,7 +19,7 @@ export const UserShellMessage: React.FC<UserShellMessageProps> = ({ text }) => {
   return (
     <Box>
       <Text color={Colors.AccentCyan}>$ </Text>
-      <Text>{commandToDisplay}</Text>
+      <Text color={Colors.Foreground}>{commandToDisplay}</Text>
     </Box>
   );
 };

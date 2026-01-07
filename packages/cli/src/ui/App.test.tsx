@@ -295,7 +295,9 @@ vi.mock('./components/Tips.js', () => ({
   Tips: vi.fn(() => null),
 }));
 
-const mockTodoPanel = vi.fn(() => <Text>Mock Todo Panel</Text>);
+const mockTodoPanel = vi.fn(() => (
+  <Text color={Colors.Foreground}>Mock Todo Panel</Text>
+));
 vi.mock('./components/TodoPanel.js', () => ({
   TodoPanel: mockTodoPanel,
 }));

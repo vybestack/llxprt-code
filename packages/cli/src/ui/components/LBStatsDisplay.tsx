@@ -32,7 +32,7 @@ const StatRow: React.FC<StatRowProps> = ({
       <Text color={Colors.Gray}>{isSubtle ? `  ↳ ${title}` : title}</Text>
     </Box>
     <Box width={VALUE_COL_WIDTH} justifyContent="flex-end">
-      <Text>{value}</Text>
+      <Text color={Colors.Foreground}>{value}</Text>
     </Box>
   </Box>
 );
@@ -49,7 +49,7 @@ export const LBStatsDisplay: React.FC = () => {
         paddingY={1}
         paddingX={2}
       >
-        <Text>Provider manager not available</Text>
+        <Text color={Colors.Foreground}>Provider manager not available</Text>
       </Box>
     );
   }

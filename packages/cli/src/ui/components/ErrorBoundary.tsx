@@ -6,6 +6,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Box, Text } from 'ink';
+import { Colors } from '../colors.js';
 
 interface Props {
   children: ReactNode;
@@ -148,7 +149,9 @@ export class ErrorBoundary extends Component<Props, State> {
             </Box>
           )}
           <Box marginTop={1}>
-            <Text dimColor>Check the console for more details.</Text>
+            <Text color={Colors.DimComment}>
+              Check the console for more details.
+            </Text>
           </Box>
         </Box>
       );

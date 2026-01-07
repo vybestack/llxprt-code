@@ -79,7 +79,7 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
             : 'No tools are currently disabled.'}
         </Text>
         <Box marginTop={1}>
-          <Text dimColor>Press ESC to return</Text>
+          <Text color={Colors.DimComment}>Press ESC to return</Text>
         </Box>
       </Box>
     );
@@ -103,12 +103,16 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
 
       {availableTools[selectedIndex] && (
         <Box marginTop={1}>
-          <Text dimColor>Tool name: {availableTools[selectedIndex].name}</Text>
+          <Text color={Colors.DimComment}>
+            Tool name: {availableTools[selectedIndex].name}
+          </Text>
         </Box>
       )}
 
       <Box marginTop={1}>
-        <Text dimColor>Press ENTER to {action} • ESC to cancel</Text>
+        <Text color={Colors.DimComment}>
+          Press ENTER to {action} • ESC to cancel
+        </Text>
       </Box>
     </Box>
   );

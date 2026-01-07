@@ -42,7 +42,7 @@ export const WelcomeStep: React.FC<WelcomeStepProps> = ({
         <Text bold color={Colors.AccentCyan}>
           Welcome to llxprt!
         </Text>
-        <Text> </Text>
+        <Text color={Colors.Foreground}> </Text>
         <Text color={Colors.Foreground}>
           {"Let's get you set up in just a few steps."}
         </Text>

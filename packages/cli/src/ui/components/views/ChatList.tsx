@@ -7,6 +7,7 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { theme } from '../../semantic-colors.js';
+import { Colors } from '../../colors.js';
 import type { ChatDetail } from '../../types.js';
 
 interface ChatListProps {
@@ -15,12 +16,16 @@ interface ChatListProps {
 
 export const ChatList: React.FC<ChatListProps> = ({ chats }) => {
   if (chats.length === 0) {
-    return <Text>No saved conversation checkpoints found.</Text>;
+    return (
+      <Text color={Colors.Foreground}>
+        No saved conversation checkpoints found.
+      </Text>
+    );
   }
 
   return (
     <Box flexDirection="column">
-      <Text>List of saved conversations:</Text>
+      <Text color={Colors.Foreground}>List of saved conversations:</Text>
       <Box height={1} />
       {chats.map((chat) => {
         const isoString = chat.mtime;
@@ -32,7 +37,7 @@ export const ChatList: React.FC<ChatListProps> = ({ chats }) => {
           : 'Invalid Date';
         return (
           <Box key={chat.name} flexDirection="row">
-            <Text>
+            <Text color={Colors.Foreground}>
               {'  '}- <Text color={theme.text.accent}>{chat.name}</Text>{' '}
               <Text color={theme.text.secondary}>({formattedDate})</Text>
             </Text>

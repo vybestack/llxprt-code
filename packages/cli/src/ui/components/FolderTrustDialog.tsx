@@ -86,8 +86,10 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         marginLeft={1}
       >
         <Box flexDirection="column" marginBottom={1}>
-          <Text bold>Do you trust this folder?</Text>
-          <Text>
+          <Text bold color={Colors.Foreground}>
+            Do you trust this folder?
+          </Text>
+          <Text color={Colors.DimComment}>
             Trusting a folder allows llxprt to execute commands it suggests.
             This is a security feature to prevent accidental execution in
             untrusted directories.

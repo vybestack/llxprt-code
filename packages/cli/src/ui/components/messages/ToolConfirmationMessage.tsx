@@ -228,7 +228,7 @@ export const ToolConfirmationMessage: React.FC<
           padding={1}
           overflow="hidden"
         >
-          <Text>Modify in progress: </Text>
+          <Text color={Colors.Foreground}>Modify in progress: </Text>
           <Text color={Colors.AccentGreen}>
             Save and close external editor to continue
           </Text>
@@ -310,7 +310,7 @@ export const ToolConfirmationMessage: React.FC<
           <Text color={SemanticColors.text.primary}>
             {createSummary('exec')}
           </Text>
-          <Text color={SemanticColors.text.secondary} dimColor>
+          <Text color={Colors.DimComment}>
             Press &apos;d&apos; to see full details
           </Text>
         </Box>
@@ -325,7 +325,7 @@ export const ToolConfirmationMessage: React.FC<
       bodyContent = (
         <Box flexDirection="column" paddingX={1} marginLeft={1}>
           <Text color={Colors.AccentCyan}>{commandPreview}</Text>
-          <Text color={SemanticColors.text.secondary} dimColor>
+          <Text color={Colors.DimComment}>
             Press &apos;d&apos; to see full details
           </Text>
         </Box>
@@ -386,7 +386,7 @@ export const ToolConfirmationMessage: React.FC<
           <Text color={SemanticColors.text.primary}>
             {createSummary('info')}
           </Text>
-          <Text color={SemanticColors.text.secondary} dimColor>
+          <Text color={Colors.DimComment}>
             Press &apos;d&apos; to see full details
           </Text>
         </Box>
@@ -407,9 +407,9 @@ export const ToolConfirmationMessage: React.FC<
           </Text>
           {displayUrls && infoProps.urls && infoProps.urls.length > 0 && (
             <Box flexDirection="column" marginTop={1}>
-              <Text>URLs to fetch:</Text>
+              <Text color={Colors.Foreground}>URLs to fetch:</Text>
               {infoProps.urls.map((url: string) => (
-                <Text key={url}>
+                <Text key={url} color={Colors.Foreground}>
                   {' '}
                   - <RenderInline text={url} />
                 </Text>
@@ -430,7 +430,7 @@ export const ToolConfirmationMessage: React.FC<
           <Text color={SemanticColors.text.primary}>
             {createSummary('mcp')}
           </Text>
-          <Text color={SemanticColors.text.secondary} dimColor>
+          <Text color={Colors.DimComment}>
             Press &apos;d&apos; to see full details
           </Text>
         </Box>

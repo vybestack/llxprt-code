@@ -78,6 +78,7 @@ import {
   type PersistedSession,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
+import { theme } from './ui/colors.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
@@ -161,7 +162,7 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
 
   return (
     <Box>
-      <Text>
+      <Text color={theme.text.primary}>
         <Spinner /> {message}
       </Text>
     </Box>
