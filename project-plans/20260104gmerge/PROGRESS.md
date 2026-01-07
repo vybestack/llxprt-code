@@ -31,7 +31,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 10 — FULL — PICK — `c71b7491, 991bd373, a4403339` — fix: Add folder names in permissions dialog similar to the launch dialog (#11278) / fix(scripts): Improve deflake script isolation and unskip test (#11325) / feat(ui): add "Esc to close" hint to SettingsDialog (#11289)
 - [x] Batch 11 — QUICK — REIMPLEMENT — `9049f8f8` — feat: remove deprecated telemetry flags (#11318)
 - [x] Batch 12 — FULL — PICK — `22f725eb` — feat: allow editing queued messages with up arrow key (#10392)
-- [x] Batch 13 — QUICK — SKIP — `dcf362bc` — Inline tree-sitter wasm and add runtime fallback (#11157) — Deferred: complex build system change, needs separate evaluation
+- [x] Batch 13 — QUICK — IMPLEMENTED — `dcf362bc` — Inline tree-sitter wasm and add runtime fallback (#11157) — IMPLEMENTED as 36e269612 (2026-01-07)
 - [x] Batch 14 — FULL — SKIP — `406f0baa, d42da871` — fix(ux) keyboard input hangs while waiting for keyboard input. (#10121) / fix(accessibility) allow line wrapper in screen reader mode  (#11317) — LLxprt already has KITTY_SEQUENCE_TIMEOUT_MS; different line wrapper approach
 - [x] Batch 15 — QUICK — PICK — `3a1d3769` — Refactor `EditTool.Name` to use centralized `EDIT_TOOL_NAME` (#11343) — COMMITTED as 8d4830129
 - [x] Batch 16 — FULL — PICK — `f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53` — f3ffaf09 PICKED a5ebeada6 / 0ded546a SKIP (PromptService architecture) / 659b0557 PICKED f6d41e648 / 4a0fcd05 SKIP (different release system) / 2b61ac53 PICKED 8b6f7643f
@@ -124,7 +124,30 @@ Use this checklist to track batch execution progress.
 - LLxprt retains all 5 telemetry CLI flags (--telemetry, --telemetry-target, --telemetry-otlp-endpoint, --telemetry-log-prompts, --telemetry-outfile)
 - Upstream uses Clearcut for telemetry; LLxprt uses uiTelemetryService and logCliConfiguration()
 
-### Batch 13 (2026-01-06)
+### Batch 13 (2026-01-07) - IMPLEMENTED
+
+- **Status**: IMPLEMENTED as commit 36e269612
+- **Upstream SHA**: dcf362bc (tree-sitter WASM shell parser)
+- **Implementation Details**:
+  - Added `packages/core/src/utils/shell-parser.ts` - Tree-sitter wrapper module
+  - Added `packages/core/src/utils/shell-parser.test.ts` - Comprehensive tests (28 tests passing)
+  - Added `packages/core/src/types/wasm.d.ts` - TypeScript declarations for WASM binary imports
+  - Updated `packages/core/src/utils/shell-utils.ts` - Integrated tree-sitter with regex fallback
+  - Updated `packages/core/src/tools/shell.ts` - Parser initialization on module load
+  - Updated `esbuild.config.js` - WASM plugin for binary embedding
+- **Dependencies Added**:
+  - `web-tree-sitter: ^0.25.10`
+  - `tree-sitter-bash: ^0.25.0`
+  - `esbuild-plugin-wasm: ^1.1.0` (build-time only)
+- **Functions**:
+  - `initializeParser()` - Loads WASM and initializes tree-sitter
+  - `parseShellCommand()` - Returns AST from shell command string
+  - `extractCommandNames()` - Extracts command names from AST
+  - `hasCommandSubstitution()` - Detects $(), ``, <(), >() constructs
+  - `splitCommandsWithTree()` - Splits commands respecting &&, ||, ;, |
+- **Fallback Behavior**: Graceful fallback to regex when tree-sitter unavailable (e.g., test environment)
+- **Verification**: All tests pass (28 shell-parser tests + 50 shell-utils tests), lint/typecheck pass, bundle builds successfully
+- **Previous Status**: Was SKIP (deferred for separate evaluation)
 
 ### Batch 16 (2026-01-06)
 - Already applied: a5ebeada6, f6d41e648, 8b6f7643f (3 PICKED)
@@ -140,14 +163,6 @@ Use this checklist to track batch execution progress.
 - UI components updated: EditorSettingsDialog.tsx, PermissionsModifyTrustDialog.tsx, ThemeDialog.tsx
 - See NOTES.md for detailed output (lines 3334+)
 - AUDIT.md: No changes needed (implementation status unchanged)
-- Upstream commit dcf362bc implements tree-sitter WASM bundling for shell command parsing
-- Original plan decision: SKIP (deferred for separate evaluation)
-- Re-validated all verification commands (lint, typecheck, build, start)
-- All commands PASSED
-- Verified missing dependencies: web-tree-sitter, tree-sitter-bash, esbuild-plugin-wasm
-- Verified missing files: integration-tests/flicker.test.ts
-- Current LLxprt shell parsing: regex-based (splitCommands, getCommandRoot, detectCommandSubstitution)
-- See NOTES.md for detailed analysis and architectural comparison
 - Decision: PERMANENT SKIP - complexity outweighs accuracy benefit for LLxprt
 - AUDIT.md: No changes needed (SKIP decision confirmed)
 
