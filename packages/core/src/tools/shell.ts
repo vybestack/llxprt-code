@@ -55,52 +55,6 @@ export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
 const DEFAULT_SHELL_TIMEOUT_MS = 120_000;
 const MAX_SHELL_TIMEOUT_MS = 600_000;
 
-/**
- * Parses the `--allowed-tools` flag to determine which sub-commands of the
- * ShellTool are allowed. The flag can be provided multiple times.
- *
- * @param allowedTools The list of allowed tools from the config.
- * @returns A Set of allowed sub-commands, or null if all commands are allowed.
- *  - `null`: All sub-commands are allowed (e.g., --allowed-tools="ShellTool").
- *  - `Set<string>`: A set of specifically allowed sub-commands (e.g., --allowed-tools="ShellTool(wc)" --allowed-tools="ShellTool(ls)").
- *  - `Set<>` (empty): No sub-commands are allowed (e.g., --allowed-tools="ShellTool()").
- */
-function parseAllowedSubcommands(
-  allowedTools: readonly string[],
-): Set<string> | null {
-  const shellToolEntries = allowedTools.filter((tool) =>
-    SHELL_TOOL_NAMES.some((name) => tool.startsWith(name)),
-  );
-
-  if (shellToolEntries.length === 0) {
-    return new Set(); // ShellTool not mentioned, so no subcommands are allowed.
-  }
-
-  // If any entry is just "run_shell_command" or "ShellTool", all subcommands are allowed.
-  if (shellToolEntries.some((entry) => SHELL_TOOL_NAMES.includes(entry))) {
-    return null;
-  }
-
-  const allSubcommands = new Set<string>();
-  const toolNamePattern = SHELL_TOOL_NAMES.join('|');
-  const regex = new RegExp(`^(${toolNamePattern})\\((.*)\\)$`);
-
-  for (const entry of shellToolEntries) {
-    const match = entry.match(regex);
-    if (match) {
-      const subcommands = match[2];
-      if (subcommands) {
-        subcommands
-          .split(',')
-          .map((s) => s.trim())
-          .forEach((s) => s && allSubcommands.add(s));
-      }
-    }
-  }
-
-  return allSubcommands;
-}
-
 export interface ShellToolParams {
   /**
    * The shell command to execute
