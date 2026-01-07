@@ -81,7 +81,9 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
           Step 2 of 5: Choose Your Model
         </Text>
         <Text> </Text>
-        <Text>Select a model for {providerDisplay}:</Text>
+        <Text color={Colors.Foreground}>
+          Select a model for {providerDisplay}:
+        </Text>
       </Box>
 
       {modelsLoadStatus === 'loading' && (
