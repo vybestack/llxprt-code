@@ -84,14 +84,14 @@ export function IdeIntegrationNudge({
     <Box
       flexDirection="column"
       borderStyle="round"
-      borderColor="yellow"
+      borderColor={Colors.AccentYellow}
       padding={1}
       width="100%"
       marginLeft={1}
     >
       <Box marginBottom={1} flexDirection="column">
         <Text color={Colors.Foreground}>
-          <Text color="yellow">{'> '}</Text>
+          <Text color={Colors.AccentYellow}>{'> '}</Text>
           {`Do you want to connect ${ideName ?? 'your editor'} to LLxprt Code?`}
         </Text>
         <Text color={Colors.DimComment}>{installText}</Text>

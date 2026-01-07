@@ -37,10 +37,8 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
           <Text color={Colors.AccentBlue}>{prefix}</Text>
         </Box>
         <Box flexGrow={1}>
-          <Text color={Colors.AccentBlue}>
-            <Text bold color={Colors.AccentBlue}>
-              OAuth Authentication Required for {provider}
-            </Text>
+          <Text bold color={Colors.AccentBlue}>
+            OAuth Authentication Required for {provider}
           </Text>
         </Box>
       </Box>
