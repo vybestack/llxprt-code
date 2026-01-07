@@ -44,8 +44,8 @@ import {
 
 export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
 
-const DEFAULT_SHELL_TIMEOUT_MS = 120_000;
-const MAX_SHELL_TIMEOUT_MS = 600_000;
+const DEFAULT_SHELL_TIMEOUT_SECONDS = 120;
+const MAX_SHELL_TIMEOUT_SECONDS = 600;
 
 /**
  * Parses the `--allowed-tools` flag to determine which sub-commands of the
@@ -130,9 +130,9 @@ export interface ShellToolParams {
   grep_flags?: string[];
 
   /**
-   * Optional timeout in milliseconds.
+   * Optional timeout in seconds (-1 for unlimited).
    */
-  timeout_ms?: number;
+  timeout_seconds?: number;
 }
 
 class ShellToolInvocation extends BaseToolInvocation<
@@ -243,17 +243,20 @@ class ShellToolInvocation extends BaseToolInvocation<
     const strippedCommand = stripShellWrapper(this.params.command);
 
     const ephemeralSettings = this.config.getEphemeralSettings();
-    const defaultTimeoutMs =
-      (ephemeralSettings.shell_default_timeout_ms as number | undefined) ??
-      DEFAULT_SHELL_TIMEOUT_MS;
-    const maxTimeoutMs =
-      (ephemeralSettings.shell_max_timeout_ms as number | undefined) ??
-      MAX_SHELL_TIMEOUT_MS;
-    const timeoutMs = this.resolveTimeoutMs(
-      this.params.timeout_ms,
-      defaultTimeoutMs,
-      maxTimeoutMs,
+    const defaultTimeoutSeconds =
+      (ephemeralSettings.shell_default_timeout_seconds as number | undefined) ??
+      DEFAULT_SHELL_TIMEOUT_SECONDS;
+    const maxTimeoutSeconds =
+      (ephemeralSettings.shell_max_timeout_seconds as number | undefined) ??
+      MAX_SHELL_TIMEOUT_SECONDS;
+    const timeoutSeconds = this.resolveTimeoutSeconds(
+      this.params.timeout_seconds,
+      defaultTimeoutSeconds,
+      maxTimeoutSeconds,
     );
+    // Convert seconds to milliseconds for setTimeout
+    const timeoutMs =
+      timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
     const timeoutController = new AbortController();
     const timeoutId =
       timeoutMs === undefined
@@ -440,7 +443,7 @@ class ShellToolInvocation extends BaseToolInvocation<
         const timeoutTriggered =
           timeoutController.signal.aborted && !signal.aborted;
         if (timeoutTriggered) {
-          llmContent = `Command timed out after ${timeoutMs ?? defaultTimeoutMs}ms (timeout_ms).`;
+          llmContent = `Command timed out after ${timeoutSeconds ?? defaultTimeoutSeconds}s (timeout_seconds).`;
           if (rawOutput && rawOutput.trim()) {
             llmContent += ` Partial output:\n${rawOutput}`;
           } else {
@@ -595,22 +598,22 @@ class ShellToolInvocation extends BaseToolInvocation<
     }
   }
 
-  private resolveTimeoutMs(
-    requestedTimeoutMs: number | undefined,
-    defaultTimeoutMs: number,
-    maxTimeoutMs: number,
+  private resolveTimeoutSeconds(
+    requestedTimeoutSeconds: number | undefined,
+    defaultTimeoutSeconds: number,
+    maxTimeoutSeconds: number,
   ): number | undefined {
-    if (requestedTimeoutMs === -1 || defaultTimeoutMs === -1) {
+    if (requestedTimeoutSeconds === -1 || defaultTimeoutSeconds === -1) {
       return undefined;
     }
 
-    const effectiveTimeout = requestedTimeoutMs ?? defaultTimeoutMs;
-    if (maxTimeoutMs === -1) {
+    const effectiveTimeout = requestedTimeoutSeconds ?? defaultTimeoutSeconds;
+    if (maxTimeoutSeconds === -1) {
       return effectiveTimeout;
     }
 
-    if (effectiveTimeout > maxTimeoutMs) {
-      return maxTimeoutMs;
+    if (effectiveTimeout > maxTimeoutSeconds) {
+      return maxTimeoutSeconds;
     }
 
     return effectiveTimeout;
@@ -757,10 +760,10 @@ export class ShellTool extends BaseDeclarativeTool<
             description:
               '(OPTIONAL) Directory to run the command in, if not the project root directory. Must be relative to the project root directory and must already exist.',
           },
-          timeout_ms: {
+          timeout_seconds: {
             type: 'number',
             description:
-              '(OPTIONAL) Timeout in milliseconds for command execution (-1 for unlimited).',
+              '(OPTIONAL) Timeout in seconds for command execution (-1 for unlimited).',
           },
         },
         required: ['command'],

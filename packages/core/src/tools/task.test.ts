@@ -353,7 +353,7 @@ describe('TaskTool', () => {
     expect(result.returnDisplay).toMatch(/abort/i);
   });
 
-  describe('timeout_ms handling', () => {
+  describe('timeout_seconds handling', () => {
     beforeEach(() => {
       vi.useFakeTimers();
     });
@@ -362,7 +362,7 @@ describe('TaskTool', () => {
       vi.useRealTimers();
     });
 
-    it('uses default timeout when timeout_ms is omitted', async () => {
+    it('uses default timeout when timeout_seconds is omitted', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
       const scope = {
         output: {
@@ -386,8 +386,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_ms: 60000,
-          task_max_timeout_ms: 300000,
+          task_default_timeout_seconds: 60,
+          task_max_timeout_seconds: 300,
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
@@ -418,7 +418,7 @@ describe('TaskTool', () => {
       await resultPromise;
     });
 
-    it('clamps timeout_ms to max setting', async () => {
+    it('clamps timeout_seconds to max setting', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
       const scope = {
         output: {
@@ -442,8 +442,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_ms: 60000,
-          task_max_timeout_ms: 120000,
+          task_default_timeout_seconds: 60,
+          task_max_timeout_seconds: 120,
         }),
       } as unknown as Config;
 
@@ -454,7 +454,7 @@ describe('TaskTool', () => {
       const invocation = tool.build({
         subagent_name: 'helper',
         goal_prompt: 'Ship it',
-        timeout_ms: 999999,
+        timeout_seconds: 999999,
       });
 
       const resultPromise = invocation.execute(
@@ -476,7 +476,7 @@ describe('TaskTool', () => {
       await resultPromise;
     });
 
-    it('skips timeout when timeout_ms is -1', async () => {
+    it('skips timeout when timeout_seconds is -1', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
       const scope = {
         output: {
@@ -500,8 +500,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_ms: 60000,
-          task_max_timeout_ms: 300000,
+          task_default_timeout_seconds: 60,
+          task_max_timeout_seconds: 300,
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
@@ -511,7 +511,7 @@ describe('TaskTool', () => {
       const invocation = tool.build({
         subagent_name: 'helper',
         goal_prompt: 'Ship it',
-        timeout_ms: -1,
+        timeout_seconds: -1,
       });
 
       const resultPromise = invocation.execute(
@@ -566,8 +566,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_ms: 60000,
-          task_max_timeout_ms: 300000,
+          task_default_timeout_seconds: 60,
+          task_max_timeout_seconds: 300,
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
@@ -578,7 +578,7 @@ describe('TaskTool', () => {
       const invocation = tool.build({
         subagent_name: 'helper',
         goal_prompt: 'Ship it',
-        timeout_ms: 50,
+        timeout_seconds: 0.05, // 50ms
       });
 
       const resultPromise = invocation.execute(
@@ -631,8 +631,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_ms: 60000,
-          task_max_timeout_ms: 300000,
+          task_default_timeout_seconds: 60,
+          task_max_timeout_seconds: 300,
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
@@ -645,7 +645,7 @@ describe('TaskTool', () => {
       const invocation = tool.build({
         subagent_name: 'helper',
         goal_prompt: 'Ship it',
-        timeout_ms: 1000,
+        timeout_seconds: 1,
       });
 
       const result = await invocation.execute(

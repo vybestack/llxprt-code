@@ -340,17 +340,17 @@ describe('ShellTool', () => {
       expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(tmpFile);
     });
 
-    describe('timeout_ms handling', () => {
+    describe('timeout_seconds handling', () => {
       afterEach(() => {
         vi.useRealTimers();
       });
 
-      it('uses default timeout when timeout_ms is omitted', async () => {
+      it('uses default timeout when timeout_seconds is omitted', async () => {
         vi.useFakeTimers();
         const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
         mockConfig.getEphemeralSettings.mockReturnValue({
-          shell_default_timeout_ms: 1234,
-          shell_max_timeout_ms: 5000,
+          shell_default_timeout_seconds: 2,
+          shell_max_timeout_seconds: 5,
         });
 
         const invocation = shellTool.build({ command: 'ls' });
@@ -363,21 +363,22 @@ describe('ShellTool', () => {
         });
         await promise;
 
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1234);
+        // 2 seconds = 2000ms
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
         setTimeoutSpy.mockRestore();
       });
 
-      it('clamps timeout_ms to the maximum setting', async () => {
+      it('clamps timeout_seconds to the maximum setting', async () => {
         vi.useFakeTimers();
         const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
         mockConfig.getEphemeralSettings.mockReturnValue({
-          shell_default_timeout_ms: 1000,
-          shell_max_timeout_ms: 2000,
+          shell_default_timeout_seconds: 1,
+          shell_max_timeout_seconds: 2,
         });
 
         const invocation = shellTool.build({
           command: 'ls',
-          timeout_ms: 5000,
+          timeout_seconds: 5,
         });
         const promise = invocation.execute(mockAbortSignal);
         resolveShellExecution({
@@ -388,21 +389,22 @@ describe('ShellTool', () => {
         });
         await promise;
 
+        // Clamped to 2 seconds = 2000ms
         expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
         setTimeoutSpy.mockRestore();
       });
 
-      it('skips the timeout when timeout_ms is -1', async () => {
+      it('skips the timeout when timeout_seconds is -1', async () => {
         vi.useFakeTimers();
         const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
         mockConfig.getEphemeralSettings.mockReturnValue({
-          shell_default_timeout_ms: 1000,
-          shell_max_timeout_ms: 2000,
+          shell_default_timeout_seconds: 1,
+          shell_max_timeout_seconds: 2,
         });
 
         const invocation = shellTool.build({
           command: 'ls',
-          timeout_ms: -1,
+          timeout_seconds: -1,
         });
         const promise = invocation.execute(mockAbortSignal);
         resolveShellExecution({
@@ -421,7 +423,7 @@ describe('ShellTool', () => {
         vi.useFakeTimers();
         const invocation = shellTool.build({
           command: 'long-running',
-          timeout_ms: 50,
+          timeout_seconds: 0.05, // 50ms
         });
         const promise = invocation.execute(mockAbortSignal);
 
@@ -440,7 +442,7 @@ describe('ShellTool', () => {
         const result = await promise;
 
         expect(result.error?.type).toBe(ToolErrorType.TIMEOUT);
-        expect(result.llmContent).toContain('timeout_ms');
+        expect(result.llmContent).toContain('timeout_seconds');
         expect(result.llmContent).toContain('partial output');
       });
 
@@ -449,13 +451,60 @@ describe('ShellTool', () => {
         abortController.abort();
         const invocation = shellTool.build({
           command: 'ls',
-          timeout_ms: 1000,
+          timeout_seconds: 1,
         });
 
         const result = await invocation.execute(abortController.signal);
 
         expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
         expect(result.error?.type).not.toBe(ToolErrorType.TIMEOUT);
+      });
+
+      it('timeout does not start until execute() is called (approval time not counted)', async () => {
+        // This test verifies that the timeout only starts when execute() is called,
+        // NOT during shouldConfirmExecute(). The scheduler calls shouldConfirmExecute()
+        // first, waits for user approval, and only then calls execute().
+        // Since timeout is set up inside execute(), approval time is not counted.
+
+        vi.useFakeTimers();
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+        mockConfig.getEphemeralSettings.mockReturnValue({
+          shell_default_timeout_seconds: 1,
+          shell_max_timeout_seconds: 5,
+        });
+
+        const invocation = shellTool.build({
+          command: 'some-command',
+          timeout_seconds: 1,
+        });
+
+        // Simulate approval taking 10 seconds (longer than the 1 second timeout)
+        // shouldConfirmExecute does NOT start the timeout
+        await invocation.shouldConfirmExecute(new AbortController().signal);
+
+        // Advance time to simulate user thinking/approving
+        await vi.advanceTimersByTimeAsync(10000);
+
+        // setTimeout should NOT have been called yet because execute() wasn't called
+        expect(setTimeoutSpy).not.toHaveBeenCalled();
+
+        // NOW execute is called (after approval) - this is when timeout starts
+        const promise = invocation.execute(mockAbortSignal);
+
+        // setTimeout should now have been called with 1000ms (1 second)
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
+
+        resolveShellExecution({
+          output: 'success',
+          stdout: 'success',
+          stderr: '',
+          rawOutput: Buffer.from('success'),
+        });
+
+        const result = await promise;
+        expect(result.error).toBeUndefined();
+
+        setTimeoutSpy.mockRestore();
       });
     });
 
