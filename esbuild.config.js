@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'node:module';
 import fs from 'fs';
 import { writeFileSync } from 'node:fs';
+import { wasmLoader } from 'esbuild-plugin-wasm';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +23,51 @@ try {
 } catch (error) {
   console.error('Failed to import esbuild:', error);
   process.exit(1);
+}
+
+/**
+ * Creates WASM plugins for embedding tree-sitter WASM files into the bundle.
+ * Handles both ?binary suffix imports and standard WASM loading.
+ */
+function createWasmPlugins() {
+  const wasmBinaryPlugin = {
+    name: 'wasm-binary',
+    setup(build) {
+      // Handle imports with ?binary suffix - used for tree-sitter language WASM files
+      build.onResolve({ filter: /\.wasm\?binary$/ }, (args) => {
+        const specifier = args.path.replace(/\?binary$/, '');
+        const resolveDir = args.resolveDir || '';
+        const isBareSpecifier =
+          !path.isAbsolute(specifier) &&
+          !specifier.startsWith('./') &&
+          !specifier.startsWith('../');
+
+        let resolvedPath;
+        if (isBareSpecifier) {
+          resolvedPath = require.resolve(specifier, {
+            paths: resolveDir ? [resolveDir, __dirname] : [__dirname],
+          });
+        } else {
+          resolvedPath = path.isAbsolute(specifier)
+            ? specifier
+            : path.join(resolveDir, specifier);
+        }
+
+        return { path: resolvedPath, namespace: 'wasm-embedded' };
+      });
+
+      // Load WASM files as embedded base64 for runtime instantiation
+      build.onLoad({ filter: /.*/, namespace: 'wasm-embedded' }, async (args) => {
+        const wasmBinary = await fs.promises.readFile(args.path);
+        return {
+          contents: `export default new Uint8Array([${wasmBinary.join(',')}]);`,
+          loader: 'js',
+        };
+      });
+    },
+  };
+
+  return [wasmBinaryPlugin, wasmLoader({ mode: 'embedded' })];
 }
 
 // Plugin to redirect module imports to node:module
@@ -66,7 +112,7 @@ const cliConfig = {
   ...baseConfig,
   entryPoints: ['packages/cli/index.ts'],
   outfile: 'bundle/llxprt.js', // LLxprt branding
-  plugins: [nodeModulePlugin], // LLxprt-specific: redirects bare 'module' imports
+  plugins: [nodeModulePlugin, ...createWasmPlugins()], // LLxprt-specific: module redirect + WASM embedding
   alias: {
     'is-in-ci': path.resolve(__dirname, 'packages/cli/src/patches/is-in-ci.ts'),
   },
@@ -86,6 +132,7 @@ const a2aServerConfig = {
   ...baseConfig,
   entryPoints: ['packages/a2a-server/src/http/server.ts'],
   outfile: 'packages/a2a-server/dist/a2a-server.mjs',
+  plugins: [...createWasmPlugins()], // WASM embedding for shell parsing
   // NO nodeModulePlugin - a2a-server doesn't import bare 'module'
   // NO metafile - not needed for secondary build
   banner: {

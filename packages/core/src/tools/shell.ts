@@ -10,6 +10,13 @@ import os, { EOL } from 'os';
 import crypto from 'crypto';
 import { spawnSync } from 'child_process';
 import { Config } from '../config/config.js';
+import { initializeParser } from '../utils/shell-parser.js';
+
+// Initialize tree-sitter parser (async, non-blocking)
+// Failures are handled gracefully with fallback to regex
+initializeParser().catch(() => {
+  // Initialization errors are already handled in shell-parser.ts
+});
 import { ToolErrorType } from './tool-error.js';
 import {
   BaseDeclarativeTool,
