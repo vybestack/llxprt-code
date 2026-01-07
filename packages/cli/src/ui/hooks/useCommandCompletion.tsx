@@ -54,6 +54,7 @@ export function useCommandCompletion(
   slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
   reverseSearchActive: boolean = false,
+  shellModeActive: boolean,
   config?: Config,
 ): UseCommandCompletionReturn {
   const {
@@ -164,13 +165,14 @@ export function useCommandCompletion(
     setIsLoadingSuggestions,
   });
 
+  // Skip slash completion in shell mode - suppress suggestions for shell commands
   const slashCompletionResults = useSlashCompletion(
     buffer,
     dirs,
     cwd,
     slashCommands,
     commandContext,
-    reverseSearchActive,
+    reverseSearchActive || shellModeActive, // Treat shell mode as if reverse search is active
     config,
   );
 
@@ -233,7 +235,11 @@ export function useCommandCompletion(
 
       const lineCodePoints = toCodePoints(buffer.lines[cursorRow] || '');
       const charAfterCompletion = lineCodePoints[end];
-      if (charAfterCompletion !== ' ') {
+      if (
+        charAfterCompletion !== ' ' &&
+        !suggestionText.endsWith('/') &&
+        !suggestionText.endsWith('\\')
+      ) {
         suggestionText += ' ';
       }
 

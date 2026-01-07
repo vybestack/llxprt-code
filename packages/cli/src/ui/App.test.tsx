@@ -47,7 +47,6 @@ interface MockServerConfig {
   targetDir: string;
   debugMode: boolean;
   question?: string;
-  fullContext: boolean;
   coreTools?: string[];
   toolDiscoveryCommand?: string;
   toolCallCommand?: string;
@@ -69,7 +68,6 @@ interface MockServerConfig {
   getToolRegistry: Mock<() => ToolRegistry>; // Use imported ToolRegistry type
   getDebugMode: Mock<() => boolean>;
   getQuestion: Mock<() => string | undefined>;
-  getFullContext: Mock<() => boolean>;
   getCoreTools: Mock<() => string[] | undefined>;
   getToolDiscoveryCommand: Mock<() => string | undefined>;
   getToolCallCommand: Mock<() => string | undefined>;
@@ -116,7 +114,6 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         targetDir: opts.targetDir || '/test/dir',
         debugMode: opts.debugMode || false,
         question: opts.question,
-        fullContext: opts.fullContext ?? false,
         coreTools: opts.coreTools,
         toolDiscoveryCommand: opts.toolDiscoveryCommand,
         toolCallCommand: opts.toolCallCommand,
@@ -138,7 +135,6 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getToolRegistry: vi.fn(() => ({}) as ToolRegistry), // Simple mock
         getDebugMode: vi.fn(() => opts.debugMode || false),
         getQuestion: vi.fn(() => opts.question),
-        getFullContext: vi.fn(() => opts.fullContext ?? false),
         getCoreTools: vi.fn(() => opts.coreTools),
         getToolDiscoveryCommand: vi.fn(() => opts.toolDiscoveryCommand),
         getToolCallCommand: vi.fn(() => opts.toolCallCommand),

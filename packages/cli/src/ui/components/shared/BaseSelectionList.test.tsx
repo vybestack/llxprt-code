@@ -324,11 +324,13 @@ describe('BaseSelectionList', () => {
       // New visible window should be Items 2, 3, 4 (scroll offset 1).
       await updateActiveIndex(3);
 
-      const output = lastFrame();
-      expect(output).not.toContain('Item 1');
-      expect(output).toContain('Item 2');
-      expect(output).toContain('Item 4');
-      expect(output).not.toContain('Item 5');
+      await waitFor(() => {
+        const output = lastFrame();
+        expect(output).not.toContain('Item 1');
+        expect(output).toContain('Item 2');
+        expect(output).toContain('Item 4');
+        expect(output).not.toContain('Item 5');
+      });
     });
 
     it('should scroll up when activeIndex moves before the visible window', async () => {
@@ -336,19 +338,23 @@ describe('BaseSelectionList', () => {
 
       await updateActiveIndex(4);
 
-      let output = lastFrame();
-      expect(output).toContain('Item 3'); // Should see items 3, 4, 5
-      expect(output).toContain('Item 5');
-      expect(output).not.toContain('Item 2');
+      await waitFor(() => {
+        const output = lastFrame();
+        expect(output).toContain('Item 3'); // Should see items 3, 4, 5
+        expect(output).toContain('Item 5');
+        expect(output).not.toContain('Item 2');
+      });
 
       // Now test scrolling up: move to index 1 (Item 2)
       // This should trigger scroll up to show items 2, 3, 4
       await updateActiveIndex(1);
 
-      output = lastFrame();
-      expect(output).toContain('Item 2');
-      expect(output).toContain('Item 4');
-      expect(output).not.toContain('Item 5'); // Item 5 should no longer be visible
+      await waitFor(() => {
+        const output = lastFrame();
+        expect(output).toContain('Item 2');
+        expect(output).toContain('Item 4');
+        expect(output).not.toContain('Item 5'); // Item 5 should no longer be visible
+      });
     });
 
     it('should pin the scroll offset to the end if selection starts near the end', async () => {
@@ -376,16 +382,19 @@ describe('BaseSelectionList', () => {
       expect(lastFrame()).toContain('Item 1');
 
       await updateActiveIndex(3); // Should trigger scroll
-      let output = lastFrame();
-      expect(output).toContain('Item 2');
-      expect(output).toContain('Item 4');
-      expect(output).not.toContain('Item 1');
-
+      await waitFor(() => {
+        const output = lastFrame();
+        expect(output).toContain('Item 2');
+        expect(output).toContain('Item 4');
+        expect(output).not.toContain('Item 1');
+      });
       await updateActiveIndex(5); // Scroll further
-      output = lastFrame();
-      expect(output).toContain('Item 4');
-      expect(output).toContain('Item 6');
-      expect(output).not.toContain('Item 3');
+      await waitFor(() => {
+        const output = lastFrame();
+        expect(output).toContain('Item 4');
+        expect(output).toContain('Item 6');
+        expect(output).not.toContain('Item 3');
+      });
     });
 
     it('should correctly identify the selected item within the visible window', () => {
@@ -413,17 +422,16 @@ describe('BaseSelectionList', () => {
           expect.objectContaining({ value: 'Item 6' }),
           expect.objectContaining({ isSelected: true }),
         );
-      });
 
-      // Item 4 (index 3) should not be selected
-      expect(mockRenderItem).toHaveBeenCalledWith(
-        expect.objectContaining({ value: 'Item 4' }),
-        expect.objectContaining({ isSelected: false }),
-      );
+        // Item 4 (index 3) should not be selected
+        expect(mockRenderItem).toHaveBeenCalledWith(
+          expect.objectContaining({ value: 'Item 4' }),
+          expect.objectContaining({ isSelected: false }),
+        );
+      });
     });
 
     it('should handle maxItemsToShow larger than the list length', () => {
-      // Test edge case where maxItemsToShow exceeds available items
       const { lastFrame } = renderComponent(
         { items: longList, maxItemsToShow: 15 },
         0,

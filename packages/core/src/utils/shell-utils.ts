@@ -9,6 +9,13 @@ import type { Config } from '../config/config.js';
 import os from 'node:os';
 import { quote } from 'shell-quote';
 import { doesToolInvocationMatch } from './tool-utils.js';
+import {
+  isParserAvailable,
+  parseShellCommand,
+  extractCommandNames,
+  hasCommandSubstitution as treeSitterHasCommandSubstitution,
+  splitCommandsWithTree,
+} from './shell-parser.js';
 
 export const SHELL_TOOL_NAMES = ['run_shell_command', 'ShellTool'];
 
@@ -109,10 +116,31 @@ export function escapeShellArg(arg: string, shell: ShellType): string {
 /**
  * Splits a shell command into a list of individual commands, respecting quotes.
  * This is used to separate chained commands (e.g., using &&, ||, ;).
+ * Uses tree-sitter for accurate parsing when available, falls back to regex.
  * @param command The shell command string to parse
  * @returns An array of individual command strings
  */
 export function splitCommands(command: string): string[] {
+  // Try tree-sitter first for accurate parsing
+  if (isParserAvailable()) {
+    const tree = parseShellCommand(command);
+    if (tree) {
+      const result = splitCommandsWithTree(tree);
+      if (result.length > 0) {
+        return result;
+      }
+    }
+  }
+
+  // Fall back to regex-based parsing
+  return splitCommandsRegex(command);
+}
+
+/**
+ * Regex-based fallback for splitting shell commands.
+ * Used when tree-sitter is not available.
+ */
+function splitCommandsRegex(command: string): string[] {
   const commands: string[] = [];
   let currentCommand = '';
   let inSingleQuotes = false;
@@ -198,6 +226,19 @@ export function getCommandRoots(command: string): string[] {
   if (!command) {
     return [];
   }
+
+  // Try tree-sitter first for accurate parsing
+  if (isParserAvailable()) {
+    const tree = parseShellCommand(command);
+    if (tree) {
+      const result = extractCommandNames(tree);
+      if (result.length > 0) {
+        return result;
+      }
+    }
+  }
+
+  // Fall back to regex-based parsing
   return splitCommands(command)
     .map((c) => getCommandRoot(c))
     .filter((c): c is string => !!c);
@@ -224,10 +265,28 @@ export function stripShellWrapper(command: string): string {
  * - Single quotes ('): Everything literal, no substitution possible
  * - Double quotes ("): Command substitution with $() and backticks unless escaped with \
  * - No quotes: Command substitution with $(), <(), and backticks
+ * Uses tree-sitter for accurate parsing when available, falls back to regex.
  * @param command The shell command string to check
  * @returns true if command substitution would be executed by bash
  */
 export function detectCommandSubstitution(command: string): boolean {
+  // Try tree-sitter first for accurate parsing
+  if (isParserAvailable()) {
+    const tree = parseShellCommand(command);
+    if (tree) {
+      return treeSitterHasCommandSubstitution(tree);
+    }
+  }
+
+  // Fall back to regex-based detection
+  return detectCommandSubstitutionRegex(command);
+}
+
+/**
+ * Regex-based fallback for detecting command substitution.
+ * Used when tree-sitter is not available.
+ */
+function detectCommandSubstitutionRegex(command: string): boolean {
   let inSingleQuotes = false;
   let inDoubleQuotes = false;
   let inBackticks = false;

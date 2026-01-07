@@ -8,6 +8,7 @@
 import type { GenerateContentResponse } from '@google/genai';
 import { ApiError } from '@google/genai';
 import { DebugLogger } from '../debug/index.js';
+import { delay, createAbortError } from './delay.js';
 
 export interface HttpError extends Error {
   status?: number;
@@ -25,6 +26,8 @@ export interface RetryOptions {
   ) => Promise<string | boolean | null>;
   authType?: string;
   trackThrottleWaitTime?: (waitTimeMs: number) => void;
+  retryFetchErrors?: boolean;
+  signal?: AbortSignal;
 }
 
 const DEFAULT_RETRY_OPTIONS: RetryOptions = {
@@ -245,15 +248,6 @@ function defaultShouldRetry(error: Error | unknown): boolean {
 }
 
 /**
- * Delays execution for a specified number of milliseconds.
- * @param ms The number of milliseconds to delay.
- * @returns A promise that resolves after the delay.
- */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
  * Retries a function with exponential backoff and jitter.
  * @param fn The asynchronous function to retry.
  * @param options Optional retry configuration.
@@ -264,6 +258,10 @@ export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options?: Partial<RetryOptions>,
 ): Promise<T> {
+  if (options?.signal?.aborted) {
+    throw createAbortError();
+  }
+
   if (options?.maxAttempts !== undefined && options.maxAttempts <= 0) {
     throw new Error('maxAttempts must be a positive number.');
   }
@@ -278,10 +276,15 @@ export async function retryWithBackoff<T>(
     maxDelayMs,
     shouldRetryOnError,
     shouldRetryOnContent,
+    retryFetchErrors: _retryFetchErrors,
+    signal,
   } = {
     ...DEFAULT_RETRY_OPTIONS,
     ...cleanOptions,
   };
+
+  // retryFetchErrors reserved for upstream API compatibility (Google-specific)
+  void _retryFetchErrors;
 
   const logger = new DebugLogger('llxprt:retry');
   let attempt = 0;
@@ -291,6 +294,9 @@ export async function retryWithBackoff<T>(
   const failoverThreshold = 1; // Attempt bucket failover after this many consecutive 429s
 
   while (attempt < maxAttempts) {
+    if (signal?.aborted) {
+      throw createAbortError();
+    }
     attempt++;
     try {
       const result = await fn();
@@ -305,13 +311,17 @@ export async function retryWithBackoff<T>(
       ) {
         const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
         const delayWithJitter = Math.max(0, currentDelay + jitter);
-        await delay(delayWithJitter);
+        await delay(delayWithJitter, signal);
         currentDelay = Math.min(maxDelayMs, currentDelay * 2);
         continue;
       }
 
       return result;
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+
       const errorStatus = getErrorStatus(error);
       const is429 = errorStatus === 429;
       const is402 = errorStatus === 402;
@@ -410,7 +420,7 @@ export async function retryWithBackoff<T>(
           () =>
             `Attempt ${attempt} failed with status ${delayErrorStatus ?? 'unknown'}. Retrying after explicit delay of ${delayDurationMs}ms... Error: ${error}`,
         );
-        await delay(delayDurationMs);
+        await delay(delayDurationMs, signal);
         // Track throttling wait time when explicitly delaying
         if (options?.trackThrottleWaitTime) {
           logger.debug(
@@ -427,7 +437,7 @@ export async function retryWithBackoff<T>(
         // Add jitter: +/- 30% of currentDelay
         const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
         const delayWithJitter = Math.max(0, currentDelay + jitter);
-        await delay(delayWithJitter);
+        await delay(delayWithJitter, signal);
         // Track throttling wait time for exponential backoff
         if (options?.trackThrottleWaitTime) {
           logger.debug(

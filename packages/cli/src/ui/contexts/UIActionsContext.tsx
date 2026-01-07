@@ -149,6 +149,9 @@ export interface UIActions {
 
   // Cancel ongoing request
   cancelOngoingRequest?: () => void;
+
+  // Queue error message
+  setQueueErrorMessage: (message: string | null) => void;
 }
 
 const UIActionsContext = createContext<UIActions | undefined>(undefined);

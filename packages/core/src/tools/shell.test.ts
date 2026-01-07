@@ -584,6 +584,60 @@ describe('ShellTool', () => {
     it('should throw an error if validation fails', () => {
       expect(() => shellTool.build({ command: '' })).toThrow();
     });
+
+    describe('in non-interactive mode', () => {
+      beforeEach(() => {
+        (mockConfig.isInteractive as Mock).mockReturnValue(false);
+        (mockConfig as Record<string, unknown>).getAllowedTools = vi
+          .fn()
+          .mockReturnValue([]);
+        (mockConfig as Record<string, unknown>).getApprovalMode = vi
+          .fn()
+          .mockReturnValue('strict');
+      });
+
+      it('should not throw an error or block for an allowed command', async () => {
+        (
+          (mockConfig as Record<string, unknown>).getAllowedTools as Mock
+        ).mockReturnValue(['ShellTool(wc)']);
+        const invocation = shellTool.build({ command: 'wc -l foo.txt' });
+        const confirmation = await invocation.shouldConfirmExecute(
+          new AbortController().signal,
+        );
+        expect(confirmation).toBe(false);
+      });
+
+      it('should not throw an error or block for an allowed command with arguments', async () => {
+        (
+          (mockConfig as Record<string, unknown>).getAllowedTools as Mock
+        ).mockReturnValue(['ShellTool(wc -l)']);
+        const invocation = shellTool.build({ command: 'wc -l foo.txt' });
+        const confirmation = await invocation.shouldConfirmExecute(
+          new AbortController().signal,
+        );
+        expect(confirmation).toBe(false);
+      });
+
+      it('should throw an error for command that is not allowed', async () => {
+        (
+          (mockConfig as Record<string, unknown>).getAllowedTools as Mock
+        ).mockReturnValue(['ShellTool(wc -l)']);
+        const invocation = shellTool.build({ command: 'madeupcommand' });
+        await expect(
+          invocation.shouldConfirmExecute(new AbortController().signal),
+        ).rejects.toThrow('madeupcommand');
+      });
+
+      it('should throw an error for a command that is a prefix of an allowed command', async () => {
+        (
+          (mockConfig as Record<string, unknown>).getAllowedTools as Mock
+        ).mockReturnValue(['ShellTool(wc -l)']);
+        const invocation = shellTool.build({ command: 'wc' });
+        await expect(
+          invocation.shouldConfirmExecute(new AbortController().signal),
+        ).rejects.toThrow('wc');
+      });
+    });
   });
 
   describe('getDescription', () => {

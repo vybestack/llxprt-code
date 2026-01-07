@@ -33,6 +33,7 @@ import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
+import { EDIT_TOOL_NAME } from './tool-names.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -687,7 +688,7 @@ export class EditTool
   extends BaseDeclarativeTool<EditToolParams, ToolResult>
   implements ModifiableDeclarativeTool<EditToolParams>
 {
-  static readonly Name = 'replace';
+  static readonly Name = EDIT_TOOL_NAME;
   constructor(
     private readonly config: Config,
     messageBus?: MessageBus,

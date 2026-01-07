@@ -294,7 +294,7 @@ describe('loadCliConfig memory discovery', () => {
       prompt: undefined,
       promptInteractive: undefined,
       outputFormat: undefined,
-      allFiles: false,
+
       showMemoryUsage: false,
       yolo: false,
       approvalMode: undefined,

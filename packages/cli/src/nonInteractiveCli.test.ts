@@ -109,7 +109,7 @@ describe('runNonInteractive', () => {
       getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
       getMaxSessionTurns: vi.fn().mockReturnValue(10),
       getIdeMode: vi.fn().mockReturnValue(false),
-      getFullContext: vi.fn().mockReturnValue(false),
+
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
       getDebugMode: vi.fn().mockReturnValue(false),
       getProviderManager: vi.fn().mockReturnValue(undefined),

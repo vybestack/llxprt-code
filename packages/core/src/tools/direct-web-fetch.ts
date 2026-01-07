@@ -18,6 +18,7 @@ import {
 import { ToolErrorType } from './tool-error.js';
 import { Config } from '../config/config.js';
 import { BaseToolInvocation } from './tools.js';
+import { DIRECT_WEB_FETCH_TOOL } from './tool-names.js';
 import fetch, { type RequestInit } from 'node-fetch';
 import TurndownService from 'turndown';
 import * as cheerio from 'cheerio';
@@ -36,7 +37,7 @@ export class DirectWebFetchTool extends BaseDeclarativeTool<
   DirectWebFetchToolParams,
   ToolResult
 > {
-  static readonly Name = 'direct_web_fetch';
+  static readonly Name = DIRECT_WEB_FETCH_TOOL;
 
   constructor(private readonly config: Config) {
     super(

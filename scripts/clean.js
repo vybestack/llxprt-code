@@ -4,66 +4,94 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-import { rmSync, readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { globSync } from 'glob';
+import { rmSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-// remove npm install/build artifacts
-rmSync(join(root, 'node_modules'), { recursive: true, force: true });
-rmSync(join(root, 'bundle'), { recursive: true, force: true });
-rmSync(join(root, 'packages/cli/src/generated/'), {
-  recursive: true,
-  force: true,
-});
 const RMRF_OPTIONS = { recursive: true, force: true };
+
+// remove npm install/build artifacts
+rmSync(join(root, 'node_modules'), RMRF_OPTIONS);
 rmSync(join(root, 'bundle'), RMRF_OPTIONS);
+rmSync(join(root, 'packages/cli/src/generated/'), RMRF_OPTIONS);
 rmSync(join(root, '.stryker-tmp'), RMRF_OPTIONS);
+
 // Dynamically clean dist directories in all workspaces
 const rootPackageJson = JSON.parse(
   readFileSync(join(root, 'package.json'), 'utf-8'),
 );
 for (const workspace of rootPackageJson.workspaces) {
-  const packages = globSync(join(workspace, 'package.json'), { cwd: root });
-  for (const pkgPath of packages) {
-    const pkgDir = dirname(join(root, pkgPath));
-    rmSync(join(pkgDir, 'dist'), RMRF_OPTIONS);
+  // Note: this is a simple glob implementation that only supports "packages/*".
+  const workspaceDir = join(root, dirname(workspace));
+  let packageDirs;
+  try {
+    packageDirs = readdirSync(workspaceDir);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      continue;
+    }
+    throw e;
+  }
+
+  for (const pkg of packageDirs) {
+    const pkgDir = join(workspaceDir, pkg);
+    try {
+      if (statSync(pkgDir).isDirectory()) {
+        rmSync(join(pkgDir, 'dist'), RMRF_OPTIONS);
+      }
+    } catch (e) {
+      if (e.code !== 'ENOENT') {
+        throw e;
+      }
+    }
   }
 }
 
+// Helper function to find directories matching a pattern recursively
+function findDirsRecursive(dir, predicate, results = []) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    const fullPath = resolve(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (predicate(entry.name)) {
+        results.push(fullPath);
+      }
+      findDirsRecursive(fullPath, predicate, results);
+    }
+  }
+  return results;
+}
+
 // Clean Stryker sandboxes that may remain after aborted runs
-const strayStrykerDirs = globSync('**/.stryker-tmp', {
-  cwd: root,
-  dot: true,
-});
+const strayStrykerDirs = findDirsRecursive(
+  root,
+  (name) => name === '.stryker-tmp',
+);
 for (const dir of strayStrykerDirs) {
-  rmSync(join(root, dir), RMRF_OPTIONS);
+  rmSync(dir, RMRF_OPTIONS);
 }
 
 // Clean up vscode-ide-companion package
-rmSync(join(root, 'packages/vscode-ide-companion/node_modules'), {
-  recursive: true,
-  force: true,
-});
-const vsixFiles = globSync('packages/vscode-ide-companion/*.vsix', {
-  cwd: root,
-});
-for (const vsixFile of vsixFiles) {
-  rmSync(join(root, vsixFile), RMRF_OPTIONS);
+rmSync(join(root, 'packages/vscode-ide-companion/node_modules'), RMRF_OPTIONS);
+
+const vscodeCompanionDir = join(root, 'packages/vscode-ide-companion');
+try {
+  const files = readdirSync(vscodeCompanionDir);
+  for (const file of files) {
+    if (file.endsWith('.vsix')) {
+      rmSync(join(vscodeCompanionDir, file), RMRF_OPTIONS);
+    }
+  }
+} catch (e) {
+  if (e.code !== 'ENOENT') {
+    throw e;
+  }
 }

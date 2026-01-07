@@ -13,6 +13,7 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from './tools.js';
+import { GOOGLE_WEB_FETCH_TOOL } from './tool-names.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { getErrorMessage } from '../utils/errors.js';
@@ -167,14 +168,28 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
           `Request failed with status code ${response.status} ${response.statusText}`,
         );
       }
-      const html = await response.text();
-      const textContent = convert(html, {
-        wordwrap: false,
-        selectors: [
-          { selector: 'a', options: { ignoreHref: true } },
-          { selector: 'img', format: 'skip' },
-        ],
-      }).substring(0, MAX_CONTENT_LENGTH);
+      const rawContent = await response.text();
+      const contentType = response.headers.get('content-type') || '';
+      let textContent: string;
+
+      // Only use html-to-text if content type is HTML, or if no content type is provided (assume HTML)
+      if (
+        contentType.toLowerCase().includes('text/html') ||
+        contentType === ''
+      ) {
+        textContent = convert(rawContent, {
+          wordwrap: false,
+          selectors: [
+            { selector: 'a', options: { ignoreHref: true } },
+            { selector: 'img', format: 'skip' },
+          ],
+        });
+      } else {
+        // For other content types (text/plain, application/json, etc.), use raw text
+        textContent = rawContent;
+      }
+
+      textContent = textContent.substring(0, MAX_CONTENT_LENGTH);
 
       // For private URLs in llxprt, we return raw content without AI processing
       // This preserves our multi-provider approach
@@ -204,9 +219,21 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     return `Processing URLs and instructions from prompt: "${displayPrompt}"`;
   }
 
-  override async shouldConfirmExecute(): Promise<
-    ToolCallConfirmationDetails | false
-  > {
+  override async shouldConfirmExecute(
+    abortSignal: AbortSignal,
+  ): Promise<ToolCallConfirmationDetails | false> {
+    // Try policy/message bus first when available.
+    if (this.messageBus) {
+      const decision = await this.getMessageBusDecision(abortSignal);
+      if (decision === 'ALLOW') {
+        return false;
+      }
+      if (decision === 'DENY') {
+        throw new Error('Tool execution denied by policy.');
+      }
+      // if 'ASK_USER', fall through to legacy confirmation UI
+    }
+
     if (this.config.getApprovalMode() === ApprovalMode.AUTO_EDIT) {
       return false;
     }
@@ -290,7 +317,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
 
     // Check if provider supports web_fetch
     const supportedTools = serverToolsProvider.getServerTools();
-    if (!supportedTools.includes('web_fetch')) {
+    if (!supportedTools.includes(GOOGLE_WEB_FETCH_TOOL)) {
       return {
         llmContent:
           'Web fetch is not available. The server tools provider does not support web fetch.',
@@ -452,7 +479,7 @@ export class GoogleWebFetchTool extends BaseDeclarativeTool<
         properties: {
           prompt: {
             description:
-              'A comprehensive prompt that includes the URL(s) (up to 20) to fetch and specific instructions on how to process their content (e.g., "Summarize https://example.com/article and extract key points from https://another.com/data"). Must contain as least one URL starting with http:// or https://.',
+              'A comprehensive prompt that includes the URL(s) (up to 20) to fetch and specific instructions on how to process their content (e.g., "Summarize https://example.com/article and extract key points from https://another.com/data"). All URLs to be fetched must be valid and complete, starting with "http://" or "https://", and be fully-formed with a valid hostname (e.g., a domain name like "example.com" or an IP address). For example, "https://example.com" is valid, but "example.com" is not.',
             type: 'string',
           },
         },

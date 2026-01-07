@@ -16,6 +16,8 @@ import {
   FatalTurnLimitedError,
   EmojiFilter,
   OutputFormat,
+  JsonStreamEventType,
+  StreamJsonFormatter,
   uiTelemetryService,
   type EmojiFilterMode,
   type ServerGeminiThoughtEvent,
@@ -39,6 +41,10 @@ export async function runNonInteractive(
       ? config.getOutputFormat()
       : OutputFormat.TEXT;
   const jsonOutput = outputFormat === OutputFormat.JSON;
+  const streamJsonOutput = outputFormat === OutputFormat.STREAM_JSON;
+
+  const startTime = Date.now();
+  const streamFormatter = streamJsonOutput ? new StreamJsonFormatter() : null;
 
   const consolePatcher = new ConsolePatcher({
     stderr: !jsonOutput,
@@ -56,6 +62,16 @@ export async function runNonInteractive(
     });
 
     const geminiClient = config.getGeminiClient();
+
+    // Emit init event for streaming JSON
+    if (streamFormatter) {
+      streamFormatter.emitEvent({
+        type: JsonStreamEventType.INIT,
+        timestamp: new Date().toISOString(),
+        session_id: config.getSessionId(),
+        model: config.getModel(),
+      });
+    }
 
     // Initialize emoji filter for non-interactive mode
     const emojiFilterMode =
@@ -105,6 +121,16 @@ export async function runNonInteractive(
         );
       }
       query = processedQuery as Part[];
+    }
+
+    // Emit user message event for streaming JSON
+    if (streamFormatter) {
+      streamFormatter.emitEvent({
+        type: JsonStreamEventType.MESSAGE,
+        timestamp: new Date().toISOString(),
+        role: 'user',
+        content: input,
+      });
     }
 
     let currentMessages: Content[] = [{ role: 'user', parts: query }];
@@ -194,18 +220,55 @@ export async function runNonInteractive(
             }
           }
 
-          if (jsonOutput) {
+          if (streamFormatter) {
+            streamFormatter.emitEvent({
+              type: JsonStreamEventType.MESSAGE,
+              timestamp: new Date().toISOString(),
+              role: 'assistant',
+              content: outputValue,
+              delta: true,
+            });
+          } else if (jsonOutput) {
             jsonResponseText += outputValue;
           } else {
             process.stdout.write(outputValue);
           }
         } else if (event.type === GeminiEventType.ToolCallRequest) {
           const toolCallRequest = event.value;
+          if (streamFormatter) {
+            streamFormatter.emitEvent({
+              type: JsonStreamEventType.TOOL_USE,
+              timestamp: new Date().toISOString(),
+              tool_name: toolCallRequest.name,
+              tool_id:
+                toolCallRequest.callId ??
+                `${toolCallRequest.name}-${Date.now()}`,
+              parameters: toolCallRequest.args ?? {},
+            });
+          }
           const normalizedRequest: ToolCallRequestInfo = {
             ...toolCallRequest,
             agentId: toolCallRequest.agentId ?? 'primary',
           };
           functionCalls.push(normalizedRequest);
+        } else if (event.type === GeminiEventType.LoopDetected) {
+          if (streamFormatter) {
+            streamFormatter.emitEvent({
+              type: JsonStreamEventType.ERROR,
+              timestamp: new Date().toISOString(),
+              severity: 'warning',
+              message: 'Loop detected, stopping execution',
+            });
+          }
+        } else if (event.type === GeminiEventType.MaxSessionTurns) {
+          if (streamFormatter) {
+            streamFormatter.emitEvent({
+              type: JsonStreamEventType.ERROR,
+              timestamp: new Date().toISOString(),
+              severity: 'error',
+              message: 'Maximum session turns exceeded',
+            });
+          }
         }
       }
 
@@ -266,8 +329,27 @@ export async function runNonInteractive(
           );
           const toolResponse = completed.response;
 
+          if (streamFormatter) {
+            streamFormatter.emitEvent({
+              type: JsonStreamEventType.TOOL_RESULT,
+              timestamp: new Date().toISOString(),
+              tool_id: requestInfo.callId,
+              status: toolResponse.error ? 'error' : 'success',
+              output:
+                typeof toolResponse.resultDisplay === 'string'
+                  ? toolResponse.resultDisplay
+                  : undefined,
+              error: toolResponse.error
+                ? {
+                    type: toolResponse.errorType || 'TOOL_EXECUTION_ERROR',
+                    message: toolResponse.error.message,
+                  }
+                : undefined,
+            });
+          }
+
           if (toolResponse.error) {
-            if (!jsonOutput) {
+            if (!jsonOutput && !streamJsonOutput) {
               console.error(
                 `Error executing tool ${requestFromModel.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
               );
@@ -280,7 +362,17 @@ export async function runNonInteractive(
         }
         currentMessages = [{ role: 'user', parts: toolResponseParts }];
       } else {
-        if (jsonOutput) {
+        // Emit final result event for streaming JSON
+        if (streamFormatter) {
+          const metrics = uiTelemetryService.getMetrics();
+          const durationMs = Date.now() - startTime;
+          streamFormatter.emitEvent({
+            type: JsonStreamEventType.RESULT,
+            timestamp: new Date().toISOString(),
+            status: 'success',
+            stats: streamFormatter.convertToStreamStats(metrics, durationMs),
+          });
+        } else if (jsonOutput) {
           const payload = JSON.stringify(
             {
               response: jsonResponseText.trimEnd(),

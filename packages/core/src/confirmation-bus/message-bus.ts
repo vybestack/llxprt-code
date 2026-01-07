@@ -68,6 +68,19 @@ export class MessageBus {
   }
 
   /**
+   * Unsubscribes from messages of a specific type.
+   *
+   * @param type - The message type to unsubscribe from
+   * @param handler - The handler function to remove
+   */
+  unsubscribe<T extends MessageBusMessage>(
+    type: MessageBusType,
+    handler: MessageHandler<T>,
+  ): void {
+    this.emitter.off(type, handler as MessageHandler);
+  }
+
+  /**
    * Requests confirmation for a tool execution through the policy engine.
    * If policy allows, returns immediately. If policy asks user, publishes confirmation request.
    *

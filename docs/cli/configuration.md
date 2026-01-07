@@ -868,8 +868,6 @@ Arguments passed directly when running the CLI can override other configurations
   - Sets the sandbox image URI.
 - **`--debug`** (**`-d`**):
   - Enables debug mode for this session, providing more verbose output.
-- **`--all-files`** (**`-a`**):
-  - If set, recursively includes all files within the current directory as context for the prompt.
 - **`--help`** (or **`-h`**):
   - Displays help information about command-line arguments.
 - **`--show-memory-usage`**:

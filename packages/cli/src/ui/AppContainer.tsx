@@ -128,6 +128,7 @@ import {
 import { calculateMainAreaWidth } from './utils/ui-sizing.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
+const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 const selectionLogger = new DebugLogger('llxprt:ui:selection');
 
@@ -849,6 +850,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
   const [showDebugProfiler, setShowDebugProfiler] = useState(false);
+  const [renderMarkdown, setRenderMarkdown] = useState<boolean>(true);
 
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
   const [quittingMessages, setQuittingMessages] = useState<
@@ -880,6 +882,11 @@ export const AppContainer = (props: AppContainerProps) => {
   const [loggingDialogData, setLoggingDialogData] = useState<{
     entries: unknown[];
   }>({ entries: [] });
+
+  // Queue error message state (for preventing slash/shell commands from being queued)
+  const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(
+    null,
+  );
 
   const openLoggingDialog = useCallback((data?: { entries: unknown[] }) => {
     setLoggingDialogData(data || { entries: [] });
@@ -1022,6 +1029,18 @@ export const AppContainer = (props: AppContainerProps) => {
       setShowIdeRestartPrompt(true);
     }
   }, [ideNeedsRestart]);
+
+  // Effect to clear queue error message after timeout
+  useEffect(() => {
+    if (queueErrorMessage) {
+      const timer = setTimeout(() => {
+        setQueueErrorMessage(null);
+      }, QUEUE_ERROR_DISPLAY_DURATION_MS);
+
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [queueErrorMessage, setQueueErrorMessage]);
 
   useKeypress(
     (key) => {
@@ -1642,6 +1661,13 @@ export const AppContainer = (props: AppContainerProps) => {
         if (Object.keys(mcpServers || {}).length > 0) {
           handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
         }
+      } else if (keyMatchers[Command.TOGGLE_MARKDOWN](key)) {
+        setRenderMarkdown((prev) => {
+          const newValue = !prev;
+          // Force re-render of static content
+          refreshStatic();
+          return newValue;
+        });
       } else if (
         keyMatchers[Command.TOGGLE_IDE_CONTEXT_DETAIL](key) &&
         config.getIdeMode() &&
@@ -1677,6 +1703,7 @@ export const AppContainer = (props: AppContainerProps) => {
       cancelOngoingRequest,
       addItem,
       settings.merged.debugKeystrokeLogging,
+      refreshStatic,
     ],
   );
 
@@ -2099,6 +2126,12 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Available terminal height for content (after footer measurement)
     availableTerminalHeight,
+
+    // Queue error message
+    queueErrorMessage,
+
+    // Markdown rendering toggle
+    renderMarkdown,
   };
 
   // Build UIActions object - memoized to avoid unnecessary re-renders (upstream optimization)
@@ -2211,6 +2244,9 @@ export const AppContainer = (props: AppContainerProps) => {
 
       // Cancel ongoing request
       cancelOngoingRequest,
+
+      // Queue error message
+      setQueueErrorMessage,
     }),
     [
       addItem,
@@ -2269,6 +2305,7 @@ export const AppContainer = (props: AppContainerProps) => {
       setShellModeActive,
       handleEscapePromptChange,
       cancelOngoingRequest,
+      setQueueErrorMessage,
     ],
   );
 

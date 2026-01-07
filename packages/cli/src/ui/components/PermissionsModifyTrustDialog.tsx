@@ -6,6 +6,7 @@
 
 import React, { useCallback, useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
+import * as path from 'node:path';
 import { Colors } from '../colors.js';
 import {
   RadioButtonSelect,
@@ -62,10 +63,12 @@ export const PermissionsModifyTrustDialog: React.FC<
     [isIdeTrusted, isParentTrusted],
   );
 
+  const folderName = path.basename(workingDirectory);
+
   const options: Array<RadioSelectItem<TrustLevel>> = useMemo(
     () => [
       {
-        label: 'Trust this folder',
+        label: `Trust this folder (${folderName})`,
         value: TrustLevel.TRUST_FOLDER,
         key: TrustLevel.TRUST_FOLDER,
       },
@@ -80,7 +83,7 @@ export const PermissionsModifyTrustDialog: React.FC<
         key: TrustLevel.DO_NOT_TRUST,
       },
     ],
-    [parentFolderName],
+    [parentFolderName, folderName],
   );
 
   // Find initial index based on current trust level
@@ -177,7 +180,7 @@ export const PermissionsModifyTrustDialog: React.FC<
         <Box marginLeft={1} marginTop={1}>
           <Text color={Colors.AccentYellow}>
             To see changes, llxprt must be restarted. Press &apos;r&apos; to
-            exit and apply changes now, or Escape to continue without restart.
+            exit and apply changes now, or Esc to continue without restart.
           </Text>
         </Box>
       </Box>

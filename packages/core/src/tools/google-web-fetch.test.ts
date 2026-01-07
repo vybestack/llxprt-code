@@ -186,6 +186,78 @@ describe('GoogleWebFetchTool', () => {
       expect(result.error?.type).toBe(ToolErrorType.WEB_FETCH_PROCESSING_ERROR);
     });
   });
+  it('should convert HTML content using html-to-text in fallback', async () => {
+    vi.spyOn(fetchUtils, 'isPrivateIp').mockReturnValue(true);
+    const htmlContent = '<html><body><h1>Hello</h1></body></html>';
+    vi.spyOn(fetchUtils, 'fetchWithTimeout').mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+      text: () => Promise.resolve(htmlContent),
+    } as Response);
+
+    const tool = new GoogleWebFetchTool(mockConfig);
+    const params = { prompt: 'fetch https://example.com' };
+    const invocation = tool.build(params);
+    const result = await invocation.execute(new AbortController().signal);
+
+    // Should convert HTML to text (note: html-to-text may uppercase, so use case-insensitive match)
+    expect(result.llmContent.toLowerCase()).toContain('hello');
+    expect(result.llmContent).not.toContain('<html>');
+  });
+
+  it('should return raw text for JSON content in fallback', async () => {
+    vi.spyOn(fetchUtils, 'isPrivateIp').mockReturnValue(true);
+    const jsonContent = '{"key": "value"}';
+    vi.spyOn(fetchUtils, 'fetchWithTimeout').mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: () => Promise.resolve(jsonContent),
+    } as Response);
+
+    const tool = new GoogleWebFetchTool(mockConfig);
+    const params = { prompt: 'fetch https://example.com' };
+    const invocation = tool.build(params);
+    const result = await invocation.execute(new AbortController().signal);
+
+    // Should not convert, return raw JSON
+    expect(result.llmContent).toContain(jsonContent);
+  });
+
+  it('should return raw text for plain text content in fallback', async () => {
+    vi.spyOn(fetchUtils, 'isPrivateIp').mockReturnValue(true);
+    const textContent = 'Just some text.';
+    vi.spyOn(fetchUtils, 'fetchWithTimeout').mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'text/plain' }),
+      text: () => Promise.resolve(textContent),
+    } as Response);
+
+    const tool = new GoogleWebFetchTool(mockConfig);
+    const params = { prompt: 'fetch https://example.com' };
+    const invocation = tool.build(params);
+    const result = await invocation.execute(new AbortController().signal);
+
+    expect(result.llmContent).toContain(textContent);
+  });
+
+  it('should treat content with no Content-Type header as HTML in fallback', async () => {
+    vi.spyOn(fetchUtils, 'isPrivateIp').mockReturnValue(true);
+    const content = '<p>No header</p>';
+    vi.spyOn(fetchUtils, 'fetchWithTimeout').mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      text: () => Promise.resolve(content),
+    } as Response);
+
+    const tool = new GoogleWebFetchTool(mockConfig);
+    const params = { prompt: 'fetch https://example.com' };
+    const invocation = tool.build(params);
+    const result = await invocation.execute(new AbortController().signal);
+
+    // Should convert HTML when no content-type is present
+    expect(result.llmContent).toContain('No header');
+    expect(result.llmContent).not.toContain('<p>');
+  });
 
   describe('shouldConfirmExecute', () => {
     it('should return confirmation details with the correct prompt and parsed urls', async () => {

@@ -370,7 +370,6 @@ describe('useGeminiStream', () => {
       targetDir: '/test/dir',
       debugMode: false,
       question: undefined,
-      fullContext: false,
       coreTools: [],
       toolDiscoveryCommand: undefined,
       toolCallCommand: undefined,
@@ -1527,6 +1526,75 @@ describe('useGeminiStream', () => {
           expect.any(AbortSignal),
           expect.any(String),
         );
+      });
+    });
+
+    it('should not call handleSlashCommand for line comments', async () => {
+      const { result, mockSendMessageStream: localMockSendMessageStream } =
+        renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('// This is a line comment');
+      });
+
+      await waitFor(() => {
+        expect(mockHandleSlashCommand).not.toHaveBeenCalled();
+        expect(localMockSendMessageStream).toHaveBeenCalledWith(
+          '// This is a line comment',
+          expect.any(AbortSignal),
+          expect.any(String),
+        );
+      });
+    });
+
+    it('should not call handleSlashCommand for block comments', async () => {
+      const { result, mockSendMessageStream: localMockSendMessageStream } =
+        renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('/* This is a block comment */');
+      });
+
+      await waitFor(() => {
+        expect(mockHandleSlashCommand).not.toHaveBeenCalled();
+        expect(localMockSendMessageStream).toHaveBeenCalledWith(
+          '/* This is a block comment */',
+          expect.any(AbortSignal),
+          expect.any(String),
+        );
+      });
+    });
+
+    it('should not call handleSlashCommand if shell mode is active', async () => {
+      const { result } = renderHook(() =>
+        useGeminiStream(
+          new MockedGeminiClientClass(mockConfig),
+          [],
+          mockAddItem,
+          mockConfig,
+          mockLoadedSettings,
+          () => {},
+          mockHandleSlashCommand,
+          true,
+          () => 'vscode' as EditorType,
+          () => {},
+          () => Promise.resolve(),
+          false,
+          () => {},
+          () => {},
+          () => {},
+          () => {},
+          80,
+          24,
+        ),
+      );
+
+      await act(async () => {
+        await result.current.submitQuery('/about');
+      });
+
+      await waitFor(() => {
+        expect(mockHandleSlashCommand).not.toHaveBeenCalled();
       });
     });
   });

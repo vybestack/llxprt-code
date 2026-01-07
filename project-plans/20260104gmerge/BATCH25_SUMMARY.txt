@@ -1,0 +1,10 @@
+---
+DEPRECATED: This file is deprecated.
+Full Batch 25 validation details are now in NOTES.md under "## Batch 25 (2026-01-05)"
+This file will be removed after documentation review.
+---
+
+Batch 25 Summary: SKIP (ARCHITECTURAL-DIFF)
+- commit: dd42893d
+- All validations PASSED
+- See NOTES.md for full details

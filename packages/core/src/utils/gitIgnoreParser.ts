@@ -103,16 +103,23 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     // .git/info/exclude file patterns are relative to project root and not file directory
     const isExcludeFile =
       patternsFileName.replace(/\\/g, '/') === '.git/info/exclude';
+    // Use posix path for patterns to preserve escaped characters (e.g., \#, \!)
     const relativeBaseDir = isExcludeFile
       ? '.'
-      : path.dirname(patternsFileName);
+      : path.dirname(patternsFileName).split(path.sep).join(path.posix.sep);
 
     const patterns = (content ?? '')
       .split('\n')
-      .map((p) => p.trim())
+      .map((p) => p.trimStart())
       .filter((p) => p !== '' && !p.startsWith('#'))
       .map((p) => {
-        const isNegative = p.startsWith('!');
+        // Handle escaped special chars at the start: \! or \#
+        // These mean the pattern literally starts with ! or #
+        // We need to KEEP the backslash for the ignore library to interpret correctly
+        // Note: Do NOT strip the backslash - ignore library needs it
+        const isEscapedBang = p.startsWith('\\!');
+
+        const isNegative = !isEscapedBang && p.startsWith('!');
         if (isNegative) {
           p = p.substring(1);
         }
@@ -138,11 +145,11 @@ export class GitIgnoreParser implements GitIgnoreFilter {
           if (!isAnchoredInFile && !p.includes('/')) {
             // If no slash and not anchored in file, it matches files in any
             // subdirectory.
-            newPattern = path.join('**', p);
+            newPattern = path.posix.join('**', p);
           }
 
           // Prepend the .gitignore file's directory.
-          newPattern = path.join(relativeBaseDir, newPattern);
+          newPattern = path.posix.join(relativeBaseDir, newPattern);
 
           // Anchor the pattern to a nested gitignore directory.
           if (!newPattern.startsWith('/')) {
@@ -158,9 +165,6 @@ export class GitIgnoreParser implements GitIgnoreFilter {
         if (isNegative) {
           newPattern = '!' + newPattern;
         }
-
-        // Even in windows, Ignore expects forward slashes.
-        newPattern = newPattern.replace(/\\/g, '/');
 
         return newPattern;
       })

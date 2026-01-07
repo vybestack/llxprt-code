@@ -40,7 +40,9 @@ describe('JSON output', () => {
     await rig.cleanup();
     await rig.setup('json-output-auth-mismatch', {
       settings: {
-        security: { auth: { enforcedType: 'gemini-api-key' } },
+        security: {
+          auth: { enforcedType: 'gemini-api-key', selectedType: '' },
+        },
       },
     });
 

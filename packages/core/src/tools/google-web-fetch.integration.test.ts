@@ -350,6 +350,7 @@ describe('GoogleWebFetchTool Integration Tests', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
+        headers: new Headers({ 'content-type': 'text/html' }),
         text: vi
           .fn()
           .mockResolvedValue('<html><body>Local content</body></html>'),
@@ -379,6 +380,7 @@ describe('GoogleWebFetchTool Integration Tests', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
+        headers: new Headers({ 'content-type': 'text/html' }),
         text: vi
           .fn()
           .mockResolvedValue(

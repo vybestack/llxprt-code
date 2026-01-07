@@ -336,7 +336,7 @@ describe('Gemini Client (client.ts)', () => {
       getVertexAI: vi.fn().mockReturnValue(false),
       getUserAgent: vi.fn().mockReturnValue('test-agent'),
       getUserMemory: vi.fn().mockReturnValue(''),
-      getFullContext: vi.fn().mockReturnValue(false),
+
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getProxy: vi.fn().mockReturnValue(undefined),
       getWorkingDir: vi.fn().mockReturnValue('/test/dir'),
@@ -3625,7 +3625,7 @@ describe('Gemini Client (client.ts)', () => {
         setModel: mockSetModel,
         getProjectRoot: vi.fn().mockReturnValue('/test'),
         getWorkingDir: vi.fn().mockReturnValue('/test'),
-        getFullContext: vi.fn().mockReturnValue(false),
+
         getUserMemory: vi.fn().mockReturnValue(''),
         getLlxprtMdFileCount: vi.fn().mockReturnValue(0),
         getFileService: vi.fn().mockReturnValue(null),

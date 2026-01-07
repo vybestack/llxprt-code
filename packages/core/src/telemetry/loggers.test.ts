@@ -426,7 +426,7 @@ describe('loggers', () => {
       }),
       getQuestion: () => 'test-question',
       getToolRegistry: () => new ToolRegistry(cfg1),
-      getFullContext: () => false,
+
       getUserMemory: () => 'user-memory',
       getComplexityAnalyzerSettings: () => ({
         complexityThreshold: 0.5,
