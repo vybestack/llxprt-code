@@ -80,7 +80,7 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
         <Text bold color={Colors.AccentCyan}>
           Step 2 of 5: Choose Your Model
         </Text>
-        <Text> </Text>
+        <Text color={Colors.Foreground}> </Text>
         <Text color={Colors.Foreground}>
           Select a model for {providerDisplay}:
         </Text>

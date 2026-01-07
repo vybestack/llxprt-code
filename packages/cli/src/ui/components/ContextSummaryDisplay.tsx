@@ -41,7 +41,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     blockedMcpServerCount === 0 &&
     openFileCount === 0
   ) {
-    return <Text> </Text>; // Render an empty space to reserve height
+    return <Text color={Colors.Foreground}> </Text>; // Render an empty space to reserve height
   }
 
   const openFilesText = (() => {

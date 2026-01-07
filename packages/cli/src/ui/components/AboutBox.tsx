@@ -141,7 +141,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
           </Text>
         </Box>
         <Box>
-          <Text>{gcpProject}</Text>
+          <Text color={Colors.Foreground}>{gcpProject}</Text>
         </Box>
       </Box>
     )}
@@ -153,7 +153,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
           </Text>
         </Box>
         <Box>
-          <Text>{ideClient}</Text>
+          <Text color={Colors.Foreground}>{ideClient}</Text>
         </Box>
       </Box>
     )}

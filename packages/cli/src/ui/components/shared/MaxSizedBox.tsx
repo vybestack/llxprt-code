@@ -172,12 +172,12 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
     <Box key={index}>
       {line.length > 0 ? (
         line.map((segment, segIndex) => (
-          <Text key={segIndex} {...segment.props}>
+          <Text key={segIndex} color={Colors.Foreground} {...segment.props}>
             {segment.text}
           </Text>
         ))
       ) : (
-        <Text> </Text>
+        <Text color={Colors.Foreground}> </Text>
       )}
     </Box>
   ));

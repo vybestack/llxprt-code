@@ -28,7 +28,7 @@ export const GeminiPrivacyNotice = ({ onExit }: GeminiPrivacyNoticeProps) => {
         Gemini API Key Notice
       </Text>
       <Newline />
-      <Text>
+      <Text color={Colors.Foreground}>
         By using the Gemini API<Text color={Colors.AccentBlue}>[1]</Text>,
         Google AI Studio
         <Text color={Colors.AccentRed}>[2]</Text>, and the other Google
@@ -40,18 +40,18 @@ export const GeminiPrivacyNotice = ({ onExit }: GeminiPrivacyNoticeProps) => {
         <Text color={Colors.AccentPurple}>[4]</Text>.
       </Text>
       <Newline />
-      <Text>
+      <Text color={Colors.Foreground}>
         <Text color={Colors.AccentBlue}>[1]</Text>{' '}
         https://ai.google.dev/docs/gemini_api_overview
       </Text>
-      <Text>
+      <Text color={Colors.Foreground}>
         <Text color={Colors.AccentRed}>[2]</Text> https://aistudio.google.com/
       </Text>
-      <Text>
+      <Text color={Colors.Foreground}>
         <Text color={Colors.AccentGreen}>[3]</Text>{' '}
         https://developers.google.com/terms
       </Text>
-      <Text>
+      <Text color={Colors.Foreground}>
         <Text color={Colors.AccentPurple}>[4]</Text>{' '}
         https://ai.google.dev/gemini-api/terms
       </Text>

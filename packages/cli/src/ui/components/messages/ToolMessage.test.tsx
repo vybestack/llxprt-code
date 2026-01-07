@@ -10,6 +10,7 @@ import { ToolMessage, ToolMessageProps } from './ToolMessage.js';
 import { StreamingState, ToolCallStatus } from '../../types.js';
 import { Text } from 'ink';
 import { StreamingContext } from '../../contexts/StreamingContext.js';
+import { Colors } from '../../colors.js';
 
 // Mock child components or utilities if they are complex or have side effects
 vi.mock('../GeminiRespondingSpinner.js', () => ({
@@ -20,9 +21,11 @@ vi.mock('../GeminiRespondingSpinner.js', () => ({
   }) => {
     const streamingState = React.useContext(StreamingContext)!;
     if (streamingState === StreamingState.Responding) {
-      return <Text>MockRespondingSpinner</Text>;
+      return <Text color={Colors.Foreground}>MockRespondingSpinner</Text>;
     }
-    return nonRespondingDisplay ? <Text>{nonRespondingDisplay}</Text> : null;
+    return nonRespondingDisplay ? (
+      <Text color={Colors.Foreground}>{nonRespondingDisplay}</Text>
+    ) : null;
   },
 }));
 vi.mock('./DiffRenderer.js', () => ({
@@ -31,12 +34,12 @@ vi.mock('./DiffRenderer.js', () => ({
   }: {
     diffContent: string;
   }) {
-    return <Text>MockDiff:{diffContent}</Text>;
+    return <Text color={Colors.Foreground}>MockDiff:{diffContent}</Text>;
   },
 }));
 vi.mock('../../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: function MockMarkdownDisplay({ text }: { text: string }) {
-    return <Text>MockMarkdown:{text}</Text>;
+    return <Text color={Colors.Foreground}>MockMarkdown:{text}</Text>;
   },
 }));
 

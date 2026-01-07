@@ -165,8 +165,8 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
           </Box>
 
           <Box>
-            <Text>API Key: </Text>
-            <Text>{maskedValue}</Text>
+            <Text color={Colors.Foreground}>API Key: </Text>
+            <Text color={Colors.Foreground}>{maskedValue}</Text>
             <Text color={Colors.AccentCyan}>▌</Text>
           </Box>
         </>

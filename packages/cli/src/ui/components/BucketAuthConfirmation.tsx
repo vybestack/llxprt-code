@@ -154,11 +154,13 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
       </Box>
 
       <Box flexDirection="column" marginBottom={1}>
-        <Text>
+        <Text color={Colors.Foreground}>
           Bucket {pendingRequest.bucketIndex} of {pendingRequest.totalBuckets}:{' '}
           <Text color={Colors.AccentGreen}>{pendingRequest.bucket}</Text>
         </Text>
-        <Text dimColor>Provider: {pendingRequest.provider}</Text>
+        <Text color={Colors.DimComment}>
+          Provider: {pendingRequest.provider}
+        </Text>
       </Box>
 
       <Box marginBottom={1}>

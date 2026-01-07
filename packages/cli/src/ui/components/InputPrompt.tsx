@@ -7,6 +7,7 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
+import { Colors } from '../colors.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
 import { TextBuffer, logicalPosToOffset } from './shared/text-buffer.js';
@@ -889,12 +890,12 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         <Box flexGrow={1} flexDirection="column">
           {buffer.text.length === 0 && placeholder ? (
             focus ? (
-              <Text>
+              <Text color={Colors.Foreground}>
                 {chalk.inverse(placeholder.slice(0, 1))}
-                <Text color={theme.text.secondary}>{placeholder.slice(1)}</Text>
+                <Text color={Colors.DimComment}>{placeholder.slice(1)}</Text>
               </Text>
             ) : (
-              <Text color={theme.text.secondary}>{placeholder}</Text>
+              <Text color={Colors.DimComment}>{placeholder}</Text>
             )
           ) : (
             linesToRender
@@ -987,7 +988,9 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                 ) {
                   if (!currentLineGhost) {
                     renderedLine.push(
-                      <Text key="cursor-end">{chalk.inverse(' ')}</Text>,
+                      <Text key="cursor-end" color={Colors.Foreground}>
+                        {chalk.inverse(' ')}
+                      </Text>,
                     );
                   }
                 }
@@ -1003,7 +1006,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                   !currentLineGhost &&
                   renderedLine.length === 0
                 ) {
-                  renderedLine.push(<Text key="blank-placeholder"> </Text>);
+                  renderedLine.push(
+                    <Text key="blank-placeholder" color={Colors.Foreground}>
+                      {' '}
+                    </Text>,
+                  );
                 }
 
                 return (

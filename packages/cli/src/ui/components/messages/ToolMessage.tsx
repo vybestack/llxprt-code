@@ -188,7 +188,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
       </Box>
       {status === ToolCallStatus.Executing && !isDetailsVisible && (
         <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
-          <Text color={Colors.Gray} dimColor>
+          <Text color={Colors.DimComment}>
             Press &apos;ctrl+r&apos; to show running command
           </Text>
         </Box>
@@ -315,6 +315,7 @@ const ToolInfo: React.FC<ToolInfo> = ({
   return (
     <Box>
       <Text
+        color={Colors.Foreground}
         wrap={showFullDescription ? 'wrap' : 'truncate-end'}
         strikethrough={status === ToolCallStatus.Canceled}
       >

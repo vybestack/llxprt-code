@@ -10,6 +10,7 @@ import { Text } from 'ink';
 import { LoadingIndicator } from './LoadingIndicator.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { StreamingState } from '../types.js';
+import { Colors } from '../colors.js';
 import { vi } from 'vitest';
 
 // Mock GeminiRespondingSpinner
@@ -21,9 +22,9 @@ vi.mock('./GeminiRespondingSpinner.js', () => ({
   }) => {
     const streamingState = React.useContext(StreamingContext)!;
     if (streamingState === StreamingState.Responding) {
-      return <Text>MockRespondingSpinner</Text>;
+      return <Text color={Colors.Foreground}>MockRespondingSpinner</Text>;
     } else if (nonRespondingDisplay) {
-      return <Text>{nonRespondingDisplay}</Text>;
+      return <Text color={Colors.Foreground}>{nonRespondingDisplay}</Text>;
     }
     return null;
   },
@@ -119,7 +120,7 @@ describe('<LoadingIndicator />', () => {
   });
 
   it('should render rightContent when provided', () => {
-    const rightContent = <Text>Extra Info</Text>;
+    const rightContent = <Text color={Colors.Foreground}>Extra Info</Text>;
     const { lastFrame } = renderWithContext(
       <LoadingIndicator {...defaultProps} rightContent={rightContent} />,
       StreamingState.Responding,

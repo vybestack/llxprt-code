@@ -17,6 +17,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { TodoContext } from '../../contexts/TodoContext.js';
 import { ToolCallContext } from '../../contexts/ToolCallContext.js';
+import { Colors } from '../../colors.js';
 
 // Mock child components to isolate ToolGroupMessage behavior
 const mockToolMessage = vi.fn();
@@ -46,7 +47,7 @@ vi.mock('./ToolMessage.js', () => ({
       resultDisplay,
     });
     const statusSymbol = {
-      [ToolCallStatus.Success]: '✓',
+      [ToolCallStatus.Success]: '[OK]',
       [ToolCallStatus.Pending]: 'o',
       [ToolCallStatus.Executing]: '⊷',
       [ToolCallStatus.Confirming]: '?',
@@ -54,7 +55,7 @@ vi.mock('./ToolMessage.js', () => ({
       [ToolCallStatus.Error]: 'x',
     }[status];
     return (
-      <Text>
+      <Text color={Colors.Foreground}>
         MockTool[{callId}]: {statusSymbol} {name} - {description} ({emphasis})
       </Text>
     );
@@ -71,7 +72,9 @@ vi.mock('./ToolConfirmationMessage.js', () => ({
       confirmationDetails?.type === 'info'
         ? (confirmationDetails as { prompt: string }).prompt
         : confirmationDetails?.title || 'confirm';
-    return <Text>MockConfirmation: {displayText}</Text>;
+    return (
+      <Text color={Colors.Foreground}>MockConfirmation: {displayText}</Text>
+    );
   },
 }));
 

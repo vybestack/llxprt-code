@@ -40,13 +40,13 @@ const StatRow: React.FC<{
         <Text color={Colors.LightBlue}>{name}</Text>
       </Box>
       <Box width={CALLS_COL_WIDTH} justifyContent="flex-end">
-        <Text>{stats.count}</Text>
+        <Text color={Colors.Foreground}>{stats.count}</Text>
       </Box>
       <Box width={SUCCESS_RATE_COL_WIDTH} justifyContent="flex-end">
         <Text color={successColor}>{successRate.toFixed(1)}%</Text>
       </Box>
       <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-        <Text>{formatDuration(avgDuration)}</Text>
+        <Text color={Colors.Foreground}>{formatDuration(avgDuration)}</Text>
       </Box>
     </Box>
   );
@@ -163,14 +163,14 @@ export const ToolStatsDisplay: React.FC = () => {
           <Text color={Colors.LightBlue}>Total Reviewed Suggestions:</Text>
         </Box>
         <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-          <Text>{totalReviewed}</Text>
+          <Text color={Colors.Foreground}>{totalReviewed}</Text>
         </Box>
       </Box>
       <Box>
         <Box
           width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
         >
-          <Text> » Accepted:</Text>
+          <Text color={Colors.DimComment}> » Accepted:</Text>
         </Box>
         <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
           <Text color={Colors.AccentGreen}>{totalDecisions.accept}</Text>
@@ -180,7 +180,7 @@ export const ToolStatsDisplay: React.FC = () => {
         <Box
           width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
         >
-          <Text> » Rejected:</Text>
+          <Text color={Colors.DimComment}> » Rejected:</Text>
         </Box>
         <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
           <Text color={Colors.AccentRed}>{totalDecisions.reject}</Text>
@@ -190,7 +190,7 @@ export const ToolStatsDisplay: React.FC = () => {
         <Box
           width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
         >
-          <Text> » Modified:</Text>
+          <Text color={Colors.DimComment}> » Modified:</Text>
         </Box>
         <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
           <Text color={Colors.AccentYellow}>{totalDecisions.modify}</Text>
@@ -212,10 +212,13 @@ export const ToolStatsDisplay: React.FC = () => {
         <Box
           width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
         >
-          <Text> Overall Agreement Rate:</Text>
+          <Text color={Colors.DimComment}> Overall Agreement Rate:</Text>
         </Box>
         <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-          <Text bold color={totalReviewed > 0 ? agreementColor : undefined}>
+          <Text
+            bold
+            color={totalReviewed > 0 ? agreementColor : Colors.Foreground}
+          >
             {totalReviewed > 0 ? `${agreementRate.toFixed(1)}%` : '--'}
           </Text>
         </Box>

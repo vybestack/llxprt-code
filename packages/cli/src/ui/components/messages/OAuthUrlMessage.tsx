@@ -38,7 +38,9 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
         </Box>
         <Box flexGrow={1}>
           <Text color={Colors.AccentBlue}>
-            <Text bold>OAuth Authentication Required for {provider}</Text>
+            <Text bold color={Colors.AccentBlue}>
+              OAuth Authentication Required for {provider}
+            </Text>
           </Text>
         </Box>
       </Box>
@@ -48,12 +50,12 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
           <Text color={SemanticColors.text.link}>{osc8Link}</Text>
         </Box>
         <Box>
-          <Text color={Colors.Comment} dimColor wrap="wrap">
+          <Text color={Colors.DimComment} wrap="wrap">
             Or copy this URL: {url}
           </Text>
         </Box>
         <Box>
-          <Text color={Colors.Comment} dimColor wrap="wrap">
+          <Text color={Colors.DimComment} wrap="wrap">
             Tip: when mouse scrolling is enabled, drag to select and it will be
             copied to your clipboard. For terminal selection, run /mouse off
             (Ctrl+\).

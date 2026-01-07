@@ -122,11 +122,14 @@ export const MultiProviderPrivacyNotice = ({
         LLxprt Code Privacy Notice
       </Text>
       <Newline />
-      <Text>
-        LLxprt Code does <Text bold>NOT</Text> collect any telemetry or usage
-        data.
+      <Text color={Colors.Foreground}>
+        LLxprt Code does{' '}
+        <Text bold color={Colors.Foreground}>
+          NOT
+        </Text>{' '}
+        collect any telemetry or usage data.
       </Text>
-      <Text>
+      <Text color={Colors.Foreground}>
         All data handling is governed by your chosen AI provider&apos;s
         policies.
       </Text>
@@ -143,35 +146,39 @@ export const MultiProviderPrivacyNotice = ({
             Local models keep all data on your machine.
           </Text>
           {providerInfo?.keyPoints.map((point, index) => (
-            <Text key={index}>
+            <Text key={index} color={Colors.Foreground}>
               {'  '}- {point}
             </Text>
           ))}
         </Box>
       ) : providerInfo ? (
         <Box flexDirection="column">
-          <Text>
+          <Text color={Colors.Foreground}>
             <Text color={Colors.AccentBlue}>[Terms]</Text> {providerInfo.tosUrl}
           </Text>
-          <Text>
+          <Text color={Colors.Foreground}>
             <Text color={Colors.AccentGreen}>[Privacy]</Text>{' '}
             {providerInfo.privacyUrl}
           </Text>
           <Newline />
-          <Text bold>Key points:</Text>
+          <Text bold color={Colors.Foreground}>
+            Key points:
+          </Text>
           {providerInfo.keyPoints.map((point, index) => (
-            <Text key={index}>
+            <Text key={index} color={Colors.Foreground}>
               {'  '}- {point}
             </Text>
           ))}
         </Box>
       ) : (
         <Box flexDirection="column">
-          <Text>
+          <Text color={Colors.Foreground}>
             Please refer to {displayName}&apos;s terms of service and privacy
             policy
           </Text>
-          <Text>for information about how your data is handled.</Text>
+          <Text color={Colors.Foreground}>
+            for information about how your data is handled.
+          </Text>
         </Box>
       )}
 

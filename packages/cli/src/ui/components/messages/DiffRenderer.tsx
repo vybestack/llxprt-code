@@ -116,7 +116,7 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
   if (parsedLines.length === 0) {
     return (
       <Box borderStyle="round" borderColor={Colors.Gray} padding={1}>
-        <Text dimColor>No changes detected.</Text>
+        <Text color={Colors.DimComment}>No changes detected.</Text>
       </Box>
     );
   }
@@ -124,7 +124,7 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
     return (
       <Box flexDirection="column">
         {parsedLines.map((line, index) => (
-          <Text key={index}>
+          <Text key={index} color={Colors.Foreground}>
             {line.type}: {line.content}
           </Text>
         ))}
@@ -196,7 +196,7 @@ const renderDiffContent = (
   if (displayableLines.length === 0) {
     return (
       <Box borderStyle="round" borderColor={Colors.Gray} padding={1}>
-        <Text dimColor>No changes detected.</Text>
+        <Text color={Colors.DimComment}>No changes detected.</Text>
       </Box>
     );
   }
@@ -313,8 +313,8 @@ const renderDiffContent = (
             </Text>
             {line.type === 'context' ? (
               <>
-                <Text>{prefixSymbol} </Text>
-                <Text wrap="wrap">
+                <Text color={Colors.Foreground}>{prefixSymbol} </Text>
+                <Text color={Colors.Foreground} wrap="wrap">
                   {colorizeLine(displayContent, language)}
                 </Text>
               </>
