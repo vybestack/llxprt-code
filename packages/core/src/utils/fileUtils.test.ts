@@ -544,7 +544,6 @@ describe('fileUtils', () => {
     });
   });
 
-
   describe('detectFileType', () => {
     let filePathForDetectTest: string;
 
