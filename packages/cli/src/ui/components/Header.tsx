@@ -45,15 +45,15 @@ export const Header: React.FC<HeaderProps> = ({
     >
       {Colors.GradientColors ? (
         <Gradient colors={Colors.GradientColors}>
-          <Text>{displayTitle}</Text>
+          <Text color={Colors.Foreground}>{displayTitle}</Text>
         </Gradient>
       ) : (
-        <Text>{displayTitle}</Text>
+        <Text color={Colors.AccentBlue}>{displayTitle}</Text>
       )}
       {nightly && (
         <Box width="100%" flexDirection="row" justifyContent="flex-end">
           <Gradient colors={Colors.GradientColors}>
-            <Text>v{version}</Text>
+            <Text color={Colors.Foreground}>v{version}</Text>
           </Gradient>
         </Box>
       )}

@@ -37,7 +37,7 @@ export const SkipExitStep: React.FC<SkipExitStepProps> = ({
 
       <Box flexDirection="column" marginBottom={1}>
         <Text color={Colors.Foreground}>To configure llxprt manually:</Text>
-        <Text> </Text>
+        <Box />
         <Text color={Colors.Foreground}>
           • Use <Text color={Colors.AccentCyan}>/auth &lt;provider&gt;</Text> to
           set up authentication

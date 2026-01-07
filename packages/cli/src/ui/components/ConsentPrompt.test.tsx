@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Colors } from '../colors.js';
 import { Text } from 'ink';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from 'ink-testing-library';
@@ -51,7 +52,7 @@ describe('ConsentPrompt', () => {
   });
 
   it('renders a ReactNode prompt directly', () => {
-    const prompt = <Text>Are you sure?</Text>;
+    const prompt = <Text color={Colors.Foreground}>Are you sure?</Text>;
     const { lastFrame } = render(
       <ConsentPrompt
         prompt={prompt}

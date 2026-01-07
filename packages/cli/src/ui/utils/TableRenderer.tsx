@@ -335,7 +335,7 @@ export const TableRenderer: React.FC<TableRendererProps> = ({
     const maxLines = Math.max(1, ...cellData.map((data) => data.lines.length));
 
     return (
-      <Text>
+      <Text color={theme.text.primary}>
         {Array.from({ length: maxLines }).map((_, lineIndex) => (
           <React.Fragment key={lineIndex}>
             {lineIndex > 0 ? '\n' : null}

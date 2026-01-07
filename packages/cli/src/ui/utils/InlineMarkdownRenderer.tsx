@@ -24,7 +24,7 @@ interface RenderInlineProps {
 const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
   // Early return for plain text without markdown or URLs
   if (!/[*_~`<[https?:]/.test(text)) {
-    return <Text>{text}</Text>;
+    return <Text color={Colors.Foreground}>{text}</Text>;
   }
 
   const nodes: React.ReactNode[] = [];
@@ -36,7 +36,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
   while ((match = inlineRegex.exec(text)) !== null) {
     if (match.index > lastIndex) {
       nodes.push(
-        <Text key={`t-${lastIndex}`}>
+        <Text key={`t-${lastIndex}`} color={Colors.Foreground}>
           {text.slice(lastIndex, match.index)}
         </Text>,
       );
@@ -53,7 +53,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
         fullMatch.length > BOLD_MARKER_LENGTH * 2
       ) {
         renderedNode = (
-          <Text key={key} bold>
+          <Text key={key} bold color={Colors.Foreground}>
             {fullMatch.slice(BOLD_MARKER_LENGTH, -BOLD_MARKER_LENGTH)}
           </Text>
         );
@@ -71,7 +71,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
         )
       ) {
         renderedNode = (
-          <Text key={key} italic>
+          <Text key={key} italic color={Colors.Foreground}>
             {fullMatch.slice(ITALIC_MARKER_LENGTH, -ITALIC_MARKER_LENGTH)}
           </Text>
         );
@@ -81,7 +81,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
         fullMatch.length > STRIKETHROUGH_MARKER_LENGTH * 2
       ) {
         renderedNode = (
-          <Text key={key} strikethrough>
+          <Text key={key} strikethrough color={Colors.Foreground}>
             {fullMatch.slice(
               STRIKETHROUGH_MARKER_LENGTH,
               -STRIKETHROUGH_MARKER_LENGTH,
@@ -111,7 +111,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
           const linkText = linkMatch[1];
           const url = linkMatch[2];
           renderedNode = (
-            <Text key={key}>
+            <Text key={key} color={Colors.Foreground}>
               {linkText}
               <Text color={Colors.AccentBlue}> ({url})</Text>
             </Text>
@@ -124,7 +124,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
           UNDERLINE_TAG_START_LENGTH + UNDERLINE_TAG_END_LENGTH - 1 // -1 because length is compared to combined length of start and end tags
       ) {
         renderedNode = (
-          <Text key={key} underline>
+          <Text key={key} underline color={Colors.Foreground}>
             {fullMatch.slice(
               UNDERLINE_TAG_START_LENGTH,
               -UNDERLINE_TAG_END_LENGTH,
@@ -143,12 +143,22 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
       renderedNode = null;
     }
 
-    nodes.push(renderedNode ?? <Text key={key}>{fullMatch}</Text>);
+    nodes.push(
+      renderedNode ?? (
+        <Text key={key} color={Colors.Foreground}>
+          {fullMatch}
+        </Text>
+      ),
+    );
     lastIndex = inlineRegex.lastIndex;
   }
 
   if (lastIndex < text.length) {
-    nodes.push(<Text key={`t-${lastIndex}`}>{text.slice(lastIndex)}</Text>);
+    nodes.push(
+      <Text key={`t-${lastIndex}`} color={Colors.Foreground}>
+        {text.slice(lastIndex)}
+      </Text>,
+    );
   }
 
   return <>{nodes.filter((node) => node !== null)}</>;

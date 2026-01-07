@@ -75,13 +75,13 @@ export const CloudFreePrivacyNotice = ({
         Gemini Code Assist for Individuals Privacy Notice
       </Text>
       <Newline />
-      <Text>
+      <Text color={Colors.Foreground}>
         This notice and our Privacy Policy
         <Text color={Colors.AccentBlue}>[1]</Text> describe how Gemini Code
         Assist handles your data. Please read them carefully.
       </Text>
       <Newline />
-      <Text>
+      <Text color={Colors.Foreground}>
         When you use Gemini Code Assist for individuals with LLxprt Code, Google
         collects your prompts, related code, generated output, code edits,
         related feature usage information, and your feedback to provide,
@@ -89,7 +89,7 @@ export const CloudFreePrivacyNotice = ({
         technologies.
       </Text>
       <Newline />
-      <Text>
+      <Text color={Colors.Foreground}>
         To help with quality and improve our products (such as generative
         machine-learning models), human reviewers may read, annotate, and
         process the data collected above. We take steps to protect your privacy
@@ -102,7 +102,7 @@ export const CloudFreePrivacyNotice = ({
       </Text>
       <Newline />
       <Box flexDirection="column">
-        <Text>
+        <Text color={Colors.Foreground}>
           Allow Google to use this data to develop and improve our products?
         </Text>
         <RadioButtonSelect
@@ -112,7 +112,7 @@ export const CloudFreePrivacyNotice = ({
         />
       </Box>
       <Newline />
-      <Text>
+      <Text color={Colors.Foreground}>
         <Text color={Colors.AccentBlue}>[1]</Text>{' '}
         https://policies.google.com/privacy
       </Text>

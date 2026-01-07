@@ -277,7 +277,7 @@ export const Footer = React.memo<FooterProps>(
               <>
                 {nightly ? (
                   <Gradient colors={Colors.GradientColors}>
-                    <Text>
+                    <Text color={Colors.Foreground}>
                       (
                       {branchName.length > maxBranchLength
                         ? truncateMiddle(branchName, maxBranchLength)
@@ -368,7 +368,7 @@ export const Footer = React.memo<FooterProps>(
             <Box flexDirection="row" alignItems="center">
               {nightly ? (
                 <Gradient colors={Colors.GradientColors}>
-                  <Text>
+                  <Text color={Colors.Foreground}>
                     {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
                   </Text>
                 </Gradient>

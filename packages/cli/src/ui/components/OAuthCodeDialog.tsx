@@ -131,7 +131,7 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
         </Text>
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>
+        <Text color={Colors.DimComment}>
           Paste code • Enter to submit • Escape to cancel • Ctrl+L to clear
         </Text>
       </Box>

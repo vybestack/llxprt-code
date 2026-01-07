@@ -94,9 +94,9 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
         <Text bold color={Colors.AccentCyan}>
           Step 5 of 5: Save Your Profile
         </Text>
-        <Text> </Text>
+        <Text color={Colors.Foreground}> </Text>
         <Text bold color={Colors.AccentGreen}>
-          {'✓ Authentication complete!'}
+          {'[OK] Authentication complete!'}
         </Text>
       </Box>
 
@@ -133,7 +133,7 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
             ) : (
               <Box>
                 <Text color={Colors.Foreground}>Profile name: </Text>
-                <Text>{profileName}</Text>
+                <Text color={Colors.Foreground}>{profileName}</Text>
                 <Text color={Colors.AccentCyan}>▌</Text>
               </Box>
             )}
