@@ -4,6 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { vi } from 'vitest';
+
+// Mock RuntimeContext before importing the component
+vi.mock('../../contexts/RuntimeContext.js', () => ({
+  useRuntimeApi: () => ({
+    getEphemeralSetting: () => true, // Show thinking blocks by default
+  }),
+  useRuntimeBridge: () => ({
+    runtimeId: 'test',
+    metadata: {},
+    api: { getEphemeralSetting: () => true },
+    runWithScope: <T,>(cb: () => T) => cb(),
+    enterScope: () => {},
+  }),
+  RuntimeContextProvider: ({ children }: { children: React.ReactNode }) =>
+    children,
+  getRuntimeBridge: () => ({
+    runtimeId: 'test',
+    metadata: {},
+    api: { getEphemeralSetting: () => true },
+    runWithScope: <T,>(cb: () => T) => cb(),
+    enterScope: () => {},
+  }),
+  getRuntimeApi: () => ({ getEphemeralSetting: () => true }),
+}));
+
+import React from 'react';
 import { GeminiMessage } from './GeminiMessage.js';
 import { StreamingState } from '../../types.js';
 import { renderWithProviders } from '../../../test-utils/render.js';
