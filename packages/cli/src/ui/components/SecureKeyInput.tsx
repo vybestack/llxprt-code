@@ -6,13 +6,29 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
+
+const logger = new DebugLogger('llxprt:ui:secure-key-input');
 
 export interface SecureKeyInputProps {
   onSubmit: (value: string) => void;
   onCancel: () => void;
   providerName: string;
 }
+
+const isEioError = (err: unknown): boolean => {
+  if (!err || typeof err !== 'object') {
+    return false;
+  }
+
+  const nodeError = err as NodeJS.ErrnoException;
+  return (
+    nodeError.code === 'EIO' ||
+    nodeError.errno === -5 ||
+    (typeof nodeError.message === 'string' && nodeError.message.includes('EIO'))
+  );
+};
 
 /**
  * Component for secure API key input with masking
@@ -58,19 +74,43 @@ export const SecureKeyInput: React.FC<SecureKeyInputProps> = ({
 
   // Set up key press handler
   useEffect(() => {
+    let rawModeEnabled = false;
     const handleInput = (chunk: Buffer, key: unknown) => {
       const keyInfo = key as { name?: string; ctrl?: boolean };
       const char = chunk.toString();
       handleKeyPress(char, keyInfo);
     };
 
+    // Issue #1020: Add error handler to prevent EIO crashes
+    const handleError = (err: Error) => {
+      // Ignore transient I/O errors
+      if (!isEioError(err)) {
+        logger.error('Stdin error in SecureKeyInput:', err);
+      }
+    };
+
     process.stdin.on('data', handleInput);
-    process.stdin.setRawMode(true);
+    process.stdin.on('error', handleError);
+    if (process.stdin.isTTY) {
+      try {
+        process.stdin.setRawMode(true);
+        rawModeEnabled = true;
+      } catch (error) {
+        logger.debug('Failed to enable raw mode for SecureKeyInput', error);
+      }
+    }
     process.stdin.resume();
 
     return () => {
       process.stdin.off('data', handleInput);
-      process.stdin.setRawMode(false);
+      process.stdin.off('error', handleError);
+      if (rawModeEnabled && process.stdin.isTTY) {
+        try {
+          process.stdin.setRawMode(false);
+        } catch {
+          // Issue #1020: Ignore cleanup errors
+        }
+      }
       process.stdin.pause();
     };
   }, [handleKeyPress]);

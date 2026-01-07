@@ -28,6 +28,14 @@ const root = join(__dirname, '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
 const bootstrapSnapshot = parseBootstrapArgs();
 
+function sanitizeNodeOptions(nodeOptions) {
+  if (!nodeOptions) return nodeOptions;
+  return nodeOptions
+    .replace(/\s*--localstorage-file(?:(?:\s*=\s*|\s+)\S+)?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // check build status, write warnings to file for app to display if needed
 execSync('node ./scripts/check-build-status.js', {
   stdio: 'inherit',
@@ -69,9 +77,22 @@ if (experimentalUi) {
   const filteredArgs = args.filter((a) => a !== '--experimental-ui');
   uiArgs.push(...filteredArgs);
 
+  const sanitizedNodeOptionsUi = sanitizeNodeOptions(process.env.NODE_OPTIONS);
+  const uiEnv = {
+    ...process.env,
+    CLI_VERSION: pkg.version,
+    DEV: 'true',
+  };
+  if (sanitizedNodeOptionsUi !== process.env.NODE_OPTIONS) {
+    if (sanitizedNodeOptionsUi) {
+      uiEnv.NODE_OPTIONS = sanitizedNodeOptionsUi;
+    } else {
+      delete uiEnv.NODE_OPTIONS;
+    }
+  }
   const uiChild = spawn('bun', uiArgs, {
     stdio: 'inherit',
-    env: { ...process.env, CLI_VERSION: pkg.version, DEV: 'true' },
+    env: uiEnv,
     cwd: join(root, 'packages/ui'),
   });
 
@@ -83,11 +104,19 @@ if (experimentalUi) {
   nodeArgs.push('./packages/cli');
   nodeArgs.push(...args);
 
+  const sanitizedNodeOptions = sanitizeNodeOptions(process.env.NODE_OPTIONS);
   const env = {
     ...process.env,
     CLI_VERSION: pkg.version,
     DEV: 'true',
   };
+  if (sanitizedNodeOptions !== process.env.NODE_OPTIONS) {
+    if (sanitizedNodeOptions) {
+      env.NODE_OPTIONS = sanitizedNodeOptions;
+    } else {
+      delete env.NODE_OPTIONS;
+    }
+  }
 
   if (bootstrapSnapshot.bootstrapArgs.profileName) {
     env.LLXPRT_BOOTSTRAP_PROFILE = bootstrapSnapshot.bootstrapArgs.profileName;

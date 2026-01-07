@@ -74,6 +74,8 @@ import {
   SettingsService,
   DebugLogger,
   ProfileManager,
+  SessionPersistenceService,
+  type PersistedSession,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -96,6 +98,7 @@ import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
 import { drainStdinBuffer } from './ui/utils/terminalContract.js';
+import { StdinRawModeManager } from './utils/stdinSafety.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
@@ -218,6 +221,50 @@ export async function startInteractiveUI(
   workspaceRoot: string,
 ) {
   const version = await getCliVersion();
+
+  // Load previous session if --continue flag was used
+  let restoredSession: PersistedSession | null = null;
+  const initialPrompt = config.getQuestion();
+
+  if (config.isContinueSession()) {
+    const persistence = new SessionPersistenceService(
+      config.storage,
+      config.getSessionId(),
+    );
+    restoredSession = await persistence.loadMostRecent();
+
+    if (restoredSession) {
+      const formattedTime =
+        SessionPersistenceService.formatSessionTime(restoredSession);
+
+      if (initialPrompt) {
+        // User provided both --continue and --prompt
+        console.log(chalk.cyan(`Resuming session from ${formattedTime}`));
+        const truncatedPrompt =
+          initialPrompt.length > 50
+            ? `${initialPrompt.slice(0, 50)}...`
+            : initialPrompt;
+        console.log(
+          chalk.dim(
+            `Your prompt "${truncatedPrompt}" will be submitted after session loads.`,
+          ),
+        );
+      } else {
+        console.log(chalk.green(`Resumed session from ${formattedTime}`));
+      }
+    } else {
+      if (initialPrompt) {
+        console.log(
+          chalk.yellow(
+            'No previous session found. Starting fresh with your prompt.',
+          ),
+        );
+      } else {
+        console.log(chalk.yellow('No previous session found. Starting fresh.'));
+      }
+    }
+  }
+
   // Detect and enable Kitty keyboard protocol once at startup
   await detectAndEnableKittyProtocol();
   setWindowTitle(basename(workspaceRoot), settings);
@@ -257,6 +304,7 @@ export async function startInteractiveUI(
             settings={settings}
             startupWarnings={startupWarnings}
             version={version}
+            restoredSession={restoredSession ?? undefined}
           />
         </SettingsContext.Provider>
       </ErrorBoundary>
@@ -393,6 +441,10 @@ export async function main() {
   }
 
   const wasRaw = process.stdin.isRaw;
+  // Issue #1020: Create stdin manager with error handling to prevent EIO crashes
+  const stdinManager = new StdinRawModeManager({
+    debug: config.getDebugMode(),
+  });
   if (
     config.isInteractive() &&
     !argv.experimentalUi &&
@@ -406,18 +458,24 @@ export async function main() {
 
     // Set this as early as possible to avoid spurious characters from
     // input showing up in the output.
-    process.stdin.setRawMode(true);
+    // Use stdinManager to safely enable raw mode with EIO error handling (Issue #1020)
+    stdinManager.enable();
 
     // This cleanup isn't strictly needed but may help in certain situations.
     process.on('SIGTERM', async () => {
-      process.stdin.setRawMode(wasRaw);
+      stdinManager.disable(true); // Restore to wasRaw
       await runExitCleanup();
       process.exit(0);
     });
     process.on('SIGINT', async () => {
-      process.stdin.setRawMode(wasRaw);
+      stdinManager.disable(true); // Restore to wasRaw
       await runExitCleanup();
       process.exit(130); // Standard exit code for SIGINT
+    });
+
+    // Register cleanup for the stdin manager to ensure error handler is removed
+    registerCleanup(() => {
+      stdinManager.disable(true);
     });
 
     // Detect and enable Kitty keyboard protocol once at startup.
@@ -911,7 +969,7 @@ export async function main() {
     // the terminal to bun/OpenTUI.
     if (process.stdin.isTTY && process.stdin.isRaw && !wasRaw) {
       try {
-        process.stdin.setRawMode(wasRaw);
+        stdinManager.disable(true); // Restore to wasRaw
       } catch {
         // ignore
       }
@@ -991,7 +1049,7 @@ export async function main() {
     child.on('close', async (code, signal) => {
       if (process.stdin.isTTY && process.stdin.isRaw !== wasRaw) {
         try {
-          process.stdin.setRawMode(wasRaw);
+          stdinManager.disable(true); // Restore to wasRaw
         } catch {
           // ignore
         }

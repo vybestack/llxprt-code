@@ -22,16 +22,14 @@ describe('OpenAIProvider compressToolMessages (Issue #894)', () => {
   it('should compress tool messages when provider limits require it', () => {
     const provider = new OpenAIProvider('test-key');
 
-    const originalPayload = {
-      status: 'success',
-      toolName: 'read_file',
-      result: 'a'.repeat(5000),
-    };
+    const originalContent =
+      'status:\nsuccess\n\ntoolName:\nread_file\n\nerror:\n\n\noutput:\n' +
+      'a'.repeat(5000);
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       {
         role: 'tool',
-        content: JSON.stringify(originalPayload),
+        content: originalContent,
         tool_call_id: 'call_abc',
       } as OpenAI.Chat.ChatCompletionToolMessageParam,
     ];
@@ -55,14 +53,8 @@ describe('OpenAIProvider compressToolMessages (Issue #894)', () => {
     const modified = messages[0] as { content?: unknown };
     expect(typeof modified.content).toBe('string');
 
-    const parsed = JSON.parse(modified.content as string) as {
-      result?: string;
-      truncated?: boolean;
-      originalLength?: number;
-    };
+    const content = modified.content as string;
 
-    expect(parsed.truncated).toBe(true);
-    expect(typeof parsed.originalLength).toBe('number');
-    expect(parsed.result).toContain('[omitted');
+    expect(content).toContain('[truncated');
   });
 });

@@ -1664,7 +1664,11 @@ export class OAuthManager {
               process.stdin.removeListener('data', onData);
               process.stdin.removeListener('error', onError);
               if (rawModeSet && process.stdin.isTTY) {
-                process.stdin.setRawMode(false);
+                try {
+                  process.stdin.setRawMode(false);
+                } catch {
+                  // Issue #1020: Ignore EIO errors during cleanup
+                }
               }
               process.stdin.pause();
             };
@@ -1672,25 +1676,50 @@ export class OAuthManager {
               cleanup();
               resolve();
             };
+            // Issue #1020: Make error handler defensive against EIO errors
             const onError = (err: Error): void => {
               cleanup();
-              reject(err);
+              // Check if this is a transient I/O error we should ignore
+              const nodeError = err as NodeJS.ErrnoException;
+              const isEioError =
+                nodeError.code === 'EIO' ||
+                nodeError.errno === -5 ||
+                (typeof nodeError.message === 'string' &&
+                  nodeError.message.includes('EIO'));
+              if (isEioError) {
+                // EIO errors are transient - treat as user cancel instead of crashing
+                logger.debug(
+                  'Ignoring transient stdin EIO error during prompt',
+                );
+                reject(new Error('Prompt cancelled due to I/O error'));
+              } else {
+                reject(err);
+              }
             };
             if (process.stdin.isTTY) {
-              process.stdin.setRawMode(true);
-              rawModeSet = true;
+              try {
+                // Issue #1020: Wrap setRawMode in try-catch
+                process.stdin.setRawMode(true);
+                rawModeSet = true;
+              } catch (err) {
+                // If setRawMode fails, EIO-style errors should not crash
+                logger.debug('Failed to set raw mode for prompt:', err);
+                cleanup();
+                reject(new Error('Failed to set raw mode for prompt'));
+                return; // Don't continue setting up listeners
+              }
             }
             process.stdin.resume();
             process.stdin.once('data', onData);
             process.stdin.once('error', onError);
           });
         } catch (error) {
-          // Ensure raw mode is reset even on unexpected errors
+          // Issue #1020: Ensure raw mode is reset even on unexpected errors
           if (rawModeSet && process.stdin.isTTY) {
             try {
               process.stdin.setRawMode(false);
             } catch {
-              // Ignore cleanup errors
+              // Ignore cleanup errors (likely EIO)
             }
           }
           throw error;

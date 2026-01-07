@@ -193,7 +193,7 @@ describe('ShellTool', () => {
         wrappedCommand,
         expect.any(String),
         expect.any(Function),
-        mockAbortSignal,
+        expect.any(AbortSignal),
         false,
         undefined,
         undefined,
@@ -228,7 +228,7 @@ describe('ShellTool', () => {
         'dir',
         expect.any(String),
         expect.any(Function),
-        mockAbortSignal,
+        expect.any(AbortSignal),
         false,
         undefined,
         undefined,
@@ -338,6 +338,125 @@ describe('ShellTool', () => {
 
       const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
       expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(tmpFile);
+    });
+
+    describe('timeout_ms handling', () => {
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('uses default timeout when timeout_ms is omitted', async () => {
+        vi.useFakeTimers();
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+        mockConfig.getEphemeralSettings.mockReturnValue({
+          shell_default_timeout_ms: 1234,
+          shell_max_timeout_ms: 5000,
+        });
+
+        const invocation = shellTool.build({ command: 'ls' });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveShellExecution({
+          output: '',
+          stdout: '',
+          stderr: '',
+          rawOutput: Buffer.from(''),
+        });
+        await promise;
+
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1234);
+        setTimeoutSpy.mockRestore();
+      });
+
+      it('clamps timeout_ms to the maximum setting', async () => {
+        vi.useFakeTimers();
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+        mockConfig.getEphemeralSettings.mockReturnValue({
+          shell_default_timeout_ms: 1000,
+          shell_max_timeout_ms: 2000,
+        });
+
+        const invocation = shellTool.build({
+          command: 'ls',
+          timeout_ms: 5000,
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveShellExecution({
+          output: '',
+          stdout: '',
+          stderr: '',
+          rawOutput: Buffer.from(''),
+        });
+        await promise;
+
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
+        setTimeoutSpy.mockRestore();
+      });
+
+      it('skips the timeout when timeout_ms is -1', async () => {
+        vi.useFakeTimers();
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+        mockConfig.getEphemeralSettings.mockReturnValue({
+          shell_default_timeout_ms: 1000,
+          shell_max_timeout_ms: 2000,
+        });
+
+        const invocation = shellTool.build({
+          command: 'ls',
+          timeout_ms: -1,
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveShellExecution({
+          output: '',
+          stdout: '',
+          stderr: '',
+          rawOutput: Buffer.from(''),
+        });
+        await promise;
+
+        expect(setTimeoutSpy).not.toHaveBeenCalled();
+        setTimeoutSpy.mockRestore();
+      });
+
+      it('returns a TIMEOUT error with partial output', async () => {
+        vi.useFakeTimers();
+        const invocation = shellTool.build({
+          command: 'long-running',
+          timeout_ms: 50,
+        });
+        const promise = invocation.execute(mockAbortSignal);
+
+        await vi.advanceTimersByTimeAsync(60);
+        resolveShellExecution({
+          aborted: true,
+          output: 'partial output',
+          stdout: 'partial output',
+          stderr: '',
+          rawOutput: Buffer.from('partial output'),
+          exitCode: null,
+          signal: null,
+          error: null,
+        });
+
+        const result = await promise;
+
+        expect(result.error?.type).toBe(ToolErrorType.TIMEOUT);
+        expect(result.llmContent).toContain('timeout_ms');
+        expect(result.llmContent).toContain('partial output');
+      });
+
+      it('returns EXECUTION_FAILED for user aborts', async () => {
+        const abortController = new AbortController();
+        abortController.abort();
+        const invocation = shellTool.build({
+          command: 'ls',
+          timeout_ms: 1000,
+        });
+
+        const result = await invocation.execute(abortController.signal);
+
+        expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
+        expect(result.error?.type).not.toBe(ToolErrorType.TIMEOUT);
+      });
     });
 
     describe('Streaming to `updateOutput`', () => {

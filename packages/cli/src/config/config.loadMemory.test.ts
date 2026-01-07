@@ -325,6 +325,7 @@ describe('loadCliConfig memory discovery', () => {
       promptWords: [],
       set: undefined,
       query: undefined,
+      continue: undefined,
     };
 
     const { ExtensionEnablementManager, ExtensionStorage } =

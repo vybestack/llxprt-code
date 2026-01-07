@@ -19,6 +19,7 @@ import {
   ToolCallStatus,
   type HistoryItemWithoutId,
   type HistoryItem,
+  type IndividualToolCallDisplay,
 } from './types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useResponsive } from './hooks/useResponsive.js';
@@ -27,6 +28,7 @@ import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useFolderTrust } from './hooks/useFolderTrust.js';
+import { useWelcomeOnboarding } from './hooks/useWelcomeOnboarding.js';
 import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
@@ -64,6 +66,11 @@ import {
   getSettingsService,
   DebugLogger,
   uiTelemetryService,
+  SessionPersistenceService,
+  type PersistedSession,
+  type IContent,
+  type ToolCallBlock,
+  type ToolResponseBlock,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { validateAuthMethod } from '../config/auth.js';
@@ -132,6 +139,7 @@ interface AppContainerProps {
   version: string;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
+  restoredSession?: PersistedSession;
 }
 
 function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
@@ -145,6 +153,32 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
   });
 }
 
+// Valid history item types for session restore validation (must be module-level for stable reference)
+const VALID_HISTORY_TYPES = new Set([
+  'user',
+  'gemini',
+  'gemini_content',
+  'oauth_url',
+  'info',
+  'error',
+  'warning',
+  'about',
+  'help',
+  'stats',
+  'model_stats',
+  'tool_stats',
+  'cache_stats',
+  'lb_stats',
+  'quit',
+  'tool_group',
+  'user_shell',
+  'compression',
+  'extensions_list',
+  'tools_list',
+  'mcp_status',
+  'chat_list',
+]);
+
 export const AppContainer = (props: AppContainerProps) => {
   debug.log('AppContainer architecture active (v2)');
   const {
@@ -153,6 +187,7 @@ export const AppContainer = (props: AppContainerProps) => {
     startupWarnings = [],
     appState,
     appDispatch,
+    restoredSession,
   } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
@@ -347,6 +382,348 @@ export const AppContainer = (props: AppContainerProps) => {
       lastPublishedHistoryTokensRef.current = null;
     };
   }, [config, updateHistoryTokenCount, tokenLogger]);
+
+  // Convert IContent[] to UI HistoryItem[] for display
+  const convertToUIHistory = useCallback(
+    (history: IContent[]): HistoryItem[] => {
+      const items: HistoryItem[] = [];
+      let id = 1;
+
+      // First pass: collect all tool responses by callId for lookup
+      const toolResponseMap = new Map<string, ToolResponseBlock>();
+      for (const content of history) {
+        if (content.speaker === 'tool') {
+          const responseBlocks = content.blocks.filter(
+            (b): b is ToolResponseBlock => b.type === 'tool_response',
+          );
+          for (const resp of responseBlocks) {
+            toolResponseMap.set(resp.callId, resp);
+          }
+        }
+      }
+
+      for (const content of history) {
+        // Extract text blocks
+        const textBlocks = content.blocks.filter(
+          (b): b is { type: 'text'; text: string } => b.type === 'text',
+        );
+        const text = textBlocks.map((b) => b.text).join('\n');
+
+        // Extract tool call blocks for AI
+        const toolCallBlocks = content.blocks.filter(
+          (b): b is ToolCallBlock => b.type === 'tool_call',
+        );
+
+        if (content.speaker === 'human' && text) {
+          items.push({
+            id: id++,
+            type: 'user',
+            text,
+          } as HistoryItem);
+        } else if (content.speaker === 'ai') {
+          // Add text response if present
+          if (text) {
+            items.push({
+              id: id++,
+              type: 'gemini',
+              text,
+              model: content.metadata?.model,
+            } as HistoryItem);
+          }
+          // Add tool calls as proper tool_group items
+          if (toolCallBlocks.length > 0) {
+            const tools: IndividualToolCallDisplay[] = toolCallBlocks.map(
+              (tc) => {
+                const response = toolResponseMap.get(tc.id);
+                // Format result display from tool response
+                let resultDisplay: string | undefined;
+                if (response) {
+                  if (response.error) {
+                    resultDisplay = `Error: ${response.error}`;
+                  } else if (response.result !== undefined) {
+                    // Convert result to string for display
+                    const result = response.result as Record<string, unknown>;
+                    if (typeof result === 'string') {
+                      resultDisplay = result;
+                    } else if (result && typeof result === 'object') {
+                      // Handle common result formats
+                      if (
+                        'output' in result &&
+                        typeof result.output === 'string'
+                      ) {
+                        resultDisplay = result.output;
+                      } else {
+                        resultDisplay = JSON.stringify(result, null, 2);
+                      }
+                    }
+                  }
+                }
+                return {
+                  callId: tc.id,
+                  name: tc.name,
+                  description: tc.description || '',
+                  resultDisplay,
+                  status: response
+                    ? ToolCallStatus.Success
+                    : ToolCallStatus.Pending,
+                  confirmationDetails: undefined,
+                };
+              },
+            );
+            items.push({
+              id: id++,
+              type: 'tool_group',
+              agentId: 'primary',
+              tools,
+            } as HistoryItem);
+          }
+        }
+        // Skip tool speaker entries - already processed via map
+      }
+
+      return items;
+    },
+    [],
+  );
+
+  // Session restoration for --continue functionality
+  // Split into two parts: UI restoration (immediate) and core history (when available)
+  const sessionRestoredRef = useRef(false);
+  const coreHistoryRestoredRef = useRef(false);
+
+  /**
+   * Validates that an item matches the HistoryItem schema.
+   * Uses duck typing for flexibility with minor schema changes.
+   */
+  const isValidHistoryItem = useCallback(
+    (item: unknown): item is HistoryItem => {
+      if (typeof item !== 'object' || item === null) {
+        return false;
+      }
+
+      const obj = item as Record<string, unknown>;
+
+      // Required fields
+      if (typeof obj.id !== 'number') return false;
+      if (typeof obj.type !== 'string') return false;
+
+      // Check if type is valid (allow unknown types from newer versions)
+      if (!VALID_HISTORY_TYPES.has(obj.type)) {
+        debug.warn(`Unknown history item type: ${obj.type}`);
+        // Allow unknown types to pass - might be from newer version
+      }
+
+      // Type-specific validation
+      switch (obj.type) {
+        case 'user':
+        case 'gemini':
+        case 'gemini_content':
+        case 'info':
+        case 'warning':
+        case 'error':
+        case 'user_shell':
+          // Text types should have text (but might be empty)
+          return typeof obj.text === 'string' || obj.text === undefined;
+
+        case 'tool_group':
+          // Tool groups must have tools array
+          if (!Array.isArray(obj.tools)) return false;
+          return obj.tools.every(
+            (tool) =>
+              typeof tool === 'object' &&
+              tool !== null &&
+              typeof (tool as Record<string, unknown>).callId === 'string' &&
+              typeof (tool as Record<string, unknown>).name === 'string',
+          );
+
+        default:
+          // For other types, just having id and type is enough
+          return true;
+      }
+    },
+    [],
+  );
+
+  /**
+   * Validates all items in a history array.
+   * Returns valid items, filters invalid ones.
+   */
+  const validateUIHistory = useCallback(
+    (items: unknown[]): { valid: HistoryItem[]; invalidCount: number } => {
+      const valid: HistoryItem[] = [];
+      let invalidCount = 0;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (isValidHistoryItem(item)) {
+          valid.push(item);
+        } else {
+          debug.warn(`Invalid history item at index ${i}:`, item);
+          invalidCount++;
+        }
+      }
+
+      return { valid, invalidCount };
+    },
+    [isValidHistoryItem],
+  );
+
+  // Part 1: Restore UI history immediately on mount
+  useEffect(() => {
+    if (!restoredSession || sessionRestoredRef.current) {
+      return;
+    }
+    sessionRestoredRef.current = true;
+
+    try {
+      // Use saved UI history if available (preserves exact display), otherwise convert from core history
+      let uiHistoryItems: HistoryItem[];
+      let usedFallback = false;
+      let invalidCount = 0;
+
+      if (
+        restoredSession.uiHistory &&
+        Array.isArray(restoredSession.uiHistory)
+      ) {
+        // Validate UI history items before loading
+        const validation = validateUIHistory(restoredSession.uiHistory);
+        invalidCount = validation.invalidCount;
+
+        if (invalidCount > 0) {
+          debug.warn(`${invalidCount} invalid UI history items found`);
+
+          if (validation.valid.length === 0) {
+            // All items invalid - fall back to conversion
+            debug.warn('All UI history invalid, falling back to conversion');
+            uiHistoryItems = convertToUIHistory(restoredSession.history);
+            usedFallback = true;
+          } else {
+            // Some items valid - use them
+            uiHistoryItems = validation.valid;
+          }
+        } else {
+          uiHistoryItems = validation.valid;
+        }
+
+        if (!usedFallback) {
+          debug.log(`Using saved UI history (${uiHistoryItems.length} items)`);
+        }
+      } else {
+        uiHistoryItems = convertToUIHistory(restoredSession.history);
+        usedFallback = true;
+        debug.log(
+          `Converted core history to UI (${uiHistoryItems.length} items)`,
+        );
+      }
+      loadHistory(uiHistoryItems);
+
+      debug.log(
+        `Restored ${restoredSession.history.length} messages (${uiHistoryItems.length} UI items) for display`,
+      );
+
+      // Add info message about restoration
+      const sessionTime = new Date(
+        restoredSession.updatedAt || restoredSession.createdAt,
+      ).toLocaleString();
+      const source = usedFallback
+        ? 'converted from core'
+        : 'restored from UI cache';
+      addItem(
+        {
+          type: 'info',
+          text: `Session restored (${uiHistoryItems.length} messages ${source} from ${sessionTime})`,
+        },
+        Date.now(),
+      );
+
+      // Warn if some items were corrupted
+      if (invalidCount > 0 && !usedFallback) {
+        addItem(
+          {
+            type: 'warning',
+            text: `${invalidCount} corrupted message(s) could not be displayed.`,
+          },
+          Date.now(),
+        );
+      }
+    } catch (err) {
+      debug.error('Failed to restore UI history:', err);
+      addItem(
+        {
+          type: 'warning',
+          text: 'Failed to restore previous session display.',
+        },
+        Date.now(),
+      );
+    }
+  }, [
+    restoredSession,
+    convertToUIHistory,
+    loadHistory,
+    addItem,
+    validateUIHistory,
+  ]);
+
+  // Part 2: Restore core history when historyService becomes available (for AI context)
+  useEffect(() => {
+    if (!restoredSession || coreHistoryRestoredRef.current) {
+      return;
+    }
+
+    const TIMEOUT_MS = 30000; // 30 second timeout
+
+    const timeout = setTimeout(() => {
+      clearInterval(checkInterval);
+      debug.warn(
+        'Timed out waiting for history service to restore core history',
+      );
+      addItem(
+        {
+          type: 'warning',
+          text: 'Could not restore AI context - history service unavailable.',
+        },
+        Date.now(),
+      );
+    }, TIMEOUT_MS);
+
+    const checkInterval = setInterval(() => {
+      const geminiClient = config.getGeminiClient();
+      const historyService = geminiClient?.getHistoryService?.();
+
+      if (!historyService) {
+        return;
+      }
+
+      clearInterval(checkInterval);
+      clearTimeout(timeout);
+      coreHistoryRestoredRef.current = true;
+
+      try {
+        historyService.validateAndFix();
+        historyService.addAll(restoredSession.history);
+
+        debug.log(
+          `Restored ${restoredSession.history.length} items to core history for AI context`,
+        );
+      } catch (err) {
+        debug.error('Failed to restore core history:', err);
+        // Notify user that AI context is missing - this is critical!
+        addItem(
+          {
+            type: 'warning',
+            text: 'Previous session display restored, but AI context could not be loaded. The AI will not remember the previous conversation.',
+          },
+          Date.now(),
+        );
+      }
+    }, 100);
+
+    return () => {
+      clearInterval(checkInterval);
+      clearTimeout(timeout);
+    };
+  }, [restoredSession, config, addItem]);
+
   const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const externalEditorStateRef = useRef<{
@@ -631,6 +1008,19 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
     useFolderTrust(settings, config, addItem);
+
+  // Welcome onboarding - shown after folder trust, before other dialogs
+  const {
+    showWelcome: isWelcomeDialogOpen,
+    state: welcomeState,
+    actions: welcomeActions,
+    availableProviders: welcomeAvailableProviders,
+    availableModels: welcomeAvailableModels,
+    triggerAuth: triggerWelcomeAuth,
+  } = useWelcomeOnboarding({
+    settings,
+    isFolderTrustComplete: !isFolderTrustDialogOpen && !isRestarting,
+  });
 
   const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
   useEffect(() => {
@@ -1478,6 +1868,57 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [streamingState, refreshStatic, _staticNeedsRefresh]);
 
+  // Session persistence - always save so sessions can be resumed with --continue
+  // Use stable dependencies to avoid recreating service (and new file path) on config changes
+  const storage = config.storage;
+  const sessionId = config.getSessionId();
+  const sessionPersistence = useMemo(
+    () => new SessionPersistenceService(storage, sessionId),
+    [storage, sessionId],
+  );
+
+  // Track previous streaming state to detect turn completion
+  const prevStreamingStateRef = useRef<StreamingState>(streamingState);
+
+  // Save session when turn completes (streaming goes idle)
+  useEffect(() => {
+    const wasActive =
+      prevStreamingStateRef.current === StreamingState.Responding ||
+      prevStreamingStateRef.current === StreamingState.WaitingForConfirmation;
+    const isNowIdle = streamingState === StreamingState.Idle;
+    prevStreamingStateRef.current = streamingState;
+
+    if (!wasActive || !isNowIdle) {
+      return;
+    }
+
+    // Get history from gemini client and save
+    const geminiClient = config.getGeminiClient();
+    const historyService = geminiClient?.getHistoryService?.();
+    if (!historyService) {
+      return;
+    }
+
+    const historyToSave = historyService.getComprehensive();
+    if (historyToSave.length === 0) {
+      return;
+    }
+
+    sessionPersistence
+      .save(
+        historyToSave,
+        {
+          provider: config.getProvider?.() ?? undefined,
+          model: config.getModel(),
+          tokenCount: historyService.getTotalTokens(),
+        },
+        history, // Save UI history for exact display restoration
+      )
+      .catch((err: unknown) => {
+        debug.error('Failed to save session:', err);
+      });
+  }, [streamingState, sessionPersistence, config, history]);
+
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {
       return consoleMessages;
@@ -1510,6 +1951,7 @@ export const AppContainer = (props: AppContainerProps) => {
       !isProviderModelDialogOpen &&
       !isToolsDialogOpen &&
       !showPrivacyNotice &&
+      !isWelcomeDialogOpen &&
       geminiClient
     ) {
       submitQuery(initialPrompt);
@@ -1526,6 +1968,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isProviderModelDialogOpen,
     isToolsDialogOpen,
     showPrivacyNotice,
+    isWelcomeDialogOpen,
     geminiClient,
   ]);
 
@@ -1659,6 +2102,12 @@ export const AppContainer = (props: AppContainerProps) => {
     isRestarting,
     isTrustedFolder: config.isTrustedFolder(),
 
+    // Welcome onboarding
+    isWelcomeDialogOpen,
+    welcomeState,
+    welcomeAvailableProviders,
+    welcomeAvailableModels,
+
     // Input history
     inputHistory: inputHistoryStore.inputHistory,
 
@@ -1741,6 +2190,10 @@ export const AppContainer = (props: AppContainerProps) => {
 
       // Folder trust dialog
       handleFolderTrustSelect,
+
+      // Welcome onboarding
+      welcomeActions,
+      triggerWelcomeAuth,
 
       // Permissions dialog
       openPermissionsDialog,
@@ -1828,6 +2281,8 @@ export const AppContainer = (props: AppContainerProps) => {
       handleToolsSelect,
       exitToolsDialog,
       handleFolderTrustSelect,
+      welcomeActions,
+      triggerWelcomeAuth,
       openPermissionsDialog,
       closePermissionsDialog,
       openLoggingDialog,

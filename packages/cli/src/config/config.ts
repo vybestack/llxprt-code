@@ -167,6 +167,7 @@ export interface CliArgs {
   promptWords: string[] | undefined;
   query: string | undefined;
   set: string[] | undefined;
+  continue: boolean | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -351,6 +352,13 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         .option('dumponerror', {
           type: 'boolean',
           description: 'Dump request body to ~/.llxprt/dumps/ on API errors.',
+          default: false,
+        })
+        .option('continue', {
+          alias: 'C',
+          type: 'boolean',
+          description:
+            'Resume the most recent session for this project. Can be combined with --prompt to continue with a new message.',
           default: false,
         })
         .deprecateOption(
@@ -636,6 +644,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     promptWords: result.promptWords as string[] | undefined,
     query: queryFromPromptWords,
     set: result.set as string[] | undefined,
+    continue: result.continue as boolean | undefined,
   };
 
   return cliArgs;
@@ -1313,6 +1322,7 @@ export async function loadCliConfig(
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
+    continueSession: argv.continue ?? false,
   });
 
   const enhancedConfig = config;
