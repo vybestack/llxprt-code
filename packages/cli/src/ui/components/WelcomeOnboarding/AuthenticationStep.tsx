@@ -115,7 +115,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
         </Box>
 
         <Box marginBottom={1}>
-          <Text>
+          <Text color={Colors.Foreground}>
             <Text color={Colors.AccentYellow}>
               <Spinner type="dots" />
             </Text>{' '}
@@ -123,8 +123,12 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
           </Text>
         </Box>
 
-        <Text>Please complete the authentication in your browser.</Text>
-        <Text>This window will update when done.</Text>
+        <Text color={Colors.Foreground}>
+          Please complete the authentication in your browser.
+        </Text>
+        <Text color={Colors.Foreground}>
+          This window will update when done.
+        </Text>
 
         <Box marginTop={1}>
           <Text color={Colors.Gray}>Press Esc to cancel and go back</Text>
@@ -145,7 +149,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
 
       {isAuthenticating ? (
         <Box marginBottom={1}>
-          <Text>
+          <Text color={Colors.Foreground}>
             <Text color={Colors.AccentYellow}>
               <Spinner type="dots" />
             </Text>{' '}
@@ -155,7 +159,9 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
       ) : (
         <>
           <Box marginBottom={1}>
-            <Text>Enter your {providerDisplay} API key:</Text>
+            <Text color={Colors.Foreground}>
+              Enter your {providerDisplay} API key:
+            </Text>
           </Box>
 
           <Box>

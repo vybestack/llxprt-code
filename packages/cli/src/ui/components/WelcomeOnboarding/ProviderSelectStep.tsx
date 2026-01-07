@@ -70,7 +70,9 @@ export const ProviderSelectStep: React.FC<ProviderSelectStepProps> = ({
           Step 1 of 5: Choose Your AI Provider
         </Text>
         <Text> </Text>
-        <Text>{"Select which AI provider you'd like to use:"}</Text>
+        <Text color={Colors.Foreground}>
+          {"Select which AI provider you'd like to use:"}
+        </Text>
       </Box>
 
       <RadioButtonSelect
