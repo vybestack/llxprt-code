@@ -106,10 +106,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     // Use posix path for patterns to preserve escaped characters (e.g., \#, \!)
     const relativeBaseDir = isExcludeFile
       ? '.'
-      : path
-          .dirname(patternsFileName)
-          .split(path.sep)
-          .join(path.posix.sep);
+      : path.dirname(patternsFileName).split(path.sep).join(path.posix.sep);
 
     const patterns = (content ?? '')
       .split('\n')

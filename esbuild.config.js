@@ -57,13 +57,16 @@ function createWasmPlugins() {
       });
 
       // Load WASM files as embedded base64 for runtime instantiation
-      build.onLoad({ filter: /.*/, namespace: 'wasm-embedded' }, async (args) => {
-        const wasmBinary = await fs.promises.readFile(args.path);
-        return {
-          contents: `export default new Uint8Array([${wasmBinary.join(',')}]);`,
-          loader: 'js',
-        };
-      });
+      build.onLoad(
+        { filter: /.*/, namespace: 'wasm-embedded' },
+        async (args) => {
+          const wasmBinary = await fs.promises.readFile(args.path);
+          return {
+            contents: `export default new Uint8Array([${wasmBinary.join(',')}]);`,
+            loader: 'js',
+          };
+        },
+      );
     },
   };
 

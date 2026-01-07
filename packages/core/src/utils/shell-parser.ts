@@ -15,7 +15,12 @@
  * Falls back gracefully to regex parsing if tree-sitter fails to initialize.
  */
 
-import type { Parser as ParserType, Language, Tree, Node } from 'web-tree-sitter';
+import type {
+  Parser as ParserType,
+  Language,
+  Tree,
+  Node,
+} from 'web-tree-sitter';
 
 // Type definitions for tree-sitter query results
 interface QueryCapture {
@@ -68,9 +73,8 @@ export async function initializeParser(): Promise<boolean> {
 
     // Load the bash language WASM
     // The ?binary suffix triggers our esbuild plugin to embed the wasm
-    const wasmModule = await import(
-      'tree-sitter-bash/tree-sitter-bash.wasm?binary'
-    );
+    const wasmModule =
+      await import('tree-sitter-bash/tree-sitter-bash.wasm?binary');
     bashLanguage = await Parser.Language.load(wasmModule.default);
     parser!.setLanguage(bashLanguage);
 
@@ -92,7 +96,6 @@ export async function initializeParser(): Promise<boolean> {
 export function isParserAvailable(): boolean {
   return parser !== null && bashLanguage !== null;
 }
-
 
 /**
  * Parse a shell command string and return the syntax tree.
