@@ -115,11 +115,9 @@ export class GitIgnoreParser implements GitIgnoreFilter {
       .map((p) => {
         // Handle escaped special chars at the start: \! or \#
         // These mean the pattern literally starts with ! or #
-        const isEscapedHash = p.startsWith('\\#');
+        // We need to KEEP the backslash for the ignore library to interpret correctly
+        // Note: Do NOT strip the backslash - ignore library needs it
         const isEscapedBang = p.startsWith('\\!');
-        if (isEscapedHash || isEscapedBang) {
-          p = p.substring(1); // Remove the backslash, keep the special char
-        }
 
         const isNegative = !isEscapedBang && p.startsWith('!');
         if (isNegative) {

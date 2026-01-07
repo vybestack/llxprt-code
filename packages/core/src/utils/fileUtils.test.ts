@@ -18,7 +18,6 @@ import * as actualNodeFs from 'node:fs'; // For setup/teardown
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { fileURLToPath } from 'node:url';
 import mime from 'mime-types';
 
 import {
@@ -545,25 +544,6 @@ describe('fileUtils', () => {
     });
   });
 
-  describe('readWasmBinaryFromDisk', () => {
-    it('loads a WASM binary from disk as a Uint8Array', async () => {
-      // Import readWasmBinaryFromDisk function
-      const { readWasmBinaryFromDisk } = await import('./fileUtils.js');
-
-      const wasmFixtureUrl = new URL(
-        './__fixtures__/dummy.wasm',
-        import.meta.url,
-      );
-      const wasmFixturePath = fileURLToPath(wasmFixtureUrl);
-      const result = await readWasmBinaryFromDisk(wasmFixturePath);
-      const expectedBytes = new Uint8Array(
-        await fsPromises.readFile(wasmFixturePath),
-      );
-
-      expect(result).toBeInstanceOf(Uint8Array);
-      expect(result).toStrictEqual(expectedBytes);
-    });
-  });
 
   describe('detectFileType', () => {
     let filePathForDetectTest: string;

@@ -289,6 +289,9 @@ src/*.tmp
       await createTestFile('bla/#foo', 'content');
       await createTestFile('bla/!bar', 'content');
 
+      // Need to reload patterns after creating .gitignore
+      parser.loadGitRepoPatterns();
+
       // These should be ignored based on the escaped patterns
       expect(parser.isIgnored('bla/#foo')).toBe(true);
       expect(parser.isIgnored('bla/!bar')).toBe(true);
@@ -305,6 +308,9 @@ src/*.tmp
       await createTestFile('foo ', 'content');
       await createTestFile('bar', 'content');
       await createTestFile('bar ', 'content');
+
+      // Need to reload patterns after creating .gitignore
+      parser.loadGitRepoPatterns();
 
       // 'foo\ ' should match 'foo '
       expect(parser.isIgnored('foo ')).toBe(true);
