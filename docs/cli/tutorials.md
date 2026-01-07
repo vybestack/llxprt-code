@@ -8,6 +8,10 @@ Learn how to use container-based sandboxing to protect your system when working 
 
 **[Sandbox Setup Tutorial](../tutorials/sandbox-setup.md)** — Step-by-step guide covering Docker/Podman setup, profile configuration, SSH passthrough, and troubleshooting.
 
+## Agent Skills
+
+- [Getting Started with Agent Skills](./tutorials/skills-getting-started.md)
+
 ## Setting up a Model Context Protocol (MCP) server
 
 > [!CAUTION]
