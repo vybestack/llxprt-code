@@ -210,6 +210,16 @@ describe('ConfigurationManager', () => {
       const config = manager.getEffectiveConfig();
       expect(config.enabled).toBe(true);
     });
+
+    it('should clear ephemeral config', () => {
+      const manager = ConfigurationManager.getInstance();
+      manager.setEphemeralConfig({ enabled: true });
+      expect(manager.getEffectiveConfig().enabled).toBe(true);
+
+      manager.clearEphemeralConfig();
+      // Should revert to default (or lower priority config)
+      expect(manager.getEffectiveConfig().enabled).toBe(false);
+    });
   });
 
   describe('Configuration Merging', () => {
