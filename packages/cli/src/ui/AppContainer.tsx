@@ -851,6 +851,7 @@ export const AppContainer = (props: AppContainerProps) => {
     useState<boolean>(false);
   const [showDebugProfiler, setShowDebugProfiler] = useState(false);
   const [renderMarkdown, setRenderMarkdown] = useState<boolean>(true);
+  const [isTodoPanelCollapsed, setIsTodoPanelCollapsed] = useState(false);
 
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
   const [quittingMessages, setQuittingMessages] = useState<
@@ -1675,6 +1676,9 @@ export const AppContainer = (props: AppContainerProps) => {
       ) {
         // Show IDE status when in IDE mode and context is available.
         handleSlashCommand('/ide status');
+      } else if (keyMatchers[Command.TOGGLE_TODO_DIALOG](key)) {
+        // Toggle todo panel collapsed/expanded state
+        setIsTodoPanelCollapsed((prev) => !prev);
       } else if (
         keyMatchers[Command.SHOW_MORE_LINES](key) &&
         !enteringConstrainHeightMode
@@ -2053,6 +2057,7 @@ export const AppContainer = (props: AppContainerProps) => {
     constrainHeight,
     showErrorDetails,
     showToolDescriptions,
+    isTodoPanelCollapsed,
     isNarrow,
     vimModeEnabled,
     vimMode,
