@@ -99,8 +99,9 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({
   const currentTodoIndex = todos.findIndex(
     (todo) => todo.status === 'in_progress',
   );
-  const { startIndex, endIndex, hasMoreAbove, hasMoreBelow } =
-    calculateViewport(todos, currentTodoIndex, collapsed ? 3 : maxVisibleItems);
+  const viewport = collapsed
+    ? { startIndex: 0, endIndex: 0, hasMoreAbove: false, hasMoreBelow: false }
+    : calculateViewport(todos, currentTodoIndex, maxVisibleItems);
 
   // Auto-hide when no todos exist - must be after all hooks to maintain consistent hook count
   if (todos.length === 0) {
@@ -203,7 +204,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({
   );
 
   // Upper caret
-  if (hasMoreAbove) {
+  if (viewport.hasMoreAbove) {
     allElements.push(
       <Box key={`upper-caret-${contentKey}`} flexDirection="row" minHeight={1}>
         <Text color={SemanticColors.text.secondary}>▲</Text>
@@ -212,13 +213,13 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({
   }
 
   // Visible todos
-  for (let i = startIndex; i <= endIndex; i++) {
+  for (let i = viewport.startIndex; i <= viewport.endIndex; i++) {
     const todo = todos[i];
     allElements.push(renderCompactTodo(todo, width - 2)); // -2 for padding
   }
 
   // Lower caret
-  if (hasMoreBelow) {
+  if (viewport.hasMoreBelow) {
     allElements.push(
       <Box key={`lower-caret-${contentKey}`} flexDirection="row" minHeight={1}>
         <Text color={SemanticColors.text.secondary}>▼</Text>
