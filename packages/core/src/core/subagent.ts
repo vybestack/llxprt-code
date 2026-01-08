@@ -50,6 +50,7 @@ import {
 import type { SubagentSchedulerFactory } from './subagentScheduler.js';
 import { ToolErrorType } from '../tools/tool-error.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
+import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -342,12 +343,18 @@ function createToolExecutionConfig(
 function buildEphemeralSettings(
   snapshot?: ReadonlySettingsSnapshot,
 ): Record<string, unknown> {
-  const ephemerals: Record<string, unknown> = {
-    emojifilter: 'auto',
-  };
+  const ephemerals: Record<string, unknown> = {};
 
   if (!snapshot) {
+    ephemerals.emojifilter = 'auto';
     return ephemerals;
+  }
+
+  // Read emojifilter from settings snapshot if available
+  if (snapshot.emojifilter !== undefined) {
+    ephemerals.emojifilter = snapshot.emojifilter;
+  } else {
+    ephemerals.emojifilter = 'auto';
   }
 
   if (snapshot.tools?.allowed) {
@@ -420,6 +427,9 @@ export class SubAgentScope {
   private readonly parentAbortSignal?: AbortSignal;
   private parentAbortCleanup?: () => void;
 
+  /** Emoji filter instance for subagent output */
+  private readonly emojiFilter?: EmojiFilter;
+
   /** Optional callback for streaming text messages during execution */
   onMessage?: (message: string) => void;
 
@@ -441,6 +451,7 @@ export class SubAgentScope {
    * @param environmentContextLoader - Function that resolves environment context for prompts.
    * @param toolConfig - Optional configuration for tools available to the subagent.
    * @param outputConfig - Optional configuration for the subagent's expected outputs.
+   * @param settingsSnapshot - Runtime settings snapshot containing emojifilter setting.
    */
   private constructor(
     readonly name: string,
@@ -454,11 +465,31 @@ export class SubAgentScope {
     private readonly config: Config,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
+    settingsSnapshot?: ReadonlySettingsSnapshot,
     parentAbortSignal?: AbortSignal,
   ) {
     const randomPart = Math.random().toString(36).slice(2, 8);
     this.subagentId = `${this.name}-${randomPart}`;
     this.parentAbortSignal = parentAbortSignal;
+
+    // Initialize emoji filter based on subagent and foreground settings
+    this.emojiFilter = this.createEmojiFilter(settingsSnapshot);
+  }
+
+  /**
+   * Creates an emoji filter based on the provided settings snapshot
+   */
+  private createEmojiFilter(
+    settingsSnapshot?: ReadonlySettingsSnapshot,
+  ): EmojiFilter | undefined {
+    const filterMode =
+      (settingsSnapshot?.emojifilter as EmojiFilterMode) ?? 'auto';
+
+    if (filterMode === 'allowed') {
+      return undefined;
+    }
+
+    return new EmojiFilter({ mode: filterMode });
   }
 
   /**
@@ -554,6 +585,7 @@ export class SubAgentScope {
       foregroundConfig,
       toolConfig,
       outputConfig,
+      settingsSnapshot,
       parentSignal,
     );
   }
@@ -711,8 +743,29 @@ export class SubAgentScope {
           }
           if (event.type === GeminiEventType.Content && event.value) {
             textResponse += event.value;
-            if (this.onMessage) {
-              this.onMessage(event.value);
+
+            let messageToSend = event.value;
+            if (this.emojiFilter) {
+              const filterResult = this.emojiFilter.filterText(messageToSend);
+              if (filterResult.blocked) {
+                this.output.terminate_reason = SubagentTerminateMode.ERROR;
+                throw new Error(
+                  filterResult.error ?? 'Content blocked by emoji filter',
+                );
+              }
+              messageToSend =
+                typeof filterResult.filtered === 'string'
+                  ? filterResult.filtered
+                  : '';
+
+              // In warn mode, include system feedback
+              if (filterResult.systemFeedback && this.onMessage) {
+                this.onMessage(filterResult.systemFeedback);
+              }
+            }
+
+            if (this.onMessage && messageToSend) {
+              this.onMessage(messageToSend);
             }
           } else if (
             event.type === GeminiEventType.Error &&
@@ -724,7 +777,21 @@ export class SubAgentScope {
         }
 
         if (textResponse.trim()) {
-          this.output.final_message = textResponse.trim();
+          let finalMessage = textResponse.trim();
+          if (this.emojiFilter) {
+            const filterResult = this.emojiFilter.filterText(finalMessage);
+            if (filterResult.blocked) {
+              this.output.terminate_reason = SubagentTerminateMode.ERROR;
+              throw new Error(
+                filterResult.error ?? 'Content blocked by emoji filter',
+              );
+            }
+            finalMessage =
+              typeof filterResult.filtered === 'string'
+                ? filterResult.filtered
+                : '';
+          }
+          this.output.final_message = finalMessage;
         }
 
         const toolRequests = [...turn.pendingToolCalls];
@@ -978,13 +1045,35 @@ export class SubAgentScope {
         }
 
         if (textResponse) {
-          if (this.onMessage) {
-            this.onMessage(textResponse);
+          const messageToSend = textResponse;
+          let messageToCallback = textResponse;
+
+          if (this.emojiFilter) {
+            const filterResult = this.emojiFilter.filterText(messageToSend);
+            if (filterResult.blocked) {
+              this.output.terminate_reason = SubagentTerminateMode.ERROR;
+              throw new Error(
+                filterResult.error ?? 'Content blocked by emoji filter',
+              );
+            }
+            messageToCallback =
+              typeof filterResult.filtered === 'string'
+                ? filterResult.filtered
+                : '';
+
+            // Include system feedback in warn mode
+            if (filterResult.systemFeedback && this.onMessage) {
+              this.onMessage(filterResult.systemFeedback);
+            }
           }
 
-          let cleanedText = textResponse;
+          if (this.onMessage && messageToCallback) {
+            this.onMessage(messageToCallback);
+          }
+
+          let cleanedText = messageToSend;
           try {
-            const parsedResult = this.textToolParser.parse(textResponse);
+            const parsedResult = this.textToolParser.parse(messageToSend);
             cleanedText = parsedResult.cleanedContent;
             if (parsedResult.toolCalls.length > 0) {
               const synthesizedCalls: FunctionCall[] = [];
@@ -1023,9 +1112,25 @@ export class SubAgentScope {
 
           textResponse = cleanedText;
           const trimmedText = textResponse.trim();
+
           if (trimmedText.length > 0) {
-            this.output.final_message = trimmedText;
+            let finalMessage = trimmedText;
+            if (this.emojiFilter) {
+              const filterResult = this.emojiFilter.filterText(finalMessage);
+              if (filterResult.blocked) {
+                this.output.terminate_reason = SubagentTerminateMode.ERROR;
+                throw new Error(
+                  filterResult.error ?? 'Content blocked by emoji filter',
+                );
+              }
+              finalMessage =
+                typeof filterResult.filtered === 'string'
+                  ? filterResult.filtered
+                  : '';
+            }
+            this.output.final_message = finalMessage;
           }
+
           const preview =
             textResponse.length > 200
               ? `${textResponse.slice(0, 200)}…`

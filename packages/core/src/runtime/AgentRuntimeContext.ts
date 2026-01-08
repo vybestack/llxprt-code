@@ -32,6 +32,8 @@ export interface ReadonlySettingsSnapshot {
     allowed?: string[];
     disabled?: string[];
   };
+  /** Emoji filter mode for subagent output */
+  emojifilter?: 'allowed' | 'auto' | 'warn' | 'error';
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.1 */
   'reasoning.enabled'?: boolean;
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.2 */
