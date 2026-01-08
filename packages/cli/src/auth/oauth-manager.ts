@@ -827,6 +827,12 @@ export class OAuthManager {
         profileBuckets = await this.getProfileBuckets(providerName);
 
         const config = this.getConfig?.();
+        // @fix issue1029 - Enhanced debug logging for failover handler setup
+        logger.debug(
+          () =>
+            `[issue1029] getOAuthToken: provider=${providerName}, buckets=${JSON.stringify(profileBuckets)}, hasConfig=${!!config}`,
+        );
+
         if (config && profileBuckets.length > 1) {
           failoverHandler = config.getBucketFailoverHandler?.();
 
@@ -837,6 +843,11 @@ export class OAuthManager {
               (value, index) => value === profileBuckets[index],
             );
 
+          logger.debug(
+            () =>
+              `[issue1029] Failover handler check: hasExisting=${!!failoverHandler}, sameBuckets=${sameBuckets}, existingBuckets=${JSON.stringify(existingBuckets)}`,
+          );
+
           if (!failoverHandler || !sameBuckets) {
             const handler = new BucketFailoverHandlerImpl(
               profileBuckets,
@@ -845,7 +856,17 @@ export class OAuthManager {
             );
             config.setBucketFailoverHandler(handler);
             failoverHandler = handler;
+            logger.debug(
+              () =>
+                `[issue1029] Created and set new BucketFailoverHandlerImpl on config for ${providerName} with buckets: ${JSON.stringify(profileBuckets)}`,
+            );
           }
+        } else if (profileBuckets.length > 1 && !config) {
+          // @fix issue1029 - This is the bug! We have multiple buckets but no config to set handler on
+          logger.warn(
+            `[issue1029] CRITICAL: Profile has ${profileBuckets.length} buckets but no Config available to set failover handler! ` +
+              `Bucket failover will NOT work. Ensure OAuthManager.setConfigGetter is called with the active Config instance.`,
+          );
         }
 
         if (!bucketToUse) {
