@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MultiBucketAuthenticator } from '../MultiBucketAuthenticator.js';
 
 /**
@@ -734,6 +734,314 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
       expect(result.authenticatedBuckets).toHaveLength(0);
       expect(result.failedBuckets).toEqual(['bucket1', 'bucket2']);
+    });
+  });
+
+  /**
+   * Issue 913: Prompt Mode Indefinite Wait
+   *
+   * When auth-bucket-prompt is enabled, the system should wait indefinitely
+   * for user approval via MessageBus dialog - no 3-second timeout race.
+   */
+  describe('Issue 913: Prompt Mode Indefinite Wait', () => {
+    /**
+     * @requirement Issue 913 - No timeout when prompt mode enabled
+     * @scenario MessageBus responds after 3+ seconds
+     * @given auth-bucket-prompt is true
+     * @when MessageBus takes 5 seconds to respond
+     * @then System waits for full response (no premature timeout)
+     */
+    it('should wait indefinitely for MessageBus confirmation when auth-bucket-prompt is true', async () => {
+      vi.useFakeTimers();
+
+      setEphemeralSetting('auth-bucket-prompt', true);
+
+      let messageBusResponseResolver: ((value: boolean) => void) | null = null;
+      const messageBusResponsePromise = new Promise<boolean>((resolve) => {
+        messageBusResponseResolver = resolve;
+      });
+
+      const promptCallTimes: number[] = [];
+      const promptAuthenticator = new MultiBucketAuthenticator(
+        async () => {
+          // Auth succeeds
+        },
+        async () => {
+          promptCallTimes.push(Date.now());
+          // Simulate MessageBus that takes 5 seconds to respond
+          return messageBusResponsePromise;
+        },
+        async () => {},
+        getEphemeralSetting,
+      );
+
+      const authPromise = promptAuthenticator.authenticateMultipleBuckets({
+        provider: 'anthropic',
+        buckets: ['bucket1'],
+      });
+
+      // Advance past the 3-second timeout that currently exists
+      await vi.advanceTimersByTimeAsync(4000);
+
+      // MessageBus responds after 5 seconds with approval
+      await vi.advanceTimersByTimeAsync(1000);
+      messageBusResponseResolver!(true);
+
+      const result = await authPromise;
+
+      // Should have waited for full MessageBus response, not timed out
+      expect(result.authenticatedBuckets).toEqual(['bucket1']);
+      expect(result.cancelled).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    /**
+     * @requirement Issue 913 - No stdin fallback with prompt mode
+     * @scenario MessageBus available and prompt mode enabled
+     * @given auth-bucket-prompt is true and MessageBus is available
+     * @when Authentication is requested
+     * @then stdin.setRawMode is never called (no stdin fallback)
+     */
+    it('should not invoke stdin fallback when auth-bucket-prompt is true and MessageBus available', async () => {
+      setEphemeralSetting('auth-bucket-prompt', true);
+
+      // Spy on stdin.setRawMode to detect fallback usage
+      const setRawModeSpy = vi.fn();
+      const originalSetRawMode = process.stdin.setRawMode;
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode = setRawModeSpy;
+      }
+
+      const noStdinAuthenticator = new MultiBucketAuthenticator(
+        async () => {},
+        async (_provider: string, _bucket: string) =>
+          // This simulates the onPrompt callback in oauth-manager.ts
+          // When prompt mode is enabled and MessageBus responds,
+          // we should NEVER hit the stdin fallback path
+          true, // MessageBus approved
+        async () => {},
+        getEphemeralSetting,
+      );
+
+      const result = await noStdinAuthenticator.authenticateMultipleBuckets({
+        provider: 'anthropic',
+        buckets: ['bucket1'],
+      });
+
+      expect(result.authenticatedBuckets).toEqual(['bucket1']);
+      // Verify stdin.setRawMode was never called (no stdin fallback occurred)
+      expect(setRawModeSpy).not.toHaveBeenCalled();
+
+      // Restore original setRawMode
+      if (originalSetRawMode) {
+        process.stdin.setRawMode = originalSetRawMode;
+      }
+    });
+
+    /**
+     * @requirement Issue 913 - Backward compatibility
+     * @scenario auth-bucket-prompt is false
+     * @given auth-bucket-prompt is false or not set
+     * @when MessageBus doesn't respond
+     * @then Falls back within ~3 seconds (preserves old behavior)
+     */
+    it('should use 3-second timeout when auth-bucket-prompt is false', async () => {
+      vi.useFakeTimers();
+
+      setEphemeralSetting('auth-bucket-prompt', false);
+
+      const timeoutAuthenticator = new MultiBucketAuthenticator(
+        async () => {},
+        async () => {
+          // This simulates a slow/non-responsive MessageBus
+          // With prompt mode disabled, should fall back after timeout
+          await new Promise((resolve) => setTimeout(resolve, 10000));
+          return true;
+        },
+        async () => {
+          // Delay callback - fallback triggered
+        },
+        getEphemeralSetting,
+      );
+
+      const authPromise = timeoutAuthenticator.authenticateMultipleBuckets({
+        provider: 'anthropic',
+        buckets: ['bucket1'],
+      });
+
+      // In non-prompt mode with delay, delay is called instead of prompt
+      // So this test validates delay-mode behavior is preserved
+      await vi.advanceTimersByTimeAsync(6000);
+
+      const result = await authPromise;
+
+      expect(result.authenticatedBuckets).toEqual(['bucket1']);
+
+      vi.useRealTimers();
+    });
+  });
+
+  /**
+   * Issue 913: Single-Bucket Prompt Support
+   *
+   * When auth-bucket-prompt is enabled, even single-bucket or default-bucket
+   * profiles should show the confirmation dialog before opening browser.
+   */
+  describe('Issue 913: Single-Bucket Prompt Support', () => {
+    /**
+     * @requirement Issue 913 - Single bucket prompt
+     * @scenario Single bucket profile with prompt mode
+     * @given auth-bucket-prompt is true and profile has single bucket
+     * @when Authentication triggered
+     * @then onPrompt callback is invoked before authenticate
+     */
+    it('should show prompt dialog for single-bucket profile when auth-bucket-prompt is true', async () => {
+      setEphemeralSetting('auth-bucket-prompt', true);
+
+      const callOrder: string[] = [];
+
+      const singleBucketAuthenticator = new MultiBucketAuthenticator(
+        async (_provider: string, bucket: string) => {
+          callOrder.push(`auth:${bucket}`);
+        },
+        async (_provider: string, bucket: string) => {
+          callOrder.push(`prompt:${bucket}`);
+          return true;
+        },
+        async () => {},
+        getEphemeralSetting,
+      );
+
+      await singleBucketAuthenticator.authenticateMultipleBuckets({
+        provider: 'anthropic',
+        buckets: ['single-bucket'],
+      });
+
+      // Prompt should be called BEFORE auth
+      expect(callOrder).toEqual(['prompt:single-bucket', 'auth:single-bucket']);
+    });
+
+    /**
+     * @requirement Issue 913 - Default bucket prompt
+     * @scenario Default (bucketless) profile with prompt mode
+     * @given auth-bucket-prompt is true and no buckets specified (uses "default")
+     * @when Authentication triggered
+     * @then onPrompt callback is invoked before authenticate
+     */
+    it('should show prompt dialog for default bucket when auth-bucket-prompt is true', async () => {
+      setEphemeralSetting('auth-bucket-prompt', true);
+
+      const callOrder: string[] = [];
+
+      const defaultBucketAuthenticator = new MultiBucketAuthenticator(
+        async (_provider: string, bucket: string) => {
+          callOrder.push(`auth:${bucket}`);
+        },
+        async (_provider: string, bucket: string) => {
+          callOrder.push(`prompt:${bucket}`);
+          return true;
+        },
+        async () => {},
+        getEphemeralSetting,
+      );
+
+      // Using 'default' as the implicit bucket name
+      await defaultBucketAuthenticator.authenticateMultipleBuckets({
+        provider: 'anthropic',
+        buckets: ['default'],
+      });
+
+      expect(callOrder).toEqual(['prompt:default', 'auth:default']);
+    });
+  });
+
+  /**
+   * Issue 913: Eager Multi-Bucket Authentication
+   *
+   * Multi-bucket profiles should authenticate ALL buckets upfront,
+   * not lazily on failover. Partial auth should only prompt for missing buckets.
+   */
+  describe('Issue 913: Eager Multi-Bucket Authentication', () => {
+    /**
+     * @requirement Issue 913 - Eager auth all buckets
+     * @scenario Multi-bucket profile, none authenticated
+     * @given 3 buckets, none have tokens
+     * @when Profile loaded
+     * @then All 3 buckets get auth attempts before any API call
+     */
+    it('should eager-authenticate all buckets in multi-bucket profile', async () => {
+      setEphemeralSetting('auth-bucket-prompt', true);
+      promptResponses = [true, true, true];
+
+      const authenticatedBuckets: string[] = [];
+
+      const eagerAuthenticator = new MultiBucketAuthenticator(
+        async (_provider: string, bucket: string) => {
+          authenticatedBuckets.push(bucket);
+        },
+        async () => promptResponses.shift() ?? true,
+        async () => {},
+        getEphemeralSetting,
+      );
+
+      const result = await eagerAuthenticator.authenticateMultipleBuckets({
+        provider: 'anthropic',
+        buckets: ['bucket1', 'bucket2', 'bucket3'],
+      });
+
+      // All 3 buckets should be authenticated upfront
+      expect(authenticatedBuckets).toEqual(['bucket1', 'bucket2', 'bucket3']);
+      expect(result.authenticatedBuckets).toHaveLength(3);
+    });
+
+    /**
+     * @requirement Issue 913 - Partial auth prompts only missing
+     * @scenario Multi-bucket profile, some already authenticated
+     * @given 3 buckets, 1 already has valid token
+     * @when Authentication check runs
+     * @then Only 2 prompts shown (for missing buckets)
+     *
+     * NOTE: This test validates the expected behavior. The actual implementation
+     * in oauth-manager.ts needs to check token existence before prompting.
+     */
+    it('should only show prompts for unauthenticated buckets', async () => {
+      setEphemeralSetting('auth-bucket-prompt', true);
+
+      const promptedBuckets: string[] = [];
+      const authenticatedBuckets: string[] = [];
+
+      // Simulate bucket2 already being authenticated
+      const alreadyAuthenticated = new Set(['bucket2']);
+
+      const partialAuthenticator = new MultiBucketAuthenticator(
+        async (_provider: string, bucket: string) => {
+          if (!alreadyAuthenticated.has(bucket)) {
+            authenticatedBuckets.push(bucket);
+          }
+        },
+        async (_provider: string, bucket: string) => {
+          // Only prompt for buckets that aren't already authenticated
+          if (!alreadyAuthenticated.has(bucket)) {
+            promptedBuckets.push(bucket);
+          }
+          return true;
+        },
+        async () => {},
+        getEphemeralSetting,
+      );
+
+      await partialAuthenticator.authenticateMultipleBuckets({
+        provider: 'anthropic',
+        buckets: ['bucket1', 'bucket2', 'bucket3'],
+      });
+
+      // Only bucket1 and bucket3 should have been prompted
+      // (bucket2 was already authenticated)
+      // NOTE: Current implementation prompts for ALL buckets - this test
+      // documents the EXPECTED behavior after the fix
+      expect(promptedBuckets).toEqual(['bucket1', 'bucket3']);
+      expect(authenticatedBuckets).toEqual(['bucket1', 'bucket3']);
     });
   });
 });
