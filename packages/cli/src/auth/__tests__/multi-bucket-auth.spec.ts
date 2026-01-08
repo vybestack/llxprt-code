@@ -806,7 +806,12 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
     it('should not invoke stdin fallback when auth-bucket-prompt is true and MessageBus available', async () => {
       setEphemeralSetting('auth-bucket-prompt', true);
 
-      const stdinFallbackInvoked = false;
+      // Spy on stdin.setRawMode to detect fallback usage
+      const setRawModeSpy = vi.fn();
+      const originalSetRawMode = process.stdin.setRawMode;
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode = setRawModeSpy;
+      }
 
       const noStdinAuthenticator = new MultiBucketAuthenticator(
         async () => {},
@@ -816,24 +821,22 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
           // we should NEVER hit the stdin fallback path
           true, // MessageBus approved
         async () => {},
-        (key: string) => {
-          if (key === 'auth-bucket-prompt') {
-            return true as unknown as undefined;
-          }
-          return getEphemeralSetting(key);
-        },
+        getEphemeralSetting,
       );
 
-      // Note: The actual stdin fallback detection would require testing
-      // oauth-manager.ts directly. This test validates the MultiBucketAuthenticator
-      // doesn't trigger fallback when prompt returns true.
       const result = await noStdinAuthenticator.authenticateMultipleBuckets({
         provider: 'anthropic',
         buckets: ['bucket1'],
       });
 
       expect(result.authenticatedBuckets).toEqual(['bucket1']);
-      expect(stdinFallbackInvoked).toBe(false);
+      // Verify stdin.setRawMode was never called (no stdin fallback occurred)
+      expect(setRawModeSpy).not.toHaveBeenCalled();
+
+      // Restore original setRawMode
+      if (originalSetRawMode) {
+        process.stdin.setRawMode = originalSetRawMode;
+      }
     });
 
     /**

@@ -258,7 +258,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
      * The actual implementation change is in oauth-manager.ts to check
      * existing tokens before prompting.
      */
-    it('should only prompt for unauthenticated buckets in multi-bucket profile', async () => {
+    it.skip('should only prompt for unauthenticated buckets in multi-bucket profile (requires profile-level integration)', async () => {
       setMockEphemeralSetting('auth-bucket-prompt', true);
 
       // Pre-authenticate bucket2
@@ -285,14 +285,12 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
       manager.setMessageBus(() => messageBus);
       await manager.toggleOAuthEnabled('anthropic');
 
-      // This would require profile-level integration to fully test
-      // For now, we document the expected behavior:
+      // This test requires profile-level integration to fully test.
+      // The expected behavior when implemented:
       // - bucket1 should be prompted
       // - bucket2 should be SKIPPED (already has token)
       // - bucket3 should be prompted
-
       // With the FIX: promptedBuckets would be ['bucket1', 'bucket3']
-      // This test serves as documentation of expected behavior
     });
   });
 });
