@@ -2,7 +2,7 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P04
  * @requirement REQ-001,REQ-002,REQ-006
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fc from 'fast-check';
 import { DebugLogger } from './DebugLogger.js';
 import { ConfigurationManager } from './ConfigurationManager.js';
@@ -15,6 +15,11 @@ describe('DebugLogger', () => {
     configManager.setEphemeralConfig({
       output: { target: 'file,stderr' },
     });
+  });
+
+  afterEach(() => {
+    // Clean up all loggers created during tests
+    DebugLogger.disposeAll();
   });
 
   /**
@@ -782,5 +787,80 @@ describe('DebugLogger', () => {
       expect(anthropicLogger.checkEnabled()).toBe(true);
       expect(streamingLogger.checkEnabled()).toBe(false);
     });
+  });
+});
+
+describe('DebugLogger Factory', () => {
+  afterEach(() => {
+    // Clean up all loggers after each test
+    DebugLogger.disposeAll();
+  });
+
+  it('should return the same instance for the same namespace', () => {
+    const logger1 = DebugLogger.getLogger('llxprt:test:factory');
+    const logger2 = DebugLogger.getLogger('llxprt:test:factory');
+    expect(logger1).toBe(logger2); // Same instance
+  });
+
+  it('should return different instances for different namespaces', () => {
+    const logger1 = DebugLogger.getLogger('llxprt:test:one');
+    const logger2 = DebugLogger.getLogger('llxprt:test:two');
+    expect(logger1).not.toBe(logger2);
+  });
+
+  it('should dispose all instances and allow re-creation', () => {
+    const logger1 = DebugLogger.getLogger('llxprt:test:dispose');
+    DebugLogger.disposeAll();
+    const logger2 = DebugLogger.getLogger('llxprt:test:dispose');
+    expect(logger1).not.toBe(logger2); // New instance after dispose
+  });
+
+  it('should not accumulate subscriptions when getting same namespace multiple times', () => {
+    const configManager = ConfigurationManager.getInstance();
+    const initialListenerCount = (
+      configManager as unknown as { listeners: Set<() => void> }
+    ).listeners.size;
+
+    // Get the same logger 100 times
+    for (let i = 0; i < 100; i++) {
+      DebugLogger.getLogger('llxprt:test:no-leak');
+    }
+
+    const finalListenerCount = (
+      configManager as unknown as { listeners: Set<() => void> }
+    ).listeners.size;
+    // Should only have 1 new listener, not 100
+    expect(finalListenerCount - initialListenerCount).toBe(1);
+  });
+
+  it('should allow dispose() to remove instance from registry', async () => {
+    const logger = DebugLogger.getLogger('llxprt:test:dispose-single');
+    await logger.dispose();
+
+    // After dispose, getLogger should create a new instance
+    const logger2 = DebugLogger.getLogger('llxprt:test:dispose-single');
+    expect(logger).not.toBe(logger2);
+  });
+
+  it('should remove subscription on dispose()', async () => {
+    const configManager = ConfigurationManager.getInstance();
+    DebugLogger.disposeAll(); // Clean up first
+
+    const initialListenerCount = (
+      configManager as unknown as { listeners: Set<() => void> }
+    ).listeners.size;
+    const logger = DebugLogger.getLogger('llxprt:test:dispose-subscription');
+    const afterCreateListenerCount = (
+      configManager as unknown as { listeners: Set<() => void> }
+    ).listeners.size;
+
+    expect(afterCreateListenerCount - initialListenerCount).toBe(1);
+
+    await logger.dispose();
+    const afterDisposeListenerCount = (
+      configManager as unknown as { listeners: Set<() => void> }
+    ).listeners.size;
+
+    expect(afterDisposeListenerCount).toBe(initialListenerCount);
   });
 });

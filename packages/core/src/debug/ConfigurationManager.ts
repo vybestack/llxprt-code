@@ -180,6 +180,18 @@ export class ConfigurationManager {
     this.mergeConfigurations();
   }
 
+  clearEphemeralConfig(): void {
+    this.ephemeralConfig = null;
+    this.mergeConfigurations();
+  }
+
+  /**
+   * Reset the singleton instance (for testing)
+   */
+  static resetForTesting(): void {
+    ConfigurationManager.instance = undefined;
+  }
+
   // Line 123-150: Persist ephemeral to user config
   persistEphemeralConfig(): void {
     if (!this.ephemeralConfig) {
