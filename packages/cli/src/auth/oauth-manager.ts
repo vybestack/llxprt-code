@@ -673,17 +673,46 @@ export class OAuthManager {
 
     // For other providers, trigger OAuth flow
     // Check if the current profile has multiple buckets - if so, use MultiBucketAuthenticator
+    // Issue 913: Also check if auth-bucket-prompt is enabled for single/default buckets
     logger.debug(
       () =>
         `[FLOW] No existing token for ${providerName}, triggering OAuth flow...`,
     );
     try {
       const buckets = await this.getProfileBuckets(providerName);
+
+      // Issue 913 FIX: When auth-bucket-prompt is enabled, route ALL profiles through
+      // MultiBucketAuthenticator to ensure the confirmation dialog is shown
+      // Import getEphemeralSetting dynamically to avoid circular dependencies
+      // Wrap in try-catch to handle cases where runtime context is not available (e.g., tests)
+      let showPrompt = false;
+      try {
+        const { getEphemeralSetting: getRuntimeEphemeralSetting } =
+          await import('../runtime/runtimeSettings.js');
+        showPrompt =
+          (getRuntimeEphemeralSetting('auth-bucket-prompt') as boolean) ??
+          false;
+      } catch (runtimeError) {
+        // Runtime context not available (e.g., in tests) - fall back to non-prompt mode
+        logger.debug(
+          'Could not get ephemeral setting (runtime not initialized), using default',
+          runtimeError,
+        );
+      }
+
       if (buckets.length > 1) {
         logger.debug(
           `Multi-bucket lazy auth triggered for ${providerName} with ${buckets.length} buckets`,
         );
         await this.authenticateMultipleBuckets(providerName, buckets);
+      } else if (showPrompt) {
+        // Issue 913: Single/default bucket with prompt mode - use MultiBucketAuthenticator
+        // to ensure the confirmation dialog is shown before opening browser
+        const effectiveBuckets = buckets.length === 1 ? buckets : ['default'];
+        logger.debug(
+          `Single-bucket auth with prompt mode for ${providerName}, bucket: ${effectiveBuckets[0]}`,
+        );
+        await this.authenticateMultipleBuckets(providerName, effectiveBuckets);
       } else {
         await this.authenticate(providerName);
       }
@@ -1563,6 +1592,9 @@ export class OAuthManager {
   /**
    * Authenticate multiple OAuth buckets sequentially using MultiBucketAuthenticator
    * with timing controls (delay/prompt) and browser auto-open settings
+   *
+   * Issue 913: This method now supports eager authentication of all buckets upfront,
+   * filtering out already-authenticated buckets to avoid unnecessary prompts.
    */
   private async authenticateMultipleBuckets(
     providerName: string,
@@ -1584,6 +1616,44 @@ export class OAuthManager {
       typeof: typeof rawBucketPrompt,
     });
 
+    // Issue 913 FIX: Filter out already-authenticated buckets for eager auth
+    // Only prompt/authenticate buckets that don't have valid tokens
+    const unauthenticatedBuckets: string[] = [];
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+
+    for (const bucket of buckets) {
+      const existingToken = await this.tokenStore.getToken(
+        providerName,
+        bucket,
+      );
+      // Check if token exists and is not expired (with 30-second buffer)
+      if (existingToken && existingToken.expiry > nowInSeconds + 30) {
+        logger.debug(`Bucket ${bucket} already authenticated, skipping`, {
+          provider: providerName,
+          bucket,
+          expiry: existingToken.expiry,
+        });
+      } else {
+        unauthenticatedBuckets.push(bucket);
+      }
+    }
+
+    // If all buckets are already authenticated, nothing to do
+    if (unauthenticatedBuckets.length === 0) {
+      logger.debug('All buckets already authenticated', {
+        provider: providerName,
+        bucketCount: buckets.length,
+      });
+      return;
+    }
+
+    logger.debug('Buckets requiring authentication', {
+      provider: providerName,
+      total: buckets.length,
+      needsAuth: unauthenticatedBuckets.length,
+      buckets: unauthenticatedBuckets,
+    });
+
     // Callback to authenticate a single bucket
     const onAuthBucket = async (
       provider: string,
@@ -1603,6 +1673,10 @@ export class OAuthManager {
       provider: string,
       bucket: string,
     ): Promise<boolean> => {
+      // Check if prompt mode is enabled FIRST - this determines timeout behavior
+      // Issue 913: When prompt mode is enabled, wait indefinitely for user approval
+      const showPrompt = getEphemeralSetting<boolean>('auth-bucket-prompt');
+
       // Try interactive TUI prompt if message bus getter is available
       // Use lazy resolution to get message bus after TUI is initialized
       const messageBus = this.getMessageBus?.();
@@ -1611,10 +1685,10 @@ export class OAuthManager {
           logger.debug('Requesting bucket auth confirmation via message bus', {
             provider,
             bucket,
+            promptMode: showPrompt,
           });
 
-          // Request confirmation via message bus with a timeout
-          // If TUI is ready, it will respond; otherwise we fall back to delay
+          // Request confirmation via message bus
           const confirmPromise = messageBus.requestBucketAuthConfirmation(
             provider,
             bucket,
@@ -1622,7 +1696,21 @@ export class OAuthManager {
             buckets.length,
           );
 
-          // Race with a 3-second timeout to give TUI time to respond
+          // Issue 913 FIX: When prompt mode is enabled, wait indefinitely for user approval
+          // The MessageBus has its own 5-minute timeout as an emergency safeguard
+          if (showPrompt) {
+            logger.debug(
+              'Prompt mode enabled - waiting indefinitely for user approval',
+            );
+            const result = await confirmPromise;
+            logger.debug('User responded to bucket auth confirmation', {
+              result,
+            });
+            return result;
+          }
+
+          // Prompt mode disabled: Race with a 3-second timeout for backward compatibility
+          // If TUI is ready, it will respond; otherwise we fall back to delay
           const timeoutPromise = new Promise<'timeout'>((resolve) =>
             setTimeout(() => resolve('timeout'), 3000),
           );
@@ -1648,7 +1736,6 @@ export class OAuthManager {
       }
 
       // TUI not available or timed out - try stdin if TTY and prompt enabled
-      const showPrompt = getEphemeralSetting<boolean>('auth-bucket-prompt');
       logger.debug('Checking TTY prompt fallback', {
         showPrompt,
         isTTY: process.stdin.isTTY,
@@ -1753,14 +1840,15 @@ export class OAuthManager {
       getEphemeralSetting,
     });
 
+    // Issue 913: Use unauthenticatedBuckets for the actual auth flow
     const result = await authenticator.authenticateMultipleBuckets({
       provider: providerName,
-      buckets,
+      buckets: unauthenticatedBuckets,
     });
 
     if (result.cancelled) {
       throw new Error(
-        `Multi-bucket authentication cancelled after ${result.authenticatedBuckets.length} of ${buckets.length} buckets`,
+        `Multi-bucket authentication cancelled after ${result.authenticatedBuckets.length} of ${unauthenticatedBuckets.length} buckets`,
       );
     }
 
