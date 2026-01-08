@@ -39,6 +39,24 @@ export interface FilterResult {
 type CompiledRegexArray = RegExp[];
 
 /**
+ * Gets the most restrictive filter mode from two modes
+ * Hierarchy: error > warn > auto > allowed
+ */
+export function getMostRestrictiveFilter(
+  mode1: EmojiFilterMode,
+  mode2: EmojiFilterMode,
+): EmojiFilterMode {
+  const priority: Record<EmojiFilterMode, number> = {
+    allowed: 0,
+    auto: 1,
+    warn: 2,
+    error: 3,
+  };
+
+  return priority[mode1] >= priority[mode2] ? mode1 : mode2;
+}
+
+/**
  * EmojiFilter class for filtering emojis from various content types
  * @pseudocode lines 01-186
  */
