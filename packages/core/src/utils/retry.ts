@@ -362,6 +362,14 @@ export async function retryWithBackoff<T>(
           is402 ||
           (is401 && consecutive401s > 1));
 
+      // @fix issue1029 - Enhanced debug logging for failover decision
+      logger.debug(
+        () =>
+          `[issue1029] Failover decision: errorStatus=${errorStatus}, is429=${is429}, is402=${is402}, is401=${is401}, ` +
+          `consecutive429s=${consecutive429s}, consecutive401s=${consecutive401s}, ` +
+          `canAttemptFailover=${canAttemptFailover}, shouldAttemptFailover=${shouldAttemptFailover}`,
+      );
+
       // Attempt bucket failover after threshold consecutive 429 errors
       // @plan PLAN-20251213issue490 Bucket failover integration
       if (shouldAttemptFailover && options?.onPersistent429) {
@@ -374,6 +382,11 @@ export async function retryWithBackoff<T>(
         const failoverResult = await options.onPersistent429(
           options.authType,
           error,
+        );
+
+        logger.debug(
+          () =>
+            `[issue1029] onPersistent429 callback returned: ${failoverResult === null ? 'null (no handler)' : failoverResult}`,
         );
 
         if (failoverResult === true || typeof failoverResult === 'string') {
@@ -394,7 +407,18 @@ export async function retryWithBackoff<T>(
           );
           throw error;
         }
-        // failoverResult === null means continue with normal retry
+        // failoverResult === null means continue with normal retry (no failover handler configured)
+        logger.debug(
+          () =>
+            `[issue1029] Failover returned null - no failover handler configured, continuing with normal retry`,
+        );
+      } else if (is429 && !canAttemptFailover) {
+        // @fix issue1029 - Log when we hit 429 but can't attempt failover
+        logger.debug(
+          () =>
+            `[issue1029] Got 429 error but canAttemptFailover=false (no onPersistent429 callback). ` +
+            `This means bucket failover is not wired for this request.`,
+        );
       }
 
       const shouldRetry = shouldRetryOnError(error as Error);

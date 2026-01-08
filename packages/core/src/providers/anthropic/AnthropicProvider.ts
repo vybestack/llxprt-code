@@ -1580,14 +1580,68 @@ export class AnthropicProvider extends BaseProvider {
 
     // Bucket failover callback for 429 errors
     // @plan PLAN-20251213issue686 Bucket failover integration for AnthropicProvider
+    // @fix issue1029 - Enhanced failover handler lookup with multiple config sources
     const logger = this.getLogger();
     const onPersistent429Callback = async (): Promise<boolean | null> => {
-      // Try to get the bucket failover handler from runtime context config
-      const failoverHandler =
-        options.runtime?.config?.getBucketFailoverHandler();
+      // Try to get the bucket failover handler from multiple config sources
+      // Issue 1029: The handler may be set on a different Config instance than options.runtime?.config
+      // We need to check multiple sources to find it
+      const runtimeConfig = options.runtime?.config;
+      const optionsConfig = options.config;
+      const globalConfig = this.globalConfig;
+
+      // Debug logging to diagnose failover handler availability
+      logger.debug(
+        () =>
+          `[issue1029] Checking failover handler availability: ` +
+          `hasRuntimeConfig=${!!runtimeConfig}, ` +
+          `hasOptionsConfig=${!!optionsConfig}, ` +
+          `hasGlobalConfig=${!!globalConfig}`,
+      );
+
+      // Try to get failover handler from multiple config sources
+      let failoverHandler = runtimeConfig?.getBucketFailoverHandler?.();
+
+      if (!failoverHandler && optionsConfig) {
+        failoverHandler = optionsConfig.getBucketFailoverHandler?.();
+        if (failoverHandler) {
+          logger.debug(
+            () =>
+              '[issue1029] Found failover handler on options.config (not runtime.config)',
+          );
+        }
+      }
+
+      if (!failoverHandler && globalConfig) {
+        failoverHandler = globalConfig.getBucketFailoverHandler?.();
+        if (failoverHandler) {
+          logger.debug(
+            () =>
+              '[issue1029] Found failover handler on globalConfig (not runtime.config)',
+          );
+        }
+      }
+
+      // Log detailed state for debugging
+      if (failoverHandler) {
+        logger.debug(
+          () =>
+            `[issue1029] Failover handler found: enabled=${failoverHandler.isEnabled()}, ` +
+            `currentBucket=${failoverHandler.getCurrentBucket() ?? 'undefined'}, ` +
+            `buckets=${JSON.stringify(failoverHandler.getBuckets?.() ?? [])}`,
+        );
+      } else {
+        logger.debug(
+          () =>
+            '[issue1029] No failover handler found on any config. ' +
+            'Bucket failover will NOT be attempted. ' +
+            'Check that profile has auth.buckets configured and OAuthManager.setConfigGetter is wired.',
+        );
+      }
 
       if (failoverHandler && failoverHandler.isEnabled()) {
         logger.debug(() => 'Attempting bucket failover on persistent 429');
+        const currentBucket = failoverHandler.getCurrentBucket();
         const success = await failoverHandler.tryFailover();
         if (success) {
           // Clear runtime-scoped auth cache so subsequent auth resolution can pick up the new bucket.
@@ -1608,19 +1662,27 @@ export class AnthropicProvider extends BaseProvider {
             options.resolved.telemetry,
           );
           failoverClient = newClient;
+          const newBucket = failoverHandler.getCurrentBucket();
           logger.debug(
             () =>
-              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
+              `Bucket failover successful: ${currentBucket} -> ${newBucket}`,
           );
           return true; // Signal retry with new bucket
         }
         logger.debug(
-          () => 'Bucket failover failed - no more buckets available',
+          () =>
+            `Bucket failover failed - no more buckets available after ${currentBucket}`,
         );
         return false; // No more buckets, stop retrying
       }
 
-      // No bucket failover configured
+      // No bucket failover configured or not enabled
+      if (failoverHandler && !failoverHandler.isEnabled()) {
+        logger.debug(
+          () =>
+            '[issue1029] Failover handler exists but is NOT enabled (likely single bucket profile)',
+        );
+      }
       return null;
     };
 
