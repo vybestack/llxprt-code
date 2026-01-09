@@ -93,6 +93,8 @@ export default defineConfig({
       // ThinkingBlockDisplay test excluded - ink-testing-library doesn't render styled Text in NO_COLOR mode
       // Include useGeminiStream thinking test for Phase P07
       'src/ui/hooks/useGeminiStream.thinking.test.tsx',
+      // Include useGeminiStream dedup test for issue #1040
+      'src/ui/hooks/useGeminiStream.dedup.test.tsx',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',

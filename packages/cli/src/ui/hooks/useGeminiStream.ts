@@ -1016,7 +1016,21 @@ export const useGeminiStream = (
         }
       }
       if (toolCallRequests.length > 0) {
-        scheduleToolCalls(toolCallRequests, signal);
+        // Issue #1040: Deduplicate tool call requests by callId to prevent
+        // the same command from being executed twice. This can happen when
+        // the provider stream emits the same tool call multiple times.
+        const seenCallIds = new Set<string>();
+        const dedupedToolCallRequests = toolCallRequests.filter((request) => {
+          if (seenCallIds.has(request.callId)) {
+            return false;
+          }
+          seenCallIds.add(request.callId);
+          return true;
+        });
+
+        if (dedupedToolCallRequests.length > 0) {
+          scheduleToolCalls(dedupedToolCallRequests, signal);
+        }
       }
       return StreamProcessingStatus.Completed;
     },

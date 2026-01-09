@@ -416,6 +416,9 @@ export class CoreToolScheduler {
   // Track the abort signal for each tool call so we can use it when handling
   // confirmation responses from the message bus
   private callIdToSignal: Map<string, AbortSignal> = new Map();
+  private processedConfirmations: Set<string> = new Set();
+  // Track all callIds seen at the scheduler boundary to prevent duplicate execution
+  private seenCallIds: Set<string> = new Set();
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -534,6 +537,8 @@ export class CoreToolScheduler {
       this.messageBusUnsubscribe = undefined;
     }
     this.pendingConfirmations.clear();
+    this.processedConfirmations.clear();
+    this.seenCallIds.clear();
 
     // Clean up any pending stale correlation ID timeouts
     for (const timeout of this.staleCorrelationIds.values()) {
@@ -881,9 +886,24 @@ export class CoreToolScheduler {
         }
         return req;
       });
+
+      // Filter out duplicate calls at the scheduler boundary to prevent duplicate execution
+      const freshRequests = requestsToProcess.filter(
+        (r) => !this.seenCallIds.has(r.callId),
+      );
+      for (const req of freshRequests) {
+        this.seenCallIds.add(req.callId);
+      }
+      if (freshRequests.length === 0) {
+        // All calls were duplicates, nothing to do
+        return;
+      }
+
+      // Use only fresh requests for all subsequent processing
+      const requestsToProcessActual = freshRequests;
       const governance = buildToolGovernance(this.config);
 
-      const newToolCalls: ToolCall[] = requestsToProcess.map(
+      const newToolCalls: ToolCall[] = requestsToProcessActual.map(
         (reqInfo): ToolCall => {
           if (isToolBlocked(reqInfo.name, governance)) {
             const errorMessage = `Tool "${reqInfo.name}" is disabled in the current profile.`;
@@ -1096,6 +1116,16 @@ export class CoreToolScheduler {
     payload?: ToolConfirmationPayload,
     skipBusPublish = false,
   ): Promise<void> {
+    if (this.processedConfirmations.has(callId)) {
+      if (toolSchedulerLogger.enabled) {
+        toolSchedulerLogger.debug(
+          () => `Skipping duplicate confirmation for callId=${callId}`,
+        );
+      }
+      return;
+    }
+    this.processedConfirmations.add(callId);
+
     const toolCall = this.toolCalls.find(
       (c) => c.request.callId === callId && c.status === 'awaiting_approval',
     );
@@ -1156,6 +1186,9 @@ export class CoreToolScheduler {
           correlationId: newCorrelationId,
         } as ToolCallConfirmationDetails;
         this.pendingConfirmations.set(newCorrelationId, callId);
+        // Remove from processedConfirmations so the tool can be confirmed again
+        // after editor modification
+        this.processedConfirmations.delete(callId);
         const context = this.getPolicyContextFromInvocation(
           waitingToolCall.invocation,
           waitingToolCall.request,
@@ -1827,6 +1860,8 @@ export class CoreToolScheduler {
     this.currentBatchSize = 0;
     this.isPublishingBufferedResults = false;
     this.pendingPublishRequest = false;
+    this.processedConfirmations.clear();
+    this.seenCallIds.clear();
 
     // 3. Cancel all active tool calls
     this.toolCalls = this.toolCalls.map((call) => {

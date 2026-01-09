@@ -2779,4 +2779,121 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
     expect(finalCalls.length).toBe(2);
     expect(finalCalls.every((c) => c.status === 'cancelled')).toBe(true);
   });
+
+  it('should prevent duplicate tool execution when handleConfirmationResponse is called twice with same call ID', async () => {
+    const mockTool = new MockTool();
+    mockTool.shouldConfirm = true;
+    const declarativeTool = mockTool;
+    const mockToolRegistry = {
+      getTool: () => declarativeTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByName: () => declarativeTool,
+      getToolByDisplayName: () => declarativeTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    } as unknown as ToolRegistry;
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+
+    const mockMessageBus = createMockMessageBus();
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getEphemeralSettings: () => ({}),
+      getAllowedTools: () => [],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+      getToolRegistry: () => mockToolRegistry,
+      getMessageBus: () => mockMessageBus,
+      getPolicyEngine: () => mockPolicyEngine,
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    const request = {
+      callId: 'duplicate-test-call',
+      name: 'mockTool',
+      args: { id: 1 },
+      isClientInitiated: false,
+      prompt_id: 'test',
+    };
+
+    // Schedule the tool
+    const schedulePromise = scheduler.schedule(
+      [request],
+      new AbortController().signal,
+    );
+
+    // Wait for tool to reach awaiting_approval
+    const waitingCall = await waitForStatus(
+      onToolCallsUpdate,
+      'awaiting_approval',
+    );
+    expect(waitingCall).toBeDefined();
+    expect(waitingCall?.status).toBe('awaiting_approval');
+
+    // Get the confirmation details
+    const confirmationDetails = (waitingCall as WaitingToolCall)
+      .confirmationDetails;
+    expect(confirmationDetails).toBeDefined();
+
+    // Simulate calling handleConfirmationResponse twice with the same call ID
+    // The first call should proceed with execution
+    const firstPromise = scheduler.handleConfirmationResponse(
+      request.callId,
+      confirmationDetails.onConfirm,
+      ToolConfirmationOutcome.ProceedOnce,
+      new AbortController().signal,
+      undefined,
+      true,
+    );
+
+    // The second call (simulating a duplicate) should be prevented
+    const secondPromise = scheduler.handleConfirmationResponse(
+      request.callId,
+      confirmationDetails.onConfirm,
+      ToolConfirmationOutcome.ProceedOnce,
+      new AbortController().signal,
+      undefined,
+      true,
+    );
+
+    // Wait for both promises to complete
+    await firstPromise;
+    await secondPromise;
+
+    // Wait for completion
+    await schedulePromise;
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
+
+    // Verify the tool executed only once (status is success)
+    const completedCalls = onAllToolCallsComplete.mock
+      .calls[0][0] as ToolCall[];
+    expect(completedCalls.length).toBe(1);
+    expect(completedCalls[0].status).toBe('success');
+    expect(completedCalls[0].request.callId).toBe('duplicate-test-call');
+  });
 });
