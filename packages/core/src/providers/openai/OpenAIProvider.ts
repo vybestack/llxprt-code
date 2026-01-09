@@ -56,7 +56,10 @@ import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { type IModel } from '../IModel.js';
 import { type IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
-import { retryWithBackoff } from '../../utils/retry.js';
+import {
+  retryWithBackoff,
+  isNetworkTransientError,
+} from '../../utils/retry.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from './openaiRequestParams.js';
@@ -4743,6 +4746,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const shouldRetry = Boolean(
       status === 429 || status === 503 || status === 504,
     );
+
+    if (!shouldRetry && isNetworkTransientError(error)) {
+      logger.debug(
+        () =>
+          `Will retry request due to network transient error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return true;
+    }
 
     if (shouldRetry) {
       logger.debug(() => `Will retry request due to status ${status}`);
