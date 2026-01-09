@@ -29,6 +29,11 @@ import { CompressionStatus } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
 import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
+import {
+  COMPRESSION_PRESERVE_THRESHOLD,
+  COMPRESSION_TOKEN_THRESHOLD,
+  COMPRESSION_TOP_PRESERVE_THRESHOLD,
+} from './compression-config.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
@@ -51,10 +56,6 @@ import {
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { tokenLimit } from './tokenLimits.js';
-import {
-  COMPRESSION_TOKEN_THRESHOLD,
-  COMPRESSION_PRESERVE_THRESHOLD,
-} from './compression-config.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext, type IdeContext, type File } from '../ide/ideContext.js';
 import {
@@ -65,7 +66,6 @@ import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
 import { TodoStore } from '../tools/todo-store.js';
 import type { Todo } from '../tools/todo-schemas.js';
-import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -1764,21 +1764,56 @@ export class GeminiClient {
       }
     }
 
-    let compressBeforeIndex = findCompressSplitPoint(
-      curatedHistory,
-      1 - COMPRESSION_PRESERVE_THRESHOLD,
+    // Use sandwich compression: preserve top and bottom, compress middle
+    // Get top preserve threshold from ephemeral settings
+    const topPreserveThreshold = this.config.getEphemeralSetting(
+      'top-preserve-threshold',
+    ) as number | undefined;
+
+    const topThreshold =
+      topPreserveThreshold ?? COMPRESSION_TOP_PRESERVE_THRESHOLD;
+    const bottomThreshold = COMPRESSION_PRESERVE_THRESHOLD;
+
+    // Calculate split points for three-section sandwich compression
+    let compressStartIndex = Math.floor(curatedHistory.length * topThreshold);
+    let compressEndIndex = Math.floor(
+      curatedHistory.length * (1 - bottomThreshold),
     );
-    // Find the first user message after the index. This is the start of the next turn.
-    while (
-      compressBeforeIndex < curatedHistory.length &&
-      (curatedHistory[compressBeforeIndex]?.role === 'model' ||
-        isFunctionResponse(curatedHistory[compressBeforeIndex]))
-    ) {
-      compressBeforeIndex++;
+
+    // Ensure minimum messages to compress
+    if (compressEndIndex - compressStartIndex < 4) {
+      return {
+        originalTokenCount,
+        newTokenCount: originalTokenCount,
+        compressionStatus: CompressionStatus.NOOP,
+      };
     }
 
-    const historyToCompress = curatedHistory.slice(0, compressBeforeIndex);
-    const historyToKeep = curatedHistory.slice(compressBeforeIndex);
+    // Adjust split points to not break tool call boundaries
+    compressStartIndex = findCompressSplitPoint(
+      curatedHistory,
+      compressStartIndex / curatedHistory.length,
+    );
+    compressEndIndex = findCompressSplitPoint(
+      curatedHistory,
+      compressEndIndex / curatedHistory.length,
+    );
+
+    // Ensure we don't invert the splits after boundary adjustment
+    if (compressStartIndex >= compressEndIndex) {
+      return {
+        originalTokenCount,
+        newTokenCount: originalTokenCount,
+        compressionStatus: CompressionStatus.NOOP,
+      };
+    }
+
+    const historyToKeepTop = curatedHistory.slice(0, compressStartIndex);
+    const historyToCompress = curatedHistory.slice(
+      compressStartIndex,
+      compressEndIndex,
+    );
+    const historyToKeepBottom = curatedHistory.slice(compressEndIndex);
 
     if (historyToCompress.length === 0) {
       return {
@@ -1807,6 +1842,7 @@ export class GeminiClient {
     // because we're creating a new compressed conversation state
     // The UI should reflect that compression happened
     const compressedChat = await this.startChat([
+      ...historyToKeepTop.map((h) => ({ role: h.role, parts: h.parts })),
       {
         role: 'user',
         parts: [{ text: summary }],
@@ -1815,7 +1851,7 @@ export class GeminiClient {
         role: 'model',
         parts: [{ text: 'Got it. Thanks for the additional context!' }],
       },
-      ...historyToKeep,
+      ...historyToKeepBottom.map((h) => ({ role: h.role, parts: h.parts })),
     ]);
     this.forceFullIdeContext = true;
 
