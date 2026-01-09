@@ -2150,6 +2150,11 @@ export class GeminiChat {
 
     const currentModel = this.runtimeState.model;
 
+    // Add back the top preserved messages (original intent from start of conversation)
+    for (const content of toKeepTop) {
+      this.historyService.add(content, currentModel);
+    }
+
     // Add compressed summary as user message
     this.historyService.add(
       {
@@ -2173,12 +2178,7 @@ export class GeminiChat {
       currentModel,
     );
 
-    // Add back the top preserved messages
-    for (const content of toKeepTop) {
-      this.historyService.add(content, currentModel);
-    }
-
-    // Add back the bottom preserved messages
+    // Add back the bottom preserved messages (recent context)
     for (const content of toKeepBottom) {
       this.historyService.add(content, currentModel);
     }

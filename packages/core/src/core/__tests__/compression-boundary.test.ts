@@ -495,7 +495,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
         : [];
 
       const allToolCallsHaveResponses = toolCallIds.every((id) =>
-        result.toKeep.some(
+        allKept.some(
           (c) =>
             c.speaker === 'tool' &&
             c.blocks.some(
