@@ -416,6 +416,7 @@ export class CoreToolScheduler {
   // Track the abort signal for each tool call so we can use it when handling
   // confirmation responses from the message bus
   private callIdToSignal: Map<string, AbortSignal> = new Map();
+  private processedConfirmations: Set<string> = new Set();
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -534,6 +535,7 @@ export class CoreToolScheduler {
       this.messageBusUnsubscribe = undefined;
     }
     this.pendingConfirmations.clear();
+    this.processedConfirmations.clear();
 
     // Clean up any pending stale correlation ID timeouts
     for (const timeout of this.staleCorrelationIds.values()) {
@@ -1096,6 +1098,16 @@ export class CoreToolScheduler {
     payload?: ToolConfirmationPayload,
     skipBusPublish = false,
   ): Promise<void> {
+    if (this.processedConfirmations.has(callId)) {
+      if (toolSchedulerLogger.enabled) {
+        toolSchedulerLogger.debug(
+          () => `Skipping duplicate confirmation for callId=${callId}`,
+        );
+      }
+      return;
+    }
+    this.processedConfirmations.add(callId);
+
     const toolCall = this.toolCalls.find(
       (c) => c.request.callId === callId && c.status === 'awaiting_approval',
     );
@@ -1156,6 +1168,9 @@ export class CoreToolScheduler {
           correlationId: newCorrelationId,
         } as ToolCallConfirmationDetails;
         this.pendingConfirmations.set(newCorrelationId, callId);
+        // Remove from processedConfirmations so the tool can be confirmed again
+        // after editor modification
+        this.processedConfirmations.delete(callId);
         const context = this.getPolicyContextFromInvocation(
           waitingToolCall.invocation,
           waitingToolCall.request,
@@ -1827,6 +1842,7 @@ export class CoreToolScheduler {
     this.currentBatchSize = 0;
     this.isPublishingBufferedResults = false;
     this.pendingPublishRequest = false;
+    this.processedConfirmations.clear();
 
     // 3. Cancel all active tool calls
     this.toolCalls = this.toolCalls.map((call) => {
