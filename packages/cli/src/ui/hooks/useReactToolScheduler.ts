@@ -185,14 +185,17 @@ export function useReactToolScheduler(
   );
 
   const mainSchedulerId = useState(() => Symbol('main-scheduler'))[0];
+  const sessionId = useMemo(() => config.getSessionId(), [config]);
+  const [scheduler, setScheduler] = useState<CoreToolScheduler | null>(null);
 
-  // The scheduler MUST be recreated when config changes because:
-  // 1. config.getToolRegistry() returns different instances during initialization
-  // 2. config.getApprovalMode() can change based on user settings
-  // 3. The Gemini client initialization depends on having the latest config
-  const scheduler: CoreToolScheduler = useMemo(
-    () =>
-      new CoreToolScheduler({
+  // Use the singleton scheduler from config to ensure all schedulers in a session
+  // share the same CoreToolScheduler instance, avoiding duplicate MessageBus
+  // subscriptions and "unknown correlationId" errors.
+  useEffect(() => {
+    let mounted = true;
+
+    const initializeScheduler = async () => {
+      const instance = await config.getOrCreateScheduler(sessionId, {
         outputUpdateHandler: (toolCallId, chunk) =>
           updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
         onAllToolCallsComplete: async (completedToolCalls) => {
@@ -207,24 +210,34 @@ export function useReactToolScheduler(
           replaceToolCallsForScheduler(mainSchedulerId, calls);
         },
         getPreferredEditor,
-        config,
         onEditorClose,
         onEditorOpen,
-      }),
-    [
-      config,
-      getPreferredEditor,
-      onEditorClose,
-      mainSchedulerId,
-      onComplete,
-      replaceToolCallsForScheduler,
-      updateToolCallOutput,
-      onEditorOpen,
-    ],
-  );
+      });
+
+      if (mounted) {
+        setScheduler(instance);
+      }
+    };
+
+    initializeScheduler();
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    config,
+    sessionId,
+    mainSchedulerId,
+    onComplete,
+    replaceToolCallsForScheduler,
+    updateToolCallOutput,
+    getPreferredEditor,
+    onEditorClose,
+    onEditorOpen,
+  ]);
 
   const createExternalScheduler = useCallback(
-    (args: Parameters<ExternalSchedulerFactory>[0]) => {
+    async (args: Parameters<ExternalSchedulerFactory>[0]) => {
       const {
         schedulerConfig,
         onAllToolCallsComplete,
@@ -235,8 +248,9 @@ export function useReactToolScheduler(
 
       const schedulerId = Symbol('subagent-scheduler');
 
-      return new CoreToolScheduler({
-        config: schedulerConfig,
+      // Use the shared scheduler instance for this session to avoid multiple
+      // MessageBus subscriptions and "unknown correlationId" errors
+      const instance = await schedulerConfig.getOrCreateScheduler(sessionId, {
         // Only update the local UI state - don't call outputUpdateHandler as well,
         // since that would cause duplicate output (the subagent's outputUpdateHandler
         // calls onMessage which goes to task.updateOutput, creating a second display).
@@ -259,8 +273,18 @@ export function useReactToolScheduler(
         onEditorClose,
         onEditorOpen,
       });
+
+      return {
+        schedule: (
+          request: ToolCallRequestInfo | ToolCallRequestInfo[],
+          signal: AbortSignal,
+        ) => {
+          return instance.schedule(request, signal);
+        },
+      };
     },
     [
+      sessionId,
       getPreferredEditor,
       onEditorClose,
       replaceToolCallsForScheduler,
@@ -268,7 +292,7 @@ export function useReactToolScheduler(
       updateToolCallOutput,
       onEditorOpen,
     ],
-  ) as ExternalSchedulerFactory;
+  ) as unknown as ExternalSchedulerFactory;
 
   type ConfigWithSchedulerFactory = Config & {
     setInteractiveSubagentSchedulerFactory?: (
@@ -299,6 +323,11 @@ export function useReactToolScheduler(
       request: ToolCallRequestInfo | ToolCallRequestInfo[],
       signal: AbortSignal,
     ) => {
+      if (!scheduler) {
+        console.warn('Scheduler not initialized yet');
+        return;
+      }
+
       const ensureAgentId = (
         req: ToolCallRequestInfo,
       ): ToolCallRequestInfo => ({
@@ -353,7 +382,7 @@ export function useReactToolScheduler(
   );
 
   const cancelAllToolCalls = useCallback(() => {
-    scheduler.cancelAll();
+    scheduler?.cancelAll();
   }, [scheduler]);
 
   return [toolCalls, schedule, markToolsAsSubmitted, cancelAllToolCalls];

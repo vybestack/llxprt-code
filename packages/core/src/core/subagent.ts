@@ -41,14 +41,13 @@ import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js'
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import { TodoStore } from '../tools/todo-store.js';
+import type { SubagentSchedulerFactory } from './subagentScheduler.js';
+import { ToolErrorType } from '../tools/tool-error.js';
 import { type ToolResultDisplay } from '../tools/tools.js';
 import {
-  CoreToolScheduler,
   type CompletedToolCall,
   type OutputUpdateHandler,
 } from './coreToolScheduler.js';
-import type { SubagentSchedulerFactory } from './subagentScheduler.js';
-import { ToolErrorType } from '../tools/tool-error.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
 
@@ -684,21 +683,27 @@ export class SubAgentScope {
       }
     };
 
-    const scheduler = options?.schedulerFactory
-      ? options.schedulerFactory({
-          schedulerConfig,
-          onAllToolCallsComplete: handleCompletion,
-          outputUpdateHandler,
-          onToolCallsUpdate: undefined,
-        })
-      : new CoreToolScheduler({
-          config: schedulerConfig,
-          outputUpdateHandler,
-          onAllToolCallsComplete: handleCompletion,
-          onToolCallsUpdate: undefined,
-          getPreferredEditor: () => undefined,
-          onEditorClose: () => {},
-        });
+    const schedulerPromise = options?.schedulerFactory
+      ? Promise.resolve(
+          options.schedulerFactory({
+            schedulerConfig,
+            onAllToolCallsComplete: handleCompletion,
+            outputUpdateHandler,
+            onToolCallsUpdate: undefined,
+          }),
+        )
+      : (async () => {
+          const sessionId = schedulerConfig.getSessionId();
+          return await schedulerConfig.getOrCreateScheduler(sessionId, {
+            outputUpdateHandler,
+            onAllToolCallsComplete: handleCompletion,
+            onToolCallsUpdate: undefined,
+            getPreferredEditor: () => undefined,
+            onEditorClose: () => {},
+          });
+        })();
+
+    const scheduler = await schedulerPromise;
 
     const startTime = Date.now();
     let turnCounter = 0;

@@ -9,7 +9,7 @@ import type {
   TaskStatusUpdateEvent,
   SendStreamingMessageSuccessResponse,
 } from '@a2a-js/sdk';
-import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { expect, vi } from 'vitest';
 
@@ -23,10 +23,6 @@ export function createMockConfig(
     requestConfirmation: vi.fn().mockResolvedValue(true),
     removeAllListeners: vi.fn(),
     listenerCount: vi.fn().mockReturnValue(0),
-  };
-
-  const defaultPolicyEngine = {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK_USER),
   };
 
   const mockConfig = {
@@ -55,7 +51,21 @@ export function createMockConfig(
     getEmbeddingModel: vi.fn().mockReturnValue('text-embedding-004'),
     getSessionId: vi.fn().mockReturnValue('test-session-id'),
     getMessageBus: vi.fn().mockReturnValue(defaultMessageBus),
-    getPolicyEngine: vi.fn().mockReturnValue(defaultPolicyEngine),
+    getOrCreateScheduler: vi
+      .fn()
+      .mockImplementation(async (_sessionId: string, _callbacks: any) => {
+        // Mock getOrCreateScheduler for tests
+        // Return a complete mock scheduler with all necessary methods
+        return {
+          schedule: vi.fn().mockResolvedValue(undefined),
+          cancelAll: vi.fn(),
+          dispose: vi.fn(),
+          toolCalls: [],
+          getPreferredEditor: vi.fn(),
+          config: mockConfig,
+          toolRegistry: mockConfig?.getToolRegistry?.() || { getTool: vi.fn() },
+        };
+      }),
     ...overrides,
   };
   return mockConfig;

@@ -82,6 +82,11 @@ import {
 } from '../services/fileSystemService.js';
 import { ProfileManager } from './profileManager.js';
 import { SubagentManager } from './subagentManager.js';
+import {
+  getOrCreateScheduler as _getOrCreateScheduler,
+  disposeScheduler as _disposeScheduler,
+  type SchedulerCallbacks,
+} from './schedulerSingleton.js';
 
 // Re-export OAuth config type
 export type { MCPOAuthConfig, AnyToolInvocation };
@@ -1828,6 +1833,70 @@ export class Config {
       unregistered: this.allPotentialTools.filter((t) => !t.isRegistered),
     };
   }
+
+  /**
+   * CoreToolScheduler singleton methods
+   * Implemented as getters to avoid circular dependencies with CoreToolScheduler
+   */
+  private get schedulerInstances(): Map<
+    string,
+    import('../core/coreToolScheduler.js').CoreToolScheduler
+  > {
+    if (!(this as any)._schedulerInstances) {
+      (this as any)._schedulerInstances = new Map();
+    }
+    return (this as any)._schedulerInstances;
+  }
+
+  private get schedulerCallbacks(): Map<string, SchedulerCallbacks[]> {
+    if (!(this as any)._schedulerCallbacks) {
+      (this as any)._schedulerCallbacks = new Map();
+    }
+    return (this as any)._schedulerCallbacks;
+  }
+
+  async getOrCreateScheduler(
+    sessionId: string,
+    callbacks: SchedulerCallbacks,
+  ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
+    let scheduler = this.schedulerInstances.get(sessionId);
+
+    if (!scheduler) {
+      // Use dynamic import to avoid circular dependency issues
+      const { CoreToolScheduler: CoreToolSchedulerClass } =
+        await import('../core/coreToolScheduler.js');
+      scheduler = new CoreToolSchedulerClass({
+        config: this,
+        outputUpdateHandler: callbacks.outputUpdateHandler,
+        onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
+        onToolCallsUpdate: callbacks.onToolCallsUpdate,
+        getPreferredEditor: callbacks.getPreferredEditor,
+        onEditorClose: callbacks.onEditorClose,
+        onEditorOpen: callbacks.onEditorOpen,
+      });
+      this.schedulerInstances.set(sessionId, scheduler);
+      this.schedulerCallbacks.set(sessionId, [callbacks]);
+    } else {
+      const existingCallbacks = this.schedulerCallbacks.get(sessionId) || [];
+      existingCallbacks.push(callbacks);
+      this.schedulerCallbacks.set(sessionId, existingCallbacks);
+    }
+
+    return scheduler;
+  }
+
+  disposeScheduler(sessionId: string): void {
+    const scheduler = this.schedulerInstances.get(sessionId);
+    if (scheduler) {
+      scheduler.dispose();
+      this.schedulerInstances.delete(sessionId);
+      this.schedulerCallbacks.delete(sessionId);
+    }
+  }
 }
+
+// Re-export SchedulerCallbacks for external use
+export { type SchedulerCallbacks };
+
 // Export model constants for use in CLI
 export { DEFAULT_GEMINI_FLASH_MODEL };

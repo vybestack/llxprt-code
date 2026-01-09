@@ -37,13 +37,18 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   return {
     ...actual,
     ToolRegistry: vi.fn(),
-    Config: vi.fn(),
   };
 });
 
 const mockToolRegistry = {
   getTool: vi.fn(),
   getAllToolNames: vi.fn(() => ['mockTool', 'anotherTool']),
+};
+
+const mockMessageBus = {
+  subscribe: vi.fn(),
+  unsubscribe: vi.fn(),
+  publish: vi.fn(),
 };
 
 const mockConfig = {
@@ -57,6 +62,16 @@ const mockConfig = {
     model: 'test-model',
     authType: 'oauth-personal',
   }),
+  getMessageBus: () => mockMessageBus,
+  getOrCreateScheduler: vi.fn(async (_sessionId: string, callbacks: any) => {
+    const { CoreToolScheduler: CoreToolSchedulerClass } =
+      await import('@vybestack/llxprt-code-core');
+    return new CoreToolSchedulerClass({
+      ...callbacks,
+      config: mockConfig as unknown as Config,
+    });
+  }),
+  setInteractiveSubagentSchedulerFactory: vi.fn(),
 } as unknown as Config;
 
 const mockTool = new MockTool({
@@ -89,7 +104,6 @@ describe('useReactToolScheduler in YOLO Mode', () => {
     setPendingHistoryItem = vi.fn();
     mockToolRegistry.getTool.mockClear();
     mockToolRequiresConfirmation.executeFn.mockClear();
-    (mockToolRequiresConfirmation.shouldConfirmExecute as Mock).mockClear();
 
     // IMPORTANT: Enable YOLO mode for this test suite
     (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.YOLO);
@@ -297,11 +311,8 @@ describe('useReactToolScheduler', () => {
 
     mockToolRegistry.getTool.mockClear();
     mockTool.executeFn.mockClear();
-    (mockTool.shouldConfirmExecute as Mock).mockClear();
     mockToolWithLiveOutput.executeFn.mockClear();
-    (mockToolWithLiveOutput.shouldConfirmExecute as Mock).mockClear();
     mockToolRequiresConfirmation.executeFn.mockClear();
-    (mockToolRequiresConfirmation.shouldConfirmExecute as Mock).mockClear();
 
     mockOnUserConfirmForToolConfirmation = vi.fn();
     (

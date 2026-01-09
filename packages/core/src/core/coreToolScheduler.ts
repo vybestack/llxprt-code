@@ -373,7 +373,7 @@ const createErrorResponse = (
   agentId: request.agentId ?? DEFAULT_AGENT_ID,
 });
 
-interface CoreToolSchedulerOptions {
+export interface CoreToolSchedulerOptions {
   config: Config;
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;

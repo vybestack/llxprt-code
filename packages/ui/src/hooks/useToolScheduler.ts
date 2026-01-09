@@ -291,6 +291,9 @@ export function useToolScheduler(
       return;
     }
 
+    let mounted = true;
+    let isInitializing = true;
+
     const handleOutputUpdate = (
       toolCallId: string,
       outputChunk: string,
@@ -332,20 +335,39 @@ export function useToolScheduler(
       handleToolCallsUpdate([]);
     };
 
-    const scheduler = new CoreToolScheduler({
-      config,
-      outputUpdateHandler: handleOutputUpdate,
-      onAllToolCallsComplete: handleAllComplete,
-      onToolCallsUpdate: handleToolCallsUpdate,
-      getPreferredEditor: () => undefined,
-      onEditorClose: () => {
-        /* no-op */
-      },
-    });
+    // Use the singleton scheduler from config to ensure all schedulers in a session
+    // share the same CoreToolScheduler instance, avoiding duplicate MessageBus
+    // subscriptions and "unknown correlationId" errors.
+    const initializeScheduler = async () => {
+      try {
+        const sessionId = config.getSessionId();
+        const scheduler = await config.getOrCreateScheduler(sessionId, {
+          outputUpdateHandler: handleOutputUpdate,
+          onAllToolCallsComplete: handleAllComplete,
+          onToolCallsUpdate: handleToolCallsUpdate,
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {
+            /* no-op */
+          },
+        });
 
-    schedulerRef.current = scheduler;
+        if (mounted) {
+          schedulerRef.current = scheduler;
+        }
+      } catch (error) {
+        logger.error('Failed to initialize scheduler:', error);
+        if (mounted) {
+          schedulerRef.current = null;
+        }
+      } finally {
+        isInitializing = false;
+      }
+    };
+
+    initializeScheduler();
 
     return () => {
+      mounted = false;
       schedulerRef.current = null;
     };
   }, [config]);

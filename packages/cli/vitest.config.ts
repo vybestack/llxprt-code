@@ -60,7 +60,13 @@ const baseExcludePatterns = [
   // Exclude UI component tests that may directly import React DOM
   '**/ui/components/**/*.test.ts',
   // Temporarily suppress remaining React 19 regressions until the hooks are migrated
-  '**/ui/hooks/**/*.test.ts',
+  // EXCEPT useToolScheduler.test.ts which we're actively working on for issue #1055
+  '**/ui/hooks/useEditorSettings.test.ts',
+  '**/ui/hooks/useReverseSearchCompletion.test.ts',
+  '**/ui/hooks/useGeminiStream.test.ts',
+  '**/ui/hooks/useGeminiStream.integration.test.ts',
+  '**/ui/hooks/useKeypress.test.ts',
+  '**/ui/hooks/usePermissionsModifyTrust.test.ts',
   '**/ui/hooks/**/*.spec.ts',
   // Block the command test that still imports the legacy runtime helpers
   '**/ui/commands/toolformatCommand.test.ts',
@@ -95,6 +101,8 @@ export default defineConfig({
       'src/ui/hooks/useGeminiStream.thinking.test.tsx',
       // Include useGeminiStream dedup test for issue #1040
       'src/ui/hooks/useGeminiStream.dedup.test.tsx',
+      // Include useToolScheduler test for issue #1055 - Phase 2
+      'src/ui/hooks/useToolScheduler.test.ts',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',
