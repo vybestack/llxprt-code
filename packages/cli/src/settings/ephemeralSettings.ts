@@ -99,7 +99,7 @@ export const ephemeralSettingHelp: Record<string, string> = {
   circuit_breaker_failure_window_ms:
     'Time window for counting failures in milliseconds (positive integer, default: 60000, load balancer only)',
   circuit_breaker_recovery_timeout_ms:
-    'Maximum timeout allowed for shell tool executions in seconds (default: 600, -1 for unlimited)',
+    'Cooldown period before retrying after circuit opens in milliseconds (positive integer, default: 30000, load balancer only)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
