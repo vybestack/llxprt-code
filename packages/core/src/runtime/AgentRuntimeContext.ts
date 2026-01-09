@@ -19,6 +19,8 @@ export interface ReadonlySettingsSnapshot {
   contextLimit?: number;
   /** Preserve threshold for compression (0.0-1.0), default 0.2 */
   preserveThreshold?: number;
+  /** Preserve threshold for top of conversation (0.0-1.0), default 0.2 */
+  topPreserveThreshold?: number;
   /** Override for tool format string, optional */
   toolFormatOverride?: string;
   /** Telemetry configuration */
@@ -183,6 +185,7 @@ export interface AgentRuntimeContext {
     compressionThreshold(): number;
     contextLimit(): number;
     preserveThreshold(): number;
+    topPreserveThreshold(): number;
     toolFormatOverride(): string | undefined;
     /**
      * @plan PLAN-20251202-THINKING.P03b

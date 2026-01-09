@@ -1863,7 +1863,8 @@ export class GeminiChat {
 
     try {
       // Get compression split
-      const { toCompress, toKeep } = this.getCompressionSplit();
+      const { toKeepTop, toCompress, toKeepBottom } =
+        this.getCompressionSplit();
 
       if (toCompress.length === 0) {
         this.logger.debug('Nothing to compress');
@@ -1874,7 +1875,7 @@ export class GeminiChat {
       const summary = await this.directCompressionCall(toCompress, prompt_id);
 
       // Apply compression atomically
-      this.applyCompression(summary, toKeep);
+      this.applyCompression(summary, toKeepTop, toKeepBottom);
 
       this.logger.debug('Compression completed successfully');
     } catch (error) {
@@ -1888,32 +1889,56 @@ export class GeminiChat {
 
   /**
    * Get the split point for compression
+   * Implements sandwich compression: preserve top and bottom, compress middle
    */
   private getCompressionSplit(): {
+    toKeepTop: IContent[];
     toCompress: IContent[];
-    toKeep: IContent[];
+    toKeepBottom: IContent[];
   } {
     const curated = this.historyService.getCurated();
 
-    // Calculate split point (keep last 30%)
-    // @plan PLAN-20251028-STATELESS6.P10
-    // @requirement REQ-STAT6-002.2
-    // @pseudocode agent-runtime-context.md line 86 (step 006.3)
+    // Get thresholds
     const preserveThreshold =
       this.runtimeContext.ephemerals.preserveThreshold();
-    let splitIndex = Math.floor(curated.length * (1 - preserveThreshold));
+    const topPreserveThreshold =
+      this.runtimeContext.ephemerals.topPreserveThreshold();
+
+    // Calculate split points
+    let topSplitIndex = Math.ceil(curated.length * topPreserveThreshold);
+    let bottomSplitIndex = Math.floor(curated.length * (1 - preserveThreshold));
+
+    // Ensure minimum messages to compress
+    if (bottomSplitIndex - topSplitIndex < 4) {
+      // Not enough to compress, preserve everything in top
+      return {
+        toKeepTop: curated,
+        toCompress: [],
+        toKeepBottom: [],
+      };
+    }
 
     // Adjust for tool call boundaries
-    splitIndex = this.adjustForToolCallBoundary(curated, splitIndex);
+    topSplitIndex = this.adjustForToolCallBoundary(curated, topSplitIndex);
+    bottomSplitIndex = this.adjustForToolCallBoundary(
+      curated,
+      bottomSplitIndex,
+    );
 
-    // Never compress if too few messages
-    if (splitIndex < 4) {
-      return { toCompress: [], toKeep: curated };
+    // Handle edge case: overlap after boundary adjustment
+    if (topSplitIndex >= bottomSplitIndex) {
+      // Split points overlap, preserve everything
+      return {
+        toKeepTop: curated,
+        toCompress: [],
+        toKeepBottom: [],
+      };
     }
 
     return {
-      toCompress: curated.slice(0, splitIndex),
-      toKeep: curated.slice(splitIndex),
+      toKeepTop: curated.slice(0, topSplitIndex),
+      toCompress: curated.slice(topSplitIndex, bottomSplitIndex),
+      toKeepBottom: curated.slice(bottomSplitIndex),
     };
   }
 
@@ -2115,7 +2140,11 @@ export class GeminiChat {
   /**
    * Apply compression results to history
    */
-  private applyCompression(summary: string, toKeep: IContent[]): void {
+  private applyCompression(
+    summary: string,
+    toKeepTop: IContent[],
+    toKeepBottom: IContent[],
+  ): void {
     // Clear and rebuild history atomically
     this.historyService.clear();
 
@@ -2144,8 +2173,13 @@ export class GeminiChat {
       currentModel,
     );
 
-    // Add back the kept messages
-    for (const content of toKeep) {
+    // Add back the top preserved messages
+    for (const content of toKeepTop) {
+      this.historyService.add(content, currentModel);
+    }
+
+    // Add back the bottom preserved messages
+    for (const content of toKeepBottom) {
       this.historyService.add(content, currentModel);
     }
   }
