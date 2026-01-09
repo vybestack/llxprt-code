@@ -1,5 +1,9 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
-import type { Config, ToolCallRequestInfo } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  ToolCallRequestInfo,
+  ToolConfirmationOutcome,
+} from '@vybestack/llxprt-code-core';
 import {
   CoreToolScheduler,
   type ToolCall as CoreToolCall,
@@ -8,7 +12,6 @@ import {
   type ExecutingToolCall,
   type CancelledToolCall,
   type ToolCallConfirmationDetails,
-  type ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
 import type { ToolStatus } from '../types/events';
 import { getLogger } from '../lib/logger';
@@ -292,7 +295,6 @@ export function useToolScheduler(
     }
 
     let mounted = true;
-    let isInitializing = true;
 
     const handleOutputUpdate = (
       toolCallId: string,
@@ -359,15 +361,16 @@ export function useToolScheduler(
         if (mounted) {
           schedulerRef.current = null;
         }
-      } finally {
-        isInitializing = false;
       }
     };
 
-    initializeScheduler();
+    void initializeScheduler();
 
     return () => {
       mounted = false;
+      if (schedulerRef.current?.dispose) {
+        schedulerRef.current.dispose();
+      }
       schedulerRef.current = null;
     };
   }, [config]);
