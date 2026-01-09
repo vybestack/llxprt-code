@@ -176,7 +176,6 @@ export const ProfileCreateWizard: React.FC<ProfileCreateWizardProps> = ({
             onUpdateBaseUrl={handleUpdateBaseUrl}
             onContinue={handleContinue}
             onBack={goBack}
-            onCancel={handleCancel}
           />
         );
 

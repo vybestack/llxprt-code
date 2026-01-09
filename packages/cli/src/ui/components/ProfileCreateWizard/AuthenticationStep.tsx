@@ -39,6 +39,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
   const [authInput, setAuthInput] = useState('');
   const [oauthBuckets, setOauthBuckets] = useState('default');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isPathValidated, setIsPathValidated] = useState(false);
   const [connectionTestState, setConnectionTestState] = useState<
     'idle' | 'testing' | 'success' | 'failed' | 'timedout'
   >('idle');
@@ -78,6 +79,15 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
     return undefined;
   }, [connectionTestState, testTimeRemaining]);
 
+  // Auto-proceed to next step after successful connection test
+  useEffect(() => {
+    if (connectionTestState === 'success') {
+      const timer = setTimeout(() => onContinue(), 500);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [connectionTestState, onContinue]);
+
   const handleAuthSelect = useCallback(
     (value: string) => {
       if (value === 'oauth') {
@@ -99,6 +109,12 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
     },
     [onUpdateAuth, onContinue, onBack],
   );
+
+  const handleAuthInputChange = useCallback((value: string) => {
+    setAuthInput(value);
+    setValidationError(null);
+    setIsPathValidated(false);
+  }, []);
 
   const handleAuthInputSubmit = useCallback(async () => {
     // OAuth bucket input
@@ -128,6 +144,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
         setValidationError(validation.error || 'Invalid file path');
         return;
       }
+      setIsPathValidated(true);
     }
 
     setValidationError(null);
@@ -154,8 +171,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
 
     if (testResult.success) {
       setConnectionTestState('success');
-      // Auto-proceed to next step after brief delay
-      setTimeout(() => onContinue(), 500);
+      // Auto-proceed handled by useEffect
     } else if (testResult.timedOut) {
       setConnectionTestState('timedout');
       setConnectionError('Connection test timed out after 30 seconds');
@@ -279,7 +295,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
           <Text color={Colors.Foreground}>API Key:</Text>
           <TextInput
             value={authInput}
-            onChange={setAuthInput}
+            onChange={handleAuthInputChange}
             onSubmit={handleAuthInputSubmit}
             isFocused={true}
             mask={true}
@@ -305,7 +321,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
           <Text color={Colors.Foreground}>Key file path:</Text>
           <TextInput
             value={authInput}
-            onChange={setAuthInput}
+            onChange={handleAuthInputChange}
             onSubmit={handleAuthInputSubmit}
             isFocused={true}
             placeholder="~/.keys/provider.key"
@@ -313,7 +329,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
           {validationError && (
             <Text color={Colors.AccentRed}>✗ {validationError}</Text>
           )}
-          {!validationError && authInput && (
+          {!validationError && isPathValidated && (
             <Text color={Colors.AccentGreen}>✓ Valid path</Text>
           )}
           <Text color={Colors.Foreground}> </Text>

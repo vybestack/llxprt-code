@@ -50,12 +50,22 @@ export const TextInput: React.FC<TextInputProps> = ({
       }
 
       // Backspace - delete character before cursor
-      if (key.name === 'backspace' || key.name === 'delete') {
+      if (key.name === 'backspace') {
         if (cursorPosition > 0) {
           const newValue =
             value.slice(0, cursorPosition - 1) + value.slice(cursorPosition);
           onChange(newValue);
           setCursorPosition(cursorPosition - 1);
+        }
+        return true;
+      }
+
+      // Delete - delete character after cursor
+      if (key.name === 'delete') {
+        if (cursorPosition < value.length) {
+          const newValue =
+            value.slice(0, cursorPosition) + value.slice(cursorPosition + 1);
+          onChange(newValue);
         }
         return true;
       }

@@ -7,7 +7,6 @@
 import type { ProviderOption, AdvancedParams } from './types.js';
 
 export const PROVIDER_OPTIONS: ProviderOption[] = [
-  // Cloud Providers (no base URL needed)
   {
     value: 'anthropic',
     label: 'Anthropic',
@@ -72,8 +71,6 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     supportsOAuth: false,
     knownModels: ['qwen-3-coder-480b', 'zai-glm-4.7', 'llama-3.3-70b'],
   },
-
-  // Third-party Cloud Providers (via aliases)
   {
     value: 'codex',
     label: 'Codex',
@@ -144,8 +141,6 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     defaultBaseUrl: 'https://llm.chutes.ai/v1/',
     supportsOAuth: false,
   },
-
-  // Local Providers (base URL with defaults)
   {
     value: 'LM Studio',
     label: 'LM Studio (local)',
@@ -160,8 +155,6 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     defaultBaseUrl: 'http://localhost:8080/v1',
     supportsOAuth: false,
   },
-
-  // Custom Provider (empty base URL)
   {
     value: 'custom',
     label: 'Custom OpenAI-compatible endpoint',

@@ -34,7 +34,7 @@ export const ProfileSuccessSummary: React.FC<ProfileSuccessSummaryProps> = ({
   );
 
   const handleSelect = useCallback(
-    async (value: string) => {
+    (value: string) => {
       if (value === 'load') {
         // Load the profile using the provided handler
         if (onLoadProfile && state.profileName) {

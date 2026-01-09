@@ -25,6 +25,7 @@ describe('appReducer', () => {
           provider: false,
           privacy: false,
           loadProfile: false,
+          createProfile: false,
           tools: false,
           oauthCode: false,
         },

@@ -200,25 +200,39 @@ export async function testConnectionWithTimeout(
   authValue: string,
   timeoutMs = 30000,
 ): Promise<ConnectionTestResult> {
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs),
-  );
+  // Create timeout sentinel that resolves (not rejects) to avoid unhandled rejections
+  const TIMEOUT_SENTINEL = { success: false, timedOut: true } as const;
+  let timeoutId: NodeJS.Timeout | undefined;
 
-  try {
-    const result = await Promise.race([
-      testConnection(provider, baseUrl, model, authType, authValue),
-      timeoutPromise,
-    ]);
-    return result;
-  } catch (error) {
-    if (error instanceof Error && error.message === 'TIMEOUT') {
-      return { success: false, timedOut: true };
-    }
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
+  const timeoutPromise = new Promise<typeof TIMEOUT_SENTINEL>((resolve) => {
+    timeoutId = setTimeout(() => resolve(TIMEOUT_SENTINEL), timeoutMs);
+  });
+
+  // Wrap testConnection to handle its own rejections
+  const testPromise = testConnection(
+    provider,
+    baseUrl,
+    model,
+    authType,
+    authValue,
+  )
+    .then((res) => res)
+    .catch(
+      (err): ConnectionTestResult => ({
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+
+  // Race the promises
+  const result = await Promise.race([testPromise, timeoutPromise]);
+
+  // Clear timeout to prevent it from firing
+  if (timeoutId !== undefined) {
+    clearTimeout(timeoutId);
   }
+
+  return result;
 }
 
 /**

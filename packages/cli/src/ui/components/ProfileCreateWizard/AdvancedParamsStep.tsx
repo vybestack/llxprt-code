@@ -27,8 +27,8 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
   state,
   onUpdateParams,
   onContinue,
-  onBack,
-  onCancel: _onCancel,
+  onBack: _onBack,
+  onCancel,
 }) => {
   const [focusedComponent, setFocusedComponent] = useState<'select' | 'custom'>(
     'select',
@@ -44,7 +44,7 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
   const [fieldInput, setFieldInput] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Handle Escape key to go back
+  // Handle Escape key to cancel or go back
   useKeypress(
     (key) => {
       if (key.name === 'escape') {
@@ -54,8 +54,8 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
           setFieldInput('');
           setValidationError(null);
         } else {
-          // Go back to previous step
-          onBack();
+          // Cancel wizard
+          onCancel();
         }
       }
     },
@@ -90,7 +90,10 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
   }, []);
 
   const handleFieldSubmit = useCallback(() => {
-    const numValue = parseFloat(fieldInput);
+    const numValue =
+      currentField === 'temperature'
+        ? Number.parseFloat(fieldInput)
+        : Number.parseInt(fieldInput, 10);
 
     if (!fieldInput.trim()) {
       // Allow skipping individual fields
@@ -110,7 +113,7 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
       return;
     }
 
-    if (isNaN(numValue)) {
+    if (Number.isNaN(numValue)) {
       setValidationError('Must be a valid number');
       return;
     }
@@ -197,7 +200,7 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
             isFocused={true}
           />
           <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Gray}>Esc Back</Text>
+          <Text color={Colors.Gray}>Esc Cancel</Text>
         </>
       )}
 

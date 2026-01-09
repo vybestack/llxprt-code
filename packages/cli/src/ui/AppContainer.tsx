@@ -1962,6 +1962,7 @@ export const AppContainer = (props: AppContainerProps) => {
       !isProviderDialogOpen &&
       !isProviderModelDialogOpen &&
       !isToolsDialogOpen &&
+      !isCreateProfileDialogOpen &&
       !showPrivacyNotice &&
       !isWelcomeDialogOpen &&
       geminiClient
@@ -1979,6 +1980,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isProviderDialogOpen,
     isProviderModelDialogOpen,
     isToolsDialogOpen,
+    isCreateProfileDialogOpen,
     showPrivacyNotice,
     isWelcomeDialogOpen,
     geminiClient,

@@ -19,7 +19,6 @@ interface BaseUrlConfigStepProps {
   onUpdateBaseUrl: (baseUrl: string) => void;
   onContinue: () => void;
   onBack: () => void;
-  onCancel: () => void;
 }
 
 export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({

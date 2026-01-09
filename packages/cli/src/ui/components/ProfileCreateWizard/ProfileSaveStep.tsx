@@ -87,7 +87,7 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
   }, []);
 
   const handleProfileNameChange = useCallback(
-    async (value: string) => {
+    (value: string) => {
       setProfileNameInput(value);
 
       if (!value.trim()) {
@@ -113,43 +113,46 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
     [onUpdateProfileName, existingProfiles],
   );
 
-  const handleProfileNameSubmit = useCallback(async () => {
-    if (!profileNameInput.trim()) {
-      setValidationError('Profile name cannot be empty');
-      return;
-    }
-    if (validationError) {
-      // If the only error is "already exists", show conflict dialog
-      if (validationError === 'Profile name already exists') {
-        setFocusedComponent('conflict');
+  const handleProfileNameSubmit = useCallback(
+    async (forceSave: boolean = false) => {
+      if (!profileNameInput.trim()) {
+        setValidationError('Profile name cannot be empty');
         return;
       }
-      return;
-    }
+      if (validationError && !forceSave) {
+        // If the only error is "already exists", show conflict dialog
+        if (validationError === 'Profile name already exists') {
+          setFocusedComponent('conflict');
+          return;
+        }
+        return;
+      }
 
-    // Save immediately
-    setFocusedComponent('saving');
-    setSaveError(null);
+      // Save immediately
+      setFocusedComponent('saving');
+      setSaveError(null);
 
-    const profileJSON = buildProfileJSON(state);
-    const result = await saveProfile(profileNameInput, profileJSON);
+      const profileJSON = buildProfileJSON(state);
+      const result = await saveProfile(profileNameInput, profileJSON);
 
-    if (result.success) {
-      onContinue();
-    } else {
-      setSaveError(result.error || 'Failed to save profile');
-      setFocusedComponent('input');
-    }
-  }, [profileNameInput, validationError, state, onContinue]);
+      if (result.success) {
+        onContinue();
+      } else {
+        setSaveError(result.error || 'Failed to save profile');
+        setFocusedComponent('input');
+      }
+    },
+    [profileNameInput, validationError, state, onContinue],
+  );
 
   const handleConflictResolution = useCallback(
     (value: string) => {
       if (value === 'rename') {
         setFocusedComponent('input');
       } else if (value === 'overwrite') {
-        // Clear validation error and save immediately
+        // Clear validation error and force save
         setValidationError(null);
-        handleProfileNameSubmit();
+        handleProfileNameSubmit(true);
       } else if (value === 'back') {
         onBack();
       } else if (value === 'cancel') {
