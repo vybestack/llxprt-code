@@ -21,7 +21,7 @@ const logger = new DebugLogger('llxprt:provider:anthropic:schema');
 
 // Tool name prefix for Claude Code OAuth compatibility
 // Tools are prefixed on outgoing requests and unprefixed on incoming responses
-const TOOL_PREFIX = 'llxprt_';
+export const TOOL_PREFIX = 'llxprt_';
 
 /**
  * Anthropic input schema format

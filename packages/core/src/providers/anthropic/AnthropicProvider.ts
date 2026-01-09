@@ -16,6 +16,7 @@ import { type IModel } from '../IModel.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import {
   convertToolsToAnthropic,
+  TOOL_PREFIX,
   type AnthropicTool,
 } from './schemaConverter.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
@@ -736,7 +737,6 @@ export class AnthropicProvider extends BaseProvider {
       return name;
     }
 
-    const TOOL_PREFIX = 'llxprt_';
     // Remove the prefix if it's present
     if (name.startsWith(TOOL_PREFIX)) {
       return name.substring(TOOL_PREFIX.length);
@@ -1221,7 +1221,7 @@ export class AnthropicProvider extends BaseProvider {
             contentArray.push({
               type: 'tool_use',
               id: this.normalizeToAnthropicToolId(tc.id),
-              name: isOAuth ? this.unprefixToolName(tc.name, isOAuth) : tc.name,
+              name: this.unprefixToolName(tc.name, isOAuth),
               input: parametersObj,
             });
           }
@@ -1901,9 +1901,7 @@ export class AnthropicProvider extends BaseProvider {
               );
               currentToolCall = {
                 id: toolBlock.id,
-                name: isOAuth
-                  ? this.unprefixToolName(toolBlock.name, isOAuth)
-                  : toolBlock.name,
+                name: this.unprefixToolName(toolBlock.name, isOAuth),
                 input: '',
               };
             } else if (chunk.content_block.type === 'thinking') {
@@ -2056,9 +2054,10 @@ export class AnthropicProvider extends BaseProvider {
           blocks.push({ type: 'text', text: contentBlock.text } as TextBlock);
         } else if (contentBlock.type === 'tool_use') {
           // Unprefix tool name for OAuth requests
-          const unprefixName = isOAuth
-            ? this.unprefixToolName(contentBlock.name, isOAuth)
-            : contentBlock.name;
+          const unprefixName = this.unprefixToolName(
+            contentBlock.name,
+            isOAuth,
+          );
 
           // Process tool parameters with double-escape handling
           const processedParameters = processToolParameters(
