@@ -13,22 +13,26 @@ import type { Config } from './config.js';
 
 export interface SchedulerCallbacks {
   outputUpdateHandler?: (toolCallId: string, outputChunk: string) => void;
-  onAllToolCallsComplete?: (completedToolCalls: any[]) => Promise<void>; // eslint-disable-line @typescript-eslint/no-explicit-any
-  onToolCallsUpdate?: (toolCalls: any[]) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
-  getPreferredEditor: () => any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onAllToolCallsComplete?: (completedToolCalls: any[]) => Promise<void>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onToolCallsUpdate?: (toolCalls: any[]) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getPreferredEditor: () => any;
   onEditorClose: () => void;
   onEditorOpen?: () => void;
 }
 
-const schedulerInstances = new Map<string, any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const schedulerInstances = new Map<string, any>();
 const schedulerCallbacks = new Map<string, SchedulerCallbacks[]>();
 
 export async function getOrCreateScheduler(
   config: Config,
   sessionId: string,
   callbacks: SchedulerCallbacks,
-): Promise<any> {
-  // eslint-disable-line @typescript-eslint/no-explicit-any
+): // eslint-disable-next-line @typescript-eslint/no-explicit-any
+Promise<any> {
   let scheduler = schedulerInstances.get(sessionId);
 
   if (!scheduler) {
@@ -64,8 +68,8 @@ export function disposeScheduler(sessionId: string): void {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getSchedulerInstance(sessionId: string): any {
-  // eslint-disable-line @typescript-eslint/no-explicit-any
   return schedulerInstances.get(sessionId);
 }
 

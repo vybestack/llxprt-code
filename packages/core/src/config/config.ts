@@ -1842,16 +1842,22 @@ export class Config {
     string,
     import('../core/coreToolScheduler.js').CoreToolScheduler
   > {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (!(this as any)._schedulerInstances) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this as any)._schedulerInstances = new Map();
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (this as any)._schedulerInstances;
   }
 
   private get schedulerCallbacks(): Map<string, SchedulerCallbacks[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (!(this as any)._schedulerCallbacks) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this as any)._schedulerCallbacks = new Map();
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (this as any)._schedulerCallbacks;
   }
 

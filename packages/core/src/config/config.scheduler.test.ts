@@ -4,29 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-  beforeAll,
-} from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Config } from './config.js';
 
 // Use dynamic import to avoid circular dependencies with Config
-let CoreToolScheduler: any;
-let OutputUpdateHandler: any;
-let AllToolCallsCompleteHandler: any;
-let ToolCallsUpdateHandler: any;
+let CoreToolScheduler: unknown;
 
 beforeAll(async () => {
   const schedulerModule = await import('../core/coreToolScheduler.js');
   CoreToolScheduler = schedulerModule.CoreToolScheduler;
-  OutputUpdateHandler = schedulerModule.OutputUpdateHandler;
-  AllToolCallsCompleteHandler = schedulerModule.AllToolCallsCompleteHandler;
-  ToolCallsUpdateHandler = schedulerModule.ToolCallsUpdateHandler;
 });
 
 describe('Config - CoreToolScheduler Singleton', () => {
@@ -50,6 +36,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
       debugMode: false,
       cwd: process.cwd(),
       model: 'gemini-pro',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       settingsService: mockSettingsService as any,
       eventEmitter: undefined,
     };
@@ -68,9 +55,9 @@ describe('Config - CoreToolScheduler Singleton', () => {
   describe('getOrCreateScheduler', () => {
     it('should create a new scheduler instance for a given sessionId if none exists', async () => {
       const callbacks = {
-        outputUpdateHandler: vi.fn() as OutputUpdateHandler,
-        onAllToolCallsComplete: vi.fn() as AllToolCallsCompleteHandler,
-        onToolCallsUpdate: vi.fn() as ToolCallsUpdateHandler,
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
         getPreferredEditor: () => undefined,
         onEditorClose: vi.fn(),
       };
@@ -80,23 +67,23 @@ describe('Config - CoreToolScheduler Singleton', () => {
         callbacks,
       );
 
-      expect(scheduler1).toBeInstanceOf(CoreToolScheduler);
+      expect(scheduler1).toBeInstanceOf(CoreToolScheduler as unknown);
       expect(scheduler1).toBeDefined();
     });
 
     it('should return the same scheduler instance for the same sessionId', async () => {
       const callbacks1 = {
-        outputUpdateHandler: vi.fn() as OutputUpdateHandler,
-        onAllToolCallsComplete: vi.fn() as AllToolCallsCompleteHandler,
-        onToolCallsUpdate: vi.fn() as ToolCallsUpdateHandler,
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
         getPreferredEditor: () => undefined,
         onEditorClose: vi.fn(),
       };
 
       const callbacks2 = {
-        outputUpdateHandler: vi.fn() as OutputUpdateHandler,
-        onAllToolCallsComplete: vi.fn() as AllToolCallsCompleteHandler,
-        onToolCallsUpdate: vi.fn() as ToolCallsUpdateHandler,
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
         getPreferredEditor: () => undefined,
         onEditorClose: vi.fn(),
       };
@@ -117,9 +104,9 @@ describe('Config - CoreToolScheduler Singleton', () => {
       const otherSessionId = 'other-session-456';
 
       const callbacks = {
-        outputUpdateHandler: vi.fn() as OutputUpdateHandler,
-        onAllToolCallsComplete: vi.fn() as AllToolCallsCompleteHandler,
-        onToolCallsUpdate: vi.fn() as ToolCallsUpdateHandler,
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
         getPreferredEditor: () => undefined,
         onEditorClose: vi.fn(),
       };
@@ -140,9 +127,9 @@ describe('Config - CoreToolScheduler Singleton', () => {
   describe('disposeScheduler', () => {
     it('should dispose and remove the scheduler for a given sessionId', async () => {
       const callbacks = {
-        outputUpdateHandler: vi.fn() as OutputUpdateHandler,
-        onAllToolCallsComplete: vi.fn() as AllToolCallsCompleteHandler,
-        onToolCallsUpdate: vi.fn() as ToolCallsUpdateHandler,
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
         getPreferredEditor: () => undefined,
         onEditorClose: vi.fn(),
       };
@@ -170,9 +157,9 @@ describe('Config - CoreToolScheduler Singleton', () => {
 
     it('should properly dispose the scheduler instance', async () => {
       const callbacks = {
-        outputUpdateHandler: vi.fn() as OutputUpdateHandler,
-        onAllToolCallsComplete: vi.fn() as AllToolCallsCompleteHandler,
-        onToolCallsUpdate: vi.fn() as ToolCallsUpdateHandler,
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
         getPreferredEditor: () => undefined,
         onEditorClose: vi.fn(),
       };
@@ -183,7 +170,10 @@ describe('Config - CoreToolScheduler Singleton', () => {
       );
 
       // Spy on the dispose method
-      const disposeSpy = vi.spyOn(scheduler, 'dispose');
+      const disposeSpy = vi.spyOn(
+        scheduler as { dispose: () => void },
+        'dispose',
+      );
 
       config.disposeScheduler(testSessionId);
 
@@ -194,17 +184,17 @@ describe('Config - CoreToolScheduler Singleton', () => {
   describe('Integration: Single scheduler per session', () => {
     it('should ensure only one CoreToolScheduler instance exists per sessionId across multiple components', async () => {
       const component1Callbacks = {
-        outputUpdateHandler: vi.fn() as OutputUpdateHandler,
-        onAllToolCallsComplete: vi.fn() as AllToolCallsCompleteHandler,
-        onToolCallsUpdate: vi.fn() as ToolCallsUpdateHandler,
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
         getPreferredEditor: () => undefined,
         onEditorClose: vi.fn(),
       };
 
       const component2Callbacks = {
-        outputUpdateHandler: vi.fn() as OutputUpdateHandler,
-        onAllToolCallsComplete: vi.fn() as AllToolCallsCompleteHandler,
-        onToolCallsUpdate: vi.fn() as ToolCallsUpdateHandler,
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
         getPreferredEditor: () => undefined,
         onEditorClose: vi.fn(),
       };
@@ -225,13 +215,14 @@ describe('Config - CoreToolScheduler Singleton', () => {
     it('should handle multiple sessions with separate schedulers', async () => {
       const sessions = ['session-1', 'session-2', 'session-3'];
       const callbacks = {
-        outputUpdateHandler: vi.fn() as OutputUpdateHandler,
-        onAllToolCallsComplete: vi.fn() as AllToolCallsCompleteHandler,
-        onToolCallsUpdate: vi.fn() as ToolCallsUpdateHandler,
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
         getPreferredEditor: () => undefined,
         onEditorClose: vi.fn(),
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const schedulers: any[] = [];
 
       for (const sessionId of sessions) {

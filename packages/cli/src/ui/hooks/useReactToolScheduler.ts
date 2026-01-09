@@ -278,9 +278,7 @@ export function useReactToolScheduler(
         schedule: (
           request: ToolCallRequestInfo | ToolCallRequestInfo[],
           signal: AbortSignal,
-        ) => {
-          return instance.schedule(request, signal);
-        },
+        ) => instance.schedule(request, signal),
       };
     },
     [

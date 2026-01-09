@@ -51,21 +51,22 @@ export function createMockConfig(
     getEmbeddingModel: vi.fn().mockReturnValue('text-embedding-004'),
     getSessionId: vi.fn().mockReturnValue('test-session-id'),
     getMessageBus: vi.fn().mockReturnValue(defaultMessageBus),
-    getOrCreateScheduler: vi
-      .fn()
-      .mockImplementation(async (_sessionId: string, _callbacks: any) => {
+    getOrCreateScheduler: vi.fn().mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (_sessionId: string, _callbacks: any) => ({
         // Mock getOrCreateScheduler for tests
         // Return a complete mock scheduler with all necessary methods
-        return {
-          schedule: vi.fn().mockResolvedValue(undefined),
-          cancelAll: vi.fn(),
-          dispose: vi.fn(),
-          toolCalls: [],
-          getPreferredEditor: vi.fn(),
-          config: mockConfig,
-          toolRegistry: mockConfig?.getToolRegistry?.() || { getTool: vi.fn() },
-        };
+        schedule: vi.fn().mockResolvedValue(undefined),
+        cancelAll: vi.fn(),
+        dispose: vi.fn(),
+        toolCalls: [],
+        getPreferredEditor: vi.fn(),
+        config: mockConfig,
+        toolRegistry: mockConfig?.getToolRegistry?.() || {
+          getTool: vi.fn(),
+        },
       }),
+    ),
     ...overrides,
   };
   return mockConfig;

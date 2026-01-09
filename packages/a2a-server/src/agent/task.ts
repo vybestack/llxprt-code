@@ -87,6 +87,7 @@ export class Task {
     this.id = id;
     this.contextId = contextId;
     this.config = config;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.scheduler = null as any;
     const contentConfig = this.config.getContentGeneratorConfig();
     const runtimeState = createAgentRuntimeState({

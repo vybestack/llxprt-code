@@ -38,6 +38,7 @@ describe('Task', () => {
       cancelAll: vi.fn(),
       dispose: vi.fn(),
       toolCalls: [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
     task['setTaskStateAndPublishUpdate'] = vi.fn();
