@@ -26,9 +26,9 @@ import {
   AnyDeclarativeTool,
   AnyToolInvocation,
   CompletedToolCall,
+  clearAllSchedulers,
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/src/test-utils/mock-tool.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/dist/config/schedulerSingleton.js';
 import type { HistoryItemWithoutId, HistoryItemToolGroup } from '../types.js';
 import { ToolCallStatus } from '../types.js';
 
