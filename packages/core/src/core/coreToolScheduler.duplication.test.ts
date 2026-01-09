@@ -508,3 +508,116 @@ describe('CoreToolScheduler Duplication Prevention', () => {
     scheduler2.dispose();
   });
 });
+
+describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
+  it('should NOT execute tool until user confirms in DEFAULT (non-YOLO) mode', async () => {
+    const mockMessageBus = createMockMessageBus();
+    const mockPolicyEngine = createMockPolicyEngine();
+
+    const testTool = new ExecutionTrackingTool();
+    ExecutionTrackingTool.resetCount();
+
+    const mockToolRegistry = {
+      getTool: () => testTool,
+      getFunctionDeclarations: () => [],
+      getFunctionDeclarationsFiltered: () => [],
+      registerTool: () => {},
+      discoverAllTools: async () => {},
+      discoverMcpTools: async () => {},
+      discoverToolsForServer: async () => {},
+      removeMcpToolsByServer: () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+      tools: new Map(),
+      mcpClientManager: undefined,
+      getToolByName: () => testTool,
+      getToolByDisplayName: () => testTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      discovery: {},
+    };
+
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getEphemeralSettings: () => ({}),
+      getAllowedTools: () => [],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+      getToolRegistry: () => mockToolRegistry,
+      getMessageBus: () => mockMessageBus,
+      getPolicyEngine: () => mockPolicyEngine,
+    } as unknown as Config;
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    const request = {
+      callId: 'approval-test-call',
+      name: 'ExecutionTrackingTool',
+      args: { id: 'test' },
+      isClientInitiated: false,
+      prompt_id: 'test-prompt',
+    };
+
+    const signal = new AbortController().signal;
+
+    // Schedule the tool - it should NOT execute until user confirms
+    const schedulePromise = scheduler.schedule([request], signal);
+
+    // Wait for tool to reach awaiting_approval
+    const waitingCall = await waitForStatus(
+      onToolCallsUpdate,
+      'awaiting_approval',
+    );
+    expect(waitingCall).toBeDefined();
+    expect(waitingCall?.status).toBe('awaiting_approval');
+
+    // CRITICAL ASSERTION: Tool should NOT have executed yet
+    expect(ExecutionTrackingTool.executionCount).toBe(0);
+
+    // Get the correlationId
+    const correlationId = (waitingCall as WaitingToolCall).confirmationDetails
+      ?.correlationId;
+    expect(correlationId).toBeDefined();
+
+    // Now simulate user confirmation via message bus
+    mockMessageBus.publish({
+      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+      correlationId,
+      outcome: ToolConfirmationOutcome.ProceedOnce,
+      confirmed: true,
+      requiresUserConfirmation: false,
+    });
+
+    // Wait for completion
+    await schedulePromise;
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
+
+    // Tool should execute exactly ONCE after confirmation
+    expect(ExecutionTrackingTool.executionCount).toBe(1);
+
+    // Verify final state
+    const completedCalls = onAllToolCallsComplete.mock
+      .calls[0][0] as CompletedToolCall[];
+    expect(completedCalls.length).toBe(1);
+    expect(completedCalls[0].status).toBe('success');
+    expect(completedCalls[0].request.callId).toBe('approval-test-call');
+
+    scheduler.dispose();
+  });
+});
