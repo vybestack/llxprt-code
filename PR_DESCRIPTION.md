@@ -39,6 +39,7 @@ Better aligned with long-running builds and downloads.
 ### 5. Enhanced Help Text
 
 Replaced minimal help text with comprehensive explanations that explain:
+
 - What the setting controls (subagent vs shell commands)
 - Why you'd change it (complex tasks vs quick operations)
 - When to use different values (examples provided)
@@ -47,6 +48,7 @@ Replaced minimal help text with comprehensive explanations that explain:
 ### 6. Added to directSettingSpecs
 
 Settings now appear in enhanced autocomplete with:
+
 - Custom hints showing examples
 - Clear indication of -1 for unlimited
 - Better user experience
@@ -75,6 +77,7 @@ All changes have been verified:
 ## Breaking Changes
 
 None. The changes are backward compatible:
+
 - Existing profiles without timeout settings will use new defaults
 - The timeout setting keys already existed in code (just weren't in autocomplete/profiles)
 - No migration needed

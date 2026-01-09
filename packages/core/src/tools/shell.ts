@@ -204,8 +204,9 @@ class ShellToolInvocation extends BaseToolInvocation<
 
     const ephemeralSettings = this.config.getEphemeralSettings();
     const defaultTimeoutSeconds =
-      (ephemeralSettings['shell-default-timeout-seconds'] as number | undefined) ??
-      DEFAULT_SHELL_TIMEOUT_SECONDS;
+      (ephemeralSettings['shell-default-timeout-seconds'] as
+        | number
+        | undefined) ?? DEFAULT_SHELL_TIMEOUT_SECONDS;
     const maxTimeoutSeconds =
       (ephemeralSettings['shell-max-timeout-seconds'] as number | undefined) ??
       MAX_SHELL_TIMEOUT_SECONDS;
