@@ -301,6 +301,27 @@ const directSettingSpecs: SettingLiteralSpec[] = [
     hint: 'positive integer (e.g., 8000)',
     description: 'Cap on thinking tokens (limits thinking length)',
   },
+  // Tool timeout settings (Issue #1049)
+  {
+    value: 'task-default-timeout-seconds',
+    hint: 'timeout in seconds (e.g., 900) or -1 (unlimited)',
+    description: 'Task tool default timeout',
+  },
+  {
+    value: 'task-max-timeout-seconds',
+    hint: 'timeout in seconds (e.g., 1800) or -1 (unlimited)',
+    description: 'Task tool max timeout',
+  },
+  {
+    value: 'shell-default-timeout-seconds',
+    hint: 'timeout in seconds (e.g., 300) or -1 (unlimited)',
+    description: 'Shell tool default timeout',
+  },
+  {
+    value: 'shell-max-timeout-seconds',
+    hint: 'timeout in seconds (e.g., 900) or -1 (unlimited)',
+    description: 'Shell tool max timeout',
+  },
   // Load balancer settings (Phase 3, Issue #489)
   {
     value: 'tpm_threshold',

@@ -88,7 +88,7 @@ describe('TaskTool', () => {
         behaviourPrompts: ['Ship the feature', 'Respect coding standards'],
         toolConfig: { tools: ['read_file', 'write_file'] },
         outputConfig: { outputs: { summary: 'Outcome summary' } },
-        runConfig: { max_time_minutes: 1 },
+        runConfig: { max_time_minutes: 15 },
       }),
       expect.any(AbortSignal),
     );
@@ -386,8 +386,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_seconds: 60,
-          task_max_timeout_seconds: 300,
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
@@ -442,8 +442,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_seconds: 60,
-          task_max_timeout_seconds: 120,
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
         }),
       } as unknown as Config;
 
@@ -500,8 +500,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_seconds: 60,
-          task_max_timeout_seconds: 300,
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
@@ -566,8 +566,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_seconds: 60,
-          task_max_timeout_seconds: 300,
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
@@ -631,8 +631,8 @@ describe('TaskTool', () => {
       const configWithSettings = {
         ...config,
         getEphemeralSettings: () => ({
-          task_default_timeout_seconds: 60,
-          task_max_timeout_seconds: 300,
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {

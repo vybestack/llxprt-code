@@ -114,7 +114,7 @@ describe('setCommand runtime integration', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, user-agent, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter, retries, retrywait, maxTurnsPerPrompt, authOnly, dumponerror, dumpcontext, prompt-caching, include-folder-structure, rate-limit-throttle, rate-limit-throttle-threshold, rate-limit-max-wait, reasoning.enabled, reasoning.includeInContext, reasoning.includeInResponse, reasoning.format, reasoning.stripFromContext, reasoning.effort, reasoning.maxTokens, enable-tool-prompts, tpm_threshold, timeout_ms, circuit_breaker_enabled, circuit_breaker_failure_threshold, circuit_breaker_failure_window_ms, circuit_breaker_recovery_timeout_ms, task_default_timeout_seconds, task_max_timeout_seconds, shell_default_timeout_seconds, shell_max_timeout_seconds',
+        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, user-agent, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter, retries, retrywait, maxTurnsPerPrompt, authOnly, dumponerror, dumpcontext, prompt-caching, include-folder-structure, rate-limit-throttle, rate-limit-throttle-threshold, rate-limit-max-wait, reasoning.enabled, reasoning.includeInContext, reasoning.includeInResponse, reasoning.format, reasoning.stripFromContext, reasoning.effort, reasoning.maxTokens, enable-tool-prompts, task-default-timeout-seconds, task-max-timeout-seconds, shell-default-timeout-seconds, shell-max-timeout-seconds, tpm_threshold, timeout_ms, circuit_breaker_enabled, circuit_breaker_failure_threshold, circuit_breaker_failure_window_ms, circuit_breaker_recovery_timeout_ms',
     });
   });
 
@@ -134,10 +134,10 @@ describe('setCommand runtime integration', () => {
   });
   it('validates task timeout settings', async () => {
     const testCases = [
-      { key: 'task_default_timeout_seconds', value: '90' },
-      { key: 'task_max_timeout_seconds', value: '180' },
-      { key: 'shell_default_timeout_seconds', value: '60' },
-      { key: 'shell_max_timeout_seconds', value: '300' },
+      { key: 'task-default-timeout-seconds', value: '90' },
+      { key: 'task-max-timeout-seconds', value: '180' },
+      { key: 'shell-default-timeout-seconds', value: '60' },
+      { key: 'shell-max-timeout-seconds', value: '300' },
     ];
 
     for (const { key, value } of testCases) {
@@ -156,10 +156,10 @@ describe('setCommand runtime integration', () => {
 
   it('validates task timeout settings with -1 for unlimited', async () => {
     const testCases = [
-      { key: 'task_default_timeout_seconds', value: '-1' },
-      { key: 'task_max_timeout_seconds', value: '-1' },
-      { key: 'shell_default_timeout_seconds', value: '-1' },
-      { key: 'shell_max_timeout_seconds', value: '-1' },
+      { key: 'task-default-timeout-seconds', value: '-1' },
+      { key: 'task-max-timeout-seconds', value: '-1' },
+      { key: 'shell-default-timeout-seconds', value: '-1' },
+      { key: 'shell-max-timeout-seconds', value: '-1' },
     ];
 
     for (const { key, value } of testCases) {
@@ -176,25 +176,25 @@ describe('setCommand runtime integration', () => {
   it('rejects invalid timeout settings', async () => {
     const invalidCases = [
       {
-        key: 'task_default_timeout_seconds',
+        key: 'task-default-timeout-seconds',
         value: '-5',
         expectedError:
           'must be a positive number in seconds or -1 for unlimited',
       },
       {
-        key: 'task_max_timeout_seconds',
+        key: 'task-max-timeout-seconds',
         value: '0',
         expectedError:
           'must be a positive number in seconds or -1 for unlimited',
       },
       {
-        key: 'shell_default_timeout_seconds',
+        key: 'shell-default-timeout-seconds',
         value: 'not-a-number',
         expectedError:
           'must be a positive number in seconds or -1 for unlimited',
       },
       {
-        key: 'shell_max_timeout_seconds',
+        key: 'shell-max-timeout-seconds',
         value: '-100',
         expectedError:
           'must be a positive number in seconds or -1 for unlimited',

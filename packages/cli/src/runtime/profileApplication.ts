@@ -536,6 +536,7 @@ export async function applyProfileWithGuards(
   // the auth-key in SettingsService (set in Step 2)
   // CRITICAL: Preserve the auth and base-url ephemerals we just set
   // Also preserve reasoning settings so they survive provider switches (fixes #890)
+  // Also preserve timeout settings so they survive provider switches (fixes #1049)
   const providerSwitch = await switchActiveProvider(targetProviderName, {
     autoOAuth: false,
     preserveEphemerals: [
@@ -549,6 +550,11 @@ export async function applyProfileWithGuards(
       'reasoning.budgetTokens',
       'reasoning.stripFromContext',
       'reasoning.includeInContext',
+      // Tool timeout settings - fixes #1049
+      'task-default-timeout-seconds',
+      'task-max-timeout-seconds',
+      'shell-default-timeout-seconds',
+      'shell-max-timeout-seconds',
     ],
   });
   const infoMessages = providerSwitch.infoMessages.filter(
