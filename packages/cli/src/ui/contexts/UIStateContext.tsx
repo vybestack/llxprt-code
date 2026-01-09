@@ -104,6 +104,7 @@ export interface UIState {
   constrainHeight: boolean;
   showErrorDetails: boolean;
   showToolDescriptions: boolean;
+  isTodoPanelCollapsed: boolean;
   isNarrow: boolean;
   vimModeEnabled: boolean;
   vimMode: string | undefined;

@@ -100,6 +100,7 @@ export const DefaultAppLayout = ({
     constrainHeight,
     showErrorDetails,
     showToolDescriptions,
+    isTodoPanelCollapsed,
     consoleMessages,
     slashCommands,
     staticKey,
@@ -285,7 +286,9 @@ export const DefaultAppLayout = ({
               history={history}
             />
 
-            {showTodoPanelSetting && <TodoPanel width={inputWidth} />}
+            {showTodoPanelSetting && (
+              <TodoPanel width={inputWidth} collapsed={isTodoPanelCollapsed} />
+            )}
 
             <BucketAuthConfirmation
               config={config}
@@ -490,7 +493,9 @@ export const DefaultAppLayout = ({
             history={history}
           />
 
-          {showTodoPanelSetting && <TodoPanel width={inputWidth} />}
+          {showTodoPanelSetting && (
+            <TodoPanel width={inputWidth} collapsed={isTodoPanelCollapsed} />
+          )}
 
           {/* OAuth bucket auth confirmation - manages its own state via message bus */}
           <BucketAuthConfirmation config={config} isFocused={!dialogsVisible} />
