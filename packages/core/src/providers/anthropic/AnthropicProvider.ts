@@ -16,6 +16,7 @@ import { type IModel } from '../IModel.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import {
   convertToolsToAnthropic,
+  TOOL_PREFIX,
   type AnthropicTool,
 } from './schemaConverter.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
@@ -164,17 +165,19 @@ export class AnthropicProvider extends BaseProvider {
       dangerouslyAllowBrowser: true,
     };
 
-    if (baseURL && baseURL.trim() !== '') {
-      clientConfig.baseURL = baseURL;
-    }
-
     if (isOAuthToken) {
       clientConfig.authToken = authToken;
       clientConfig.defaultHeaders = {
-        'anthropic-beta': 'oauth-2025-04-20',
+        'anthropic-beta': 'oauth-2025-04-20, interleaved-thinking-2025-05-14',
       };
+      if (baseURL && baseURL.trim() !== '') {
+        clientConfig.baseURL = baseURL;
+      }
     } else {
       clientConfig.apiKey = authToken || '';
+      if (baseURL && baseURL.trim() !== '') {
+        clientConfig.baseURL = baseURL;
+      }
     }
 
     return new Anthropic(clientConfig as ClientOptions);
@@ -728,6 +731,20 @@ export class AnthropicProvider extends BaseProvider {
     // Unknown format - assume it's a raw UUID
     return 'hist_tool_' + id;
   }
+  private unprefixToolName(name: string, isOAuth: boolean): string {
+    // Only unprefix for OAuth requests
+    if (!isOAuth) {
+      return name;
+    }
+
+    // Remove the prefix if it's present
+    if (name.startsWith(TOOL_PREFIX)) {
+      return name.substring(TOOL_PREFIX.length);
+    }
+
+    // Return as-is if no prefix
+    return name;
+  }
 
   /**
    * Sort object keys alphabetically for stable JSON serialization
@@ -780,6 +797,9 @@ export class AnthropicProvider extends BaseProvider {
       options.resolved.telemetry,
     );
     const { contents: content, tools } = options;
+
+    // Detect OAuth token for Claude Code compatibility
+    const isOAuth = authToken.startsWith('sk-ant-oat');
 
     // Read reasoning settings from options.settings (SettingsService) - same pattern as OpenAI
     // This is the correct way to access ephemeral settings that are applied via profiles
@@ -1201,7 +1221,7 @@ export class AnthropicProvider extends BaseProvider {
             contentArray.push({
               type: 'tool_use',
               id: this.normalizeToAnthropicToolId(tc.id),
-              name: tc.name,
+              name: this.unprefixToolName(tc.name, isOAuth),
               input: parametersObj,
             });
           }
@@ -1309,7 +1329,7 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     // Convert Gemini format tools to Anthropic format using provider-specific converter
-    let anthropicTools = convertToolsToAnthropic(tools);
+    let anthropicTools = convertToolsToAnthropic(tools, isOAuth);
 
     // Stabilize tool ordering and JSON schema keys to prevent cache invalidation
     if (anthropicTools && anthropicTools.length > 0) {
@@ -1342,8 +1362,6 @@ export class AnthropicProvider extends BaseProvider {
               ),
             ),
           );
-
-    const isOAuth = authToken.startsWith('sk-ant-oat');
 
     // Get streaming setting from ephemeral settings (default: enabled)
     // Check invocation ephemerals first, then fall back to provider config
@@ -1519,12 +1537,18 @@ export class AnthropicProvider extends BaseProvider {
       const existingBeta = customHeaders['anthropic-beta'] as
         | string
         | undefined;
+      const betaWithOAuth = this.mergeBetaHeaders(
+        existingBeta,
+        'oauth-2025-04-20',
+      );
+      const betaWithThinking = this.mergeBetaHeaders(
+        betaWithOAuth,
+        'interleaved-thinking-2025-05-14',
+      );
       customHeaders = {
         ...customHeaders,
-        'anthropic-beta': this.mergeBetaHeaders(
-          existingBeta,
-          'oauth-2025-04-20',
-        ),
+        'anthropic-beta': betaWithThinking,
+        'User-Agent': 'claude-cli/2.1.2 (external, cli)',
       };
     }
 
@@ -1877,7 +1901,7 @@ export class AnthropicProvider extends BaseProvider {
               );
               currentToolCall = {
                 id: toolBlock.id,
-                name: toolBlock.name,
+                name: this.unprefixToolName(toolBlock.name, isOAuth),
                 input: '',
               };
             } else if (chunk.content_block.type === 'thinking') {
@@ -2029,17 +2053,23 @@ export class AnthropicProvider extends BaseProvider {
         if (contentBlock.type === 'text') {
           blocks.push({ type: 'text', text: contentBlock.text } as TextBlock);
         } else if (contentBlock.type === 'tool_use') {
+          // Unprefix tool name for OAuth requests
+          const unprefixName = this.unprefixToolName(
+            contentBlock.name,
+            isOAuth,
+          );
+
           // Process tool parameters with double-escape handling
           const processedParameters = processToolParameters(
             JSON.stringify(contentBlock.input),
-            contentBlock.name,
+            unprefixName,
             'anthropic',
           );
 
           blocks.push({
             type: 'tool_call',
             id: this.normalizeToHistoryToolId(contentBlock.id),
-            name: contentBlock.name,
+            name: unprefixName,
             parameters: processedParameters,
           } as ToolCallBlock);
         } else if (contentBlock.type === 'thinking') {

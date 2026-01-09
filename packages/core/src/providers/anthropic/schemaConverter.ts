@@ -19,6 +19,10 @@ import { DebugLogger } from '../../debug/DebugLogger.js';
 
 const logger = new DebugLogger('llxprt:provider:anthropic:schema');
 
+// Tool name prefix for Claude Code OAuth compatibility
+// Tools are prefixed on outgoing requests and unprefixed on incoming responses
+export const TOOL_PREFIX = 'llxprt_';
+
 /**
  * Anthropic input schema format
  */
@@ -239,6 +243,7 @@ export function convertToolsToAnthropic(
   geminiTools?: Array<{
     functionDeclarations?: GeminiToolDeclaration[];
   }>,
+  isOAuth?: boolean,
 ): AnthropicTool[] | undefined {
   if (!geminiTools || geminiTools.length === 0) {
     return undefined;
@@ -260,8 +265,11 @@ export function convertToolsToAnthropic(
 
       const inputSchema = convertSchemaToAnthropic(toolParameters);
 
+      // Prefix tool names for OAuth to avoid conflicts with Claude Code built-in tools
+      const toolName = isOAuth ? `${TOOL_PREFIX}${decl.name}` : decl.name;
+
       anthropicTools.push({
-        name: decl.name,
+        name: toolName,
         description: decl.description || '',
         input_schema: inputSchema,
       });
