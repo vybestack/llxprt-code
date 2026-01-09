@@ -18,3 +18,9 @@ export const COMPRESSION_TOKEN_THRESHOLD = 0.85;
 // This ensures more aggressive compression when we're closer to limits
 export const COMPRESSION_PRESERVE_THRESHOLD =
   2 * (1 - COMPRESSION_TOKEN_THRESHOLD);
+
+// Threshold for preserving the top portion of conversation (original user intent)
+export const COMPRESSION_TOP_PRESERVE_THRESHOLD = 0.2;
+
+// Maximum characters to preserve in individual messages for saved sections
+export const MAX_MESSAGE_CHARS_IN_PRESERVED = 5000;

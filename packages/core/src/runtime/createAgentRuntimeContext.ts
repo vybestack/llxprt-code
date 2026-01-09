@@ -23,6 +23,7 @@ import { tokenLimit } from '../core/tokenLimits.js';
 const EPHEMERAL_DEFAULTS = {
   compressionThreshold: 0.8,
   preserveThreshold: 0.2,
+  topPreserveThreshold: 0.2,
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */
   reasoning: {
     enabled: true, // REQ-THINK-006.1
@@ -75,6 +76,9 @@ export function createAgentRuntimeContext(
     preserveThreshold: (): number =>
       options.settings.preserveThreshold ??
       EPHEMERAL_DEFAULTS.preserveThreshold,
+    topPreserveThreshold: (): number =>
+      options.settings.topPreserveThreshold ??
+      EPHEMERAL_DEFAULTS.topPreserveThreshold,
     toolFormatOverride: (): string | undefined =>
       options.settings.toolFormatOverride,
     /**
