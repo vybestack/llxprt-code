@@ -28,6 +28,7 @@ import {
   CompletedToolCall,
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/src/test-utils/mock-tool.js';
+import { clearAllSchedulers } from '@vybestack/llxprt-code-core/dist/config/schedulerSingleton.js';
 import type { HistoryItemWithoutId, HistoryItemToolGroup } from '../types.js';
 import { ToolCallStatus } from '../types.js';
 
@@ -114,8 +115,8 @@ describe('useReactToolScheduler in YOLO Mode', () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
-    // IMPORTANT: Disable YOLO mode after this test suite
-    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.DEFAULT);
+    // Clean up scheduler instances to avoid memory leaks
+    void clearAllSchedulers();
   });
 
   const renderSchedulerInYoloMode = () =>
@@ -221,6 +222,8 @@ describe('useReactToolScheduler agentId propagation', () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+    // Clean up scheduler instances to avoid memory leaks
+    void clearAllSchedulers();
   });
 
   const renderScheduler = () =>
@@ -334,6 +337,8 @@ describe('useReactToolScheduler', () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+    // Clean up scheduler instances to avoid memory leaks
+    void clearAllSchedulers();
   });
 
   const renderScheduler = () =>

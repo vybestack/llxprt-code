@@ -53,19 +53,43 @@ export function createMockConfig(
     getMessageBus: vi.fn().mockReturnValue(defaultMessageBus),
     getOrCreateScheduler: vi.fn().mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async (_sessionId: string, _callbacks: any) => ({
+      async (_sessionId: string, _callbacks: any) => {
         // Mock getOrCreateScheduler for tests
         // Return a complete mock scheduler with all necessary methods
-        schedule: vi.fn().mockResolvedValue(undefined),
-        cancelAll: vi.fn(),
-        dispose: vi.fn(),
-        toolCalls: [],
-        getPreferredEditor: vi.fn(),
-        config: mockConfig,
-        toolRegistry: mockConfig?.getToolRegistry?.() || {
-          getTool: vi.fn(),
-        },
-      }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mockScheduler: any = {
+          schedule: vi.fn().mockImplementation(
+            async (
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              request: { callId: string; name: string } | any[],
+              _signal: unknown,
+            ) => {
+              // Simulate the real scheduler behavior:
+              // 1. Publish 'state-change' event with 'state-change' kind
+              const messageBus = mockConfig.getMessageBus();
+              if (messageBus?.publish) {
+                messageBus.publish('tool-update', {
+                  kind: 'tool-call-update',
+                  data: {
+                    status: 'validating',
+                    request: Array.isArray(request) ? request[0] : request,
+                  },
+                });
+              }
+              return Promise.resolve(undefined);
+            },
+          ),
+          cancelAll: vi.fn(),
+          dispose: vi.fn(),
+          toolCalls: [],
+          getPreferredEditor: _callbacks?.getPreferredEditor || vi.fn(),
+          config: mockConfig,
+          toolRegistry: mockConfig?.getToolRegistry?.() || {
+            getTool: vi.fn(),
+          },
+        };
+        return mockScheduler;
+      },
     ),
     ...overrides,
   };
