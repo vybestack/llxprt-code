@@ -73,6 +73,10 @@ export interface UIActions {
   handleProfileSelect: (profile: string) => void;
   exitLoadProfileDialog: () => void;
 
+  // Create profile dialog
+  openCreateProfileDialog: () => void;
+  exitCreateProfileDialog: () => void;
+
   // Tools dialog
   openToolsDialog: (action: 'enable' | 'disable') => void;
   handleToolsSelect: (tool: string) => void;

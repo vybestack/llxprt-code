@@ -62,6 +62,7 @@ describe('useEditorSettings', () => {
         provider: false,
         privacy: false,
         loadProfile: false,
+        createProfile: false,
         tools: false,
         oauthCode: false,
       },

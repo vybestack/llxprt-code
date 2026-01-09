@@ -21,6 +21,7 @@ import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { ProviderDialog } from './ProviderDialog.js';
 import { ProviderModelDialog } from './ProviderModelDialog.js';
 import { LoadProfileDialog } from './LoadProfileDialog.js';
+import { ProfileCreateWizard } from './ProfileCreateWizard/index.js';
 import { ToolsDialog } from './ToolsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
 import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
@@ -251,6 +252,17 @@ export const DialogManager = ({
           profiles={uiState.profiles}
           onSelect={uiActions.handleProfileSelect}
           onClose={uiActions.exitLoadProfileDialog}
+        />
+      </Box>
+    );
+  }
+  if (uiState.isCreateProfileDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <ProfileCreateWizard
+          onClose={uiActions.exitCreateProfileDialog}
+          onLoadProfile={uiActions.handleProfileSelect}
+          availableProviders={uiState.providerOptions}
         />
       </Box>
     );

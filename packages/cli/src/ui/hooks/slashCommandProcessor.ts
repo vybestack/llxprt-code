@@ -58,6 +58,7 @@ interface SlashCommandProcessorActions {
   openPermissionsDialog: () => void;
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void;
+  openCreateProfileDialog: () => void;
   quit: (messages: HistoryItem[]) => void;
   setDebugMessage: (message: string) => void;
   toggleCorgiMode: () => void;
@@ -486,6 +487,9 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'loadProfile':
                       actions.openLoadProfileDialog();
+                      return { type: 'handled' };
+                    case 'createProfile':
+                      actions.openCreateProfileDialog();
                       return { type: 'handled' };
                     case 'saveProfile':
                       return { type: 'handled' };

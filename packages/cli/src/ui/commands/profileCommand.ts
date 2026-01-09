@@ -876,6 +876,22 @@ const setDefaultCommand: SlashCommand = {
 };
 
 /**
+ * Profile create subcommand
+ */
+const createCommand: SlashCommand = {
+  name: 'create',
+  description: 'interactive wizard to create a new profile',
+  kind: CommandKind.BUILT_IN,
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<OpenDialogActionReturn> => ({
+    type: 'dialog',
+    dialog: 'createProfile',
+  }),
+};
+
+/**
  * Profile list subcommand
  */
 const listCommand: SlashCommand = {
@@ -924,6 +940,7 @@ export const profileCommand: SlashCommand = {
   subCommands: [
     saveCommand,
     loadCommand,
+    createCommand,
     deleteCommand,
     setDefaultCommand,
     listCommand,
@@ -939,6 +956,7 @@ export const profileCommand: SlashCommand = {
   /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]
                                 - Save a load balancer profile
   /profile load <name>          - Load a saved profile
+  /profile create               - Interactive wizard to create a profile
   /profile delete <name>        - Delete a saved profile
   /profile set-default <name>   - Set profile to load on startup (or "none")
   /profile list                 - List all saved profiles`,

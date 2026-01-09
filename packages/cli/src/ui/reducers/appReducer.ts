@@ -21,6 +21,7 @@ export type AppAction =
         | 'provider'
         | 'privacy'
         | 'loadProfile'
+        | 'createProfile'
         | 'tools'
         | 'oauthCode';
     }
@@ -34,6 +35,7 @@ export type AppAction =
         | 'provider'
         | 'privacy'
         | 'loadProfile'
+        | 'createProfile'
         | 'tools'
         | 'oauthCode';
     }
@@ -52,6 +54,7 @@ export interface AppState {
     provider: boolean;
     privacy: boolean;
     loadProfile: boolean;
+    createProfile: boolean;
     tools: boolean;
     oauthCode: boolean;
   };
@@ -76,6 +79,7 @@ export const initialAppState: AppState = {
     provider: false,
     privacy: false,
     loadProfile: false,
+    createProfile: false,
     tools: false,
     oauthCode: false,
   },

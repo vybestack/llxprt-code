@@ -161,6 +161,7 @@ export const DefaultAppLayout = ({
     uiState.isProviderDialogOpen ||
     uiState.isProviderModelDialogOpen ||
     uiState.isLoadProfileDialogOpen ||
+    uiState.isCreateProfileDialogOpen ||
     uiState.isToolsDialogOpen ||
     uiState.showPrivacyNotice;
 

@@ -65,6 +65,7 @@ export interface UIState {
   isProviderDialogOpen: boolean;
   isProviderModelDialogOpen: boolean;
   isLoadProfileDialogOpen: boolean;
+  isCreateProfileDialogOpen: boolean;
   isToolsDialogOpen: boolean;
   isFolderTrustDialogOpen: boolean;
   showWorkspaceMigrationDialog: boolean;
