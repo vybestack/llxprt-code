@@ -22,6 +22,7 @@ import {
   ToolCallRequestInfo,
   ToolRegistry,
   ApprovalMode,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -193,6 +194,16 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
   });
 
   afterEach(() => {
+    // Dispose FileOutput singleton to stop its recurring timer before
+    // clearing fake timers. This prevents infinite timer loops when
+    // vi.runAllTimersAsync() advances the recurring flush timer.
+    // We need to reset all loggers which disposes FileOutput.
+    try {
+      DebugLogger.resetForTesting();
+    } catch (_e) {
+      // Ignore if not available
+    }
+
     vi.clearAllTimers();
     vi.useRealTimers();
     vi.clearAllMocks();
