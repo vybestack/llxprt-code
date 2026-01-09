@@ -101,7 +101,8 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
         return;
       }
 
-      // Check for conflicts
+      // Check for conflicts (best-effort early validation for UX)
+      // Note: Filesystem is the final source of truth via atomic save operation
       if (existingProfiles.includes(value)) {
         setValidationError('Profile name already exists');
         return;
@@ -133,10 +134,19 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
       setSaveError(null);
 
       const profileJSON = buildProfileJSON(state);
-      const result = await saveProfile(profileNameInput, profileJSON);
+      // Atomic save operation - filesystem is source of truth for conflicts
+      // Uses 'wx' flag by default to prevent overwrite unless forceSave=true
+      const result = await saveProfile(profileNameInput, profileJSON, {
+        overwrite: forceSave,
+      });
 
       if (result.success) {
         onContinue();
+      } else if (result.alreadyExists) {
+        // Filesystem reports file exists - show conflict dialog
+        // This catches stale existingProfiles or race conditions
+        setValidationError('Profile name already exists');
+        setFocusedComponent('conflict');
       } else {
         setSaveError(result.error || 'Failed to save profile');
         setFocusedComponent('input');

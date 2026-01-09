@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
@@ -12,7 +12,7 @@ import { TextInput } from './TextInput.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { PROVIDER_OPTIONS } from './constants.js';
 import { validateKeyFile } from './validation.js';
-import { testConnectionWithTimeout, getStepPosition } from './utils.js';
+import { getStepPosition } from './utils.js';
 import type { WizardState } from './types.js';
 
 interface AuthenticationStepProps {
@@ -28,11 +28,11 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
   onUpdateAuth,
   onContinue,
   onBack,
-  onCancel,
+  onCancel: _onCancel,
 }) => {
-  const [focusedComponent, setFocusedComponent] = useState<
-    'select' | 'input' | 'testing'
-  >('select');
+  const [focusedComponent, setFocusedComponent] = useState<'select' | 'input'>(
+    'select',
+  );
   const [authMethod, setAuthMethod] = useState<
     'apikey' | 'keyfile' | 'oauth' | 'skip' | null
   >(null);
@@ -40,11 +40,6 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
   const [oauthBuckets, setOauthBuckets] = useState('default');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isPathValidated, setIsPathValidated] = useState(false);
-  const [connectionTestState, setConnectionTestState] = useState<
-    'idle' | 'testing' | 'success' | 'failed' | 'timedout'
-  >('idle');
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [testTimeRemaining, setTestTimeRemaining] = useState(30);
 
   const providerOption = PROVIDER_OPTIONS.find(
     (p) => p.value === state.config.provider,
@@ -62,31 +57,10 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
           // Go back to previous step
           onBack();
         }
-        // Don't allow escape during testing - user has retry/skip/back/cancel options
       }
     },
     { isActive: true },
   );
-
-  // Countdown timer for connection test
-  useEffect(() => {
-    if (connectionTestState === 'testing' && testTimeRemaining > 0) {
-      const timer = setTimeout(() => {
-        setTestTimeRemaining((prev) => prev - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [connectionTestState, testTimeRemaining]);
-
-  // Auto-proceed to next step after successful connection test
-  useEffect(() => {
-    if (connectionTestState === 'success') {
-      const timer = setTimeout(() => onContinue(), 500);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [connectionTestState, onContinue]);
 
   const handleAuthSelect = useCallback(
     (value: string) => {
@@ -149,66 +123,16 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
 
     setValidationError(null);
 
-    // Store auth value before testing
+    // Store auth value and proceed
     if (authMethod === 'apikey') {
       onUpdateAuth({ type: 'apikey', value: authInput });
     } else if (authMethod === 'keyfile') {
       onUpdateAuth({ type: 'keyfile', value: authInput });
     }
 
-    // Initiate connection test
-    setFocusedComponent('testing');
-    setConnectionTestState('testing');
-    setTestTimeRemaining(30);
-
-    const testResult = await testConnectionWithTimeout(
-      state.config.provider || '',
-      state.config.baseUrl,
-      state.config.model || '',
-      authMethod as 'apikey' | 'keyfile',
-      authInput,
-    );
-
-    if (testResult.success) {
-      setConnectionTestState('success');
-      // Auto-proceed handled by useEffect
-    } else if (testResult.timedOut) {
-      setConnectionTestState('timedout');
-      setConnectionError('Connection test timed out after 30 seconds');
-    } else {
-      setConnectionTestState('failed');
-      setConnectionError(testResult.error || 'Connection failed');
-    }
-  }, [
-    authInput,
-    authMethod,
-    oauthBuckets,
-    onUpdateAuth,
-    state.config,
-    onContinue,
-  ]);
-
-  const handleRetry = useCallback(() => {
-    setConnectionTestState('idle');
-    setConnectionError(null);
-    setFocusedComponent('input');
-  }, []);
-
-  const handleSkipValidation = useCallback(() => {
-    setConnectionTestState('idle');
-    setConnectionError(null);
+    // Proceed to next step
     onContinue();
-  }, [onContinue]);
-
-  const handleFailureAction = useCallback(
-    (value: string) => {
-      if (value === 'retry') handleRetry();
-      else if (value === 'skip') handleSkipValidation();
-      else if (value === 'back') onBack();
-      else if (value === 'cancel') onCancel();
-    },
-    [handleRetry, handleSkipValidation, onBack, onCancel],
-  );
+  }, [authInput, authMethod, oauthBuckets, onUpdateAuth, onContinue]);
 
   // Build auth options based on provider
   const authOptions: Array<{ label: string; value: string; key: string }> = [];
@@ -365,55 +289,6 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
           <Text color={Colors.Gray}>Enter Continue Esc Back to list</Text>
         </>
       )}
-
-      {focusedComponent === 'testing' && connectionTestState === 'testing' && (
-        <>
-          <Text color={Colors.AccentYellow}>
-            Testing connection to{' '}
-            {providerOption?.label || state.config.provider}...
-          </Text>
-          <Text color={Colors.Gray}>
-            ({testTimeRemaining} seconds remaining)
-          </Text>
-          <Text color={Colors.Foreground}> </Text>
-          <Text color={Colors.Gray}>Please wait...</Text>
-        </>
-      )}
-
-      {focusedComponent === 'testing' && connectionTestState === 'success' && (
-        <>
-          <Text color={Colors.AccentGreen}>✓ Connection successful!</Text>
-          <Text color={Colors.Gray}>Proceeding to next step...</Text>
-        </>
-      )}
-
-      {focusedComponent === 'testing' &&
-        (connectionTestState === 'failed' ||
-          connectionTestState === 'timedout') && (
-          <>
-            <Text color={Colors.AccentRed}>
-              ✗ Connection{' '}
-              {connectionTestState === 'timedout' ? 'timed out' : 'failed'}
-            </Text>
-            <Text color={Colors.Foreground}> </Text>
-            <Text color={Colors.AccentRed}>Error: {connectionError}</Text>
-            <Text color={Colors.Foreground}> </Text>
-            <RadioButtonSelect
-              items={[
-                { label: 'Try again', value: 'retry', key: 'retry' },
-                {
-                  label: 'Continue anyway (skip validation)',
-                  value: 'skip',
-                  key: 'skip',
-                },
-                { label: 'Back', value: 'back', key: 'back' },
-                { label: 'Cancel', value: 'cancel', key: 'cancel' },
-              ]}
-              onSelect={handleFailureAction}
-              isFocused={true}
-            />
-          </>
-        )}
     </Box>
   );
 };

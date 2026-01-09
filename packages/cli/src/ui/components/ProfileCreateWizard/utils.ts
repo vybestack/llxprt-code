@@ -7,12 +7,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { PROVIDER_OPTIONS } from './constants.js';
 import { WizardStep } from './types.js';
 import type { WizardState, ConnectionTestResult } from './types.js';
-
-const logger = new DebugLogger('llxprt:ui:profilewizard');
 
 function expandTilde(filePath: string): string {
   // Handle ~/ for home directory
@@ -39,13 +36,6 @@ export function needsBaseUrlConfig(provider: string | null): boolean {
   if (!provider) return false;
   const providerOption = PROVIDER_OPTIONS.find((p) => p.value === provider);
   const result = providerOption?.needsBaseUrl ?? false;
-
-  // Debug logging
-  logger.debug(
-    () =>
-      `needsBaseUrlConfig: provider="${provider}", foundOption=${!!providerOption}, needsBaseUrl=${result}`,
-  );
-
   return result;
 }
 
@@ -75,7 +65,7 @@ export function generateProfileNameSuggestions(
   return suggestions.slice(0, 3); // Max 3 suggestions
 }
 
-export function buildProfileJSON(state: WizardState): object {
+export function buildProfileJSON(state: WizardState): Record<string, unknown> {
   const profile: Record<string, unknown> = {
     version: 1,
     provider:
@@ -126,20 +116,43 @@ export function buildProfileJSON(state: WizardState): object {
 
 export async function saveProfile(
   name: string,
-  config: object,
-): Promise<{ success: boolean; error?: string; path?: string }> {
+  config: Record<string, unknown>,
+  opts: { overwrite?: boolean } = {},
+): Promise<{
+  success: boolean;
+  error?: string;
+  path?: string;
+  alreadyExists?: boolean;
+}> {
   try {
     const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
 
-    // Ensure directory exists
-    await fs.mkdir(profilesDir, { recursive: true });
+    // Ensure directory exists with restrictive permissions (owner-only)
+    await fs.mkdir(profilesDir, { recursive: true, mode: 0o700 });
 
-    // Write profile
+    // Write profile with restrictive permissions (owner read/write only)
     const profilePath = path.join(profilesDir, `${name}.json`);
-    await fs.writeFile(profilePath, JSON.stringify(config, null, 2), 'utf-8');
+    const data = JSON.stringify(config, null, 2);
+    await fs.writeFile(profilePath, data, {
+      encoding: 'utf-8',
+      mode: 0o600,
+      flag: opts.overwrite ? 'w' : 'wx',
+    });
 
     return { success: true, path: profilePath };
   } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'EEXIST'
+    ) {
+      return {
+        success: false,
+        alreadyExists: true,
+        error: 'Profile name already exists',
+      };
+    }
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
