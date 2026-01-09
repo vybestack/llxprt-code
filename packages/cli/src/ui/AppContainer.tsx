@@ -96,6 +96,7 @@ import { submitOAuthCode } from './oauth-submission.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
+import { useCreateProfileDialog } from './hooks/useCreateProfileDialog.js';
 import { useToolsDialog } from './hooks/useToolsDialog.js';
 import {
   shouldUpdateTokenMetrics,
@@ -1190,6 +1191,15 @@ export const AppContainer = (props: AppContainerProps) => {
   });
 
   const {
+    showDialog: isCreateProfileDialogOpen,
+    openDialog: openCreateProfileDialog,
+    closeDialog: exitCreateProfileDialog,
+    providers: createProfileProviders,
+  } = useCreateProfileDialog({
+    appState,
+  });
+
+  const {
     showDialog: isToolsDialogOpen,
     openDialog: openToolsDialogRaw,
     closeDialog: exitToolsDialog,
@@ -1376,6 +1386,7 @@ export const AppContainer = (props: AppContainerProps) => {
       openPermissionsDialog,
       openProviderDialog,
       openLoadProfileDialog,
+      openCreateProfileDialog,
       quit: setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
@@ -1394,6 +1405,7 @@ export const AppContainer = (props: AppContainerProps) => {
       openPermissionsDialog,
       openProviderDialog,
       openLoadProfileDialog,
+      openCreateProfileDialog,
       setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
@@ -1954,6 +1966,7 @@ export const AppContainer = (props: AppContainerProps) => {
       !isProviderDialogOpen &&
       !isProviderModelDialogOpen &&
       !isToolsDialogOpen &&
+      !isCreateProfileDialogOpen &&
       !showPrivacyNotice &&
       !isWelcomeDialogOpen &&
       geminiClient
@@ -1971,6 +1984,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isProviderDialogOpen,
     isProviderModelDialogOpen,
     isToolsDialogOpen,
+    isCreateProfileDialogOpen,
     showPrivacyNotice,
     isWelcomeDialogOpen,
     geminiClient,
@@ -2021,6 +2035,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isProviderDialogOpen,
     isProviderModelDialogOpen,
     isLoadProfileDialogOpen,
+    isCreateProfileDialogOpen,
     isToolsDialogOpen,
     isFolderTrustDialogOpen,
     showWorkspaceMigrationDialog,
@@ -2030,7 +2045,9 @@ export const AppContainer = (props: AppContainerProps) => {
     isLoggingDialogOpen,
 
     // Dialog data
-    providerOptions,
+    providerOptions: isCreateProfileDialogOpen
+      ? createProfileProviders
+      : providerOptions,
     selectedProvider,
     providerModels,
     currentModel,
@@ -2188,6 +2205,10 @@ export const AppContainer = (props: AppContainerProps) => {
       handleProfileSelect,
       exitLoadProfileDialog,
 
+      // Create profile dialog
+      openCreateProfileDialog,
+      exitCreateProfileDialog,
+
       // Tools dialog
       openToolsDialog,
       handleToolsSelect,
@@ -2282,6 +2303,8 @@ export const AppContainer = (props: AppContainerProps) => {
       openLoadProfileDialog,
       handleProfileSelect,
       exitLoadProfileDialog,
+      openCreateProfileDialog,
+      exitCreateProfileDialog,
       openToolsDialog,
       handleToolsSelect,
       exitToolsDialog,
