@@ -349,8 +349,8 @@ describe('ShellTool', () => {
         vi.useFakeTimers();
         const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
         mockConfig.getEphemeralSettings.mockReturnValue({
-          shell_default_timeout_seconds: 2,
-          shell_max_timeout_seconds: 5,
+          'shell-default-timeout-seconds': 2,
+          'shell-max-timeout-seconds': 5,
         });
 
         const invocation = shellTool.build({ command: 'ls' });
@@ -372,8 +372,8 @@ describe('ShellTool', () => {
         vi.useFakeTimers();
         const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
         mockConfig.getEphemeralSettings.mockReturnValue({
-          shell_default_timeout_seconds: 1,
-          shell_max_timeout_seconds: 2,
+          'shell-default-timeout-seconds': 1,
+          'shell-max-timeout-seconds': 2,
         });
 
         const invocation = shellTool.build({
@@ -398,8 +398,8 @@ describe('ShellTool', () => {
         vi.useFakeTimers();
         const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
         mockConfig.getEphemeralSettings.mockReturnValue({
-          shell_default_timeout_seconds: 1,
-          shell_max_timeout_seconds: 2,
+          'shell-default-timeout-seconds': 1,
+          'shell-max-timeout-seconds': 2,
         });
 
         const invocation = shellTool.build({
@@ -469,8 +469,8 @@ describe('ShellTool', () => {
         vi.useFakeTimers();
         const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
         mockConfig.getEphemeralSettings.mockReturnValue({
-          shell_default_timeout_seconds: 1,
-          shell_max_timeout_seconds: 5,
+          'shell-default-timeout-seconds': 1,
+          'shell-max-timeout-seconds': 5,
         });
 
         const invocation = shellTool.build({

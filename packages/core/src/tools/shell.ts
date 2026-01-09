@@ -52,8 +52,9 @@ import { doesToolInvocationMatch } from '../utils/tool-utils.js';
 
 export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
 
-const DEFAULT_SHELL_TIMEOUT_SECONDS = 120;
-const MAX_SHELL_TIMEOUT_SECONDS = 600;
+// Tool timeout settings (Issue #1049)
+const DEFAULT_SHELL_TIMEOUT_SECONDS = 300;
+const MAX_SHELL_TIMEOUT_SECONDS = 900;
 
 export interface ShellToolParams {
   /**
@@ -203,10 +204,10 @@ class ShellToolInvocation extends BaseToolInvocation<
 
     const ephemeralSettings = this.config.getEphemeralSettings();
     const defaultTimeoutSeconds =
-      (ephemeralSettings.shell_default_timeout_seconds as number | undefined) ??
+      (ephemeralSettings['shell-default-timeout-seconds'] as number | undefined) ??
       DEFAULT_SHELL_TIMEOUT_SECONDS;
     const maxTimeoutSeconds =
-      (ephemeralSettings.shell_max_timeout_seconds as number | undefined) ??
+      (ephemeralSettings['shell-max-timeout-seconds'] as number | undefined) ??
       MAX_SHELL_TIMEOUT_SECONDS;
     const timeoutSeconds = this.resolveTimeoutSeconds(
       this.params.timeout_seconds,

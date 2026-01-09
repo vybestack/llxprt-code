@@ -30,8 +30,9 @@ import { DebugLogger } from '../debug/DebugLogger.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
-const DEFAULT_TASK_TIMEOUT_SECONDS = 60;
-const MAX_TASK_TIMEOUT_SECONDS = 300;
+// Tool timeout settings (Issue #1049)
+const DEFAULT_TASK_TIMEOUT_SECONDS = 900;
+const MAX_TASK_TIMEOUT_SECONDS = 1800;
 
 export interface TaskToolParams {
   subagent_name?: string;
@@ -533,10 +534,10 @@ class TaskToolInvocation extends BaseToolInvocation<
   } {
     const settings = this.config.getEphemeralSettings?.() ?? {};
     const defaultTimeoutSeconds =
-      (settings.task_default_timeout_seconds as number | undefined) ??
+      (settings['task-default-timeout-seconds'] as number | undefined) ??
       DEFAULT_TASK_TIMEOUT_SECONDS;
     const maxTimeoutSeconds =
-      (settings.task_max_timeout_seconds as number | undefined) ??
+      (settings['task-max-timeout-seconds'] as number | undefined) ??
       MAX_TASK_TIMEOUT_SECONDS;
 
     const timeoutSeconds = this.resolveTimeoutSeconds(

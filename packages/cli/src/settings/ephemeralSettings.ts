@@ -77,6 +77,16 @@ export const ephemeralSettingHelp: Record<string, string> = {
   'enable-tool-prompts':
     'Load tool-specific prompts from ~/.llxprt/prompts/tools/** (true/false, default: false)',
 
+  // Tool timeout settings (Issue #1049)
+  'task-default-timeout-seconds':
+    'Default timeout in seconds for task tool executions (launches subagents for complex autonomous work). Use higher values (e.g., 900-1800) for complex development tasks, data analysis, or multi-step workflows. Use lower values for quick operations. Set to -1 for unlimited. Default: 900 (15 minutes)',
+  'task-max-timeout-seconds':
+    'Maximum allowed timeout in seconds for task tool executions, enforcing an upper bound even when explicitly specified. Prevents runaway subagent processes. Default: 1800 (30 minutes)',
+  'shell-default-timeout-seconds':
+    'Default timeout in seconds for shell command executions (runs terminal commands like git, npm, build scripts). Use higher values (e.g., 300-900) for long-running builds or downloads. Use lower values for quick commands. Set to -1 for unlimited. Default: 300 (5 minutes)',
+  'shell-max-timeout-seconds':
+    'Maximum allowed timeout in seconds for shell command executions, enforcing an upper bound even when explicitly specified. Prevents hanging commands. Default: 900 (15 minutes)',
+
   // Load balancer advanced failover settings (Phase 3, Issue #489)
   tpm_threshold:
     'Minimum tokens per minute before triggering failover (positive integer, load balancer only)',
@@ -89,16 +99,6 @@ export const ephemeralSettingHelp: Record<string, string> = {
   circuit_breaker_failure_window_ms:
     'Time window for counting failures in milliseconds (positive integer, default: 60000, load balancer only)',
   circuit_breaker_recovery_timeout_ms:
-    'Cooldown period before retrying after circuit opens in milliseconds (positive integer, default: 30000, load balancer only)',
-
-  // Tool timeout settings (Issue #920, #1028)
-  task_default_timeout_seconds:
-    'Default timeout for task tool executions in seconds (default: 60, -1 for unlimited)',
-  task_max_timeout_seconds:
-    'Maximum timeout allowed for task tool executions in seconds (default: 300, -1 for unlimited)',
-  shell_default_timeout_seconds:
-    'Default timeout for shell tool executions in seconds (default: 120, -1 for unlimited)',
-  shell_max_timeout_seconds:
     'Maximum timeout allowed for shell tool executions in seconds (default: 600, -1 for unlimited)',
 };
 
@@ -475,10 +475,10 @@ export function parseEphemeralSettingValue(
   }
 
   if (
-    key === 'task_default_timeout_seconds' ||
-    key === 'task_max_timeout_seconds' ||
-    key === 'shell_default_timeout_seconds' ||
-    key === 'shell_max_timeout_seconds'
+    key === 'task-default-timeout-seconds' ||
+    key === 'task-max-timeout-seconds' ||
+    key === 'shell-default-timeout-seconds' ||
+    key === 'shell-max-timeout-seconds'
   ) {
     const numValue = parsedValue as number;
     if (typeof numValue !== 'number' || (numValue !== -1 && numValue <= 0)) {

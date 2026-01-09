@@ -892,7 +892,7 @@ export function clearActiveModelParam(name: string): void {
   settingsService.setProviderSetting(providerName, name, undefined);
 }
 
-const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
+export const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
   'auth-key',
   'auth-keyfile',
   'context-limit',
@@ -932,6 +932,11 @@ const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
   'prompt-caching',
   'include-folder-structure',
   'enable-tool-prompts',
+  // Tool timeout settings (Issue #1049)
+  'task-default-timeout-seconds',
+  'task-max-timeout-seconds',
+  'shell-default-timeout-seconds',
+  'shell-max-timeout-seconds',
 ];
 
 const SENSITIVE_MODEL_PARAM_KEYS = new Set([
