@@ -42,6 +42,20 @@ describe('prompts async integration', () => {
     model: 'gemini-1.5-pro',
   };
 
+  beforeAll(async () => {
+    // Create a temporary directory for test prompts
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-test-'));
+    process.env.LLXPRT_PROMPTS_DIR = tempDir;
+
+    // Initialize the prompt system once for all tests
+    await initializePromptSystem();
+  });
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    process.env.LLXPRT_PROMPTS_DIR = tempDir;
+  });
+
   const callPrompt = (
     overrides: Partial<CoreSystemPromptOptions> = {},
   ): Promise<string> => {
@@ -61,20 +75,6 @@ describe('prompts async integration', () => {
     });
     return [...header, ...entries].join('\n');
   };
-
-  beforeAll(async () => {
-    // Create a temporary directory for test prompts
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-test-'));
-    process.env.LLXPRT_PROMPTS_DIR = tempDir;
-
-    // Initialize the prompt system once for all tests
-    await initializePromptSystem();
-  });
-
-  beforeEach(() => {
-    originalEnv = { ...process.env };
-    process.env.LLXPRT_PROMPTS_DIR = tempDir;
-  });
 
   afterEach(() => {
     // Restore original environment
@@ -215,7 +215,7 @@ describe('prompts async integration', () => {
   });
 
   describe('subagent delegation block (issue #1019)', () => {
-    it('should contain Subagent Delegation block when explicitly enabled', async () => {
+    it('should contain Subagent Delegation block when includeSubagentDelegation is true and tools include both task and list_subagents', async () => {
       const tools = ['read_file', 'list_subagents', 'task'];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
@@ -223,12 +223,14 @@ describe('prompts async integration', () => {
         includeSubagentDelegation: true,
       });
 
-      expect(prompt).toContain('Subagent Delegation');
-      expect(prompt).toContain('list_subagents');
-      expect(prompt).toContain('task');
+      expect(prompt).toContain('# Subagent Delegation');
+      expect(prompt).toContain('Requests that involve whole-codebase analysis');
+      expect(prompt).toContain(
+        'Call `list_subagents` if you need to confirm the available helpers',
+      );
     });
 
-    it('should exclude Subagent Delegation block when not explicitly enabled', async () => {
+    it('should replace SUBAGENT_DELEGATION placeholder with empty when includeSubagentDelegation is false', async () => {
       const tools = ['read_file', 'list_subagents', 'task'];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
@@ -237,11 +239,29 @@ describe('prompts async integration', () => {
       });
 
       expect(prompt).not.toContain('Subagent Delegation');
-      expect(prompt).not.toContain('LLXPRT:BEGIN_SUBAGENT_DELEGATION');
-      expect(prompt).not.toContain('LLXPRT:END_SUBAGENT_DELEGATION');
+      expect(prompt).not.toContain(
+        'Requests that involve whole-codebase analysis',
+      );
+      expect(prompt).not.toContain(
+        'Call `list_subagents` if you need to confirm the available helpers',
+      );
     });
 
-    it('should exclude Subagent Delegation block when tools do not include task', async () => {
+    it('should replace SUBAGENT_DELEGATION placeholder with empty when tools do not include ListSubagents', async () => {
+      const tools = ['read_file', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: true,
+      });
+
+      expect(prompt).not.toContain('Subagent Delegation');
+      expect(prompt).not.toContain(
+        'Requests that involve whole-codebase analysis',
+      );
+    });
+
+    it('should replace SUBAGENT_DELEGATION placeholder with empty when tools do not include Task', async () => {
       const tools = ['read_file', 'list_subagents'];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
@@ -250,20 +270,33 @@ describe('prompts async integration', () => {
       });
 
       expect(prompt).not.toContain('Subagent Delegation');
-      expect(prompt).not.toContain('LLXPRT:BEGIN_SUBAGENT_DELEGATION');
-      expect(prompt).not.toContain('LLXPRT:END_SUBAGENT_DELEGATION');
+      expect(prompt).not.toContain(
+        'Requests that involve whole-codebase analysis',
+      );
     });
 
-    it('should exclude markers from the prompt after processing', async () => {
+    it('should replace SUBAGENT_DELEGATION placeholder with empty when includeSubagentDelegation is undefined', async () => {
       const tools = ['read_file', 'list_subagents', 'task'];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
         tools,
-        includeSubagentDelegation: true,
       });
 
-      expect(prompt).not.toContain('LLXPRT:BEGIN_SUBAGENT_DELEGATION');
-      expect(prompt).not.toContain('LLXPRT:END_SUBAGENT_DELEGATION');
+      expect(prompt).not.toContain('Subagent Delegation');
+      expect(prompt).not.toContain(
+        'Requests that involve whole-codebase analysis',
+      );
+    });
+
+    it('should not contain placeholder markers like {{SUBAGENT_DELEGATION}} in final output', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: false,
+      });
+
+      expect(prompt).not.toContain('{{SUBAGENT_DELEGATION}}');
     });
   });
 });

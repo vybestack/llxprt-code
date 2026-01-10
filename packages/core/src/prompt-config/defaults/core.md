@@ -59,17 +59,7 @@ Technology preferences when unspecified:
 - **Task Management:** Use todo tools for complex tasks. Update status in real-time.
 - **Tool Call Formatting:** All tool calls must be formatted as JSON. Do not use Python syntax for tool calls, especially for arrays and objects. For example, use `{"files": ["file1.txt", "file2.txt"]}` instead of `list_files(files=["file1.txt", "file2.txt"])`.
 
-<!-- LLXPRT:BEGIN_SUBAGENT_DELEGATION -->
-
-## Subagent Delegation
-
-- Requests that involve whole-codebase analysis, audits, recommendations, or long-form reporting **must** be delegated to a subagent rather than handled directly.
-- Flow:
-  1. Call `list_subagents` if you need to confirm the available helpers.
-  2. Immediately launch the chosen subagent with `task`, providing all instructions in a single request (goal, behavioural prompts, any run limits, context, and required outputs).
-  3. Wait for the subagent to return. Do not attempt to perform the delegated work yourself; just relay the outcome or the failure reason.
-- If no suitable subagent is available, briefly ask the user once per session whether you should proceed yourself. If they agree, continue and do the work directly.
-<!-- LLXPRT:END_SUBAGENT_DELEGATION -->
+{{SUBAGENT_DELEGATION}}
 
 # Examples
 

@@ -536,14 +536,6 @@ export class PromptService {
       processedContent = content;
     }
 
-    // Strip subagent delegation block unless explicitly enabled and tools allow it.
-    if (!this.shouldIncludeSubagentDelegation(context)) {
-      processedContent = this.stripSubagentDelegationBlock(processedContent);
-    }
-
-    // Markers should always be stripped from the final output
-    processedContent = this.stripDelegationMarkers(processedContent);
-
     return processedContent;
   }
 
@@ -594,39 +586,5 @@ export class PromptService {
     const estimate = Math.max(wordCount * 1.3, characterCount / 4);
 
     return Math.round(estimate);
-  }
-
-  private shouldIncludeSubagentDelegation(context: PromptContext): boolean {
-    if (context.includeSubagentDelegation !== true) {
-      return false;
-    }
-    const enabledTools = context.enabledTools ?? [];
-    const hasTaskTool = enabledTools.includes('Task');
-    const hasListSubagentsTool = enabledTools.includes('ListSubagents');
-    return hasTaskTool && hasListSubagentsTool;
-  }
-
-  private stripSubagentDelegationBlock(content: string): string {
-    let result = content.replace(
-      /<!-- LLXPRT:BEGIN_SUBAGENT_DELEGATION -->[\s\S]*?<!-- LLXPRT:END_SUBAGENT_DELEGATION -->\s*/g,
-      '',
-    );
-
-    result = result.replace(
-      /<!-- LLXPRT:BEGIN_SUBAGENT_DELEGATION -->[\s\S]*$/g,
-      '',
-    );
-
-    return result.replace(/\n{3,}/g, '\n\n').trim();
-  }
-
-  private stripDelegationMarkers(content: string): string {
-    let result = content;
-    result = result.replace(
-      /<!-- LLXPRT:BEGIN_SUBAGENT_DELEGATION -->\s*/g,
-      '',
-    );
-    result = result.replace(/\s*<!-- LLXPRT:END_SUBAGENT_DELEGATION -->/g, '');
-    return result;
   }
 }

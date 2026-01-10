@@ -1,9 +1,13 @@
 import path from 'node:path';
+import * as fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   type TemplateVariables,
   type TemplateProcessingOptions,
   type PromptContext,
 } from './types.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * TemplateEngine - Handles variable substitution in prompt templates
@@ -225,7 +229,51 @@ export class TemplateEngine {
       sessionStartedAt ?? variables['CURRENT_DATETIME'];
     variables['PLATFORM'] = process.platform;
 
+    // Add SUBAGENT_DELEGATION variable - empty unless includeSubagentDelegation is true and the required tools are available
+    const enabledTools = context.enabledTools ?? [];
+    const hasTaskTool =
+      enabledTools.includes('Task') || enabledTools.includes('task');
+    const hasListSubagentsTool =
+      enabledTools.includes('ListSubagents') ||
+      enabledTools.includes('list_subagents');
+    if (
+      context.includeSubagentDelegation === true &&
+      hasTaskTool &&
+      hasListSubagentsTool
+    ) {
+      // The content will be loaded from subagent-delegation.md file
+      // We load it here directly to include in template variables
+      try {
+        const subagentDelegationContent = this.loadSubagentDelegationContent();
+        variables['SUBAGENT_DELEGATION'] = subagentDelegationContent;
+      } catch {
+        // If loading fails, use empty string
+        variables['SUBAGENT_DELEGATION'] = '';
+      }
+    } else {
+      variables['SUBAGENT_DELEGATION'] = '';
+    }
+
     return variables;
+  }
+
+  /**
+   * Load the subagent delegation content from the default file
+   * @returns The content of subagent-delegation.md
+   */
+  private loadSubagentDelegationContent(): string {
+    const coreDefaultsPath = path.resolve(
+      __dirname,
+      'defaults',
+      'subagent-delegation.md',
+    );
+    try {
+      return fs.readFileSync(coreDefaultsPath, 'utf-8');
+    } catch (error) {
+      throw new Error(
+        `Failed to load subagent-delegation.md from ${coreDefaultsPath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /**
