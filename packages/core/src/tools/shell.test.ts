@@ -78,7 +78,9 @@ describe('ShellTool', () => {
       getDebugMode: vi.fn().mockReturnValue(false),
       getTargetDir: vi.fn().mockReturnValue('/test/dir'),
       getSummarizeToolOutputConfig: vi.fn().mockReturnValue(undefined),
-      getWorkspaceContext: () => createMockWorkspaceContext('.'),
+      getWorkspaceContext: vi
+        .fn()
+        .mockReturnValue(createMockWorkspaceContext('.')),
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
@@ -147,6 +149,19 @@ describe('ShellTool', () => {
       ).toThrow(
         "Directory 'rel/path' is not a registered workspace directory.",
       );
+    });
+
+    it('should allow absolute directory within workspace', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      const workspaceContext = createMockWorkspaceContext('/test/dir');
+      vi.mocked(workspaceContext.isPathWithinWorkspace).mockReturnValue(true);
+      (mockConfig.getWorkspaceContext as Mock).mockReturnValue(
+        workspaceContext,
+      );
+
+      expect(() =>
+        shellTool.build({ command: 'ls', directory: '/test/dir/subdir' }),
+      ).not.toThrow();
     });
   });
 
