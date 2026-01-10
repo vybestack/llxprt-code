@@ -476,6 +476,188 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         content: 'correct response',
       });
     });
+
+    it('should preserve resolved baseURL and authToken when sub-profile omits them', async () => {
+      const captured: Array<{ baseURL?: string; authToken?: string }> = [];
+
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(
+          options: GenerateChatOptions,
+        ): AsyncGenerator<IContent> {
+          captured.push({
+            baseURL: options.resolved?.baseURL,
+            authToken: options.resolved?.authToken,
+          });
+          yield { type: 'text' as const, content: 'success' };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-preserve-resolved',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'first',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            // baseURL/authToken intentionally omitted
+          },
+          {
+            name: 'second',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            // baseURL/authToken intentionally omitted
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+        resolved: {
+          model: 'original-model',
+          baseURL: 'https://original.api.com',
+          authToken: 'original-token',
+        },
+      };
+
+      const results: IContent[] = [];
+      for await (const chunk of provider.generateChatCompletion(options)) {
+        results.push(chunk);
+      }
+
+      expect(results).toHaveLength(1);
+      expect(captured).toEqual([
+        {
+          baseURL: 'https://original.api.com',
+          authToken: 'original-token',
+        },
+      ]);
+    });
+
+    it('should override resolved baseURL when sub-profile provides one', async () => {
+      const captured: Array<{ baseURL?: string }> = [];
+
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(
+          options: GenerateChatOptions,
+        ): AsyncGenerator<IContent> {
+          captured.push({ baseURL: options.resolved?.baseURL });
+          yield { type: 'text' as const, content: 'success' };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-override-baseurl',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'first',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            baseURL: 'https://subprofile.api.com',
+          },
+          {
+            name: 'second',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            baseURL: 'https://subprofile.api.com',
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+        resolved: {
+          model: 'original-model',
+          baseURL: 'https://original.api.com',
+          authToken: 'original-token',
+        },
+      };
+
+      const results: IContent[] = [];
+      for await (const chunk of provider.generateChatCompletion(options)) {
+        results.push(chunk);
+      }
+
+      expect(results).toHaveLength(1);
+      expect(captured).toEqual([{ baseURL: 'https://subprofile.api.com' }]);
+    });
+
+    it('should override resolved authToken when sub-profile provides one', async () => {
+      const captured: Array<{ authToken?: string }> = [];
+
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(
+          options: GenerateChatOptions,
+        ): AsyncGenerator<IContent> {
+          captured.push({ authToken: options.resolved?.authToken });
+          yield { type: 'text' as const, content: 'success' };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-override-authtoken',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'first',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            authToken: 'subprofile-token',
+          },
+          {
+            name: 'second',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            authToken: 'subprofile-token',
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+        resolved: {
+          model: 'original-model',
+          baseURL: 'https://original.api.com',
+          authToken: 'original-token',
+        },
+      };
+
+      const results: IContent[] = [];
+      for await (const chunk of provider.generateChatCompletion(options)) {
+        results.push(chunk);
+      }
+
+      expect(results).toHaveLength(1);
+      expect(captured).toEqual([{ authToken: 'subprofile-token' }]);
+    });
   });
 
   describe('Aggregated Error When All Backends Fail', () => {

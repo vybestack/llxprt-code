@@ -625,8 +625,8 @@ export class LoadBalancingProvider implements IProvider {
         model: isResolvedSubProfile(subProfile)
           ? subProfile.model
           : (subProfile.modelId ?? ''),
-        baseURL: subProfile.baseURL ?? '',
-        authToken: subProfile.authToken ?? '',
+        ...(subProfile.baseURL && { baseURL: subProfile.baseURL }),
+        ...(subProfile.authToken && { authToken: subProfile.authToken }),
       },
     };
   }
