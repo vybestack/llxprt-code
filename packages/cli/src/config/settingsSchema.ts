@@ -921,9 +921,9 @@ export const SETTINGS_SCHEMA = {
         label: 'Use Ripgrep',
         category: 'Tools',
         requiresRestart: false,
-        default: false,
+        default: undefined as boolean | undefined,
         description:
-          'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
+          'Use ripgrep for file content search instead of the fallback implementation. When unset, ripgrep is auto-enabled if detected.',
         showInDialog: true,
       },
       enableToolOutputTruncation: {
@@ -1378,9 +1378,9 @@ export const SETTINGS_SCHEMA = {
     label: 'Use Ripgrep',
     category: 'Tools',
     requiresRestart: false,
-    default: false,
+    default: undefined as boolean | undefined,
     description:
-      'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
+      'Use ripgrep for file content search instead of the fallback implementation. When unset, ripgrep is auto-enabled if detected.',
     showInDialog: true,
   },
   enablePromptCompletion: {

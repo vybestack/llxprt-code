@@ -15,6 +15,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
+  isRipgrepAvailable,
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 import { loadCliConfig, parseArguments, type CliArgs } from './config.js';
@@ -191,6 +192,8 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
       respectGitIgnore: true,
       respectGeminiIgnore: true,
     },
+    // Mock isRipgrepAvailable to return true by default (ripgrep is bundled)
+    isRipgrepAvailable: vi.fn().mockResolvedValue(true),
   };
 });
 
@@ -2224,6 +2227,8 @@ describe('loadCliConfig useRipgrep', () => {
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    // Default: ripgrep is available
+    vi.mocked(isRipgrepAvailable).mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -2233,10 +2238,29 @@ describe('loadCliConfig useRipgrep', () => {
     clearActiveProviderRuntimeContext();
   });
 
-  it('should be false by default when useRipgrep is not set in settings', async () => {
+  it('should auto-enable ripgrep when available and not set in settings', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
+    vi.mocked(isRipgrepAvailable).mockResolvedValue(true);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getUseRipgrep()).toBe(true);
+  });
+
+  it('should be false when ripgrep not available and not set in settings', async () => {
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {};
+    vi.mocked(isRipgrepAvailable).mockResolvedValue(false);
     const config = await loadCliConfig(
       settings,
       [],
@@ -2250,10 +2274,11 @@ describe('loadCliConfig useRipgrep', () => {
     expect(config.getUseRipgrep()).toBe(false);
   });
 
-  it('should be false when useRipgrep is set to false in settings', async () => {
+  it('should be false when useRipgrep is set to false in settings, even if ripgrep available', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = { useRipgrep: false };
+    vi.mocked(isRipgrepAvailable).mockResolvedValue(true);
     const config = await loadCliConfig(
       settings,
       [],
@@ -2271,6 +2296,7 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = { useRipgrep: true };
+    vi.mocked(isRipgrepAvailable).mockResolvedValue(false);
     const config = await loadCliConfig(
       settings,
       [],

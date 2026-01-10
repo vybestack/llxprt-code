@@ -72,6 +72,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getLlxprtMdFileCount: vi.fn(() => llxprtMdFileCount),
       };
     }),
+    isRipgrepAvailable: vi.fn().mockResolvedValue(true),
   };
 });
 

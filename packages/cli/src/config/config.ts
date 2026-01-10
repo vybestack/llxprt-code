@@ -32,6 +32,7 @@ import {
   DebugLogger,
   createPolicyEngineConfig,
   SHELL_TOOL_NAMES,
+  isRipgrepAvailable,
   type GeminiCLIExtension,
   type Profile,
 } from '@vybestack/llxprt-code-core';
@@ -1234,6 +1235,19 @@ export async function loadCliConfig(
       ? OutputFormat.JSON
       : OutputFormat.TEXT;
 
+  // Auto-detect ripgrep when useRipgrep is not explicitly set in settings
+  // Precedence: CLI arg (if available) > explicit setting in files > auto-detection
+  let useRipgrepSetting = effectiveSettings.useRipgrep;
+  if (useRipgrepSetting === undefined) {
+    const ripgrepAvailable = await isRipgrepAvailable();
+    useRipgrepSetting = ripgrepAvailable;
+    logger.debug(() =>
+      ripgrepAvailable
+        ? 'Ripgrep detected, auto-enabling for faster searches'
+        : 'Ripgrep not detected, using default grep implementation',
+    );
+  }
+
   const config = new Config({
     sessionId,
     embeddingModel: undefined, // No embedding model configured for llxprt-code
@@ -1318,7 +1332,7 @@ export async function loadCliConfig(
     folderTrust,
     trustedFolder,
     shellReplacement: effectiveSettings.shellReplacement,
-    useRipgrep: effectiveSettings.useRipgrep,
+    useRipgrep: useRipgrepSetting,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,

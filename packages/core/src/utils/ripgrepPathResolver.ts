@@ -12,6 +12,39 @@ import os from 'os';
  * Cross-platform ripgrep path resolution
  * Implements the robust solution described in issue 483
  */
+
+let ripgrepAvailabilityCache: boolean | null = null;
+
+/**
+ * Check if ripgrep is available on the system.
+ * This is a non-throwing wrapper around getRipgrepPath that returns a boolean.
+ * Results are cached for performance.
+ *
+ * @returns true if ripgrep is available, false otherwise
+ */
+export async function isRipgrepAvailable(): Promise<boolean> {
+  if (ripgrepAvailabilityCache !== null) {
+    return ripgrepAvailabilityCache;
+  }
+
+  try {
+    await getRipgrepPath();
+    ripgrepAvailabilityCache = true;
+    return true;
+  } catch {
+    ripgrepAvailabilityCache = false;
+    return false;
+  }
+}
+
+/**
+ * Clear the ripgrep availability cache.
+ * Useful for testing or when configuration changes.
+ */
+export function clearRipgrepAvailabilityCache(): void {
+  ripgrepAvailabilityCache = null;
+}
+
 export async function getRipgrepPath(): Promise<string> {
   const isWindows = os.platform() === 'win32';
 
