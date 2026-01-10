@@ -12,9 +12,11 @@ export async function shouldIncludeSubagentDelegation(
   enabledToolNames: string[],
   resolveSubagentManager: SubagentManagerResolver,
 ): Promise<boolean> {
-  const normalized = enabledToolNames.map((name) => name.toLowerCase());
-  const hasTaskTool = normalized.includes('task');
-  const hasListSubagentsTool = normalized.includes('list_subagents');
+  const normalized = new Set(
+    enabledToolNames.map((name) => name.trim().toLowerCase()),
+  );
+  const hasTaskTool = normalized.has('task');
+  const hasListSubagentsTool = normalized.has('list_subagents');
   if (!hasTaskTool || !hasListSubagentsTool) {
     return false;
   }

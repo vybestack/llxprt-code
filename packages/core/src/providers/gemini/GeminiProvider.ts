@@ -1575,7 +1575,6 @@ export class GeminiProvider extends BaseProvider {
         userMemory,
         model: currentModel,
         tools: toolNamesForPrompt,
-        includeSubagentDelegation: false,
       });
 
       const contentsWithSystemPrompt = [
@@ -1748,7 +1747,6 @@ export class GeminiProvider extends BaseProvider {
         userMemory,
         model: currentModel,
         tools: toolNamesForPrompt,
-        includeSubagentDelegation: false,
       });
 
       const apiRequest = {

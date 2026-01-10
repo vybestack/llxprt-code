@@ -11,6 +11,7 @@ import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import { getFolderStructure } from '../utils/getFolderStructure.js';
+import { DebugLogger } from '../debug/index.js';
 import type {
   PromptContext,
   PromptEnvironment,
@@ -21,6 +22,7 @@ const MAX_FOLDER_STRUCTURE_CHARS = 6000;
 const MAX_FOLDER_STRUCTURE_TOP_LEVEL = 20;
 const SESSION_STARTED_AT = new Date();
 const SESSION_STARTED_AT_LABEL = SESSION_STARTED_AT.toLocaleString();
+const logger = new DebugLogger('llxprt:core:prompts');
 
 // Singleton instance of PromptService
 let promptService: PromptService | null = null;
@@ -217,7 +219,7 @@ async function buildPromptContext(
       folderStructure = compactFolderStructureSnapshot(folderStructure);
     } catch (error) {
       // If folder structure generation fails, continue without it
-      console.warn('Failed to generate folder structure:', error);
+      logger.debug(() => `Failed to generate folder structure: ${error}`);
     }
   }
 

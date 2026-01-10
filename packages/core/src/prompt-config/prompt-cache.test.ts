@@ -109,6 +109,13 @@ describe('PromptCache', () => {
       expect(key).toContain('no-subagent-delegation');
     });
 
+    it('should omit delegation flags when undefined', () => {
+      const context = createContext({ includeSubagentDelegation: undefined });
+      const key = cache.generateKey(context);
+      expect(key).not.toContain('no-subagent-delegation');
+      expect(key).not.toContain('subagent-delegation');
+    });
+
     it('should handle null or undefined context', () => {
       const key = cache.generateKey(null as unknown as PromptContext);
       expect(key).toBe('');

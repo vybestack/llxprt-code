@@ -54,6 +54,7 @@ import {
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
@@ -519,11 +520,15 @@ export class OpenAIResponsesProvider extends BaseProvider {
       () => options.invocation?.userMemory,
     );
 
+    const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+      toolNamesForPrompt ?? [],
+      () => options.config?.getSubagentManager?.(),
+    );
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       model: resolvedModel,
       tools: toolNamesForPrompt,
-      includeSubagentDelegation: false,
+      includeSubagentDelegation,
     });
 
     // Responses API input types: messages, function_call, function_call_output

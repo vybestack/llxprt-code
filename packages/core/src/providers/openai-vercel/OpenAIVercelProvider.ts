@@ -58,6 +58,7 @@ import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { type IModel } from '../IModel.js';
 import { type IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { convertToVercelMessages } from './messageConversion.js';
 import { getToolIdStrategy } from '../../tools/ToolIdStrategy.js';
@@ -854,11 +855,15 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       options.userMemory,
       () => options.invocation?.userMemory,
     );
+    const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+      toolNamesArg ?? [],
+      () => options.config?.getSubagentManager?.(),
+    );
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       model: modelId,
       tools: toolNamesArg,
-      includeSubagentDelegation: false,
+      includeSubagentDelegation,
     });
 
     // Filter thinking from context based on settings

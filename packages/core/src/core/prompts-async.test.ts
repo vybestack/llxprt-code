@@ -10,8 +10,7 @@
  * These tests verify that:
  * 1. Subagent Delegation block is present when it should be present
  * 2. Subagent Delegation block is absent when it should be absent
- * 3. The block is excluded for subagents
- * 4. The block is excluded when no subagents are available or tools are not registered
+ * 3. Delegation markers are stripped from final prompts
  */
 
 import {
@@ -102,14 +101,6 @@ describe('prompts async integration', () => {
       const userMemory = 'Remember: The user prefers concise responses.';
       const prompt = await callPrompt({ userMemory });
 
-      // Debug: log what we actually get
-      if (!prompt.includes(userMemory)) {
-        console.error(
-          'Prompt does not contain user memory. Last 500 chars:',
-          prompt.slice(-500),
-        );
-      }
-
       expect(prompt).toContain(userMemory);
       // Should have both core content and user memory
       expect(prompt).toContain('interactive CLI agent');
@@ -120,25 +111,6 @@ describe('prompts async integration', () => {
       const prompt = await callPrompt({ model: 'gemini-2.5-flash' });
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
-
-      // Debug: Check if flash-specific content is present
-      const hasFlashContent = prompt.includes(
-        'Additional Instructions for Flash Models',
-      );
-      const hasImportantText = prompt.includes(
-        'IMPORTANT: You MUST use the provided tools when appropriate',
-      );
-
-      // Write debug to file for inspection
-      // TODO: Remove this debug code when model-specific prompt loading is fixed
-      // const fs = require('fs');
-      // const fullPrompt = prompt.length > 2000 ? prompt.substring(prompt.length - 2000) : prompt;
-      // fs.writeFileSync('/tmp/test-debug.txt', `Flash content present: ${hasFlashContent}\nImportant text present: ${hasImportantText}\nPrompt length: ${prompt.length}\nLast 2000 chars:\n${fullPrompt}`);
-
-      if (!hasImportantText) {
-        console.error('Flash content present:', hasFlashContent);
-        console.error('Last 500 chars of prompt:', prompt.slice(-500));
-      }
 
       // Flash models should have additional tool instructions
       expect(prompt).toContain(
@@ -246,6 +218,7 @@ describe('prompts async integration', () => {
     it('should contain Subagent Delegation block when explicitly enabled', async () => {
       const tools = ['read_file', 'list_subagents', 'task'];
       const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
         tools,
         includeSubagentDelegation: true,
       });
@@ -257,16 +230,8 @@ describe('prompts async integration', () => {
 
     it('should exclude Subagent Delegation block when not explicitly enabled', async () => {
       const tools = ['read_file', 'list_subagents', 'task'];
-      const prompt = await getCoreSystemPromptAsync({ tools });
-
-      expect(prompt).not.toContain('Subagent Delegation');
-      expect(prompt).not.toContain('LLXPRT:BEGIN_SUBAGENT_DELEGATION');
-      expect(prompt).not.toContain('LLXPRT:END_SUBAGENT_DELEGATION');
-    });
-
-    it('should exclude Subagent Delegation block when explicitly disabled', async () => {
-      const tools = ['read_file', 'list_subagents', 'task'];
       const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
         tools,
         includeSubagentDelegation: false,
       });
@@ -278,7 +243,11 @@ describe('prompts async integration', () => {
 
     it('should exclude Subagent Delegation block when tools do not include task', async () => {
       const tools = ['read_file', 'list_subagents'];
-      const prompt = await getCoreSystemPromptAsync({ tools });
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: true,
+      });
 
       expect(prompt).not.toContain('Subagent Delegation');
       expect(prompt).not.toContain('LLXPRT:BEGIN_SUBAGENT_DELEGATION');
@@ -288,6 +257,7 @@ describe('prompts async integration', () => {
     it('should exclude markers from the prompt after processing', async () => {
       const tools = ['read_file', 'list_subagents', 'task'];
       const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
         tools,
         includeSubagentDelegation: true,
       });

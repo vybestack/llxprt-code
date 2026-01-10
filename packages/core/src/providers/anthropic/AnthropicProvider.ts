@@ -1414,7 +1414,6 @@ export class AnthropicProvider extends BaseProvider {
         userMemory,
         model: currentModel,
         tools: toolNamesForPrompt,
-        includeSubagentDelegation: false,
       });
       if (corePrompt) {
         if (wantCaching) {
@@ -1449,7 +1448,6 @@ export class AnthropicProvider extends BaseProvider {
           userMemory,
           model: currentModel,
           tools: toolNamesForPrompt,
-          includeSubagentDelegation: false,
         })
       : undefined;
 
