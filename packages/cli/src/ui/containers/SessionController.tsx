@@ -181,6 +181,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     );
 
     try {
+      const settings = loadSettings(config.getWorkingDir());
       const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
         config.getWorkingDir(),
         config.shouldLoadMemoryFromIncludeDirectories()
@@ -188,9 +189,11 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           : [],
         config.getDebugMode(),
         config.getFileService(),
-        loadSettings(config.getWorkingDir()).merged,
+        settings.merged,
         config.getExtensionContextFilePaths(),
         config.getFolderTrust(),
+        settings.merged.ui?.memoryImportFormat || 'tree',
+        config.getFileFilteringOptions(),
       );
       config.setUserMemory(memoryContent);
       config.setLlxprtMdFileCount(fileCount);

@@ -56,10 +56,15 @@ vi.mock('../../config/config.js', () => ({
   ),
 }));
 
+export const loadSettings = vi.fn((_dir) => ({
+  merged: {
+    loadMemoryFromIncludeDirectories: false,
+    ui: { memoryImportFormat: 'tree' },
+  },
+}));
+
 vi.mock('../../config/settings.js', () => ({
-  loadSettings: vi.fn(() => ({
-    merged: { loadMemoryFromIncludeDirectories: false },
-  })),
+  loadSettings,
 }));
 
 vi.mock('@vybestack/llxprt-code-core', async () => {
@@ -81,7 +86,6 @@ describe('SessionController', () => {
     vi.clearAllTimers();
     vi.useFakeTimers();
 
-    // Reset the history manager mock with new function instances
     mockAddItem = vi.fn();
     mockUpdateItem = vi.fn();
     mockClearItems = vi.fn();
@@ -101,6 +105,7 @@ describe('SessionController', () => {
       getFileService: vi.fn(),
       getExtensionContextFilePaths: vi.fn(() => []),
       getFolderTrust: vi.fn(() => true),
+      getUserMemory: vi.fn(() => 'test memory content'),
       setUserMemory: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
       setModel: vi.fn(),
@@ -109,6 +114,7 @@ describe('SessionController', () => {
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: vi.fn(() => [process.cwd()]),
       })),
+      getFileFilteringOptions: vi.fn(() => ({})),
     } as unknown as Partial<Config>;
   });
 
@@ -374,7 +380,10 @@ describe('SessionController', () => {
     const mockLoadHierarchicalLlxprtMemory = vi.mocked(
       configModule.loadHierarchicalLlxprtMemory,
     );
+    const settingsModule = await import('../../config/settings.js');
+    const loadSettingsMock = vi.mocked(settingsModule.loadSettings);
 
+    expect(loadSettingsMock).toHaveBeenCalledWith(customWorkingDir);
     expect(mockLoadHierarchicalLlxprtMemory).toHaveBeenCalledWith(
       customWorkingDir,
       expect.any(Array),
@@ -383,6 +392,8 @@ describe('SessionController', () => {
       expect.anything(),
       expect.any(Array),
       expect.any(Boolean),
+      'tree',
+      {},
     );
 
     expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalledWith(
@@ -393,7 +404,38 @@ describe('SessionController', () => {
       expect.anything(),
       expect.anything(),
       expect.anything(),
+      expect.anything(),
+      expect.anything(),
     );
+
+    unmount();
+  });
+
+  it('should call loadSettings with config.getWorkingDir() on memory refresh', async () => {
+    const customWorkingDir = '/custom/working/dir';
+    (mockConfig.getWorkingDir as ReturnType<typeof vi.fn>).mockReturnValue(
+      customWorkingDir,
+    );
+
+    let contextValue: SessionContextType | undefined;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      return null;
+    };
+
+    const { unmount } = render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    await contextValue!.performMemoryRefresh();
+
+    const settingsModule = await import('../../config/settings.js');
+    const loadSettingsMock = vi.mocked(settingsModule.loadSettings);
+
+    expect(loadSettingsMock).toHaveBeenCalledWith(customWorkingDir);
 
     unmount();
   });
