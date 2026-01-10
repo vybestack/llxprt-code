@@ -684,6 +684,7 @@ export class AnthropicProvider extends BaseProvider {
   /**
    * Normalize tool IDs from various formats to Anthropic format
    * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
+   * Sanitizes invalid characters to match Anthropic's pattern ^[a-zA-Z0-9_-]+$
    */
   private normalizeToAnthropicToolId(id: string): string {
     // If already in Anthropic format, return as-is
@@ -703,8 +704,10 @@ export class AnthropicProvider extends BaseProvider {
       return 'toolu_' + uuid;
     }
 
-    // Unknown format - assume it's a raw UUID
-    return 'toolu_' + id;
+    // Unknown format - sanitize and add Anthropic prefix
+    // Replace all invalid characters (anything not a-z, A-Z, 0-9, underscore, hyphen) with hyphens
+    const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, '-');
+    return 'toolu_' + sanitized;
   }
 
   /**
