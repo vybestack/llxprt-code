@@ -171,7 +171,6 @@ describe('Settings Loading and Merging', () => {
       });
       expect(settings.merged.tools).toMatchObject({
         autoAccept: false,
-        useRipgrep: false,
         enableToolOutputTruncation: true,
       });
       expect(settings.merged.mcp).toEqual({});
@@ -254,7 +253,6 @@ describe('Settings Loading and Merging', () => {
           customThemes: {},
           theme: undefined,
         },
-        useRipgrep: false,
         ...systemSettingsContent,
       });
     });
@@ -336,7 +334,6 @@ describe('Settings Loading and Merging', () => {
           customThemes: {},
           theme: undefined,
         },
-        useRipgrep: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -416,7 +413,6 @@ describe('Settings Loading and Merging', () => {
           customThemes: {},
           theme: undefined,
         },
-        useRipgrep: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -501,7 +497,6 @@ describe('Settings Loading and Merging', () => {
           customThemes: {},
           theme: undefined,
         },
-        useRipgrep: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -598,7 +593,6 @@ describe('Settings Loading and Merging', () => {
           customThemes: {},
           theme: undefined,
         },
-        useRipgrep: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -706,7 +700,6 @@ describe('Settings Loading and Merging', () => {
           customThemes: {},
           theme: undefined,
         },
-        useRipgrep: false,
       });
     });
 
@@ -1667,7 +1660,6 @@ describe('Settings Loading and Merging', () => {
             customThemes: {},
             theme: undefined,
           },
-          useRipgrep: false,
           ...systemSettingsContent,
         });
       });

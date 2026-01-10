@@ -601,8 +601,8 @@ The following settings are available in the `/settings` dialog:
   - **Default:** `true`
 
 - **`tools.useRipgrep`** (boolean):
-  - **Description:** Use ripgrep for file content search instead of the fallback implementation. Provides significantly faster search performance on large codebases.
-  - **Default:** `false`
+  - **Description:** Use ripgrep for file content search instead of the fallback implementation. When unset, ripgrep is auto-enabled if detected.
+  - **Default:** `auto` (enabled when ripgrep is available)
 
 - **`tools.enableToolOutputTruncation`** (boolean):
   - **Description:** Enable truncation of large tool outputs to prevent overwhelming the context window.
