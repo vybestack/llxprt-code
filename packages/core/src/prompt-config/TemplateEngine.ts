@@ -1,13 +1,10 @@
 import path from 'node:path';
-import * as fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { CORE_DEFAULTS } from './defaults/core-defaults.js';
 import {
   type TemplateVariables,
   type TemplateProcessingOptions,
   type PromptContext,
 } from './types.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * TemplateEngine - Handles variable substitution in prompt templates
@@ -262,18 +259,13 @@ export class TemplateEngine {
    * @returns The content of subagent-delegation.md
    */
   private loadSubagentDelegationContent(): string {
-    const coreDefaultsPath = path.resolve(
-      __dirname,
-      'defaults',
-      'subagent-delegation.md',
-    );
-    try {
-      return fs.readFileSync(coreDefaultsPath, 'utf-8');
-    } catch (error) {
+    const content = CORE_DEFAULTS['subagent-delegation.md'];
+    if (!content) {
       throw new Error(
-        `Failed to load subagent-delegation.md from ${coreDefaultsPath}: ${error instanceof Error ? error.message : String(error)}`,
+        'Failed to load subagent-delegation.md from CORE_DEFAULTS',
       );
     }
+    return content;
   }
 
   /**
