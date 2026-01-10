@@ -1234,7 +1234,7 @@ export const AppContainer = (props: AppContainerProps) => {
     );
     try {
       const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
-        process.cwd(),
+        config.getWorkingDir(),
         settings.merged.loadMemoryFromIncludeDirectories
           ? config.getWorkspaceContext().getDirectories()
           : [],
@@ -1243,7 +1243,7 @@ export const AppContainer = (props: AppContainerProps) => {
         settings.merged,
         config.getExtensionContextFilePaths(),
         config.getFolderTrust(),
-        settings.merged.ui?.memoryImportFormat || 'tree', // Use setting or default to 'tree'
+        settings.merged.ui?.memoryImportFormat || 'tree',
         config.getFileFilteringOptions(),
       );
 

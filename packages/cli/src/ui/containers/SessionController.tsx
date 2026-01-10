@@ -18,7 +18,6 @@ import { useRuntimeApi, getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { Config, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 import { loadSettings } from '../../config/settings.js';
-import process from 'node:process';
 import {
   SessionStateProvider,
   useSessionState,
@@ -182,17 +181,14 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     );
 
     try {
-      // Note: loadHierarchicalLlxprtMemory now requires settings, but SessionController
-      // doesn't have access to settings. This needs to be refactored.
-      // For now, using the internal config loading that has settings.
       const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
-        process.cwd(),
+        config.getWorkingDir(),
         config.shouldLoadMemoryFromIncludeDirectories()
           ? config.getWorkspaceContext().getDirectories()
           : [],
         config.getDebugMode(),
         config.getFileService(),
-        loadSettings(process.cwd()).merged, // Get merged settings object
+        loadSettings(config.getWorkingDir()).merged,
         config.getExtensionContextFilePaths(),
         config.getFolderTrust(),
       );
