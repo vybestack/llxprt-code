@@ -719,7 +719,7 @@ export class ShellTool extends BaseDeclarativeTool<
           directory: {
             type: 'string',
             description:
-              '(OPTIONAL) Directory to run the command in, if not the project root directory. Must be relative to the project root directory and must already exist.',
+              '(OPTIONAL) Directory to run the command in. Provide a workspace directory name (e.g., "packages") or an absolute path within the workspace.',
           },
           timeout_seconds: {
             type: 'number',
@@ -755,10 +755,15 @@ export class ShellTool extends BaseDeclarativeTool<
       return 'Could not identify command root to obtain permission from user.';
     }
     if (params.directory) {
+      const workspaceContext = this.config.getWorkspaceContext();
       if (path.isAbsolute(params.directory)) {
-        return 'Directory cannot be absolute. Please refer to workspace directories by their name.';
+        if (!workspaceContext.isPathWithinWorkspace(params.directory)) {
+          const directories = workspaceContext.getDirectories();
+          return `Directory must be within one of the workspace directories: ${directories.join(', ')}`;
+        }
+        return null;
       }
-      const workspaceDirs = this.config.getWorkspaceContext().getDirectories();
+      const workspaceDirs = workspaceContext.getDirectories();
       const matchingDirs = workspaceDirs.filter(
         (dir) => path.basename(dir) === params.directory,
       );

@@ -1480,6 +1480,111 @@ export class AnthropicProvider extends BaseProvider {
     // Note: reasoningEnabled and reasoningBudgetTokens are now read from options.settings
     // at the start of this method (using options.settings.get() pattern like OpenAI)
 
+    // Attach cache_control to the last message's last non-thinking block when caching is enabled
+    // This marks the conversation history boundary for prompt caching
+    if (wantCaching && anthropicMessages.length > 0) {
+      const lastMessage = anthropicMessages[anthropicMessages.length - 1];
+
+      if (typeof lastMessage.content === 'string') {
+        if (lastMessage.content.trim() !== '') {
+          lastMessage.content = [
+            {
+              type: 'text',
+              text: lastMessage.content,
+              cache_control: { type: 'ephemeral', ttl },
+            },
+          ] as Array<
+            | {
+                type: 'text';
+                text: string;
+                cache_control: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+              }
+            | {
+                type: 'tool_use';
+                id: string;
+                name: string;
+                input: unknown;
+                cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+              }
+            | {
+                type: 'tool_result';
+                tool_use_id: string;
+                content: string;
+                is_error?: boolean;
+                cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+              }
+          >;
+          cacheLogger.debug(
+            () =>
+              `Added cache_control to last message (converted string to array)`,
+          );
+        }
+      } else if (Array.isArray(lastMessage.content)) {
+        const content = lastMessage.content as Array<
+          | {
+              type: 'text';
+              text: string;
+              cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+            }
+          | {
+              type: 'tool_use';
+              id: string;
+              name: string;
+              input: unknown;
+              cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+            }
+          | {
+              type: 'tool_result';
+              tool_use_id: string;
+              content: string;
+              is_error?: boolean;
+              cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+            }
+          | {
+              type: 'thinking';
+              thinking: string;
+              signature?: string;
+              cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+            }
+          | {
+              type: 'redacted_thinking';
+              data: string;
+              cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+            }
+        >;
+
+        let lastNonThinkingIndex = -1;
+        for (let i = content.length - 1; i >= 0; i--) {
+          const block = content[i];
+          if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
+            // Skipthinking blocks with empty text content
+            if (block.type === 'text' && block.text.trim() === '') {
+              continue;
+            }
+
+            // Skip tool_result blocks with empty content
+            if (block.type === 'tool_result' && block.content.trim() === '') {
+              continue;
+            }
+
+            lastNonThinkingIndex = i;
+            break;
+          }
+        }
+
+        if (lastNonThinkingIndex >= 0) {
+          content[lastNonThinkingIndex] = {
+            ...content[lastNonThinkingIndex],
+            cache_control: { type: 'ephemeral', ttl },
+          } as unknown as (typeof content)[number];
+          cacheLogger.debug(() => {
+            const block = content[lastNonThinkingIndex];
+            return `Added cache_control to last message's last ${block.type} block (index ${lastNonThinkingIndex})`;
+          });
+        }
+      }
+    }
+
     const requestBody = {
       model: currentModel,
       messages: anthropicMessages,

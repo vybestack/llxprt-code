@@ -78,7 +78,9 @@ describe('ShellTool', () => {
       getDebugMode: vi.fn().mockReturnValue(false),
       getTargetDir: vi.fn().mockReturnValue('/test/dir'),
       getSummarizeToolOutputConfig: vi.fn().mockReturnValue(undefined),
-      getWorkspaceContext: () => createMockWorkspaceContext('.'),
+      getWorkspaceContext: vi
+        .fn()
+        .mockReturnValue(createMockWorkspaceContext('.')),
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
@@ -147,6 +149,19 @@ describe('ShellTool', () => {
       ).toThrow(
         "Directory 'rel/path' is not a registered workspace directory.",
       );
+    });
+
+    it('should allow absolute directory within workspace', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      const workspaceContext = createMockWorkspaceContext('/test/dir');
+      vi.mocked(workspaceContext.isPathWithinWorkspace).mockReturnValue(true);
+      (mockConfig.getWorkspaceContext as Mock).mockReturnValue(
+        workspaceContext,
+      );
+
+      expect(() =>
+        shellTool.build({ command: 'ls', directory: '/test/dir/subdir' }),
+      ).not.toThrow();
     });
   });
 
@@ -461,11 +476,6 @@ describe('ShellTool', () => {
       });
 
       it('timeout does not start until execute() is called (approval time not counted)', async () => {
-        // This test verifies that the timeout only starts when execute() is called,
-        // NOT during shouldConfirmExecute(). The scheduler calls shouldConfirmExecute()
-        // first, waits for user approval, and only then calls execute().
-        // Since timeout is set up inside execute(), approval time is not counted.
-
         vi.useFakeTimers();
         const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
         mockConfig.getEphemeralSettings.mockReturnValue({
@@ -478,21 +488,20 @@ describe('ShellTool', () => {
           timeout_seconds: 1,
         });
 
-        // Simulate approval taking 10 seconds (longer than the 1 second timeout)
-        // shouldConfirmExecute does NOT start the timeout
+        const setTimeoutCountBefore = setTimeoutSpy.mock.calls.length;
         await invocation.shouldConfirmExecute(new AbortController().signal);
 
-        // Advance time to simulate user thinking/approving
-        await vi.advanceTimersByTimeAsync(10000);
+        expect(setTimeoutSpy.mock.calls.length).toBe(setTimeoutCountBefore);
 
-        // setTimeout should NOT have been called yet because execute() wasn't called
-        expect(setTimeoutSpy).not.toHaveBeenCalled();
-
-        // NOW execute is called (after approval) - this is when timeout starts
         const promise = invocation.execute(mockAbortSignal);
 
-        // setTimeout should now have been called with 1000ms (1 second)
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
+        expect(setTimeoutSpy.mock.calls.length).toBeGreaterThan(
+          setTimeoutCountBefore,
+        );
+
+        const lastCall =
+          setTimeoutSpy.mock.calls[setTimeoutSpy.mock.calls.length - 1];
+        expect(lastCall[1]).toBe(1000);
 
         resolveShellExecution({
           output: 'success',

@@ -19,18 +19,24 @@ import {
 } from '../../runtime/providerRuntimeContext.js';
 
 type AnthropicContentBlock =
-  | { type: 'text'; text: string }
+  | {
+      type: 'text';
+      text: string;
+      cache_control?: { type: string; ttl?: string };
+    }
   | {
       type: 'tool_use';
       id: string;
       name: string;
       input: unknown;
+      cache_control?: { type: string; ttl?: string };
     }
   | {
       type: 'tool_result';
       tool_use_id: string;
       content: string;
       is_error?: boolean;
+      cache_control?: { type: string; ttl?: string };
     };
 
 interface AnthropicMessage {
@@ -1349,6 +1355,190 @@ describe('AnthropicProvider', () => {
           !betaHeader.includes('extended-cache-ttl-2025-04-11');
         expect(isValidHeader).toBe(true);
       });
+
+      it('should add cache_control to last message in multi-turn history when prompt-caching is 5m', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        // Multi-turn conversation with final human message
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First message' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'First response' }],
+          },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Second message' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'Second response' }],
+          },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'How are you?' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(request.messages).toBeDefined();
+        const anthropicMessages = request.messages as AnthropicMessage[];
+
+        // The last message should have cache_control on its last content block
+        const lastMessage = anthropicMessages[anthropicMessages.length - 1];
+        expect(lastMessage.role).toBe('user');
+
+        // Last message content should be an array with cache_control
+        expect(Array.isArray(lastMessage.content)).toBe(true);
+        const contentBlocks = lastMessage.content as AnthropicContentBlock[];
+        expect(contentBlocks.length).toBeGreaterThan(0);
+
+        // The last content block should have cache_control
+        const lastContentBlock = contentBlocks[contentBlocks.length - 1];
+        expect(lastContentBlock.type).toBe('text');
+        expect(lastContentBlock.cache_control).toEqual({
+          type: 'ephemeral',
+          ttl: '5m',
+        });
+      });
+
+      it('should add cache_control to last tool_result block in history when prompt-caching is 5m', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        // Multi-turn history with tool call and response
+        const toolCallId = 'hist_tool_read_123';
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Process this file' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: toolCallId,
+                name: 'read_file',
+                parameters: { path: '/tmp/file.txt' },
+              },
+            ],
+          },
+          {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'tool_response',
+                callId: toolCallId,
+                toolName: 'read_file',
+                result: 'File content here',
+              },
+            ],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(request.messages).toBeDefined();
+        const anthropicMessages = request.messages as AnthropicMessage[];
+
+        // The last message should be the tool response
+        const lastMessage = anthropicMessages[anthropicMessages.length - 1];
+        expect(lastMessage.role).toBe('user');
+        expect(Array.isArray(lastMessage.content)).toBe(true);
+
+        const contentBlocks = lastMessage.content as AnthropicContentBlock[];
+        expect(contentBlocks.length).toBeGreaterThan(0);
+
+        // The last content block should be a tool_result with cache_control
+        const lastContentBlock = contentBlocks[contentBlocks.length - 1];
+        expect(lastContentBlock.type).toBe('tool_result');
+        expect(lastContentBlock.cache_control).toEqual({
+          type: 'ephemeral',
+          ttl: '5m',
+        });
+      });
+
+      it('should not add cache_control to message blocks when prompt-caching is off', async () => {
+        settingsService.setProviderSetting(
+          'anthropic',
+          'prompt-caching',
+          'off',
+        );
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        // Multi-turn conversation with final human message
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First message' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'First response' }],
+          },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'How are you?' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(request.messages).toBeDefined();
+        const anthropicMessages = request.messages as AnthropicMessage[];
+
+        // All message blocks should not have cache_control
+        const allCacheControls = anthropicMessages.flatMap((message) => {
+          if (Array.isArray(message.content)) {
+            const contentBlocks = message.content as AnthropicContentBlock[];
+            return contentBlocks.map((block) => block.cache_control);
+          }
+          // String content has no cache_control, which is correct
+          return [];
+        });
+
+        // All cache_controls that exist should be undefined
+        expect(allCacheControls.every((cc) => cc === undefined)).toBe(true);
+      });
     });
 
     describe('Stable Tool Ordering', () => {
@@ -1453,6 +1643,76 @@ describe('AnthropicProvider', () => {
         const propertyKeys = Object.keys(tool.input_schema.properties);
         expect(propertyKeys).toEqual(['apple', 'middle', 'zebra']);
       });
+    });
+
+    it('should not add cache_control to last message when content is empty string', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+        },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: '' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      expect(request.messages).toBeDefined();
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      const lastMessage = anthropicMessages[anthropicMessages.length - 1];
+      expect(lastMessage.role).toBe('user');
+
+      // Last message content should remain a string (not converted to array)
+      expect(typeof lastMessage.content).toBe('string');
+      expect(lastMessage.content).toBe('');
+    });
+
+    it('should not add cache_control to last message when content is whitespace only', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+        },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: '   \n\t  ' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      expect(request.messages).toBeDefined();
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      const lastMessage = anthropicMessages[anthropicMessages.length - 1];
+      expect(lastMessage.role).toBe('user');
+
+      // Last message content should remain a string (not converted to array)
+      expect(typeof lastMessage.content).toBe('string');
+      expect(lastMessage.content).toBe('   \n\t  ');
     });
 
     describe('Cache Metrics Extraction', () => {
