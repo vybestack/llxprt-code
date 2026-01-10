@@ -4,6 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Test-first implementation for issue #1019: Subagent Delegation Block
+ *
+ * These tests verify that:
+ * 1. Subagent Delegation block is present when it should be present
+ * 2. Subagent Delegation block is absent when it should be absent
+ * 3. The block is excluded for subagents
+ * 4. The block is excluded when no subagents are available or tools are not registered
+ */
+
 import {
   describe,
   it,
@@ -37,11 +47,7 @@ describe('prompts async integration', () => {
     overrides: Partial<CoreSystemPromptOptions> = {},
   ): Promise<string> => {
     const options = { ...baseOptions, ...overrides };
-    return getCoreSystemPromptAsync(
-      options.userMemory,
-      options.model,
-      options.tools,
-    );
+    return getCoreSystemPromptAsync(options);
   };
 
   const buildLargeFolderStructure = (entryCount: number): string => {
@@ -233,6 +239,61 @@ describe('prompts async integration', () => {
         folderSpy.mockRestore();
         settingsSpy.mockRestore();
       }
+    });
+  });
+
+  describe('subagent delegation block (issue #1019)', () => {
+    it('should contain Subagent Delegation block when explicitly enabled', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        tools,
+        includeSubagentDelegation: true,
+      });
+
+      expect(prompt).toContain('Subagent Delegation');
+      expect(prompt).toContain('list_subagents');
+      expect(prompt).toContain('task');
+    });
+
+    it('should exclude Subagent Delegation block when not explicitly enabled', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({ tools });
+
+      expect(prompt).not.toContain('Subagent Delegation');
+      expect(prompt).not.toContain('LLXPRT:BEGIN_SUBAGENT_DELEGATION');
+      expect(prompt).not.toContain('LLXPRT:END_SUBAGENT_DELEGATION');
+    });
+
+    it('should exclude Subagent Delegation block when explicitly disabled', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        tools,
+        includeSubagentDelegation: false,
+      });
+
+      expect(prompt).not.toContain('Subagent Delegation');
+      expect(prompt).not.toContain('LLXPRT:BEGIN_SUBAGENT_DELEGATION');
+      expect(prompt).not.toContain('LLXPRT:END_SUBAGENT_DELEGATION');
+    });
+
+    it('should exclude Subagent Delegation block when tools do not include task', async () => {
+      const tools = ['read_file', 'list_subagents'];
+      const prompt = await getCoreSystemPromptAsync({ tools });
+
+      expect(prompt).not.toContain('Subagent Delegation');
+      expect(prompt).not.toContain('LLXPRT:BEGIN_SUBAGENT_DELEGATION');
+      expect(prompt).not.toContain('LLXPRT:END_SUBAGENT_DELEGATION');
+    });
+
+    it('should exclude markers from the prompt after processing', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        tools,
+        includeSubagentDelegation: true,
+      });
+
+      expect(prompt).not.toContain('LLXPRT:BEGIN_SUBAGENT_DELEGATION');
+      expect(prompt).not.toContain('LLXPRT:END_SUBAGENT_DELEGATION');
     });
   });
 });

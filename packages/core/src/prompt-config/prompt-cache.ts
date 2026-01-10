@@ -90,6 +90,13 @@ export class PromptCache {
       envFlags.push('ide');
     }
 
+    // Include subagent delegation flag in cache key
+    if (context.includeSubagentDelegation === true) {
+      envFlags.push('subagent-delegation');
+    } else if (context.includeSubagentDelegation === false) {
+      envFlags.push('no-subagent-delegation');
+    }
+
     // Construct key
     const components = [provider, model];
     if (tools.length > 0) {

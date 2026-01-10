@@ -519,11 +519,12 @@ export class OpenAIResponsesProvider extends BaseProvider {
       () => options.invocation?.userMemory,
     );
 
-    const systemPrompt = await getCoreSystemPromptAsync(
+    const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
-      resolvedModel,
-      toolNamesForPrompt,
-    );
+      model: resolvedModel,
+      tools: toolNamesForPrompt,
+      includeSubagentDelegation: false,
+    });
 
     // Responses API input types: messages, function_call, function_call_output
     type ResponsesInputItem =

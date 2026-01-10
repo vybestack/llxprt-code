@@ -86,6 +86,8 @@ function getToolNameMapping(): Record<string, string> {
     delete_line_range: 'DeleteLineRange',
     insert_at_line: 'InsertAtLine',
     read_line_range: 'ReadLineRange',
+    list_subagents: 'ListSubagents',
+    task: 'Task',
   };
 }
 
@@ -165,13 +167,23 @@ function compactFolderStructureSnapshot(
 }
 
 /**
+ * Options for getCoreSystemPromptAsync
+ */
+export interface CoreSystemPromptOptions {
+  userMemory?: string;
+  model?: string;
+  tools?: string[];
+  provider?: string;
+  includeSubagentDelegation?: boolean;
+}
+
+/**
  * Build PromptContext from current environment and parameters
  */
 async function buildPromptContext(
-  model?: string,
-  tools?: string[],
-  provider?: string,
+  options: CoreSystemPromptOptions,
 ): Promise<PromptContext> {
+  const { model, tools, provider, includeSubagentDelegation } = options;
   const cwd = process.cwd();
 
   // Check if folder structure should be included (default: false for better cache hit rates)
@@ -303,19 +315,50 @@ async function buildPromptContext(
     enabledTools,
     environment,
     enableToolPrompts,
+    includeSubagentDelegation,
   };
 }
 
 /**
  * Async version of getCoreSystemPrompt that uses the new PromptService
+ * Supports both legacy positional arguments and options object for backward compatibility
  */
 export async function getCoreSystemPromptAsync(
-  userMemory?: string,
+  userMemoryOrOptions?: string | CoreSystemPromptOptions,
   model?: string,
   tools?: string[],
 ): Promise<string> {
   const service = await getPromptService();
-  const context = await buildPromptContext(model, tools);
+
+  // Handle both legacy positional args and options object
+  let userMemory: string | undefined = undefined;
+  let modelArg: string | undefined = undefined;
+  let toolsArg: string[] | undefined = undefined;
+  let providerArg: string | undefined = undefined;
+  let includeSubagentDelegation: boolean | undefined = undefined;
+
+  if (typeof userMemoryOrOptions === 'object' && userMemoryOrOptions !== null) {
+    // Options object mode
+    const opts = userMemoryOrOptions as CoreSystemPromptOptions;
+    userMemory = opts.userMemory;
+    modelArg = opts.model;
+    toolsArg = opts.tools;
+    providerArg = opts.provider;
+    includeSubagentDelegation = opts.includeSubagentDelegation;
+  } else {
+    // Legacy positional args mode
+    userMemory = userMemoryOrOptions as string | undefined;
+    modelArg = model;
+    toolsArg = tools;
+  }
+
+  const context = await buildPromptContext({
+    model: modelArg,
+    tools: toolsArg,
+    provider: providerArg,
+    includeSubagentDelegation,
+  });
+
   return await service.getPrompt(context, userMemory);
 }
 

@@ -854,11 +854,12 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       options.userMemory,
       () => options.invocation?.userMemory,
     );
-    const systemPrompt = await getCoreSystemPromptAsync(
+    const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
-      modelId,
-      toolNamesArg,
-    );
+      model: modelId,
+      tools: toolNamesArg,
+      includeSubagentDelegation: false,
+    });
 
     // Filter thinking from context based on settings
     const stripPolicy = rsEnabled ? rsStripFromContext : 'all'; // If disabled, strip all

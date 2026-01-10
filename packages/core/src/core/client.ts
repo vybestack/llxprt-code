@@ -29,6 +29,7 @@ import { CompressionStatus } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
 import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
+import { shouldIncludeSubagentDelegation } from '../prompt-config/subagent-delegation.js';
 import {
   COMPRESSION_PRESERVE_THRESHOLD,
   COMPRESSION_TOKEN_THRESHOLD,
@@ -802,11 +803,14 @@ export class GeminiClient {
       logger.debug(
         () => `DEBUG [client.startChat]: Model from config: ${model}`,
       );
-      let systemInstruction = await getCoreSystemPromptAsync(
+      const includeSubagentDelegation =
+        await this.shouldIncludeSubagentDelegation(enabledToolNames);
+      let systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
         model,
-        enabledToolNames,
-      );
+        tools: enabledToolNames,
+        includeSubagentDelegation,
+      });
 
       // Add environment context to system instruction
       const envContextText = envParts
@@ -1543,11 +1547,15 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = await getCoreSystemPromptAsync(
+      const enabledToolNames = this.getEnabledToolNamesForPrompt();
+      const includeSubagentDelegation =
+        await this.shouldIncludeSubagentDelegation(enabledToolNames);
+      const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
-        modelToUse,
-        this.getEnabledToolNamesForPrompt(),
-      );
+        model: modelToUse,
+        tools: enabledToolNames,
+        includeSubagentDelegation,
+      });
 
       // Convert Content[] to a single prompt for BaseLLMClient
       // This preserves the conversation context in the prompt
@@ -1637,12 +1645,16 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
+      const enabledToolNames = this.getEnabledToolNamesForPrompt();
+      const includeSubagentDelegation =
+        await this.shouldIncludeSubagentDelegation(enabledToolNames);
       // Provider name removed from prompt call signature
-      const systemInstruction = await getCoreSystemPromptAsync(
+      const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
-        modelToUse,
-        this.getEnabledToolNamesForPrompt(),
-      );
+        model: modelToUse,
+        tools: enabledToolNames,
+        includeSubagentDelegation,
+      });
 
       const requestConfig = {
         abortSignal,
@@ -2021,6 +2033,14 @@ export class GeminiClient {
           .map((tool) => tool.name)
           .filter(Boolean),
       ),
+    );
+  }
+
+  private async shouldIncludeSubagentDelegation(
+    enabledToolNames: string[],
+  ): Promise<boolean> {
+    return shouldIncludeSubagentDelegation(enabledToolNames, () =>
+      this.config.getSubagentManager?.(),
     );
   }
 

@@ -1571,11 +1571,12 @@ export class GeminiProvider extends BaseProvider {
         options.userMemory,
         () => options.invocation?.userMemory,
       );
-      const systemInstruction = await getCoreSystemPromptAsync(
+      const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
-        currentModel,
-        toolNamesForPrompt,
-      );
+        model: currentModel,
+        tools: toolNamesForPrompt,
+        includeSubagentDelegation: false,
+      });
 
       const contentsWithSystemPrompt = [
         {
@@ -1743,11 +1744,12 @@ export class GeminiProvider extends BaseProvider {
         options.userMemory,
         () => options.invocation?.userMemory,
       );
-      const systemInstruction = await getCoreSystemPromptAsync(
+      const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
-        currentModel,
-        toolNamesForPrompt,
-      );
+        model: currentModel,
+        tools: toolNamesForPrompt,
+        includeSubagentDelegation: false,
+      });
 
       const apiRequest = {
         model: currentModel,

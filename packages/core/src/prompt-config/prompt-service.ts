@@ -510,15 +510,29 @@ export class PromptService {
     );
 
     // Process template
+    let processedContent: string;
     try {
-      return this.templateEngine.processTemplate(content, variables);
+      processedContent = this.templateEngine.processTemplate(
+        content,
+        variables,
+      );
     } catch (error) {
       // Template processing fails: Return original content
       if (this.config.debugMode) {
         console.error(`Failed to process template for ${filePath}:`, error);
       }
-      return content;
+      processedContent = content;
     }
+
+    // Strip subagent delegation block unless explicitly enabled.
+    if (context.includeSubagentDelegation !== true) {
+      processedContent = this.stripSubagentDelegationBlock(processedContent);
+    }
+
+    // Markers should always be stripped from the final output
+    processedContent = this.stripDelegationMarkers(processedContent);
+
+    return processedContent;
   }
 
   /**
@@ -568,5 +582,34 @@ export class PromptService {
     const estimate = Math.max(wordCount * 1.3, characterCount / 4);
 
     return Math.round(estimate);
+  }
+
+  private stripSubagentDelegationBlock(content: string): string {
+    const beginMarker = '<!-- LLXPRT:BEGIN_SUBAGENT_DELEGATION -->';
+    const endMarker = '<!-- LLXPRT:END_SUBAGENT_DELEGATION -->';
+
+    const beginIndex = content.indexOf(beginMarker);
+    if (beginIndex === -1) {
+      return content;
+    }
+
+    const endIndex = content.indexOf(endMarker, beginIndex);
+    if (endIndex === -1) {
+      return content;
+    }
+
+    const before = content.substring(0, beginIndex);
+    const after = content.substring(endIndex + endMarker.length);
+    return (before + after).replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  private stripDelegationMarkers(content: string): string {
+    let result = content;
+    result = result.replace(
+      /<!-- LLXPRT:BEGIN_SUBAGENT_DELEGATION -->\s*/g,
+      '',
+    );
+    result = result.replace(/\s*<!-- LLXPRT:END_SUBAGENT_DELEGATION -->/g, '');
+    return result;
   }
 }

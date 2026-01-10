@@ -29,8 +29,10 @@ import { createProviderCallOptions } from '../../../test-utils/providerCallOptio
 let capturedSystemPrompts: string[] = [];
 
 vi.mock('../../../core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(async (userMemory: string) => {
-    const prompt = userMemory ? `SYSTEM[${userMemory}]` : 'SYSTEM[empty]';
+  getCoreSystemPromptAsync: vi.fn(async (options: { userMemory?: string }) => {
+    const prompt = options?.userMemory
+      ? `SYSTEM[${options.userMemory}]`
+      : 'SYSTEM[empty]';
     capturedSystemPrompts.push(prompt);
     return prompt;
   }),

@@ -1653,11 +1653,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       options.userMemory,
       () => options.invocation?.userMemory,
     );
-    const systemPrompt = await getCoreSystemPromptAsync(
+    const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       model,
-      toolNamesArg,
-    );
+      tools: toolNamesArg,
+      includeSubagentDelegation: false,
+    });
 
     // Add system prompt as the first message in the array
     const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -3199,11 +3200,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       options.userMemory,
       () => options.invocation?.userMemory,
     );
-    const systemPrompt = await getCoreSystemPromptAsync(
+    const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       model,
-      toolNamesArg,
-    );
+      tools: toolNamesArg,
+      includeSubagentDelegation: false,
+    });
 
     // Add system prompt as the first message in the array
     const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [

@@ -1747,11 +1747,11 @@ export class SubAgentScope {
       ),
     );
 
-    const coreSystemPrompt = await getCoreSystemPromptAsync(
-      undefined,
-      this.modelConfig.model,
-      toolNames,
-    );
+    const coreSystemPrompt = await getCoreSystemPromptAsync({
+      model: this.modelConfig.model,
+      tools: toolNames,
+      includeSubagentDelegation: false,
+    });
 
     const instructionSections = [
       envContextText,
