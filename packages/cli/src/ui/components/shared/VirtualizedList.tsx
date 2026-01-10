@@ -17,6 +17,7 @@ import {
 import type React from 'react';
 import { useBatchedScroll } from '../../hooks/useBatchedScroll.js';
 import { type DOMElement, measureElement, Box } from 'ink';
+import { Colors } from '../../colors.js';
 
 export const SCROLL_TO_ITEM_END = Number.MAX_SAFE_INTEGER;
 
@@ -469,7 +470,7 @@ function VirtualizedList<T>(
       overflowY="scroll"
       overflowX="hidden"
       scrollTop={scrollTop}
-      scrollbarThumbColor={props.scrollbarThumbColor ?? 'gray'}
+      scrollbarThumbColor={props.scrollbarThumbColor ?? Colors.Gray}
       width="100%"
       height="100%"
       flexDirection="column"

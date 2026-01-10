@@ -146,6 +146,7 @@ export function AuthDialog({
       flexDirection="column"
       padding={1}
       width="100%"
+      backgroundColor={Colors.Background}
     >
       <Text bold color={Colors.Foreground}>
         OAuth Authentication
