@@ -104,6 +104,153 @@ describe('TemplateEngine', () => {
     });
   });
 
+  describe('SUBAGENT_DELEGATION variable', () => {
+    it('should include SUBAGENT_DELEGATION when includeSubagentDelegation is true and tools include Task and ListSubagents', () => {
+      const context: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        enabledTools: ['Task', 'ListSubagents', 'ReadFile'],
+        includeSubagentDelegation: true,
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+
+      expect(vars.SUBAGENT_DELEGATION).toBeDefined();
+      expect(typeof vars.SUBAGENT_DELEGATION).toBe('string');
+      expect(vars.SUBAGENT_DELEGATION).toContain('Subagent Delegation');
+    });
+
+    it('should be empty string when includeSubagentDelegation is false', () => {
+      const context: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        enabledTools: ['Task', 'ListSubagents', 'ReadFile'],
+        includeSubagentDelegation: false,
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+
+      expect(vars.SUBAGENT_DELEGATION).toBe('');
+    });
+
+    it('should be empty string when includeSubagentDelegation is undefined', () => {
+      const context: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        enabledTools: ['Task', 'ListSubagents', 'ReadFile'],
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+
+      expect(vars.SUBAGENT_DELEGATION).toBe('');
+    });
+
+    it('should be empty string when Task tool is not in enabled tools', () => {
+      const context: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        enabledTools: ['ListSubagents', 'ReadFile'],
+        includeSubagentDelegation: true,
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+
+      expect(vars.SUBAGENT_DELEGATION).toBe('');
+    });
+
+    it('should be empty string when ListSubagents tool is not in enabled tools', () => {
+      const context: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        enabledTools: ['Task', 'ReadFile'],
+        includeSubagentDelegation: true,
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+
+      expect(vars.SUBAGENT_DELEGATION).toBe('');
+    });
+
+    it('should substitute {{SUBAGENT_DELEGATION}} in template content', () => {
+      const template = `Core content.
+
+{{SUBAGENT_DELEGATION}}
+
+More content`;
+      const context: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        enabledTools: ['Task', 'ListSubagents'],
+        includeSubagentDelegation: true,
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+      const result = engine.processTemplate(template, vars);
+
+      expect(result).toContain('Core content.');
+      expect(result).toContain('Subagent Delegation');
+      expect(result).toContain('More content');
+      expect(result).not.toContain('{{SUBAGENT_DELEGATION}}');
+    });
+
+    it('should remove {{SUBAGENT_DELEGATION}} from template when variable is empty', () => {
+      const template = `Core content.
+
+{{SUBAGENT_DELEGATION}}
+
+More content`;
+      const context: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        enabledTools: ['ReadFile'],
+        includeSubagentDelegation: false,
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+      const result = engine.processTemplate(template, vars);
+
+      expect(result).toContain('Core content.');
+      expect(result).not.toContain('Subagent Delegation');
+      expect(result).toContain('More content');
+      expect(result).not.toContain('{{SUBAGENT_DELEGATION}}');
+    });
+  });
+
   describe('basic variable substitution', () => {
     it('should substitute known variables with actual values', () => {
       /**

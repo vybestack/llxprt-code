@@ -24,16 +24,21 @@ import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
 import type { Config } from '../../../config/config.js';
 import { GeminiProvider } from '../GeminiProvider.js';
 import { createProviderCallOptions } from '../../../test-utils/providerCallOptions.js';
+import type { CoreSystemPromptOptions } from '../../../core/prompts.js';
 
 // Track what system prompts were generated
 let capturedSystemPrompts: string[] = [];
 
 vi.mock('../../../core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(async (userMemory: string) => {
-    const prompt = userMemory ? `SYSTEM[${userMemory}]` : 'SYSTEM[empty]';
-    capturedSystemPrompts.push(prompt);
-    return prompt;
-  }),
+  getCoreSystemPromptAsync: vi.fn(
+    async (options: CoreSystemPromptOptions | undefined) => {
+      const prompt = options?.userMemory
+        ? `SYSTEM[${options.userMemory}]`
+        : 'SYSTEM[empty]';
+      capturedSystemPrompts.push(prompt);
+      return prompt;
+    },
+  ),
 }));
 
 const googleGenAIState = {

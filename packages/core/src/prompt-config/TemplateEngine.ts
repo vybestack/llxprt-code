@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { CORE_DEFAULTS } from './defaults/core-defaults.js';
 import {
   type TemplateVariables,
   type TemplateProcessingOptions,
@@ -225,7 +226,46 @@ export class TemplateEngine {
       sessionStartedAt ?? variables['CURRENT_DATETIME'];
     variables['PLATFORM'] = process.platform;
 
+    // Add SUBAGENT_DELEGATION variable - empty unless includeSubagentDelegation is true and the required tools are available
+    const enabledTools = context.enabledTools ?? [];
+    const hasTaskTool =
+      enabledTools.includes('Task') || enabledTools.includes('task');
+    const hasListSubagentsTool =
+      enabledTools.includes('ListSubagents') ||
+      enabledTools.includes('list_subagents');
+    if (
+      context.includeSubagentDelegation === true &&
+      hasTaskTool &&
+      hasListSubagentsTool
+    ) {
+      // The content will be loaded from subagent-delegation.md file
+      // We load it here directly to include in template variables
+      try {
+        const subagentDelegationContent = this.loadSubagentDelegationContent();
+        variables['SUBAGENT_DELEGATION'] = subagentDelegationContent;
+      } catch {
+        // If loading fails, use empty string
+        variables['SUBAGENT_DELEGATION'] = '';
+      }
+    } else {
+      variables['SUBAGENT_DELEGATION'] = '';
+    }
+
     return variables;
+  }
+
+  /**
+   * Load the subagent delegation content from the default file
+   * @returns The content of subagent-delegation.md
+   */
+  private loadSubagentDelegationContent(): string {
+    const content = CORE_DEFAULTS['subagent-delegation.md'];
+    if (!content) {
+      throw new Error(
+        'Failed to load subagent-delegation.md from CORE_DEFAULTS',
+      );
+    }
+    return content;
   }
 
   /**

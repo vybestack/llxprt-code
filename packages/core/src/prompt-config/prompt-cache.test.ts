@@ -94,11 +94,26 @@ describe('PromptCache', () => {
           isSandboxed: true,
           hasIdeCompanion: false,
         },
+        includeSubagentDelegation: true,
       });
       const key = cache.generateKey(context);
       expect(key).toContain('git');
       expect(key).toContain('sandbox');
+      expect(key).toContain('subagent-delegation');
       expect(key).not.toContain('ide');
+    });
+
+    it('should include no-subagent-delegation flag when disabled', () => {
+      const context = createContext({ includeSubagentDelegation: false });
+      const key = cache.generateKey(context);
+      expect(key).toContain('no-subagent-delegation');
+    });
+
+    it('should omit delegation flags when undefined', () => {
+      const context = createContext({ includeSubagentDelegation: undefined });
+      const key = cache.generateKey(context);
+      expect(key).not.toContain('no-subagent-delegation');
+      expect(key).not.toContain('subagent-delegation');
     });
 
     it('should handle null or undefined context', () => {

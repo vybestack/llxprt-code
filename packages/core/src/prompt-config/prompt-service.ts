@@ -5,6 +5,7 @@ import { TemplateEngine } from './TemplateEngine.js';
 import { PromptInstaller, type DefaultsMap } from './prompt-installer.js';
 import type { PromptContext } from './types.js';
 import { ALL_DEFAULTS } from './defaults/index.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs/promises';
@@ -49,6 +50,7 @@ export class PromptService {
   private preloadedFiles: Map<string, string>;
   private _detectedEnvironment: EnvironmentInfo | null;
   private installerNotices: string[];
+  private logger = new DebugLogger('llxprt:prompt-config:service');
 
   /**
    * Creates a new PromptService instance
@@ -140,7 +142,7 @@ export class PromptService {
       }
       // Log warnings if debugMode
       if (this.config.debugMode && validation.warnings.length > 0) {
-        console.warn('Installation warnings:', validation.warnings);
+        this.logger.warn(() => `Installation warnings: ${validation.warnings}`);
       }
     }
 
@@ -154,7 +156,9 @@ export class PromptService {
       if (loadResult.success && loadResult.content) {
         this.preloadedFiles.set(file, loadResult.content);
       } else if (this.config.debugMode) {
-        console.warn(`Failed to preload file ${file}:`, loadResult.error);
+        this.logger.warn(
+          () => `Failed to preload file ${file}: ${loadResult.error}`,
+        );
       }
     }
 
@@ -208,7 +212,7 @@ export class PromptService {
     if (cached) {
       if (this.config.debugMode) {
         const cacheKey = this.cache.generateKey(context);
-        console.log(`Cache hit: ${cacheKey}`);
+        this.logger.debug(() => `Cache hit: ${cacheKey}`);
       }
       // If we have user memory, append it to the cached base prompt
       if (userMemory && userMemory.trim()) {
@@ -224,9 +228,9 @@ export class PromptService {
       context,
     );
     if (this.config.debugMode) {
-      console.log(
-        'Resolved files:',
-        resolvedFiles.map((f) => f.path),
+      this.logger.debug(
+        () =>
+          `Resolved files: ${resolvedFiles.map((file) => file.path).join(', ')}`,
       );
     }
 
@@ -318,7 +322,7 @@ export class PromptService {
   clearCache(): void {
     this.cache.clear();
     if (this.config.debugMode) {
-      console.log('Cache cleared');
+      this.logger.debug(() => 'Cache cleared');
     }
   }
 
@@ -461,7 +465,9 @@ export class PromptService {
     } catch (error) {
       // Directory read fails: Return empty array
       if (this.config.debugMode) {
-        console.error('Failed to read tools directory:', error);
+        this.logger.error(() => `Failed to read tools directory: ${error}`, {
+          error,
+        });
       }
       return [];
     }
@@ -496,7 +502,10 @@ export class PromptService {
       );
       if (!loadResult.success || !loadResult.content) {
         if (this.config.debugMode) {
-          console.error(`Failed to load file ${filePath}:`, loadResult.error);
+          this.logger.error(
+            () => `Failed to load file ${filePath}: ${loadResult.error}`,
+            { error: loadResult.error },
+          );
         }
         return '';
       }
@@ -510,15 +519,24 @@ export class PromptService {
     );
 
     // Process template
+    let processedContent: string;
     try {
-      return this.templateEngine.processTemplate(content, variables);
+      processedContent = this.templateEngine.processTemplate(
+        content,
+        variables,
+      );
     } catch (error) {
       // Template processing fails: Return original content
       if (this.config.debugMode) {
-        console.error(`Failed to process template for ${filePath}:`, error);
+        this.logger.error(
+          () => `Failed to process template for ${filePath}: ${error}`,
+          { error },
+        );
       }
-      return content;
+      processedContent = content;
     }
+
+    return processedContent;
   }
 
   /**

@@ -92,9 +92,10 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
 
     // Generate the system prompt as the real implementation would
     await getCoreSystemPromptAsync({
-      userMemory: userMemory || '',
-      model: options.resolved.model || this.getDefaultModel(),
-      provider: this.name,
+      userMemory,
+      model: 'codex-mini-latest',
+      tools: ['todo_write'],
+      includeSubagentDelegation: false,
     });
 
     // Create a mock OpenAI request with the parameters to test they're passed correctly

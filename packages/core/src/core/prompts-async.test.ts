@@ -4,6 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Test-first implementation for issue #1019: Subagent Delegation Block
+ *
+ * These tests verify that:
+ * 1. Subagent Delegation block is present when it should be present
+ * 2. Subagent Delegation block is absent when it should be absent
+ * 3. Delegation markers are stripped from final prompts
+ */
+
 import {
   describe,
   it,
@@ -33,15 +42,25 @@ describe('prompts async integration', () => {
     model: 'gemini-1.5-pro',
   };
 
+  beforeAll(async () => {
+    // Create a temporary directory for test prompts
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-test-'));
+    process.env.LLXPRT_PROMPTS_DIR = tempDir;
+
+    // Initialize the prompt system once for all tests
+    await initializePromptSystem();
+  });
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    process.env.LLXPRT_PROMPTS_DIR = tempDir;
+  });
+
   const callPrompt = (
     overrides: Partial<CoreSystemPromptOptions> = {},
   ): Promise<string> => {
     const options = { ...baseOptions, ...overrides };
-    return getCoreSystemPromptAsync(
-      options.userMemory,
-      options.model,
-      options.tools,
-    );
+    return getCoreSystemPromptAsync(options);
   };
 
   const buildLargeFolderStructure = (entryCount: number): string => {
@@ -56,20 +75,6 @@ describe('prompts async integration', () => {
     });
     return [...header, ...entries].join('\n');
   };
-
-  beforeAll(async () => {
-    // Create a temporary directory for test prompts
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-test-'));
-    process.env.LLXPRT_PROMPTS_DIR = tempDir;
-
-    // Initialize the prompt system once for all tests
-    await initializePromptSystem();
-  });
-
-  beforeEach(() => {
-    originalEnv = { ...process.env };
-    process.env.LLXPRT_PROMPTS_DIR = tempDir;
-  });
 
   afterEach(() => {
     // Restore original environment
@@ -96,14 +101,6 @@ describe('prompts async integration', () => {
       const userMemory = 'Remember: The user prefers concise responses.';
       const prompt = await callPrompt({ userMemory });
 
-      // Debug: log what we actually get
-      if (!prompt.includes(userMemory)) {
-        console.error(
-          'Prompt does not contain user memory. Last 500 chars:',
-          prompt.slice(-500),
-        );
-      }
-
       expect(prompt).toContain(userMemory);
       // Should have both core content and user memory
       expect(prompt).toContain('interactive CLI agent');
@@ -114,25 +111,6 @@ describe('prompts async integration', () => {
       const prompt = await callPrompt({ model: 'gemini-2.5-flash' });
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
-
-      // Debug: Check if flash-specific content is present
-      const hasFlashContent = prompt.includes(
-        'Additional Instructions for Flash Models',
-      );
-      const hasImportantText = prompt.includes(
-        'IMPORTANT: You MUST use the provided tools when appropriate',
-      );
-
-      // Write debug to file for inspection
-      // TODO: Remove this debug code when model-specific prompt loading is fixed
-      // const fs = require('fs');
-      // const fullPrompt = prompt.length > 2000 ? prompt.substring(prompt.length - 2000) : prompt;
-      // fs.writeFileSync('/tmp/test-debug.txt', `Flash content present: ${hasFlashContent}\nImportant text present: ${hasImportantText}\nPrompt length: ${prompt.length}\nLast 2000 chars:\n${fullPrompt}`);
-
-      if (!hasImportantText) {
-        console.error('Flash content present:', hasFlashContent);
-        console.error('Last 500 chars of prompt:', prompt.slice(-500));
-      }
 
       // Flash models should have additional tool instructions
       expect(prompt).toContain(
@@ -233,6 +211,92 @@ describe('prompts async integration', () => {
         folderSpy.mockRestore();
         settingsSpy.mockRestore();
       }
+    });
+  });
+
+  describe('subagent delegation block (issue #1019)', () => {
+    it('should contain Subagent Delegation block when includeSubagentDelegation is true and tools include both task and list_subagents', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: true,
+      });
+
+      expect(prompt).toContain('# Subagent Delegation');
+      expect(prompt).toContain('Requests that involve whole-codebase analysis');
+      expect(prompt).toContain(
+        'Call `list_subagents` if you need to confirm the available helpers',
+      );
+    });
+
+    it('should replace SUBAGENT_DELEGATION placeholder with empty when includeSubagentDelegation is false', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: false,
+      });
+
+      expect(prompt).not.toContain('Subagent Delegation');
+      expect(prompt).not.toContain(
+        'Requests that involve whole-codebase analysis',
+      );
+      expect(prompt).not.toContain(
+        'Call `list_subagents` if you need to confirm the available helpers',
+      );
+    });
+
+    it('should replace SUBAGENT_DELEGATION placeholder with empty when tools do not include ListSubagents', async () => {
+      const tools = ['read_file', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: true,
+      });
+
+      expect(prompt).not.toContain('Subagent Delegation');
+      expect(prompt).not.toContain(
+        'Requests that involve whole-codebase analysis',
+      );
+    });
+
+    it('should replace SUBAGENT_DELEGATION placeholder with empty when tools do not include Task', async () => {
+      const tools = ['read_file', 'list_subagents'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: true,
+      });
+
+      expect(prompt).not.toContain('Subagent Delegation');
+      expect(prompt).not.toContain(
+        'Requests that involve whole-codebase analysis',
+      );
+    });
+
+    it('should replace SUBAGENT_DELEGATION placeholder with empty when includeSubagentDelegation is undefined', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+      });
+
+      expect(prompt).not.toContain('Subagent Delegation');
+      expect(prompt).not.toContain(
+        'Requests that involve whole-codebase analysis',
+      );
+    });
+
+    it('should not contain placeholder markers like {{SUBAGENT_DELEGATION}} in final output', async () => {
+      const tools = ['read_file', 'list_subagents', 'task'];
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        tools,
+        includeSubagentDelegation: false,
+      });
+
+      expect(prompt).not.toContain('{{SUBAGENT_DELEGATION}}');
     });
   });
 });

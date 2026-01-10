@@ -1410,11 +1410,11 @@ export class AnthropicProvider extends BaseProvider {
 
     // For OAuth mode, inject core system prompt as the first human message
     if (isOAuth) {
-      const corePrompt = await getCoreSystemPromptAsync(
+      const corePrompt = await getCoreSystemPromptAsync({
         userMemory,
-        currentModel,
-        toolNamesForPrompt,
-      );
+        model: currentModel,
+        tools: toolNamesForPrompt,
+      });
       if (corePrompt) {
         if (wantCaching) {
           anthropicMessages.unshift({
@@ -1444,11 +1444,11 @@ export class AnthropicProvider extends BaseProvider {
 
     // Build system field with caching support
     const systemPrompt = !isOAuth
-      ? await getCoreSystemPromptAsync(
+      ? await getCoreSystemPromptAsync({
           userMemory,
-          currentModel,
-          toolNamesForPrompt,
-        )
+          model: currentModel,
+          tools: toolNamesForPrompt,
+        })
       : undefined;
 
     let systemField: Record<string, unknown> = {};

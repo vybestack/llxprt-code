@@ -56,6 +56,7 @@ import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { type IModel } from '../IModel.js';
 import { type IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import {
   retryWithBackoff,
   isNetworkTransientError,
@@ -1653,11 +1654,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       options.userMemory,
       () => options.invocation?.userMemory,
     );
-    const systemPrompt = await getCoreSystemPromptAsync(
+    const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+      toolNamesArg ?? [],
+      () => options.config?.getSubagentManager?.(),
+    );
+    const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       model,
-      toolNamesArg,
-    );
+      tools: toolNamesArg,
+      includeSubagentDelegation,
+    });
 
     // Add system prompt as the first message in the array
     const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -3199,11 +3205,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       options.userMemory,
       () => options.invocation?.userMemory,
     );
-    const systemPrompt = await getCoreSystemPromptAsync(
+    const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+      toolNamesArg ?? [],
+      () => options.config?.getSubagentManager?.(),
+    );
+    const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       model,
-      toolNamesArg,
-    );
+      tools: toolNamesArg,
+      includeSubagentDelegation,
+    });
 
     // Add system prompt as the first message in the array
     const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [

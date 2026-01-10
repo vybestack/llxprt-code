@@ -37,4 +37,5 @@ export interface PromptContext {
   enabledTools: string[];
   environment: PromptEnvironment;
   enableToolPrompts?: boolean;
+  includeSubagentDelegation?: boolean;
 }
