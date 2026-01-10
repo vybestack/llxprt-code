@@ -41,6 +41,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
     padding={1}
     marginY={1}
     width="100%"
+    backgroundColor={Colors.Background}
   >
     <Box marginBottom={1}>
       <Text bold color={Colors.AccentPurple}>

@@ -19,6 +19,7 @@ import {
 } from './VirtualizedList.js';
 import { useScrollable } from '../../contexts/ScrollProvider.js';
 import { Box, type DOMElement } from 'ink';
+import { Colors } from '../../colors.js';
 import { useKeypress, type Key } from '../../hooks/useKeypress.js';
 import { keyMatchers, Command } from '../../keyMatchers.js';
 
@@ -132,7 +133,7 @@ function ScrollableList<T>(
 
   useScrollable(scrollableEntry, hasFocus);
 
-  const scrollbarColor = hasFocus ? 'gray' : 'darkgray';
+  const scrollbarColor = hasFocus ? Colors.Foreground : Colors.Gray;
 
   return (
     <Box
