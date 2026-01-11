@@ -28,6 +28,7 @@ import type { SlashCommand, CommandContext } from '../commands/types.js';
 import type { ShellConfirmationRequest } from '../components/ShellConfirmationDialog.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { WelcomeState, ModelInfo } from '../hooks/useWelcomeOnboarding.js';
+import type { SubagentView } from '../components/SubagentManagement/types.js';
 
 /**
  * UI State shape for the AppContainer architecture.
@@ -86,7 +87,7 @@ export interface UIState {
   toolsDialogDisabledTools: string[];
   workspaceGeminiCLIExtensions: GeminiCLIExtension[];
   loggingDialogData: { entries: unknown[] };
-  subagentDialogInitialView?: string;
+  subagentDialogInitialView?: SubagentView;
   subagentDialogInitialName?: string;
 
   // Confirmation requests

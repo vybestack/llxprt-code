@@ -22,7 +22,7 @@ interface SubagentCreationWizardProps {
   isFocused?: boolean;
 }
 
-type FieldName = 'name' | 'description' | 'systemPrompt' | 'profile';
+type FieldName = 'name' | 'systemPrompt' | 'profile';
 
 export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   profiles,
@@ -31,9 +31,8 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   isFocused = true,
 }) => {
   const [state, setState] = useState<CreateWizardState>({
-    currentStep: CreateStep.BASIC_INFO,
+    currentStep: CreateStep.FORM,
     name: '',
-    description: '',
     systemPrompt: '',
     selectedProfile: profiles[0] || '',
     validationErrors: {},
@@ -46,7 +45,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   const [showProfileSelect, setShowProfileSelect] = useState(false);
 
   const fields = useMemo<FieldName[]>(
-    () => ['name', 'description', 'systemPrompt', 'profile'],
+    () => ['name', 'systemPrompt', 'profile'],
     [],
   );
 
@@ -104,6 +103,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
     setError(null);
     try {
       await onSave(state.name, state.systemPrompt, state.selectedProfile);
+      setIsSaving(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create');
       setIsSaving(false);
@@ -154,10 +154,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
           handleInput('\n');
           return;
         }
-        if (
-          key.name === 'return' &&
-          (focusedField === 'name' || focusedField === 'description')
-        ) {
+        if (key.name === 'return' && focusedField === 'name') {
           setIsEditing(false);
           moveField(1);
           return;
@@ -312,25 +309,24 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
         </Box>
       )}
 
-      {/* Step 1: Basic Information */}
+      {/* Step 1: Name */}
       <Box marginTop={1}>
         <Text bold color={Colors.Foreground}>
-          Step 1: Basic Information
+          Step 1: Name
         </Text>
       </Box>
       {renderField('name', 'Name', 1, state.name)}
-      {renderField('description', 'Description', 2, state.description)}
 
-      {/* Step 2: Configuration */}
+      {/* Step 2: System Prompt */}
       <Box marginTop={1}>
         <Text bold color={Colors.Foreground}>
-          Step 2: Configuration
+          Step 2: System Prompt
         </Text>
       </Box>
       {renderField(
         'systemPrompt',
         'System Prompt',
-        3,
+        2,
         state.systemPrompt,
         true,
       )}
@@ -341,7 +337,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
           Step 3: Profile Assignment
         </Text>
       </Box>
-      {renderField('profile', 'Profile', 4, state.selectedProfile)}
+      {renderField('profile', 'Profile', 3, state.selectedProfile)}
 
       {/* Controls */}
       <Box flexDirection="column" marginTop={1}>

@@ -29,6 +29,7 @@ import {
 } from '@google/genai';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
+import { SubagentView } from '../components/SubagentManagement/types.js';
 
 /**
  * Parse save command arguments
@@ -445,7 +446,7 @@ const listCommand: SlashCommand = {
   ): Promise<SlashCommandActionReturn> => ({
     type: 'dialog',
     dialog: 'subagent',
-    dialogData: { initialView: 'list' },
+    dialogData: { initialView: SubagentView.LIST },
   }),
 };
 
@@ -496,7 +497,7 @@ const showCommand: SlashCommand = {
     return {
       type: 'dialog',
       dialog: 'subagent',
-      dialogData: { initialView: 'show', initialName: name },
+      dialogData: { initialView: SubagentView.SHOW, initialName: name },
     };
   },
 };
@@ -547,7 +548,7 @@ const deleteCommand: SlashCommand = {
     return {
       type: 'dialog',
       dialog: 'subagent',
-      dialogData: { initialView: 'delete', initialName: name },
+      dialogData: { initialView: SubagentView.DELETE, initialName: name },
     };
   },
 };
@@ -598,7 +599,7 @@ const editCommand: SlashCommand = {
     return {
       type: 'dialog',
       dialog: 'subagent',
-      dialogData: { initialView: 'edit', initialName: name },
+      dialogData: { initialView: SubagentView.EDIT, initialName: name },
     };
   },
 };
@@ -616,7 +617,7 @@ const createCommand: SlashCommand = {
   ): Promise<SlashCommandActionReturn> => ({
     type: 'dialog',
     dialog: 'subagent',
-    dialogData: { initialView: 'create' },
+    dialogData: { initialView: SubagentView.CREATE },
   }),
 };
 

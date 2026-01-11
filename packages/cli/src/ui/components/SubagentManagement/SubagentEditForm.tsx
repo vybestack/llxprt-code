@@ -13,6 +13,7 @@ import { EditField, type SubagentInfo } from './types.js';
 interface SubagentEditFormProps {
   subagent: SubagentInfo;
   profiles: string[];
+  pendingProfile?: string; // Profile selected from wizard, not yet saved
   onSave: (systemPrompt: string, profile: string) => Promise<void>;
   onCancel: () => void;
   onSelectProfile: () => void;
@@ -21,14 +22,16 @@ interface SubagentEditFormProps {
 
 export const SubagentEditForm: React.FC<SubagentEditFormProps> = ({
   subagent,
-  profiles,
+  profiles: _profiles,
+  pendingProfile,
   onSave,
   onCancel,
   onSelectProfile,
   isFocused = true,
 }) => {
   const [systemPrompt, setSystemPrompt] = useState(subagent.systemPrompt);
-  const [selectedProfile] = useState(subagent.profile);
+  // Use pendingProfile from parent (set after profile wizard) or fall back to original
+  const selectedProfile = pendingProfile ?? subagent.profile;
   const [focusedField, setFocusedField] = useState<EditField>(
     EditField.SYSTEM_PROMPT,
   );
@@ -130,11 +133,6 @@ export const SubagentEditForm: React.FC<SubagentEditFormProps> = ({
     },
     { isActive: isFocused && !isSaving },
   );
-
-  // Expose setSelectedProfile for parent component
-  React.useEffect(() => {
-    // Parent can update profile via callback
-  }, [profiles]);
 
   // Display prompt preview
   const promptLines = systemPrompt.split('\n');
@@ -248,10 +246,4 @@ export const SubagentEditForm: React.FC<SubagentEditFormProps> = ({
       )}
     </Box>
   );
-};
-
-// Export a method to update profile from parent
-export const useSubagentEditForm = () => {
-  const [selectedProfile, setSelectedProfile] = useState<string>('');
-  return { selectedProfile, setSelectedProfile };
 };

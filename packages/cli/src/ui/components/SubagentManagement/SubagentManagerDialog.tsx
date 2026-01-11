@@ -20,6 +20,7 @@ import { SubagentEditForm } from './SubagentEditForm.js';
 import { SubagentCreationWizard } from './SubagentCreationWizard.js';
 import { ProfileAttachmentWizard } from './ProfileAttachmentWizard.js';
 import { SubagentDeleteDialog } from './SubagentDeleteDialog.js';
+import { SubagentMainMenu } from './SubagentMainMenu.js';
 
 export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
   onClose,
@@ -43,6 +44,11 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
     isLoading: true,
     error: null,
   });
+
+  // Track pending profile change when selecting from edit form (not yet saved)
+  const [pendingProfile, setPendingProfile] = useState<string | undefined>(
+    undefined,
+  );
 
   // Load subagents and profiles
   const loadData = useCallback(async () => {
@@ -177,18 +183,33 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
     [navigateTo],
   );
 
+  // Handle cancel from edit form - clears pending profile
+  const handleEditCancel = useCallback(() => {
+    setPendingProfile(undefined);
+    goBack();
+  }, [goBack]);
+
   // Handle save (edit)
   const handleSave = useCallback(
     async (systemPrompt: string, profile: string) => {
       if (!subagentManager || !state.selectedSubagent) return;
 
-      await subagentManager.saveSubagent(
-        state.selectedSubagent.name,
-        profile,
-        systemPrompt,
-      );
-      await loadData();
-      goBack();
+      try {
+        await subagentManager.saveSubagent(
+          state.selectedSubagent.name,
+          profile,
+          systemPrompt,
+        );
+        // Clear pending profile after successful save
+        setPendingProfile(undefined);
+        await loadData();
+        goBack();
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          error: err instanceof Error ? err.message : 'Failed to save subagent',
+        }));
+      }
     },
     [subagentManager, state.selectedSubagent, loadData, goBack],
   );
@@ -198,37 +219,82 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
     async (name: string, systemPrompt: string, profile: string) => {
       if (!subagentManager) return;
 
-      await subagentManager.saveSubagent(name, profile, systemPrompt);
-      await loadData();
-      navigateTo(SubagentView.LIST);
+      try {
+        await subagentManager.saveSubagent(name, profile, systemPrompt);
+        await loadData();
+        navigateTo(SubagentView.LIST);
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          error:
+            err instanceof Error ? err.message : 'Failed to create subagent',
+        }));
+      }
     },
     [subagentManager, loadData, navigateTo],
   );
 
-  // Handle profile attachment
+  // Handle profile attachment - check if we came from EDIT view
   const handleProfileAttach = useCallback(
     async (profileName: string) => {
-      if (!subagentManager || !state.selectedSubagent) return;
+      if (!state.selectedSubagent) return;
 
-      await subagentManager.saveSubagent(
-        state.selectedSubagent.name,
-        profileName,
-        state.selectedSubagent.systemPrompt,
-      );
-      await loadData();
-      goBack();
+      // Check if previous view was EDIT - if so, just set pending profile and go back
+      const prevView =
+        state.navigationStack.length >= 2
+          ? state.navigationStack[state.navigationStack.length - 2]
+          : null;
+
+      if (prevView === SubagentView.EDIT) {
+        // Don't save yet - just set pending profile and return to edit form
+        setPendingProfile(profileName);
+        goBack();
+        return;
+      }
+
+      // Direct profile attachment from list - save immediately
+      if (!subagentManager) return;
+
+      try {
+        await subagentManager.saveSubagent(
+          state.selectedSubagent.name,
+          profileName,
+          state.selectedSubagent.systemPrompt,
+        );
+        await loadData();
+        goBack();
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          error:
+            err instanceof Error ? err.message : 'Failed to attach profile',
+        }));
+      }
     },
-    [subagentManager, state.selectedSubagent, loadData, goBack],
+    [
+      subagentManager,
+      state.selectedSubagent,
+      state.navigationStack,
+      loadData,
+      goBack,
+    ],
   );
 
   // Handle delete confirmation
   const handleDeleteConfirm = useCallback(async () => {
     if (!subagentManager || !state.selectedSubagent) return;
 
-    await subagentManager.deleteSubagent(state.selectedSubagent.name);
-    await loadData();
-    // After delete, close the dialog
-    onClose();
+    try {
+      await subagentManager.deleteSubagent(state.selectedSubagent.name);
+      await loadData();
+      // After delete, close the dialog
+      onClose();
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        error: err instanceof Error ? err.message : 'Failed to delete subagent',
+      }));
+    }
   }, [subagentManager, state.selectedSubagent, loadData, onClose]);
 
   // Render current view
@@ -284,8 +350,9 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
           <SubagentEditForm
             subagent={state.selectedSubagent}
             profiles={state.profiles}
+            pendingProfile={pendingProfile}
             onSave={handleSave}
-            onCancel={goBack}
+            onCancel={handleEditCancel}
             onSelectProfile={handleSelectProfileFromEdit}
             isFocused={true}
           />
@@ -328,6 +395,9 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
           />
         );
 
+      case SubagentView.MENU:
+        return <SubagentMainMenu onSelect={navigateTo} isFocused={true} />;
+
       default:
         return <Text color={Colors.Gray}>Unknown view</Text>;
     }
@@ -348,6 +418,8 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         return `Attach Profile: ${state.selectedSubagent?.name ?? ''}`;
       case SubagentView.DELETE:
         return 'Delete Subagent';
+      case SubagentView.MENU:
+        return 'Subagent Manager';
       default:
         return 'Subagent';
     }

@@ -51,11 +51,21 @@ export const ProfileAttachmentWizard: React.FC<
 
   // Load profile info when selection changes
   React.useEffect(() => {
+    let cancelled = false;
     if (getProfileInfo && selectedProfile) {
       getProfileInfo(selectedProfile)
-        .then(setPreviewInfo)
-        .catch(() => setPreviewInfo(null));
+        .then((info) => {
+          if (!cancelled) setPreviewInfo(info);
+        })
+        .catch(() => {
+          if (!cancelled) setPreviewInfo(null);
+        });
+    } else {
+      if (!cancelled) setPreviewInfo(null);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [selectedProfile, getProfileInfo]);
 
   const moveSelection = useCallback(

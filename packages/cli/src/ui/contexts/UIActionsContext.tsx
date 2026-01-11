@@ -11,6 +11,7 @@ import type { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { Key } from '../hooks/useKeypress.js';
 import type { AuthType, EditorType } from '@vybestack/llxprt-code-core';
 import type { SettingScope } from '../../config/settings.js';
+import type { SubagentView } from '../components/SubagentManagement/types.js';
 
 /**
  * UI Actions shape for the AppContainer architecture.
@@ -113,7 +114,10 @@ export interface UIActions {
   closeLoggingDialog: () => void;
 
   // Subagent dialog
-  openSubagentDialog: (initialView?: string, initialName?: string) => void;
+  openSubagentDialog: (
+    initialView?: SubagentView,
+    initialName?: string,
+  ) => void;
   closeSubagentDialog: () => void;
 
   // Workspace migration dialog

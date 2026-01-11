@@ -80,6 +80,7 @@ import { useGitBranchName } from './hooks/useGitBranchName.js';
 import { useFocus } from './hooks/useFocus.js';
 import { useBracketedPaste } from './hooks/useBracketedPaste.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
+import { SubagentView } from './components/SubagentManagement/types.js';
 import { useVimMode } from './contexts/VimModeContext.js';
 import { useVim } from './hooks/vim.js';
 import { useKeypress, Key } from './hooks/useKeypress.js';
@@ -888,7 +889,7 @@ export const AppContainer = (props: AppContainerProps) => {
   // Subagent dialog state
   const [isSubagentDialogOpen, setIsSubagentDialogOpen] = useState(false);
   const [subagentDialogInitialView, setSubagentDialogInitialView] = useState<
-    string | undefined
+    SubagentView | undefined
   >(undefined);
   const [subagentDialogInitialName, setSubagentDialogInitialName] = useState<
     string | undefined
@@ -909,7 +910,7 @@ export const AppContainer = (props: AppContainerProps) => {
   }, []);
 
   const openSubagentDialog = useCallback(
-    (initialView?: string, initialName?: string) => {
+    (initialView?: SubagentView, initialName?: string) => {
       setSubagentDialogInitialView(initialView);
       setSubagentDialogInitialName(initialName);
       setIsSubagentDialogOpen(true);

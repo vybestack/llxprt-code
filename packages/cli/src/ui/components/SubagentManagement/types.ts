@@ -29,12 +29,14 @@ export enum ListFocusMode {
 
 /**
  * Creation wizard steps
+ *
+ * NOTE: Currently the wizard uses field-based navigation rather than
+ * step-based navigation. This enum is retained for potential future
+ * multi-step wizard implementation.
  */
 export enum CreateStep {
-  BASIC_INFO = 'basic_info',
-  SYSTEM_PROMPT = 'system_prompt',
-  PROFILE_SELECT = 'profile_select',
-  PREVIEW = 'preview',
+  /** Single form view with all fields */
+  FORM = 'form',
 }
 
 /**
@@ -88,7 +90,6 @@ export interface SubagentManagerDialogProps {
 export interface CreateWizardState {
   currentStep: CreateStep;
   name: string;
-  description: string;
   systemPrompt: string;
   selectedProfile: string;
   validationErrors: Record<string, string>;

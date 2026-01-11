@@ -27,6 +27,7 @@ import type {
   ExtensionUpdateAction,
 } from '../state/extensions.js';
 import type { CommandArgumentSchema } from './schema/types.js';
+import type { SubagentView } from '../components/SubagentManagement/types.js';
 
 // Grouped dependencies for clarity and easier mocking
 export interface CommandContext {
@@ -123,26 +124,59 @@ export interface MessageActionReturn {
 }
 
 /**
+ * Type-safe dialog data for subagent dialog.
+ * Maps to SubagentManagerDialogProps expected properties.
+ */
+export interface SubagentDialogData {
+  /** Initial view to display in the subagent dialog */
+  initialView?: SubagentView;
+  /** Name of the subagent to pre-select (maps to initialSubagentName prop) */
+  initialName?: string;
+}
+
+/**
+ * Type-safe dialog data for logging dialog.
+ */
+export interface LoggingDialogData {
+  entries: unknown[];
+}
+
+/** All supported dialog types */
+export type DialogType =
+  | 'auth'
+  | 'theme'
+  | 'editor'
+  | 'privacy'
+  | 'settings'
+  | 'logging'
+  | 'providerModel'
+  | 'permissions'
+  | 'provider'
+  | 'loadProfile'
+  | 'createProfile'
+  | 'saveProfile'
+  | 'subagent';
+
+/** Map dialog types to their associated data types for type-safe access */
+export interface DialogDataMap {
+  subagent: SubagentDialogData;
+  logging: LoggingDialogData;
+}
+
+/**
  * The return type for a command action that needs to open a dialog.
+ * Use SubagentDialogData for type-safe subagent dialog data.
  */
 export interface OpenDialogActionReturn {
   type: 'dialog';
-
-  dialog:
-    | 'auth'
-    | 'theme'
-    | 'editor'
-    | 'privacy'
-    | 'settings'
-    | 'logging'
-    | 'providerModel'
-    | 'permissions'
-    | 'provider'
-    | 'loadProfile'
-    | 'createProfile'
-    | 'saveProfile'
-    | 'subagent';
-  dialogData?: unknown;
+  dialog: DialogType;
+  /**
+   * Dialog-specific data. Type depends on dialog:
+   * - 'subagent': SubagentDialogData
+   * - 'logging': LoggingDialogData
+   * - others: undefined
+   */
+  dialogData?: SubagentDialogData | LoggingDialogData;
 }
 
 /**

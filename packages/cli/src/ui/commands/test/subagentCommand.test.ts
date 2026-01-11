@@ -42,6 +42,7 @@ import {
   Logger,
   SessionMetrics,
 } from '@vybestack/llxprt-code-core';
+import { SubagentView } from '../../components/SubagentManagement/types.js';
 import { FunctionCallingConfigMode } from '@google/genai';
 import {
   CommandContext,
@@ -373,7 +374,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.dialog).toBe('subagent');
-      expect(result.dialogData?.initialView).toBe('list');
+      expect(result.dialogData?.initialView).toBe(SubagentView.LIST);
     });
   });
 
@@ -390,7 +391,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.dialog).toBe('subagent');
-      expect(result.dialogData?.initialView).toBe('show');
+      expect(result.dialogData?.initialView).toBe(SubagentView.SHOW);
       expect(result.dialogData?.initialName).toBe('testagent');
     });
 
@@ -427,7 +428,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       expect(result.dialog).toBe('subagent');
-      expect(result.dialogData?.initialView).toBe('delete');
+      expect(result.dialogData?.initialView).toBe(SubagentView.DELETE);
       expect(result.dialogData?.initialName).toBe('testagent');
     });
 
@@ -527,7 +528,7 @@ describe('editCommand @requirement:REQ-008', () => {
     );
 
     expect(result.dialog).toBe('subagent');
-    expect(result.dialogData?.initialView).toBe('edit');
+    expect(result.dialogData?.initialView).toBe(SubagentView.EDIT);
     expect(result.dialogData?.initialName).toBe('testagent');
   });
 });

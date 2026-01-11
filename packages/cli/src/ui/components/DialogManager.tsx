@@ -325,12 +325,10 @@ export const DialogManager = ({
   }
 
   if (uiState.isSubagentDialogOpen) {
-    const initialView =
-      (uiState.subagentDialogInitialView as SubagentView) || SubagentView.MENU;
     return (
       <SubagentManagerDialog
         onClose={uiActions.closeSubagentDialog}
-        initialView={initialView}
+        initialView={uiState.subagentDialogInitialView ?? SubagentView.MENU}
         initialSubagentName={uiState.subagentDialogInitialName}
       />
     );

@@ -12,7 +12,6 @@ import { SubagentView, MENU_ACTIONS } from './types.js';
 
 interface SubagentMainMenuProps {
   onSelect: (view: SubagentView) => void;
-  onClose: () => void;
   isFocused?: boolean;
 }
 
