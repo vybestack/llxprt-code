@@ -45,11 +45,8 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
     }
   };
 
-  // Split system prompt into lines for display
+  // Split system prompt into lines for display (show all lines)
   const promptLines = subagent.systemPrompt.split('\n');
-  const maxPromptLines = 8;
-  const displayLines = promptLines.slice(0, maxPromptLines);
-  const hasMoreLines = promptLines.length > maxPromptLines;
 
   return (
     <Box flexDirection="column">
@@ -98,16 +95,11 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
           borderColor={Colors.Gray}
           paddingX={1}
         >
-          {displayLines.map((line, idx) => (
-            <Text key={idx} color={Colors.Foreground} wrap="truncate">
+          {promptLines.map((line, idx) => (
+            <Text key={idx} color={Colors.Foreground} wrap="wrap">
               {line || ' '}
             </Text>
           ))}
-          {hasMoreLines && (
-            <Text color={Colors.Gray}>
-              ... ({promptLines.length - maxPromptLines} more lines)
-            </Text>
-          )}
         </Box>
       </Box>
 
