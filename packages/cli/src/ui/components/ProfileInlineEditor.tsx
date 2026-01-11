@@ -46,6 +46,17 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
   const maxVisibleLines = 15;
   const [scrollOffset, setScrollOffset] = useState(0);
 
+  // Reset editor when a different profile is loaded into the dialog.
+  useEffect(() => {
+    setLines(formatProfile(profile));
+    setCursorLine(0);
+    setScrollOffset(0);
+    setIsEditing(false);
+    setEditBuffer('');
+    setValidationError(null);
+    setHasChanges(false);
+  }, [profileName, profile]);
+
   // Ensure cursor line is visible
   useEffect(() => {
     if (cursorLine < scrollOffset) {
@@ -95,7 +106,7 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
           typeof key.sequence === 'string' &&
           !key.ctrl &&
           !key.meta &&
-          key.insertable
+          key.insertable !== false
         ) {
           setEditBuffer((prev) => prev + key.sequence);
           return;

@@ -65,6 +65,11 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
         }
       }
 
+      // On error / missing profile screens, only Esc should do anything.
+      if (error || !profile) {
+        return;
+      }
+
       if (confirmDelete) {
         if (key.sequence === 'y' || key.sequence === 'Y') {
           onDelete(profileName);

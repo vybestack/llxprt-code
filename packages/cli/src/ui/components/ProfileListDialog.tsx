@@ -59,6 +59,14 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
     setIndex(0);
   }, [searchTerm]);
 
+  // Clamp index when the underlying list changes.
+  React.useEffect(() => {
+    setIndex((prev) => {
+      if (filteredProfiles.length === 0) return 0;
+      return Math.min(prev, filteredProfiles.length - 1);
+    });
+  }, [filteredProfiles.length]);
+
   const columns = isNarrow ? 1 : isWide ? 3 : 2;
   const longest = filteredProfiles.reduce(
     (len, p) => Math.max(len, p.name.length + 10), // account for indicators
@@ -70,6 +78,10 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
   const rows = Math.ceil(filteredProfiles.length / columns);
 
   const move = (delta: number) => {
+    if (filteredProfiles.length === 0) {
+      setIndex(0);
+      return;
+    }
     let next = index + delta;
     if (next < 0) next = 0;
     if (next >= filteredProfiles.length) next = filteredProfiles.length - 1;

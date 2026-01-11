@@ -111,10 +111,15 @@ export const useProfileManagement = ({
       setProfileError(
         error instanceof Error ? error.message : 'Failed to load profiles',
       );
+      addMessage({
+        type: MessageType.ERROR,
+        content: `Failed to load profiles: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [runtime]);
+  }, [runtime, addMessage]);
 
   // Open list dialog
   const openListDialog = useCallback(async () => {
