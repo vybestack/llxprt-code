@@ -155,13 +155,10 @@ describe('profileCommand', () => {
       (cmd) => cmd?.name === 'list',
     )!;
 
-    it('lists saved profiles', async () => {
+    it('opens the profile list dialog', async () => {
       const result = await list.action!(context, '');
-      expect(runtimeMocks.listSavedProfiles).toHaveBeenCalled();
-      expect(result?.type).toBe('message');
-      expect(result).toBeDefined();
-      expect((result as { content: string }).content).toContain('alpha');
-      expect((result as { content: string }).content).toContain('beta');
+      expect(result?.type).toBe('dialog');
+      expect((result as { dialog: string }).dialog).toBe('profileList');
     });
   });
 

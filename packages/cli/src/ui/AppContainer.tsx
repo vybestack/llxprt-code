@@ -98,6 +98,7 @@ import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from './hooks/useCreateProfileDialog.js';
+import { useProfileManagement } from './hooks/useProfileManagement.js';
 import { useToolsDialog } from './hooks/useToolsDialog.js';
 import {
   shouldUpdateTokenMetrics,
@@ -1225,6 +1226,36 @@ export const AppContainer = (props: AppContainerProps) => {
   });
 
   const {
+    showListDialog: isProfileListDialogOpen,
+    showDetailDialog: isProfileDetailDialogOpen,
+    showEditorDialog: isProfileEditorDialogOpen,
+    profiles: profileListItems,
+    isLoading: profileDialogLoading,
+    selectedProfileName,
+    selectedProfile: selectedProfileData,
+    defaultProfileName,
+    activeProfileName,
+    profileError: profileDialogError,
+    openListDialog: openProfileListDialog,
+    closeListDialog: closeProfileListDialog,
+    viewProfileDetail,
+    closeDetailDialog: closeProfileDetailDialog,
+    loadProfile: loadProfileFromDetail,
+    deleteProfile: deleteProfileFromDetail,
+    setDefault: setProfileAsDefault,
+    openEditor: openProfileEditor,
+    closeEditor: closeProfileEditor,
+    saveProfile: saveProfileFromEditor,
+  } = useProfileManagement({
+    addMessage: (msg) =>
+      addItem(
+        { type: msg.type as MessageType, text: msg.content },
+        msg.timestamp.getTime(),
+      ),
+    appState,
+  });
+
+  const {
     showDialog: isToolsDialogOpen,
     openDialog: openToolsDialogRaw,
     closeDialog: exitToolsDialog,
@@ -1413,6 +1444,9 @@ export const AppContainer = (props: AppContainerProps) => {
       openProviderDialog,
       openLoadProfileDialog,
       openCreateProfileDialog,
+      openProfileListDialog,
+      viewProfileDetail,
+      openProfileEditor,
       quit: setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
@@ -1433,6 +1467,9 @@ export const AppContainer = (props: AppContainerProps) => {
       openProviderDialog,
       openLoadProfileDialog,
       openCreateProfileDialog,
+      openProfileListDialog,
+      viewProfileDetail,
+      openProfileEditor,
       setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
@@ -2063,6 +2100,9 @@ export const AppContainer = (props: AppContainerProps) => {
     isProviderModelDialogOpen,
     isLoadProfileDialogOpen,
     isCreateProfileDialogOpen,
+    isProfileListDialogOpen,
+    isProfileDetailDialogOpen,
+    isProfileEditorDialogOpen,
     isToolsDialogOpen,
     isFolderTrustDialogOpen,
     showWorkspaceMigrationDialog,
@@ -2087,6 +2127,15 @@ export const AppContainer = (props: AppContainerProps) => {
     loggingDialogData,
     subagentDialogInitialView,
     subagentDialogInitialName,
+
+    // Profile management dialog data
+    profileListItems,
+    selectedProfileName,
+    selectedProfileData,
+    defaultProfileName,
+    activeProfileName,
+    profileDialogError,
+    profileDialogLoading,
 
     // Confirmation requests
     shellConfirmationRequest,
@@ -2239,6 +2288,18 @@ export const AppContainer = (props: AppContainerProps) => {
       openCreateProfileDialog,
       exitCreateProfileDialog,
 
+      // Profile management dialogs
+      openProfileListDialog,
+      closeProfileListDialog,
+      viewProfileDetail,
+      closeProfileDetailDialog,
+      loadProfileFromDetail,
+      deleteProfileFromDetail,
+      setProfileAsDefault,
+      openProfileEditor,
+      closeProfileEditor,
+      saveProfileFromEditor,
+
       // Tools dialog
       openToolsDialog,
       handleToolsSelect,
@@ -2339,6 +2400,16 @@ export const AppContainer = (props: AppContainerProps) => {
       exitLoadProfileDialog,
       openCreateProfileDialog,
       exitCreateProfileDialog,
+      openProfileListDialog,
+      closeProfileListDialog,
+      viewProfileDetail,
+      closeProfileDetailDialog,
+      loadProfileFromDetail,
+      deleteProfileFromDetail,
+      setProfileAsDefault,
+      openProfileEditor,
+      closeProfileEditor,
+      saveProfileFromEditor,
       openToolsDialog,
       handleToolsSelect,
       exitToolsDialog,

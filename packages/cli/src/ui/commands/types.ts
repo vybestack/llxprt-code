@@ -155,7 +155,10 @@ export type DialogType =
   | 'loadProfile'
   | 'createProfile'
   | 'saveProfile'
-  | 'subagent';
+  | 'subagent'
+  | 'profileList'
+  | 'profileDetail'
+  | 'profileEditor';
 
 /** Map dialog types to their associated data types for type-safe access */
 export interface DialogDataMap {
