@@ -150,7 +150,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
           typeof key.sequence === 'string' &&
           !key.ctrl &&
           !key.meta &&
-          key.insertable
+          key.insertable !== false
         ) {
           setSearchTerm((prev) => prev + key.sequence);
         }

@@ -25,6 +25,34 @@ interface ProfileDetailDialogProps {
   error?: string;
 }
 
+/**
+ * Allowlist of ephemeralSettings keys that are safe to display.
+ * Any key NOT in this set will be hidden to prevent accidental secret leakage.
+ */
+const SAFE_EPHEMERAL_KEYS = new Set([
+  'baseurl',
+  'endpoint',
+  'url',
+  'timeout',
+  'maxretries',
+  'retries',
+  'region',
+  'debug',
+  'loglevel',
+  'version',
+  'apiversion',
+  'organization',
+  'orgid',
+  'project',
+  'projectid',
+  'maxtokens',
+  'temperature',
+  'topp',
+  'topk',
+  'stream',
+  'safetysettings',
+]);
+
 // Type guard for load balancer profile
 function isLoadBalancerProfile(profile: Profile): profile is Profile & {
   type: 'loadbalancer';
@@ -200,21 +228,12 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
           </Box>
         )}
 
-        {/* Ephemeral Settings - show non-sensitive ones */}
+        {/* Ephemeral Settings - show only allowlisted safe keys */}
         {profile.ephemeralSettings && (
           <Box flexDirection="column" marginBottom={1}>
             <Text color={SemanticColors.text.secondary}>Settings:</Text>
             {Object.entries(profile.ephemeralSettings)
-              .filter(([key]) => {
-                const k = key.toLowerCase();
-                return (
-                  !k.includes('key') &&
-                  !k.includes('auth') &&
-                  !k.includes('secret') &&
-                  !k.includes('token') &&
-                  !k.includes('password')
-                );
-              })
+              .filter(([key]) => SAFE_EPHEMERAL_KEYS.has(key.toLowerCase()))
               .filter(([, value]) => value !== undefined && value !== null)
               .slice(0, 10) // Limit displayed settings
               .map(([key, value]) => (

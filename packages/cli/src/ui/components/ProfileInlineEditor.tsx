@@ -19,6 +19,51 @@ interface ProfileInlineEditorProps {
   error?: string;
 }
 
+/**
+ * Validates a profile structure. Returns error message or null if valid.
+ */
+function validateProfile(profile: unknown): string | null {
+  if (typeof profile !== 'object' || profile === null) {
+    return 'Invalid profile: must be an object';
+  }
+
+  const p = profile as Record<string, unknown>;
+
+  if (!('version' in p) || typeof p.version !== 'string') {
+    return 'Missing or invalid version';
+  }
+
+  if (!('type' in p) || typeof p.type !== 'string') {
+    return 'Missing or invalid type';
+  }
+
+  if (p.type === 'standard') {
+    if (!('provider' in p) || typeof p.provider !== 'string' || !p.provider) {
+      return 'Standard profile requires provider';
+    }
+    if (!('model' in p) || typeof p.model !== 'string' || !p.model) {
+      return 'Standard profile requires model';
+    }
+  } else if (p.type === 'loadbalancer') {
+    if (!('profiles' in p) || !Array.isArray(p.profiles)) {
+      return 'Load balancer requires profiles array';
+    }
+    if (p.profiles.length === 0) {
+      return 'Load balancer requires at least one profile';
+    }
+    if (!p.profiles.every((item) => typeof item === 'string')) {
+      return 'Profiles must be strings';
+    }
+    if (!('policy' in p) || typeof p.policy !== 'string' || !p.policy) {
+      return 'Load balancer requires policy';
+    }
+  } else {
+    return `Unknown profile type: ${p.type}`;
+  }
+
+  return null;
+}
+
 // Simple JSON editor that allows line-by-line editing
 export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
   profileName,
@@ -77,6 +122,13 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
     }
   }, [lines]);
 
+  // Clear stale validation errors when JSON becomes valid
+  useEffect(() => {
+    if (!validateJson) {
+      setValidationError(null);
+    }
+  }, [validateJson]);
+
   useKeypress(
     (key) => {
       if (isEditing) {
@@ -128,15 +180,10 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
         }
         try {
           const updatedProfile = JSON.parse(lines.join('\n'));
-          // Basic type validation - Profile must have version and type at minimum
-          if (typeof updatedProfile !== 'object' || updatedProfile === null) {
-            setValidationError('Invalid profile: must be an object');
-            return;
-          }
-          if (!('version' in updatedProfile) || !('type' in updatedProfile)) {
-            setValidationError(
-              'Invalid profile: missing required fields (version, type)',
-            );
+          // Comprehensive profile validation
+          const profileError = validateProfile(updatedProfile);
+          if (profileError) {
+            setValidationError(profileError);
             return;
           }
           onSave(profileName, updatedProfile as Profile);

@@ -15,6 +15,52 @@ import { ProfileManager, DebugLogger } from '@vybestack/llxprt-code-core';
 
 const debug = new DebugLogger('llxprt:ui:useProfileManagement');
 
+/**
+ * Validates a profile before saving. Returns error message or null if valid.
+ */
+function validateProfileForSave(profile: unknown): string | null {
+  if (typeof profile !== 'object' || profile === null) {
+    return 'Invalid profile: must be an object';
+  }
+
+  const p = profile as Record<string, unknown>;
+
+  if (!('version' in p) || typeof p.version !== 'string') {
+    return 'Invalid profile: missing or invalid version';
+  }
+
+  if (!('type' in p) || typeof p.type !== 'string') {
+    return 'Invalid profile: missing or invalid type';
+  }
+
+  // Type-specific validation
+  if (p.type === 'standard') {
+    if (!('provider' in p) || typeof p.provider !== 'string' || !p.provider) {
+      return 'Standard profile requires a provider';
+    }
+    if (!('model' in p) || typeof p.model !== 'string' || !p.model) {
+      return 'Standard profile requires a model';
+    }
+  } else if (p.type === 'loadbalancer') {
+    if (!('profiles' in p) || !Array.isArray(p.profiles)) {
+      return 'Load balancer profile requires a profiles array';
+    }
+    if (p.profiles.length === 0) {
+      return 'Load balancer profile requires at least one profile';
+    }
+    if (!p.profiles.every((item) => typeof item === 'string')) {
+      return 'Load balancer profiles must be strings';
+    }
+    if (!('policy' in p) || typeof p.policy !== 'string' || !p.policy) {
+      return 'Load balancer profile requires a policy';
+    }
+  } else {
+    return `Unknown profile type: ${p.type}`;
+  }
+
+  return null;
+}
+
 interface UseProfileManagementParams {
   addMessage: (msg: {
     type: MessageType;
@@ -316,14 +362,10 @@ export const useProfileManagement = ({
   const saveProfile = useCallback(
     async (profileName: string, updatedProfile: unknown) => {
       try {
-        // Type guard before save - ProfileManager.saveProfile will also validate
-        if (
-          typeof updatedProfile !== 'object' ||
-          updatedProfile === null ||
-          !('version' in updatedProfile) ||
-          !('type' in updatedProfile)
-        ) {
-          setProfileError('Invalid profile structure: missing version or type');
+        // Comprehensive validation before save
+        const validationError = validateProfileForSave(updatedProfile);
+        if (validationError) {
+          setProfileError(validationError);
           return;
         }
 
