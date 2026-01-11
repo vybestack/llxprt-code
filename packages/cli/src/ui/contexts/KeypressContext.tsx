@@ -1010,7 +1010,10 @@ export function KeypressProvider({
         );
       }
 
-      if (mouseSequenceBuffer.length > MAX_MOUSE_BUFFER_SIZE) {
+      if (
+        mouseEventsEnabled &&
+        mouseSequenceBuffer.length > MAX_MOUSE_BUFFER_SIZE
+      ) {
         mouseSequenceBuffer = mouseSequenceBuffer.slice(-MAX_MOUSE_BUFFER_SIZE);
       }
 

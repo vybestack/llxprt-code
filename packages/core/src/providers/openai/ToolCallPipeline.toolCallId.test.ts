@@ -22,7 +22,7 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
   });
 
   describe('ToolCallFragment should include ID field', () => {
-    it('should support fragment with tool_call_id', async () => {
+    it('should support fragment with tool_call_id', () => {
       // This test verifies that ToolCallFragment now supports the 'id' field
 
       // Simulate a streaming chunk with tool_call_id
@@ -45,7 +45,7 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
   });
 
   describe('NormalizedToolCall should include ID field', () => {
-    it('should preserve tool_call_id through normalization', async () => {
+    it('should preserve tool_call_id through normalization', () => {
       // This test verifies that NormalizedToolCall now supports the 'id' field
 
       const validatedCall = {
@@ -64,8 +64,6 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
 
   describe('Pipeline should preserve tool_call IDs', () => {
     it('should preserve tool_call_id from fragments to normalized output', async () => {
-      pipeline = new ToolCallPipeline();
-
       // Simulate the real-world scenario from OpenAI streaming API
 
       // Fragment 1: tool name and ID (first chunk)
@@ -103,8 +101,6 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
     });
 
     it('should preserve different IDs for multiple tool calls', async () => {
-      pipeline = new ToolCallPipeline();
-
       // Simulate two concurrent tool calls with different IDs
 
       // Tool call 0
@@ -145,16 +141,15 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
   describe('Qwen/OpenAI-specific scenarios', () => {
     it('should handle Qwen-style tool_call IDs', async () => {
       // Qwen models use standard OpenAI-style tool_call IDs
-      const qwenPipeline = new ToolCallPipeline();
 
-      qwenPipeline.addFragment(0, {
+      pipeline.addFragment(0, {
         index: 0,
         id: 'call_qwen_example_123',
         name: 'search_file_content',
         args: '{"query": "test"}',
       });
 
-      const pipelineResult = await qwenPipeline.process();
+      const pipelineResult = await pipeline.process();
 
       expect(pipelineResult.normalized).toHaveLength(1);
       expect(pipelineResult.normalized[0].id).toBe('call_qwen_example_123');
@@ -170,16 +165,14 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
       ];
 
       for (const testId of testIds) {
-        const testPipeline = new ToolCallPipeline();
-
-        testPipeline.addFragment(0, {
+        pipeline.addFragment(0, {
           index: 0,
           id: testId,
           name: 'test_tool',
           args: '{}',
         });
 
-        const pipelineResult = await testPipeline.process();
+        const pipelineResult = await pipeline.process();
 
         expect(pipelineResult.normalized).toHaveLength(1);
         expect(pipelineResult.normalized[0].id).toBe(testId);
@@ -211,7 +204,6 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
 
   describe('Full flow simulation', () => {
     it('should simulate the complete pipeline flow with tool_call_id preservation', async () => {
-      pipeline = new ToolCallPipeline();
       // This simulates the actual flow in OpenAIProvider.generatePipelineChatCompletionImpl
 
       // 1. OpenAI API returns streaming chunks with tool_call IDs
