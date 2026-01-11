@@ -140,7 +140,8 @@ export interface OpenDialogActionReturn {
     | 'provider'
     | 'loadProfile'
     | 'createProfile'
-    | 'saveProfile';
+    | 'saveProfile'
+    | 'subagent';
   dialogData?: unknown;
 }
 

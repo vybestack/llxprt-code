@@ -73,6 +73,7 @@ export interface UIState {
   isOAuthCodeDialogOpen: boolean;
   isPermissionsDialogOpen: boolean;
   isLoggingDialogOpen: boolean;
+  isSubagentDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];
@@ -85,6 +86,8 @@ export interface UIState {
   toolsDialogDisabledTools: string[];
   workspaceGeminiCLIExtensions: GeminiCLIExtension[];
   loggingDialogData: { entries: unknown[] };
+  subagentDialogInitialView?: string;
+  subagentDialogInitialName?: string;
 
   // Confirmation requests
   shellConfirmationRequest: ShellConfirmationRequest | null;

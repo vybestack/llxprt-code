@@ -80,12 +80,13 @@ const invoke = async (
 };
 
 describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.P08 @requirement:REQ-002 @requirement:REQ-003 @requirement:REQ-005', () => {
-  it('exposes create alias for save command', () => {
-    const saveCommand = subagentCommand.subCommands?.find(
-      (cmd) => cmd.name === 'save',
+  it('has separate create command for interactive wizard', () => {
+    const createCommand = subagentCommand.subCommands?.find(
+      (cmd) => cmd.name === 'create',
     );
 
-    expect(saveCommand?.altNames).toEqual(expect.arrayContaining(['create']));
+    expect(createCommand).toBeDefined();
+    expect(createCommand?.description).toMatch(/create.*interactive/i);
   });
 
   it('suggests subagent names with hint on first argument', async () => {

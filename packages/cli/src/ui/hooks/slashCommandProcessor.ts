@@ -54,6 +54,7 @@ interface SlashCommandProcessorActions {
   openPrivacyNotice: () => void;
   openSettingsDialog: () => void;
   openLoggingDialog: (data?: { entries: unknown[] }) => void;
+  openSubagentDialog: (initialView?: string, initialName?: string) => void;
   openProviderModelDialog: () => void;
   openPermissionsDialog: () => void;
   openProviderDialog: () => void;
@@ -493,6 +494,16 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'saveProfile':
                       return { type: 'handled' };
+                    case 'subagent': {
+                      const subagentData = result.dialogData as
+                        | { initialView?: string; initialName?: string }
+                        | undefined;
+                      actions.openSubagentDialog(
+                        subagentData?.initialView,
+                        subagentData?.initialName,
+                      );
+                      return { type: 'handled' };
+                    }
                     default: {
                       const unhandled: never = result.dialog;
                       throw new Error(

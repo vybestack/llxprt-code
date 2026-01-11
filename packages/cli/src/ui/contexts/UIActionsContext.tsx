@@ -112,6 +112,10 @@ export interface UIActions {
   openLoggingDialog: (data?: { entries: unknown[] }) => void;
   closeLoggingDialog: () => void;
 
+  // Subagent dialog
+  openSubagentDialog: (initialView?: string, initialName?: string) => void;
+  closeSubagentDialog: () => void;
+
   // Workspace migration dialog
   onWorkspaceMigrationDialogOpen: () => void;
   onWorkspaceMigrationDialogClose: () => void;
