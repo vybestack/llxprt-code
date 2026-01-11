@@ -345,6 +345,8 @@ export async function retryWithBackoff<T>(
       }
 
       // Retry once to allow OAuth refresh or onPersistent429 to refresh before failover.
+      // This retry relies on either automatic OAuth refresh during the next request
+      // or refresh logic inside onPersistent429 before failover executes.
       const shouldAttemptRefreshRetry =
         is401 && options?.onPersistent429 && consecutive401s === 1;
 
