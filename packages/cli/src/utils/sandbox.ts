@@ -53,26 +53,26 @@ const BUILTIN_SEATBELT_PROFILES = [
   'restrictive-proxied',
 ];
 
+const PASSTHROUGH_VARIABLES = [
+  'LLXPRT_CODE_IDE_SERVER_PORT',
+  'LLXPRT_CODE_IDE_WORKSPACE_PATH',
+  'LLXPRT_CODE_WELCOME_CONFIG_PATH',
+  'TERM_PROGRAM',
+] as const;
+
 export function getPassthroughEnvVars(
   env: NodeJS.ProcessEnv,
 ): Record<string, string> {
-  const passthroughVariables = [
-    'LLXPRT_CODE_IDE_SERVER_PORT',
-    'LLXPRT_CODE_IDE_WORKSPACE_PATH',
-    'LLXPRT_CODE_WELCOME_CONFIG_PATH',
-    'TERM_PROGRAM',
-  ];
+  const result: Record<string, string> = {};
 
-  return passthroughVariables.reduce<Record<string, string>>(
-    (result, envVar) => {
-      const value = env[envVar];
-      if (!value) {
-        return result;
-      }
-      return { ...result, [envVar]: value };
-    },
-    {},
-  );
+  for (const envVar of PASSTHROUGH_VARIABLES) {
+    const value = env[envVar];
+    if (typeof value === 'string' && value.length > 0) {
+      result[envVar] = value;
+    }
+  }
+
+  return result;
 }
 
 export function buildSandboxEnvArgs(env: NodeJS.ProcessEnv): string[] {
@@ -342,8 +342,8 @@ export async function start_sandbox(
       let sandboxProcess: ChildProcess | undefined = undefined;
       const sandboxEnv = {
         ...process.env,
-        ...getPassthroughEnvVars(process.env),
       };
+      Object.assign(sandboxEnv, getPassthroughEnvVars(process.env));
 
       if (proxyCommand) {
         const proxy =

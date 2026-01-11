@@ -219,8 +219,9 @@ describe('buildSandboxEnvArgs', () => {
 
   it('should return a new array', () => {
     const env: NodeJS.ProcessEnv = { ...mockEnv };
-    const result = buildSandboxEnvArgs(env);
+    const result1 = buildSandboxEnvArgs(env);
+    const result2 = buildSandboxEnvArgs(env);
 
-    expect(result).not.toBe(env);
+    expect(result2).not.toBe(result1);
   });
 });
