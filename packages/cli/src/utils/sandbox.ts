@@ -53,23 +53,33 @@ const BUILTIN_SEATBELT_PROFILES = [
   'restrictive-proxied',
 ];
 
-export function buildSandboxEnvArgs(env: NodeJS.ProcessEnv): string[] {
-  const args: string[] = [];
-  const passthroughVariables = [
-    'LLXPRT_CODE_IDE_SERVER_PORT',
-    'LLXPRT_CODE_IDE_WORKSPACE_PATH',
-    'LLXPRT_CODE_WELCOME_CONFIG_PATH',
-    'TERM_PROGRAM',
-  ];
+const PASSTHROUGH_VARIABLES = [
+  'LLXPRT_CODE_IDE_SERVER_PORT',
+  'LLXPRT_CODE_IDE_WORKSPACE_PATH',
+  'LLXPRT_CODE_WELCOME_CONFIG_PATH',
+  'TERM_PROGRAM',
+] as const;
 
-  for (const envVar of passthroughVariables) {
+export function getPassthroughEnvVars(
+  env: NodeJS.ProcessEnv,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  for (const envVar of PASSTHROUGH_VARIABLES) {
     const value = env[envVar];
-    if (value) {
-      args.push('--env', `${envVar}=${value}`);
+    if (typeof value === 'string' && value.length > 0) {
+      result[envVar] = value;
     }
   }
 
-  return args;
+  return result;
+}
+
+export function buildSandboxEnvArgs(env: NodeJS.ProcessEnv): string[] {
+  return Object.entries(getPassthroughEnvVars(env)).flatMap(([key, value]) => [
+    '--env',
+    `${key}=${value}`,
+  ]);
 }
 
 /**
@@ -330,14 +340,10 @@ export async function start_sandbox(
       const proxyCommand = process.env.LLXPRT_SANDBOX_PROXY_COMMAND;
       let proxyProcess: ChildProcess | undefined = undefined;
       let sandboxProcess: ChildProcess | undefined = undefined;
-      const sandboxEnv = { ...process.env };
-      for (const envVar of buildSandboxEnvArgs(process.env)) {
-        if (envVar === '--env') {
-          continue;
-        }
-        const [key, ...rest] = envVar.split('=');
-        sandboxEnv[key] = rest.join('=');
-      }
+      const sandboxEnv = {
+        ...process.env,
+      };
+      Object.assign(sandboxEnv, getPassthroughEnvVars(process.env));
 
       if (proxyCommand) {
         const proxy =
