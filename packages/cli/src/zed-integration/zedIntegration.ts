@@ -33,6 +33,7 @@ import {
   type TodoUpdateEvent,
   type Todo,
   DEFAULT_AGENT_ID,
+  type FilterFilesOptions,
 } from '@vybestack/llxprt-code-core';
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
