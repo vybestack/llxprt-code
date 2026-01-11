@@ -82,9 +82,11 @@ const mockToolRequiresConfirmation = new MockTool({
 
 describe('useReactToolScheduler in YOLO Mode', () => {
   let onComplete: Mock;
+  let setPendingHistoryItem: Mock;
 
   beforeEach(() => {
     onComplete = vi.fn();
+    setPendingHistoryItem = vi.fn();
     mockToolRegistry.getTool.mockClear();
     mockToolRequiresConfirmation.executeFn.mockClear();
     (mockToolRequiresConfirmation.shouldConfirmExecute as Mock).mockClear();
@@ -254,6 +256,7 @@ describe('useReactToolScheduler agentId propagation', () => {
 
 describe('useReactToolScheduler', () => {
   let onComplete: Mock;
+  let setPendingHistoryItem: Mock;
   let capturedOnConfirmForTest:
     | ((outcome: ToolConfirmationOutcome) => void | Promise<void>)
     | undefined;
