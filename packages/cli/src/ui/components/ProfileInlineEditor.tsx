@@ -116,8 +116,19 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
           return;
         }
         try {
-          const updatedProfile = JSON.parse(lines.join('\n')) as Profile;
-          onSave(profileName, updatedProfile);
+          const updatedProfile = JSON.parse(lines.join('\n'));
+          // Basic type validation - Profile must have version and type at minimum
+          if (typeof updatedProfile !== 'object' || updatedProfile === null) {
+            setValidationError('Invalid profile: must be an object');
+            return;
+          }
+          if (!('version' in updatedProfile) || !('type' in updatedProfile)) {
+            setValidationError(
+              'Invalid profile: missing required fields (version, type)',
+            );
+            return;
+          }
+          onSave(profileName, updatedProfile as Profile);
         } catch (e) {
           setValidationError(e instanceof Error ? e.message : 'Invalid JSON');
         }

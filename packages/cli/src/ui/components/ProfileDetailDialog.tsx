@@ -31,7 +31,12 @@ function isLoadBalancerProfile(profile: Profile): profile is Profile & {
   profiles: string[];
   policy: string;
 } {
-  return profile.type === 'loadbalancer';
+  const p = profile as Record<string, unknown>;
+  return (
+    profile.type === 'loadbalancer' &&
+    Array.isArray(p.profiles) &&
+    typeof p.policy === 'string'
+  );
 }
 
 export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
@@ -195,12 +200,16 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
           <Box flexDirection="column" marginBottom={1}>
             <Text color={SemanticColors.text.secondary}>Settings:</Text>
             {Object.entries(profile.ephemeralSettings)
-              .filter(
-                ([key]) =>
-                  !key.includes('key') &&
-                  !key.includes('auth') &&
-                  !key.includes('secret'),
-              )
+              .filter(([key]) => {
+                const k = key.toLowerCase();
+                return (
+                  !k.includes('key') &&
+                  !k.includes('auth') &&
+                  !k.includes('secret') &&
+                  !k.includes('token') &&
+                  !k.includes('password')
+                );
+              })
               .filter(([, value]) => value !== undefined && value !== null)
               .slice(0, 10) // Limit displayed settings
               .map(([key, value]) => (

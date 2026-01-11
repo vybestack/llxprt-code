@@ -100,9 +100,8 @@ export const useProfileManagement = ({
 
       // Try to get active profile name
       try {
-        const status = runtime.getActiveProviderStatus();
-        // The status might have a currentProfile field
-        const current = (status as { currentProfile?: string }).currentProfile;
+        const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
+        const current = diagnostics?.profileName;
         setActiveProfileName(current ?? null);
       } catch {
         // Ignore errors getting active profile
@@ -321,14 +320,14 @@ export const useProfileManagement = ({
         });
         // Close editor and reopen detail
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileEditor' });
-        await viewProfileDetail(profileName);
+        await viewProfileDetail(profileName, editorOpenedDirectly);
       } catch (error) {
         setProfileError(
           error instanceof Error ? error.message : 'Failed to save profile',
         );
       }
     },
-    [addMessage, appDispatch, viewProfileDetail],
+    [addMessage, appDispatch, viewProfileDetail, editorOpenedDirectly],
   );
 
   return {
