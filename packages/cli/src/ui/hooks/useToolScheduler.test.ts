@@ -372,7 +372,10 @@ describe('useReactToolScheduler', () => {
     const failedCall = completionArgs[0];
     expect(failedCall.status).toBe('error');
     expect(failedCall.request.agentId).toBe('primary');
-    const errorMessage = failedCall.response.error?.message ?? '';
+    if (!failedCall.response.error) {
+      throw new Error('Expected tool response error');
+    }
+    const errorMessage = failedCall.response.error.message ?? '';
     expect(errorMessage).toContain('could not be loaded');
     expect(errorMessage).toContain('Did you mean one of:');
     expect(errorMessage).toContain('"mockTool"');
