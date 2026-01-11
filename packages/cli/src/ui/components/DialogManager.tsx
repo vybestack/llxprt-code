@@ -29,6 +29,8 @@ import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 // import { ModelDialog } from './ModelDialog.js'; // TODO: Not yet ported from upstream
 import { LoggingDialog } from './LoggingDialog.js';
+import { SubagentManagerDialog } from './SubagentManagement/index.js';
+import { SubagentView } from './SubagentManagement/types.js';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
@@ -318,6 +320,16 @@ export const DialogManager = ({
           }>
         }
         onClose={uiActions.closeLoggingDialog}
+      />
+    );
+  }
+
+  if (uiState.isSubagentDialogOpen) {
+    return (
+      <SubagentManagerDialog
+        onClose={uiActions.closeSubagentDialog}
+        initialView={uiState.subagentDialogInitialView ?? SubagentView.MENU}
+        initialSubagentName={uiState.subagentDialogInitialName}
       />
     );
   }

@@ -8,8 +8,6 @@ import {
   beforeAll,
 } from 'vitest';
 
-vi.mock('child_process');
-
 const runWithScopeMock = vi.fn((callback: () => unknown) => callback());
 const getRuntimeBridgeMock = vi.fn(() => ({
   runWithScope: runWithScopeMock,
@@ -36,7 +34,6 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
  * See: project-plans/subagentconfig/analysis/findings.md for Phase 01 results
  */
 import * as fs from 'fs/promises';
-import { writeFileSync } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import {
@@ -45,6 +42,7 @@ import {
   Logger,
   SessionMetrics,
 } from '@vybestack/llxprt-code-core';
+import { SubagentView } from '../../components/SubagentManagement/types.js';
 import { FunctionCallingConfigMode } from '@google/genai';
 import {
   CommandContext,
@@ -54,7 +52,6 @@ import {
 } from '../types.js';
 import { LoadedSettings } from '../../../config/settings.js';
 import { SessionStatsState } from '../../contexts/SessionContext.js';
-import { spawnSync } from 'child_process';
 
 let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
 let subagentCommandModule: typeof import('../subagentCommand.js');
@@ -63,18 +60,7 @@ beforeAll(async () => {
   // Reset modules to ensure fresh import with mocks
   vi.resetModules();
 
-  // Set up default mock behavior for spawnSync
-  vi.mocked(spawnSync).mockImplementation(() => ({
-    pid: 12345,
-    output: [null, null, null] as [null, null, null],
-    stdout: Buffer.from(''),
-    stderr: Buffer.from(''),
-    status: 0,
-    signal: null,
-    error: undefined,
-  }));
-
-  // Import AFTER mock is set up
+  // Import module
   const mod = await import('../subagentCommand.js?t=' + Date.now());
   subagentCommand = mod.subagentCommand;
   subagentCommandModule = mod;
@@ -201,6 +187,23 @@ const ensureConfirm = (
     throw new Error('Expected confirm action return');
   }
   return value;
+};
+
+type DialogActionReturn = {
+  type: 'dialog';
+  dialog: string;
+  dialogData?: Record<string, unknown>;
+};
+
+const ensureDialog = (
+  value: SlashCommandActionReturn | void,
+): DialogActionReturn => {
+  expect(value).toBeDefined();
+  expect(value?.type).toBe('dialog');
+  if (!value || value.type !== 'dialog') {
+    throw new Error('Expected dialog action return');
+  }
+  return value as DialogActionReturn;
 };
 
 /**
@@ -359,100 +362,37 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
   });
 
   describe('listCommand @requirement:REQ-005 @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
-    it('should show message when no subagents exist', async () => {
-      // Mock listSubagents to return empty array
-      // Use real SubagentManager for this test
+    it('should open list dialog', async () => {
+      // listCommand now opens interactive dialog instead of returning message
       context = createTestContext({
         profileManager,
         subagentManager,
       });
 
-      const result = ensureMessage(
-        await subagentCommand.subCommands![1].action!(context, ''),
+      const result = ensureDialog(
+        await subagentCommand.subCommands![2].action!(context, ''),
       );
 
-      expect(result.messageType).toBe('info');
-      expect(result.content).toMatch(/no subagents found/i);
-    });
-
-    it('should list all subagents with details', async () => {
-      // Create multiple subagents
-      await subagentManager.saveSubagent('agent1', 'testprofile', 'Prompt 1');
-      await subagentManager.saveSubagent('agent2', 'testprofile', 'Prompt 2');
-
-      const result = ensureMessage(
-        await subagentCommand.subCommands![1].action!(context, ''),
-      );
-
-      expect(result.messageType).toBe('info');
-      expect(result.content).toMatch(/agent1/);
-      expect(result.content).toMatch(/agent2/);
-      expect(result.content).toMatch(/testprofile/);
+      expect(result.dialog).toBe('subagent');
+      expect(result.dialogData?.initialView).toBe(SubagentView.LIST);
     });
   });
 
   describe('showCommand @requirement:REQ-006 @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
-    it('should display full subagent configuration', async () => {
+    it('should open show dialog for existing subagent', async () => {
       await subagentManager.saveSubagent(
         'testagent',
         'testprofile',
         'Test system prompt',
       );
 
-      const result = ensureMessage(
-        await subagentCommand.subCommands![2].action!(context, 'testagent'),
-      );
-
-      expect(result.messageType).toBe('info');
-      expect(result.content).toMatch(/testagent/);
-      expect(result.content).toMatch(/testprofile/);
-      expect(result.content).toMatch(/Test system prompt/);
-    });
-
-    it('should error for non-existent subagent', async () => {
-      const result = ensureMessage(
-        await subagentCommand.subCommands![2].action!(context, 'nonexistent'),
-      );
-
-      expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/not found/i);
-    });
-
-    it('should error when name not provided', async () => {
-      const result = ensureMessage(
-        await subagentCommand.subCommands![2].action!(context, ''),
-      );
-
-      expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/usage|name required/i);
-    });
-  });
-
-  describe('deleteCommand @requirement:REQ-007 @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
-    it('should delete subagent with confirmation', async () => {
-      await subagentManager.saveSubagent(
-        'testagent',
-        'testprofile',
-        'Test prompt',
-      );
-
-      // First call: should prompt for confirmation
-      ensureConfirm(
+      const result = ensureDialog(
         await subagentCommand.subCommands![3].action!(context, 'testagent'),
       );
 
-      // Second call: with confirmation
-      context.overwriteConfirmed = true;
-      const result2 = ensureMessage(
-        await subagentCommand.subCommands![3].action!(context, 'testagent'),
-      );
-
-      expect(result2.messageType).toBe('info');
-      expect(result2.content).toMatch(/deleted/i);
-
-      // Verify deleted
-      const exists = await subagentManager.subagentExists('testagent');
-      expect(exists).toBe(false);
+      expect(result.dialog).toBe('subagent');
+      expect(result.dialogData?.initialView).toBe(SubagentView.SHOW);
+      expect(result.dialogData?.initialSubagentName).toBe('testagent');
     });
 
     it('should error for non-existent subagent', async () => {
@@ -463,6 +403,52 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       expect(result.messageType).toBe('error');
       expect(result.content).toMatch(/not found/i);
     });
+
+    it('should error when name not provided', async () => {
+      const result = ensureMessage(
+        await subagentCommand.subCommands![3].action!(context, ''),
+      );
+
+      expect(result.messageType).toBe('error');
+      expect(result.content).toMatch(/usage/i);
+    });
+  });
+
+  describe('deleteCommand @requirement:REQ-007 @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
+    it('should open delete dialog for existing subagent', async () => {
+      await subagentManager.saveSubagent(
+        'testagent',
+        'testprofile',
+        'Test prompt',
+      );
+
+      // deleteCommand now opens interactive dialog for confirmation
+      const result = ensureDialog(
+        await subagentCommand.subCommands![5].action!(context, 'testagent'),
+      );
+
+      expect(result.dialog).toBe('subagent');
+      expect(result.dialogData?.initialView).toBe(SubagentView.DELETE);
+      expect(result.dialogData?.initialSubagentName).toBe('testagent');
+    });
+
+    it('should error for non-existent subagent', async () => {
+      const result = ensureMessage(
+        await subagentCommand.subCommands![5].action!(context, 'nonexistent'),
+      );
+
+      expect(result.messageType).toBe('error');
+      expect(result.content).toMatch(/not found/i);
+    });
+
+    it('should error when name not provided', async () => {
+      const result = ensureMessage(
+        await subagentCommand.subCommands![5].action!(context, ''),
+      );
+
+      expect(result.messageType).toBe('error');
+      expect(result.content).toMatch(/usage/i);
+    });
   });
 });
 
@@ -471,6 +457,9 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P10
  * @requirement:REQ-008
+ *
+ * NOTE: editCommand now opens interactive dialog instead of external editor.
+ * Editor-based tests removed in favor of dialog-based UI.
  */
 describe('editCommand @requirement:REQ-008', () => {
   let context: CommandContext;
@@ -509,17 +498,13 @@ describe('editCommand @requirement:REQ-008', () => {
     vi.clearAllMocks();
   });
 
-  it('should have spawnSync mocked', () => {
-    expect(vi.isMockFunction(spawnSync)).toBe(true);
-  });
-
   it('should error when name not provided', async () => {
     const result = ensureMessage(
       await subagentCommand.subCommands![4].action!(context, ''),
     );
 
     expect(result.messageType).toBe('error');
-    expect(result.content).toMatch(/usage|name required/i);
+    expect(result.content).toMatch(/usage/i);
   });
 
   it('should error for non-existent subagent', async () => {
@@ -531,115 +516,20 @@ describe('editCommand @requirement:REQ-008', () => {
     expect(result.content).toMatch(/not found/i);
   });
 
-  it('should launch editor for existing subagent', async () => {
-    await subagentManager.saveSubagent(
-      'testagent',
-      'testprofile',
-      'Test prompt',
-    );
-    const original = await subagentManager.loadSubagent('testagent');
-
-    // Mock implementation that simulates file editing
-    vi.mocked(spawnSync).mockImplementationOnce((_cmd, args) => {
-      const filePath = Array.isArray(args)
-        ? (args[0] as string | undefined)
-        : undefined;
-      if (filePath) {
-        writeFileSync(
-          filePath,
-          JSON.stringify(
-            {
-              ...original,
-              systemPrompt: 'Updated prompt from editor',
-            },
-            null,
-            2,
-          ),
-          'utf8',
-        );
-      }
-      return {
-        pid: 12345,
-        output: [null, null, null] as [null, null, null],
-        stdout: Buffer.from(''),
-        stderr: Buffer.from(''),
-        status: 0,
-        signal: null,
-        error: undefined,
-      };
-    });
-
-    const result = ensureMessage(
-      await subagentCommand.subCommands![4].action!(context, 'testagent'),
-    );
-
-    const updated = await subagentManager.loadSubagent('testagent');
-    expect(updated.systemPrompt).toBe('Updated prompt from editor');
-    expect(new Date(updated.updatedAt).getTime()).toBeGreaterThanOrEqual(
-      new Date(original.updatedAt).getTime(),
-    );
-    expect(result.messageType).toBe('info');
-    expect(result.content).toMatch(/updated successfully/i);
-  });
-
-  it('should handle editor failure', async () => {
+  it('should open edit dialog for existing subagent', async () => {
     await subagentManager.saveSubagent(
       'testagent',
       'testprofile',
       'Test prompt',
     );
 
-    // Mock editor exiting with error
-    vi.mocked(spawnSync).mockImplementationOnce(() => ({
-      pid: 12345,
-      output: [null, null, null] as [null, null, null],
-      stdout: Buffer.from(''),
-      stderr: Buffer.from(''),
-      status: 1,
-      signal: null,
-      error: undefined,
-    }));
-
-    const result = ensureMessage(
+    const result = ensureDialog(
       await subagentCommand.subCommands![4].action!(context, 'testagent'),
     );
 
-    expect(result.messageType).toBe('error');
-    expect(result.content).toMatch(/editor.*exited|failed/i);
-  });
-
-  it('should validate JSON after edit', async () => {
-    await subagentManager.saveSubagent(
-      'testagent',
-      'testprofile',
-      'Test prompt',
-    );
-
-    // Mock editor writing invalid JSON
-    vi.mocked(spawnSync).mockImplementationOnce((_cmd, args) => {
-      const filePath = Array.isArray(args)
-        ? (args[0] as string | undefined)
-        : undefined;
-      if (filePath) {
-        writeFileSync(filePath, '{ invalid json', 'utf8');
-      }
-      return {
-        pid: 12345,
-        output: [null, null, null] as [null, null, null],
-        stdout: Buffer.from(''),
-        stderr: Buffer.from(''),
-        status: 0,
-        signal: null,
-        error: undefined,
-      };
-    });
-
-    const result = ensureMessage(
-      await subagentCommand.subCommands![4].action!(context, 'testagent'),
-    );
-
-    expect(result.messageType).toBe('error');
-    expect(result.content).toMatch(/invalid json/i);
+    expect(result.dialog).toBe('subagent');
+    expect(result.dialogData?.initialView).toBe(SubagentView.EDIT);
+    expect(result.dialogData?.initialSubagentName).toBe('testagent');
   });
 });
 

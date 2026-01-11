@@ -80,6 +80,7 @@ import { useGitBranchName } from './hooks/useGitBranchName.js';
 import { useFocus } from './hooks/useFocus.js';
 import { useBracketedPaste } from './hooks/useBracketedPaste.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
+import { SubagentView } from './components/SubagentManagement/types.js';
 import { useVimMode } from './contexts/VimModeContext.js';
 import { useVim } from './hooks/vim.js';
 import { useKeypress, Key } from './hooks/useKeypress.js';
@@ -885,6 +886,15 @@ export const AppContainer = (props: AppContainerProps) => {
     entries: unknown[];
   }>({ entries: [] });
 
+  // Subagent dialog state
+  const [isSubagentDialogOpen, setIsSubagentDialogOpen] = useState(false);
+  const [subagentDialogInitialView, setSubagentDialogInitialView] = useState<
+    SubagentView | undefined
+  >(undefined);
+  const [subagentDialogInitialName, setSubagentDialogInitialName] = useState<
+    string | undefined
+  >(undefined);
+
   // Queue error message state (for preventing slash/shell commands from being queued)
   const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(
     null,
@@ -897,6 +907,21 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const closeLoggingDialog = useCallback(() => {
     setIsLoggingDialogOpen(false);
+  }, []);
+
+  const openSubagentDialog = useCallback(
+    (initialView?: SubagentView, initialName?: string) => {
+      setSubagentDialogInitialView(initialView);
+      setSubagentDialogInitialName(initialName);
+      setIsSubagentDialogOpen(true);
+    },
+    [],
+  );
+
+  const closeSubagentDialog = useCallback(() => {
+    setIsSubagentDialogOpen(false);
+    setSubagentDialogInitialView(undefined);
+    setSubagentDialogInitialName(undefined);
   }, []);
 
   const {
@@ -1382,6 +1407,7 @@ export const AppContainer = (props: AppContainerProps) => {
       openPrivacyNotice,
       openSettingsDialog,
       openLoggingDialog,
+      openSubagentDialog,
       openProviderModelDialog,
       openPermissionsDialog,
       openProviderDialog,
@@ -1401,6 +1427,7 @@ export const AppContainer = (props: AppContainerProps) => {
       openPrivacyNotice,
       openSettingsDialog,
       openLoggingDialog,
+      openSubagentDialog,
       openProviderModelDialog,
       openPermissionsDialog,
       openProviderDialog,
@@ -2043,6 +2070,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isOAuthCodeDialogOpen: appState.openDialogs.oauthCode,
     isPermissionsDialogOpen,
     isLoggingDialogOpen,
+    isSubagentDialogOpen,
 
     // Dialog data
     providerOptions: isCreateProfileDialogOpen
@@ -2057,6 +2085,8 @@ export const AppContainer = (props: AppContainerProps) => {
     toolsDialogDisabledTools,
     workspaceGeminiCLIExtensions,
     loggingDialogData,
+    subagentDialogInitialView,
+    subagentDialogInitialName,
 
     // Confirmation requests
     shellConfirmationRequest,
@@ -2229,6 +2259,10 @@ export const AppContainer = (props: AppContainerProps) => {
       openLoggingDialog,
       closeLoggingDialog,
 
+      // Subagent dialog
+      openSubagentDialog,
+      closeSubagentDialog,
+
       // Workspace migration dialog
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
@@ -2315,6 +2349,8 @@ export const AppContainer = (props: AppContainerProps) => {
       closePermissionsDialog,
       openLoggingDialog,
       closeLoggingDialog,
+      openSubagentDialog,
+      closeSubagentDialog,
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
       openPrivacyNotice,

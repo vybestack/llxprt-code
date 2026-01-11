@@ -19,7 +19,6 @@ import {
   Config,
   DebugLogger,
   GeminiClient,
-  SubagentConfig,
   createRuntimeStateFromConfig,
 } from '@vybestack/llxprt-code-core';
 
@@ -28,12 +27,9 @@ import {
   FunctionCallingConfigMode,
   SendMessageParameters,
 } from '@google/genai';
-import { spawnSync } from 'child_process';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
+import { SubagentView } from '../components/SubagentManagement/types.js';
 
 /**
  * Parse save command arguments
@@ -232,7 +228,6 @@ const subagentSchema = [
  */
 const saveCommand: SlashCommand = {
   name: 'save',
-  altNames: ['create'],
   description: 'Save a subagent configuration (auto or manual mode)',
   kind: CommandKind.BUILT_IN,
   // Schema-based completion replaces legacy completion function
@@ -436,100 +431,34 @@ const saveCommand: SlashCommand = {
 };
 
 /**
- * /subagent list command
+ * /subagent list command - Opens interactive list view
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
  * @requirement:REQ-005
- * @pseudocode SubagentCommand.md lines 135-182
  */
 const listCommand: SlashCommand = {
   name: 'list',
-  description: 'List all saved subagents',
+  description: 'List all saved subagents (interactive)',
   kind: CommandKind.BUILT_IN,
   action: async (
-    context: CommandContext,
+    _context: CommandContext,
     _args: string,
-  ): Promise<SlashCommandActionReturn> => {
-    const { services } = context;
-    const subagentManager = services.subagentManager;
-    if (!subagentManager) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
-      };
-    }
-
-    try {
-      const names = await subagentManager.listSubagents();
-
-      if (names.length === 0) {
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: "No subagents found. Use '/subagent save' to create one.",
-        };
-      }
-
-      // Load each subagent for details
-      const details = await Promise.all(
-        names.map(async (n) => {
-          const config = await subagentManager.loadSubagent(n);
-          return { name: n, config };
-        }),
-      ); // @plan:PLAN-20250117-SUBAGENTCONFIG.P08 @requirement:REQ-005
-
-      /**
-       * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
-       * @requirement:REQ-005
-       * @requirement:REQ-009
-       * @pseudocode SubagentCommand.md lines 159-166
-       */
-      // Sort by creation date (oldest first as per pseudocode)
-      details.sort(
-        (itemA, itemB) =>
-          new Date(itemA.config.createdAt).getTime() -
-          new Date(itemB.config.createdAt).getTime(),
-      ); // @plan:PLAN-20250117-SUBAGENTCONFIG.P09 @requirement:REQ-009
-
-      // Format output
-      const lines = ['List of saved subagents:\n'];
-      for (const { name, config } of details) {
-        const createdDate = new Date(config.createdAt).toLocaleString();
-        lines.push(
-          `  - ${name}     (profile: ${config.profile}, created: ${createdDate})`,
-        );
-      }
-      lines.push(
-        "\nNote: Use '/subagent show <name>' to view full configuration",
-      );
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: lines.join('\n'),
-      };
-    } catch (_error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Failed to list subagents',
-      };
-    }
-  },
+  ): Promise<SlashCommandActionReturn> => ({
+    type: 'dialog',
+    dialog: 'subagent',
+    dialogData: { initialView: SubagentView.LIST },
+  }),
 };
 
 /**
- * /subagent show command
+ * /subagent show command - Opens interactive show view
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
  * @requirement:REQ-006
- * @pseudocode SubagentCommand.md lines 183-234
  */
 const showCommand: SlashCommand = {
   name: 'show',
-  description: 'Show detailed subagent configuration',
+  description: 'Show detailed subagent configuration (interactive)',
   kind: CommandKind.BUILT_IN,
   action: async (
     context: CommandContext,
@@ -545,62 +474,43 @@ const showCommand: SlashCommand = {
       };
     }
 
+    // Validate subagent exists
     const { services } = context;
     const subagentManager = services.subagentManager;
     if (!subagentManager) {
       return {
         type: 'message',
         messageType: 'error',
-        content:
-          'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
+        content: 'SubagentManager service is unavailable.',
       };
     }
 
-    try {
-      const config: SubagentConfig = await subagentManager.loadSubagent(name);
-
-      const createdDate = new Date(config.createdAt).toLocaleString();
-      const updatedDate = new Date(config.updatedAt).toLocaleString();
-
-      const separator = '-'.repeat(60);
-      const output = [
-        `Subagent: ${config.name}`,
-        `Profile: ${config.profile}`,
-        `Created: ${createdDate}`,
-        `Updated: ${updatedDate}`,
-        '',
-        'System Prompt:',
-        separator,
-        config.systemPrompt,
-        separator,
-      ].join('\n');
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: output,
-      };
-    } catch (_error) {
+    const exists = await subagentManager.subagentExists(name);
+    if (!exists) {
       return {
         type: 'message',
         messageType: 'error',
-        content: `Error: Subagent '${name}' not found. Use /subagent list to see available subagents.`,
+        content: `Subagent '${name}' not found. Use /subagent list to see available subagents.`,
       };
     }
+
+    return {
+      type: 'dialog',
+      dialog: 'subagent',
+      dialogData: { initialView: SubagentView.SHOW, initialSubagentName: name },
+    };
   },
 };
 
 /**
- * /subagent delete command
+ * /subagent delete command - Opens interactive delete confirmation
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
  * @requirement:REQ-007
- * @requirement:REQ-015
- * @pseudocode SubagentCommand.md lines 235-291
  */
 const deleteCommand: SlashCommand = {
   name: 'delete',
-  description: 'Delete a subagent configuration',
+  description: 'Delete a subagent configuration (interactive)',
   kind: CommandKind.BUILT_IN,
   action: async (
     context: CommandContext,
@@ -616,25 +526,17 @@ const deleteCommand: SlashCommand = {
       };
     }
 
-    const { services, overwriteConfirmed, invocation } = context;
+    const { services } = context;
     const subagentManager = services.subagentManager;
     if (!subagentManager) {
       return {
         type: 'message',
         messageType: 'error',
-        content:
-          'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
+        content: 'SubagentManager service is unavailable.',
       };
     }
 
-    /**
-     * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
-     * @requirement:REQ-007
-     * @pseudocode SubagentCommand.md lines 258-264
-     */
-    // Check if subagent exists
     const exists = await subagentManager.subagentExists(name);
-
     if (!exists) {
       return {
         type: 'message',
@@ -643,67 +545,26 @@ const deleteCommand: SlashCommand = {
       };
     }
 
-    /**
-     * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
-     * @requirement:REQ-007
-     * @pseudocode SubagentCommand.md lines 265-274
-     */
-    // Prompt for confirmation if not already given
-    if (!overwriteConfirmed) {
-      return {
-        type: 'confirm_action',
-        prompt: React.createElement(
-          Text,
-          null,
-          'Are you sure you want to delete subagent ',
-          React.createElement(Text, { color: Colors.AccentPurple }, name),
-          '? This action cannot be undone.',
-        ),
-        originalInvocation: {
-          raw: invocation?.raw || '',
-        },
-      };
-    }
-
-    /**
-     * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
-     * @requirement:REQ-007
-     * @pseudocode SubagentCommand.md lines 276-283
-     */
-    try {
-      await subagentManager.deleteSubagent(name);
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Successfully deleted subagent '${name}'.`,
-      };
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          error instanceof Error
-            ? `Failed to delete subagent: ${error.message}`
-            : 'Failed to delete subagent due to an unknown error.',
-      };
-    }
+    return {
+      type: 'dialog',
+      dialog: 'subagent',
+      dialogData: {
+        initialView: SubagentView.DELETE,
+        initialSubagentName: name,
+      },
+    };
   },
 };
 
 /**
- * /subagent edit command
+ * /subagent edit command - Opens interactive edit form
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P11
  * @requirement:REQ-008
- * @requirement:REQ-015
- * @pseudocode SubagentCommand.md lines 166-210
- *
- * Pattern: Uses spawnSync approach from text-buffer.ts
  */
 const editCommand: SlashCommand = {
   name: 'edit',
-  description: 'Edit subagent configuration in system editor',
+  description: 'Edit subagent configuration (interactive)',
   kind: CommandKind.BUILT_IN,
   action: async (
     context: CommandContext,
@@ -720,127 +581,47 @@ const editCommand: SlashCommand = {
     }
 
     const { services } = context;
-    const subagentManager = services.subagentManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P11 @requirement:REQ-008
+    const subagentManager = services.subagentManager;
     if (!subagentManager) {
       return {
         type: 'message',
         messageType: 'error',
-        content:
-          'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
+        content: 'SubagentManager service is unavailable.',
       };
     }
 
-    // Check if subagent exists
     const exists = await subagentManager.subagentExists(name);
-
     if (!exists) {
       return {
         type: 'message',
         messageType: 'error',
-        content: `Error: Subagent '${name}' not found.`,
+        content: `Subagent '${name}' not found.`,
       };
     }
 
-    // Load current config
-    const config = await subagentManager.loadSubagent(name);
-
-    // Create temp file (like text-buffer.ts does)
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'subagent-edit-'));
-    const filePath = path.join(tmpDir, `${name}.json`);
-
-    try {
-      // Write current config to temp file
-      fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf8');
-
-      // Determine editor (like text-buffer.ts)
-      const editor = process.env.VISUAL || process.env.EDITOR || 'vi';
-
-      // Launch editor with spawnSync (BLOCKS until editor closes)
-      const { status, error } = spawnSync(editor, [filePath], {
-        stdio: 'inherit',
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      if (typeof status === 'number' && status !== 0) {
-        throw new Error(`Editor exited with status ${status}`);
-      }
-
-      // Read edited content
-      const editedContent = fs.readFileSync(filePath, 'utf8');
-
-      // Parse and validate JSON
-      let editedConfig: SubagentConfig;
-      try {
-        editedConfig = JSON.parse(editedContent);
-      } catch (_error) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: 'Error: Invalid JSON after edit. Changes not saved.',
-        };
-      }
-
-      // Validate required fields
-      if (
-        !editedConfig.name ||
-        !editedConfig.profile ||
-        !editedConfig.systemPrompt
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: 'Error: Required fields missing. Changes not saved.',
-        };
-      }
-
-      // Validate profile exists
-      const profileValid = await subagentManager.validateProfileReference(
-        editedConfig.profile,
-      );
-      if (!profileValid) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Error: Profile '${editedConfig.profile}' not found. Changes not saved.`,
-        };
-      }
-
-      // Save the edited config (updates updatedAt timestamp)
-      await subagentManager.saveSubagent(
-        editedConfig.name,
-        editedConfig.profile,
-        editedConfig.systemPrompt,
-      );
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Subagent '${name}' updated successfully.`,
-      };
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          error instanceof Error ? error.message : 'Failed to edit subagent',
-      };
-    } finally {
-      // Cleanup temp file and directory (like text-buffer.ts)
-      try {
-        fs.unlinkSync(filePath);
-      } catch {
-        /* ignore */
-      }
-      try {
-        fs.rmdirSync(tmpDir);
-      } catch {
-        /* ignore */
-      }
-    }
+    return {
+      type: 'dialog',
+      dialog: 'subagent',
+      dialogData: { initialView: SubagentView.EDIT, initialSubagentName: name },
+    };
   },
+};
+
+/**
+ * /subagent create command - Opens interactive creation wizard
+ */
+const createCommand: SlashCommand = {
+  name: 'create',
+  description: 'Create a new subagent (interactive wizard)',
+  kind: CommandKind.BUILT_IN,
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<SlashCommandActionReturn> => ({
+    type: 'dialog',
+    dialog: 'subagent',
+    dialogData: { initialView: SubagentView.CREATE },
+  }),
 };
 
 /**
@@ -858,26 +639,13 @@ export const subagentCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   subCommands: [
     saveCommand,
+    createCommand,
     listCommand,
     showCommand,
-    deleteCommand,
     editCommand,
+    deleteCommand,
   ],
-  action: async (
-    _context: CommandContext,
-    _args: string,
-  ): Promise<SlashCommandActionReturn> => {
-    // No default action, list subcommands in a message.
-    const subCommandsList =
-      subagentCommand.subCommands
-        ?.map((cmd) => `  - ${cmd.name}: ${cmd.description}`)
-        .join('\n') || 'No subcommands available.';
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: `Available subagent subcommands:\n${subCommandsList}`,
-    };
-  },
+  // No default action - shows subcommand help
 };
 
 function createDetachedGeminiClientForAutoPrompt(config: Config): GeminiClient {
