@@ -31,7 +31,7 @@ function isLoadBalancerProfile(profile: Profile): profile is Profile & {
   profiles: string[];
   policy: string;
 } {
-  const p = profile as Record<string, unknown>;
+  const p = profile as unknown as Record<string, unknown>;
   return (
     profile.type === 'loadbalancer' &&
     Array.isArray(p.profiles) &&
