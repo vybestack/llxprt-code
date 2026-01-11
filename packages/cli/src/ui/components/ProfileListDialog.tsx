@@ -18,6 +18,7 @@ export interface ProfileListItem {
   model?: string;
   isDefault?: boolean;
   isActive?: boolean;
+  loadError?: boolean;
 }
 
 interface ProfileListDialogProps {

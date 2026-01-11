@@ -76,10 +76,11 @@ export const useProfileManagement = ({
               model: isLB ? undefined : profile.model,
             } as ProfileListItem;
           } catch {
-            // If we can't load the profile, just return basic info
+            // If we can't load the profile, return with error indicator
             return {
               name,
               type: 'standard',
+              loadError: true,
             } as ProfileListItem;
           }
         }),
@@ -310,6 +311,17 @@ export const useProfileManagement = ({
   const saveProfile = useCallback(
     async (profileName: string, updatedProfile: unknown) => {
       try {
+        // Type guard before save - ProfileManager.saveProfile will also validate
+        if (
+          typeof updatedProfile !== 'object' ||
+          updatedProfile === null ||
+          !('version' in updatedProfile) ||
+          !('type' in updatedProfile)
+        ) {
+          setProfileError('Invalid profile structure: missing version or type');
+          return;
+        }
+
         // Use ProfileManager directly to save
         const manager = new ProfileManager();
         await manager.saveProfile(profileName, updatedProfile as Profile);

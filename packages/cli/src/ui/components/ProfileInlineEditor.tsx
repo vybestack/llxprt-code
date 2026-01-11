@@ -209,19 +209,10 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
       </Box>
 
       {/* Error display */}
-      {(validationError || externalError) && (
+      {(validationError || externalError || validateJson) && (
         <Box marginBottom={1}>
           <Text color={SemanticColors.status.error}>
-            Error: {validationError || externalError}
-          </Text>
-        </Box>
-      )}
-
-      {/* JSON validation status */}
-      {validateJson && (
-        <Box marginBottom={1}>
-          <Text color={SemanticColors.status.error}>
-            JSON Error: {validateJson}
+            Error: {validationError || externalError || validateJson}
           </Text>
         </Box>
       )}
