@@ -130,8 +130,8 @@ export interface MessageActionReturn {
 export interface SubagentDialogData {
   /** Initial view to display in the subagent dialog */
   initialView?: SubagentView;
-  /** Name of the subagent to pre-select (maps to initialSubagentName prop) */
-  initialName?: string;
+  /** Name of the subagent to pre-select */
+  initialSubagentName?: string;
 }
 
 /**

@@ -509,7 +509,7 @@ export const useSlashCommandProcessor = (
                         | undefined;
                       actions.openSubagentDialog(
                         subagentData?.initialView,
-                        subagentData?.initialName,
+                        subagentData?.initialSubagentName,
                       );
                       return { type: 'handled' };
                     }

@@ -392,7 +392,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
       expect(result.dialog).toBe('subagent');
       expect(result.dialogData?.initialView).toBe(SubagentView.SHOW);
-      expect(result.dialogData?.initialName).toBe('testagent');
+      expect(result.dialogData?.initialSubagentName).toBe('testagent');
     });
 
     it('should error for non-existent subagent', async () => {
@@ -429,7 +429,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
       expect(result.dialog).toBe('subagent');
       expect(result.dialogData?.initialView).toBe(SubagentView.DELETE);
-      expect(result.dialogData?.initialName).toBe('testagent');
+      expect(result.dialogData?.initialSubagentName).toBe('testagent');
     });
 
     it('should error for non-existent subagent', async () => {
@@ -529,7 +529,7 @@ describe('editCommand @requirement:REQ-008', () => {
 
     expect(result.dialog).toBe('subagent');
     expect(result.dialogData?.initialView).toBe(SubagentView.EDIT);
-    expect(result.dialogData?.initialName).toBe('testagent');
+    expect(result.dialogData?.initialSubagentName).toBe('testagent');
   });
 });
 

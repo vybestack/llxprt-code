@@ -497,7 +497,7 @@ const showCommand: SlashCommand = {
     return {
       type: 'dialog',
       dialog: 'subagent',
-      dialogData: { initialView: SubagentView.SHOW, initialName: name },
+      dialogData: { initialView: SubagentView.SHOW, initialSubagentName: name },
     };
   },
 };
@@ -548,7 +548,10 @@ const deleteCommand: SlashCommand = {
     return {
       type: 'dialog',
       dialog: 'subagent',
-      dialogData: { initialView: SubagentView.DELETE, initialName: name },
+      dialogData: {
+        initialView: SubagentView.DELETE,
+        initialSubagentName: name,
+      },
     };
   },
 };
@@ -599,7 +602,7 @@ const editCommand: SlashCommand = {
     return {
       type: 'dialog',
       dialog: 'subagent',
-      dialogData: { initialView: SubagentView.EDIT, initialName: name },
+      dialogData: { initialView: SubagentView.EDIT, initialSubagentName: name },
     };
   },
 };

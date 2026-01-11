@@ -39,7 +39,13 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
 
   const formatDate = (isoString: string) => {
     try {
-      return new Date(isoString).toLocaleString();
+      return new Date(isoString).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
     } catch {
       return isoString;
     }
@@ -64,7 +70,7 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
         </Box>
         <Box>
           <Text color={Colors.Gray}>Status: </Text>
-          <Text color="#00ff00">Active</Text>
+          <Text color={Colors.AccentGreen}>Active</Text>
         </Box>
         <Box>
           <Text color={Colors.Gray}>Created: </Text>
