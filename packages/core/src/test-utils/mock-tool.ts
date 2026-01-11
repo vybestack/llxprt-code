@@ -115,8 +115,7 @@ export class MockTool extends BaseDeclarativeTool<
     const executeImpl = options.execute ?? defaultExecute;
     this.executeFn = createExecuteFn(executeImpl, options.name);
     if (options.shouldConfirmExecute) {
-      this.shouldConfirmExecute = (params, signal) =>
-        options.shouldConfirmExecute!(params, signal);
+      this.shouldConfirmExecute = options.shouldConfirmExecute;
     } else {
       this.shouldConfirmExecute = async () => {
         if (!this.shouldConfirm) {

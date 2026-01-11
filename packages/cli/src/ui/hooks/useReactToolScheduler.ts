@@ -33,7 +33,7 @@ type ExternalSchedulerFactory = (args: {
     signal: AbortSignal,
   ): Promise<void> | void;
 };
-import { useCallback, useState, useMemo, useEffect } from 'react';
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import {
   HistoryItemToolGroup,
   IndividualToolCallDisplay,
@@ -187,12 +187,19 @@ export function useReactToolScheduler(
   const mainSchedulerId = useState(() => Symbol('main-scheduler'))[0];
   const sessionId = useMemo(() => config.getSessionId(), [config]);
   const [scheduler, setScheduler] = useState<CoreToolScheduler | null>(null);
+  const pendingScheduleRequests = useRef<
+    Array<{
+      request: ToolCallRequestInfo | ToolCallRequestInfo[];
+      signal: AbortSignal;
+    }>
+  >([]);
 
   // Use the singleton scheduler from config to ensure all schedulers in a session
   // share the same CoreToolScheduler instance, avoiding duplicate MessageBus
   // subscriptions and "unknown correlationId" errors.
   useEffect(() => {
     let mounted = true;
+    let resolved = false;
 
     const initializeScheduler = async () => {
       const instance = await config.getOrCreateScheduler(sessionId, {
@@ -214,15 +221,34 @@ export function useReactToolScheduler(
         onEditorOpen,
       });
 
-      if (mounted) {
-        setScheduler(instance);
+      resolved = true;
+      if (!mounted) {
+        config.disposeScheduler?.(sessionId);
+        return;
       }
+      if (pendingScheduleRequests.current.length > 0) {
+        for (const { request, signal } of pendingScheduleRequests.current) {
+          if (signal.aborted) {
+            continue;
+          }
+          instance.schedule(request, signal).catch(() => {
+            // Silently ignore cancellation rejections - this is expected behavior
+            // when the user presses ESC to cancel queued tool calls
+          });
+        }
+        pendingScheduleRequests.current = [];
+      }
+
+      setScheduler(instance);
     };
 
-    initializeScheduler();
+    void initializeScheduler();
 
     return () => {
       mounted = false;
+      if (resolved) {
+        config.disposeScheduler?.(sessionId);
+      }
     };
   }, [
     config,
@@ -231,6 +257,7 @@ export function useReactToolScheduler(
     onComplete,
     replaceToolCallsForScheduler,
     updateToolCallOutput,
+
     getPreferredEditor,
     onEditorClose,
     onEditorOpen,
@@ -279,6 +306,7 @@ export function useReactToolScheduler(
           request: ToolCallRequestInfo | ToolCallRequestInfo[],
           signal: AbortSignal,
         ) => instance.schedule(request, signal),
+        dispose: () => schedulerConfig.disposeScheduler?.(sessionId),
       };
     },
     [
@@ -321,11 +349,6 @@ export function useReactToolScheduler(
       request: ToolCallRequestInfo | ToolCallRequestInfo[],
       signal: AbortSignal,
     ) => {
-      if (!scheduler) {
-        console.warn('Scheduler not initialized yet');
-        return;
-      }
-
       const ensureAgentId = (
         req: ToolCallRequestInfo,
       ): ToolCallRequestInfo => ({
@@ -337,13 +360,21 @@ export function useReactToolScheduler(
         ? request.map(ensureAgentId)
         : ensureAgentId(request);
 
+      if (!scheduler) {
+        pendingScheduleRequests.current.push({
+          request: normalizedRequest,
+          signal,
+        });
+        return Promise.resolve();
+      }
+
       // The scheduler.schedule() returns a Promise that rejects when the abort
       // signal fires while tool calls are queued. We intentionally catch and
       // ignore these rejections because:
       // 1. Cancellation is an expected user action, not an error
       // 2. The UI state is updated via cancelAllToolCalls() synchronously
       // 3. Tool results are not needed after cancellation
-      scheduler.schedule(normalizedRequest, signal).catch(() => {
+      return scheduler.schedule(normalizedRequest, signal).catch(() => {
         // Silently ignore cancellation rejections - this is expected behavior
         // when the user presses ESC to cancel queued tool calls
       });

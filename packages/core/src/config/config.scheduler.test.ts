@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { Config } from './config.js';
 
 // Use dynamic import to avoid circular dependencies with Config
@@ -100,6 +100,24 @@ describe('Config - CoreToolScheduler Singleton', () => {
       expect(scheduler1).toBe(scheduler2);
     });
 
+    it('should not retain callbacks in scheduler entry', async () => {
+      const callbacks = {
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
+        getPreferredEditor: () => undefined,
+        onEditorClose: vi.fn(),
+      };
+
+      await config.getOrCreateScheduler(testSessionId, callbacks);
+
+      const entry = (
+        config as unknown as { _schedulerEntries: Map<string, unknown> }
+      )._schedulerEntries.get(testSessionId);
+      expect(entry).toBeDefined();
+      expect(entry).not.toHaveProperty('callbacks');
+    });
+
     it('should create different scheduler instances for different sessionIds', async () => {
       const otherSessionId = 'other-session-456';
 
@@ -134,7 +152,10 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      await config.getOrCreateScheduler(testSessionId, callbacks);
+      const scheduler = await config.getOrCreateScheduler(
+        testSessionId,
+        callbacks,
+      );
 
       // Dispose
       config.disposeScheduler(testSessionId);
@@ -145,6 +166,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
         callbacks,
       );
       expect(newScheduler).toBeDefined();
+      expect(newScheduler).not.toBe(scheduler);
     });
 
     it('should not throw if disposing a non-existent scheduler', () => {
@@ -153,6 +175,36 @@ describe('Config - CoreToolScheduler Singleton', () => {
       expect(() => {
         config.disposeScheduler(nonExistentSessionId);
       }).not.toThrow();
+    });
+
+    it('should keep scheduler alive until all references disposed', async () => {
+      const callbacks = {
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
+        getPreferredEditor: () => undefined,
+        onEditorClose: vi.fn(),
+      };
+
+      const scheduler = await config.getOrCreateScheduler(
+        testSessionId,
+        callbacks,
+      );
+
+      // Add a second reference
+      await config.getOrCreateScheduler(testSessionId, callbacks);
+
+      // Dispose once should keep scheduler alive due to refCount
+      config.disposeScheduler(testSessionId);
+      const stillExisting = await config.getOrCreateScheduler(
+        testSessionId,
+        callbacks,
+      );
+      expect(stillExisting).toBe(scheduler);
+
+      // Clean up remaining references
+      config.disposeScheduler(testSessionId);
+      config.disposeScheduler(testSessionId);
     });
 
     it('should properly dispose the scheduler instance', async () => {

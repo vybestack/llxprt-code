@@ -704,6 +704,11 @@ export class SubAgentScope {
         })();
 
     const scheduler = await schedulerPromise;
+    const schedulerDispose = options?.schedulerFactory
+      ? typeof scheduler.dispose === 'function'
+        ? scheduler.dispose.bind(scheduler)
+        : () => {}
+      : () => schedulerConfig.disposeScheduler(schedulerConfig.getSessionId());
 
     const startTime = Date.now();
     let turnCounter = 0;
@@ -927,6 +932,11 @@ export class SubAgentScope {
       this.finalizeOutput();
       throw error;
     } finally {
+      try {
+        schedulerDispose();
+      } catch (_error) {
+        // ignore scheduler disposal errors
+      }
       this.parentAbortCleanup?.();
       this.parentAbortCleanup = undefined;
       this.activeAbortController = null;

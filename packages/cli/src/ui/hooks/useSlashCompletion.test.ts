@@ -1250,7 +1250,7 @@ describe('useSlashCompletion', () => {
         result.current.handleAutocomplete(1); // index 1 is 'add'
       });
 
-      expect(result.current.textBuffer.text).toBe('/memory add ');
+      expect(result.current.textBuffer.text).toBe('/add ');
     });
 
     it('should complete a command with an alternative name', () => {

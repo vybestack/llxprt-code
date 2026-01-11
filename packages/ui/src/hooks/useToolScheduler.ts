@@ -366,9 +366,7 @@ export function useToolScheduler(
 
     return () => {
       mounted = false;
-      if (schedulerRef.current?.dispose) {
-        schedulerRef.current.dispose();
-      }
+      config.disposeScheduler?.(config.getSessionId());
       schedulerRef.current = null;
     };
   }, [config]);

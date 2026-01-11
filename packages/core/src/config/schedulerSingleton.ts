@@ -23,9 +23,14 @@ export interface SchedulerCallbacks {
   onEditorOpen?: () => void;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const schedulerInstances = new Map<string, any>();
-const schedulerCallbacks = new Map<string, SchedulerCallbacks[]>();
+type SchedulerEntry = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scheduler: any;
+  refCount: number;
+  callbacks?: SchedulerCallbacks;
+};
+
+const schedulerEntries = new Map<string, SchedulerEntry>();
 
 export async function getOrCreateScheduler(
   config: Config,
@@ -33,13 +38,13 @@ export async function getOrCreateScheduler(
   callbacks: SchedulerCallbacks,
 ): // eslint-disable-next-line @typescript-eslint/no-explicit-any
 Promise<any> {
-  let scheduler = schedulerInstances.get(sessionId);
+  const entry = schedulerEntries.get(sessionId);
 
-  if (!scheduler) {
+  if (!entry) {
     // Use dynamic import to avoid circular dependencies and work with ESM
     const { CoreToolScheduler: CoreToolSchedulerClass } =
       await import('../core/coreToolScheduler.js');
-    scheduler = new CoreToolSchedulerClass({
+    const scheduler = new CoreToolSchedulerClass({
       config,
       outputUpdateHandler: callbacks.outputUpdateHandler,
       onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
@@ -48,39 +53,68 @@ Promise<any> {
       onEditorClose: callbacks.onEditorClose,
       onEditorOpen: callbacks.onEditorOpen,
     });
-    schedulerInstances.set(sessionId, scheduler);
-    schedulerCallbacks.set(sessionId, [callbacks]);
-  } else {
-    const existingCallbacks = schedulerCallbacks.get(sessionId) || [];
-    existingCallbacks.push(callbacks);
-    schedulerCallbacks.set(sessionId, existingCallbacks);
+    schedulerEntries.set(sessionId, {
+      scheduler,
+      refCount: 1,
+      callbacks,
+    });
+    return scheduler;
   }
 
-  return scheduler;
+  const entryCallbacks = entry.callbacks;
+  const shouldRefreshCallbacks =
+    !entryCallbacks ||
+    entryCallbacks.outputUpdateHandler !== callbacks.outputUpdateHandler ||
+    entryCallbacks.onAllToolCallsComplete !==
+      callbacks.onAllToolCallsComplete ||
+    entryCallbacks.onToolCallsUpdate !== callbacks.onToolCallsUpdate ||
+    entryCallbacks.getPreferredEditor !== callbacks.getPreferredEditor ||
+    entryCallbacks.onEditorClose !== callbacks.onEditorClose ||
+    entryCallbacks.onEditorOpen !== callbacks.onEditorOpen;
+
+  entry.refCount += 1;
+  if (shouldRefreshCallbacks) {
+    entry.scheduler.setCallbacks?.({
+      config,
+      outputUpdateHandler: callbacks.outputUpdateHandler,
+      onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
+      onToolCallsUpdate: callbacks.onToolCallsUpdate,
+      getPreferredEditor: callbacks.getPreferredEditor,
+      onEditorClose: callbacks.onEditorClose,
+      onEditorOpen: callbacks.onEditorOpen,
+    });
+    entry.callbacks = callbacks;
+  }
+  return entry.scheduler;
 }
 
 export function disposeScheduler(sessionId: string): void {
-  const scheduler = schedulerInstances.get(sessionId);
-  if (scheduler) {
-    scheduler.dispose();
-    schedulerInstances.delete(sessionId);
-    schedulerCallbacks.delete(sessionId);
+  const entry = schedulerEntries.get(sessionId);
+  if (!entry) {
+    return;
   }
+
+  entry.refCount -= 1;
+  if (entry.refCount > 0) {
+    return;
+  }
+
+  entry.scheduler.dispose();
+  schedulerEntries.delete(sessionId);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getSchedulerInstance(sessionId: string): any {
-  return schedulerInstances.get(sessionId);
+  return schedulerEntries.get(sessionId)?.scheduler;
 }
 
 export function clearAllSchedulers(): void {
-  for (const [_sessionId, scheduler] of schedulerInstances.entries()) {
+  for (const [_sessionId, entry] of schedulerEntries.entries()) {
     try {
-      scheduler.dispose();
+      entry.scheduler.dispose();
     } catch (_error) {
       // Ignore errors during cleanup
     }
   }
-  schedulerInstances.clear();
-  schedulerCallbacks.clear();
+  schedulerEntries.clear();
 }

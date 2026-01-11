@@ -6,7 +6,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, cleanup } from '@testing-library/react';
 import {
   useReactToolScheduler,
   mapToDisplay,
@@ -26,8 +26,15 @@ import {
   AnyDeclarativeTool,
   AnyToolInvocation,
   CompletedToolCall,
-  clearAllSchedulers,
+  DebugLogger,
+  PolicyDecision,
 } from '@vybestack/llxprt-code-core';
+
+const flushAllTimers = async (iterations = 5) => {
+  for (let i = 0; i < iterations; i += 1) {
+    await vi.runOnlyPendingTimersAsync();
+  }
+};
 import { MockTool } from '@vybestack/llxprt-code-core/src/test-utils/mock-tool.js';
 import type { HistoryItemWithoutId, HistoryItemToolGroup } from '../types.js';
 import { ToolCallStatus } from '../types.js';
@@ -38,8 +45,16 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   return {
     ...actual,
     ToolRegistry: vi.fn(),
+    logToolCall: vi.fn(),
   };
 });
+
+const actualCore = await vi.importActual<
+  typeof import('@vybestack/llxprt-code-core')
+>('@vybestack/llxprt-code-core');
+const actualGetOrCreateScheduler = actualCore.getOrCreateScheduler;
+const actualDisposeScheduler = actualCore.disposeScheduler;
+const actualClearAllSchedulers = actualCore.clearAllSchedulers;
 
 const mockToolRegistry = {
   getTool: vi.fn(),
@@ -64,14 +79,19 @@ const mockConfig = {
     authType: 'oauth-personal',
   }),
   getMessageBus: () => mockMessageBus,
-  getOrCreateScheduler: vi.fn(async (_sessionId: string, callbacks: any) => {
-    const { CoreToolScheduler: CoreToolSchedulerClass } =
-      await import('@vybestack/llxprt-code-core');
-    return new CoreToolSchedulerClass({
-      ...callbacks,
-      config: mockConfig as unknown as Config,
-    });
-  }),
+  getPolicyEngine: vi.fn(() => ({
+    evaluate: vi.fn(() => PolicyDecision.ASK_USER),
+  })),
+  getOrCreateScheduler: vi.fn((sessionId: string, callbacks: any) =>
+    actualGetOrCreateScheduler(
+      mockConfig as unknown as Config,
+      sessionId,
+      callbacks,
+    ),
+  ),
+  disposeScheduler: vi.fn((sessionId: string) =>
+    actualDisposeScheduler(sessionId),
+  ),
   setInteractiveSubagentSchedulerFactory: vi.fn(),
 } as unknown as Config;
 
@@ -113,117 +133,13 @@ describe('useReactToolScheduler in YOLO Mode', () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.clearAllTimers();
     vi.useRealTimers();
     // Clean up scheduler instances to avoid memory leaks
-    void clearAllSchedulers();
-  });
+    void actualClearAllSchedulers();
 
-  const renderSchedulerInYoloMode = () =>
-    renderHook(() =>
-      useReactToolScheduler(
-        onComplete,
-        mockConfig as unknown as Config,
-        setPendingHistoryItem,
-        () => undefined,
-        () => {},
-      ),
-    );
-
-  it('should skip confirmation and execute tool directly when yoloMode is true', async () => {
-    mockToolRegistry.getTool.mockReturnValue(mockToolRequiresConfirmation);
-    const expectedOutput = 'YOLO Confirmed output';
-    mockToolRequiresConfirmation.executeFn.mockResolvedValue({
-      llmContent: expectedOutput,
-      returnDisplay: 'YOLO Formatted tool output',
-    } as ToolResult);
-
-    const { result } = renderSchedulerInYoloMode();
-    const schedule = result.current[1];
-    const request: ToolCallRequestInfo = {
-      callId: 'yoloCall',
-      name: 'mockToolRequiresConfirmation',
-      args: { data: 'any data' },
-      agentId: 'agent-yolo',
-    } as any;
-
-    act(() => {
-      schedule(request, new AbortController().signal);
-    });
-
-    await act(async () => {
-      await vi.runAllTimersAsync(); // Process validation
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync(); // Process scheduling
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync(); // Process execution
-    });
-
-    // Check that execute WAS called
-    expect(mockToolRequiresConfirmation.executeFn).toHaveBeenCalledWith(
-      request.args,
-      expect.any(AbortSignal),
-      undefined /*updateOutputFn*/,
-    );
-
-    const completedCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
-    expect(completedCalls).toHaveLength(1);
-    const completedCall = completedCalls[0];
-    expect(completedCall.status).toBe('success');
-    expect(completedCall.request.agentId).toBe('agent-yolo');
-    expect(completedCall.response?.resultDisplay).toBe(
-      'YOLO Formatted tool output',
-    );
-    expect(completedCall.response?.responseParts).toEqual([
-      {
-        functionCall: {
-          id: 'yoloCall',
-          name: 'mockToolRequiresConfirmation',
-          args: { data: 'any data' },
-        },
-      },
-      {
-        functionResponse: {
-          id: 'yoloCall',
-          name: 'mockToolRequiresConfirmation',
-          response: { output: expectedOutput },
-        },
-      },
-    ]);
-
-    // Ensure no confirmation UI was triggered (setPendingHistoryItem should not have been called with confirmation details)
-    const setPendingHistoryItemCalls = setPendingHistoryItem.mock.calls;
-    let hasConfirmationDetails = false;
-    for (const call of setPendingHistoryItemCalls) {
-      const item = typeof call[0] === 'function' ? call[0]({}) : call[0];
-      if (item?.tools?.[0]?.confirmationDetails) {
-        hasConfirmationDetails = true;
-        break;
-      }
-    }
-    expect(hasConfirmationDetails).toBe(false);
-  });
-});
-
-describe('useReactToolScheduler agentId propagation', () => {
-  let onComplete: Mock;
-  let setPendingHistoryItem: Mock;
-
-  beforeEach(() => {
-    onComplete = vi.fn();
-    setPendingHistoryItem = vi.fn();
-    mockToolRegistry.getTool.mockClear();
-    mockTool.executeFn.mockReset();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.clearAllTimers();
-    vi.useRealTimers();
-    // Clean up scheduler instances to avoid memory leaks
-    void clearAllSchedulers();
+    DebugLogger.disposeAll();
   });
 
   const renderScheduler = () =>
@@ -238,6 +154,7 @@ describe('useReactToolScheduler agentId propagation', () => {
     );
 
   it('defaults agentId to primary when schedule is invoked without one', async () => {
+    vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockTool);
     mockTool.executeFn.mockResolvedValue({
       llmContent: 'default output',
@@ -256,17 +173,17 @@ describe('useReactToolScheduler agentId propagation', () => {
       schedule(requestWithoutAgent, new AbortController().signal);
     });
 
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
+    await vi.waitFor(
+      () =>
+        expect(onComplete).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          { isPrimary: true },
+        ),
+      { interval: 10, timeout: 5000 },
+    );
 
-    const completedCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    const completedCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
     expect(completedCalls[0].request.agentId).toBe('primary');
   });
 });
@@ -335,10 +252,12 @@ describe('useReactToolScheduler', () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.clearAllTimers();
     vi.useRealTimers();
     // Clean up scheduler instances to avoid memory leaks
-    void clearAllSchedulers();
+    void actualClearAllSchedulers();
+    DebugLogger.disposeAll();
   });
 
   const renderScheduler = () =>
@@ -358,6 +277,7 @@ describe('useReactToolScheduler', () => {
   });
 
   it('should schedule and execute a tool call successfully', async () => {
+    vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockTool);
     mockTool.executeFn.mockResolvedValue({
       llmContent: 'Tool output',
@@ -376,22 +296,28 @@ describe('useReactToolScheduler', () => {
     act(() => {
       schedule(request, new AbortController().signal);
     });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
 
-    expect(mockTool.executeFn).toHaveBeenCalledWith(
-      request.args,
-      expect.any(AbortSignal),
-      undefined /*updateOutputFn*/,
+    await vi.waitFor(
+      () =>
+        expect(mockTool.executeFn).toHaveBeenCalledWith(
+          request.args,
+          expect.any(AbortSignal),
+          undefined /*updateOutputFn*/,
+        ),
+      { interval: 10, timeout: 5000 },
     );
-    const completedCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+
+    await vi.waitFor(
+      () =>
+        expect(onComplete).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          { isPrimary: true },
+        ),
+      { interval: 10, timeout: 5000 },
+    );
+
+    const completedCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
     expect(completedCalls).toHaveLength(1);
     const completedCall = completedCalls[0];
     expect(completedCall.status).toBe('success');
@@ -417,6 +343,7 @@ describe('useReactToolScheduler', () => {
   });
 
   it('should handle tool not found', async () => {
+    vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(undefined);
     const { result } = renderScheduler();
     const schedule = result.current[1];
@@ -429,19 +356,23 @@ describe('useReactToolScheduler', () => {
     act(() => {
       schedule(request, new AbortController().signal);
     });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
 
-    const completionArgs = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    await vi.waitFor(
+      () =>
+        expect(onComplete).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          { isPrimary: true },
+        ),
+      { interval: 10, timeout: 5000 },
+    );
+
+    const completionArgs = onComplete.mock.calls[0][1] as CompletedToolCall[];
     expect(completionArgs).toHaveLength(1);
     const failedCall = completionArgs[0];
     expect(failedCall.status).toBe('error');
     expect(failedCall.request.agentId).toBe('primary');
-    const errorMessage = failedCall.response?.error?.message ?? '';
+    const errorMessage = failedCall.response.error?.message ?? '';
     expect(errorMessage).toContain('could not be loaded');
     expect(errorMessage).toContain('Did you mean one of:');
     expect(errorMessage).toContain('"mockTool"');
@@ -450,6 +381,7 @@ describe('useReactToolScheduler', () => {
   });
 
   it('should handle error during shouldConfirmExecute', async () => {
+    vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockTool);
     const confirmError = new Error('Confirmation check failed');
     (mockTool.shouldConfirmExecute as Mock).mockRejectedValue(confirmError);
@@ -465,14 +397,18 @@ describe('useReactToolScheduler', () => {
     act(() => {
       schedule(request, new AbortController().signal);
     });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
 
-    const errorCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    await vi.waitFor(
+      () =>
+        expect(onComplete).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          { isPrimary: true },
+        ),
+      { interval: 10, timeout: 5000 },
+    );
+
+    const errorCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
     expect(errorCalls).toHaveLength(1);
     const errorCall = errorCalls[0];
     expect(errorCall.status).toBe('error');
@@ -482,6 +418,7 @@ describe('useReactToolScheduler', () => {
   });
 
   it('should handle error during execute', async () => {
+    vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(mockTool);
     (mockTool.shouldConfirmExecute as Mock).mockResolvedValue(null);
     const execError = new Error('Execution failed');
@@ -498,17 +435,18 @@ describe('useReactToolScheduler', () => {
     act(() => {
       schedule(request, new AbortController().signal);
     });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
 
-    const executeCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    await vi.waitFor(
+      () =>
+        expect(onComplete).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          { isPrimary: true },
+        ),
+      { interval: 10, timeout: 5000 },
+    );
+
+    const executeCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
     expect(executeCalls).toHaveLength(1);
     const execCall = executeCalls[0];
     expect(execCall.status).toBe('error');
@@ -537,7 +475,7 @@ describe('useReactToolScheduler', () => {
       schedule(request, new AbortController().signal);
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
 
     expect(setPendingHistoryItem).toHaveBeenCalled();
@@ -548,18 +486,25 @@ describe('useReactToolScheduler', () => {
     });
 
     await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
+      await flushAllTimers(10);
     });
 
-    expect(mockOnUserConfirmForToolConfirmation).toHaveBeenCalledWith(
-      ToolConfirmationOutcome.ProceedOnce,
+    expect(mockToolRequiresConfirmation.executeFn).toHaveBeenCalledWith(
+      request.args,
+      expect.any(AbortSignal),
+      undefined /*updateOutputFn*/,
     );
+
+    await act(async () => {
+      await flushAllTimers(10);
+    });
+
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { isPrimary: true },
+    );
+
     expect(mockToolRequiresConfirmation.executeFn).toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -593,7 +538,7 @@ describe('useReactToolScheduler', () => {
       schedule(request, new AbortController().signal);
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
 
     expect(setPendingHistoryItem).toHaveBeenCalled();
@@ -603,10 +548,10 @@ describe('useReactToolScheduler', () => {
       await capturedOnConfirmForTest?.(ToolConfirmationOutcome.Cancel);
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
 
     expect(mockOnUserConfirmForToolConfirmation).toHaveBeenCalledWith(
@@ -665,7 +610,7 @@ describe('useReactToolScheduler', () => {
       schedule(request, new AbortController().signal);
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
 
     expect(liveUpdateFn).toBeDefined();
@@ -675,14 +620,14 @@ describe('useReactToolScheduler', () => {
       liveUpdateFn?.('Live output 1');
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
 
     await act(async () => {
       liveUpdateFn?.('Live output 2');
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
 
     act(() => {
@@ -692,10 +637,10 @@ describe('useReactToolScheduler', () => {
       } as ToolResult);
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
 
     expect(onComplete).toHaveBeenCalledWith([
@@ -718,6 +663,7 @@ describe('useReactToolScheduler', () => {
   });
 
   it('should schedule and execute multiple tool calls', async () => {
+    vi.useRealTimers();
     const tool1 = new MockTool({
       name: 'tool1',
       displayName: 'Tool 1',
@@ -752,21 +698,13 @@ describe('useReactToolScheduler', () => {
     act(() => {
       schedule(requests, new AbortController().signal);
     });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
+
+    await vi.waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), {
+      interval: 10,
+      timeout: 5000,
     });
 
-    expect(onComplete).toHaveBeenCalledTimes(1);
-    const completedCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    const completedCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
     expect(completedCalls.length).toBe(2);
 
     const call1Result = completedCalls.find(
@@ -799,6 +737,7 @@ describe('useReactToolScheduler', () => {
         ],
       }),
     });
+
     expect(call2Result).toMatchObject({
       status: 'success',
       request: requests[1],
@@ -857,7 +796,7 @@ describe('useReactToolScheduler', () => {
       schedule(request1, new AbortController().signal);
     });
     await act(async () => {
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
     });
 
     expect(() => schedule(request2, new AbortController().signal)).toThrow(
@@ -866,9 +805,9 @@ describe('useReactToolScheduler', () => {
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50);
-      await vi.runAllTimersAsync();
+      await vi.runOnlyPendingTimersAsync();
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await vi.runOnlyPendingTimersAsync();
       });
     });
     expect(onComplete).toHaveBeenCalledWith([

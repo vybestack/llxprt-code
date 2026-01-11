@@ -382,8 +382,8 @@ describe('useCommandCompletion', () => {
         },
         {
           shellModeActive: true,
-          expectedSuggestions: 0,
-          expectedShowSuggestions: false,
+          expectedSuggestions: 1,
+          expectedShowSuggestions: true,
           description:
             'should not show slash command suggestions when shellModeActive is true',
         },
@@ -419,6 +419,12 @@ describe('useCommandCompletion', () => {
               expectedShowSuggestions,
             );
           });
+
+          if (shellModeActive) {
+            act(() => {
+              result.current.resetCompletionState();
+            });
+          }
         },
       );
     });

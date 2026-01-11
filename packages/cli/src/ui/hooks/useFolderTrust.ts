@@ -14,7 +14,7 @@ import {
   isWorkspaceTrusted,
 } from '../../config/trustedFolders.js';
 import { type HistoryItemWithoutId, MessageType } from '../types.js';
-import * as process from 'process';
+import process from 'node:process';
 
 const debug = new DebugLogger('llxprt:ui:useFolderTrust');
 

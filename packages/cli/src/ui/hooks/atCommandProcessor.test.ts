@@ -20,6 +20,7 @@ import * as os from 'os';
 import { ToolCallStatus } from '../types.js';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import * as fsPromises from 'fs/promises';
+import * as fs from 'fs';
 
 import * as path from 'path';
 
@@ -37,8 +38,10 @@ describe('handleAtCommand', () => {
   async function createTestFile(fullPath: string, fileContents: string) {
     await fsPromises.mkdir(path.dirname(fullPath), { recursive: true });
     await fsPromises.writeFile(fullPath, fileContents);
-    return path.resolve(testRootDir, fullPath);
+    return fs.realpathSync(fullPath);
   }
+
+  let originalCwd: string;
 
   beforeEach(async () => {
     vi.resetAllMocks();
@@ -46,6 +49,8 @@ describe('handleAtCommand', () => {
     testRootDir = await fsPromises.mkdtemp(
       path.join(os.tmpdir(), 'folder-structure-test-'),
     );
+    originalCwd = process.cwd();
+    process.chdir(testRootDir);
 
     abortController = new AbortController();
 
@@ -55,6 +60,15 @@ describe('handleAtCommand', () => {
       getToolRegistry,
       getTargetDir: () => testRootDir,
       isSandboxed: () => false,
+      getMessageBus: vi.fn(() => ({
+        subscribe: vi.fn(),
+        unsubscribe: vi.fn(),
+        publish: vi.fn(),
+        respondToConfirmation: vi.fn(),
+        requestConfirmation: vi.fn().mockResolvedValue(true),
+        removeAllListeners: vi.fn(),
+        listenerCount: vi.fn().mockReturnValue(0),
+      })),
       getFileService: () => new FileDiscoveryService(testRootDir),
       getFileFilteringRespectGitIgnore: () => true,
       getFileFilteringRespectLlxprtIgnore: () => true,
@@ -64,10 +78,31 @@ describe('handleAtCommand', () => {
       }),
       getFileSystemService: () => new StandardFileSystemService(),
       getEnableRecursiveFileSearch: vi.fn(() => true),
-      getWorkspaceContext: () => ({
-        isPathWithinWorkspace: () => true,
-        getDirectories: () => [testRootDir],
-      }),
+      getWorkspaceContext: () => {
+        const workspaceRoot = fs.realpathSync(testRootDir);
+        return {
+          isPathWithinWorkspace: (inputPath: string) => {
+            const absoluteInput = path.isAbsolute(inputPath)
+              ? inputPath
+              : path.resolve(testRootDir, inputPath);
+            let resolved: string;
+            try {
+              resolved = fs.realpathSync(absoluteInput);
+            } catch {
+              if (absoluteInput.startsWith(testRootDir)) {
+                resolved = path.resolve(
+                  workspaceRoot,
+                  path.relative(testRootDir, absoluteInput),
+                );
+              } else {
+                resolved = path.normalize(absoluteInput);
+              }
+            }
+            return resolved.startsWith(workspaceRoot);
+          },
+          getDirectories: () => [workspaceRoot],
+        };
+      },
       getEphemeralSettings: () => ({}), // No disabled tools
       getMcpServers: () => ({}),
       getMcpServerCommand: () => undefined,
@@ -93,6 +128,7 @@ describe('handleAtCommand', () => {
 
   afterEach(async () => {
     abortController.abort();
+    process.chdir(originalCwd);
     await fsPromises.rm(testRootDir, { recursive: true, force: true });
   });
 
@@ -146,10 +182,7 @@ describe('handleAtCommand', () => {
     const fileContent = 'This is the file content.';
     // Create file in the test directory
     const relativePath = path.join('path', 'to', 'file.txt');
-    const filePath = await createTestFile(
-      path.join(testRootDir, relativePath),
-      fileContent,
-    );
+    await createTestFile(path.join(testRootDir, relativePath), fileContent);
     // Use relative path in the query
     const query = `@${relativePath}`;
 
@@ -166,7 +199,7 @@ describe('handleAtCommand', () => {
       processedQuery: [
         { text: `@${relativePath}` },
         { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${filePath}:\n` },
+        { text: `\nContent from @${relativePath}:\n` },
         { text: fileContent },
         { text: '\n--- End of content ---' },
       ],
@@ -186,10 +219,7 @@ describe('handleAtCommand', () => {
     const fileContent = 'This is the file content.';
     const relativeDirPath = path.join('path', 'to');
     const relativeFilePath = path.join(relativeDirPath, 'file.txt');
-    const filePath = await createTestFile(
-      path.join(testRootDir, relativeFilePath),
-      fileContent,
-    );
+    await createTestFile(path.join(testRootDir, relativeFilePath), fileContent);
     const query = `@${relativeDirPath}`;
     const resolvedGlob = `${relativeDirPath}/**`;
 
@@ -206,7 +236,7 @@ describe('handleAtCommand', () => {
       processedQuery: [
         { text: `@${resolvedGlob}` },
         { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${filePath}:\n` },
+        { text: `\nContent from @${relativeFilePath}:\n` },
         { text: fileContent },
         { text: '\n--- End of content ---' },
       ],
@@ -220,12 +250,9 @@ describe('handleAtCommand', () => {
   it('should handle query with text before and after @command', async () => {
     const fileContent = 'Markdown content.';
     const relativePath = 'doc.md';
-    const filePath = await createTestFile(
-      path.join(testRootDir, relativePath),
-      fileContent,
-    );
-    const textBefore = 'Explain this: ';
-    const textAfter = ' in detail.';
+    await createTestFile(path.join(testRootDir, relativePath), fileContent);
+    const textBefore = 'Please read ';
+    const textAfter = ' and summarize.';
     const query = `${textBefore}@${relativePath}${textAfter}`;
 
     const result = await handleAtCommand({
@@ -233,7 +260,7 @@ describe('handleAtCommand', () => {
       config: mockConfig,
       addItem: mockAddItem,
       onDebugMessage: mockOnDebugMessage,
-      messageId: 128,
+      messageId: 127,
       signal: abortController.signal,
     });
 
@@ -241,7 +268,7 @@ describe('handleAtCommand', () => {
       processedQuery: [
         { text: `${textBefore}@${relativePath}${textAfter}` },
         { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${filePath}:\n` },
+        { text: `\nContent from @${relativePath}:\n` },
         { text: fileContent },
         { text: '\n--- End of content ---' },
       ],
@@ -252,10 +279,7 @@ describe('handleAtCommand', () => {
   it('should correctly unescape paths with escaped spaces', async () => {
     const fileContent = 'This is the file content.';
     const relativePath = path.join('path', 'to', 'my file.txt');
-    const filePath = await createTestFile(
-      path.join(testRootDir, relativePath),
-      fileContent,
-    );
+    await createTestFile(path.join(testRootDir, relativePath), fileContent);
     const escapedPath = path.join('path', 'to', 'my\\ file.txt');
     const query = `@${escapedPath}`;
 
@@ -272,7 +296,7 @@ describe('handleAtCommand', () => {
       processedQuery: [
         { text: `@${relativePath}` },
         { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${filePath}:\n` },
+        { text: `\nContent from @${relativePath}:\n` },
         { text: fileContent },
         { text: '\n--- End of content ---' },
       ],
@@ -291,16 +315,10 @@ describe('handleAtCommand', () => {
   it('should handle multiple @file references', async () => {
     const content1 = 'Content file1';
     const relativePath1 = 'file1.txt';
-    const file1Path = await createTestFile(
-      path.join(testRootDir, relativePath1),
-      content1,
-    );
+    await createTestFile(path.join(testRootDir, relativePath1), content1);
     const content2 = 'Content file2';
     const relativePath2 = 'file2.md';
-    const file2Path = await createTestFile(
-      path.join(testRootDir, relativePath2),
-      content2,
-    );
+    await createTestFile(path.join(testRootDir, relativePath2), content2);
     const query = `@${relativePath1} @${relativePath2}`;
 
     const result = await handleAtCommand({
@@ -316,9 +334,9 @@ describe('handleAtCommand', () => {
       processedQuery: [
         { text: query },
         { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${file1Path}:\n` },
+        { text: `\nContent from @${relativePath1}:\n` },
         { text: content1 },
-        { text: `\nContent from @${file2Path}:\n` },
+        { text: `\nContent from @${relativePath2}:\n` },
         { text: content2 },
         { text: '\n--- End of content ---' },
       ],
@@ -330,17 +348,11 @@ describe('handleAtCommand', () => {
     const text1 = 'Check ';
     const content1 = 'C1';
     const relativePath1 = 'f1.txt';
-    const file1Path = await createTestFile(
-      path.join(testRootDir, relativePath1),
-      content1,
-    );
+    await createTestFile(path.join(testRootDir, relativePath1), content1);
     const text2 = ' and ';
     const content2 = 'C2';
     const relativePath2 = 'f2.md';
-    const file2Path = await createTestFile(
-      path.join(testRootDir, relativePath2),
-      content2,
-    );
+    await createTestFile(path.join(testRootDir, relativePath2), content2);
     const text3 = ' please.';
     const query = `${text1}@${relativePath1}${text2}@${relativePath2}${text3}`;
 
@@ -357,9 +369,9 @@ describe('handleAtCommand', () => {
       processedQuery: [
         { text: query },
         { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${file1Path}:\n` },
+        { text: `\nContent from @${relativePath1}:\n` },
         { text: content1 },
-        { text: `\nContent from @${file2Path}:\n` },
+        { text: `\nContent from @${relativePath2}:\n` },
         { text: content2 },
         { text: '\n--- End of content ---' },
       ],
@@ -370,17 +382,11 @@ describe('handleAtCommand', () => {
   it('should handle a mix of valid, invalid, and lone @ references', async () => {
     const content1 = 'Valid content 1';
     const relativePath1 = 'valid1.txt';
-    const file1Path = await createTestFile(
-      path.join(testRootDir, relativePath1),
-      content1,
-    );
+    await createTestFile(path.join(testRootDir, relativePath1), content1);
     const invalidFile = 'nonexistent.txt';
     const content2 = 'Globbed content';
     const relativePath2 = path.join('resolved', 'valid2.actual');
-    const file2Path = await createTestFile(
-      path.join(testRootDir, relativePath2),
-      content2,
-    );
+    await createTestFile(path.join(testRootDir, relativePath2), content2);
     const query = `Look at @${relativePath1} then @${invalidFile} and also just @ symbol, then @${relativePath2}`;
 
     const result = await handleAtCommand({
@@ -406,9 +412,9 @@ describe('handleAtCommand', () => {
       .map((p: unknown) => (p as { text: string }).text)
       .join('');
     expect(queryText).toContain('--- Content from referenced files ---');
-    expect(queryText).toContain(`Content from @${file1Path}:`);
+    expect(queryText).toContain(`Content from @${relativePath1}:`);
     expect(queryText).toContain(content1);
-    expect(queryText).toContain(`Content from @${file2Path}:`);
+    expect(queryText).toContain(`Content from @${relativePath2}:`);
     expect(queryText).toContain(content2);
     expect(queryText).toContain('--- End of content ---');
     expect(mockOnDebugMessage).toHaveBeenCalledWith(
@@ -452,12 +458,12 @@ describe('handleAtCommand', () => {
         path.join(testRootDir, '.gitignore'),
         'node_modules/package.json',
       );
-      const gitIgnoredFile = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, 'node_modules', 'package.json'),
         'the file contents',
       );
 
-      const query = `@${gitIgnoredFile}`;
+      const query = '@node_modules/package.json';
 
       const result = await handleAtCommand({
         query,
@@ -473,10 +479,10 @@ describe('handleAtCommand', () => {
         shouldProceed: true,
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Path ${gitIgnoredFile} is git-ignored and will be skipped.`,
+        'Path node_modules/package.json is git-ignored and will be skipped.',
       );
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Ignored 1 files:\nGit-ignored: ${gitIgnoredFile}`,
+        'Ignored 1 files:\nGit-ignored: node_modules/package.json',
       );
     });
 
@@ -487,7 +493,7 @@ describe('handleAtCommand', () => {
       );
 
       const relativePath = path.join('src', 'index.ts');
-      const validFile = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, relativePath),
         'console.log("Hello world");',
       );
@@ -506,7 +512,7 @@ describe('handleAtCommand', () => {
         processedQuery: [
           { text: `@${relativePath}` },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${validFile}:\n` },
+          { text: `\nContent from @${relativePath}:\n` },
           { text: 'console.log("Hello world");' },
           { text: '\n--- End of content ---' },
         ],
@@ -517,7 +523,7 @@ describe('handleAtCommand', () => {
     it('should handle mixed git-ignored and valid files', async () => {
       await createTestFile(path.join(testRootDir, '.gitignore'), '.env');
       const relativePath1 = 'README.md';
-      const validFile = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, relativePath1),
         '# Project README',
       );
@@ -538,7 +544,7 @@ describe('handleAtCommand', () => {
         processedQuery: [
           { text: `@${relativePath1} @${relativePath2}` },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${validFile}:\n` },
+          { text: `\nContent from @${relativePath1}:\n` },
           { text: '# Project README' },
           { text: '\n--- End of content ---' },
         ],
@@ -553,11 +559,11 @@ describe('handleAtCommand', () => {
     });
 
     it('should always ignore .git directory files', async () => {
-      const gitFile = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, '.git', 'config'),
         '[core]\n\trepositoryformatversion = 0\n',
       );
-      const query = `@${gitFile}`;
+      const query = '@.git/config';
 
       const result = await handleAtCommand({
         query,
@@ -573,10 +579,10 @@ describe('handleAtCommand', () => {
         shouldProceed: true,
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Path ${gitFile} is git-ignored and will be skipped.`,
+        'Path .git/config is git-ignored and will be skipped.',
       );
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Ignored 1 files:\nGit-ignored: ${gitFile}`,
+        'Ignored 1 files:\nGit-ignored: .git/config',
       );
     });
   });
@@ -613,11 +619,11 @@ describe('handleAtCommand', () => {
         path.join(testRootDir, '.llxprtignore'),
         'build/output.js',
       );
-      const llxprtIgnoredFile = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, 'build', 'output.js'),
         'console.log("Hello");',
       );
-      const query = `@${llxprtIgnoredFile}`;
+      const query = '@build/output.js';
 
       const result = await handleAtCommand({
         query,
@@ -633,10 +639,10 @@ describe('handleAtCommand', () => {
         shouldProceed: true,
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Path ${llxprtIgnoredFile} is llxprt-ignored and will be skipped.`,
+        'Path build/output.js is llxprt-ignored and will be skipped.',
       );
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Ignored 1 files:\nLlxprt-ignored: ${llxprtIgnoredFile}`,
+        'Ignored 1 files:\nLlxprt-ignored: build/output.js',
       );
     });
   });
@@ -646,7 +652,7 @@ describe('handleAtCommand', () => {
       'build/output.js',
     );
     const relativePath = path.join('src', 'index.ts');
-    const validFile = await createTestFile(
+    await createTestFile(
       path.join(testRootDir, relativePath),
       'console.log("Hello world");',
     );
@@ -665,7 +671,7 @@ describe('handleAtCommand', () => {
       processedQuery: [
         { text: `@${relativePath}` },
         { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${validFile}:\n` },
+        { text: `\nContent from @${relativePath}:\n` },
         { text: 'console.log("Hello world");' },
         { text: '\n--- End of content ---' },
       ],
@@ -679,7 +685,7 @@ describe('handleAtCommand', () => {
       'dist/bundle.js',
     );
     const relativePath1 = path.join('src', 'main.ts');
-    const validFile = await createTestFile(
+    await createTestFile(
       path.join(testRootDir, relativePath1),
       '// Main application entry',
     );
@@ -703,7 +709,7 @@ describe('handleAtCommand', () => {
       processedQuery: [
         { text: `@${relativePath1} @${relativePath2}` },
         { text: '\n--- Content from referenced files ---' },
-        { text: `\nContent from @${validFile}:\n` },
+        { text: `\nContent from @${relativePath1}:\n` },
         { text: '// Main application entry' },
         { text: '\n--- End of content ---' },
       ],
@@ -812,11 +818,8 @@ describe('handleAtCommand', () => {
     it.each(punctuationTestCases)(
       'should terminate @path at $name',
       async ({ fileName, fileContent, queryTemplate, messageId }) => {
-        const filePath = await createTestFile(
-          path.join(testRootDir, fileName),
-          fileContent,
-        );
-        const query = queryTemplate(filePath);
+        await createTestFile(path.join(testRootDir, fileName), fileContent);
+        const query = queryTemplate(fileName);
 
         const result = await handleAtCommand({
           query,
@@ -827,11 +830,13 @@ describe('handleAtCommand', () => {
           signal: abortController.signal,
         });
 
+        const fileInQuery = fileName;
+
         expect(result).toEqual({
           processedQuery: [
             { text: query },
             { text: '\n--- Content from referenced files ---' },
-            { text: `\nContent from @${filePath}:\n` },
+            { text: `\nContent from @${fileInQuery}:\n` },
             { text: fileContent },
             { text: '\n--- End of content ---' },
           ],
@@ -842,16 +847,10 @@ describe('handleAtCommand', () => {
 
     it('should handle multiple @paths terminated by different punctuation', async () => {
       const content1 = 'First file';
-      const file1Path = await createTestFile(
-        path.join(testRootDir, 'first.txt'),
-        content1,
-      );
+      await createTestFile(path.join(testRootDir, 'first.txt'), content1);
       const content2 = 'Second file';
-      const file2Path = await createTestFile(
-        path.join(testRootDir, 'second.txt'),
-        content2,
-      );
-      const query = `Compare @${file1Path}, @${file2Path}; what's different?`;
+      await createTestFile(path.join(testRootDir, 'second.txt'), content2);
+      const query = "Compare @first.txt, @second.txt; what's different?";
 
       const result = await handleAtCommand({
         query,
@@ -864,11 +863,11 @@ describe('handleAtCommand', () => {
 
       expect(result).toEqual({
         processedQuery: [
-          { text: `Compare @${file1Path}, @${file2Path}; what's different?` },
+          { text: query },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${file1Path}:\n` },
+          { text: '\nContent from @first.txt:\n' },
           { text: content1 },
-          { text: `\nContent from @${file2Path}:\n` },
+          { text: '\nContent from @second.txt:\n' },
           { text: content2 },
           { text: '\n--- End of content ---' },
         ],
@@ -878,11 +877,11 @@ describe('handleAtCommand', () => {
 
     it('should still handle escaped spaces in paths before punctuation', async () => {
       const fileContent = 'Spaced file content';
-      const filePath = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, 'spaced file.txt'),
         fileContent,
       );
-      const escapedPath = path.join(testRootDir, 'spaced\\ file.txt');
+      const escapedPath = path.join('spaced\\ file.txt');
       const query = `Check @${escapedPath}, it has spaces.`;
 
       const result = await handleAtCommand({
@@ -896,9 +895,9 @@ describe('handleAtCommand', () => {
 
       expect(result).toEqual({
         processedQuery: [
-          { text: `Check @${filePath}, it has spaces.` },
+          { text: 'Check @spaced file.txt, it has spaces.' },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${filePath}:\n` },
+          { text: '\nContent from @spaced file.txt:\n' },
           { text: fileContent },
           { text: '\n--- End of content ---' },
         ],
@@ -908,11 +907,8 @@ describe('handleAtCommand', () => {
 
     it('should not break file paths with periods in extensions', async () => {
       const fileContent = 'TypeScript content';
-      const filePath = await createTestFile(
-        path.join(testRootDir, 'example.d.ts'),
-        fileContent,
-      );
-      const query = `Analyze @${filePath} for type definitions.`;
+      await createTestFile(path.join(testRootDir, 'example.d.ts'), fileContent);
+      const query = 'Analyze @example.d.ts for type definitions.';
 
       const result = await handleAtCommand({
         query,
@@ -925,9 +921,9 @@ describe('handleAtCommand', () => {
 
       expect(result).toEqual({
         processedQuery: [
-          { text: `Analyze @${filePath} for type definitions.` },
+          { text: query },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${filePath}:\n` },
+          { text: '\nContent from @example.d.ts:\n' },
           { text: fileContent },
           { text: '\n--- End of content ---' },
         ],
@@ -937,11 +933,8 @@ describe('handleAtCommand', () => {
 
     it('should handle file paths ending with period followed by space', async () => {
       const fileContent = 'Config content';
-      const filePath = await createTestFile(
-        path.join(testRootDir, 'config.json'),
-        fileContent,
-      );
-      const query = `Check @${filePath}. This file contains settings.`;
+      await createTestFile(path.join(testRootDir, 'config.json'), fileContent);
+      const query = 'Check @config.json. This file contains settings.';
 
       const result = await handleAtCommand({
         query,
@@ -954,9 +947,9 @@ describe('handleAtCommand', () => {
 
       expect(result).toEqual({
         processedQuery: [
-          { text: `Check @${filePath}. This file contains settings.` },
+          { text: query },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${filePath}:\n` },
+          { text: '\nContent from @config.json:\n' },
           { text: fileContent },
           { text: '\n--- End of content ---' },
         ],
@@ -966,11 +959,8 @@ describe('handleAtCommand', () => {
 
     it('should handle comma termination with complex file paths', async () => {
       const fileContent = 'Package info';
-      const filePath = await createTestFile(
-        path.join(testRootDir, 'package.json'),
-        fileContent,
-      );
-      const query = `Review @${filePath}, then check dependencies.`;
+      await createTestFile(path.join(testRootDir, 'package.json'), fileContent);
+      const query = 'Review @package.json, then check dependencies.';
 
       const result = await handleAtCommand({
         query,
@@ -983,9 +973,9 @@ describe('handleAtCommand', () => {
 
       expect(result).toEqual({
         processedQuery: [
-          { text: `Review @${filePath}, then check dependencies.` },
+          { text: query },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${filePath}:\n` },
+          { text: '\nContent from @package.json:\n' },
           { text: fileContent },
           { text: '\n--- End of content ---' },
         ],
@@ -995,11 +985,11 @@ describe('handleAtCommand', () => {
 
     it('should not terminate at period within file name', async () => {
       const fileContent = 'Version info';
-      const filePath = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, 'version.1.2.3.txt'),
         fileContent,
       );
-      const query = `Check @${filePath} contains version information.`;
+      const query = 'Check @version.1.2.3.txt contains version information.';
 
       const result = await handleAtCommand({
         query,
@@ -1012,9 +1002,9 @@ describe('handleAtCommand', () => {
 
       expect(result).toEqual({
         processedQuery: [
-          { text: `Check @${filePath} contains version information.` },
+          { text: query },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${filePath}:\n` },
+          { text: '\nContent from @version.1.2.3.txt:\n' },
           { text: fileContent },
           { text: '\n--- End of content ---' },
         ],
@@ -1024,11 +1014,8 @@ describe('handleAtCommand', () => {
 
     it('should handle end of string termination for period and comma', async () => {
       const fileContent = 'End file content';
-      const filePath = await createTestFile(
-        path.join(testRootDir, 'end.txt'),
-        fileContent,
-      );
-      const query = `Show me @${filePath}.`;
+      await createTestFile(path.join(testRootDir, 'end.txt'), fileContent);
+      const query = 'Show me @end.txt.';
 
       const result = await handleAtCommand({
         query,
@@ -1041,9 +1028,9 @@ describe('handleAtCommand', () => {
 
       expect(result).toEqual({
         processedQuery: [
-          { text: `Show me @${filePath}.` },
+          { text: query },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${filePath}:\n` },
+          { text: '\nContent from @end.txt:\n' },
           { text: fileContent },
           { text: '\n--- End of content ---' },
         ],
@@ -1053,11 +1040,11 @@ describe('handleAtCommand', () => {
 
     it('should handle files with special characters in names', async () => {
       const fileContent = 'File with special chars content';
-      const filePath = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, 'file$with&special#chars.txt'),
         fileContent,
       );
-      const query = `Check @${filePath} for content.`;
+      const query = 'Check @file$with&special#chars.txt for content.';
 
       const result = await handleAtCommand({
         query,
@@ -1070,9 +1057,9 @@ describe('handleAtCommand', () => {
 
       expect(result).toEqual({
         processedQuery: [
-          { text: `Check @${filePath} for content.` },
+          { text: 'Check @file$with&special#chars.txt for content.' },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${filePath}:\n` },
+          { text: '\nContent from @file$with&special#chars.txt:\n' },
           { text: fileContent },
           { text: '\n--- End of content ---' },
         ],
@@ -1082,11 +1069,11 @@ describe('handleAtCommand', () => {
 
     it('should handle basic file names without special characters', async () => {
       const fileContent = 'Basic file content';
-      const filePath = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, 'basicfile.txt'),
         fileContent,
       );
-      const query = `Check @${filePath} please.`;
+      const query = 'Check @basicfile.txt please.';
 
       const result = await handleAtCommand({
         query,
@@ -1099,9 +1086,9 @@ describe('handleAtCommand', () => {
 
       expect(result).toEqual({
         processedQuery: [
-          { text: `Check @${filePath} please.` },
+          { text: query },
           { text: '\n--- Content from referenced files ---' },
-          { text: `\nContent from @${filePath}:\n` },
+          { text: '\nContent from @basicfile.txt:\n' },
           { text: fileContent },
           { text: '\n--- End of content ---' },
         ],
@@ -1113,11 +1100,11 @@ describe('handleAtCommand', () => {
   it("should not add the user's turn to history, as that is the caller's responsibility", async () => {
     // Arrange
     const fileContent = 'This is the file content.';
-    const filePath = await createTestFile(
+    await createTestFile(
       path.join(testRootDir, 'path', 'to', 'another-file.txt'),
       fileContent,
     );
-    const query = `A query with @${filePath}`;
+    const query = 'A query with @path/to/another-file.txt';
 
     // Act
     await handleAtCommand({

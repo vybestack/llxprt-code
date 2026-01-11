@@ -148,13 +148,13 @@ export function logToolCall(
     'event.name': EVENT_TOOL_CALL,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  uiTelemetryService.addEvent(uiEvent);
   if (!isTelemetrySdkInitialized()) {
     if (process.env.VERBOSE === 'true') {
       console.error(`[TELEMETRY] SDK not initialized, skipping log`);
     }
     return;
   }
+  uiTelemetryService.addEvent(uiEvent);
 
   const { metadata, ...eventWithoutMetadata } = event;
   const attributes: LogAttributes = {
@@ -278,13 +278,13 @@ export function logApiRequest(config: Config, event: ApiRequestEvent): void {
 }
 
 export function logApiError(config: Config, event: ApiErrorEvent): void {
+  if (!isTelemetrySdkInitialized()) return;
   const uiEvent = {
     ...event,
     'event.name': EVENT_API_ERROR,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
   uiTelemetryService.addEvent(uiEvent);
-  if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
@@ -319,13 +319,13 @@ export function logApiError(config: Config, event: ApiErrorEvent): void {
 }
 
 export function logApiResponse(config: Config, event: ApiResponseEvent): void {
+  if (!isTelemetrySdkInitialized()) return;
   const uiEvent = {
     ...event,
     'event.name': EVENT_API_RESPONSE,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
   uiTelemetryService.addEvent(uiEvent);
-  if (!isTelemetrySdkInitialized()) return;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
     ...event,
