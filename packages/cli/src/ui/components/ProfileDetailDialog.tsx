@@ -26,9 +26,7 @@ interface ProfileDetailDialogProps {
 }
 
 // Type guard for load balancer profile
-function isLoadBalancerProfile(
-  profile: Profile,
-): profile is Profile & {
+function isLoadBalancerProfile(profile: Profile): profile is Profile & {
   type: 'loadbalancer';
   profiles: string[];
   policy: string;
