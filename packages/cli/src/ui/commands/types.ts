@@ -170,7 +170,6 @@ export type DialogType =
   | 'privacy'
   | 'settings'
   | 'logging'
-  | 'providerModel'
   | 'permissions'
   | 'provider'
   | 'loadProfile'

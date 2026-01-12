@@ -642,8 +642,8 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
       <Box marginTop={1}>
         <Text color={SemanticColors.text.secondary}>
           {isNarrow
-            ? `\u2191/\u2193 Enter${currentProvider ? ' P' : ''} Tab Esc`
-            : `\u2191/\u2193 select  Enter copy ID${currentProvider ? `  P ${state.providerFilter === null ? currentProvider + ' only' : 'all providers'}` : ''}  Tab filters  Esc close`}
+            ? `\u2191/\u2193 Enter${currentProvider ? ' ^A' : ''} Tab Esc`
+            : `\u2191/\u2193 select  Enter copy ID${currentProvider ? `  ^A ${state.providerFilter === null ? currentProvider + ' only' : 'all providers'}` : ''}  Tab filters  Esc close`}
         </Text>
       </Box>
     </Box>

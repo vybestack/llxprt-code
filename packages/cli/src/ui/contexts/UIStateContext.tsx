@@ -16,7 +16,6 @@ import type {
 } from '../types.js';
 import type {
   IdeContext,
-  IModel,
   ApprovalMode,
   AnyDeclarativeTool,
   ThoughtSummary,
@@ -64,7 +63,6 @@ export interface UIState {
   isAuthenticating: boolean;
   isEditorDialogOpen: boolean;
   isProviderDialogOpen: boolean;
-  isProviderModelDialogOpen: boolean;
   isLoadProfileDialogOpen: boolean;
   isCreateProfileDialogOpen: boolean;
   isToolsDialogOpen: boolean;
@@ -80,7 +78,6 @@ export interface UIState {
   // Dialog data
   providerOptions: string[];
   selectedProvider: string;
-  providerModels: IModel[];
   currentModel: string;
   profiles: string[];
   toolsDialogAction: 'enable' | 'disable';

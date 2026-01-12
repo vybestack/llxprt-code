@@ -61,7 +61,6 @@ import {
   EditorType,
   type IdeContext,
   ideContext,
-  type IModel,
   // type IdeInfo, // TODO: Fix IDE integration
   getSettingsService,
   DebugLogger,
@@ -94,7 +93,6 @@ import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
 import { useRuntimeApi } from './contexts/RuntimeContext.js';
 import { submitOAuthCode } from './oauth-submission.js';
-import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from './hooks/useCreateProfileDialog.js';
@@ -870,7 +868,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [providerModels, setProviderModels] = useState<IModel[]>([]);
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
 
   const openPermissionsDialog = useCallback(() => {
@@ -1176,31 +1173,6 @@ export const AppContainer = (props: AppContainerProps) => {
     config,
   });
 
-  const {
-    showDialog: isProviderModelDialogOpen,
-    openDialog: openProviderModelDialogRaw,
-    handleSelect: handleProviderModelChange,
-    closeDialog: exitProviderModelDialog,
-  } = useProviderModelDialog({
-    addMessage: (msg) =>
-      addItem(
-        { type: msg.type as MessageType, text: msg.content },
-        msg.timestamp.getTime(),
-      ),
-    appState,
-  });
-
-  const openProviderModelDialog = useCallback(async () => {
-    try {
-      const models = await runtime.listAvailableModels();
-      setProviderModels(models);
-    } catch (e) {
-      console.error('Failed to load models:', e);
-      setProviderModels([]);
-    }
-    await openProviderModelDialogRaw();
-  }, [openProviderModelDialogRaw, runtime]);
-
   // Watch for model changes from config
   useEffect(() => {
     const checkModelChange = () => {
@@ -1447,7 +1419,6 @@ export const AppContainer = (props: AppContainerProps) => {
       openLoggingDialog,
       openSubagentDialog,
       openModelsDialog,
-      openProviderModelDialog,
       openPermissionsDialog,
       openProviderDialog,
       openLoadProfileDialog,
@@ -1468,7 +1439,6 @@ export const AppContainer = (props: AppContainerProps) => {
       openLoggingDialog,
       openSubagentDialog,
       openModelsDialog,
-      openProviderModelDialog,
       openPermissionsDialog,
       openProviderDialog,
       openLoadProfileDialog,
@@ -2031,7 +2001,6 @@ export const AppContainer = (props: AppContainerProps) => {
       !isThemeDialogOpen &&
       !isEditorDialogOpen &&
       !isProviderDialogOpen &&
-      !isProviderModelDialogOpen &&
       !isToolsDialogOpen &&
       !isCreateProfileDialogOpen &&
       !showPrivacyNotice &&
@@ -2049,7 +2018,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isThemeDialogOpen,
     isEditorDialogOpen,
     isProviderDialogOpen,
-    isProviderModelDialogOpen,
     isToolsDialogOpen,
     isCreateProfileDialogOpen,
     showPrivacyNotice,
@@ -2100,7 +2068,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isAuthenticating,
     isEditorDialogOpen,
     isProviderDialogOpen,
-    isProviderModelDialogOpen,
     isLoadProfileDialogOpen,
     isCreateProfileDialogOpen,
     isToolsDialogOpen,
@@ -2118,7 +2085,6 @@ export const AppContainer = (props: AppContainerProps) => {
       ? createProfileProviders
       : providerOptions,
     selectedProvider,
-    providerModels,
     currentModel,
     profiles,
     toolsDialogAction,
@@ -2267,11 +2233,6 @@ export const AppContainer = (props: AppContainerProps) => {
       handleProviderSelect,
       exitProviderDialog,
 
-      // Provider model dialog
-      openProviderModelDialog,
-      handleProviderModelChange,
-      exitProviderModelDialog,
-
       // Load profile dialog
       openLoadProfileDialog,
       handleProfileSelect,
@@ -2377,9 +2338,6 @@ export const AppContainer = (props: AppContainerProps) => {
       openProviderDialog,
       handleProviderSelect,
       exitProviderDialog,
-      openProviderModelDialog,
-      handleProviderModelChange,
-      exitProviderModelDialog,
       openLoadProfileDialog,
       handleProfileSelect,
       exitLoadProfileDialog,

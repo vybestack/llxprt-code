@@ -160,7 +160,6 @@ export const DefaultAppLayout = ({
     uiState.isOAuthCodeDialogOpen ||
     uiState.isEditorDialogOpen ||
     uiState.isProviderDialogOpen ||
-    uiState.isProviderModelDialogOpen ||
     uiState.isLoadProfileDialogOpen ||
     uiState.isCreateProfileDialogOpen ||
     uiState.isToolsDialogOpen ||

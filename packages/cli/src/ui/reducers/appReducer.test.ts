@@ -21,7 +21,6 @@ describe('appReducer', () => {
           theme: false,
           auth: false,
           editor: false,
-          providerModel: false,
           provider: false,
           privacy: false,
           loadProfile: false,
@@ -101,7 +100,6 @@ describe('appReducer', () => {
       'theme',
       'auth',
       'editor',
-      'providerModel',
       'provider',
       'privacy',
     ] as const;
@@ -148,7 +146,6 @@ describe('appReducer', () => {
       expect(state.openDialogs.theme).toBe(true);
       expect(state.openDialogs.auth).toBe(true);
       expect(state.openDialogs.editor).toBe(true);
-      expect(state.openDialogs.providerModel).toBe(false);
       expect(state.openDialogs.provider).toBe(false);
       expect(state.openDialogs.privacy).toBe(false);
     });
@@ -567,7 +564,6 @@ describe('appReducer', () => {
           theme: false,
           auth: false,
           editor: false,
-          providerModel: false,
           provider: false,
           privacy: false,
           loadProfile: false,

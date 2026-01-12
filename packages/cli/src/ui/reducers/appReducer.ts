@@ -17,7 +17,6 @@ export type AppAction =
         | 'theme'
         | 'auth'
         | 'editor'
-        | 'providerModel'
         | 'provider'
         | 'privacy'
         | 'loadProfile'
@@ -31,7 +30,6 @@ export type AppAction =
         | 'theme'
         | 'auth'
         | 'editor'
-        | 'providerModel'
         | 'provider'
         | 'privacy'
         | 'loadProfile'
@@ -50,7 +48,6 @@ export interface AppState {
     theme: boolean;
     auth: boolean;
     editor: boolean;
-    providerModel: boolean;
     provider: boolean;
     privacy: boolean;
     loadProfile: boolean;
@@ -75,7 +72,6 @@ export const initialAppState: AppState = {
     theme: false,
     auth: false,
     editor: false,
-    providerModel: false,
     provider: false,
     privacy: false,
     loadProfile: false,

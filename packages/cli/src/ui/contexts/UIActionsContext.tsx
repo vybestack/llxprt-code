@@ -64,11 +64,6 @@ export interface UIActions {
   handleProviderSelect: (provider: string) => Promise<void>;
   exitProviderDialog: () => void;
 
-  // Provider model dialog
-  openProviderModelDialog: () => Promise<void>;
-  handleProviderModelChange: (model: string) => void;
-  exitProviderModelDialog: () => void;
-
   // Load profile dialog
   openLoadProfileDialog: () => void;
   handleProfileSelect: (profile: string) => void;

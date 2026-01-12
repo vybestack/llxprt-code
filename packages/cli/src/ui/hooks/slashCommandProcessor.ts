@@ -65,7 +65,6 @@ interface SlashCommandProcessorActions {
     initialName?: string,
   ) => void;
   openModelsDialog: (data?: ModelsDialogData) => void;
-  openProviderModelDialog: () => void;
   openPermissionsDialog: () => void;
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void;
@@ -486,9 +485,6 @@ export const useSlashCommandProcessor = (
                       } else {
                         actions.openLoggingDialog();
                       }
-                      return { type: 'handled' };
-                    case 'providerModel':
-                      actions.openProviderModelDialog();
                       return { type: 'handled' };
                     case 'permissions':
                       actions.openPermissionsDialog();

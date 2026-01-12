@@ -8,14 +8,16 @@ import {
   SlashCommand,
   CommandContext,
   OpenDialogActionReturn,
+  MessageActionReturn,
   CommandKind,
   ModelsDialogData,
 } from './types.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 /**
- * Parse command arguments for /models command
+ * Parse command arguments for /model command
  */
-interface ModelsCommandArgs {
+interface ModelCommandArgs {
   search?: string;
   provider?: string;
   tools?: boolean;
@@ -25,9 +27,9 @@ interface ModelsCommandArgs {
   all?: boolean;
 }
 
-function parseArgs(args: string): ModelsCommandArgs {
+function parseArgs(args: string): ModelCommandArgs {
   const parts = args.trim().split(/\s+/).filter(Boolean);
-  const result: ModelsCommandArgs = {};
+  const result: ModelCommandArgs = {};
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
@@ -44,7 +46,7 @@ function parseArgs(args: string): ModelsCommandArgs {
     } else if (part === '--all') {
       result.all = true;
     } else if (!part.startsWith('-')) {
-      // Positional arg is search term
+      // Positional arg is search term (or direct model name)
       result.search = part;
     }
     // Ignore --limit, --verbose, -v, -l (removed per spec)
@@ -54,9 +56,23 @@ function parseArgs(args: string): ModelsCommandArgs {
 }
 
 /**
+ * Check if any filter flags are set
+ */
+function hasAnyFlags(args: ModelCommandArgs): boolean {
+  return !!(
+    args.provider ||
+    args.tools ||
+    args.vision ||
+    args.reasoning ||
+    args.audio ||
+    args.all
+  );
+}
+
+/**
  * Convert parsed args to dialog props
  */
-function argsToDialogData(args: ModelsCommandArgs): ModelsDialogData {
+function argsToDialogData(args: ModelCommandArgs): ModelsDialogData {
   return {
     initialSearch: args.search,
     initialFilters: {
@@ -73,18 +89,39 @@ function argsToDialogData(args: ModelsCommandArgs): ModelsDialogData {
   };
 }
 
-export const modelsCommand: SlashCommand = {
-  name: 'models',
-  description: 'browse and search models from registry',
+export const modelCommand: SlashCommand = {
+  name: 'model',
+  description: 'browse, search, or switch models',
   kind: CommandKind.BUILT_IN,
-  action: (_context: CommandContext, args: string): OpenDialogActionReturn => {
-    // Parse arguments
+  action: async (
+    _context: CommandContext,
+    args: string,
+  ): Promise<OpenDialogActionReturn | MessageActionReturn> => {
     const parsedArgs = parseArgs(args);
 
-    // Convert to dialog data
-    const dialogData = argsToDialogData(parsedArgs);
+    // Direct switch: positional arg with NO flags
+    // e.g., "/model gpt-4o" switches directly
+    // but "/model gpt-4o --tools" opens dialog with search + filter
+    if (parsedArgs.search && !hasAnyFlags(parsedArgs)) {
+      try {
+        const runtime = getRuntimeApi();
+        const result = await runtime.setActiveModel(parsedArgs.search);
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Switched from ${result.previousModel ?? 'unknown'} to ${result.nextModel} in provider '${result.providerName}'`,
+        };
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
 
-    // Return dialog action
+    // Open dialog with filters
+    const dialogData = argsToDialogData(parsedArgs);
     return {
       type: 'dialog',
       dialog: 'models',

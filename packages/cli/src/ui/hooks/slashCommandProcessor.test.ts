@@ -183,7 +183,6 @@ describe('useSlashCommandProcessor', () => {
   let openAuthDialog: ReturnType<typeof vi.fn>;
   let openEditorDialog: ReturnType<typeof vi.fn>;
   let openProviderDialog: ReturnType<typeof vi.fn>;
-  let openProviderModelDialog: ReturnType<typeof vi.fn>;
   let openLoadProfileDialog: ReturnType<typeof vi.fn>;
   let openToolsDialog: ReturnType<typeof vi.fn>;
   let toggleCorgiMode: ReturnType<typeof vi.fn>;
@@ -246,7 +245,6 @@ describe('useSlashCommandProcessor', () => {
     openAuthDialog = vi.fn();
     openEditorDialog = vi.fn();
     openProviderDialog = vi.fn();
-    openProviderModelDialog = vi.fn();
     openLoadProfileDialog = vi.fn();
     openToolsDialog = vi.fn();
     toggleCorgiMode = vi.fn();
@@ -276,7 +274,6 @@ describe('useSlashCommandProcessor', () => {
       openAuthDialog,
       openEditorDialog,
       openProviderDialog,
-      openProviderModelDialog,
       openLoadProfileDialog,
       openToolsDialog,
       toggleCorgiMode,

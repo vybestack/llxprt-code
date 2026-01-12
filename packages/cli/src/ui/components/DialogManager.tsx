@@ -20,7 +20,6 @@ import { AuthDialog } from './AuthDialog.js';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { ProviderDialog } from './ProviderDialog.js';
-import { ProviderModelDialog } from './ProviderModelDialog.js';
 import { LoadProfileDialog } from './LoadProfileDialog.js';
 import { ProfileCreateWizard } from './ProfileCreateWizard/index.js';
 import { ToolsDialog } from './ToolsDialog.js';
@@ -270,18 +269,6 @@ export const DialogManager = ({
           currentProvider={uiState.selectedProvider}
           onSelect={uiActions.handleProviderSelect}
           onClose={uiActions.exitProviderDialog}
-        />
-      </Box>
-    );
-  }
-  if (uiState.isProviderModelDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <ProviderModelDialog
-          models={uiState.providerModels}
-          currentModel={uiState.currentModel}
-          onSelect={uiActions.handleProviderModelChange}
-          onClose={uiActions.exitProviderModelDialog}
         />
       </Box>
     );
