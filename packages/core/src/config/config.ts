@@ -1834,78 +1834,15 @@ export class Config {
     };
   }
 
-  /**
-   * CoreToolScheduler singleton methods
-   * Implemented as getters to avoid circular dependencies with CoreToolScheduler
-   */
-  private get schedulerEntries(): Map<
-    string,
-    {
-      scheduler: import('../core/coreToolScheduler.js').CoreToolScheduler;
-      refCount: number;
-    }
-  > {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!(this as any)._schedulerEntries) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this as any)._schedulerEntries = new Map();
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (this as any)._schedulerEntries;
-  }
-
   async getOrCreateScheduler(
     sessionId: string,
     callbacks: SchedulerCallbacks,
   ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
-    const entry = this.schedulerEntries.get(sessionId);
-
-    if (!entry) {
-      // Use dynamic import to avoid circular dependency issues
-      const { CoreToolScheduler: CoreToolSchedulerClass } =
-        await import('../core/coreToolScheduler.js');
-      const scheduler = new CoreToolSchedulerClass({
-        config: this,
-        outputUpdateHandler: callbacks.outputUpdateHandler,
-        onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
-        onToolCallsUpdate: callbacks.onToolCallsUpdate,
-        getPreferredEditor: callbacks.getPreferredEditor,
-        onEditorClose: callbacks.onEditorClose,
-        onEditorOpen: callbacks.onEditorOpen,
-      });
-      this.schedulerEntries.set(sessionId, {
-        scheduler,
-        refCount: 1,
-      });
-      return scheduler;
-    }
-
-    entry.refCount += 1;
-    entry.scheduler.setCallbacks?.({
-      config: this,
-      outputUpdateHandler: callbacks.outputUpdateHandler,
-      onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
-      onToolCallsUpdate: callbacks.onToolCallsUpdate,
-      getPreferredEditor: callbacks.getPreferredEditor,
-      onEditorClose: callbacks.onEditorClose,
-      onEditorOpen: callbacks.onEditorOpen,
-    });
-    return entry.scheduler;
+    return _getOrCreateScheduler(this, sessionId, callbacks);
   }
 
   disposeScheduler(sessionId: string): void {
-    const entry = this.schedulerEntries.get(sessionId);
-    if (!entry) {
-      return;
-    }
-
-    entry.refCount -= 1;
-    if (entry.refCount > 0) {
-      return;
-    }
-
-    entry.scheduler.dispose();
-    this.schedulerEntries.delete(sessionId);
+    _disposeScheduler(sessionId);
   }
 }
 

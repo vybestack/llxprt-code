@@ -61,7 +61,7 @@ type UnionKeys<T> = T extends T ? keyof T : never;
 export class Task {
   id: string;
   contextId: string;
-  scheduler: CoreToolScheduler;
+  scheduler: CoreToolScheduler | null;
   config: Config;
   geminiClient: GeminiClient;
   pendingToolConfirmationDetails: Map<string, ToolCallConfirmationDetails>;
@@ -87,8 +87,7 @@ export class Task {
     this.id = id;
     this.contextId = contextId;
     this.config = config;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.scheduler = null as any;
+    this.scheduler = null;
     const contentConfig = this.config.getContentGeneratorConfig();
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
@@ -430,6 +429,9 @@ export class Task {
 
   private async createScheduler(): Promise<CoreToolScheduler> {
     const sessionId = this.config.getSessionId();
+    if (!sessionId) {
+      throw new Error('Scheduler sessionId is required');
+    }
     return await this.config.getOrCreateScheduler(sessionId, {
       outputUpdateHandler: this._schedulerOutputUpdate.bind(this),
       onAllToolCallsComplete: this._schedulerAllToolCallsComplete.bind(this),
@@ -583,6 +585,9 @@ export class Task {
     };
     this.setTaskStateAndPublishUpdate('working', stateChange);
 
+    if (!this.scheduler) {
+      throw new Error('Scheduler not initialized');
+    }
     await this.scheduler.schedule(updatedRequests, abortSignal);
   }
 

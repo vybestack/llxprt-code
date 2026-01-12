@@ -4,8 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  beforeEach,
+  afterEach,
+  vi,
+} from 'vitest';
 import { Config } from './config.js';
+import type { ISettingsService } from '../settings/types.js';
+import { clearAllSchedulers } from './schedulerSingleton.js';
 
 // Use dynamic import to avoid circular dependencies with Config
 let CoreToolScheduler: unknown;
@@ -21,13 +31,35 @@ describe('Config - CoreToolScheduler Singleton', () => {
 
   beforeEach(async () => {
     // Create a minimal Config instance for testing
-    const mockSettingsService = {
+    const mockSettingsService: ISettingsService = {
       get: vi.fn(),
       set: vi.fn(),
       getAllGlobalSettings: vi.fn(() => ({})),
       getProviderSettings: vi.fn(() => ({})),
       setProviderSetting: vi.fn(),
       clear: vi.fn(),
+      getSettings: vi.fn().mockResolvedValue({ providers: {} }),
+      updateSettings: vi.fn().mockResolvedValue(undefined),
+      switchProvider: vi.fn().mockResolvedValue(undefined),
+      exportForProfile: vi.fn().mockResolvedValue({
+        defaultProvider: 'openai',
+        providers: {},
+        tools: { allowed: [], disabled: [] },
+      }),
+      importFromProfile: vi.fn().mockResolvedValue(undefined),
+      setCurrentProfileName: vi.fn(),
+      getCurrentProfileName: vi.fn().mockReturnValue(null),
+      getDiagnosticsData: vi.fn().mockResolvedValue({
+        provider: 'openai',
+        model: 'unknown',
+        profile: null,
+        providerSettings: {},
+        ephemeralSettings: {},
+        modelParams: {},
+        allSettings: { providers: {} },
+      }),
+      emit: vi.fn(),
+      onSettingsChanged: vi.fn().mockReturnValue(() => {}),
     };
 
     const configParams = {
@@ -36,21 +68,19 @@ describe('Config - CoreToolScheduler Singleton', () => {
       debugMode: false,
       cwd: process.cwd(),
       model: 'gemini-pro',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      settingsService: mockSettingsService as any,
+      settingsService: mockSettingsService,
       eventEmitter: undefined,
     };
 
     config = new Config(configParams);
     await config.initialize();
 
-    // Clear any existing scheduler instances from previous tests
-    const { clearAllSchedulers } = await import('./schedulerSingleton.js');
     clearAllSchedulers();
   });
 
-  // Note: afterEach cleanup is skipped because require() doesn't work in ESM mode.
-  // beforeEach already clears schedulers before each test.
+  afterEach(() => {
+    clearAllSchedulers();
+  });
 
   describe('getOrCreateScheduler', () => {
     it('should create a new scheduler instance for a given sessionId if none exists', async () => {
@@ -100,7 +130,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
       expect(scheduler1).toBe(scheduler2);
     });
 
-    it('should not retain callbacks in scheduler entry', async () => {
+    it('should not create duplicate schedulers for concurrent requests', async () => {
       const callbacks = {
         outputUpdateHandler: vi.fn(),
         onAllToolCallsComplete: vi.fn(),
@@ -109,13 +139,12 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      await config.getOrCreateScheduler(testSessionId, callbacks);
+      const [scheduler1, scheduler2] = await Promise.all([
+        config.getOrCreateScheduler(testSessionId, callbacks),
+        config.getOrCreateScheduler(testSessionId, callbacks),
+      ]);
 
-      const entry = (
-        config as unknown as { _schedulerEntries: Map<string, unknown> }
-      )._schedulerEntries.get(testSessionId);
-      expect(entry).toBeDefined();
-      expect(entry).not.toHaveProperty('callbacks');
+      expect(scheduler1).toBe(scheduler2);
     });
 
     it('should create different scheduler instances for different sessionIds', async () => {
@@ -274,14 +303,11 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const schedulers: any[] = [];
-
-      for (const sessionId of sessions) {
-        schedulers.push(
-          await config.getOrCreateScheduler(sessionId, callbacks),
-        );
-      }
+      const schedulers = await Promise.all(
+        sessions.map((sessionId) =>
+          config.getOrCreateScheduler(sessionId, callbacks),
+        ),
+      );
 
       // All schedulers should be different
       expect(schedulers[0]).not.toBe(schedulers[1]);

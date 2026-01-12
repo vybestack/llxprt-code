@@ -271,6 +271,12 @@ export function useToolScheduler(
 ): UseToolSchedulerResult {
   const [toolCalls, setToolCalls] = useState<TrackedToolCall[]>([]);
   const schedulerRef = useRef<CoreToolScheduler | null>(null);
+  const pendingScheduleRequests = useRef<
+    Array<{
+      request: ToolCallRequestInfo | ToolCallRequestInfo[];
+      signal: AbortSignal;
+    }>
+  >([]);
 
   // Use refs to store callbacks so they don't trigger effect re-runs
   const onCompleteRef = useRef<OnCompleteCallback>(onAllToolCallsComplete);
@@ -292,16 +298,23 @@ export function useToolScheduler(
       return;
     }
 
+    const sessionId = config.getSessionId();
     let mounted = true;
 
     const handleOutputUpdate = (
       toolCallId: string,
       outputChunk: string,
     ): void => {
+      if (!mounted) {
+        return;
+      }
       setToolCalls((prev) => applyOutputUpdate(prev, toolCallId, outputChunk));
     };
 
     const handleToolCallsUpdate = (updatedCalls: CoreToolCall[]): void => {
+      if (!mounted) {
+        return;
+      }
       setToolCalls((prevCalls) => {
         if (updatedCalls.length === 0) {
           return [];
@@ -318,6 +331,9 @@ export function useToolScheduler(
     const handleAllComplete = async (
       completedToolCalls: CompletedToolCall[],
     ): Promise<void> => {
+      if (!mounted) {
+        return;
+      }
       logger.debug(
         'handleAllComplete called',
         'toolCount:',
@@ -340,7 +356,6 @@ export function useToolScheduler(
     // subscriptions and "unknown correlationId" errors.
     const initializeScheduler = async () => {
       try {
-        const sessionId = config.getSessionId();
         const scheduler = await config.getOrCreateScheduler(sessionId, {
           outputUpdateHandler: handleOutputUpdate,
           onAllToolCallsComplete: handleAllComplete,
@@ -351,8 +366,21 @@ export function useToolScheduler(
           },
         });
 
-        if (mounted) {
-          schedulerRef.current = scheduler;
+        if (!mounted) {
+          config.disposeScheduler(sessionId);
+          return;
+        }
+
+        schedulerRef.current = scheduler;
+
+        if (pendingScheduleRequests.current.length > 0) {
+          for (const { request, signal } of pendingScheduleRequests.current) {
+            if (signal.aborted) {
+              continue;
+            }
+            void scheduler.schedule(request, signal);
+          }
+          pendingScheduleRequests.current = [];
         }
       } catch (error) {
         logger.error('Failed to initialize scheduler:', error);
@@ -366,7 +394,7 @@ export function useToolScheduler(
 
     return () => {
       mounted = false;
-      config.disposeScheduler(config.getSessionId());
+      config.disposeScheduler(sessionId);
       schedulerRef.current = null;
     };
   }, [config]);
@@ -380,7 +408,10 @@ export function useToolScheduler(
       const scheduler = schedulerRef.current;
       if (scheduler) {
         void scheduler.schedule(request, signal);
+        return;
       }
+
+      pendingScheduleRequests.current.push({ request, signal });
     },
     [],
   );

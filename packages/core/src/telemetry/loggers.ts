@@ -143,17 +143,18 @@ export function logToolCall(
     console.error(`[TELEMETRY] logToolCall: ${event.function_name}`);
   }
 
-  const uiEvent = {
-    ...event,
-    'event.name': EVENT_TOOL_CALL,
-    'event.timestamp': new Date().toISOString(),
-  } as UiEvent;
   if (!isTelemetrySdkInitialized()) {
     if (process.env.VERBOSE === 'true') {
       console.error(`[TELEMETRY] SDK not initialized, skipping log`);
     }
     return;
   }
+
+  const uiEvent = {
+    ...event,
+    'event.name': EVENT_TOOL_CALL,
+    'event.timestamp': new Date().toISOString(),
+  } as UiEvent;
   uiTelemetryService.addEvent(uiEvent);
 
   const { metadata, ...eventWithoutMetadata } = event;

@@ -98,7 +98,10 @@ describe('handleAtCommand', () => {
                 resolved = path.normalize(absoluteInput);
               }
             }
-            return resolved.startsWith(workspaceRoot);
+            return (
+              resolved === workspaceRoot ||
+              resolved.startsWith(workspaceRoot + path.sep)
+            );
           },
           getDirectories: () => [workspaceRoot],
         };

@@ -11,7 +11,11 @@
  */
 import { reportError } from '../utils/errorReporting.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { Config, ApprovalMode } from '../config/config.js';
+import {
+  Config,
+  ApprovalMode,
+  type SchedulerCallbacks,
+} from '../config/config.js';
 import {
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
@@ -703,12 +707,25 @@ export class SubAgentScope {
           });
         })();
 
-    const scheduler = await schedulerPromise;
+    let scheduler: Awaited<typeof schedulerPromise>;
+    try {
+      scheduler = await schedulerPromise;
+    } catch (error) {
+      this.logger.error(
+        () =>
+          `Subagent ${this.subagentId} failed to create scheduler: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+      throw error;
+    }
+
     const schedulerDispose = options?.schedulerFactory
       ? typeof scheduler.dispose === 'function'
         ? scheduler.dispose.bind(scheduler)
-        : () => {}
-      : () => schedulerConfig.disposeScheduler(schedulerConfig.getSessionId());
+        : async () => {}
+      : async () =>
+          schedulerConfig.disposeScheduler(schedulerConfig.getSessionId());
 
     const startTime = Date.now();
     let turnCounter = 0;
@@ -933,9 +950,14 @@ export class SubAgentScope {
       throw error;
     } finally {
       try {
-        schedulerDispose();
-      } catch (_error) {
-        // ignore scheduler disposal errors
+        await schedulerDispose();
+      } catch (error) {
+        this.logger.warn(
+          () =>
+            `Subagent ${this.subagentId} failed to dispose scheduler: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
       }
       this.parentAbortCleanup?.();
       this.parentAbortCleanup = undefined;
@@ -1459,6 +1481,13 @@ export class SubAgentScope {
           : ApprovalMode.DEFAULT,
       getMessageBus: () => this.config.getMessageBus(),
       getPolicyEngine: () => this.config.getPolicyEngine(),
+      getOrCreateScheduler: (
+        sessionId: string,
+        callbacks: SchedulerCallbacks,
+      ) => this.config.getOrCreateScheduler(sessionId, callbacks),
+      disposeScheduler: (sessionId: string) => {
+        this.config.disposeScheduler(sessionId);
+      },
     } as unknown as Config;
   }
 

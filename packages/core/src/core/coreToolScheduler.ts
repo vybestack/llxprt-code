@@ -512,6 +512,7 @@ export class CoreToolScheduler {
             `Skipping TOOL_CONFIRMATION_RESPONSE for callId=${callId} because signal is missing (call already finalized).`,
         );
       }
+      this.pendingConfirmations.delete(response.correlationId);
       return;
     }
     const signal = originalSignal;

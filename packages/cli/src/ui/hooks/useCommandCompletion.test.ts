@@ -385,7 +385,7 @@ describe('useCommandCompletion', () => {
           expectedSuggestions: 1,
           expectedShowSuggestions: true,
           description:
-            'should not show slash command suggestions when shellModeActive is true',
+            'should show slash command suggestions when shellModeActive is true',
         },
       ])(
         '$description',
@@ -420,11 +420,9 @@ describe('useCommandCompletion', () => {
             );
           });
 
-          if (shellModeActive) {
-            act(() => {
-              result.current.resetCompletionState();
-            });
-          }
+          act(() => {
+            result.current.resetCompletionState();
+          });
         },
       );
     });
