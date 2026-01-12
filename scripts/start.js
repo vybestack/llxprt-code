@@ -21,6 +21,7 @@ import { spawn, execSync } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { parseBootstrapArgs } from '../packages/cli/dist/src/config/profileBootstrap.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -28,12 +29,25 @@ const root = join(__dirname, '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
 const bootstrapSnapshot = parseBootstrapArgs();
 
-function sanitizeNodeOptions(nodeOptions) {
-  if (!nodeOptions) return nodeOptions;
-  return nodeOptions
-    .replace(/\s*--localstorage-file(?:(?:\s*=\s*|\s+)\S+)?/g, '')
+/**
+ * Prepare NODE_OPTIONS for child processes in DEV mode.
+ * - Removes any existing --localstorage-file flags (with or without values)
+ * - Adds --localstorage-file with a valid temp path to prevent warnings from
+ *   react-devtools-core when it tries to access localStorage
+ */
+function prepareNodeOptionsForDev(nodeOptions) {
+  // Remove any existing --localstorage-file flags
+  let sanitized = (nodeOptions || '')
+    .replace(/\s*--localstorage-file(?:(?:\s*=\s*|\s+)(?!-)\S+)?/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // Add --localstorage-file with a valid path for DEV mode
+  // This prevents warnings from react-devtools-core accessing localStorage
+  const localStoragePath = join(tmpdir(), 'llxprt-dev-localstorage');
+  const localStorageFlag = `--localstorage-file=${localStoragePath}`;
+
+  return sanitized ? `${sanitized} ${localStorageFlag}` : localStorageFlag;
 }
 
 // check build status, write warnings to file for app to display if needed
@@ -77,19 +91,12 @@ if (experimentalUi) {
   const filteredArgs = args.filter((a) => a !== '--experimental-ui');
   uiArgs.push(...filteredArgs);
 
-  const sanitizedNodeOptionsUi = sanitizeNodeOptions(process.env.NODE_OPTIONS);
   const uiEnv = {
     ...process.env,
     CLI_VERSION: pkg.version,
     DEV: 'true',
+    NODE_OPTIONS: prepareNodeOptionsForDev(process.env.NODE_OPTIONS),
   };
-  if (sanitizedNodeOptionsUi !== process.env.NODE_OPTIONS) {
-    if (sanitizedNodeOptionsUi) {
-      uiEnv.NODE_OPTIONS = sanitizedNodeOptionsUi;
-    } else {
-      delete uiEnv.NODE_OPTIONS;
-    }
-  }
   const uiChild = spawn('bun', uiArgs, {
     stdio: 'inherit',
     env: uiEnv,
@@ -104,19 +111,12 @@ if (experimentalUi) {
   nodeArgs.push('./packages/cli');
   nodeArgs.push(...args);
 
-  const sanitizedNodeOptions = sanitizeNodeOptions(process.env.NODE_OPTIONS);
   const env = {
     ...process.env,
     CLI_VERSION: pkg.version,
     DEV: 'true',
+    NODE_OPTIONS: prepareNodeOptionsForDev(process.env.NODE_OPTIONS),
   };
-  if (sanitizedNodeOptions !== process.env.NODE_OPTIONS) {
-    if (sanitizedNodeOptions) {
-      env.NODE_OPTIONS = sanitizedNodeOptions;
-    } else {
-      delete env.NODE_OPTIONS;
-    }
-  }
 
   if (bootstrapSnapshot.bootstrapArgs.profileName) {
     env.LLXPRT_BOOTSTRAP_PROFILE = bootstrapSnapshot.bootstrapArgs.profileName;
