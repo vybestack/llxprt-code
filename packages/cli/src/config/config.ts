@@ -661,7 +661,7 @@ export async function loadHierarchicalLlxprtMemory(
   debugMode: boolean,
   fileService: FileDiscoveryService,
   settings: Settings,
-  extensionContextFilePaths: string[] = [],
+  extensions: GeminiCLIExtension[],
   folderTrust: boolean,
   memoryImportFormat: 'flat' | 'tree' = 'tree',
   fileFilteringOptions?: FileFilteringOptions,
@@ -687,7 +687,7 @@ export async function loadHierarchicalLlxprtMemory(
     includeDirectoriesToReadGemini,
     debugMode,
     fileService,
-    extensionContextFilePaths,
+    extensions,
     folderTrust,
     memoryImportFormat,
     fileFilteringOptions,
@@ -991,10 +991,6 @@ export async function loadCliConfig(
     setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
   }
 
-  const extensionContextFilePaths = activeExtensions.flatMap(
-    (e) => e.contextFiles,
-  );
-
   const fileService = new FileDiscoveryService(cwd);
 
   const memoryFileFiltering = {
@@ -1039,7 +1035,7 @@ export async function loadCliConfig(
       debugMode,
       fileService,
       effectiveSettings,
-      extensionContextFilePaths,
+      allExtensions,
       trustedFolder,
       memoryImportFormat,
       memoryFileFiltering,
@@ -1048,6 +1044,8 @@ export async function loadCliConfig(
   let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
   const question =
     argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+
+  const extensionContextFilePaths = allExtensions.filter((ext) => ext.isActive).flatMap((ext) => ext.contextFiles);
 
   // Determine approval mode with backward compatibility
   let approvalMode: ApprovalMode;

@@ -1324,7 +1324,7 @@ export const AppContainer = (props: AppContainerProps) => {
         config.getDebugMode(),
         config.getFileService(),
         settings.merged,
-        config.getExtensionContextFilePaths(),
+        config.getExtensions(),
         config.getFolderTrust(),
         settings.merged.ui?.memoryImportFormat || 'tree',
         config.getFileFilteringOptions(),
