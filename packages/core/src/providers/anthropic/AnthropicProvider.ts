@@ -2403,10 +2403,11 @@ export class AnthropicProvider extends BaseProvider {
 
   /**
    * Normalize tool IDs from various formats to Anthropic format.
+   * Sanitizes invalid characters (not matching ^[a-zA-Z0-9_-]+$) by replacing with hyphens.
    */
   private normalizeToAnthropicToolId(id: string): string {
     if (!id) {
-      throw new Error('Tool ID cannot be empty or undefined');
+      return 'toolu_';
     }
 
     if (id.startsWith('toolu_')) {
