@@ -2406,7 +2406,7 @@ export class AnthropicProvider extends BaseProvider {
    */
   private normalizeToAnthropicToolId(id: string): string {
     if (!id) {
-      return 'toolu_';
+      throw new Error('Tool ID cannot be empty or undefined');
     }
 
     if (id.startsWith('toolu_')) {

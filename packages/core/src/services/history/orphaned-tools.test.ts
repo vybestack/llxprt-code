@@ -199,8 +199,8 @@ describe.skip('Orphaned Tool Calls - HistoryService (OBSOLETE - atomic implement
         'turn-test',
         0,
         'anthropic',
-        'orphaned_tool',
         'call_orphaned',
+        'orphaned_tool',
       );
 
       // Add history with orphaned tool call
