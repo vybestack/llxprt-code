@@ -19,8 +19,8 @@ const mockKeytar = vi.hoisted(() => ({
 const mockServiceName = 'service-name';
 const mockCryptoRandomBytesString = 'random-string';
 
-// Mock the dynamic import of 'keytar'
-vi.mock('keytar', () => ({
+// Mock both the main import and keytar compatibility export
+vi.mock('@napi-rs/keyring/keytar', () => ({
   default: mockKeytar,
 }));
 
@@ -35,8 +35,6 @@ describe('KeychainTokenStorage', () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    // Reset the internal state of the keychain-token-storage module
-    vi.resetModules();
     const { KeychainTokenStorage } =
       await import('./keychain-token-storage.js');
     storage = new KeychainTokenStorage(mockServiceName);
@@ -47,7 +45,7 @@ describe('KeychainTokenStorage', () => {
     vi.useRealTimers();
   });
 
-  const validCredentials = {
+  const validCredentials: OAuthCredentials = {
     serverName: 'test-server',
     token: {
       accessToken: 'access-token',
@@ -55,7 +53,7 @@ describe('KeychainTokenStorage', () => {
       expiresAt: Date.now() + 3600000,
     },
     updatedAt: Date.now(),
-  } as OAuthCredentials;
+  };
 
   describe('checkKeychainAvailability', () => {
     it('should return true if keytar is available and functional', async () => {
@@ -108,7 +106,6 @@ describe('KeychainTokenStorage', () => {
 
   describe('with keychain unavailable', () => {
     beforeEach(async () => {
-      // Force keychain to be unavailable
       mockKeytar.setPassword.mockRejectedValue(new Error('keychain error'));
       await storage.checkKeychainAvailability();
     });
@@ -150,7 +147,6 @@ describe('KeychainTokenStorage', () => {
       mockKeytar.getPassword.mockResolvedValue('test');
       mockKeytar.deletePassword.mockResolvedValue(true);
       await storage.checkKeychainAvailability();
-      // Reset mocks after availability check
       vi.resetAllMocks();
     });
 

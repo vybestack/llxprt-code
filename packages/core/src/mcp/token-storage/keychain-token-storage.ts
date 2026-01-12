@@ -26,8 +26,36 @@ type KeytarModule = Keytar | { default: Keytar };
 
 export type KeytarLoader = () => Promise<KeytarModule>;
 
-const defaultKeytarLoader: KeytarLoader = async () =>
-  (await import('keytar')) as KeytarModule;
+const defaultKeytarLoader: KeytarLoader = async () => {
+  const keyring = (await import('@napi-rs/keyring')) as {
+    AsyncEntry: new (
+      service: string,
+      account: string,
+    ) => {
+      getPassword(): Promise<string | null>;
+      setPassword(password: string): Promise<void>;
+      deletePassword(): Promise<boolean>;
+    };
+    findCredentialsAsync: (
+      service: string,
+    ) => Promise<Array<{ account: string; password: string }>>;
+  };
+  return {
+    getPassword: (service: string, account: string) => {
+      const entry = new keyring.AsyncEntry(service, account);
+      return entry.getPassword();
+    },
+    setPassword: (service: string, account: string, password: string) => {
+      const entry = new keyring.AsyncEntry(service, account);
+      return entry.setPassword(password);
+    },
+    deletePassword: (service: string, account: string) => {
+      const entry = new keyring.AsyncEntry(service, account);
+      return entry.deletePassword();
+    },
+    findCredentials: keyring.findCredentialsAsync,
+  } as Keytar;
+};
 let keytarLoader: KeytarLoader = defaultKeytarLoader;
 
 export function setKeytarLoader(loader: KeytarLoader): void {
@@ -61,14 +89,16 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       const isModuleMissing =
         err?.code === 'ERR_MODULE_NOT_FOUND' ||
         err?.code === 'MODULE_NOT_FOUND' ||
-        err?.message?.includes(`'keytar'`);
+        err?.code === 'ERR_DLOPEN_FAILED' ||
+        err?.message?.includes(`'keytar'`) ||
+        err?.message?.includes(`'@napi-rs/keyring'`);
 
       if (isModuleMissing) {
         console.warn(
-          'keytar not available; falling back to encrypted file storage for MCP tokens.',
+          '@napi-rs/keyring not available; falling back to encrypted file storage for MCP tokens.',
         );
       } else {
-        console.error('Failed to load keytar module:', error);
+        console.error('Failed to load @napi-rs/keyring module:', error);
       }
 
       this.keytarModule = null;

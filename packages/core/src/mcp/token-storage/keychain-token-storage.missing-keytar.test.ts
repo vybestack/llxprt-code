@@ -31,7 +31,30 @@ describe('KeychainTokenStorage when keytar is missing', () => {
 
     expect(isAvailable).toBe(false);
     expect(warnSpy).toHaveBeenCalledWith(
-      'keytar not available; falling back to encrypted file storage for MCP tokens.',
+      '@napi-rs/keyring not available; falling back to encrypted file storage for MCP tokens.',
+    );
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('falls back without throwing when native module fails to load (ERR_DLOPEN_FAILED)', async () => {
+    const error = new Error('Cannot load native module');
+    (error as NodeJS.ErrnoException).code = 'ERR_DLOPEN_FAILED';
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    setKeytarLoader(() => Promise.reject(error));
+
+    const storage = new KeychainTokenStorage('service');
+
+    const isAvailable = await storage.checkKeychainAvailability();
+
+    expect(isAvailable).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '@napi-rs/keyring not available; falling back to encrypted file storage for MCP tokens.',
     );
     expect(errorSpy).not.toHaveBeenCalled();
 
