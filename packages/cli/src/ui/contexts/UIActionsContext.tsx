@@ -120,6 +120,19 @@ export interface UIActions {
   ) => void;
   closeSubagentDialog: () => void;
 
+  // Models dialog
+  openModelsDialog: (data?: {
+    initialSearch?: string;
+    initialFilters?: {
+      tools?: boolean;
+      vision?: boolean;
+      reasoning?: boolean;
+      audio?: boolean;
+    };
+    includeDeprecated?: boolean;
+  }) => void;
+  closeModelsDialog: () => void;
+
   // Workspace migration dialog
   onWorkspaceMigrationDialogOpen: () => void;
   onWorkspaceMigrationDialogClose: () => void;

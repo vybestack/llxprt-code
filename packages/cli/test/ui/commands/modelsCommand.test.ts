@@ -4,190 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { modelsCommand } from '../../../src/ui/commands/modelsCommand.js';
-import { CommandContext } from '../../../src/ui/commands/types.js';
+import {
+  CommandContext,
+  OpenDialogActionReturn,
+  ModelsDialogData,
+} from '../../../src/ui/commands/types.js';
 import { LoadedSettings } from '../../../src/config/settings.js';
-import { Logger, type LlxprtModel } from '@vybestack/llxprt-code-core';
+import { Logger } from '@vybestack/llxprt-code-core';
 import { SessionStatsState } from '../../../src/ui/contexts/SessionContext.js';
-
-// Create mock models directly in llxprt format
-const mockLlxprtModels: LlxprtModel[] = [
-  {
-    id: 'openai/gpt-4-turbo',
-    name: 'GPT-4 Turbo',
-    provider: 'OpenAI',
-    providerId: 'openai',
-    providerName: 'OpenAI',
-    modelId: 'gpt-4-turbo',
-    family: 'gpt-4',
-    supportedToolFormats: ['openai'],
-    contextWindow: 128000,
-    maxOutputTokens: 4096,
-    capabilities: {
-      vision: true,
-      audio: false,
-      pdf: false,
-      toolCalling: true,
-      reasoning: false,
-      temperature: true,
-      structuredOutput: true,
-      attachment: true,
-    },
-    pricing: { input: 10, output: 30 },
-    limits: { contextWindow: 128000, maxOutput: 4096 },
-    metadata: {
-      releaseDate: '2024-04-09',
-      openWeights: false,
-      status: 'stable',
-    },
-    envVars: ['OPENAI_API_KEY'],
-  },
-  {
-    id: 'openai/o1-preview',
-    name: 'O1 Preview',
-    provider: 'OpenAI',
-    providerId: 'openai',
-    providerName: 'OpenAI',
-    modelId: 'o1-preview',
-    family: 'o1',
-    supportedToolFormats: ['openai'],
-    contextWindow: 128000,
-    maxOutputTokens: 32768,
-    capabilities: {
-      vision: false,
-      audio: false,
-      pdf: false,
-      toolCalling: false,
-      reasoning: true,
-      temperature: true,
-      structuredOutput: false,
-      attachment: false,
-    },
-    limits: { contextWindow: 128000, maxOutput: 32768 },
-    metadata: {
-      releaseDate: '2024-09-12',
-      openWeights: false,
-      status: 'stable',
-    },
-    envVars: ['OPENAI_API_KEY'],
-  },
-  {
-    id: 'openai/gpt-3.5-turbo-old',
-    name: 'GPT-3.5 Turbo Old',
-    provider: 'OpenAI',
-    providerId: 'openai',
-    providerName: 'OpenAI',
-    modelId: 'gpt-3.5-turbo-old',
-    family: 'gpt-3.5',
-    supportedToolFormats: ['openai'],
-    contextWindow: 4096,
-    maxOutputTokens: 4096,
-    capabilities: {
-      vision: false,
-      audio: false,
-      pdf: false,
-      toolCalling: true,
-      reasoning: false,
-      temperature: true,
-      structuredOutput: false,
-      attachment: false,
-    },
-    limits: { contextWindow: 4096, maxOutput: 4096 },
-    metadata: {
-      releaseDate: '2023-01-01',
-      openWeights: false,
-      status: 'deprecated',
-    },
-    envVars: ['OPENAI_API_KEY'],
-  },
-  {
-    id: 'anthropic/claude-3-5-sonnet',
-    name: 'Claude 3.5 Sonnet',
-    provider: 'Anthropic',
-    providerId: 'anthropic',
-    providerName: 'Anthropic',
-    modelId: 'claude-3-5-sonnet',
-    family: 'claude-3.5',
-    supportedToolFormats: ['anthropic'],
-    contextWindow: 200000,
-    maxOutputTokens: 8192,
-    capabilities: {
-      vision: true,
-      audio: false,
-      pdf: true,
-      toolCalling: true,
-      reasoning: false,
-      temperature: true,
-      structuredOutput: false,
-      attachment: true,
-    },
-    pricing: { input: 3, output: 15 },
-    limits: { contextWindow: 200000, maxOutput: 8192 },
-    metadata: {
-      releaseDate: '2024-06-20',
-      openWeights: false,
-      status: 'stable',
-    },
-    envVars: ['ANTHROPIC_API_KEY'],
-  },
-];
-
-// Mock the registry module
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
-
-  // Create a mock registry class
-  class MockModelsRegistry {
-    private models = new Map<string, LlxprtModel>();
-    private initialized = false;
-
-    constructor() {
-      // Populate with mock models
-      for (const model of mockLlxprtModels) {
-        this.models.set(model.id, model);
-      }
-    }
-
-    isInitialized() {
-      return this.initialized;
-    }
-
-    async initialize() {
-      this.initialized = true;
-    }
-
-    getAll() {
-      return Array.from(this.models.values());
-    }
-
-    getById(id: string) {
-      return this.models.get(id);
-    }
-
-    getByProvider(providerId: string) {
-      return this.getAll().filter((m) => m.providerId === providerId);
-    }
-  }
-
-  let mockRegistryInstance: MockModelsRegistry | null = null;
-
-  return {
-    ...actual,
-    getModelsRegistry: () => {
-      if (!mockRegistryInstance) {
-        mockRegistryInstance = new MockModelsRegistry();
-      }
-      return mockRegistryInstance;
-    },
-    initializeModelsRegistry: async () => {
-      const registry = mockRegistryInstance || new MockModelsRegistry();
-      mockRegistryInstance = registry;
-      await registry.initialize();
-      return registry;
-    },
-  };
-});
 
 // Create mock command context
 function createMockContext(): CommandContext {
@@ -225,10 +51,6 @@ describe('modelsCommand', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   describe('command metadata', () => {
     it('has correct name', () => {
       expect(modelsCommand.name).toBe('models');
@@ -240,191 +62,289 @@ describe('modelsCommand', () => {
     });
   });
 
-  describe('basic listing', () => {
-    it('lists models when no args', async () => {
-      const result = await modelsCommand.action(context, '');
-      expect(result.type).toBe('message');
-      expect(result.messageType).toBe('info');
-      expect(result.content).toContain('openai');
-      expect(result.content).toContain('anthropic');
-    });
-
-    it('shows model count in output', async () => {
-      const result = await modelsCommand.action(context, '');
-      expect(result.content).toMatch(/Total: \d+ models/);
-    });
-
-    it('groups output by provider', async () => {
-      const result = await modelsCommand.action(context, '');
-      expect(result.content).toContain('## openai');
-      expect(result.content).toContain('## anthropic');
-    });
-  });
-
-  describe('filtering', () => {
-    it('filters by search term (model name)', async () => {
-      const result = await modelsCommand.action(context, 'claude');
-      expect(result.content).toContain('claude-3-5-sonnet');
-      expect(result.content).not.toContain('gpt-4-turbo');
-    });
-
-    it('filters by --provider flag', async () => {
-      const result = await modelsCommand.action(context, '--provider openai');
-      expect(result.content).toContain('gpt-4-turbo');
-      expect(result.content).not.toContain('claude');
-    });
-
-    it('filters by -p short flag', async () => {
-      const result = await modelsCommand.action(context, '-p anthropic');
-      expect(result.content).toContain('claude');
-      expect(result.content).not.toContain('gpt');
-    });
-
-    it('filters by --reasoning flag', async () => {
-      const result = await modelsCommand.action(context, '--reasoning');
-      expect(result.content).toContain('o1-preview');
-      // gpt-4-turbo doesn't have reasoning
-      expect(result.content).not.toContain('gpt-4-turbo');
-    });
-
-    it('filters by -r short flag', async () => {
-      const result = await modelsCommand.action(context, '-r');
-      expect(result.content).toContain('o1-preview');
-    });
-
-    it('filters by --tools flag', async () => {
-      const result = await modelsCommand.action(context, '--tools');
-      expect(result.content).toContain('gpt-4-turbo');
-      expect(result.content).toContain('claude-3-5-sonnet');
-      // o1-preview doesn't have tool_call
-      expect(result.content).not.toContain('o1-preview');
-    });
-
-    it('filters by -t short flag', async () => {
-      const result = await modelsCommand.action(context, '-t');
-      expect(result.content).toContain('gpt-4-turbo');
-    });
-
-    it('filters out deprecated models by default', async () => {
-      const result = await modelsCommand.action(context, '');
-      expect(result.content).not.toContain('gpt-3.5-turbo-old');
-    });
-  });
-
-  describe('limit option', () => {
-    it('limits output with --limit N', async () => {
-      const result = await modelsCommand.action(context, '--limit 2');
-      // Should show only 2 models - verify truncation message appears
-      expect(result.content).toBeDefined();
-    });
-
-    it('limits output with -l N', async () => {
-      const result = await modelsCommand.action(context, '-l 1');
-      expect(result.content).toContain('and');
-      expect(result.content).toContain('more');
-    });
-
-    it('defaults to 25 limit', async () => {
-      // With only 4 models in mock, this won't truncate
-      const result = await modelsCommand.action(context, '');
-      expect(result.content).not.toContain('and 0 more');
-    });
-  });
-
-  describe('verbose option', () => {
-    it('shows pricing with --verbose', async () => {
-      const result = await modelsCommand.action(context, '--verbose');
-      // Verbose shows $X/1M for pricing
-      expect(result.content).toContain('$');
-      expect(result.content).toContain('/1M');
-    });
-
-    it('shows pricing with -v', async () => {
-      const result = await modelsCommand.action(context, '-v');
-      expect(result.content).toContain('$');
-    });
-  });
-
-  describe('combined options', () => {
-    it('handles multiple flags combined', async () => {
-      const result = await modelsCommand.action(context, '-p openai -t -v');
-      expect(result.content).toContain('openai');
-      expect(result.content).toContain('$');
-      // Should only show OpenAI models with tools
-    });
-
-    it('handles search term with flags', async () => {
-      const result = await modelsCommand.action(context, 'gpt --tools');
-      expect(result.content).toContain('gpt-4-turbo');
-      expect(result.content).not.toContain('claude');
-    });
-  });
-
-  describe('empty results', () => {
-    it('shows "No models found" when no matches', async () => {
-      const result = await modelsCommand.action(
+  describe('dialog action return', () => {
+    it('returns dialog type with models dialog', () => {
+      const result = modelsCommand.action(
         context,
-        'nonexistent-model-xyz',
-      );
-      expect(result.content).toContain('No models found');
+        '',
+      ) as OpenDialogActionReturn;
+      expect(result.type).toBe('dialog');
+      expect(result.dialog).toBe('models');
+    });
+
+    it('returns dialogData object', () => {
+      const result = modelsCommand.action(
+        context,
+        '',
+      ) as OpenDialogActionReturn;
+      expect(result.dialogData).toBeDefined();
+    });
+
+    it('returns empty filters when no args', () => {
+      const result = modelsCommand.action(
+        context,
+        '',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialSearch).toBeUndefined();
+      expect(data.initialFilters).toEqual({
+        tools: false,
+        vision: false,
+        reasoning: false,
+        audio: false,
+      });
+      expect(data.includeDeprecated).toBe(false);
     });
   });
 
-  describe('error handling', () => {
-    it('returns message type on any input', async () => {
-      // The mock registry always has models, so we just verify the command
-      // returns a proper message response and doesn't crash
-      const result = await modelsCommand.action(context, '');
-      expect(result.type).toBe('message');
-      expect(result.messageType).toBe('info');
+  describe('search term parsing', () => {
+    it('parses positional search term', () => {
+      const result = modelsCommand.action(
+        context,
+        'gpt-4',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialSearch).toBe('gpt-4');
+    });
+
+    it('parses search term with provider flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '--provider openai',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      // provider sets providerOverride, not initialSearch
+      expect(data.providerOverride).toBe('openai');
+    });
+
+    it('prioritizes search term over provider', () => {
+      const result = modelsCommand.action(
+        context,
+        'claude --provider anthropic',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      // search takes priority
+      expect(data.initialSearch).toBe('claude');
     });
   });
 
-  describe('usage help', () => {
-    it('shows usage line in output', async () => {
-      const result = await modelsCommand.action(context, '');
-      expect(result.content).toContain('Usage:');
-      expect(result.content).toContain('/models');
+  describe('capability filter parsing', () => {
+    it('parses --tools flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '--tools',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.tools).toBe(true);
+      expect(data.initialFilters?.vision).toBe(false);
+      expect(data.initialFilters?.reasoning).toBe(false);
+      expect(data.initialFilters?.audio).toBe(false);
+    });
+
+    it('parses -t short flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '-t',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.tools).toBe(true);
+    });
+
+    it('parses --vision flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '--vision',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.vision).toBe(true);
+    });
+
+    it('parses --reasoning flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '--reasoning',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.reasoning).toBe(true);
+    });
+
+    it('parses -r short flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '-r',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.reasoning).toBe(true);
+    });
+
+    it('parses --audio flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '--audio',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.audio).toBe(true);
+    });
+
+    it('parses -a short flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '-a',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.audio).toBe(true);
+    });
+
+    it('parses multiple capability flags', () => {
+      const result = modelsCommand.action(
+        context,
+        '--tools --vision --reasoning',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.tools).toBe(true);
+      expect(data.initialFilters?.vision).toBe(true);
+      expect(data.initialFilters?.reasoning).toBe(true);
+      expect(data.initialFilters?.audio).toBe(false);
     });
   });
-});
 
-describe('argument parsing', () => {
-  // Test the parseArgs function indirectly through command behavior
-  let context: CommandContext;
+  describe('--all flag parsing', () => {
+    it('parses --all flag to showAllProviders', () => {
+      const result = modelsCommand.action(
+        context,
+        '--all',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      // --all shows all providers, not deprecated models
+      expect(data.showAllProviders).toBe(true);
+    });
 
-  beforeEach(() => {
-    context = createMockContext();
-    vi.clearAllMocks();
+    it('defaults includeDeprecated to false', () => {
+      const result = modelsCommand.action(
+        context,
+        '',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.includeDeprecated).toBe(false);
+    });
   });
 
-  it('parses positional search term', async () => {
-    const result = await modelsCommand.action(context, 'gpt');
-    expect(result.content).toContain('gpt');
+  describe('combined args parsing', () => {
+    it('parses search term with tools filter', () => {
+      const result = modelsCommand.action(
+        context,
+        'gpt --tools',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialSearch).toBe('gpt');
+      expect(data.initialFilters?.tools).toBe(true);
+    });
+
+    it('parses provider with reasoning and all', () => {
+      const result = modelsCommand.action(
+        context,
+        '-p openai -r --all',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.providerOverride).toBe('openai');
+      expect(data.initialFilters?.reasoning).toBe(true);
+      expect(data.showAllProviders).toBe(true);
+    });
+
+    it('parses all capability flags together', () => {
+      const result = modelsCommand.action(
+        context,
+        '-t -r -a --vision',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.tools).toBe(true);
+      expect(data.initialFilters?.vision).toBe(true);
+      expect(data.initialFilters?.reasoning).toBe(true);
+      expect(data.initialFilters?.audio).toBe(true);
+    });
   });
 
-  it('parses long flags', async () => {
-    const result = await modelsCommand.action(
-      context,
-      '--provider openai --reasoning',
-    );
-    // No models match both openai AND reasoning (o1 is openai + reasoning)
-    expect(result.type).toBe('message');
+  describe('ignored flags', () => {
+    it('ignores --limit flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '--limit 10',
+      ) as OpenDialogActionReturn;
+      expect(result.type).toBe('dialog');
+      // Should not crash, limit is ignored
+    });
+
+    it('ignores -l short flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '-l 5',
+      ) as OpenDialogActionReturn;
+      expect(result.type).toBe('dialog');
+    });
+
+    it('ignores --verbose flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '--verbose',
+      ) as OpenDialogActionReturn;
+      expect(result.type).toBe('dialog');
+    });
+
+    it('ignores -v short flag', () => {
+      const result = modelsCommand.action(
+        context,
+        '-v',
+      ) as OpenDialogActionReturn;
+      expect(result.type).toBe('dialog');
+    });
+
+    it('ignores unknown flags gracefully', () => {
+      const result = modelsCommand.action(
+        context,
+        '--unknown-flag value',
+      ) as OpenDialogActionReturn;
+      expect(result.type).toBe('dialog');
+    });
   });
 
-  it('parses short flags', async () => {
-    const result = await modelsCommand.action(context, '-p openai -r');
-    expect(result.type).toBe('message');
-  });
+  describe('example command args', () => {
+    it('/models --tools --provider openai', () => {
+      const result = modelsCommand.action(
+        context,
+        '--tools --provider openai',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.providerOverride).toBe('openai');
+      expect(data.initialFilters?.tools).toBe(true);
+    });
 
-  it('handles mixed short and long flags', async () => {
-    const result = await modelsCommand.action(context, '-p openai --verbose');
-    expect(result.content).toContain('openai');
-  });
+    it('/models --tools --reasoning', () => {
+      const result = modelsCommand.action(
+        context,
+        '--tools --reasoning',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialFilters?.tools).toBe(true);
+      expect(data.initialFilters?.reasoning).toBe(true);
+    });
 
-  it('ignores unknown flags', async () => {
-    const result = await modelsCommand.action(context, '--unknown-flag value');
-    // Should not crash, just ignore
-    expect(result.type).toBe('message');
+    it('/models gpt-4o', () => {
+      const result = modelsCommand.action(
+        context,
+        'gpt-4o',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialSearch).toBe('gpt-4o');
+    });
+
+    it('/models claude --vision', () => {
+      const result = modelsCommand.action(
+        context,
+        'claude --vision',
+      ) as OpenDialogActionReturn;
+      const data = result.dialogData as ModelsDialogData;
+      expect(data.initialSearch).toBe('claude');
+      expect(data.initialFilters?.vision).toBe(true);
+    });
   });
 });

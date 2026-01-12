@@ -141,6 +141,27 @@ export interface LoggingDialogData {
   entries: unknown[];
 }
 
+/**
+ * Type-safe dialog data for models dialog.
+ */
+export interface ModelsDialogData {
+  /** Pre-fill search term (from positional arg) */
+  initialSearch?: string;
+  /** Pre-set capability filters */
+  initialFilters?: {
+    tools?: boolean;
+    vision?: boolean;
+    reasoning?: boolean;
+    audio?: boolean;
+  };
+  /** Include deprecated models */
+  includeDeprecated?: boolean;
+  /** Override provider filter from --provider arg */
+  providerOverride?: string | null;
+  /** Show all providers (from --all flag) */
+  showAllProviders?: boolean;
+}
+
 /** All supported dialog types */
 export type DialogType =
   | 'auth'
@@ -155,12 +176,14 @@ export type DialogType =
   | 'loadProfile'
   | 'createProfile'
   | 'saveProfile'
-  | 'subagent';
+  | 'subagent'
+  | 'models';
 
 /** Map dialog types to their associated data types for type-safe access */
 export interface DialogDataMap {
   subagent: SubagentDialogData;
   logging: LoggingDialogData;
+  models: ModelsDialogData;
 }
 
 /**
@@ -174,9 +197,10 @@ export interface OpenDialogActionReturn {
    * Dialog-specific data. Type depends on dialog:
    * - 'subagent': SubagentDialogData
    * - 'logging': LoggingDialogData
+   * - 'models': ModelsDialogData
    * - others: undefined
    */
-  dialogData?: SubagentDialogData | LoggingDialogData;
+  dialogData?: SubagentDialogData | LoggingDialogData | ModelsDialogData;
 }
 
 /**

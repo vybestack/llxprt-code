@@ -75,6 +75,7 @@ export interface UIState {
   isPermissionsDialogOpen: boolean;
   isLoggingDialogOpen: boolean;
   isSubagentDialogOpen: boolean;
+  isModelsDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];
@@ -89,6 +90,20 @@ export interface UIState {
   loggingDialogData: { entries: unknown[] };
   subagentDialogInitialView?: SubagentView;
   subagentDialogInitialName?: string;
+  modelsDialogData?: {
+    initialSearch?: string;
+    initialFilters?: {
+      tools?: boolean;
+      vision?: boolean;
+      reasoning?: boolean;
+      audio?: boolean;
+    };
+    includeDeprecated?: boolean;
+    /** Override provider filter from --provider arg */
+    providerOverride?: string | null;
+    /** Show all providers (from --all flag) */
+    showAllProviders?: boolean;
+  };
 
   // Confirmation requests
   shellConfirmationRequest: ShellConfirmationRequest | null;

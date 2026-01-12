@@ -895,6 +895,22 @@ export const AppContainer = (props: AppContainerProps) => {
     string | undefined
   >(undefined);
 
+  // Models dialog state
+  const [isModelsDialogOpen, setIsModelsDialogOpen] = useState(false);
+  const [modelsDialogData, setModelsDialogData] = useState<
+    | {
+        initialSearch?: string;
+        initialFilters?: {
+          tools?: boolean;
+          vision?: boolean;
+          reasoning?: boolean;
+          audio?: boolean;
+        };
+        includeDeprecated?: boolean;
+      }
+    | undefined
+  >(undefined);
+
   // Queue error message state (for preventing slash/shell commands from being queued)
   const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(
     null,
@@ -922,6 +938,28 @@ export const AppContainer = (props: AppContainerProps) => {
     setIsSubagentDialogOpen(false);
     setSubagentDialogInitialView(undefined);
     setSubagentDialogInitialName(undefined);
+  }, []);
+
+  const openModelsDialog = useCallback(
+    (data?: {
+      initialSearch?: string;
+      initialFilters?: {
+        tools?: boolean;
+        vision?: boolean;
+        reasoning?: boolean;
+        audio?: boolean;
+      };
+      includeDeprecated?: boolean;
+    }) => {
+      setModelsDialogData(data);
+      setIsModelsDialogOpen(true);
+    },
+    [],
+  );
+
+  const closeModelsDialog = useCallback(() => {
+    setIsModelsDialogOpen(false);
+    setModelsDialogData(undefined);
   }, []);
 
   const {
@@ -1408,6 +1446,7 @@ export const AppContainer = (props: AppContainerProps) => {
       openSettingsDialog,
       openLoggingDialog,
       openSubagentDialog,
+      openModelsDialog,
       openProviderModelDialog,
       openPermissionsDialog,
       openProviderDialog,
@@ -1428,6 +1467,7 @@ export const AppContainer = (props: AppContainerProps) => {
       openSettingsDialog,
       openLoggingDialog,
       openSubagentDialog,
+      openModelsDialog,
       openProviderModelDialog,
       openPermissionsDialog,
       openProviderDialog,
@@ -2071,6 +2111,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isPermissionsDialogOpen,
     isLoggingDialogOpen,
     isSubagentDialogOpen,
+    isModelsDialogOpen,
 
     // Dialog data
     providerOptions: isCreateProfileDialogOpen
@@ -2087,6 +2128,7 @@ export const AppContainer = (props: AppContainerProps) => {
     loggingDialogData,
     subagentDialogInitialView,
     subagentDialogInitialName,
+    modelsDialogData,
 
     // Confirmation requests
     shellConfirmationRequest,
@@ -2263,6 +2305,10 @@ export const AppContainer = (props: AppContainerProps) => {
       openSubagentDialog,
       closeSubagentDialog,
 
+      // Models dialog
+      openModelsDialog,
+      closeModelsDialog,
+
       // Workspace migration dialog
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
@@ -2351,6 +2397,8 @@ export const AppContainer = (props: AppContainerProps) => {
       closeLoggingDialog,
       openSubagentDialog,
       closeSubagentDialog,
+      openModelsDialog,
+      closeModelsDialog,
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
       openPrivacyNotice,

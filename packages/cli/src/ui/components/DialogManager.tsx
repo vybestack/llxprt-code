@@ -5,8 +5,9 @@
  */
 
 import { Box, Text } from 'ink';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -31,6 +32,7 @@ import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js'
 import { LoggingDialog } from './LoggingDialog.js';
 import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
+import { ModelsDialog } from './ModelsDialog.js';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
@@ -55,13 +57,50 @@ export const DialogManager = ({
 }: DialogManagerProps) => {
   const uiState = useUIState();
   const uiActions = useUIActions();
+  const runtime = useRuntimeApi();
   const { constrainHeight, terminalHeight, mainAreaWidth } = uiState;
   // staticExtraHeight not yet implemented in LLxprt
   const staticExtraHeight = 0;
 
+  // Get current provider for ModelsDialog
+  const currentProvider = useMemo(() => {
+    try {
+      return runtime.getActiveProviderName() || null;
+    } catch {
+      return null;
+    }
+  }, [runtime]);
+
   const handlePrivacyNoticeExit = useCallback(() => {
     uiActions.handlePrivacyNoticeExit();
   }, [uiActions]);
+
+  // Handler for ModelsDialog selection
+  const handleModelsDialogSelect = useCallback(
+    async (model: { modelId: string }) => {
+      try {
+        const result = await runtime.setActiveModel(model.modelId);
+        addItem(
+          {
+            type: 'info',
+            text: `Switched from ${result.previousModel ?? 'unknown'} to ${result.nextModel} in provider '${result.providerName}'`,
+          },
+          Date.now(),
+        );
+      } catch (e) {
+        const status = runtime.getActiveProviderStatus();
+        addItem(
+          {
+            type: 'error',
+            text: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
+          },
+          Date.now(),
+        );
+      }
+      uiActions.closeModelsDialog();
+    },
+    [runtime, addItem, uiActions],
+  );
 
   // TODO: IdeTrustChangeDialog not yet ported from upstream
   // if (uiState.showIdeRestartPrompt) {
@@ -331,6 +370,23 @@ export const DialogManager = ({
         initialView={uiState.subagentDialogInitialView ?? SubagentView.MENU}
         initialSubagentName={uiState.subagentDialogInitialName}
       />
+    );
+  }
+
+  if (uiState.isModelsDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <ModelsDialog
+          onSelect={handleModelsDialogSelect}
+          onClose={uiActions.closeModelsDialog}
+          initialSearch={uiState.modelsDialogData?.initialSearch}
+          initialFilters={uiState.modelsDialogData?.initialFilters}
+          includeDeprecated={uiState.modelsDialogData?.includeDeprecated}
+          currentProvider={currentProvider}
+          initialProviderFilter={uiState.modelsDialogData?.providerOverride}
+          showAllProviders={uiState.modelsDialogData?.showAllProviders}
+        />
+      </Box>
     );
   }
 

@@ -166,6 +166,7 @@ export const DefaultAppLayout = ({
     uiState.isToolsDialogOpen ||
     uiState.isLoggingDialogOpen ||
     uiState.isSubagentDialogOpen ||
+    uiState.isModelsDialogOpen ||
     uiState.showPrivacyNotice;
 
   if (quittingMessages) {

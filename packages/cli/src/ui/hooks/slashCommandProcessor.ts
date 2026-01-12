@@ -37,6 +37,7 @@ import {
   type CommandContext,
   type SlashCommand,
   type SubagentDialogData,
+  type ModelsDialogData,
 } from '../commands/types.js';
 import { CommandService } from '../../services/CommandService.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
@@ -63,6 +64,7 @@ interface SlashCommandProcessorActions {
     initialView?: SubagentView,
     initialName?: string,
   ) => void;
+  openModelsDialog: (data?: ModelsDialogData) => void;
   openProviderModelDialog: () => void;
   openPermissionsDialog: () => void;
   openProviderDialog: () => void;
@@ -511,6 +513,14 @@ export const useSlashCommandProcessor = (
                         subagentData?.initialView,
                         subagentData?.initialSubagentName,
                       );
+                      return { type: 'handled' };
+                    }
+                    case 'models': {
+                      // Type-safe access via discriminated union - dialogData is ModelsDialogData when dialog is 'models'
+                      const modelsData = result.dialogData as
+                        | ModelsDialogData
+                        | undefined;
+                      actions.openModelsDialog(modelsData);
                       return { type: 'handled' };
                     }
                     default: {
