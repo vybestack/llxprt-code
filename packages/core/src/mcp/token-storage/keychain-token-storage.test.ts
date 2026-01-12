@@ -5,24 +5,23 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { KeychainTokenStorage } from './keychain-token-storage.js';
+import {
+  KeychainTokenStorage,
+  setKeytarLoader,
+  resetKeytarLoader,
+} from './keychain-token-storage.js';
 import type { OAuthCredentials } from './types.js';
 
-// Hoist the mock to be available in the vi.mock factory
-const mockKeytar = vi.hoisted(() => ({
+// Create mock keytar functions
+const mockKeytar = {
   getPassword: vi.fn(),
   setPassword: vi.fn(),
   deletePassword: vi.fn(),
   findCredentials: vi.fn(),
-}));
+};
 
 const mockServiceName = 'service-name';
 const mockCryptoRandomBytesString = 'random-string';
-
-// Mock the dynamic import of 'keytar'
-vi.mock('keytar', () => ({
-  default: mockKeytar,
-}));
 
 vi.mock('node:crypto', () => ({
   randomBytes: vi.fn(() => ({
@@ -35,19 +34,18 @@ describe('KeychainTokenStorage', () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    // Reset the internal state of the keychain-token-storage module
-    vi.resetModules();
-    const { KeychainTokenStorage } =
-      await import('./keychain-token-storage.js');
+    // Inject the mock keytar via setKeytarLoader
+    setKeytarLoader(() => Promise.resolve(mockKeytar));
     storage = new KeychainTokenStorage(mockServiceName);
   });
 
   afterEach(() => {
+    resetKeytarLoader();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
-  const validCredentials = {
+  const validCredentials: OAuthCredentials = {
     serverName: 'test-server',
     token: {
       accessToken: 'access-token',
@@ -55,7 +53,7 @@ describe('KeychainTokenStorage', () => {
       expiresAt: Date.now() + 3600000,
     },
     updatedAt: Date.now(),
-  } as OAuthCredentials;
+  };
 
   describe('checkKeychainAvailability', () => {
     it('should return true if keytar is available and functional', async () => {
@@ -108,7 +106,6 @@ describe('KeychainTokenStorage', () => {
 
   describe('with keychain unavailable', () => {
     beforeEach(async () => {
-      // Force keychain to be unavailable
       mockKeytar.setPassword.mockRejectedValue(new Error('keychain error'));
       await storage.checkKeychainAvailability();
     });
@@ -150,7 +147,6 @@ describe('KeychainTokenStorage', () => {
       mockKeytar.getPassword.mockResolvedValue('test');
       mockKeytar.deletePassword.mockResolvedValue(true);
       await storage.checkKeychainAvailability();
-      // Reset mocks after availability check
       vi.resetAllMocks();
     });
 

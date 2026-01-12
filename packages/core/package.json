@@ -22,7 +22,6 @@
   ],
   "dependencies": {
     "@ai-sdk/openai": "^2.0.74",
-    "ai": "^5.0.104",
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
     "@google/genai": "1.16.0",
@@ -41,6 +40,7 @@
     "@types/glob": "^8.1.0",
     "@types/html-to-text": "^9.0.4",
     "@xterm/headless": "5.5.0",
+    "ai": "^5.0.104",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.0",
     "chardet": "^2.1.0",
@@ -83,7 +83,7 @@
     "@lydell/node-pty-linux-x64": "1.1.0",
     "@lydell/node-pty-win32-arm64": "1.1.0",
     "@lydell/node-pty-win32-x64": "1.1.0",
-    "keytar": "^7.9.0",
+    "@napi-rs/keyring": "^1.2.0",
     "node-pty": "^1.0.0"
   },
   "devDependencies": {
