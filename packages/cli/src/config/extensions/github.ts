@@ -15,7 +15,7 @@ import * as os from 'node:os';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EXTENSIONS_CONFIG_FILENAME, loadExtension } from '../extension.js';
+import { EXTENSIONS_CONFIG_FILENAME, EXTENSIONS_CONFIG_FILENAME_FALLBACK, loadExtension } from '../extension.js';
 import * as tar from 'tar';
 import extract from 'extract-zip';
 
@@ -315,9 +315,12 @@ export async function downloadFromGitHubRelease(
       const lonelyDir = entries.find((entry) => entry.isDirectory());
       if (
         lonelyDir &&
-        fs.existsSync(
+        (fs.existsSync(
           path.join(destination, lonelyDir.name, EXTENSIONS_CONFIG_FILENAME),
-        )
+        ) ||
+          fs.existsSync(
+            path.join(destination, lonelyDir.name, EXTENSIONS_CONFIG_FILENAME_FALLBACK),
+          ))
       ) {
         const dirPathToExtract = path.join(destination, lonelyDir.name);
         const extractedDirFiles = await fs.promises.readdir(dirPathToExtract);

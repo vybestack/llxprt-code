@@ -32,6 +32,7 @@ export { ExtensionEnablementManager } from './extensions/extensionEnablement.js'
 export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
 
 export const EXTENSIONS_CONFIG_FILENAME = 'llxprt-extension.json';
+export const EXTENSIONS_CONFIG_FILENAME_FALLBACK = 'gemini-extension.json';
 export const INSTALL_METADATA_FILENAME = '.llxprt-extension-install.json';
 
 /**
@@ -212,13 +213,20 @@ export function loadExtension(
     effectiveExtensionPath = installMetadata.source;
   }
 
-  const configFilePath = path.join(
+  // Try llxprt-extension.json first, then fall back to gemini-extension.json
+  let configFilePath = path.join(
     effectiveExtensionPath,
     EXTENSIONS_CONFIG_FILENAME,
   );
   if (!fs.existsSync(configFilePath)) {
+    configFilePath = path.join(
+      effectiveExtensionPath,
+      EXTENSIONS_CONFIG_FILENAME_FALLBACK,
+    );
+  }
+  if (!fs.existsSync(configFilePath)) {
     console.error(
-      `Warning: extension directory ${effectiveExtensionPath} does not contain a config file ${configFilePath}.`,
+      `Warning: extension directory ${effectiveExtensionPath} does not contain a config file (${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK}).`,
     );
     return null;
   }
@@ -506,7 +514,7 @@ export async function installOrUpdateExtension(
     });
     if (!newExtensionConfig) {
       throw new Error(
-        `Invalid extension at ${installMetadata.source}. Please make sure it has a valid llxprt-extension.json file.`,
+        `Invalid extension at ${installMetadata.source}. Please make sure it has a valid ${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK} file.`,
       );
     }
 
@@ -648,7 +656,11 @@ export async function loadExtensionConfig(
   context: LoadExtensionContext,
 ): Promise<ExtensionConfig | null> {
   const { extensionDir, workspaceDir } = context;
-  const configFilePath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME);
+  // Try llxprt-extension.json first, then fall back to gemini-extension.json
+  let configFilePath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME);
+  if (!fs.existsSync(configFilePath)) {
+    configFilePath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME_FALLBACK);
+  }
   if (!fs.existsSync(configFilePath)) {
     return null;
   }
