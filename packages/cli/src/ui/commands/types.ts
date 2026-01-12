@@ -141,6 +141,14 @@ export interface LoggingDialogData {
   entries: unknown[];
 }
 
+/**
+ * Type-safe dialog data for profile dialogs.
+ */
+export interface ProfileDialogData {
+  /** Name of the profile to display/edit */
+  profileName?: string;
+}
+
 /** All supported dialog types */
 export type DialogType =
   | 'auth'
@@ -155,12 +163,17 @@ export type DialogType =
   | 'loadProfile'
   | 'createProfile'
   | 'saveProfile'
-  | 'subagent';
+  | 'subagent'
+  | 'profileList'
+  | 'profileDetail'
+  | 'profileEditor';
 
 /** Map dialog types to their associated data types for type-safe access */
 export interface DialogDataMap {
   subagent: SubagentDialogData;
   logging: LoggingDialogData;
+  profileDetail: ProfileDialogData;
+  profileEditor: ProfileDialogData;
 }
 
 /**
@@ -174,9 +187,10 @@ export interface OpenDialogActionReturn {
    * Dialog-specific data. Type depends on dialog:
    * - 'subagent': SubagentDialogData
    * - 'logging': LoggingDialogData
+   * - 'profileDetail'/'profileEditor': ProfileDialogData
    * - others: undefined
    */
-  dialogData?: SubagentDialogData | LoggingDialogData;
+  dialogData?: SubagentDialogData | LoggingDialogData | ProfileDialogData;
 }
 
 /**

@@ -78,6 +78,21 @@ export interface UIActions {
   openCreateProfileDialog: () => void;
   exitCreateProfileDialog: () => void;
 
+  // Profile management dialogs
+  openProfileListDialog: () => void;
+  closeProfileListDialog: () => void;
+  viewProfileDetail: (profileName: string, openedDirectly?: boolean) => void;
+  closeProfileDetailDialog: () => void;
+  loadProfileFromDetail: (profileName: string) => void;
+  deleteProfileFromDetail: (profileName: string) => void;
+  setProfileAsDefault: (profileName: string) => void;
+  openProfileEditor: (profileName: string, openedDirectly?: boolean) => void;
+  closeProfileEditor: () => void;
+  saveProfileFromEditor: (
+    profileName: string,
+    updatedProfile: unknown,
+  ) => Promise<void>;
+
   // Tools dialog
   openToolsDialog: (action: 'enable' | 'disable') => void;
   handleToolsSelect: (tool: string) => void;

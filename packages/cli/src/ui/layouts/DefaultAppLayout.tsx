@@ -163,6 +163,9 @@ export const DefaultAppLayout = ({
     uiState.isProviderModelDialogOpen ||
     uiState.isLoadProfileDialogOpen ||
     uiState.isCreateProfileDialogOpen ||
+    uiState.isProfileListDialogOpen ||
+    uiState.isProfileDetailDialogOpen ||
+    uiState.isProfileEditorDialogOpen ||
     uiState.isToolsDialogOpen ||
     uiState.isLoggingDialogOpen ||
     uiState.isSubagentDialogOpen ||

@@ -1207,6 +1207,11 @@ export async function listSavedProfiles(): Promise<string[]> {
   return manager.listProfiles();
 }
 
+export async function getProfileByName(profileName: string): Promise<Profile> {
+  const manager = new ProfileManager();
+  return manager.loadProfile(profileName);
+}
+
 export function getActiveProfileName(): string | null {
   const { settingsService } = getCliRuntimeServices();
   if (typeof settingsService.getCurrentProfileName === 'function') {
