@@ -30,9 +30,10 @@ describe('AnthropicProvider.normalizeToAnthropicToolId', () => {
     expect(result).toBe('toolu_ghi012');
   });
 
-  it('handles empty IDs gracefully', () => {
+  it('handles empty IDs gracefully by generating a fallback', () => {
     const provider = new AnthropicProvider('test-key') as TestAnthropicProvider;
     const result = provider.normalizeToAnthropicToolId('');
-    expect(result).toBe('toolu_');
+    // When ID is empty, a deterministic fallback is generated
+    expect(result).toMatch(/^toolu_[a-f0-9]{16}$/);
   });
 });
