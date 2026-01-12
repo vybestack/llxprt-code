@@ -673,6 +673,13 @@ export const AppContainer = (props: AppContainerProps) => {
       return;
     }
 
+    const geminiClient = config.getGeminiClient();
+    if (geminiClient) {
+      geminiClient.resetChat().catch((err) => {
+        debug.error('Failed to initialize chat for session restore:', err);
+      });
+    }
+
     const TIMEOUT_MS = 30000; // 30 second timeout
 
     const timeout = setTimeout(() => {
