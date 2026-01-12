@@ -8,12 +8,15 @@
 export * from './config/config.js';
 export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
-
-// Export policy engine
-export * from './policy/types.js';
-export * from './policy/policy-engine.js';
-export * from './policy/stable-stringify.js';
+export * from './config/schedulerSingleton.js';
 export * from './policy/config.js';
+export * from './policy/index.js';
+export { PolicyEngine } from './policy/policy-engine.js';
+export {
+  PolicyDecision,
+  PolicyRule,
+  type PolicyEngineConfig,
+} from './policy/types.js';
 
 // Export message bus
 export * from './confirmation-bus/types.js';

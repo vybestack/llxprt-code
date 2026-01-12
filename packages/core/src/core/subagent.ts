@@ -11,7 +11,11 @@
  */
 import { reportError } from '../utils/errorReporting.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { Config, ApprovalMode } from '../config/config.js';
+import {
+  Config,
+  ApprovalMode,
+  type SchedulerCallbacks,
+} from '../config/config.js';
 import {
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
@@ -41,14 +45,13 @@ import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js'
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import { TodoStore } from '../tools/todo-store.js';
+import type { SubagentSchedulerFactory } from './subagentScheduler.js';
+import { ToolErrorType } from '../tools/tool-error.js';
 import { type ToolResultDisplay } from '../tools/tools.js';
 import {
-  CoreToolScheduler,
   type CompletedToolCall,
   type OutputUpdateHandler,
 } from './coreToolScheduler.js';
-import type { SubagentSchedulerFactory } from './subagentScheduler.js';
-import { ToolErrorType } from '../tools/tool-error.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
 
@@ -684,21 +687,45 @@ export class SubAgentScope {
       }
     };
 
-    const scheduler = options?.schedulerFactory
-      ? options.schedulerFactory({
-          schedulerConfig,
-          onAllToolCallsComplete: handleCompletion,
-          outputUpdateHandler,
-          onToolCallsUpdate: undefined,
-        })
-      : new CoreToolScheduler({
-          config: schedulerConfig,
-          outputUpdateHandler,
-          onAllToolCallsComplete: handleCompletion,
-          onToolCallsUpdate: undefined,
-          getPreferredEditor: () => undefined,
-          onEditorClose: () => {},
-        });
+    const schedulerPromise = options?.schedulerFactory
+      ? Promise.resolve(
+          options.schedulerFactory({
+            schedulerConfig,
+            onAllToolCallsComplete: handleCompletion,
+            outputUpdateHandler,
+            onToolCallsUpdate: undefined,
+          }),
+        )
+      : (async () => {
+          const sessionId = schedulerConfig.getSessionId();
+          return await schedulerConfig.getOrCreateScheduler(sessionId, {
+            outputUpdateHandler,
+            onAllToolCallsComplete: handleCompletion,
+            onToolCallsUpdate: undefined,
+            getPreferredEditor: () => undefined,
+            onEditorClose: () => {},
+          });
+        })();
+
+    let scheduler: Awaited<typeof schedulerPromise>;
+    try {
+      scheduler = await schedulerPromise;
+    } catch (error) {
+      this.logger.error(
+        () =>
+          `Subagent ${this.subagentId} failed to create scheduler: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+      throw error;
+    }
+
+    const schedulerDispose = options?.schedulerFactory
+      ? typeof scheduler.dispose === 'function'
+        ? scheduler.dispose.bind(scheduler)
+        : async () => {}
+      : async () =>
+          schedulerConfig.disposeScheduler(schedulerConfig.getSessionId());
 
     const startTime = Date.now();
     let turnCounter = 0;
@@ -922,6 +949,16 @@ export class SubAgentScope {
       this.finalizeOutput();
       throw error;
     } finally {
+      try {
+        await schedulerDispose();
+      } catch (error) {
+        this.logger.warn(
+          () =>
+            `Subagent ${this.subagentId} failed to dispose scheduler: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+      }
       this.parentAbortCleanup?.();
       this.parentAbortCleanup = undefined;
       this.activeAbortController = null;
@@ -1444,6 +1481,13 @@ export class SubAgentScope {
           : ApprovalMode.DEFAULT,
       getMessageBus: () => this.config.getMessageBus(),
       getPolicyEngine: () => this.config.getPolicyEngine(),
+      getOrCreateScheduler: (
+        sessionId: string,
+        callbacks: SchedulerCallbacks,
+      ) => this.config.getOrCreateScheduler(sessionId, callbacks),
+      disposeScheduler: (sessionId: string) => {
+        this.config.disposeScheduler(sessionId);
+      },
     } as unknown as Config;
   }
 

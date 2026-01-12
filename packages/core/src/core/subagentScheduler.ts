@@ -22,4 +22,5 @@ export type SubagentSchedulerFactory = (args: {
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
   ): Promise<void> | void;
+  dispose?: () => void;
 };

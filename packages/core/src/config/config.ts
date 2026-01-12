@@ -82,6 +82,11 @@ import {
 } from '../services/fileSystemService.js';
 import { ProfileManager } from './profileManager.js';
 import { SubagentManager } from './subagentManager.js';
+import {
+  getOrCreateScheduler as _getOrCreateScheduler,
+  disposeScheduler as _disposeScheduler,
+  type SchedulerCallbacks,
+} from './schedulerSingleton.js';
 
 // Re-export OAuth config type
 export type { MCPOAuthConfig, AnyToolInvocation };
@@ -1828,6 +1833,21 @@ export class Config {
       unregistered: this.allPotentialTools.filter((t) => !t.isRegistered),
     };
   }
+
+  async getOrCreateScheduler(
+    sessionId: string,
+    callbacks: SchedulerCallbacks,
+  ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
+    return _getOrCreateScheduler(this, sessionId, callbacks);
+  }
+
+  disposeScheduler(sessionId: string): void {
+    _disposeScheduler(sessionId);
+  }
 }
+
+// Re-export SchedulerCallbacks for external use
+export { type SchedulerCallbacks };
+
 // Export model constants for use in CLI
 export { DEFAULT_GEMINI_FLASH_MODEL };

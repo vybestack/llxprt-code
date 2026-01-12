@@ -114,6 +114,18 @@ const coreMocks = vi.hoisted(() => {
     uiTelemetryService,
     SessionMetrics: class {},
     ModelMetrics: class {},
+    DebugLogger: class {
+      static enabled = false;
+      log = vi.fn();
+      debug = vi.fn();
+      error = vi.fn();
+    },
+    IdeClient: {
+      getInstance: vi.fn().mockResolvedValue({
+        addStatusChangeListener: vi.fn(),
+        removeStatusChangeListener: vi.fn(),
+      }),
+    },
   };
 });
 
@@ -173,7 +185,9 @@ function createTestCommand(overrides: Partial<SlashCommand>): SlashCommand {
 
 describe('useSlashCommandProcessor', () => {
   let mockConfig: Config;
-  const mockSettings = {} as LoadedSettings;
+  const mockSettings = {
+    merged: {},
+  } as LoadedSettings;
   let addItem: ReturnType<typeof vi.fn>;
   let clearItems: ReturnType<typeof vi.fn>;
   let loadHistory: ReturnType<typeof vi.fn>;

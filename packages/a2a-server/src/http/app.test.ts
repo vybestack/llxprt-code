@@ -215,7 +215,7 @@ describe('E2E Tests', () => {
     expect(toolCallUpdateEvent.status.message?.parts).toMatchObject([
       {
         data: {
-          status: 'validating',
+          status: 'scheduled',
           request: { callId: 'test-call-id' },
         },
       },
@@ -309,27 +309,27 @@ describe('E2E Tests', () => {
     expect(workingEvent.kind).toBe('status-update');
     expect(workingEvent.status.state).toBe('working');
 
-    // State Update: Validate each tool call
-    const toolCallValidateEvent1 = events[3].result as TaskStatusUpdateEvent;
-    expect(toolCallValidateEvent1.metadata?.['coderAgent']).toMatchObject({
+    // State Update: Scheduled each tool call
+    const toolCallScheduledEvent1 = events[3].result as TaskStatusUpdateEvent;
+    expect(toolCallScheduledEvent1.metadata?.['coderAgent']).toMatchObject({
       kind: 'tool-call-update',
     });
-    expect(toolCallValidateEvent1.status.message?.parts).toMatchObject([
+    expect(toolCallScheduledEvent1.status.message?.parts).toMatchObject([
       {
         data: {
-          status: 'validating',
+          status: 'scheduled',
           request: { callId: 'test-call-id-1' },
         },
       },
     ]);
-    const toolCallValidateEvent2 = events[4].result as TaskStatusUpdateEvent;
-    expect(toolCallValidateEvent2.metadata?.['coderAgent']).toMatchObject({
+    const toolCallScheduledEvent2 = events[4].result as TaskStatusUpdateEvent;
+    expect(toolCallScheduledEvent2.metadata?.['coderAgent']).toMatchObject({
       kind: 'tool-call-update',
     });
-    expect(toolCallValidateEvent2.status.message?.parts).toMatchObject([
+    expect(toolCallScheduledEvent2.status.message?.parts).toMatchObject([
       {
         data: {
-          status: 'validating',
+          status: 'scheduled',
           request: { callId: 'test-call-id-2' },
         },
       },
@@ -419,22 +419,8 @@ describe('E2E Tests', () => {
     expect(workingEvent2.kind).toBe('status-update');
     expect(workingEvent2.status.state).toBe('working');
 
-    // Status update: tool-call-update (validating)
-    const validatingEvent = events[3].result as TaskStatusUpdateEvent;
-    expect(validatingEvent.metadata?.['coderAgent']).toMatchObject({
-      kind: 'tool-call-update',
-    });
-    expect(validatingEvent.status.message?.parts).toMatchObject([
-      {
-        data: {
-          status: 'validating',
-          request: { callId: 'test-call-id-no-approval' },
-        },
-      },
-    ]);
-
     // Status update: tool-call-update (scheduled)
-    const scheduledEvent = events[4].result as TaskStatusUpdateEvent;
+    const scheduledEvent = events[3].result as TaskStatusUpdateEvent;
     expect(scheduledEvent.metadata?.['coderAgent']).toMatchObject({
       kind: 'tool-call-update',
     });
@@ -448,7 +434,7 @@ describe('E2E Tests', () => {
     ]);
 
     // Status update: tool-call-update (executing)
-    const executingEvent = events[5].result as TaskStatusUpdateEvent;
+    const executingEvent = events[4].result as TaskStatusUpdateEvent;
     expect(executingEvent.metadata?.['coderAgent']).toMatchObject({
       kind: 'tool-call-update',
     });
@@ -462,7 +448,7 @@ describe('E2E Tests', () => {
     ]);
 
     // Status update: tool-call-update (success)
-    const successEvent = events[6].result as TaskStatusUpdateEvent;
+    const successEvent = events[5].result as TaskStatusUpdateEvent;
     expect(successEvent.metadata?.['coderAgent']).toMatchObject({
       kind: 'tool-call-update',
     });
@@ -476,12 +462,12 @@ describe('E2E Tests', () => {
     ]);
 
     // Status update: working (before sending tool result to LLM)
-    const workingEvent3 = events[7].result as TaskStatusUpdateEvent;
+    const workingEvent3 = events[6].result as TaskStatusUpdateEvent;
     expect(workingEvent3.kind).toBe('status-update');
     expect(workingEvent3.status.state).toBe('working');
 
     // Status update: text-content (final LLM response)
-    const textContentEvent = events[8].result as TaskStatusUpdateEvent;
+    const textContentEvent = events[7].result as TaskStatusUpdateEvent;
     expect(textContentEvent.metadata?.['coderAgent']).toMatchObject({
       kind: 'text-content',
     });
@@ -490,7 +476,7 @@ describe('E2E Tests', () => {
     ]);
 
     assertUniqueFinalEventIsLast(events);
-    expect(events.length).toBe(10);
+    expect(events.length).toBe(9);
   });
 
   it('should bypass tool approval in YOLO mode', async () => {
@@ -550,26 +536,12 @@ describe('E2E Tests', () => {
     expect(workingEvent2.kind).toBe('status-update');
     expect(workingEvent2.status.state).toBe('working');
 
-    // Status update: tool-call-update (validating)
-    const validatingEvent = events[3].result as TaskStatusUpdateEvent;
-    expect(validatingEvent.metadata?.['coderAgent']).toMatchObject({
-      kind: 'tool-call-update',
-    });
-    expect(validatingEvent.status.message?.parts).toMatchObject([
-      {
-        data: {
-          status: 'validating',
-          request: { callId: 'test-call-id-yolo' },
-        },
-      },
-    ]);
-
     // Status update: tool-call-update (scheduled)
-    const awaitingEvent = events[4].result as TaskStatusUpdateEvent;
-    expect(awaitingEvent.metadata?.['coderAgent']).toMatchObject({
+    const scheduledEvent = events[3].result as TaskStatusUpdateEvent;
+    expect(scheduledEvent.metadata?.['coderAgent']).toMatchObject({
       kind: 'tool-call-update',
     });
-    expect(awaitingEvent.status.message?.parts).toMatchObject([
+    expect(scheduledEvent.status.message?.parts).toMatchObject([
       {
         data: {
           status: 'scheduled',
@@ -579,7 +551,7 @@ describe('E2E Tests', () => {
     ]);
 
     // Status update: tool-call-update (executing)
-    const executingEvent = events[5].result as TaskStatusUpdateEvent;
+    const executingEvent = events[4].result as TaskStatusUpdateEvent;
     expect(executingEvent.metadata?.['coderAgent']).toMatchObject({
       kind: 'tool-call-update',
     });
@@ -593,7 +565,7 @@ describe('E2E Tests', () => {
     ]);
 
     // Status update: tool-call-update (success)
-    const successEvent = events[6].result as TaskStatusUpdateEvent;
+    const successEvent = events[5].result as TaskStatusUpdateEvent;
     expect(successEvent.metadata?.['coderAgent']).toMatchObject({
       kind: 'tool-call-update',
     });
@@ -607,12 +579,12 @@ describe('E2E Tests', () => {
     ]);
 
     // Status update: working (before sending tool result to LLM)
-    const workingEvent3 = events[7].result as TaskStatusUpdateEvent;
+    const workingEvent3 = events[6].result as TaskStatusUpdateEvent;
     expect(workingEvent3.kind).toBe('status-update');
     expect(workingEvent3.status.state).toBe('working');
 
     // Status update: text-content (final LLM response)
-    const textContentEvent = events[8].result as TaskStatusUpdateEvent;
+    const textContentEvent = events[7].result as TaskStatusUpdateEvent;
     expect(textContentEvent.metadata?.['coderAgent']).toMatchObject({
       kind: 'text-content',
     });
@@ -621,6 +593,6 @@ describe('E2E Tests', () => {
     ]);
 
     assertUniqueFinalEventIsLast(events);
-    expect(events.length).toBe(10);
+    expect(events.length).toBe(9);
   });
 });

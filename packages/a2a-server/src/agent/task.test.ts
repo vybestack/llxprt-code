@@ -32,6 +32,15 @@ describe('Task', () => {
       mockEventBus,
     );
 
+    // Create a mock scheduler
+    task.scheduler = {
+      schedule: vi.fn().mockResolvedValue(undefined),
+      cancelAll: vi.fn(),
+      dispose: vi.fn(),
+      toolCalls: [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
     task['setTaskStateAndPublishUpdate'] = vi.fn();
     task['getProposedContent'] = vi.fn().mockResolvedValue('new content');
 

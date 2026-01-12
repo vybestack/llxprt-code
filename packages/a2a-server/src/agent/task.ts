@@ -61,7 +61,7 @@ type UnionKeys<T> = T extends T ? keyof T : never;
 export class Task {
   id: string;
   contextId: string;
-  scheduler: CoreToolScheduler;
+  scheduler: CoreToolScheduler | null;
   config: Config;
   geminiClient: GeminiClient;
   pendingToolConfirmationDetails: Map<string, ToolCallConfirmationDetails>;
@@ -87,7 +87,7 @@ export class Task {
     this.id = id;
     this.contextId = contextId;
     this.config = config;
-    this.scheduler = this.createScheduler();
+    this.scheduler = null;
     const contentConfig = this.config.getContentGeneratorConfig();
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
@@ -114,7 +114,9 @@ export class Task {
     config: Config,
     eventBus?: ExecutionEventBus,
   ): Promise<Task> {
-    return new Task(id, contextId, config, eventBus);
+    const task = new Task(id, contextId, config, eventBus);
+    task.scheduler = await task.createScheduler();
+    return task;
   }
 
   // Note: `getAllMCPServerStatuses` retrieves the status of all MCP servers for the entire
@@ -425,16 +427,18 @@ export class Task {
     }
   }
 
-  private createScheduler(): CoreToolScheduler {
-    const scheduler = new CoreToolScheduler({
+  private async createScheduler(): Promise<CoreToolScheduler> {
+    const sessionId = this.config.getSessionId();
+    if (!sessionId) {
+      throw new Error('Scheduler sessionId is required');
+    }
+    return await this.config.getOrCreateScheduler(sessionId, {
       outputUpdateHandler: this._schedulerOutputUpdate.bind(this),
       onAllToolCallsComplete: this._schedulerAllToolCallsComplete.bind(this),
       onToolCallsUpdate: this._schedulerToolCallsUpdate.bind(this),
       getPreferredEditor: () => 'vscode',
-      config: this.config,
       onEditorClose: () => {},
     });
-    return scheduler;
   }
 
   private _pickFields<
@@ -581,6 +585,9 @@ export class Task {
     };
     this.setTaskStateAndPublishUpdate('working', stateChange);
 
+    if (!this.scheduler) {
+      throw new Error('Scheduler not initialized');
+    }
     await this.scheduler.schedule(updatedRequests, abortSignal);
   }
 

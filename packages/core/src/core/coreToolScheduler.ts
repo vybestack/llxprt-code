@@ -373,7 +373,7 @@ const createErrorResponse = (
   agentId: request.agentId ?? DEFAULT_AGENT_ID,
 });
 
-interface CoreToolSchedulerOptions {
+export interface CoreToolSchedulerOptions {
   config: Config;
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
@@ -390,12 +390,13 @@ export class CoreToolScheduler {
   private outputUpdateHandler?: OutputUpdateHandler;
   private onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   private onToolCallsUpdate?: ToolCallsUpdateHandler;
-  private getPreferredEditor: () => EditorType | undefined;
+  private getPreferredEditor: () => EditorType | undefined = () => undefined;
   private config: Config;
-  private onEditorClose: () => void;
+  private onEditorClose: () => void = () => undefined;
   private onEditorOpen?: () => void;
   private isFinalizingToolCalls = false;
   private isScheduling = false;
+  private toolContextInteractiveMode: boolean;
   private requestQueue: QueuedRequest[] = [];
   private messageBusUnsubscribe?: () => void;
   private pendingConfirmations: Map<string, string> = new Map();
@@ -412,7 +413,6 @@ export class CoreToolScheduler {
     }
   > = new Map();
   private nextPublishIndex = 0;
-  private readonly toolContextInteractiveMode: boolean;
   // Track the abort signal for each tool call so we can use it when handling
   // confirmation responses from the message bus
   private callIdToSignal: Map<string, AbortSignal> = new Map();
@@ -423,12 +423,7 @@ export class CoreToolScheduler {
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
     this.toolRegistry = options.config.getToolRegistry();
-    this.outputUpdateHandler = options.outputUpdateHandler;
-    this.onAllToolCallsComplete = options.onAllToolCallsComplete;
-    this.onToolCallsUpdate = options.onToolCallsUpdate;
-    this.getPreferredEditor = options.getPreferredEditor;
-    this.onEditorClose = options.onEditorClose;
-    this.onEditorOpen = options.onEditorOpen;
+    this.setCallbacks(options);
     this.toolContextInteractiveMode =
       options.toolContextInteractiveMode ?? true;
 
@@ -437,6 +432,15 @@ export class CoreToolScheduler {
       MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       this.handleMessageBusResponse.bind(this),
     );
+  }
+
+  setCallbacks(options: CoreToolSchedulerOptions): void {
+    this.outputUpdateHandler = options.outputUpdateHandler;
+    this.onAllToolCallsComplete = options.onAllToolCallsComplete;
+    this.onToolCallsUpdate = options.onToolCallsUpdate;
+    this.getPreferredEditor = options.getPreferredEditor;
+    this.onEditorClose = options.onEditorClose;
+    this.onEditorOpen = options.onEditorOpen;
   }
 
   /**
@@ -498,25 +502,20 @@ export class CoreToolScheduler {
           : ToolConfirmationOutcome.Cancel
         : ToolConfirmationOutcome.Cancel);
 
-    // Use the original signal stored for this call, or a pre-aborted signal as fallback.
-    // If the original signal is missing, it means the tool call was already completed or
-    // cancelled (cleaned up in publishBufferedResults), so we use an aborted signal to
-    // ensure the confirmation handler doesn't proceed with execution.
+    // Use the original signal stored for this call. If it's missing, the call
+    // has already completed/cancelled and we should ignore this response.
     const originalSignal = this.callIdToSignal.get(callId);
-    let signal: AbortSignal;
-    if (originalSignal) {
-      signal = originalSignal;
-    } else {
+    if (!originalSignal) {
       if (toolSchedulerLogger.enabled) {
         toolSchedulerLogger.debug(
           () =>
-            `Using pre-aborted fallback AbortSignal for callId=${callId} (original signal not found in map)`,
+            `Skipping TOOL_CONFIRMATION_RESPONSE for callId=${callId} because signal is missing (call already finalized).`,
         );
       }
-      const abortedController = new AbortController();
-      abortedController.abort();
-      signal = abortedController.signal;
+      this.pendingConfirmations.delete(response.correlationId);
+      return;
     }
+    const signal = originalSignal;
     void this.handleConfirmationResponse(
       callId,
       waitingToolCall.confirmationDetails.onConfirm,
@@ -1556,9 +1555,19 @@ export class CoreToolScheduler {
       if (this.pendingResults.size > 0) {
         // Use setImmediate to avoid deep recursion and allow the event loop to process
         // other pending tool completions first
-        setImmediate(() => {
-          void this.publishBufferedResults(signal);
-        });
+        // Avoid scheduling when there are no results to publish yet.
+        let hasNextBuffered = false;
+        for (const buffered of this.pendingResults.values()) {
+          if (buffered.executionIndex === this.nextPublishIndex) {
+            hasNextBuffered = true;
+            break;
+          }
+        }
+        if (hasNextBuffered) {
+          setImmediate(() => {
+            void this.publishBufferedResults(signal);
+          });
+        }
       }
     }
   }
@@ -1777,17 +1786,14 @@ export class CoreToolScheduler {
 
       if (this.onAllToolCallsComplete) {
         this.isFinalizingToolCalls = true;
-        await this.onAllToolCallsComplete(completedCalls);
-        this.isFinalizingToolCalls = false;
+        try {
+          await this.onAllToolCallsComplete(completedCalls);
+        } finally {
+          this.isFinalizingToolCalls = false;
+        }
       }
+
       this.notifyToolCallsUpdate();
-      // After completion, process the next item in the queue.
-      if (this.requestQueue.length > 0) {
-        const next = this.requestQueue.shift()!;
-        this._schedule(next.request, next.signal)
-          .then(next.resolve)
-          .catch(next.reject);
-      }
     }
   }
 
