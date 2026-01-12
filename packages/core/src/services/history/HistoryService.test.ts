@@ -1229,5 +1229,143 @@ describe('HistoryService - Behavioral Tests', () => {
         ).toBe(false);
       });
     });
+
+    describe('Strict tool adjacency mode', () => {
+      it('should synthesize tool responses for orphaned tool calls when strictToolAdjacency is true', () => {
+        service.add(createUserMessage('Question'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_orphan1',
+              name: 'tool1',
+              parameters: {},
+            },
+          ],
+        });
+
+        expect(service.getAll()).toHaveLength(2);
+
+        const curated = service.getCuratedForProvider([], {
+          strictToolAdjacency: true,
+        });
+        expect(curated).toHaveLength(3);
+
+        const toolCallIndex = curated.findIndex(
+          (c) =>
+            c.speaker === 'ai' &&
+            c.blocks.some(
+              (b) =>
+                b.type === 'tool_call' &&
+                (b as ToolCallBlock).id === 'hist_tool_orphan1',
+            ),
+        );
+        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+        expect(curated[toolCallIndex + 1]?.speaker).toBe('tool');
+        expect(
+          curated[toolCallIndex + 1]?.blocks.some(
+            (b) =>
+              b.type === 'tool_response' &&
+              (b as ToolResponseBlock).callId === 'hist_tool_orphan1',
+          ),
+        ).toBe(true);
+      });
+
+      it('should NOT synthesize tool responses for orphaned tool calls without later non-tool message when strictToolAdjacency is false', () => {
+        service.add(createUserMessage('Question'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_orphan2',
+              name: 'tool1',
+              parameters: {},
+            },
+          ],
+        });
+
+        expect(service.getAll()).toHaveLength(2);
+
+        const curated = service.getCuratedForProvider([], {
+          strictToolAdjacency: false,
+        });
+        expect(curated).toHaveLength(2);
+
+        const toolCallIndex = curated.findIndex(
+          (c) =>
+            c.speaker === 'ai' &&
+            c.blocks.some(
+              (b) =>
+                b.type === 'tool_call' &&
+                (b as ToolCallBlock).id === 'hist_tool_orphan2',
+            ),
+        );
+        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+        expect(curated[toolCallIndex + 1]?.speaker).not.toBe('tool');
+      });
+
+      it('should synthesize tool responses in strict mode even without later non-tool message', () => {
+        service.add(createUserMessage('Question'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_pending',
+              name: 'tool1',
+              parameters: {},
+            },
+          ],
+        });
+
+        expect(service.getAll()).toHaveLength(2);
+
+        const curated = service.getCuratedForProvider([], {
+          strictToolAdjacency: true,
+        });
+        expect(curated).toHaveLength(3);
+
+        const syntheticToolMessage = curated[2];
+        expect(syntheticToolMessage.speaker).toBe('tool');
+        expect(syntheticToolMessage.metadata?.synthetic).toBe(true);
+        expect(syntheticToolMessage.metadata?.reason).toBe(
+          'reordered_tool_responses',
+        );
+      });
+
+      it('should handle strictToolAdjacency default as false', () => {
+        service.add(createUserMessage('Question'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_default',
+              name: 'tool1',
+              parameters: {},
+            },
+          ],
+        });
+
+        expect(service.getAll()).toHaveLength(2);
+
+        const curated = service.getCuratedForProvider();
+        expect(curated).toHaveLength(2);
+
+        const toolCallIndex = curated.findIndex(
+          (c) =>
+            c.speaker === 'ai' &&
+            c.blocks.some(
+              (b) =>
+                b.type === 'tool_call' &&
+                (b as ToolCallBlock).id === 'hist_tool_default',
+            ),
+        );
+        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+        expect(curated[toolCallIndex + 1]?.speaker).not.toBe('tool');
+      });
+    });
   });
 });

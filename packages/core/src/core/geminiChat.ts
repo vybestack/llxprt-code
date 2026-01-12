@@ -750,7 +750,10 @@ export class GeminiChat {
 
     // Build a provider-safe request transcript that includes the new message(s)
     // without committing them to history yet.
-    const iContents = this.historyService.getCuratedForProvider(userIContents);
+    const strictToolAdjacency = provider.name.includes('anthropic');
+    const iContents = this.historyService.getCuratedForProvider(userIContents, {
+      strictToolAdjacency,
+    });
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-004.1
@@ -1409,8 +1412,13 @@ export class GeminiChat {
         });
         // Build a provider-safe request transcript that includes the new message(s)
         // without committing them to history yet.
-        requestContents =
-          this.historyService.getCuratedForProvider(userIContents);
+        const strictToolAdjacency = provider.name.includes('anthropic');
+        requestContents = this.historyService.getCuratedForProvider(
+          userIContents,
+          {
+            strictToolAdjacency,
+          },
+        );
       } else {
         const turnKey = this.historyService.generateTurnKey();
         const idGen = this.historyService.getIdGeneratorCallback(turnKey);
@@ -1423,9 +1431,11 @@ export class GeminiChat {
         );
         // Build a provider-safe request transcript that includes the new message
         // without committing it to history yet.
-        requestContents = this.historyService.getCuratedForProvider([
-          userIContent,
-        ]);
+        const strictToolAdjacency = provider.name.includes('anthropic');
+        requestContents = this.historyService.getCuratedForProvider(
+          [userIContent],
+          { strictToolAdjacency },
+        );
       }
 
       // DEBUG: Check for malformed entries
