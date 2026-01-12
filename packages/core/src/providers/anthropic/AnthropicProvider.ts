@@ -13,6 +13,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages/index.js';
 import { DebugLogger } from '../../debug/index.js';
 import { type IModel } from '../IModel.js';
+import { getModelsFromRegistry } from '../../models/provider-integration.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import {
   convertToolsToAnthropic,
@@ -267,6 +268,26 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
+    // Try to get models from the ModelsRegistry first (models.dev integration)
+    // This provides richer metadata (pricing, capabilities, context window, etc.)
+    try {
+      const registryModels = await getModelsFromRegistry({
+        providerName: this.name,
+        fallbackModels: [], // Don't use fallback here, we'll try other methods
+        includeDeprecated: false,
+      });
+
+      if (registryModels.length > 0) {
+        // Override provider name to match this provider instance
+        return registryModels.map((m) => ({
+          ...m,
+          provider: this.name,
+        }));
+      }
+    } catch {
+      // Registry not available, continue with other methods
+    }
+
     const authToken = await this.getAuthToken();
     if (!authToken) {
       this.getAuthLogger().debug(
@@ -289,7 +310,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-opus-4-5-20251101',
           name: 'Claude Opus 4.5',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 500000,
           maxOutputTokens: 32000,
@@ -297,7 +318,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-opus-4-5',
           name: 'Claude Opus 4.5',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 500000,
           maxOutputTokens: 32000,
@@ -305,7 +326,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-opus-4-1-20250805',
           name: 'Claude Opus 4.1',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 500000,
           maxOutputTokens: 32000,
@@ -313,7 +334,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-opus-4-1',
           name: 'Claude Opus 4.1',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 500000,
           maxOutputTokens: 32000,
@@ -321,7 +342,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-sonnet-4-5-20250929',
           name: 'Claude Sonnet 4.5',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 400000,
           maxOutputTokens: 64000,
@@ -329,7 +350,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-sonnet-4-5',
           name: 'Claude Sonnet 4.5',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 400000,
           maxOutputTokens: 64000,
@@ -337,7 +358,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-sonnet-4-20250514',
           name: 'Claude Sonnet 4',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 400000,
           maxOutputTokens: 64000,
@@ -345,7 +366,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-sonnet-4',
           name: 'Claude Sonnet 4',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 400000,
           maxOutputTokens: 64000,
@@ -353,7 +374,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-haiku-4-5-20251001',
           name: 'Claude Haiku 4.5',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 500000,
           maxOutputTokens: 16000,
@@ -361,7 +382,7 @@ export class AnthropicProvider extends BaseProvider {
         {
           id: 'claude-haiku-4-5',
           name: 'Claude Haiku 4.5',
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: 500000,
           maxOutputTokens: 16000,
@@ -383,7 +404,7 @@ export class AnthropicProvider extends BaseProvider {
         models.push({
           id: model.id,
           name: model.display_name || model.id,
-          provider: 'anthropic',
+          provider: this.name,
           supportedToolFormats: ['anthropic'],
           contextWindow: this.getContextWindowForModel(model.id),
           maxOutputTokens: this.getMaxTokensForModel(model.id),

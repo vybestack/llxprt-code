@@ -54,6 +54,7 @@ import {
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { type IModel } from '../IModel.js';
+import { getModelsFromRegistry } from '../../models/provider-integration.js';
 import { type IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
@@ -824,6 +825,26 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
+    // Try to get models from the ModelsRegistry first (models.dev integration)
+    // This provides richer metadata (pricing, capabilities, context window, etc.)
+    try {
+      const registryModels = await getModelsFromRegistry({
+        providerName: this.name,
+        fallbackModels: [], // Don't use fallback here, we'll try other methods
+        includeDeprecated: false,
+      });
+
+      if (registryModels.length > 0) {
+        // Override provider name to match this provider instance
+        return registryModels.map((m) => ({
+          ...m,
+          provider: this.name,
+        }));
+      }
+    } catch {
+      // Registry not available, continue with other methods
+    }
+
     try {
       // Always try to fetch models, regardless of auth status
       // Local endpoints often work without authentication
@@ -844,7 +865,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           models.push({
             id: model.id,
             name: model.id,
-            provider: 'openai',
+            provider: this.name,
             supportedToolFormats: ['openai'],
           });
         }

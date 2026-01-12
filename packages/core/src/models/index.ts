@@ -1,0 +1,92 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Models Registry - models.dev integration for llxprt
+ *
+ * Provides automatic model discovery, pricing, and capabilities
+ * from the models.dev API with caching and fallback support.
+ *
+ * @example
+ * ```typescript
+ * import { initializeModelsRegistry, getModelsRegistry } from '@vybestack/llxprt-code-core/models';
+ *
+ * // Initialize on startup
+ * await initializeModelsRegistry();
+ *
+ * // Get registry instance
+ * const registry = getModelsRegistry();
+ *
+ * // Query models
+ * const allModels = registry.getAll();
+ * const claudeModels = registry.getByProvider('anthropic');
+ * const reasoningModels = registry.search({ reasoning: true });
+ * ```
+ */
+
+// Core registry
+export {
+  ModelsRegistry,
+  getModelsRegistry,
+  initializeModelsRegistry,
+  type ModelSearchQuery,
+  type ModelsRegistryEvent,
+} from './registry.js';
+
+// Schemas and types
+export {
+  // models.dev API schemas
+  ModelsDevModelSchema,
+  ModelsDevProviderSchema,
+  ModelsDevApiResponseSchema,
+  type ModelsDevModel,
+  type ModelsDevProvider,
+  type ModelsDevApiResponse,
+
+  // llxprt internal schemas
+  LlxprtModelSchema,
+  LlxprtProviderSchema,
+  LlxprtModelCapabilitiesSchema,
+  LlxprtModelPricingSchema,
+  LlxprtModelLimitsSchema,
+  LlxprtModelMetadataSchema,
+  LlxprtDefaultProfileSchema,
+  type LlxprtModel,
+  type LlxprtProvider,
+  type LlxprtModelCapabilities,
+  type LlxprtModelPricing,
+  type LlxprtModelLimits,
+  type LlxprtModelMetadata,
+  type LlxprtDefaultProfile,
+
+  // Cache metadata
+  ModelsCacheMetadataSchema,
+  type ModelsCacheMetadata,
+} from './schema.js';
+
+// Transformers
+export {
+  transformModel,
+  transformProvider,
+  transformApiResponse,
+} from './transformer.js';
+
+// Profile utilities
+export {
+  generateDefaultProfile,
+  getRecommendedThinkingBudget,
+  mergeProfileWithDefaults,
+} from './profiles.js';
+
+// Provider integration utilities
+export {
+  getModelsFromRegistry,
+  llxprtModelToIModel,
+  hasModelInRegistry,
+  getExtendedModelInfo,
+  getRecommendedModel,
+  type GetModelsFromRegistryOptions,
+} from './provider-integration.js';

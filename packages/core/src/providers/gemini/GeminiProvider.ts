@@ -42,6 +42,7 @@ import {
   shouldDumpSDKContext,
   dumpSDKContext,
 } from '../utils/dumpSDKContext.js';
+import { getModelsFromRegistry } from '../../models/provider-integration.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
   retryWithBackoff,
@@ -464,6 +465,48 @@ export class GeminiProvider extends BaseProvider {
    * Determine auth mode per call instead of using cached state
    */
   async getModels(): Promise<IModel[]> {
+    // Default fallback models used when registry and API are unavailable
+    const fallbackModels: IModel[] = [
+      {
+        id: 'gemini-2.5-pro',
+        name: 'Gemini 2.5 Pro',
+        provider: this.name,
+        supportedToolFormats: ['google', 'gemini'],
+      },
+      {
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
+        provider: this.name,
+        supportedToolFormats: ['google', 'gemini'],
+      },
+      {
+        id: 'gemini-2.5-flash-exp',
+        name: 'Gemini 2.5 Flash Experimental',
+        provider: this.name,
+        supportedToolFormats: ['google', 'gemini'],
+      },
+    ];
+
+    // Try to get models from the ModelsRegistry first (models.dev integration)
+    // This provides richer metadata (pricing, capabilities, context window, etc.)
+    try {
+      const registryModels = await getModelsFromRegistry({
+        providerName: this.name,
+        fallbackModels: [], // Don't use fallback here, we'll try other methods
+        includeDeprecated: false,
+      });
+
+      if (registryModels.length > 0) {
+        // Override provider name to match this provider instance
+        return registryModels.map((m) => ({
+          ...m,
+          provider: this.name,
+        }));
+      }
+    } catch {
+      // Registry not available, continue with other methods
+    }
+
     // Determine auth mode for this call
     const { authMode } = await this.determineBestAuth();
 
@@ -474,25 +517,25 @@ export class GeminiProvider extends BaseProvider {
           id: 'gemini-2.5-pro',
           name: 'Gemini 2.5 Pro',
           provider: this.name,
-          supportedToolFormats: [],
+          supportedToolFormats: ['google', 'gemini'],
         },
         {
           id: 'gemini-2.5-flash',
           name: 'Gemini 2.5 Flash',
           provider: this.name,
-          supportedToolFormats: [],
+          supportedToolFormats: ['google', 'gemini'],
         },
         {
           id: 'gemini-2.5-flash-lite',
           name: 'Gemini 2.5 Flash Lite',
           provider: this.name,
-          supportedToolFormats: [],
+          supportedToolFormats: ['google', 'gemini'],
         },
         {
           id: 'gemini-3-pro-preview',
           name: 'Gemini 3 Pro Preview',
           provider: this.name,
-          supportedToolFormats: [],
+          supportedToolFormats: ['google', 'gemini'],
         },
       ];
     }
@@ -529,7 +572,7 @@ export class GeminiProvider extends BaseProvider {
                 id: model.name.replace('models/', ''), // Remove 'models/' prefix
                 name: model.displayName || model.name,
                 provider: this.name,
-                supportedToolFormats: [],
+                supportedToolFormats: ['google', 'gemini'],
               }));
             }
           }
@@ -540,26 +583,7 @@ export class GeminiProvider extends BaseProvider {
     }
 
     // Return default models as fallback
-    return [
-      {
-        id: 'gemini-2.5-pro',
-        name: 'Gemini 2.5 Pro',
-        provider: this.name,
-        supportedToolFormats: [],
-      },
-      {
-        id: 'gemini-2.5-flash',
-        name: 'Gemini 2.5 Flash',
-        provider: this.name,
-        supportedToolFormats: [],
-      },
-      {
-        id: 'gemini-2.5-flash-exp',
-        name: 'Gemini 2.5 Flash Experimental',
-        provider: this.name,
-        supportedToolFormats: [],
-      },
-    ];
+    return fallbackModels;
   }
 
   /**

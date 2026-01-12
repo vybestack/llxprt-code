@@ -37,6 +37,7 @@ import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
 import { providerCommand } from '../ui/commands/providerCommand.js';
 import { modelCommand } from '../ui/commands/modelCommand.js';
+import { modelsCommand } from '../ui/commands/modelsCommand.js';
 import { keyCommand } from '../ui/commands/keyCommand.js';
 import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
@@ -111,6 +112,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       vimCommand,
       providerCommand,
       modelCommand,
+      modelsCommand,
       keyCommand,
       keyfileCommand,
       baseurlCommand,

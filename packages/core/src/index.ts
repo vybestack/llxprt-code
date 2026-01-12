@@ -343,8 +343,11 @@ export type { LogEntry as DebugLogEntry } from './debug/index.js';
 // Export Storage
 export { Storage } from './config/storage.js';
 
-// Export models
+// Export models (legacy constants)
 export * from './config/models.js';
+
+// Export models registry (models.dev integration)
+export * from './models/index.js';
 
 // --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---
 export { SubagentManager } from './config/subagentManager.js';
