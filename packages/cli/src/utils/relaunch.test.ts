@@ -140,7 +140,8 @@ describe('relaunchAppInChildProcess', () => {
     const nodeArgs = ['--max-old-space-size=4096'];
     process.env = {
       ...process.env,
-      NODE_OPTIONS: '--max-old-space-size=2048 --localstorage-file --enable-source-maps',
+      NODE_OPTIONS:
+        '--max-old-space-size=2048 --localstorage-file --enable-source-maps',
     };
 
     const promise = relaunchAppInChildProcess(nodeArgs);
@@ -188,17 +189,21 @@ describe('sanitizeNodeOptions', () => {
   });
 
   it('should remove --localstorage-file with equals value', () => {
-    expect(sanitizeNodeOptions('--localstorage-file=/some/path')).toBeUndefined();
+    expect(
+      sanitizeNodeOptions('--localstorage-file=/some/path'),
+    ).toBeUndefined();
   });
 
   it('should remove --localstorage-file with space-separated value', () => {
-    expect(sanitizeNodeOptions('--localstorage-file /some/path')).toBeUndefined();
+    expect(
+      sanitizeNodeOptions('--localstorage-file /some/path'),
+    ).toBeUndefined();
   });
 
   it('should preserve other options before --localstorage-file', () => {
-    expect(sanitizeNodeOptions('--max-old-space-size=4096 --localstorage-file')).toBe(
-      '--max-old-space-size=4096',
-    );
+    expect(
+      sanitizeNodeOptions('--max-old-space-size=4096 --localstorage-file'),
+    ).toBe('--max-old-space-size=4096');
   });
 
   it('should preserve other options after --localstorage-file', () => {
@@ -216,14 +221,16 @@ describe('sanitizeNodeOptions', () => {
   });
 
   it('should not consume following flags as values', () => {
-    expect(
-      sanitizeNodeOptions('--localstorage-file --other-flag value'),
-    ).toBe('--other-flag value');
+    expect(sanitizeNodeOptions('--localstorage-file --other-flag value')).toBe(
+      '--other-flag value',
+    );
   });
 
   it('should handle multiple spaces', () => {
     expect(
-      sanitizeNodeOptions('  --max-old-space-size=4096   --localstorage-file   '),
+      sanitizeNodeOptions(
+        '  --max-old-space-size=4096   --localstorage-file   ',
+      ),
     ).toBe('--max-old-space-size=4096');
   });
 });

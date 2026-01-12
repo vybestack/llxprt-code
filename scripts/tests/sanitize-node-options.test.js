@@ -19,11 +19,11 @@ function runWithNodeOptions(nodeOptions, command = 'echo "$NODE_OPTIONS"') {
   } else {
     delete env.NODE_OPTIONS;
   }
-  
+
   try {
-    return execSync(`${scriptPath} bash -c '${command}'`, { 
+    return execSync(`${scriptPath} bash -c '${command}'`, {
       env,
-      encoding: 'utf-8'
+      encoding: 'utf-8',
     }).trim();
   } catch (error) {
     throw new Error(`Script failed: ${error.message}`);
@@ -47,17 +47,23 @@ describe('sanitize-node-options.sh', () => {
   });
 
   it('should preserve other options before --localstorage-file', () => {
-    const result = runWithNodeOptions('--max-old-space-size=4096 --localstorage-file');
+    const result = runWithNodeOptions(
+      '--max-old-space-size=4096 --localstorage-file',
+    );
     expect(result).toBe('--max-old-space-size=4096');
   });
 
   it('should preserve other options after --localstorage-file', () => {
-    const result = runWithNodeOptions('--localstorage-file --enable-source-maps');
+    const result = runWithNodeOptions(
+      '--localstorage-file --enable-source-maps',
+    );
     expect(result).toBe('--enable-source-maps');
   });
 
   it('should preserve options on both sides', () => {
-    const result = runWithNodeOptions('--max-old-space-size=4096 --localstorage-file --enable-source-maps');
+    const result = runWithNodeOptions(
+      '--max-old-space-size=4096 --localstorage-file --enable-source-maps',
+    );
     expect(result).toBe('--max-old-space-size=4096 --enable-source-maps');
   });
 
@@ -72,7 +78,10 @@ describe('sanitize-node-options.sh', () => {
   });
 
   it('should pass through to child command', () => {
-    const result = runWithNodeOptions('--localstorage-file', 'echo "hello world"');
+    const result = runWithNodeOptions(
+      '--localstorage-file',
+      'echo "hello world"',
+    );
     expect(result).toBe('hello world');
   });
 
@@ -80,7 +89,7 @@ describe('sanitize-node-options.sh', () => {
     // This test verifies that node runs successfully without the warning
     const result = runWithNodeOptions(
       '--localstorage-file',
-      'node -e "console.log(\\"success\\")"'
+      'node -e "console.log(\\"success\\")"',
     );
     expect(result).toBe('success');
   });
