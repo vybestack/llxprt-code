@@ -272,10 +272,10 @@ export function useToolScheduler(
   const [toolCalls, setToolCalls] = useState<TrackedToolCall[]>([]);
   const schedulerRef = useRef<CoreToolScheduler | null>(null);
   const pendingScheduleRequests = useRef<
-    Array<{
+    {
       request: ToolCallRequestInfo | ToolCallRequestInfo[];
       signal: AbortSignal;
-    }>
+    }[]
   >([]);
 
   // Use refs to store callbacks so they don't trigger effect re-runs
