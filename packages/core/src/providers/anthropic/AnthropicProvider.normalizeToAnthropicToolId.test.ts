@@ -30,9 +30,10 @@ describe('AnthropicProvider.normalizeToAnthropicToolId', () => {
     expect(result).toBe('toolu_ghi012');
   });
 
-  it('handles empty IDs', () => {
+  it('throws on empty IDs', () => {
     const provider = new AnthropicProvider('test-key') as TestAnthropicProvider;
-    const result = provider.normalizeToAnthropicToolId('');
-    expect(result).toBe('toolu_');
+    expect(() => provider.normalizeToAnthropicToolId('')).toThrow(
+      'Tool ID cannot be empty or undefined',
+    );
   });
 });

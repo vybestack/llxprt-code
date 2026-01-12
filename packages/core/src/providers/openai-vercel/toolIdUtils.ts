@@ -61,16 +61,19 @@ export function normalizeToHistoryToolId(id: string): string {
   }
 
   if (id.startsWith('hist_tool_')) {
-    return id;
+    const suffix = id.substring('hist_tool_'.length);
+    return `hist_tool_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   }
 
   if (id.startsWith('call_')) {
-    return `hist_tool_${id.substring('call_'.length)}`;
+    const suffix = id.substring('call_'.length);
+    return `hist_tool_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   }
 
   if (id.startsWith('toolu_')) {
-    return `hist_tool_${id.substring('toolu_'.length)}`;
+    const suffix = id.substring('toolu_'.length);
+    return `hist_tool_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   }
 
-  return `hist_tool_${id}`;
+  return `hist_tool_${id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 }
