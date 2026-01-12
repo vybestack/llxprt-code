@@ -30,6 +30,7 @@ import { Help } from './Help.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import type { SlashCommand } from '../commands/types.js';
 import { ChatList } from './views/ChatList.js';
+import { ExtensionsList } from './views/ExtensionsList.js';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;
@@ -157,11 +158,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
       {itemForDisplay.type === 'compression' && (
         <CompressionMessage compression={itemForDisplay.compression} />
       )}
-      {itemForDisplay.type === 'extensions_list' && (
-        <Box>
-          <Text color="yellow">Extensions list view not yet implemented</Text>
-        </Box>
-      )}
+      {itemForDisplay.type === 'extensions_list' && <ExtensionsList />}
       {itemForDisplay.type === 'tools_list' && (
         <Box>
           <Text color="yellow">Tools list view not yet implemented</Text>
