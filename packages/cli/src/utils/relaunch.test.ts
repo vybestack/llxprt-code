@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { relaunchAppInChildProcess } from './relaunch.js';
+import { relaunchAppInChildProcess, sanitizeNodeOptions } from './relaunch.js';
 import { RELAUNCH_EXIT_CODE } from './bootstrap.js';
 
 vi.mock('node:child_process');
@@ -134,5 +134,96 @@ describe('relaunchAppInChildProcess', () => {
       string
     >;
     expect(spawnEnv.CUSTOM_VAR).toBe('test-value');
+  });
+
+  it('should sanitize NODE_OPTIONS to remove --localstorage-file', async () => {
+    const nodeArgs = ['--max-old-space-size=4096'];
+    process.env = {
+      ...process.env,
+      NODE_OPTIONS: '--max-old-space-size=2048 --localstorage-file --enable-source-maps',
+    };
+
+    const promise = relaunchAppInChildProcess(nodeArgs);
+
+    mockChildProcess.emit('close', 0);
+    await promise;
+
+    const spawnEnv = mockedChildProcess.spawn.mock.calls[0][2]?.env as Record<
+      string,
+      string | undefined
+    >;
+    expect(spawnEnv.NODE_OPTIONS).toBe(
+      '--max-old-space-size=2048 --enable-source-maps',
+    );
+  });
+
+  it('should remove NODE_OPTIONS entirely if only --localstorage-file present', async () => {
+    const nodeArgs = ['--max-old-space-size=4096'];
+    process.env = { ...process.env, NODE_OPTIONS: '--localstorage-file' };
+
+    const promise = relaunchAppInChildProcess(nodeArgs);
+
+    mockChildProcess.emit('close', 0);
+    await promise;
+
+    const spawnEnv = mockedChildProcess.spawn.mock.calls[0][2]?.env as Record<
+      string,
+      string | undefined
+    >;
+    expect(spawnEnv.NODE_OPTIONS).toBeUndefined();
+  });
+});
+
+describe('sanitizeNodeOptions', () => {
+  it('should return undefined for undefined input', () => {
+    expect(sanitizeNodeOptions(undefined)).toBeUndefined();
+  });
+
+  it('should return undefined for empty string', () => {
+    expect(sanitizeNodeOptions('')).toBeUndefined();
+  });
+
+  it('should remove --localstorage-file without value', () => {
+    expect(sanitizeNodeOptions('--localstorage-file')).toBeUndefined();
+  });
+
+  it('should remove --localstorage-file with equals value', () => {
+    expect(sanitizeNodeOptions('--localstorage-file=/some/path')).toBeUndefined();
+  });
+
+  it('should remove --localstorage-file with space-separated value', () => {
+    expect(sanitizeNodeOptions('--localstorage-file /some/path')).toBeUndefined();
+  });
+
+  it('should preserve other options before --localstorage-file', () => {
+    expect(sanitizeNodeOptions('--max-old-space-size=4096 --localstorage-file')).toBe(
+      '--max-old-space-size=4096',
+    );
+  });
+
+  it('should preserve other options after --localstorage-file', () => {
+    expect(
+      sanitizeNodeOptions('--localstorage-file --enable-source-maps'),
+    ).toBe('--enable-source-maps');
+  });
+
+  it('should preserve options on both sides of --localstorage-file', () => {
+    expect(
+      sanitizeNodeOptions(
+        '--max-old-space-size=4096 --localstorage-file --enable-source-maps',
+      ),
+    ).toBe('--max-old-space-size=4096 --enable-source-maps');
+  });
+
+  it('should not consume following flags as values', () => {
+    expect(
+      sanitizeNodeOptions('--localstorage-file --other-flag value'),
+    ).toBe('--other-flag value');
+  });
+
+  it('should handle multiple spaces', () => {
+    expect(
+      sanitizeNodeOptions('  --max-old-space-size=4096   --localstorage-file   '),
+    ).toBe('--max-old-space-size=4096');
   });
 });

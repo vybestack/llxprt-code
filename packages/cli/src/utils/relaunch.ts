@@ -12,6 +12,25 @@
 import { spawn } from 'node:child_process';
 
 /**
+ * Sanitize NODE_OPTIONS to remove --localstorage-file flags that may cause warnings.
+ * Node emits a warning when --localstorage-file is present without a valid path.
+ * This can happen when IDEs like VSCode set NODE_OPTIONS in the environment.
+ *
+ * @param nodeOptions - The NODE_OPTIONS environment variable value
+ * @returns Sanitized NODE_OPTIONS string, or undefined if empty
+ */
+export function sanitizeNodeOptions(
+  nodeOptions: string | undefined,
+): string | undefined {
+  if (!nodeOptions) return undefined;
+  const sanitized = nodeOptions
+    .replace(/\s*--localstorage-file(?:(?:\s*=\s*|\s+)(?!-)\S+)?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return sanitized || undefined;
+}
+
+/**
  * Relaunch the current application in a child process with additional Node.js arguments.
  * This is used to restart with higher memory limits or enter sandboxed environments.
  *
@@ -25,7 +44,12 @@ export async function relaunchAppInChildProcess(
   additionalArgs: string[],
 ): Promise<number> {
   const nodeArgs = [...additionalArgs, ...process.argv.slice(1)];
-  const newEnv = { ...process.env, LLXPRT_CODE_NO_RELAUNCH: 'true' };
+  const sanitizedNodeOptions = sanitizeNodeOptions(process.env.NODE_OPTIONS);
+  const newEnv: Record<string, string | undefined> = {
+    ...process.env,
+    LLXPRT_CODE_NO_RELAUNCH: 'true',
+    NODE_OPTIONS: sanitizedNodeOptions,
+  };
 
   const child = spawn(process.execPath, nodeArgs, {
     stdio: 'inherit',

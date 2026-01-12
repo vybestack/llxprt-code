@@ -10,7 +10,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "llxprt": "dist/index.js"
+    "llxprt": "llxprt.sh"
   },
   "scripts": {
     "build": "node ../../scripts/build_package.js",
@@ -30,7 +30,8 @@
     "prepack": "npm run build"
   },
   "files": [
-    "dist"
+    "dist",
+    "llxprt.sh"
   ],
   "config": {
     "sandboxImageUri": "ghcr.io/vybestack/llxprt-code/sandbox:0.8.0"
