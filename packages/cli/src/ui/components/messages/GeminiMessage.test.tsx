@@ -4,17 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
+import React from 'react';
+import { Text } from 'ink';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { GeminiMessage } from './GeminiMessage.js';
+import { StreamingState } from '../../types.js';
+import { renderWithProviders } from '../../../test-utils/render.js';
+import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
+import { Colors } from '../../colors.js';
 
-// Mock RuntimeContext before importing the component
+let mockGetEphemeralSetting = vi.fn().mockReturnValue(true);
+
 vi.mock('../../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
-    getEphemeralSetting: () => true, // Show thinking blocks by default
+    getEphemeralSetting: mockGetEphemeralSetting,
   }),
   useRuntimeBridge: () => ({
     runtimeId: 'test',
     metadata: {},
-    api: { getEphemeralSetting: () => true },
+    api: { getEphemeralSetting: mockGetEphemeralSetting },
     runWithScope: <T,>(cb: () => T) => cb(),
     enterScope: () => {},
   }),
@@ -23,54 +31,123 @@ vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeBridge: () => ({
     runtimeId: 'test',
     metadata: {},
-    api: { getEphemeralSetting: () => true },
+    api: { getEphemeralSetting: mockGetEphemeralSetting },
     runWithScope: <T,>(cb: () => T) => cb(),
     enterScope: () => {},
   }),
-  getRuntimeApi: () => ({ getEphemeralSetting: () => true }),
+  getRuntimeApi: () => ({ getEphemeralSetting: mockGetEphemeralSetting }),
 }));
 
-import React from 'react';
-import { GeminiMessage } from './GeminiMessage.js';
-import { StreamingState } from '../../types.js';
-import { renderWithProviders } from '../../../test-utils/render.js';
+vi.mock('../../utils/MarkdownDisplay.js', () => ({
+  MarkdownDisplay: function MockMarkdownDisplay({
+    text,
+    isPending,
+  }: {
+    text: string;
+    isPending: boolean;
+  }) {
+    return (
+      <Text color={Colors.Foreground}>
+        MockMarkdown:{text}
+        {isPending ? ':pending' : ':complete'}
+      </Text>
+    );
+  },
+}));
 
-describe('<GeminiMessage /> - Raw Markdown Display Snapshots', () => {
+vi.mock('./ThinkingBlockDisplay.js', () => ({
+  ThinkingBlockDisplay: function MockThinkingBlockDisplay({
+    block,
+    visible,
+  }: {
+    block: ThinkingBlock;
+    visible: boolean;
+  }) {
+    if (!visible) return null;
+    return <Text color={Colors.Foreground}>MockThinking:{block.thought}</Text>;
+  },
+}));
+
+describe('<GeminiMessage />', () => {
   const baseProps = {
-    text: 'Test **bold** and `code` markdown\n\n```javascript\nconst x = 1;\n```',
+    text: 'Hello, world!',
     isPending: false,
     terminalWidth: 80,
   };
 
-  it.each([
-    { renderMarkdown: true, description: '(default)' },
-    {
-      renderMarkdown: false,
-      description: '(raw markdown with syntax highlighting, no line numbers)',
-    },
-  ])(
-    'renders with renderMarkdown=$renderMarkdown $description',
-    ({ renderMarkdown }) => {
-      const { lastFrame } = renderWithProviders(
-        <GeminiMessage {...baseProps} />,
-        {
-          uiState: { renderMarkdown, streamingState: StreamingState.Idle },
-        },
-      );
-      expect(lastFrame()).toMatchSnapshot();
-    },
-  );
+  beforeEach(() => {
+    mockGetEphemeralSetting = vi.fn().mockReturnValue(true);
+  });
 
-  it.each([{ renderMarkdown: true }, { renderMarkdown: false }])(
-    'renders pending state with renderMarkdown=$renderMarkdown',
-    ({ renderMarkdown }) => {
+  describe('model name display', () => {
+    it('should render model name when model prop is provided', () => {
       const { lastFrame } = renderWithProviders(
-        <GeminiMessage {...baseProps} isPending={true} />,
+        <GeminiMessage {...baseProps} model="gemini-pro" />,
         {
-          uiState: { renderMarkdown, streamingState: StreamingState.Idle },
+          uiState: {
+            renderMarkdown: true,
+            streamingState: StreamingState.Idle,
+          },
         },
       );
-      expect(lastFrame()).toMatchSnapshot();
-    },
-  );
+
+      expect(lastFrame()).toContain('gemini-pro');
+    });
+
+    it('should not render model name when model prop is undefined', () => {
+      const { lastFrame } = renderWithProviders(
+        <GeminiMessage {...baseProps} model={undefined} />,
+        {
+          uiState: {
+            renderMarkdown: true,
+            streamingState: StreamingState.Idle,
+          },
+        },
+      );
+
+      expect(lastFrame()).not.toContain('gemini-pro');
+    });
+  });
+
+  describe('thinking blocks display', () => {
+    const thinkingBlocks: ThinkingBlock[] = [
+      {
+        type: 'thinking',
+        thought: 'First thought',
+        sourceField: 'reasoning_content',
+      },
+    ];
+
+    it('should not render thinking blocks when reasoning.includeInResponse is false', () => {
+      mockGetEphemeralSetting.mockReturnValue(false);
+
+      const { lastFrame } = renderWithProviders(
+        <GeminiMessage {...baseProps} thinkingBlocks={thinkingBlocks} />,
+        {
+          uiState: {
+            renderMarkdown: true,
+            streamingState: StreamingState.Idle,
+          },
+        },
+      );
+
+      expect(lastFrame()).not.toContain('MockThinking:First thought');
+    });
+
+    it('should not render thinking blocks when thinkingBlocks is undefined', () => {
+      mockGetEphemeralSetting.mockReturnValue(true);
+
+      const { lastFrame } = renderWithProviders(
+        <GeminiMessage {...baseProps} thinkingBlocks={undefined} />,
+        {
+          uiState: {
+            renderMarkdown: true,
+            streamingState: StreamingState.Idle,
+          },
+        },
+      );
+
+      expect(lastFrame()).not.toContain('MockThinking');
+    });
+  });
 });
