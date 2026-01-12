@@ -34,7 +34,7 @@ export function normalizeToOpenAIToolId(id: string): string {
 
   if (id.startsWith('call_')) {
     const suffix = id.substring('call_'.length);
-    return `call_${suffix.replace(/[^a-zA-Z0-9_]/g, '')}`;
+    return `call_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   }
 
   let suffix = '';
@@ -46,7 +46,7 @@ export function normalizeToOpenAIToolId(id: string): string {
     suffix = id;
   }
 
-  return `call_${suffix.replace(/[^a-zA-Z0-9_]/g, '')}`;
+  return `call_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 }
 
 /**

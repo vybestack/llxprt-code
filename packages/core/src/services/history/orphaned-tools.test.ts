@@ -198,6 +198,7 @@ describe.skip('Orphaned Tool Calls - HistoryService (OBSOLETE - atomic implement
       const toolCallId = historyService.generateHistoryId(
         'turn-test',
         0,
+        'anthropic',
         'orphaned_tool',
         'call_orphaned',
       );

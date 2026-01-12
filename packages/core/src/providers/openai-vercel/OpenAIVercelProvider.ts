@@ -447,6 +447,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       return `call_${id.substring('hist_tool_'.length)}`;
     }
 
+    if (id.startsWith('toolu_')) {
+      return `call_${id.substring('toolu_'.length)}`;
+    }
+
     return `call_${id}`;
   }
 
@@ -464,6 +468,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     if (id.startsWith('call_')) {
       return `hist_tool_${id.substring('call_'.length)}`;
+    }
+
+    if (id.startsWith('toolu_')) {
+      return `hist_tool_${id.substring('toolu_'.length)}`;
     }
 
     return `hist_tool_${id}`;

@@ -428,10 +428,10 @@ describe('ToolIdStrategy', () => {
           },
         ];
         const mapper = standardStrategy.createMapper(contents);
-        // Should remove - . : characters
+        // Should preserve hyphens but remove . : characters
         expect(
           mapper.resolveToolCallId(contents[0].blocks[0] as ToolCallBlock),
-        ).toBe('call_abc123xyz456');
+        ).toBe('call_abc-123xyz456');
       });
     });
   });

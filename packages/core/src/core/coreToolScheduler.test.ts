@@ -1288,6 +1288,7 @@ describe('CoreToolScheduler edit cancellation', () => {
     const curated = historyService.getCuratedForProvider();
     expect(curated).toHaveLength(2);
     expect(curated[0].speaker).toBe('ai');
+    expect(curated[0].blocks[0].type).toBe('tool_call');
     const toolCallId = (curated[0].blocks[0] as ToolCallBlock).id;
     expect(toolCallId).toMatch(/^hist_tool_[a-zA-Z0-9_-]+$/);
     expect(curated[0].blocks[0]).toMatchObject({
