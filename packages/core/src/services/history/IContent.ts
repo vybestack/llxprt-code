@@ -69,6 +69,9 @@ export interface ContentMetadata {
 
   /** Reason for synthetic content generation */
   reason?: string;
+
+  /** Stable identifier for a conversation turn */
+  turnId?: string;
 }
 
 export interface UsageStats {
@@ -198,133 +201,76 @@ export interface CodeBlock {
 
   /** Programming language for syntax highlighting */
   language?: string;
-
-  /** Optional filename this code is from/for */
-  filename?: string;
-
-  /** Whether this code was executed */
-  executed?: boolean;
-
-  /** Execution result if executed */
-  executionResult?: unknown;
 }
 
 /**
- * Helper type guards for content blocks
- */
-export const ContentBlockGuards = {
-  isTextBlock: (block: ContentBlock): block is TextBlock =>
-    block.type === 'text',
-
-  isToolCallBlock: (block: ContentBlock): block is ToolCallBlock =>
-    block.type === 'tool_call',
-
-  isToolResponseBlock: (block: ContentBlock): block is ToolResponseBlock =>
-    block.type === 'tool_response',
-
-  isMediaBlock: (block: ContentBlock): block is MediaBlock =>
-    block.type === 'media',
-
-  isThinkingBlock: (block: ContentBlock): block is ThinkingBlock =>
-    block.type === 'thinking',
-
-  isCodeBlock: (block: ContentBlock): block is CodeBlock =>
-    block.type === 'code',
-};
-
-/**
- * Helper to create IContent instances
- */
-export const ContentFactory = {
-  createUserMessage: (text: string, metadata?: ContentMetadata): IContent => ({
-    speaker: 'human',
-    blocks: [{ type: 'text', text }],
-    metadata,
-  }),
-
-  createAIMessage: (
-    blocks: ContentBlock[],
-    metadata?: ContentMetadata,
-  ): IContent => ({
-    speaker: 'ai',
-    blocks,
-    metadata,
-  }),
-
-  createToolResponse: (
-    callId: string,
-    toolName: string,
-    result: unknown,
-    error?: string,
-    metadata?: ContentMetadata,
-  ): IContent => ({
-    speaker: 'tool',
-    blocks: [
-      {
-        type: 'tool_response',
-        callId,
-        toolName,
-        result,
-        error,
-      },
-    ],
-    metadata,
-  }),
-};
-
-/**
- * Validation helpers
+ * Utility class for content validation operations
  */
 export const ContentValidation = {
   /**
-   * Check if content has meaningful content (not empty)
+   * Check if IContent has valid content (non-empty blocks, at least one block with actual content)
    */
-  hasContent: (content: IContent): boolean => {
+  hasContent(content: IContent): boolean {
     if (!content.blocks || content.blocks.length === 0) {
       return false;
     }
 
+    // Check if any block has actual content
     return content.blocks.some((block) => {
-      switch (block.type) {
-        case 'text':
-          return block.text.trim().length > 0;
-        case 'tool_call':
-        case 'tool_response':
-        case 'media':
-        case 'code':
-          return true;
-        case 'thinking':
-          return block.thought.trim().length > 0;
-        default:
-          return false;
+      if (block.type === 'text') {
+        return !!block.text && block.text.trim().length > 0;
       }
+      if (block.type === 'tool_call') {
+        return !!block.name && !!block.parameters;
+      }
+      if (block.type === 'tool_response') {
+        return !!block.callId && block.result !== undefined;
+      }
+      if (block.type === 'media') {
+        return !!block.data && !!block.mimeType;
+      }
+      if (block.type === 'thinking') {
+        return !!block.thought && block.thought.trim().length > 0;
+      }
+      if (block.type === 'code') {
+        return !!block.code && block.code.trim().length > 0;
+      }
+      return false;
     });
   },
-
-  /**
-   * Check if content is valid for inclusion in history
-   */
-  isValid: (content: IContent): boolean => {
-    // Must have a valid speaker
-    if (!['human', 'ai', 'tool'].includes(content.speaker)) {
-      return false;
-    }
-
-    // Must have at least one block
-    if (!content.blocks || content.blocks.length === 0) {
-      return false;
-    }
-
-    // Tool responses must have tool_response blocks
-    if (content.speaker === 'tool') {
-      const hasToolResponse = content.blocks.some(
-        (b) => b.type === 'tool_response',
-      );
-      if (!hasToolResponse) {
-        return false;
-      }
-    }
-
-    return true;
-  },
 };
+
+export function createUserMessage(
+  text: string,
+  metadata?: { timestamp?: number; provider?: string },
+): IContent {
+  const content: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text }],
+  };
+  if (metadata) {
+    content.metadata = metadata;
+  }
+  return content;
+}
+
+export function createToolResponse(
+  callId: string,
+  toolName: string,
+  result: unknown,
+  error?: string,
+): IContent {
+  const block: ToolResponseBlock = {
+    type: 'tool_response',
+    callId,
+    toolName,
+    result,
+  };
+  if (error) {
+    block.error = error;
+  }
+  return {
+    speaker: 'tool',
+    blocks: [block],
+  };
+}

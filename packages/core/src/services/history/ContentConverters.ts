@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { randomUUID } from 'crypto';
 import { type Content, type Part } from '@google/genai';
 import type {
   IContent,
@@ -24,59 +25,16 @@ import type {
   ThinkingBlock,
 } from './IContent.js';
 import { DebugLogger } from '../../debug/index.js';
+import {
+  canonicalizeToolCallId,
+  canonicalizeToolResponseId,
+} from './canonicalToolIds.js';
 
 /**
  * Converts between Gemini Content format and IContent format
  */
 export class ContentConverters {
   private static logger = new DebugLogger('llxprt:content:converters');
-  private static normalizeToHistoryId(
-    id: string | undefined,
-  ): string | undefined {
-    if (!id) return undefined;
-    if (id.startsWith('hist_tool_')) return id;
-
-    let candidate = id;
-    let didStrip = true;
-
-    while (didStrip) {
-      didStrip = false;
-
-      if (candidate.startsWith('call_')) {
-        candidate = candidate.substring('call_'.length);
-        didStrip = true;
-        continue;
-      }
-
-      if (candidate.startsWith('toolu_')) {
-        candidate = candidate.substring('toolu_'.length);
-        didStrip = true;
-        continue;
-      }
-
-      // Some systems can produce malformed OpenAI-style call ids:
-      // - missing underscore: "call3or3..."
-      // - double-prefixed: "call_call3or3..." or "call_call_3or3..."
-      //
-      // When we see a "call" prefix without the underscore, strip it
-      // if the suffix looks like a real OpenAI call id token.
-      if (candidate.startsWith('call') && !candidate.startsWith('call_')) {
-        const suffix = candidate.substring('call'.length);
-        const looksLikeToken =
-          suffix.length >= 8 && /^[a-zA-Z0-9]+$/.test(suffix);
-        if (looksLikeToken) {
-          candidate = suffix;
-          didStrip = true;
-          continue;
-        }
-      }
-    }
-
-    if (!candidate) return undefined;
-
-    // Unknown provider format: preserve suffix, add history prefix
-    return `hist_tool_${candidate}`;
-  }
   /**
    * Convert IContent to Gemini Content format
    */
@@ -211,6 +169,7 @@ export class ContentConverters {
     content: Content,
     generateIdCb?: () => string,
     getNextUnmatchedToolCall?: () => { historyId: string; toolName?: string },
+    turnKeyOverride?: string,
   ): IContent {
     this.logger.debug('Converting Gemini Content to IContent:', {
       role: content.role,
@@ -240,6 +199,11 @@ export class ContentConverters {
     });
     const speaker = content.role === 'user' ? 'human' : 'ai';
     const blocks: ContentBlock[] = [];
+    const metadata: IContent['metadata'] = {};
+    const turnKey = turnKeyOverride ?? generateTurnKey();
+    const providerName = 'gemini';
+    let callIndex = 0;
+    let responseIndex = 0;
 
     // Handle empty parts array explicitly
     if (!content.parts || content.parts.length === 0) {
@@ -262,35 +226,49 @@ export class ContentConverters {
             });
           }
         } else if ('functionCall' in part && part.functionCall) {
-          // Preserve original ID by normalizing prefix; generate only if missing.
-          const normalized = this.normalizeToHistoryId(part.functionCall.id);
-          const finalId =
-            normalized ?? (generateIdCb ? generateIdCb() : generateId());
+          const toolName = part.functionCall.name || '';
+          const rawId = part.functionCall.id;
+          const generatedId =
+            !rawId && generateIdCb ? generateIdCb() : undefined;
+          const finalId = generatedId
+            ? generatedId
+            : canonicalizeToolCallId({
+                providerName,
+                rawId,
+                toolName,
+                turnKey,
+                callIndex,
+              });
           this.logger.debug('Converting functionCall to tool_call block:', {
             originalId: part.functionCall.id,
             finalId,
             name: part.functionCall.name,
-            usedCallback: !!generateIdCb && !normalized,
+            usedCallback: !!generatedId,
           });
           blocks.push({
             type: 'tool_call',
             id: finalId,
-            name: part.functionCall.name || '',
+            name: toolName,
             parameters:
               (part.functionCall.args as Record<string, unknown>) || {},
           });
+          callIndex += 1;
         } else if ('functionResponse' in part && part.functionResponse) {
-          // Prefer provided ID (normalized). If absent, use positional matcher; else generate.
-          const normalized = this.normalizeToHistoryId(
-            part.functionResponse.id,
-          );
-          const matched = !normalized
-            ? getNextUnmatchedToolCall?.()
-            : undefined;
-          const callId =
-            normalized ??
-            matched?.historyId ??
-            (generateIdCb ? generateIdCb() : generateId());
+          const toolName = part.functionResponse.name || '';
+          const rawId = part.functionResponse.id;
+          const matched = !rawId ? getNextUnmatchedToolCall?.() : undefined;
+          const generatedId =
+            !rawId && !matched && generateIdCb ? generateIdCb() : undefined;
+          const callId = matched?.historyId
+            ? matched.historyId
+            : (generatedId ??
+              canonicalizeToolResponseId({
+                providerName,
+                rawId,
+                toolName,
+                turnKey,
+                callIndex: responseIndex,
+              }));
           this.logger.debug(
             'Converting functionResponse to tool_response block:',
             {
@@ -353,6 +331,7 @@ export class ContentConverters {
               '') as string,
             result,
           });
+          responseIndex += 1;
         } else if ('inlineData' in part && part.inlineData) {
           // Handle inline data (media)
           blocks.push({
@@ -372,10 +351,12 @@ export class ContentConverters {
     const finalSpeaker: 'human' | 'ai' | 'tool' =
       content.role === 'user' && hasToolResponse ? 'tool' : speaker;
 
+    metadata.turnId = turnKey;
+
     const result: IContent = {
       speaker: finalSpeaker,
       blocks,
-      metadata: {},
+      metadata,
     };
 
     this.logger.debug('Converted to IContent:', {
@@ -453,10 +434,6 @@ export class ContentConverters {
   }
 }
 
-/**
- * Generate a unique ID for tool calls
- */
-function generateId(): string {
-  // Use normalized history ID prefix; providers convert prefixes as needed.
-  return `hist_tool_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+function generateTurnKey(): string {
+  return `turn_${randomUUID()}`;
 }

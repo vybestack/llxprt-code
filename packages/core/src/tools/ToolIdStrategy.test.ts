@@ -306,6 +306,38 @@ describe('ToolIdStrategy', () => {
         expect(result).toContain('functions.');
         expect(result).toContain(':');
       });
+
+      it('should keep consistent IDs when tool call order changes', () => {
+        const first: IContent = {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_a',
+              name: 'glob',
+              parameters: {},
+            },
+            {
+              type: 'tool_call',
+              id: 'hist_tool_b',
+              name: 'read_file',
+              parameters: {},
+            },
+          ],
+        };
+        const second: IContent = {
+          speaker: 'ai',
+          blocks: [...first.blocks].reverse(),
+        };
+
+        const mapper = kimiStrategy.createMapper([second]);
+        const blocks = second.blocks as ToolCallBlock[];
+
+        expect(mapper.resolveToolCallId(blocks[0])).toBe(
+          'functions.read_file:0',
+        );
+        expect(mapper.resolveToolCallId(blocks[1])).toBe('functions.glob:1');
+      });
     });
   });
 
@@ -396,10 +428,10 @@ describe('ToolIdStrategy', () => {
           },
         ];
         const mapper = standardStrategy.createMapper(contents);
-        // Should remove - . : characters
+        // Should preserve hyphens but remove . : characters
         expect(
           mapper.resolveToolCallId(contents[0].blocks[0] as ToolCallBlock),
-        ).toBe('call_abc123xyz456');
+        ).toBe('call_abc-123xyz456');
       });
     });
   });

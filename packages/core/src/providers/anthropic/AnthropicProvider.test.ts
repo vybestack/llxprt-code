@@ -833,6 +833,142 @@ describe('AnthropicProvider', () => {
       await expect(generator.next()).rejects.toThrow('API Error');
     });
 
+    it('should sanitize tool_use IDs to be Anthropic-compatible', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'ok' },
+          };
+        },
+      };
+
+      mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_functions.read_file:0',
+              name: 'read_file',
+              parameters: { absolute_path: '/tmp/test.txt' },
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toEqual([
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'ok' }],
+        },
+      ]);
+
+      const request = mockAnthropicInstance.messages.create.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+      const assistantMessage = anthropicMessages.find(
+        (msg) => msg.role === 'assistant' && Array.isArray(msg.content),
+      );
+
+      expect(assistantMessage).toBeDefined();
+
+      const toolUseBlock = (
+        assistantMessage?.content as AnthropicContentBlock[]
+      ).find((block) => block.type === 'tool_use') as AnthropicContentBlock & {
+        id: string;
+      };
+
+      expect(toolUseBlock.id).toMatch(/^toolu_[a-zA-Z0-9_-]+$/);
+    });
+
+    it('should sanitize tool_result IDs to be Anthropic-compatible', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'done' },
+          };
+        },
+      };
+
+      mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_functions.read_file:0',
+              name: 'read_file',
+              parameters: { absolute_path: '/tmp/test.txt' },
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'hist_tool_functions.read_file:0',
+              toolName: 'read_file',
+              result: { output: 'ok' },
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toEqual([
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'done' }],
+        },
+      ]);
+
+      const request = mockAnthropicInstance.messages.create.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+      const toolResultMessage = anthropicMessages.find(
+        (msg) =>
+          msg.role === 'user' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((block) => block.type === 'tool_result'),
+      ) as AnthropicMessage;
+
+      expect(toolResultMessage).toBeDefined();
+
+      const toolResultBlock = (
+        toolResultMessage.content as AnthropicContentBlock[]
+      ).find(
+        (block) => block.type === 'tool_result',
+      ) as AnthropicContentBlock & { tool_use_id: string };
+
+      expect(toolResultBlock.tool_use_id).toMatch(/^toolu_[a-zA-Z0-9_-]+$/);
+    });
+
     it('should handle usage tracking', async () => {
       const mockStream = {
         async *[Symbol.asyncIterator]() {

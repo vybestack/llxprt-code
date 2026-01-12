@@ -6,6 +6,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
+import { createHash } from 'node:crypto';
 import type {
   ToolUseBlock,
   TextDelta,
@@ -561,6 +562,21 @@ export class AnthropicProvider extends BaseProvider {
     throw new Error('Server tools not supported by Anthropic provider');
   }
 
+  override getToolFormat(): ToolFormat {
+    const format = this.detectToolFormat();
+    const logger = new DebugLogger('llxprt:provider:anthropic');
+    logger.debug(() => `getToolFormat() called, returning: ${format}`, {
+      provider: this.name,
+      model: this.getModel(),
+      format,
+    });
+    return format;
+  }
+
+  getRateLimitInfo(): AnthropicRateLimitInfo | undefined {
+    return this.lastRateLimitInfo;
+  }
+
   /**
    * Get current model parameters from SettingsService per call
    * @returns Current parameters or undefined if not set
@@ -674,37 +690,6 @@ export class AnthropicProvider extends BaseProvider {
 
       return 'anthropic';
     }
-  }
-
-  override getToolFormat(): ToolFormat {
-    // Use the same detection logic as detectToolFormat()
-    return this.detectToolFormat();
-  }
-
-  /**
-   * Normalize tool IDs from various formats to Anthropic format
-   * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
-   */
-  private normalizeToAnthropicToolId(id: string): string {
-    // If already in Anthropic format, return as-is
-    if (id.startsWith('toolu_')) {
-      return id;
-    }
-
-    // For history format, extract the UUID and add Anthropic prefix
-    if (id.startsWith('hist_tool_')) {
-      const uuid = id.substring('hist_tool_'.length);
-      return 'toolu_' + uuid;
-    }
-
-    // For OpenAI format, extract the UUID and add Anthropic prefix
-    if (id.startsWith('call_')) {
-      const uuid = id.substring('call_'.length);
-      return 'toolu_' + uuid;
-    }
-
-    // Unknown format - assume it's a raw UUID
-    return 'toolu_' + id;
   }
 
   /**
@@ -2418,11 +2403,35 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Get current rate limit information
-   * Returns the last known rate limit state from the most recent API call
+   * Normalize tool IDs from various formats to Anthropic format.
+   * Sanitizes invalid characters (not matching ^[a-zA-Z0-9_-]+$) by replacing with hyphens.
    */
-  getRateLimitInfo(): AnthropicRateLimitInfo | undefined {
-    return this.lastRateLimitInfo;
+  private normalizeToAnthropicToolId(id: string): string {
+    if (!id) {
+      // Generate a unique deterministic fallback using timestamp + hash
+      const timestamp = Date.now().toString();
+      const hash = createHash('sha256')
+        .update(timestamp + Math.random())
+        .digest('hex')
+        .substring(0, 16);
+      return `toolu_${hash}`;
+    }
+
+    if (id.startsWith('toolu_')) {
+      return id;
+    }
+
+    if (id.startsWith('hist_tool_')) {
+      const suffix = id.substring('hist_tool_'.length);
+      return `toolu_${suffix.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+    }
+
+    if (id.startsWith('call_')) {
+      const suffix = id.substring('call_'.length);
+      return `toolu_${suffix.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+    }
+
+    return `toolu_${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   }
 
   /**

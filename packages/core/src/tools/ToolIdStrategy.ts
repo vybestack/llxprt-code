@@ -22,6 +22,7 @@ import type {
 } from '../services/history/IContent.js';
 import type { ToolFormat } from './IToolFormatter.js';
 import { normalizeToOpenAIToolId } from '../providers/openai-vercel/toolIdUtils.js';
+import crypto from 'node:crypto';
 
 /**
  * Interface for mapping tool IDs to provider-specific formats
@@ -172,32 +173,50 @@ export const standardStrategy: ToolIdStrategy = {
  *
  * @returns A 9-character alphanumeric string
  */
-function generateMistralToolId(): string {
-  const chars =
-    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const MISTRAL_CHARS =
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+function base62FromHex(hex: string): string {
+  const base = BigInt(MISTRAL_CHARS.length);
+  let value = BigInt(`0x${hex}`);
   let result = '';
-  for (let i = 0; i < 9; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+
+  if (value === BigInt(0)) {
+    return '0';
   }
+
+  while (value > 0) {
+    const remainder = value % base;
+    result = MISTRAL_CHARS[Number(remainder)] + result;
+    value = value / base;
+  }
+
   return result;
 }
 
-/**
- * Converts any tool ID to Mistral's required format.
- *
- * If the ID is already 9 alphanumeric characters, return it as-is.
- * Otherwise, generate a new compliant ID.
- *
- * @param id - The original tool call ID
- * @returns A Mistral-compatible 9-character alphanumeric ID
- */
-function toMistralToolId(id: string): string {
-  // Check if already compliant: exactly 9 alphanumeric characters
+function generateDeterministicMistralId(seed: string, salt: number): string {
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${seed}|${salt}`)
+    .digest('hex');
+  const base62 = base62FromHex(hash);
+  const padded = base62.padStart(9, 'a');
+  return padded.slice(0, 9);
+}
+
+function toMistralToolId(id: string, used: Set<string>): string {
   if (/^[a-zA-Z0-9]{9}$/.test(id)) {
     return id;
   }
-  // Generate a new compliant ID
-  return generateMistralToolId();
+
+  let salt = 0;
+  while (true) {
+    const candidate = generateDeterministicMistralId(id, salt);
+    if (!used.has(candidate)) {
+      return candidate;
+    }
+    salt += 1;
+  }
 }
 
 /**
@@ -212,18 +231,18 @@ function toMistralToolId(id: string): string {
  */
 export const mistralStrategy: ToolIdStrategy = {
   createMapper(contents: IContent[]): ToolIdMapper {
-    // Build a map of internal ID -> Mistral format ID
     const idToMistralId = new Map<string, string>();
+    const usedIds = new Set<string>();
 
-    // Scan all tool calls in the conversation and assign Mistral IDs
     for (const content of contents) {
       if (content.speaker !== 'ai') continue;
 
       for (const block of content.blocks) {
         if (isToolCallBlock(block)) {
-          // Check if this ID already has a Mistral mapping
           if (!idToMistralId.has(block.id)) {
-            idToMistralId.set(block.id, toMistralToolId(block.id));
+            const mistralId = toMistralToolId(block.id, usedIds);
+            idToMistralId.set(block.id, mistralId);
+            usedIds.add(mistralId);
           }
         }
       }
@@ -231,24 +250,23 @@ export const mistralStrategy: ToolIdStrategy = {
 
     return {
       resolveToolCallId(tc: ToolCallBlock): string {
-        // Return existing mapping or create new one
         let mistralId = idToMistralId.get(tc.id);
         if (!mistralId) {
-          mistralId = toMistralToolId(tc.id);
+          mistralId = toMistralToolId(tc.id, usedIds);
           idToMistralId.set(tc.id, mistralId);
+          usedIds.add(mistralId);
         }
         return mistralId;
       },
 
       resolveToolResponseId(tr: ToolResponseBlock): string {
-        // Look up the corresponding tool call's Mistral ID
         const mistralId = idToMistralId.get(tr.callId);
         if (mistralId) {
           return mistralId;
         }
-        // Fallback: generate a new compliant ID
-        const newId = toMistralToolId(tr.callId);
+        const newId = toMistralToolId(tr.callId, usedIds);
         idToMistralId.set(tr.callId, newId);
+        usedIds.add(newId);
         return newId;
       },
     };
