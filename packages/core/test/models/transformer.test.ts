@@ -472,7 +472,7 @@ describe('transformProvider', () => {
 
 describe('transformApiResponse', () => {
   it('transforms multiple providers', () => {
-    const { models, providers } = transformApiResponse(mockApiResponse);
+    const { providers } = transformApiResponse(mockApiResponse);
     expect(providers.size).toBe(4); // openai, anthropic, google, deepseek
   });
 

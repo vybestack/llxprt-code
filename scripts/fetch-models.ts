@@ -33,7 +33,7 @@ interface FetchResult {
 }
 
 async function fetchModels(): Promise<FetchResult> {
-  console.log('📡 Fetching models from models.dev...');
+  console.log('Fetching models from models.dev...');
 
   try {
     const controller = new AbortController();
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
 
   if (result.success) {
     console.log(
-      `✅ Bundled ${result.providerCount} providers and ${result.modelCount} models`,
+      `Bundled ${result.providerCount} providers and ${result.modelCount} models`,
     );
     console.log(`   Output: ${OUTPUT_PATH}`);
   } else {

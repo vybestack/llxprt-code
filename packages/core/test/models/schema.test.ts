@@ -50,31 +50,36 @@ describe('ModelsDevModelSchema', () => {
 
   describe('required fields', () => {
     it('fails when id is missing', () => {
-      const { id: _id, ...modelWithoutId } = minimalModel;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id: _, ...modelWithoutId } = minimalModel;
       const result = ModelsDevModelSchema.safeParse(modelWithoutId);
       expect(result.success).toBe(false);
     });
 
     it('fails when name is missing', () => {
-      const { name: _name, ...modelWithoutName } = minimalModel;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { name: _, ...modelWithoutName } = minimalModel;
       const result = ModelsDevModelSchema.safeParse(modelWithoutName);
       expect(result.success).toBe(false);
     });
 
     it('fails when limit is missing', () => {
-      const { limit: _limit, ...modelWithoutLimit } = minimalModel;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { limit: _, ...modelWithoutLimit } = minimalModel;
       const result = ModelsDevModelSchema.safeParse(modelWithoutLimit);
       expect(result.success).toBe(false);
     });
 
     it('fails when release_date is missing', () => {
-      const { release_date: _rd, ...modelWithoutDate } = minimalModel;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { release_date: _, ...modelWithoutDate } = minimalModel;
       const result = ModelsDevModelSchema.safeParse(modelWithoutDate);
       expect(result.success).toBe(false);
     });
 
     it('fails when open_weights is missing', () => {
-      const { open_weights: _ow, ...modelWithoutOW } = minimalModel;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { open_weights: _, ...modelWithoutOW } = minimalModel;
       const result = ModelsDevModelSchema.safeParse(modelWithoutOW);
       expect(result.success).toBe(false);
     });

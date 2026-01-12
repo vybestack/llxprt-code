@@ -120,11 +120,7 @@ describe('ModelsRegistry', () => {
 
       // First call for cache check (stale)
       // Second call for bundled fallback
-      let callCount = 0;
-      vi.mocked(fs.existsSync).mockImplementation(() => {
-        callCount++;
-        return true;
-      });
+      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.statSync).mockReturnValue({
         mtimeMs: eightDaysAgo,
       } as fs.Stats);
