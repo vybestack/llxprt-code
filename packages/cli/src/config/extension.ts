@@ -659,7 +659,10 @@ export async function loadExtensionConfig(
   // Try llxprt-extension.json first, then fall back to gemini-extension.json
   let configFilePath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME);
   if (!fs.existsSync(configFilePath)) {
-    configFilePath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME_FALLBACK);
+    configFilePath = path.join(
+      extensionDir,
+      EXTENSIONS_CONFIG_FILENAME_FALLBACK,
+    );
   }
   if (!fs.existsSync(configFilePath)) {
     return null;

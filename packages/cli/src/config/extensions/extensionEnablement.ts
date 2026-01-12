@@ -6,7 +6,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { coreEvents, type GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import {
+  coreEvents,
+  type GeminiCLIExtension,
+} from '@vybestack/llxprt-code-core';
 
 export interface ExtensionEnablementConfig {
   overrides: string[];

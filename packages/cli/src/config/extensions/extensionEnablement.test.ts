@@ -9,7 +9,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExtensionEnablementManager, Override } from './extensionEnablement.js';
-import { coreEvents, type GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import {
+  coreEvents,
+  type GeminiCLIExtension,
+} from '@vybestack/llxprt-code-core';
 
 // Helper to create a temporary directory for testing
 function createTestDir() {

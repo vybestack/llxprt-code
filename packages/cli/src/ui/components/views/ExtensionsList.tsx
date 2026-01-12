@@ -15,7 +15,9 @@ interface ExtensionsListProps {
   extensions: readonly GeminiCLIExtension[];
 }
 
-export const ExtensionsList: React.FC<ExtensionsListProps> = ({ extensions }) => {
+export const ExtensionsList: React.FC<ExtensionsListProps> = ({
+  extensions,
+}) => {
   const { commandContext } = useUIState();
   const extensionsUpdateState = commandContext.ui.extensionsUpdateState;
 
@@ -60,7 +62,9 @@ export const ExtensionsList: React.FC<ExtensionsListProps> = ({ extensions }) =>
           return (
             <Box key={ext.name}>
               <Text color={Colors.Foreground}>
-                <Text color={Colors.AccentCyan}>{`${ext.name} (v${ext.version})`}</Text>
+                <Text
+                  color={Colors.AccentCyan}
+                >{`${ext.name} (v${ext.version})`}</Text>
                 <Text color={activeColor}>{` - ${activeString}`}</Text>
                 {<Text color={stateColor}>{` (${stateText})`}</Text>}
               </Text>

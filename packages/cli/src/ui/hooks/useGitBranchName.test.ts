@@ -123,10 +123,12 @@ describe('useGitBranchName', () => {
     };
 
     let watchCallback: ((eventType: string) => void) | null = null;
-    const watchSpy = vi.mocked(fs.watch).mockImplementation((path, callback) => {
-      watchCallback = callback as (eventType: string) => void;
-      return mockWatcher as unknown as fs.FSWatcher;
-    });
+    const watchSpy = vi
+      .mocked(fs.watch)
+      .mockImplementation((path, callback) => {
+        watchCallback = callback as (eventType: string) => void;
+        return mockWatcher as unknown as fs.FSWatcher;
+      });
 
     let callCount = 0;
     // Mock exec to return different values on each call
@@ -198,7 +200,9 @@ describe('useGitBranchName', () => {
       ...watcherEmitter,
     };
 
-    const watchMock = vi.mocked(fs.watch).mockReturnValue(mockWatcher as unknown as fs.FSWatcher);
+    const watchMock = vi
+      .mocked(fs.watch)
+      .mockReturnValue(mockWatcher as unknown as fs.FSWatcher);
 
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
       (_command, _options, callback) => {

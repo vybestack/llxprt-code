@@ -2217,8 +2217,9 @@ export async function applyCliArgumentOverrides(
 ): Promise<void> {
   const { readFile } = await import('node:fs/promises');
   const { homedir } = await import('node:os');
-  const { applyCliSetArguments } =
-    await import('../config/cliEphemeralSettings.js');
+  const { applyCliSetArguments } = await import(
+    '../config/cliEphemeralSettings.js'
+  );
 
   const { config } = getCliRuntimeServices();
 

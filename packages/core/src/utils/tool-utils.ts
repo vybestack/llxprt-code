@@ -128,7 +128,9 @@ export function isShellInvocationAllowlisted(
   const command = commandValue.trim();
 
   const normalize = (cmd: string): string => cmd.trim().replace(/\s+/g, ' ');
-  const commandsToValidate = splitCommands(command).map(normalize).filter(Boolean);
+  const commandsToValidate = splitCommands(command)
+    .map(normalize)
+    .filter(Boolean);
 
   if (commandsToValidate.length === 0) {
     return false;

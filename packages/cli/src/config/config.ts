@@ -588,10 +588,21 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
   // We no longer accept it as a CLI argument
 
   // Map camelCase names to match CliArgs interface
-  // Check if an MCP subcommand was handled
+  // Check if an MCP or extensions subcommand was handled
   // The _ array contains the commands that were run
   if (result._ && result._.length > 0 && result._[0] === 'mcp') {
     // An MCP subcommand was executed (like 'mcp list'), exit cleanly
+    process.exit(0);
+  }
+
+  if (
+    result._ &&
+    result._.length > 0 &&
+    (result._[0] === 'extensions' ||
+      result._[0] === 'extension' ||
+      result._[0] === 'ext')
+  ) {
+    // An extensions subcommand was executed (like 'extensions install'), exit cleanly
     process.exit(0);
   }
 
@@ -1045,7 +1056,9 @@ export async function loadCliConfig(
   const question =
     argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
 
-  const extensionContextFilePaths = allExtensions.filter((ext) => ext.isActive).flatMap((ext) => ext.contextFiles);
+  const extensionContextFilePaths = allExtensions
+    .filter((ext) => ext.isActive)
+    .flatMap((ext) => ext.contextFiles);
 
   // Determine approval mode with backward compatibility
   let approvalMode: ApprovalMode;
@@ -1377,8 +1390,9 @@ export async function loadCliConfig(
 
   // Register provider infrastructure AFTER runtime context but BEFORE any profile application
   // This is critical for applyProfileSnapshot to access the provider manager
-  const { registerCliProviderInfrastructure } =
-    await import('../runtime/runtimeSettings.js');
+  const { registerCliProviderInfrastructure } = await import(
+    '../runtime/runtimeSettings.js'
+  );
   if (runtimeState.oauthManager) {
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
@@ -1559,8 +1573,9 @@ export async function loadCliConfig(
       bootstrapArgs.baseurlOverride ||
       (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
   ) {
-    const { applyCliArgumentOverrides } =
-      await import('../runtime/runtimeSettings.js');
+    const { applyCliArgumentOverrides } = await import(
+      '../runtime/runtimeSettings.js'
+    );
     await applyCliArgumentOverrides(
       {
         key: argv.key,

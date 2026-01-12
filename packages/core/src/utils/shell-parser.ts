@@ -73,8 +73,9 @@ export async function initializeParser(): Promise<boolean> {
 
     // Load the bash language WASM
     // The ?binary suffix triggers our esbuild plugin to embed the wasm
-    const wasmModule =
-      await import('tree-sitter-bash/tree-sitter-bash.wasm?binary');
+    const wasmModule = await import(
+      'tree-sitter-bash/tree-sitter-bash.wasm?binary'
+    );
     bashLanguage = await Parser.Language.load(wasmModule.default);
     parser!.setLanguage(bashLanguage);
 
