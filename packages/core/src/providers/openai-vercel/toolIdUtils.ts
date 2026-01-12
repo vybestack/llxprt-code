@@ -20,6 +20,12 @@
  * @description Tool ID normalization utility functions
  */
 
+const SANITIZE_PATTERN = /[^a-zA-Z0-9_-]/g;
+
+function sanitizeSuffix(suffix: string): string {
+  return suffix.replace(SANITIZE_PATTERN, '');
+}
+
 /**
  * Normalizes various tool ID formats to OpenAI format (call_xxx)
  * - hist_tool_xxx → call_xxx
@@ -34,7 +40,7 @@ export function normalizeToOpenAIToolId(id: string): string {
 
   if (id.startsWith('call_')) {
     const suffix = id.substring('call_'.length);
-    return `call_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    return `call_${sanitizeSuffix(suffix)}`;
   }
 
   let suffix = '';
@@ -46,7 +52,7 @@ export function normalizeToOpenAIToolId(id: string): string {
     suffix = id;
   }
 
-  return `call_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  return `call_${sanitizeSuffix(suffix)}`;
 }
 
 /**
@@ -62,18 +68,18 @@ export function normalizeToHistoryToolId(id: string): string {
 
   if (id.startsWith('hist_tool_')) {
     const suffix = id.substring('hist_tool_'.length);
-    return `hist_tool_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    return `hist_tool_${sanitizeSuffix(suffix)}`;
   }
 
   if (id.startsWith('call_')) {
     const suffix = id.substring('call_'.length);
-    return `hist_tool_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    return `hist_tool_${sanitizeSuffix(suffix)}`;
   }
 
   if (id.startsWith('toolu_')) {
     const suffix = id.substring('toolu_'.length);
-    return `hist_tool_${suffix.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    return `hist_tool_${sanitizeSuffix(suffix)}`;
   }
 
-  return `hist_tool_${id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  return `hist_tool_${sanitizeSuffix(id)}`;
 }

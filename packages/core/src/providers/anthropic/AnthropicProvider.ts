@@ -6,6 +6,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
+import { createHash } from 'node:crypto';
 import type {
   ToolUseBlock,
   TextDelta,
@@ -2407,7 +2408,13 @@ export class AnthropicProvider extends BaseProvider {
    */
   private normalizeToAnthropicToolId(id: string): string {
     if (!id) {
-      return 'toolu_';
+      // Generate a unique deterministic fallback using timestamp + hash
+      const timestamp = Date.now().toString();
+      const hash = createHash('sha256')
+        .update(timestamp + Math.random())
+        .digest('hex')
+        .substring(0, 16);
+      return `toolu_${hash}`;
     }
 
     if (id.startsWith('toolu_')) {
