@@ -11,7 +11,6 @@ import type {
   TextDelta,
   InputJSONDelta,
 } from '@anthropic-ai/sdk/resources/messages/index.js';
-import crypto from 'node:crypto';
 import { DebugLogger } from '../../debug/index.js';
 import { type IModel } from '../IModel.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
@@ -2403,42 +2402,28 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Normalize tool IDs from various formats to Anthropic format
-   * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
+   * Normalize tool IDs from various formats to Anthropic format.
    */
   private normalizeToAnthropicToolId(id: string): string {
-    const sanitize = (value: string): string => {
-      const sanitized = value.replace(/[^a-zA-Z0-9_-]/g, '');
-      if (!sanitized || sanitized === 'toolu_') {
-        const hash = crypto
-          .createHash('sha256')
-          .update(value)
-          .digest('hex')
-          .slice(0, 24);
-        return `toolu_${hash}`;
-      }
-      return sanitized;
-    };
+    if (!id) {
+      return 'toolu_';
+    }
 
-    // If already in Anthropic format, return sanitized
     if (id.startsWith('toolu_')) {
-      return sanitize(id);
+      return id;
     }
 
-    // For history format, extract the UUID and add Anthropic prefix
     if (id.startsWith('hist_tool_')) {
-      const uuid = id.substring('hist_tool_'.length);
-      return sanitize('toolu_' + uuid);
+      const suffix = id.substring('hist_tool_'.length);
+      return `toolu_${suffix.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
     }
 
-    // For OpenAI format, extract the UUID and add Anthropic prefix
     if (id.startsWith('call_')) {
-      const uuid = id.substring('call_'.length);
-      return sanitize('toolu_' + uuid);
+      const suffix = id.substring('call_'.length);
+      return `toolu_${suffix.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
     }
 
-    // Unknown format - assume it's a raw UUID
-    return sanitize('toolu_' + id);
+    return `toolu_${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   }
 
   /**

@@ -1,4 +1,4 @@
-/**
+/*
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
@@ -26,7 +26,13 @@ describe.skip('Orphaned Tool Calls - HistoryService (OBSOLETE - atomic implement
       });
 
       // Add AI response with tool call
-      const toolCallId = historyService.generateHistoryId();
+      const toolCallId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'openai',
+        'call_write_test',
+        'write_file',
+      );
       historyService.add({
         speaker: 'ai',
         blocks: [
@@ -51,9 +57,27 @@ describe.skip('Orphaned Tool Calls - HistoryService (OBSOLETE - atomic implement
 
     it('should handle mixed matched and unmatched tool calls', () => {
       // Add AI response with multiple tool calls
-      const matchedId = historyService.generateHistoryId();
-      const orphanId1 = historyService.generateHistoryId();
-      const orphanId2 = historyService.generateHistoryId();
+      const matchedId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'openai',
+        'call_matched',
+        'tool1',
+      );
+      const orphanId1 = historyService.generateHistoryId(
+        'turn-test',
+        1,
+        'openai',
+        'call_orphan1',
+        'tool2',
+      );
+      const orphanId2 = historyService.generateHistoryId(
+        'turn-test',
+        2,
+        'openai',
+        'call_orphan2',
+        'tool3',
+      );
 
       historyService.add({
         speaker: 'ai',
@@ -105,7 +129,13 @@ describe.skip('Orphaned Tool Calls - HistoryService (OBSOLETE - atomic implement
   describe('getCurated with orphaned tools', () => {
     it('should return history with orphaned tool calls (currently broken)', () => {
       // Setup history with orphaned tool call
-      const toolCallId = historyService.generateHistoryId();
+      const toolCallId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'openai',
+        'call_orphaned',
+        'orphaned_tool',
+      );
 
       historyService.add({
         speaker: 'human',
@@ -165,7 +195,12 @@ describe.skip('Orphaned Tool Calls - HistoryService (OBSOLETE - atomic implement
 
   describe('validateAndFix', () => {
     it('should add synthetic responses for orphaned tool calls', () => {
-      const toolCallId = historyService.generateHistoryId();
+      const toolCallId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'orphaned_tool',
+        'call_orphaned',
+      );
 
       // Add history with orphaned tool call
       historyService.add({
@@ -278,15 +313,10 @@ describe.skip('SyntheticToolResponseHandler (OBSOLETE - atomic implementation pr
         SyntheticToolResponseHandler.patchMessageHistory(messages);
 
       // Should have added a synthetic response
-      expect(patched.length).toBeGreaterThan(messages.length);
-
-      // Find the synthetic response
-      const syntheticResponse = patched.find(
-        (m) => m.role === 'tool' && m.tool_call_id === 'hist_tool_orphan',
-      );
-
-      expect(syntheticResponse).toBeDefined();
-      expect(syntheticResponse?.content).toContain('cancelled');
+      const toolResponses = patched.filter((m) => m.role === 'tool');
+      expect(toolResponses).toHaveLength(1);
+      expect(toolResponses[0].tool_call_id).toBe('hist_tool_orphan');
+      expect(toolResponses[0].content).toContain('cancelled');
     });
   });
 });

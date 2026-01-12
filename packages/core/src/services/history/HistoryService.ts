@@ -28,6 +28,7 @@ import { AnthropicTokenizer } from '../../providers/tokenizers/AnthropicTokenize
 import { type TokensUpdatedEvent } from './HistoryEvents.js';
 import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
+import { canonicalizeToolCallId } from './canonicalToolIds.js';
 import { estimateTokens as estimateTextTokens } from '../../utils/toolOutputLimiter.js';
 
 /**
@@ -103,19 +104,37 @@ export class HistoryService
   }
 
   /**
-   * Generate a new normalized history tool ID.
-   * Format: hist_tool_<uuid-v4>
+   * Generate a new canonical history tool ID.
+   * Format: hist_tool_<hash>
    */
-  generateHistoryId(): string {
-    return `hist_tool_${randomUUID()}`;
+  generateHistoryId(
+    turnKey: string,
+    callIndex: number,
+    providerName?: string,
+    rawId?: string,
+    toolName?: string,
+  ): string {
+    return canonicalizeToolCallId({
+      providerName,
+      rawId,
+      toolName,
+      turnKey,
+      callIndex,
+    });
   }
 
   /**
    * Get a callback suitable for passing into converters
    * which will generate normalized history IDs on demand.
    */
-  getIdGeneratorCallback(): () => string {
-    return () => this.generateHistoryId();
+  getIdGeneratorCallback(turnKey?: string): () => string {
+    let callIndex = 0;
+    const stableTurnKey = turnKey ?? this.generateTurnKey();
+    return () => this.generateHistoryId(stableTurnKey, callIndex++);
+  }
+
+  generateTurnKey(): string {
+    return `turn_${randomUUID()}`;
   }
 
   /**

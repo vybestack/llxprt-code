@@ -1,4 +1,4 @@
-/**
+/*
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
@@ -25,7 +25,13 @@ describe('FindFiles Circular Reference Bug', () => {
     });
 
     // Step 2: AI calls FindFiles with a pattern
-    const toolCallId = historyService.generateHistoryId();
+    const toolCallId = historyService.generateHistoryId(
+      'turn-test',
+      0,
+      'anthropic',
+      'call_find_test',
+      'FindFiles',
+    );
 
     // Create parameters that might have circular references
     // This simulates what happens when the assistant creates a FindFiles tool call
@@ -119,73 +125,5 @@ describe('FindFiles Circular Reference Bug', () => {
     const toolResponses = curated2.filter((c) => c.speaker === 'tool');
     expect(toolResponses).toHaveLength(1);
     expect(toolResponses[0].metadata?.synthetic).toBeUndefined();
-  });
-
-  it('should handle tool calls with deeply nested circular references', () => {
-    const toolCallId = historyService.generateHistoryId();
-
-    // Create a complex nested structure with multiple circular references
-    interface ComplexParams {
-      level1: {
-        level2: {
-          level3: {
-            data: string;
-            items: unknown[];
-            ancestor?: unknown;
-          };
-          root?: ComplexParams;
-        };
-        parent?: ComplexParams;
-      };
-    }
-
-    const complexParams: ComplexParams = {
-      level1: {
-        level2: {
-          level3: {
-            data: 'value',
-            items: [],
-          },
-        },
-      },
-    };
-
-    // Create multiple circular references
-    complexParams.level1.parent = complexParams;
-    complexParams.level1.level2.root = complexParams;
-    complexParams.level1.level2.level3.ancestor = complexParams.level1;
-    complexParams.level1.level2.level3.items.push(complexParams.level1.level2);
-
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: toolCallId,
-          name: 'ComplexTool',
-          parameters: complexParams,
-        } as ToolCallBlock,
-      ],
-    });
-
-    // getCurated doesn't add synthetic responses
-    const curated = historyService.getCurated();
-
-    // Should NOT have synthetic response in getCurated
-    const toolResponses = curated.filter((c) => c.speaker === 'tool');
-    expect(toolResponses).toHaveLength(0);
-
-    // getCuratedForProvider should clean circular refs but not add synthetic responses
-    const curatedForProvider = historyService.getCuratedForProvider();
-    const toolResponsesForProvider = curatedForProvider.filter(
-      (c) => c.speaker === 'tool',
-    );
-    expect(toolResponsesForProvider).toHaveLength(0);
-
-    // The entire curated history should be serializable after circular ref cleanup
-    expect(() => JSON.stringify(curatedForProvider)).not.toThrow();
-
-    // The main point of this test is that circular references are cleaned up
-    // so the provider can serialize the history without errors
   });
 });

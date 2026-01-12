@@ -20,61 +20,33 @@
  * @description Tool ID normalization utility functions
  */
 
-import * as crypto from 'crypto';
-
 /**
  * Normalizes various tool ID formats to OpenAI format (call_xxx)
  * - hist_tool_xxx → call_xxx
  * - toolu_xxx → call_xxx
  * - call_xxx → call_xxx (unchanged)
- * - raw UUID → call_uuid
- * - Sanitizes non-alphanumeric characters (except underscore)
- * - If result is empty after sanitization, generates a fallback ID
+ * - unknown → call_unknown
  */
 export function normalizeToOpenAIToolId(id: string): string {
-  const sanitize = (value: string) =>
-    value.replace(/[^a-zA-Z0-9_]/g, '') ||
-    'call_' + crypto.randomUUID().replace(/-/g, '');
+  if (!id) {
+    return 'call_';
+  }
 
-  // If already in OpenAI format, sanitize and return
   if (id.startsWith('call_')) {
-    const sanitized = sanitize(id);
-    // If only "call_" remains after sanitization, generate fallback
-    if (sanitized === 'call_') {
-      return 'call_' + crypto.randomUUID().replace(/-/g, '');
-    }
-    return sanitized;
+    const suffix = id.substring('call_'.length);
+    return `call_${suffix.replace(/[^a-zA-Z0-9_]/g, '')}`;
   }
 
-  // For history format, extract the UUID and add OpenAI prefix
+  let suffix = '';
   if (id.startsWith('hist_tool_')) {
-    const uuid = id.substring('hist_tool_'.length);
-    const sanitizedUuid = uuid.replace(/[^a-zA-Z0-9_]/g, '');
-    // If nothing left after sanitization, generate fallback
-    if (!sanitizedUuid) {
-      return 'call_' + crypto.randomUUID().replace(/-/g, '');
-    }
-    return 'call_' + sanitizedUuid;
+    suffix = id.substring('hist_tool_'.length);
+  } else if (id.startsWith('toolu_')) {
+    suffix = id.substring('toolu_'.length);
+  } else {
+    suffix = id;
   }
 
-  // For Anthropic format, extract the UUID and add OpenAI prefix
-  if (id.startsWith('toolu_')) {
-    const uuid = id.substring('toolu_'.length);
-    const sanitizedUuid = uuid.replace(/[^a-zA-Z0-9_]/g, '');
-    // If nothing left after sanitization, generate fallback
-    if (!sanitizedUuid) {
-      return 'call_' + crypto.randomUUID().replace(/-/g, '');
-    }
-    return 'call_' + sanitizedUuid;
-  }
-
-  // Unknown format - assume it's a raw UUID or identifier
-  const sanitizedId = id.replace(/[^a-zA-Z0-9_]/g, '');
-  // If nothing left after sanitization, generate fallback
-  if (!sanitizedId) {
-    return 'call_' + crypto.randomUUID().replace(/-/g, '');
-  }
-  return 'call_' + sanitizedId;
+  return `call_${suffix.replace(/[^a-zA-Z0-9_]/g, '')}`;
 }
 
 /**
@@ -82,47 +54,23 @@ export function normalizeToOpenAIToolId(id: string): string {
  * - call_xxx → hist_tool_xxx
  * - toolu_xxx → hist_tool_xxx
  * - hist_tool_xxx → hist_tool_xxx (unchanged)
- * - raw UUID → hist_tool_uuid
  */
 export function normalizeToHistoryToolId(id: string): string {
-  // If already in history format, sanitize and return
+  if (!id) {
+    return 'hist_tool_';
+  }
+
   if (id.startsWith('hist_tool_')) {
-    const uuid = id.substring('hist_tool_'.length);
-    const sanitizedUuid = uuid.replace(/[^a-zA-Z0-9_]/g, '');
-    // If nothing left after sanitization, generate fallback
-    if (!sanitizedUuid) {
-      return 'hist_tool_' + crypto.randomUUID().replace(/-/g, '');
-    }
-    return 'hist_tool_' + sanitizedUuid;
+    return id;
   }
 
-  // For OpenAI format, extract the UUID and add history prefix
   if (id.startsWith('call_')) {
-    const uuid = id.substring('call_'.length);
-    const sanitizedUuid = uuid.replace(/[^a-zA-Z0-9_]/g, '');
-    // If nothing left after sanitization, generate fallback
-    if (!sanitizedUuid) {
-      return 'hist_tool_' + crypto.randomUUID().replace(/-/g, '');
-    }
-    return 'hist_tool_' + sanitizedUuid;
+    return `hist_tool_${id.substring('call_'.length)}`;
   }
 
-  // For Anthropic format, extract the UUID and add history prefix
   if (id.startsWith('toolu_')) {
-    const uuid = id.substring('toolu_'.length);
-    const sanitizedUuid = uuid.replace(/[^a-zA-Z0-9_]/g, '');
-    // If nothing left after sanitization, generate fallback
-    if (!sanitizedUuid) {
-      return 'hist_tool_' + crypto.randomUUID().replace(/-/g, '');
-    }
-    return 'hist_tool_' + sanitizedUuid;
+    return `hist_tool_${id.substring('toolu_'.length)}`;
   }
 
-  // Unknown format - assume it's a raw UUID or identifier
-  const sanitizedId = id.replace(/[^a-zA-Z0-9_]/g, '');
-  // If nothing left after sanitization, generate fallback
-  if (!sanitizedId) {
-    return 'hist_tool_' + crypto.randomUUID().replace(/-/g, '');
-  }
-  return 'hist_tool_' + sanitizedId;
+  return `hist_tool_${id}`;
 }

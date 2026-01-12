@@ -1,4 +1,4 @@
-/**
+/*
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
@@ -25,7 +25,13 @@ describe('Circular Reference Bug', () => {
     });
 
     // Step 2: Add AI message with tool call
-    const toolCallId = historyService.generateHistoryId();
+    const toolCallId = historyService.generateHistoryId(
+      'turn-test',
+      0,
+      'openai',
+      'call_some_tool_test',
+      'some_tool',
+    );
     historyService.add({
       speaker: 'ai',
       blocks: [
@@ -91,7 +97,13 @@ describe('Circular Reference Bug', () => {
     });
 
     // AI makes first tool call
-    const toolCall1 = historyService.generateHistoryId();
+    const toolCall1 = historyService.generateHistoryId(
+      'turn-test',
+      1,
+      'openai',
+      'call_raw_2',
+      'todo_read',
+    );
     historyService.add({
       speaker: 'ai',
       blocks: [
@@ -135,7 +147,13 @@ describe('Circular Reference Bug', () => {
 
     // This pattern repeats - let's do it multiple times like in the logs
     for (let i = 0; i < 5; i++) {
-      const toolCallId = historyService.generateHistoryId();
+      const toolCallId = historyService.generateHistoryId(
+        'turn-test',
+        i + 2,
+        'openai',
+        `raw-loop-${i}`,
+        'read_file',
+      );
 
       // AI makes another tool call
       historyService.add({
@@ -177,7 +195,13 @@ describe('Circular Reference Bug', () => {
   it('should not create synthetic responses when tool responses exist in full history', () => {
     // This tests our fix - we check full history for responses, not just curated
 
-    const toolCallId = historyService.generateHistoryId();
+    const toolCallId = historyService.generateHistoryId(
+      'turn-test',
+      0,
+      'openai',
+      'call_test_no_synthetic',
+      'test',
+    );
 
     // Add AI message with tool call
     historyService.add({
@@ -224,7 +248,13 @@ describe('Circular Reference Bug', () => {
   });
 
   it('should handle complex nested parameters without circular references', () => {
-    const toolCallId = historyService.generateHistoryId();
+    const toolCallId = historyService.generateHistoryId(
+      'turn-test',
+      0,
+      'openai',
+      'call_complex_params',
+      'complex_tool',
+    );
 
     // Create an object with potential circular reference
     interface NestedData {
