@@ -63,29 +63,31 @@ For direct API access with pay-as-you-go pricing:
 **Anthropic:**
 
 ```bash
-export ANTHROPIC_API_KEY="your-key-here"
 llxprt
 /provider anthropic
-/model claude-sonnet-4-5
+/keyfile ~/.anthropic_key
+/model claude-sonnet-4-5-20250929
 ```
 
 **OpenAI:**
 
 ```bash
-export OPENAI_API_KEY="your-key-here"
 llxprt
 /provider openai
-/model gpt-4.1
+/keyfile ~/.openai_key
+/model gpt-5.2
 ```
 
 **Gemini (API Key):**
 
 ```bash
-export GEMINI_API_KEY="your-key-here"
 llxprt
 /provider gemini
-/model gemini-2.5-flash
+/keyfile ~/.gemini_key
+/model gemini-3-flash-preview
 ```
+
+**Note:** Store your API key in a file (e.g., `~/.anthropic_key`) with `chmod 600` permissions. The `/keyfile` command loads the key securely without exposing it in shell history.
 
 Get your API keys from:
 
@@ -178,7 +180,7 @@ Or set it as your default:
 1. **Be specific** — "Add error handling to the login function in src/auth.js" works better than "improve my code"
 2. **Provide context** — Mention relevant files, error messages, or constraints
 3. **Iterate** — Follow up with clarifications or ask for alternatives
-4. **Use the right model** — Larger models (claude-opus, gpt-4.1) for complex tasks, faster models (gemini-flash, claude-haiku) for quick questions
+4. **Use the right model** — Larger models (claude-opus-4-5, gpt-5.2) for complex tasks, faster models (gemini-flash, claude-haiku-4-5) for quick questions
 
 ## Next Steps
 

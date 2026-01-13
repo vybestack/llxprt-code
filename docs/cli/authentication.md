@@ -179,7 +179,7 @@ LLxprt Code supports authentication with multiple AI providers beyond Google. Us
 
 - **Anthropic** - OAuth for Claude models
 - **Gemini** - OAuth for Google AI
-- **OpenAI** - OAuth for ChatGPT Plus/Pro subscribers (access GPT-5 Codex without API keys)
+- **Codex** - OAuth for ChatGPT Plus/Pro subscribers (use `/auth codex` for OAuth; access GPT-5 without API keys)
 - **Qwen** - OAuth for Alibaba Cloud models
 
 ### The `/auth` Command
@@ -188,7 +188,7 @@ LLxprt Code supports authentication with multiple AI providers beyond Google. Us
 /auth <provider> <action> [bucket-name]
 ```
 
-**Providers:** `anthropic`, `gemini`, `openai`, `qwen`, and others
+**Providers:** `anthropic`, `gemini`, `codex` (OpenAI), `qwen`, and others
 
 **Actions:**
 

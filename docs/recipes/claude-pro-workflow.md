@@ -29,7 +29,7 @@ This recipe guides you through setting up LLxprt Code with Claude Pro or Claude 
 ### Step 2: Set Your Model
 
 ```bash
-/model claude-sonnet-4-5
+/model claude-sonnet-4-5-20250929
 ```
 
 ### Step 3: Configure Context and Tokens
@@ -63,7 +63,7 @@ Save this to `~/.llxprt/profiles/claude-pro.json`:
 {
   "version": 1,
   "provider": "anthropic",
-  "model": "claude-sonnet-4-5",
+  "model": "claude-sonnet-4-5-20250929",
   "modelParams": {
     "temperature": 0.7,
     "max_tokens": 8192
@@ -113,7 +113,7 @@ Save this to `~/.llxprt/profiles/claude-thinking.json`:
 {
   "version": 1,
   "provider": "anthropic",
-  "model": "claude-sonnet-4-5",
+  "model": "claude-sonnet-4-5-20250929",
   "modelParams": {
     "temperature": 0.7,
     "max_tokens": 16384,
@@ -140,7 +140,7 @@ If you have multiple Claude subscriptions (personal + work):
 {
   "version": 1,
   "provider": "lb",
-  "model": "claude-sonnet-4-5",
+  "model": "claude-sonnet-4-5-20250929",
   "ephemeralSettings": {
     "context-limit": 200000,
     "lb": {
@@ -148,12 +148,12 @@ If you have multiple Claude subscriptions (personal + work):
       "buckets": [
         {
           "provider": "anthropic",
-          "model": "claude-sonnet-4-5",
+          "model": "claude-sonnet-4-5-20250929",
           "note": "Primary OAuth account"
         },
         {
           "provider": "anthropic",
-          "model": "claude-sonnet-4-5",
+          "model": "claude-sonnet-4-5-20250929",
           "key": "sk-ant-api03-secondary-key...",
           "note": "Backup API key account"
         }
@@ -173,7 +173,7 @@ Save this to `~/.llxprt/profiles/claude-tiered.json`:
 {
   "version": 1,
   "provider": "lb",
-  "model": "claude-sonnet-4-5",
+  "model": "claude-sonnet-4-5-20250929",
   "ephemeralSettings": {
     "context-limit": 200000,
     "lb": {
@@ -181,7 +181,7 @@ Save this to `~/.llxprt/profiles/claude-tiered.json`:
       "buckets": [
         {
           "provider": "anthropic",
-          "model": "claude-sonnet-4-5",
+          "model": "claude-sonnet-4-5-20250929",
           "modelParams": {
             "temperature": 0.7,
             "max_tokens": 16384,
@@ -193,7 +193,7 @@ Save this to `~/.llxprt/profiles/claude-tiered.json`:
         },
         {
           "provider": "anthropic",
-          "model": "claude-haiku-4-5",
+          "model": "claude-haiku-4-5-20251001",
           "modelParams": {
             "temperature": 0.7,
             "max_tokens": 8192
@@ -257,7 +257,7 @@ llxprt --profile-load claude-thinking
 ### One-off with Inline Profile
 
 ```bash
-llxprt --profile '{"provider":"anthropic","model":"claude-sonnet-4-5","modelParams":{"thinking":{"type":"enabled","budget_tokens":8192}}}' -p "Analyze this code for security issues"
+llxprt --profile '{"provider":"anthropic","model":"claude-sonnet-4-5-20250929","modelParams":{"thinking":{"type":"enabled","budget_tokens":8192}}}' -p "Analyze this code for security issues"
 ```
 
 ## Troubleshooting
@@ -292,7 +292,7 @@ Ensure you're using a compatible model:
 /model
 
 # Switch to thinking-compatible model
-/model claude-sonnet-4-5
+/model claude-sonnet-4-5-20250929
 ```
 
 ### Context Limit Exceeded
