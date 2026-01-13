@@ -94,6 +94,7 @@ Each provider offers different models. You can select a specific model using the
 - Supports o3 (including o3-pro which REQUIRES Responses API), o1, GPT-4.1, GPT-4o, and other OpenAI models
 - Tool calling support (tool outputs are sent to the model as plain multi-line text; see [Tool output format](../tool-output-format.md))
 - Responses API support for advanced models (o3, o1, gpt-4.1)
+- **OAuth support**: ChatGPT Plus/Pro subscribers can use OAuth authentication instead of API keys (see [OAuth Setup](../oauth-setup.md))
 
 ### Anthropic
 
