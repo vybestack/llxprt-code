@@ -13,7 +13,6 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages/index.js';
 import { DebugLogger } from '../../debug/index.js';
 import { type IModel } from '../IModel.js';
-import { getModelsFromRegistry } from '../../models/provider-integration.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import {
   convertToolsToAnthropic,
@@ -268,26 +267,6 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
-    // Try to get models from the ModelsRegistry first (models.dev integration)
-    // This provides richer metadata (pricing, capabilities, context window, etc.)
-    try {
-      const registryModels = await getModelsFromRegistry({
-        providerName: this.name,
-        fallbackModels: [], // Don't use fallback here, we'll try other methods
-        includeDeprecated: false,
-      });
-
-      if (registryModels.length > 0) {
-        // Override provider name to match this provider instance
-        return registryModels.map((m) => ({
-          ...m,
-          provider: this.name,
-        }));
-      }
-    } catch {
-      // Registry not available, continue with other methods
-    }
-
     const authToken = await this.getAuthToken();
     if (!authToken) {
       this.getAuthLogger().debug(

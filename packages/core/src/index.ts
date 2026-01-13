@@ -122,7 +122,7 @@ export * from './tools/tool-context.js';
 export * from './tools/tool-names.js';
 
 // Export prompt logic
-export * from './prompts/mcp-prompts.js';
+export * from './prompts/index.js';
 
 // Export prompt configuration system
 export * from './prompt-config/prompt-service.js';

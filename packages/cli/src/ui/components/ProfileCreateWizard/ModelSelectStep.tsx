@@ -91,9 +91,8 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
 
       setIsLoading(true);
       try {
-        const hydratedModels: HydratedModel[] = await runtime.listAvailableModels(
-          state.config.provider,
-        );
+        const hydratedModels: HydratedModel[] =
+          await runtime.listAvailableModels(state.config.provider);
         // Filter out deprecated models and extract IDs
         const modelIds = hydratedModels
           .filter((m) => m.metadata?.status !== 'deprecated')

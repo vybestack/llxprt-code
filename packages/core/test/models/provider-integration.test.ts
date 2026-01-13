@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import {
   llxprtModelToIModel,
-  getModelsFromRegistry,
   hasModelInRegistry,
   getExtendedModelInfo,
   getRecommendedModel,
@@ -18,7 +17,6 @@ import {
   getModelsRegistry,
 } from '../../src/models/registry.js';
 import type { LlxprtModel } from '../../src/models/schema.js';
-import type { IModel } from '../../src/providers/IModel.js';
 import {
   mockApiResponse,
   fullModel,
@@ -100,122 +98,6 @@ describe('llxprtModelToIModel', () => {
   it('preserves supportedToolFormats array', () => {
     const result = llxprtModelToIModel(sampleLlxprtModel);
     expect(result.supportedToolFormats).toEqual(['openai']);
-  });
-});
-
-describe('getModelsFromRegistry', () => {
-  const fallbackModels: IModel[] = [
-    {
-      id: 'fallback-model',
-      name: 'Fallback Model',
-      provider: 'fallback',
-      supportedToolFormats: ['openai'],
-    },
-  ];
-
-  beforeEach(async () => {
-    await resetRegistry();
-    vi.clearAllMocks();
-  });
-
-  afterEach(async () => {
-    await resetRegistry();
-  });
-
-  it('returns fallback when registry not initialized', async () => {
-    const result = await getModelsFromRegistry({
-      providerName: 'openai',
-      fallbackModels,
-    });
-    expect(result).toEqual(fallbackModels);
-  });
-
-  describe('with initialized registry', () => {
-    beforeEach(async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(
-        JSON.stringify(mockApiResponse),
-      );
-      mockFetch.mockRejectedValue(new Error('Network error'));
-
-      const registry = getModelsRegistry();
-      await registry.initialize();
-    });
-
-    it('maps gemini provider to google and google-vertex', async () => {
-      const result = await getModelsFromRegistry({
-        providerName: 'gemini',
-        fallbackModels: [],
-      });
-      // Should find models from google provider
-      expect(result.length).toBeGreaterThan(0);
-    });
-
-    it('maps openai provider to openai', async () => {
-      const result = await getModelsFromRegistry({
-        providerName: 'openai',
-        fallbackModels: [],
-      });
-      expect(result.length).toBe(3); // 4 models minus 1 deprecated
-    });
-
-    it('maps anthropic provider to anthropic', async () => {
-      const result = await getModelsFromRegistry({
-        providerName: 'anthropic',
-        fallbackModels: [],
-      });
-      expect(result.length).toBe(1);
-    });
-
-    it('returns fallback when no models found', async () => {
-      const result = await getModelsFromRegistry({
-        providerName: 'nonexistent',
-        fallbackModels,
-      });
-      expect(result).toEqual(fallbackModels);
-    });
-
-    it('filters deprecated models by default', async () => {
-      const result = await getModelsFromRegistry({
-        providerName: 'openai',
-        fallbackModels: [],
-      });
-      // Should not include gpt-3.5-turbo-0301 which is deprecated
-      const deprecated = result.find((m) => m.id === 'gpt-3.5-turbo-0301');
-      expect(deprecated).toBeUndefined();
-    });
-
-    it('includes deprecated when includeDeprecated: true', async () => {
-      const result = await getModelsFromRegistry({
-        providerName: 'openai',
-        fallbackModels: [],
-        includeDeprecated: true,
-      });
-      expect(result.length).toBe(4);
-    });
-
-    it('filters to specific modelIds when provided', async () => {
-      const result = await getModelsFromRegistry({
-        providerName: 'openai',
-        fallbackModels: [],
-        modelIds: ['gpt-4-turbo', 'gpt-4o'],
-      });
-      expect(result.length).toBe(2);
-      expect(result.map((m) => m.id).sort()).toEqual(['gpt-4-turbo', 'gpt-4o']);
-    });
-
-    it('converts results to IModel format', async () => {
-      const result = await getModelsFromRegistry({
-        providerName: 'openai',
-        fallbackModels: [],
-      });
-      result.forEach((model) => {
-        expect(model).toHaveProperty('id');
-        expect(model).toHaveProperty('name');
-        expect(model).toHaveProperty('provider');
-        expect(model).toHaveProperty('supportedToolFormats');
-      });
-    });
   });
 });
 

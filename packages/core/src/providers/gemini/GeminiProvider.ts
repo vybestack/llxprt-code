@@ -42,7 +42,6 @@ import {
   shouldDumpSDKContext,
   dumpSDKContext,
 } from '../utils/dumpSDKContext.js';
-import { getModelsFromRegistry } from '../../models/provider-integration.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
   retryWithBackoff,
@@ -465,7 +464,7 @@ export class GeminiProvider extends BaseProvider {
    * Determine auth mode per call instead of using cached state
    */
   async getModels(): Promise<IModel[]> {
-    // Default fallback models used when registry and API are unavailable
+    // Default fallback models used when API is unavailable
     const fallbackModels: IModel[] = [
       {
         id: 'gemini-2.5-pro',
@@ -486,26 +485,6 @@ export class GeminiProvider extends BaseProvider {
         supportedToolFormats: ['google', 'gemini'],
       },
     ];
-
-    // Try to get models from the ModelsRegistry first (models.dev integration)
-    // This provides richer metadata (pricing, capabilities, context window, etc.)
-    try {
-      const registryModels = await getModelsFromRegistry({
-        providerName: this.name,
-        fallbackModels: [], // Don't use fallback here, we'll try other methods
-        includeDeprecated: false,
-      });
-
-      if (registryModels.length > 0) {
-        // Override provider name to match this provider instance
-        return registryModels.map((m) => ({
-          ...m,
-          provider: this.name,
-        }));
-      }
-    } catch {
-      // Registry not available, continue with other methods
-    }
 
     // Determine auth mode for this call
     const { authMode } = await this.determineBestAuth();

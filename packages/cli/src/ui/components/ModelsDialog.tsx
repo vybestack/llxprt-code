@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from 'react';
 import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
@@ -425,9 +431,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   // Calculate max model ID length from filtered models
   const maxModelIdLen = useMemo(() => {
     if (filteredModels.length === 0) return 20;
-    return Math.max(
-      ...filteredModels.map((m) => (m.modelId || m.id).length),
-    );
+    return Math.max(...filteredModels.map((m) => (m.modelId || m.id).length));
   }, [filteredModels]);
 
   // Model ID column: use actual max length, but cap at available space

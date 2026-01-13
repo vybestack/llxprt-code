@@ -12,7 +12,7 @@ import {
   type ContentGeneratorConfig,
   createContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import { PromptRegistry } from '../prompts/prompt-registry.js';
+import { PromptRegistry } from '../prompts/index.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import { LSTool } from '../tools/ls.js';
 import { ReadFileTool } from '../tools/read-file.js';

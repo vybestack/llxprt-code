@@ -833,7 +833,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     // Step 1: Get models from provider (live API or fallback)
-    let baseModels = await provider.getModels();
+    const baseModels = await provider.getModels();
 
     // Step 2: Initialize registry if needed (non-blocking failure)
     try {

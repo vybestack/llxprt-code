@@ -12,7 +12,7 @@ import {
   CommandKind,
 } from './types.js';
 import { MessageType } from '../types.js';
-import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
+import { GIT_COMMIT_INFO } from '../../generated/index.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
 

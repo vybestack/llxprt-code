@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient } from './mcp-client.js';
 import type { ToolRegistry } from './tool-registry.js';
-import type { PromptRegistry } from '../prompts/prompt-registry.js';
+import type { PromptRegistry } from '../prompts/index.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import type { Config } from '../config/config.js';
 

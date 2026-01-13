@@ -59,9 +59,7 @@ export type HydratedModel = IModel & Partial<ModelHydrationData>;
  * @param providerName - The llxprt provider name (e.g., 'gemini', 'openai')
  * @returns Array of models.dev provider IDs, or null if no mapping found
  */
-export function getModelsDevProviderIds(
-  providerName: string,
-): string[] | null {
+export function getModelsDevProviderIds(providerName: string): string[] | null {
   const ids = PROVIDER_ID_MAP[providerName];
   if (ids && ids.length > 0) {
     return ids;
@@ -150,7 +148,10 @@ function findPartialMatch(
   for (const [key, model] of registryMap) {
     const normalizedKey = key.toLowerCase();
     // Check if the registry key is contained in the model ID or vice versa
-    if (normalizedId.includes(normalizedKey) || normalizedKey.includes(normalizedId)) {
+    if (
+      normalizedId.includes(normalizedKey) ||
+      normalizedKey.includes(normalizedId)
+    ) {
       return model;
     }
   }

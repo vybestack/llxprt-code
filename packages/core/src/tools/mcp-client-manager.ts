@@ -6,7 +6,7 @@
 
 import type { Config, MCPServerConfig } from '../config/config.js';
 import type { ToolRegistry } from './tool-registry.js';
-import type { PromptRegistry } from '../prompts/prompt-registry.js';
+import type { PromptRegistry } from '../prompts/index.js';
 import {
   McpClient,
   MCPDiscoveryState,

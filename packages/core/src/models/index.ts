@@ -83,12 +83,10 @@ export {
 
 // Provider integration utilities
 export {
-  getModelsFromRegistry,
   llxprtModelToIModel,
   hasModelInRegistry,
   getExtendedModelInfo,
   getRecommendedModel,
-  type GetModelsFromRegistryOptions,
 } from './provider-integration.js';
 
 // Hydration utilities

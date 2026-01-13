@@ -38,10 +38,10 @@ export const PROVIDER_ID_MAP: Record<string, string[]> = {
 
   // Alias provider display names -> models.dev provider IDs
   'Chutes.ai': ['chutes'],
-  'xAI': ['xai'],
-  'Synthetic': ['synthetic'],
-  'Fireworks': ['fireworks-ai'],
-  'OpenRouter': ['openrouter'],
+  xAI: ['xai'],
+  Synthetic: ['synthetic'],
+  Fireworks: ['fireworks-ai'],
+  OpenRouter: ['openrouter'],
   'Cerebras Code': ['cerebras'],
   'LM Studio': ['lmstudio'],
   'llama.cpp': ['llama'],
@@ -50,20 +50,6 @@ export const PROVIDER_ID_MAP: Record<string, string[]> = {
   codex: ['openai'],
   kimi: ['kimi-for-coding'],
 };
-
-/**
- * Options for getting models from registry
- */
-export interface GetModelsFromRegistryOptions {
-  /** The llxprt provider name (e.g., 'gemini', 'openai') */
-  providerName: string;
-  /** Fallback models to use if registry is empty or unavailable */
-  fallbackModels?: IModel[];
-  /** Whether to include deprecated models (default: false) */
-  includeDeprecated?: boolean;
-  /** Filter to specific model IDs */
-  modelIds?: string[];
-}
 
 /**
  * Converts an LlxprtModel to the IModel interface
@@ -78,88 +64,6 @@ export function llxprtModelToIModel(model: LlxprtModel): IModel {
     contextWindow: model.contextWindow,
     maxOutputTokens: model.maxOutputTokens,
   };
-}
-
-/**
- * Get models for a provider from the ModelsRegistry
- *
- * This function is designed to be called from IProvider.getModels() implementations.
- * It provides:
- * - Automatic lookup of models from the registry
- * - Mapping of provider names to models.dev provider IDs
- * - Fallback to hardcoded models if registry is unavailable
- * - Filtering of deprecated models (optional)
- *
- * @example
- * ```typescript
- * // In a provider's getModels() method:
- * async getModels(): Promise<IModel[]> {
- *   return getModelsFromRegistry({
- *     providerName: 'gemini',
- *     fallbackModels: this.getHardcodedModels(),
- *   });
- * }
- * ```
- */
-export async function getModelsFromRegistry(
-  options: GetModelsFromRegistryOptions,
-): Promise<IModel[]> {
-  const {
-    providerName,
-    fallbackModels = [],
-    includeDeprecated = false,
-    modelIds,
-  } = options;
-
-  try {
-    const registry = getModelsRegistry();
-
-    // If registry hasn't been initialized, use fallback
-    if (!registry.isInitialized()) {
-      return fallbackModels;
-    }
-
-    // Map llxprt provider name to models.dev provider ID(s)
-    const modelsDevProviderIds = PROVIDER_ID_MAP[providerName] ?? [
-      providerName,
-    ];
-
-    // Collect models from all mapped provider IDs
-    const llxprtModels: LlxprtModel[] = [];
-    for (const providerId of modelsDevProviderIds) {
-      const models = registry.getByProvider(providerId);
-      llxprtModels.push(...models);
-    }
-
-    // If no models found in registry, use fallback
-    if (llxprtModels.length === 0) {
-      return fallbackModels;
-    }
-
-    // Filter models
-    let filteredModels = llxprtModels;
-
-    // Filter out deprecated unless explicitly included
-    if (!includeDeprecated) {
-      filteredModels = filteredModels.filter(
-        (m) => m.metadata?.status !== 'deprecated',
-      );
-    }
-
-    // Filter to specific model IDs if provided
-    if (modelIds && modelIds.length > 0) {
-      const modelIdSet = new Set(modelIds);
-      filteredModels = filteredModels.filter(
-        (m) => modelIdSet.has(m.modelId) || modelIdSet.has(m.id),
-      );
-    }
-
-    // Convert to IModel interface
-    return filteredModels.map(llxprtModelToIModel);
-  } catch {
-    // On any error, return fallback models
-    return fallbackModels;
-  }
 }
 
 /**
