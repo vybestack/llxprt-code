@@ -160,7 +160,8 @@ describe('GCSTaskStore', () => {
         return mockWriteStream;
       }),
       once: vi.fn((event, cb) => {
-        if (event === 'finish') setTimeout(cb, 0); // Simulate async finish        return mockWriteStream;
+        if (event === 'finish') setTimeout(cb, 0); // Simulate async finish
+        return mockWriteStream;
       }),
       destroy: vi.fn(),
       write: vi.fn().mockReturnValue(true),

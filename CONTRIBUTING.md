@@ -215,7 +215,7 @@ npm run lint
   - `a2a-server`: A2A server implementation for the Gemini CLI. (Experimental)
   - `cli/`: The command-line interface.
   - `core/`: The core backend logic for the Gemini CLI.
-  - `test-utils` Utilities for creating and cleaning temporary file systems for
+  - `test-utils`: Utilities for creating and cleaning temporary file systems for
     testing.
   - `vscode-ide-companion/`: The Gemini CLI Companion extension pairs with
     Gemini CLI.

@@ -1088,13 +1088,16 @@ export async function loadCliConfig(
   // Override approval mode if disableYoloMode is set.
   if (effectiveSettings.security?.disableYoloMode) {
     if (approvalMode === ApprovalMode.YOLO) {
-      logger.error('YOLO mode is disabled by the "disableYolo" setting.');
+      logger.error('YOLO mode is disabled by the "disableYoloMode" setting.');
       throw new Error(
         'Cannot start in YOLO mode when it is disabled by settings',
       );
     }
-    approvalMode = ApprovalMode.DEFAULT;
-  } else if (approvalMode === ApprovalMode.YOLO) {
+    // Note: We only block YOLO mode here. AUTO_EDIT and other modes are still
+    // allowed since disableYoloMode specifically targets YOLO mode only.
+  }
+
+  if (approvalMode === ApprovalMode.YOLO) {
     logger.warn(
       'YOLO mode is enabled. All tool calls will be automatically approved.',
     );

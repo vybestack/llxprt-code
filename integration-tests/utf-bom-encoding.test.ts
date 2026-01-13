@@ -50,7 +50,7 @@ const utf32BE = (s: string) => {
 let rig: TestRig;
 let dir: string;
 
-describe('BOM end-to-end integraion', () => {
+describe('BOM end-to-end integration', () => {
   beforeAll(async () => {
     rig = new TestRig();
     await rig.setup('bom-integration');
