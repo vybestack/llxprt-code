@@ -25,12 +25,11 @@ jobs:
   e2e_doc_change_filter:
     name: 'Detect doc-only changes for E2E'
     runs-on: 'ubuntu-latest'
-    if: github.event_name == 'pull_request'
     outputs:
       docs_only: '${{ steps.detect.outputs.docs_only }}'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
         with:
           fetch-depth: 1
 
@@ -39,9 +38,15 @@ jobs:
         env:
           GH_TOKEN: '${{ github.token }}'
           PR_NUMBER: >-
-            ${{ github.event.pull_request.number }}
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
         run: |
           set -euo pipefail
+          
+          # For non-PR events (push, merge_group, workflow_dispatch), always run tests
+          if [[ -z "${PR_NUMBER:-}" ]]; then
+            echo "docs_only=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           files="$(gh api \
             --paginate \
