@@ -20,16 +20,14 @@ Essential guides for daily use:
 
 - **[Provider Configuration](./cli/providers.md):** Configure and manage LLM providers (Anthropic, OpenAI, Gemini, and more).
 - **[Authentication](./cli/authentication.md):** Set up authentication for various providers.
-- **[OAuth Setup](./oauth-setup.md):** Configure OAuth authentication for subscription access.
 - **[Profiles](./cli/profiles.md):** Save and manage configurations for different contexts.
-- **[Commands Reference](./cli/commands.md):** Complete documentation of available CLI commands.
-- **[Configuration](./cli/configuration.md):** Configure the CLI behavior.
+- **[Subagents](./subagents.md):** Create and manage specialized AI assistants tied to profiles.
 
 ### Advanced Topics
 
 Power features for advanced users:
 
-- **[Subagents](./subagents.md):** Create and manage specialized AI assistants tied to profiles.
+- **[OAuth Setup](./oauth-setup.md):** Configure OAuth authentication for subscription access.
 - **[Local Models](./local-models.md):** Complete guide to using local AI models with LM Studio, Ollama, llama.cpp, and more.
 - **[OpenAI Responses API](./cli/providers-openai-responses.md):** Using OpenAI's enhanced Responses API.
 - **[Prompt Configuration](./prompt-configuration.md):** How to customize AI behavior with prompts.
@@ -40,8 +38,10 @@ Power features for advanced users:
 
 ### Reference
 
-Configuration, customization, and troubleshooting:
+Configuration, commands, and troubleshooting:
 
+- **[Configuration](./cli/configuration.md):** Configure the CLI behavior.
+- **[Commands Reference](./cli/commands.md):** Complete documentation of available CLI commands.
 - **[Troubleshooting Guide](./troubleshooting.md):** Find solutions to common problems and FAQs.
 - **[CLI Introduction](./cli/index.md):** Overview of the command-line interface.
 - **[Execution and Deployment](./deployment.md):** Information for running LLxprt Code.

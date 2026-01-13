@@ -58,8 +58,6 @@ Save a profile with multiple OAuth buckets for automatic failover when rate limi
 - On 402 (quota/payment): advance to next bucket immediately
 - On 401 (auth failure): attempt token refresh, retry once, then advance
 
-> **Need to create buckets first?** See the [OAuth Setup Guide](../oauth-setup.md#multi-account-failover) for step-by-step bucket creation instructions and practical failover scenarios (team accounts, personal+work, multi-provider).
-
 ### OpenAI-Compatible Endpoints
 
 Profiles work with any OpenAI-compatible endpoint. Here's an example using Synthetic with Kimi K2:
@@ -155,101 +153,202 @@ Create profiles with buckets, then reference them in a load balancer:
 /profile save loadbalancer team-lb roundrobin claude-team1 claude-team2
 ```
 
-### Cache Considerations
+## Cache Considerations
 
-When using load balancer profiles, token caching behavior differs from single-backend configurations:
+When using load balancers, understanding cache behavior is critical for consistent conversations.
 
-**Token Cache Locality**
+### Token Caching Across Backends
 
-- Each backend in a load balancer maintains its own token cache
-- Cached prompt tokens are not shared across backends
-- Round-robin distribution may reduce cache hit rates compared to single-backend setups
+Load balancer profiles distribute requests across multiple backends (model profiles). Each backend maintains its own:
 
-**Cache Loss on Failover**
+- **Conversation context**: The accumulated message history
+- **System prompt cache**: Cached tokenization of system prompts
+- **Provider-specific caches**: Some providers cache prompt prefixes for faster responses
 
-- When failover occurs, the new backend starts with a cold cache
-- Previously cached conversation context must be re-processed
-- This can increase token usage and latency for the first request after failover
-
-**Best Practices for Cache-Aware Configuration**
-
-1. **Use failover policy for cache efficiency**: Keeps requests on the same backend until failure, maximizing cache hits
-2. **Consider sticky sessions**: For conversation-heavy workloads, failover policy preserves context better than round-robin
-3. **Monitor cache metrics**: Use `/stats lb` to track cache hit rates per backend
-4. **Plan for cold start latency**: First request after failover may be slower due to cache rebuild
+**Round-robin implications:**
 
 ```bash
-# Failover policy preserves cache better than round-robin
-/profile save loadbalancer cache-aware failover primary-claude backup-claude
+# With round-robin, requests cycle through backends
+/profile save loadbalancer multi roundrobin claude-work openai-work gemini-work
+
+# Request 1 → claude-work (builds context)
+# Request 2 → openai-work (starts fresh context)
+# Request 3 → gemini-work (starts fresh context)
+# Request 4 → claude-work (may have stale context)
 ```
 
-### Failover Behavior
+Each provider sees a fragmented conversation, which can lead to:
 
-Load balancer failover is triggered by specific HTTP status codes and network conditions. Understanding these behaviors helps you configure resilient setups.
+- Inconsistent responses due to missing context
+- Loss of conversation continuity
+- Increased token usage (re-sending context each time)
 
-**Default Failover Status Codes**
-
-By default, failover occurs on these HTTP status codes:
-
-| Code | Meaning           | Failover Reason                          |
-| ---- | ----------------- | ---------------------------------------- |
-| 429  | Too Many Requests | Rate limit exceeded, try another backend |
-| 500  | Internal Error    | Server error, backend may be unhealthy   |
-| 502  | Bad Gateway       | Upstream failure, try alternative        |
-| 503  | Service Unavail   | Backend temporarily unavailable          |
-| 504  | Gateway Timeout   | Request timed out, try faster backend    |
-
-**Customizing Failover Status Codes**
-
-Override the default codes using the `failover_status_codes` setting:
+**Failover implications:**
 
 ```bash
-# Only failover on rate limits and 503
-/set failover_status_codes [429,503]
-/profile save loadbalancer custom-failover failover profile1 profile2
+# With failover, requests stay on primary until failure
+/profile save loadbalancer resilient failover primary-claude backup-openai
 
-# Add 400 errors to trigger failover (not recommended for most cases)
-/set failover_status_codes [400,429,500,502,503,504]
+# All requests go to primary-claude until it fails
+# On failover, backup-openai starts with fresh context
 ```
 
-**Bucket vs. Load Balancer Failover Interaction**
+### Cache Loss on Failover
 
-When using profiles with multiple OAuth buckets inside a load balancer, failover happens at two levels:
+When failover occurs (switching from one backend to another), **all cached context is lost**:
 
-1. **Bucket-level failover** (within a profile): Cycles through buckets on 401/402/429
-2. **Load balancer failover** (across profiles): Moves to next backend profile on configured status codes
+1. **Immediate loss**: The new backend has no knowledge of previous conversation turns
+2. **Provider cache invalidation**: Any provider-side prompt caching is lost
+3. **Token re-consumption**: The system must re-send conversation history to the new backend
 
-```
-Request → Profile A (bucket1 → bucket2 → bucket3) → Profile B (bucket1 → bucket2)
-              ↑ bucket failover                         ↑ LB failover
-```
+**What triggers cache loss:**
 
-The bucket failover is exhausted first before the load balancer moves to the next profile.
+- Rate limit (429) causing backend switch
+- Server error (500, 502, 503, 504) causing backend switch
+- Network timeout triggering failover
+- Manual backend rotation in round-robin
 
-**Retry Behavior**
+### Best Practices for Cache-Aware Configuration
 
-Control retry attempts before failover with these settings:
+**1. Prefer failover over round-robin for conversational workloads:**
 
 ```bash
-# Retry 3 times with 1 second delay before failing over
+# Good for conversations - stays on one backend
+/profile save loadbalancer chat-resilient failover primary backup
+
+# Better for stateless batch jobs - distributes load
+/profile save loadbalancer batch-jobs roundrobin worker1 worker2 worker3
+```
+
+**2. Use bucket failover within a single profile for rate limit handling:**
+
+```bash
+# Multiple buckets on same provider preserve context better
+/profile save model claude-multi bucket1 bucket2 bucket3
+
+# Buckets share the same model context, only auth rotates
+```
+
+**3. Set appropriate retry counts to avoid premature failover:**
+
+```bash
+# Allow retries before switching backends
 /set failover_retry_count 3
-/set failover_retry_delay_ms 1000
-/profile save loadbalancer retry-tolerant failover profile1 profile2
+/set failover_retry_delay_ms 2000
+/profile save loadbalancer patient-lb failover primary backup
 ```
 
-- `failover_retry_count`: Number of retries per backend (default: 1)
-- `failover_retry_delay_ms`: Milliseconds between retries (default: 0)
+**4. Consider sticky sessions for long conversations:**
 
-Retries occur on the same backend before advancing to the next one. Set higher values for transient errors, lower for faster failover.
+For extended conversations, consider loading a single model profile rather than a load balancer to maintain consistent context.
 
-**Network Error Handling**
+## Failover Behavior
 
-By default, network errors (TCP connection failures, DNS resolution errors, timeouts) trigger failover:
+Understanding when and how failover occurs helps you configure resilient setups.
+
+### Default Failover Triggers
+
+By default, these HTTP status codes trigger failover:
+
+| Status Code | Meaning               | Failover Behavior                  |
+| ----------- | --------------------- | ---------------------------------- |
+| 429         | Rate Limited          | Immediate failover to next backend |
+| 500         | Internal Server Error | Retry, then failover               |
+| 502         | Bad Gateway           | Retry, then failover               |
+| 503         | Service Unavailable   | Retry, then failover               |
+| 504         | Gateway Timeout       | Retry, then failover               |
+
+Network errors (TCP connection failures, DNS resolution failures, timeouts) also trigger failover when `failover_on_network_errors` is enabled (default: true).
+
+### Customizing Failover Status Codes
+
+Override the default status codes using `failover_status_codes`:
 
 ```bash
-# Disable network error failover (only fail on HTTP status codes)
+# Only failover on rate limits and service unavailable
+/set failover_status_codes [429,503]
+
+# Add 400 (bad request) to failover triggers
+/set failover_status_codes [400,429,500,502,503,504]
+
+# Failover on any 4xx or 5xx error
+/set failover_status_codes [400,401,402,403,404,429,500,501,502,503,504]
+```
+
+Save the configuration to a profile:
+
+```bash
+/set failover_status_codes [429,500,502,503,504]
+/profile save loadbalancer my-lb failover primary backup
+```
+
+### Bucket Failover vs Load Balancer Failover
+
+There are two distinct failover mechanisms that can work together:
+
+**Bucket Failover** (within a single model profile):
+
+- Rotates OAuth buckets on the same provider
+- Preserves model context and conversation state
+- Triggers on: 429 (rate limit), 402 (quota), 401 (auth failure with refresh)
+
+```bash
+# Bucket failover within a profile
+/profile save model claude-buckets bucket1 bucket2 bucket3
+```
+
+**Load Balancer Failover** (across model profiles):
+
+- Switches between entirely different backends (potentially different providers)
+- Loses context on switch (see Cache Considerations above)
+- Triggers on: configurable status codes (default: 429, 500, 502, 503, 504)
+
+```bash
+# LB failover across profiles
+/profile save loadbalancer multi-provider failover claude-profile openai-profile
+```
+
+**Combined failover chain:**
+
+When both are configured, bucket failover occurs first, then LB failover:
+
+```
+Request fails with 429
+  → Try bucket2 (same profile)
+    → Try bucket3 (same profile)
+      → All buckets exhausted, LB failover
+        → Try next profile in load balancer
+```
+
+### Retry Configuration
+
+Fine-tune retry behavior before failover occurs:
+
+```bash
+# Number of retries per backend before moving to next
+/set failover_retry_count 3
+
+# Delay between retries (milliseconds)
+/set failover_retry_delay_ms 1000
+
+# Disable network error failover (not recommended)
 /set failover_on_network_errors false
-/profile save loadbalancer http-only-failover failover profile1 profile2
+```
+
+**Example with aggressive retry:**
+
+```bash
+/set failover_retry_count 5
+/set failover_retry_delay_ms 2000  # 2 seconds between retries
+/profile save loadbalancer patient-failover failover primary backup
+```
+
+**Example with immediate failover:**
+
+```bash
+/set failover_retry_count 0  # No retries, immediate failover
+/set failover_retry_delay_ms 0
+/profile save loadbalancer fast-failover failover primary backup
 ```
 
 ## Managing Profiles
@@ -367,15 +466,122 @@ Example:
 /profile save model claude-work
 
 /provider openai
-/model gpt-5.1-codex
+/model gpt-5.2
 /profile save model openai-work
 
 /provider gemini
-/model gemini-2.5-flash
+/model gemini-3-flash-preview
 /profile save model gemini-work
 
 # Create round-robin load balancer
 /profile save loadbalancer multi-provider roundrobin claude-work openai-work gemini-work
+```
+
+### Resilient Multi-Provider Setup with OAuth Buckets
+
+This example demonstrates a complete high-availability configuration combining:
+
+- Multiple providers (Anthropic, OpenAI)
+- OAuth bucket failover within each provider
+- Load balancer failover across providers
+- Custom failover status codes
+
+**Step 1: Set up OAuth buckets for each provider**
+
+```bash
+# Anthropic buckets (team accounts)
+/auth anthropic login team1@company.com
+/auth anthropic login team2@company.com
+/auth anthropic login personal@gmail.com
+
+# OpenAI buckets
+/auth openai login enterprise@company.com
+/auth openai login backup@company.com
+```
+
+**Step 2: Create model profiles with bucket chains**
+
+```bash
+# Anthropic profile with 3-bucket failover
+/provider anthropic
+/model claude-sonnet-4-5
+/profile save model claude-ha team1@company.com team2@company.com personal@gmail.com
+
+# OpenAI profile with 2-bucket failover
+/provider openai
+/model gpt-5.2
+/profile save model openai-ha enterprise@company.com backup@company.com
+```
+
+**Step 3: Configure failover settings**
+
+```bash
+# Retry 2 times with 1 second delay before failover
+/set failover_retry_count 2
+/set failover_retry_delay_ms 1000
+
+# Trigger failover on rate limits and server errors
+/set failover_status_codes [429,500,502,503,504]
+
+# Enable network error failover
+/set failover_on_network_errors true
+```
+
+**Step 4: Create the load balancer**
+
+```bash
+# Create failover load balancer: try Anthropic first, fall back to OpenAI
+/profile save loadbalancer enterprise-ha failover claude-ha openai-ha
+
+# Set as default
+/profile set-default enterprise-ha
+```
+
+**Complete failover chain in action:**
+
+```
+Request hits 429 (rate limit)
+  ↓
+Bucket failover: team1@company.com → team2@company.com
+  ↓ (still 429)
+Bucket failover: team2@company.com → personal@gmail.com
+  ↓ (still 429, all Anthropic buckets exhausted)
+LB failover: claude-ha profile → openai-ha profile
+  ↓
+New provider (OpenAI) with fresh bucket chain:
+  enterprise@company.com → backup@company.com
+  ↓
+Request succeeds on OpenAI
+```
+
+**Verify the configuration:**
+
+```bash
+# Check load balancer stats
+/stats lb
+
+# Check bucket usage
+/stats buckets
+
+# View full diagnostics
+/diagnostics
+```
+
+**The complete profile JSON (enterprise-ha.json):**
+
+```json
+{
+  "version": 1,
+  "type": "loadbalancer",
+  "policy": "failover",
+  "backends": ["claude-ha", "openai-ha"],
+  "ephemeralSettings": {
+    "failover_retry_count": 2,
+    "failover_retry_delay_ms": 1000,
+    "failover_status_codes": [429, 500, 502, 503, 504],
+    "failover_on_network_errors": true
+  }
+}
 ```
 
 ## Profile Storage

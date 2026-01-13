@@ -175,16 +175,12 @@ If none of these environment variables are set in a non-interactive session, the
 
 ## Multi-Provider Authentication
 
-LLxprt Code supports authentication with multiple AI providers beyond Google. Use the `/auth` command to manage OAuth authentication for providers that support it.
+LLxprt Code supports authentication with multiple AI providers beyond Google. Use the `/auth` command to manage OAuth authentication for providers that support it:
 
-**OAuth-Supported Providers:**
-
-- **Gemini** (Google AI) - Browser-based OAuth flow
-- **Anthropic** - Authorization code via dialog
-- **Qwen** (Alibaba Cloud) - Device code flow
-- **Codex** (OpenAI) - Browser-based OAuth flow via ChatGPT subscription
-
-For detailed setup instructions, see the [OAuth Setup Guide](../oauth-setup.md).
+- **Anthropic** - OAuth for Claude models
+- **Gemini** - OAuth for Google AI
+- **OpenAI** - OAuth for ChatGPT Plus/Pro subscribers (access GPT-5 Codex without API keys)
+- **Qwen** - OAuth for Alibaba Cloud models
 
 ### The `/auth` Command
 
@@ -192,7 +188,7 @@ For detailed setup instructions, see the [OAuth Setup Guide](../oauth-setup.md).
 /auth <provider> <action> [bucket-name]
 ```
 
-**Providers:** `anthropic`, `gemini`, `qwen`, `codex` (OpenAI), and others
+**Providers:** `anthropic`, `gemini`, `openai`, `qwen`, and others
 
 **Actions:**
 
@@ -205,8 +201,6 @@ For detailed setup instructions, see the [OAuth Setup Guide](../oauth-setup.md).
 
 OAuth buckets let you manage multiple authentication contexts per provider. This is useful when you have multiple accounts or API credentials for the same provider.
 
-> **Why use multiple buckets?** When you hit rate limits (429 errors) or quota limits (402 errors) on one account, llxprt-code can automatically fail over to another bucket. This is especially valuable for teams sharing multiple Claude Pro accounts or developers who want personal accounts as backup. For complete setup instructions and example scenarios, see the [Multi-Account Failover Guide](../oauth-setup.md#multi-account-failover).
-
 **Creating buckets:**
 
 ```bash
@@ -216,6 +210,9 @@ OAuth buckets let you manage multiple authentication contexts per provider. This
 # Named buckets
 /auth anthropic login work@company.com
 /auth anthropic login personal@gmail.com
+
+# OpenAI OAuth for ChatGPT Plus/Pro subscribers
+/auth openai login
 ```
 
 **Viewing buckets:**
