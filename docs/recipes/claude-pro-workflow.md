@@ -1,40 +1,61 @@
-# Claude Pro Workflow Recipe
+# Claude Pro/Max Workflow Recipe
 
-Maximize your Claude Pro/Max subscription with thinking mode and multi-account failover for rate limits.
+This recipe guides you through setting up LLxprt Code with Claude Pro or Claude Max subscription, including thinking mode for complex reasoning tasks.
 
-## Overview
+## When to Use This Setup
 
-Claude Pro/Max subscribers get access to:
+- You have a Claude Pro or Claude Max subscription
+- You need extended thinking for complex coding and reasoning tasks
+- You want to leverage Claude's full capabilities
+- You're working on production-level code that benefits from deeper analysis
 
-- Higher rate limits than free tier
-- Access to claude-opus-4-5-20251101 (most capable)
-- Thinking mode for complex reasoning
-- Priority access during peak times
+## Provider Overview
 
-This recipe shows you how to configure LLxprt Code to get the most out of your subscription.
+| Feature        | Claude Pro/Max                       |
+| -------------- | ------------------------------------ |
+| Context Limit  | 200,000 tokens                       |
+| Authentication | OAuth (subscription-based)           |
+| Thinking Mode  | Available with budget_tokens control |
+| Best For       | Complex reasoning, code analysis     |
 
-## Basic Claude Pro Setup
+## Basic Claude OAuth Setup
 
-### Interactive Setup
+### Step 1: Enable OAuth
 
 ```bash
-# 1. Enable Anthropic OAuth
 /auth anthropic enable
+```
 
-# 2. Set provider and model
-/provider anthropic
-/model claude-sonnet-4-5-20250929
+### Step 2: Set Your Model
 
-# 3. Configure for coding work
+```bash
+/model claude-sonnet-4-5
+```
+
+### Step 3: Configure Context and Tokens
+
+```bash
 /set context-limit 200000
 /set modelparam max_tokens 8192
-/set modelparam temperature 0.2
+```
 
-# 4. Save the profile
+### Step 4: Authenticate
+
+Make any request to trigger OAuth:
+
+```bash
+Hello, can you help me with a coding task?
+```
+
+A dialog will prompt you for your authorization code. Visit the Anthropic console to get your code.
+
+### Step 5: Save Profile
+
+```bash
 /profile save claude-pro
 ```
 
-### Profile JSON (Copy-Paste Ready)
+### Complete Basic Claude Profile JSON
 
 Save this to `~/.llxprt/profiles/claude-pro.json`:
 
@@ -42,9 +63,9 @@ Save this to `~/.llxprt/profiles/claude-pro.json`:
 {
   "version": 1,
   "provider": "anthropic",
-  "model": "claude-sonnet-4-5-20250929",
+  "model": "claude-sonnet-4-5",
   "modelParams": {
-    "temperature": 0.2,
+    "temperature": 0.7,
     "max_tokens": 8192
   },
   "ephemeralSettings": {
@@ -53,48 +74,38 @@ Save this to `~/.llxprt/profiles/claude-pro.json`:
 }
 ```
 
-### First-Time Authentication
+## Enabling Thinking Mode
 
-1. Run: `/profile load claude-pro`
-2. Send any message to trigger OAuth
-3. A dialog appears asking for your authorization code
-4. Go to: https://console.anthropic.com/settings/oauth
-5. Copy the authorization code
-6. Paste it into the dialog
-7. Done! Token is cached for future sessions
+Thinking mode allows Claude to reason through complex problems step-by-step before providing an answer.
 
-## Thinking Mode Setup
-
-Claude's thinking mode enables step-by-step reasoning for complex tasks. Use it for:
-
-- Architecture decisions
-- Debugging complex issues
-- Multi-step refactoring
-- Code review with detailed analysis
-
-### Interactive Setup with Thinking
+### Step 1: Enable Thinking
 
 ```bash
-# 1. Enable Anthropic OAuth
-/auth anthropic enable
+/set modelparam thinking {"type":"enabled","budget_tokens":8192}
+```
 
-# 2. Set provider and model (Sonnet or Opus)
-/provider anthropic
-/model claude-sonnet-4-5-20250929
+The `budget_tokens` parameter controls how many tokens Claude can use for thinking:
 
-# 3. Enable thinking mode with budget
-/set modelparam thinking {"type":"enabled","budget_tokens":16384}
+- **4096**: Quick analysis, simple problems
+- **8192**: Standard depth, most coding tasks
+- **16384**: Deep analysis, complex architecture decisions
+- **32768**: Maximum depth, intricate multi-step reasoning
 
-# 4. Increase max_tokens to accommodate thinking + response
-/set modelparam max_tokens 32768
-/set context-limit 200000
-/set modelparam temperature 1
+### Step 2: Adjust Max Tokens
 
-# 5. Save the profile
+When using thinking mode, increase `max_tokens` to accommodate both thinking and response:
+
+```bash
+/set modelparam max_tokens 16384
+```
+
+### Step 3: Save Thinking Profile
+
+```bash
 /profile save claude-thinking
 ```
 
-### Profile JSON with Thinking (Copy-Paste Ready)
+### Complete Thinking Mode Profile JSON
 
 Save this to `~/.llxprt/profiles/claude-thinking.json`:
 
@@ -102,71 +113,13 @@ Save this to `~/.llxprt/profiles/claude-thinking.json`:
 {
   "version": 1,
   "provider": "anthropic",
-  "model": "claude-sonnet-4-5-20250929",
+  "model": "claude-sonnet-4-5",
   "modelParams": {
-    "temperature": 1,
-    "max_tokens": 32768,
+    "temperature": 0.7,
+    "max_tokens": 16384,
     "thinking": {
       "type": "enabled",
-      "budget_tokens": 16384
-    }
-  },
-  "ephemeralSettings": {
-    "context-limit": 200000
-  }
-}
-```
-
-### Thinking Budget Guidelines
-
-| Budget Tokens | Use Case                          |
-| ------------- | --------------------------------- |
-| 4096          | Quick reasoning, simple decisions |
-| 8192          | Medium complexity analysis        |
-| 16384         | Complex debugging, architecture   |
-| 32768         | Deep analysis, major refactoring  |
-
-**Note:** `temperature` must be set to `1` when thinking mode is enabled.
-
-## Opus for Maximum Capability
-
-For the most complex tasks, use claude-opus-4-5-20251101:
-
-### Interactive Setup
-
-```bash
-# 1. Enable Anthropic OAuth
-/auth anthropic enable
-
-# 2. Set Opus model
-/provider anthropic
-/model claude-opus-4-5-20251101
-
-# 3. Enable thinking with larger budget
-/set modelparam thinking {"type":"enabled","budget_tokens":32768}
-/set modelparam max_tokens 65536
-/set context-limit 200000
-/set modelparam temperature 1
-
-# 4. Save the profile
-/profile save claude-opus-thinking
-```
-
-### Profile JSON (Copy-Paste Ready)
-
-Save this to `~/.llxprt/profiles/claude-opus-thinking.json`:
-
-```json
-{
-  "version": 1,
-  "provider": "anthropic",
-  "model": "claude-opus-4-5-20251101",
-  "modelParams": {
-    "temperature": 1,
-    "max_tokens": 65536,
-    "thinking": {
-      "type": "enabled",
-      "budget_tokens": 32768
+      "budget_tokens": 8192
     }
   },
   "ephemeralSettings": {
@@ -177,129 +130,196 @@ Save this to `~/.llxprt/profiles/claude-opus-thinking.json`:
 
 ## Multi-Bucket Failover for Rate Limits
 
-When you hit rate limits on one Claude account, automatically switch to another.
+Claude Pro/Max subscriptions have rate limits. Configure multiple authentication buckets to maximize throughput:
 
-### Step 1: Authenticate Multiple Accounts
+### Option 1: Multiple OAuth Sessions
 
-```bash
-# Authenticate first account
-/auth anthropic login work@company.com
-
-# Authenticate second account
-/auth anthropic login personal@gmail.com
-
-# Verify both are authenticated
-/auth anthropic status
-```
-
-### Step 2: Create Failover Profile
-
-```bash
-# Set up provider and model
-/provider anthropic
-/model claude-sonnet-4-5-20250929
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/set context-limit 200000
-
-# Save profile with multiple buckets (first = primary)
-/profile save model claude-ha work@company.com personal@gmail.com
-```
-
-### Profile JSON with Multi-Bucket (Copy-Paste Ready)
-
-Save this to `~/.llxprt/profiles/claude-ha.json`:
+If you have multiple Claude subscriptions (personal + work):
 
 ```json
 {
   "version": 1,
-  "provider": "anthropic",
-  "model": "claude-sonnet-4-5-20250929",
-  "modelParams": {
-    "temperature": 0.2,
-    "max_tokens": 8192
-  },
+  "provider": "lb",
+  "model": "claude-sonnet-4-5",
   "ephemeralSettings": {
-    "context-limit": 200000
-  },
-  "buckets": ["work@company.com", "personal@gmail.com"]
+    "context-limit": 200000,
+    "lb": {
+      "type": "failover",
+      "buckets": [
+        {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-5",
+          "note": "Primary OAuth account"
+        },
+        {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-5",
+          "key": "sk-ant-api03-secondary-key...",
+          "note": "Backup API key account"
+        }
+      ]
+    }
+  }
 }
 ```
 
-### How Failover Works
+### Option 2: Model Tier Failover
 
-| Error Code | Meaning             | Behavior                           |
-| ---------- | ------------------- | ---------------------------------- |
-| 429        | Rate limit exceeded | Immediately switch to next bucket  |
-| 402        | Payment/quota issue | Immediately switch to next bucket  |
-| 401        | Auth error          | Refresh once, then switch if fails |
+Fall back to faster/cheaper models when rate limited:
 
-## Profile Selection Guide
+Save this to `~/.llxprt/profiles/claude-tiered.json`:
 
-| Profile              | Model  | Thinking | Use Case                       |
-| -------------------- | ------ | -------- | ------------------------------ |
-| claude-pro           | Sonnet | Off      | Fast coding, simple tasks      |
-| claude-thinking      | Sonnet | 16k      | Complex debugging, refactoring |
-| claude-opus-thinking | Opus   | 32k      | Architecture, major decisions  |
-| claude-ha            | Sonnet | Off      | Rate-limit-sensitive workflows |
-
-## Switching Between Profiles
-
-```bash
-# Quick tasks - use standard profile
-/profile load claude-pro
-
-# Complex problem - enable thinking
-/profile load claude-thinking
-
-# Mission critical - use Opus
-/profile load claude-opus-thinking
-
-# Heavy usage day - use failover
-/profile load claude-ha
+```json
+{
+  "version": 1,
+  "provider": "lb",
+  "model": "claude-sonnet-4-5",
+  "ephemeralSettings": {
+    "context-limit": 200000,
+    "lb": {
+      "type": "failover",
+      "buckets": [
+        {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-5",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 16384,
+            "thinking": {
+              "type": "enabled",
+              "budget_tokens": 8192
+            }
+          }
+        },
+        {
+          "provider": "anthropic",
+          "model": "claude-haiku-4-5",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          }
+        }
+      ]
+    }
+  }
+}
 ```
 
-## Set Default Profile
+## Interactive Commands Reference
+
+### Quick Thinking Toggle
 
 ```bash
-# Use claude-pro as default
-/profile set-default claude-pro
+# Enable thinking
+/set modelparam thinking {"type":"enabled","budget_tokens":8192}
 
-# Clear default
-/profile set-default none
+# Disable thinking (for simpler tasks)
+/set modelparam thinking {"type":"disabled"}
+
+# Check current parameters
+/set modelparam
+```
+
+### Adjust Thinking Budget On-the-fly
+
+```bash
+# Light thinking for quick tasks
+/set modelparam thinking {"type":"enabled","budget_tokens":4096}
+
+# Deep thinking for complex problems
+/set modelparam thinking {"type":"enabled","budget_tokens":32768}
+```
+
+### Quick Profile Switching
+
+```bash
+# Simple tasks without thinking
+/profile load claude-pro
+
+# Complex tasks with thinking
+/profile load claude-thinking
+```
+
+## Command Line Usage
+
+### Start with Thinking Enabled
+
+```bash
+llxprt --profile-load claude-thinking
+```
+
+### One-off with Inline Profile
+
+```bash
+llxprt --profile '{"provider":"anthropic","model":"claude-sonnet-4-5","modelParams":{"thinking":{"type":"enabled","budget_tokens":8192}}}' -p "Analyze this code for security issues"
 ```
 
 ## Troubleshooting
 
-### OAuth Token Expired
+### Rate Limit Errors
+
+If you see rate limit errors:
+
+1. Wait a few minutes (limits reset periodically)
+2. Switch to tiered failover profile
+3. Reduce thinking budget temporarily
 
 ```bash
+# Quick fix: reduce thinking budget
+/set modelparam thinking {"type":"enabled","budget_tokens":4096}
+```
+
+### OAuth Token Issues
+
+```bash
+# Re-authenticate
 /auth anthropic logout
 /auth anthropic enable
-# Send a message to re-authenticate
 ```
 
 ### Thinking Mode Not Working
 
-1. Ensure `temperature` is set to `1`
-2. Increase `max_tokens` to accommodate thinking + response
-3. Verify `thinking.type` is `"enabled"`
-
-### Rate Limits Still Hitting
-
-1. Add more buckets to your failover profile
-2. Consider mixing in OpenAI/Gemini (see [High Availability](./high-availability.md))
-
-### Bucket Authentication Failed
+Ensure you're using a compatible model:
 
 ```bash
-# Re-authenticate specific bucket
-/auth anthropic login work@company.com
+# Check current model
+/model
+
+# Switch to thinking-compatible model
+/model claude-sonnet-4-5
 ```
 
-## See Also
+### Context Limit Exceeded
 
-- [OAuth Setup Guide](../oauth-setup.md) - Complete OAuth documentation
-- [Free Tier Setup](./free-tier-setup.md) - Free alternatives
-- [High Availability Setup](./high-availability.md) - Multi-provider failover
-- [Settings and Profiles](../settings-and-profiles.md) - Profile management
+```bash
+# Clear conversation
+/clear
+
+# Or compress history
+/compress
+
+# Check context usage
+/context
+```
+
+## Best Practices
+
+1. **Match thinking budget to task complexity**: Don't use 32k tokens for simple questions
+2. **Save multiple profiles**: Quick switching between thinking modes
+3. **Use failover for production**: Avoid disruptions from rate limits
+4. **Monitor token usage**: Thinking tokens count toward your usage
+5. **Start with disabled thinking**: Enable only when needed for complex tasks
+
+## Profile Summary
+
+| Profile           | Use Case                        | Thinking    |
+| ----------------- | ------------------------------- | ----------- |
+| `claude-pro`      | General coding, quick responses | Disabled    |
+| `claude-thinking` | Complex analysis, architecture  | 8192 tokens |
+| `claude-tiered`   | Production with failover        | On primary  |
+
+## Next Steps
+
+- [High Availability Setup](./high-availability.md) - Multi-provider redundancy
+- [CI/CD Automation](./ci-cd-automation.md) - Use Claude in pipelines
+- [Free Tier Setup](./free-tier-setup.md) - Add free providers as backup

@@ -1,38 +1,61 @@
 # Free Tier Setup Recipe
 
-Get started with LLxprt Code completely free using Gemini and Qwen OAuth authentication.
+This recipe guides you through setting up LLxprt Code with free-tier AI providers. Both Gemini and Qwen offer generous free tiers perfect for getting started.
 
-## Overview
+## When to Use This Setup
 
-Both Google Gemini and Alibaba Qwen offer free tiers accessible via OAuth:
+- You're exploring LLxprt Code without API costs
+- You want to experiment with different models before committing to paid tiers
+- You're building personal projects with moderate usage
+- You want backup free providers for rate limit situations
 
-| Provider | Free Tier Limits            | Best For                        |
-| -------- | --------------------------- | ------------------------------- |
-| Gemini   | Generous daily quota        | General coding, exploration     |
-| Qwen     | Free access via device flow | Alternative when Gemini limited |
+## Provider Overview
 
-## Gemini Free Setup
+| Provider | Context Limit | Free Tier Details                  |
+| -------- | ------------- | ---------------------------------- |
+| Gemini   | 1,048,576     | Free with Google account via OAuth |
+| Qwen     | 262,144       | Free with Alibaba Cloud account    |
 
-### Interactive Setup
+## Gemini OAuth Setup (Free)
+
+Gemini offers the largest context window (1M tokens) on its free tier.
+
+### Step 1: Enable OAuth
 
 ```bash
-# 1. Enable Gemini OAuth
 /auth gemini enable
+```
 
-# 2. Set provider and model
-/provider gemini
-/model gemini-2.5-flash
+### Step 2: Set Your Model
 
-# 3. Configure for coding work
-/set context-limit 200000
+```bash
+/model gemini-3-flash-preview
+```
+
+### Step 3: Configure Context Limit
+
+```bash
+/set context-limit 1048576
 /set modelparam max_tokens 8192
-/set modelparam temperature 0.2
+```
 
-# 4. Save the profile
+### Step 4: Authenticate
+
+Make any request to trigger OAuth:
+
+```bash
+Hello, can you help me with a coding task?
+```
+
+Your browser will open for Google authentication. Grant permissions and you're set!
+
+### Step 5: Save Profile
+
+```bash
 /profile save gemini-free
 ```
 
-### Profile JSON (Copy-Paste Ready)
+### Complete Gemini Free Profile JSON
 
 Save this to `~/.llxprt/profiles/gemini-free.json`:
 
@@ -40,48 +63,57 @@ Save this to `~/.llxprt/profiles/gemini-free.json`:
 {
   "version": 1,
   "provider": "gemini",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3-flash-preview",
   "modelParams": {
-    "temperature": 0.2,
+    "temperature": 0.7,
     "max_tokens": 8192
   },
   "ephemeralSettings": {
-    "context-limit": 200000
+    "context-limit": 1048576
   }
 }
 ```
 
-### First-Time Authentication
+## Qwen OAuth Setup (Free)
 
-1. Run: `/profile load gemini-free`
-2. Send any message to trigger OAuth
-3. Browser opens automatically
-4. Sign in with your Google account
-5. Grant permissions to LLxprt Code
-6. Done! Authentication is cached for future sessions
+Qwen offers excellent coding capabilities on its free tier.
 
-## Qwen Free Setup
-
-### Interactive Setup
+### Step 1: Enable OAuth
 
 ```bash
-# 1. Enable Qwen OAuth
 /auth qwen enable
+```
 
-# 2. Set provider and model
-/provider qwen
-/model qwen3-coder-480b-a35b-instruct
+### Step 2: Set Your Model
 
-# 3. Configure for coding work
-/set context-limit 200000
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
+```bash
+/model qwen3-coder-pro
+```
 
-# 4. Save the profile
+### Step 3: Configure Context Limit
+
+```bash
+/set context-limit 262144
+/set modelparam max_tokens 4096
+```
+
+### Step 4: Authenticate
+
+Make any request to trigger the device code flow:
+
+```bash
+Hello, can you help me with a coding task?
+```
+
+You'll see a device code and URL. Visit the URL, enter the code, and grant permissions.
+
+### Step 5: Save Profile
+
+```bash
 /profile save qwen-free
 ```
 
-### Profile JSON (Copy-Paste Ready)
+### Complete Qwen Free Profile JSON
 
 Save this to `~/.llxprt/profiles/qwen-free.json`:
 
@@ -89,130 +121,132 @@ Save this to `~/.llxprt/profiles/qwen-free.json`:
 {
   "version": 1,
   "provider": "qwen",
-  "model": "qwen3-coder-480b-a35b-instruct",
+  "model": "qwen3-coder-pro",
   "modelParams": {
-    "temperature": 0.2,
-    "max_tokens": 8192
+    "temperature": 0.7,
+    "max_tokens": 4096
   },
   "ephemeralSettings": {
-    "context-limit": 200000
+    "context-limit": 262144
   }
 }
 ```
 
-### First-Time Authentication (Device Flow)
+## Switching Between Free Providers
 
-1. Run: `/profile load qwen-free`
-2. Send any message to trigger OAuth
-3. You'll see a device code and URL:
-   ```
-   Device code: ABC-DEF-123
-   Visit: https://oauth.qwen.alibaba.com/device
-   Enter code: ABC-DEF-123
-   ```
-4. Open the URL in your browser
-5. Enter the device code
-6. Grant permissions
-7. Authentication completes automatically
-
-## When to Use Which Provider
-
-### Use Gemini When:
-
-- You need fast responses
-- Working on general coding tasks
-- You want seamless browser-based OAuth
-- Gemini-3-flash offers good speed/quality balance
-
-### Use Qwen When:
-
-- You've hit Gemini's rate limits
-- You want a coding-specialized model
-- Working on complex code generation
-- You prefer device-code authentication flow
-
-## Dual-Provider Setup (Maximum Free Usage)
-
-Set up both providers and switch between them as needed:
-
-### Interactive Setup
+### Interactive Switching
 
 ```bash
-# Enable both OAuth providers
-/auth gemini enable
-/auth qwen enable
-
-# Create Gemini profile
-/provider gemini
-/model gemini-2.5-flash
-/set context-limit 200000
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/profile save gemini-free
-
-# Create Qwen profile
-/provider qwen
-/model qwen3-coder-480b-a35b-instruct
-/set context-limit 200000
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/profile save qwen-free
-```
-
-### Switching Between Free Providers
-
-```bash
-# Start with Gemini
+# Switch to Gemini
 /profile load gemini-free
 
-# Switch to Qwen when needed
+# Switch to Qwen
 /profile load qwen-free
 ```
 
-## Recommended Model Choices
+### Command Line Switching
 
-### Gemini Models (Free)
+```bash
+# Start with Gemini
+llxprt --profile-load gemini-free
 
-| Model            | Speed | Quality | Use Case               |
-| ---------------- | ----- | ------- | ---------------------- |
-| gemini-3-flash   | Fast  | Good    | Quick tasks, iteration |
-| gemini-2.5-flash | Fast  | Great   | General coding         |
+# Start with Qwen
+llxprt --profile-load qwen-free
+```
 
-### Qwen Models (Free)
+### Set a Default Free Provider
 
-| Model                          | Speed  | Quality   | Use Case           |
-| ------------------------------ | ------ | --------- | ------------------ |
-| qwen3-coder-480b-a35b-instruct | Medium | Excellent | Complex code tasks |
+```bash
+# Make Gemini your default (loads on every startup)
+/profile set-default gemini-free
+```
+
+## Combined Free Tier Profile with Failover
+
+For maximum availability, create a profile that uses Gemini as primary with Qwen as backup. This uses LLxprt's load balancer feature:
+
+Save this to `~/.llxprt/profiles/free-tier-lb.json`:
+
+```json
+{
+  "version": 1,
+  "provider": "lb",
+  "model": "gemini-3-flash-preview",
+  "ephemeralSettings": {
+    "context-limit": 262144,
+    "lb": {
+      "type": "failover",
+      "buckets": [
+        {
+          "provider": "gemini",
+          "model": "gemini-3-flash-preview",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          }
+        },
+        {
+          "provider": "qwen",
+          "model": "qwen3-coder-pro",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 4096
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+**Note:** When using failover, set `context-limit` to the smaller of the two providers (262,144) to ensure compatibility.
 
 ## Troubleshooting
 
 ### OAuth Token Expired
 
+If you get authentication errors:
+
 ```bash
 # Re-authenticate
 /auth gemini logout
 /auth gemini enable
-# Then send a message to trigger re-auth
+
+# Or for Qwen
+/auth qwen logout
+/auth qwen enable
 ```
 
-### Rate Limit Hit
+### Rate Limit Errors
 
-Switch to the other free provider:
+Free tiers have rate limits. If you hit them:
+
+1. Wait a few minutes before retrying
+2. Switch to your backup provider
+3. Consider the failover profile above
+
+### Context Limit Errors
+
+If you see "context limit exceeded" errors:
 
 ```bash
-/profile load qwen-free  # or gemini-free
+# Start a new conversation to clear history
+/clear
+
+# Or compress the current conversation
+/compress
 ```
 
-### Browser Doesn't Open (Gemini)
+## Best Practices
 
-Copy the URL from the terminal and paste it manually in your browser.
+1. **Save both profiles**: Have quick access to both free providers
+2. **Use Gemini for large contexts**: Its 1M token limit handles big codebases
+3. **Use Qwen for coding tasks**: Excellent code generation and understanding
+4. **Monitor rate limits**: Switch providers when one hits limits
+5. **Set a default**: Choose your preferred provider as default for convenience
 
-### Device Code Timeout (Qwen)
+## Next Steps
 
-Complete authentication within 5-15 minutes after the code appears.
-
-## See Also
-
-- [OAuth Setup Guide](../oauth-setup.md) - Complete OAuth documentation
-- [Claude Pro Workflow](./claude-pro-workflow.md) - Paid tier with more features
-- [High Availability Setup](./high-availability.md) - Multi-provider failover
+- [High Availability Setup](./high-availability.md) - Add paid providers for production use
+- [CI/CD Automation](./ci-cd-automation.md) - Use free tiers in your pipelines
+- [Settings and Profiles](../settings-and-profiles.md) - Learn more about profile management

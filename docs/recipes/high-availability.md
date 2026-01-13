@@ -1,389 +1,409 @@
 # High Availability Multi-Provider Recipe
 
-Maximum uptime with load balancing across Claude, OpenAI, and Gemini providers.
+This recipe guides you through setting up LLxprt Code with multiple providers for maximum availability and reliability.
 
-## Overview
+## When to Use This Setup
 
-When reliability matters, don't depend on a single provider. This recipe configures:
+- You need reliable AI assistance for production work
+- You want automatic failover when providers are unavailable
+- You're building systems that can't afford downtime
+- You want to balance cost vs. capability across providers
 
-- Automatic failover between providers
-- Load balancing for distributed usage
-- Graceful degradation when providers are unavailable
+## Provider Overview
 
-## Provider Comparison
+| Provider | Context Limit | Cost Tier | Best For                    |
+| -------- | ------------- | --------- | --------------------------- |
+| Claude   | 200,000       | Premium   | Complex reasoning, analysis |
+| OpenAI   | 400,000       | Premium   | General tasks, fast         |
+| Gemini   | 1,048,576     | Free/Paid | Large context, free tier    |
 
-| Provider  | Model                      | Strengths                   | Considerations              |
-| --------- | -------------------------- | --------------------------- | --------------------------- |
-| Anthropic | claude-sonnet-4-5-20250929 | Best code quality, thinking | Rate limits on Pro          |
-| OpenAI    | gpt-5.2                    | Fast, reliable API          | Requires API key            |
-| Gemini    | gemini-2.5-flash           | Free tier, fast             | Occasional quality variance |
+## Basic Failover Configuration
 
-## Step 1: Create Individual Provider Profiles
+This configuration tries Claude first, then OpenAI, then Gemini:
 
-First, set up each provider as a separate profile.
+### Complete Failover Profile JSON
 
-### Claude Profile
-
-```bash
-# Option A: OAuth (Claude Pro/Max)
-/auth anthropic enable
-/provider anthropic
-/model claude-sonnet-4-5-20250929
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/set context-limit 200000
-/profile save anthropic-primary
-
-# Option B: API Key
-/provider anthropic
-/key sk-ant-your-key
-/model claude-sonnet-4-5-20250929
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/set context-limit 200000
-/profile save anthropic-primary
-```
-
-**Profile JSON** (`~/.llxprt/profiles/anthropic-primary.json`):
+Save this to `~/.llxprt/profiles/high-availability.json`:
 
 ```json
 {
   "version": 1,
-  "provider": "anthropic",
-  "model": "claude-sonnet-4-5-20250929",
-  "modelParams": {
-    "temperature": 0.2,
-    "max_tokens": 8192
-  },
+  "provider": "lb",
+  "model": "claude-sonnet-4-5",
   "ephemeralSettings": {
-    "context-limit": 200000
+    "context-limit": 200000,
+    "lb": {
+      "type": "failover",
+      "buckets": [
+        {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-5",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          }
+        },
+        {
+          "provider": "openai",
+          "model": "gpt-5.2",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          }
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3-flash-preview",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          }
+        }
+      ]
+    }
   }
 }
 ```
 
-### OpenAI Profile
+**Note:** Set `context-limit` to the smallest provider limit (200,000) to ensure all providers can handle requests.
 
-```bash
-/provider openai
-/key sk-your-openai-key
-/model gpt-5.2
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/set context-limit 200000
-/profile save openai-backup
+## Load Balancer Types
+
+### Failover (Recommended for Reliability)
+
+Tries providers in order, moving to the next only on failure:
+
+```json
+{
+  "lb": {
+    "type": "failover",
+    "buckets": [...]
+  }
+}
 ```
 
-**Profile JSON** (`~/.llxprt/profiles/openai-backup.json`):
+**Best for:** Production systems where you want predictable primary provider usage.
+
+### Round Robin
+
+Distributes requests evenly across providers:
+
+```json
+{
+  "lb": {
+    "type": "round-robin",
+    "buckets": [...]
+  }
+}
+```
+
+**Best for:** Maximizing throughput when all providers are equally capable.
+
+### Random
+
+Randomly selects a provider for each request:
+
+```json
+{
+  "lb": {
+    "type": "random",
+    "buckets": [...]
+  }
+}
+```
+
+**Best for:** Simple load distribution without state.
+
+## Cost-Optimized Configuration
+
+Prioritize free/cheap providers, falling back to premium only when needed:
+
+Save this to `~/.llxprt/profiles/cost-optimized.json`:
 
 ```json
 {
   "version": 1,
-  "provider": "openai",
-  "model": "gpt-5.2",
-  "modelParams": {
-    "temperature": 0.2,
-    "max_tokens": 8192
-  },
+  "provider": "lb",
+  "model": "gemini-3-flash-preview",
   "ephemeralSettings": {
-    "context-limit": 200000
+    "context-limit": 200000,
+    "lb": {
+      "type": "failover",
+      "buckets": [
+        {
+          "provider": "gemini",
+          "model": "gemini-3-flash-preview",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          },
+          "note": "Free tier - try first"
+        },
+        {
+          "provider": "qwen",
+          "model": "qwen3-coder-pro",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 4096
+          },
+          "note": "Free tier backup"
+        },
+        {
+          "provider": "anthropic",
+          "model": "claude-haiku-4-5",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 4096
+          },
+          "note": "Cheap paid fallback"
+        },
+        {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-5",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          },
+          "note": "Premium last resort"
+        }
+      ]
+    }
   }
 }
 ```
 
-### Gemini Profile
+## Capability-Optimized Configuration
+
+Use the best model for complex tasks, with cheaper fallbacks:
+
+Save this to `~/.llxprt/profiles/capability-optimized.json`:
+
+```json
+{
+  "version": 1,
+  "provider": "lb",
+  "model": "claude-sonnet-4-5",
+  "ephemeralSettings": {
+    "context-limit": 200000,
+    "lb": {
+      "type": "failover",
+      "buckets": [
+        {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-5",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 16384,
+            "thinking": {
+              "type": "enabled",
+              "budget_tokens": 8192
+            }
+          },
+          "note": "Best reasoning with thinking"
+        },
+        {
+          "provider": "openai",
+          "model": "o3-pro",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          },
+          "note": "Strong reasoning alternative"
+        },
+        {
+          "provider": "openai",
+          "model": "gpt-5.2",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          },
+          "note": "Fast, capable backup"
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3-pro-preview",
+          "modelParams": {
+            "temperature": 0.7,
+            "max_tokens": 8192
+          },
+          "note": "Large context fallback"
+        }
+      ]
+    }
+  }
+}
+```
+
+## Setting Up Authentication
+
+For high availability, configure authentication for all providers:
+
+### API Keys (Environment Variables)
 
 ```bash
-# Option A: OAuth (Free)
+# Add to ~/.bashrc or ~/.zshrc
+export ANTHROPIC_API_KEY="sk-ant-..."
+export OPENAI_API_KEY="sk-..."
+export GEMINI_API_KEY="..."
+```
+
+### OAuth for Free Providers
+
+```bash
+# Enable OAuth for free providers
 /auth gemini enable
-/provider gemini
-/model gemini-2.5-flash
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/set context-limit 200000
-/profile save gemini-fallback
-
-# Option B: API Key
-/provider gemini
-/key your-gemini-key
-/model gemini-2.5-flash
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/set context-limit 200000
-/profile save gemini-fallback
+/auth qwen enable
 ```
 
-**Profile JSON** (`~/.llxprt/profiles/gemini-fallback.json`):
+### Keyfiles for Security
+
+```bash
+# Create secure keyfiles
+echo "sk-ant-..." > ~/.keys/anthropic.key
+echo "sk-..." > ~/.keys/openai.key
+chmod 600 ~/.keys/*.key
+```
+
+## Mixed Authentication Profile
+
+Combine OAuth and API keys in a single profile:
 
 ```json
 {
   "version": 1,
-  "provider": "gemini",
-  "model": "gemini-2.5-flash",
-  "modelParams": {
-    "temperature": 0.2,
-    "max_tokens": 8192
-  },
+  "provider": "lb",
+  "model": "claude-sonnet-4-5",
   "ephemeralSettings": {
-    "context-limit": 200000
+    "context-limit": 200000,
+    "lb": {
+      "type": "failover",
+      "buckets": [
+        {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-5",
+          "note": "Uses OAuth or ANTHROPIC_API_KEY env var"
+        },
+        {
+          "provider": "openai",
+          "model": "gpt-5.2",
+          "key": "sk-...",
+          "note": "Explicit API key"
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3-flash-preview",
+          "note": "Uses OAuth (free tier)"
+        }
+      ]
+    }
   }
 }
-```
-
-## Step 2: Create Load Balancer Profile
-
-### Failover Mode (Recommended for Reliability)
-
-Uses providers in priority order. Only switches when current provider fails.
-
-```bash
-/profile save loadbalancer ha-failover failover anthropic-primary openai-backup gemini-fallback
-```
-
-**Profile JSON** (`~/.llxprt/profiles/ha-failover.json`):
-
-```json
-{
-  "version": 1,
-  "type": "loadbalancer",
-  "policy": "failover",
-  "profiles": ["anthropic-primary", "openai-backup", "gemini-fallback"]
-}
-```
-
-### Round-Robin Mode (For Distributed Load)
-
-Distributes requests across all providers evenly.
-
-```bash
-/profile save loadbalancer ha-roundrobin roundrobin anthropic-primary openai-backup gemini-fallback
-```
-
-**Profile JSON** (`~/.llxprt/profiles/ha-roundrobin.json`):
-
-```json
-{
-  "version": 1,
-  "type": "loadbalancer",
-  "policy": "roundrobin",
-  "profiles": ["anthropic-primary", "openai-backup", "gemini-fallback"]
-}
-```
-
-## Step 3: Load and Use
-
-```bash
-# Load the HA profile
-/profile load ha-failover
-
-# Set as default for all sessions
-/profile set-default ha-failover
-```
-
-## Complete Setup Command Sequence
-
-Copy-paste this entire sequence to set up high availability:
-
-```bash
-# 1. Enable OAuth for free providers
-/auth anthropic enable
-/auth gemini enable
-
-# 2. Create Anthropic profile
-/provider anthropic
-/model claude-sonnet-4-5-20250929
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/set context-limit 200000
-/profile save anthropic-primary
-
-# 3. Create OpenAI profile (requires API key)
-/provider openai
-/key sk-your-openai-key
-/model gpt-5.2
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/set context-limit 200000
-/profile save openai-backup
-
-# 4. Create Gemini profile
-/provider gemini
-/model gemini-2.5-flash
-/set modelparam max_tokens 8192
-/set modelparam temperature 0.2
-/set context-limit 200000
-/profile save gemini-fallback
-
-# 5. Create load balancer with failover
-/profile save loadbalancer ha-failover failover anthropic-primary openai-backup gemini-fallback
-
-# 6. Load and set as default
-/profile load ha-failover
-/profile set-default ha-failover
 ```
 
 ## Cost vs. Capability Tradeoffs
 
-### Budget-Conscious HA (Free + Paid Backup)
+| Configuration        | Cost     | Capability | Availability | Use Case            |
+| -------------------- | -------- | ---------- | ------------ | ------------------- |
+| Cost-Optimized       | Low      | Moderate   | High         | Personal projects   |
+| Capability-Optimized | High     | Maximum    | High         | Production code     |
+| Basic Failover       | Moderate | High       | Very High    | General development |
 
-Prioritize free providers, use paid only when necessary:
+### Decision Guide
 
-```json
-{
-  "version": 1,
-  "type": "loadbalancer",
-  "policy": "failover",
-  "profiles": ["gemini-fallback", "qwen-free", "anthropic-primary"]
-}
-```
+1. **Personal/Learning**: Use cost-optimized (free tiers first)
+2. **Professional Development**: Use basic failover (reliable, balanced)
+3. **Production/Critical**: Use capability-optimized (best results)
+4. **CI/CD Pipelines**: Use cost-optimized with explicit keys
 
-**Setup:**
+## Interactive Commands
 
-```bash
-/auth gemini enable
-/auth qwen enable
-
-/provider gemini
-/model gemini-2.5-flash
-/set modelparam max_tokens 8192
-/set context-limit 200000
-/profile save gemini-fallback
-
-/provider qwen
-/model qwen3-coder-480b-a35b-instruct
-/set modelparam max_tokens 8192
-/set context-limit 200000
-/profile save qwen-free
-
-/auth anthropic enable
-/provider anthropic
-/model claude-sonnet-4-5-20250929
-/set modelparam max_tokens 8192
-/set context-limit 200000
-/profile save anthropic-primary
-
-/profile save loadbalancer budget-ha failover gemini-fallback qwen-free anthropic-primary
-```
-
-### Quality-First HA (Best Models Priority)
-
-Start with highest quality, fall back to faster options:
-
-```json
-{
-  "version": 1,
-  "type": "loadbalancer",
-  "policy": "failover",
-  "profiles": [
-    "anthropic-opus",
-    "anthropic-sonnet",
-    "openai-backup",
-    "gemini-fallback"
-  ]
-}
-```
-
-### Speed-Optimized HA (Fast Models First)
-
-Prioritize response speed:
-
-```json
-{
-  "version": 1,
-  "type": "loadbalancer",
-  "policy": "failover",
-  "profiles": ["gemini-fallback", "openai-backup", "anthropic-primary"]
-}
-```
-
-## Monitoring Failover
-
-Check which provider is currently active:
+### Load High Availability Profile
 
 ```bash
-/stats buckets
+/profile load high-availability
 ```
 
-View provider health and request distribution:
+### Check Current Provider Status
 
 ```bash
+/provider
 /auth
 ```
 
-## Failover Behavior
+### Switch Between Configurations
 
-The load balancer automatically fails over on these errors:
+```bash
+# For cost-sensitive work
+/profile load cost-optimized
 
-| Error Code | Meaning       | Action                            |
-| ---------- | ------------- | --------------------------------- |
-| 429        | Rate limit    | Immediate switch to next provider |
-| 402        | Payment/quota | Immediate switch to next provider |
-| 401        | Auth failure  | Attempt refresh, then switch      |
-| 500-503    | Server error  | Immediate switch to next provider |
-| Timeout    | Network issue | Switch after configured timeout   |
+# For complex problems
+/profile load capability-optimized
 
-## Advanced: Weighted Load Balancing
+# For general reliability
+/profile load high-availability
+```
 
-For proportional distribution (e.g., 70% Claude, 20% OpenAI, 10% Gemini):
+## Command Line Usage
 
-```json
-{
-  "version": 1,
-  "type": "loadbalancer",
-  "policy": "weighted",
-  "profiles": [
-    { "profile": "anthropic-primary", "weight": 70 },
-    { "profile": "openai-backup", "weight": 20 },
-    { "profile": "gemini-fallback", "weight": 10 }
-  ]
-}
+```bash
+# Start with high availability
+llxprt --profile-load high-availability
+
+# Or with inline profile
+llxprt --profile '{"provider":"lb","ephemeralSettings":{"lb":{"type":"failover","buckets":[{"provider":"anthropic","model":"claude-sonnet-4-5"},{"provider":"openai","model":"gpt-5.2"}]}}}'
 ```
 
 ## Troubleshooting
 
 ### All Providers Failing
 
+Check authentication for each provider:
+
 ```bash
-# Check individual provider status
-/profile load anthropic-primary
-# Try a simple request
+# Check status
+/auth
 
-/profile load openai-backup
-# Try a simple request
+# Test individual providers
+/provider anthropic
+/model claude-sonnet-4-5
+Hello, are you working?
 
-/profile load gemini-fallback
-# Try a simple request
+/provider openai
+/model gpt-5.2
+Hello, are you working?
 ```
-
-### Failover Not Triggering
-
-1. Verify all profiles exist: `/profile list`
-2. Check load balancer configuration
-3. Ensure error codes are failover-triggering types
 
 ### Unexpected Provider Being Used
 
-```bash
-# Check current provider status
-/stats buckets
-
-# Re-authenticate if needed
-/auth anthropic enable
-/auth gemini enable
-```
-
-### OAuth Tokens Expired
+Failover uses the first working provider. Check if your primary has issues:
 
 ```bash
-/auth anthropic logout
-/auth anthropic enable
+# Review provider status
+/provider
 
-/auth gemini logout
-/auth gemini enable
+# Check for rate limits or errors in previous responses
 ```
 
-## See Also
+### Context Limit Mismatch
 
-- [Claude Pro Workflow](./claude-pro-workflow.md) - Single-provider optimization
-- [Free Tier Setup](./free-tier-setup.md) - Free provider configuration
-- [OAuth Setup Guide](../oauth-setup.md) - Authentication details
-- [Settings and Profiles](../settings-and-profiles.md) - Profile management
+Ensure your `context-limit` is set to the smallest provider limit:
+
+```bash
+/set context-limit 200000
+/profile save high-availability
+```
+
+## Best Practices
+
+1. **Test all providers**: Verify authentication works before depending on failover
+2. **Set conservative context limits**: Use the smallest provider's limit
+3. **Monitor costs**: Track usage across providers
+4. **Update regularly**: Provider capabilities and pricing change
+5. **Keep credentials secure**: Use keyfiles or environment variables
+6. **Have a backup plan**: Know how to manually switch if LB fails
+
+## Next Steps
+
+- [CI/CD Automation](./ci-cd-automation.md) - Use HA config in pipelines
+- [Claude Pro Workflow](./claude-pro-workflow.md) - Optimize Claude usage
+- [Free Tier Setup](./free-tier-setup.md) - Add free providers

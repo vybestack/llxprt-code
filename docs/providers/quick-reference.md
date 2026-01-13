@@ -49,7 +49,7 @@ Examples:
 - Writing mode: context-limit 200000, max_tokens 4000 → prompt budget ≈ 196k (minus safety).
 
 > **Reasoning tips:**  
-> MiniMax M2 relies on interleaved thinking tokens, so keep prior reasoning in context (`/set reasoning.stripFromContext none`).  
+> MiniMax M2.1 relies on interleaved thinking tokens, so keep prior reasoning in context (`/set reasoning.stripFromContext none`).  
 > Kimi K2 can trim older reasoning when you need to manage its 256k window (`/set reasoning.stripFromContext allButLast` or `all`) while still surfacing recent thinking blocks.
 
 ### OpenAI
@@ -57,23 +57,23 @@ Examples:
 ```bash
 /provider openai
 /key sk-your-openai-key
-/model gpt-5
+/model gpt-5.2
 ```
 
 #### Model geometry & recommended settings (OpenAI)
 
-Common models: gpt-5, gpt-5-mini, gpt-5-nano, gpt-5-thinking, gpt-5-pro, gpt-5.2-instant
+Common models: gpt-5.2, o3-pro, o4-mini
 
 Guidance:
 
-- Start with context-limit 200000 unless you know the model's smaller limit; adjust down if you get limit errors.
+- Start with context-limit 400000 for gpt-5.2, 200000 for o3-pro/o4-mini; adjust down if you get limit errors.
 - Typical defaults:
-  - gpt-5/gpt-5-thinking: context-limit 200000
-  - gpt-5.2-instant / gpt-5.2-pro: context-limit 165000
+  - gpt-5.2: context-limit 400000, max_tokens up to 128000
+  - o3-pro / o4-mini: context-limit 200000, max_tokens up to 100000
   - Example setup:
 
 ```bash
-/set context-limit 200000
+/set context-limit 400000
 /set modelparam max_tokens 4096
 /set modelparam temperature 0.2  # code-oriented
 ```
@@ -84,13 +84,13 @@ Guidance:
 {
   "version": 1,
   "provider": "openai",
-  "model": "gpt-5",
+  "model": "gpt-5.2",
   "modelParams": { "temperature": 0.2, "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 200000 }
+  "ephemeralSettings": { "context-limit": 400000 }
 }
 ```
 
-**Common models:** `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-thinking`, `gpt-5-pro`, `gpt-5.2-instant`
+**Common models:** `gpt-5.2`, `o3-pro`, `o4-mini`
 
 **Environment variable:** `export OPENAI_API_KEY=sk-...`
 
@@ -151,20 +151,21 @@ Guidance:
 ```bash
 /provider gemini
 /key your-gemini-key
-/model gemini-2.5-flash
+/model gemini-3-flash-preview
 ```
 
 #### Model geometry & recommended settings (Gemini)
 
-Common models: gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro
+Common models: gemini-3-flash-preview, gemini-3-pro-preview
 
 Guidance:
 
-- Use context-limit 200000 as a safe starting value; lower if you see provider limit errors.
+- Use context-limit 1048576 for Gemini 3 models; lower if you see provider limit errors.
+- Max output tokens: 65536
 - Example setup:
 
 ```bash
-/set context-limit 200000
+/set context-limit 1048576
 /set modelparam max_tokens 4096   # Gemini often uses camelCase params in native SDKs, but LLxprt forwards what you set
 ```
 
@@ -174,15 +175,15 @@ Guidance:
 {
   "version": 1,
   "provider": "gemini",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3-flash-preview",
   "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 200000 }
+  "ephemeralSettings": { "context-limit": 1048576 }
 }
 ```
 
 #### Model geometry & recommended settings (Synthetic)
 
-Popular models: hf:zai-org/GLM-4.6, hf:mistralai/Mixtral-8x7B
+Popular models: hf:zai-org/GLM-4.7, hf:mistralai/Mixtral-8x7B
 
 Guidance:
 
@@ -200,7 +201,7 @@ Guidance:
 {
   "version": 1,
   "provider": "synthetic",
-  "model": "hf:zai-org/GLM-4.6",
+  "model": "hf:zai-org/GLM-4.7",
   "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
   "ephemeralSettings": {}
 }
@@ -214,7 +215,7 @@ Guidance:
 
 Note: OAuth is lazy - authentication happens when you first use the provider.
 
-**Common models:** `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.5-pro`
+**Common models:** `gemini-3-flash-preview`, `gemini-3-pro-preview`
 
 **Environment variable:** `export GEMINI_API_KEY=...`
 
@@ -251,11 +252,11 @@ Guidance:
 }
 ```
 
-/model hf:zai-org/GLM-4.6
+/model hf:zai-org/GLM-4.7
 
 ````
 
-**Popular models:** `hf:zai-org/GLM-4.6`, `hf:mistralai/Mixtral-8x7B`
+**Popular models:** `hf:zai-org/GLM-4.7`, `hf:mistralai/Mixtral-8x7B`
 
 ### Qwen (Free)
 
@@ -388,22 +389,22 @@ Example model: accounts/fireworks/models/llama-v3p3-70b-instruct
 /model accounts/fireworks/models/llama-v3p3-70b-instruct
 ```
 
-#### Cerebras (GLM‑4.6)
+#### Cerebras (GLM-4.7)
 
 ```bash
 /provider openai
 /baseurl https://api.cerebras.ai/v1/
 /key your-cerebras-key
-/model zai-glm-4.6
+/model zai-glm-4.7
 # Recommended runtime tuning:
-/set context-limit 121000
+/set context-limit 200000
 /set modelparam max_tokens 10000
 /set modelparam temperature 1
 ```
 
 **Notes:**
 
-- GLM‑4.6 generally supports large context (often cited ~200k), but the Cerebras endpoint typically performs best with a reduced effective window. We recommend context-limit 121000 and max_tokens 10000 as a reliable starting point.
+- GLM-4.7 supports 200k context with max output of 131,072 tokens.
 - Budget room for completions: effective prompt budget = context-limit − max_tokens − safety.
 - The /provider qwen alias is for Qwen's own service, not for Cerebras.
 
@@ -413,13 +414,13 @@ Example model: accounts/fireworks/models/llama-v3p3-70b-instruct
 {
   "version": 1,
   "provider": "openai",
-  "model": "zai-glm-4.6",
+  "model": "zai-glm-4.7",
   "modelParams": {
     "temperature": 1,
     "max_tokens": 10000
   },
   "ephemeralSettings": {
-    "context-limit": 121000,
+    "context-limit": 200000,
     "base-url": "https://api.cerebras.ai/v1",
     "shell-replacement": true
   }
