@@ -15,7 +15,7 @@ Get started immediately with powerful LLM options:
 # Free Gemini models
 /auth gemini enable
 /provider gemini
-/model gemini-2.5-flash
+/model gemini-3-flash-preview
 
 # Free Qwen models
 /auth qwen enable
@@ -25,18 +25,31 @@ Get started immediately with powerful LLM options:
 # Your Claude Pro / Max subscription
 /auth anthropic enable
 /provider anthropic
-/model claude-sonnet-4-5
+/model claude-sonnet-4-5-20250929
+
+# Your ChatGPT Plus / Pro subscription (Codex)
+/auth codex enable
+/provider codex
+/model gpt-5.2
+
+# Kimi subscription (K2 Thinking with reasoning)
+/auth kimi enable
+/provider kimi
+/model kimi-k2-thinking
 ```
 
 ## Why Choose LLxprt Code?
 
-- **Free Tier Support**: Start coding immediately with Gemini, Qwen, or your existing Claude account
-- **Provider Flexibility**: Switch between any Anthropic, Gemini, or OpenAI-compatible provider
-- **Top Open Models**: Works seamlessly with GLM 4.6, MiniMax-2, and Qwen 3 Coder
+- **Use Your Existing Subscriptions**: Use Claude Pro/Max, ChatGPT Plus/Pro (Codex), or Kimi subscriptions directly via OAuth
+- **Multi-Account Failover**: Configure multiple OAuth accounts that automatically failover on rate limits
+- **Load Balancer Profiles**: Balance requests across providers or accounts with automatic failover
+- **Free Tier Support**: Start coding immediately with Gemini or Qwen free tiers
+- **Provider Flexibility**: Switch between any Anthropic, Gemini, OpenAI, Kimi, or OpenAI-compatible provider
+- **Top Open Models**: Works seamlessly with GLM-4.7, Kimi K2 Thinking, MiniMax M2.1, and Qwen 3 Coder
 - **Local Models**: Run models locally with LM Studio, llama.cpp for complete privacy
 - **Privacy First**: No telemetry by default, local processing available
 - **Subagent Flexibility**: Create agents with different models, providers, or settings
-- **[ACTION] Real-time**: Interactive REPL with beautiful themes
+- **Interactive REPL**: Beautiful terminal UI with multiple themes
 - **Zed Integration**: Native Zed editor integration for seamless workflow
 
 ```bash
@@ -45,7 +58,7 @@ npm install -g @vybestack/llxprt-code
 llxprt
 
 # Try without installing
-npx @vybestack/llxprt-code --provider synthetic --model hf:zai-org/GLM-4.6 --keyfile ~/.synthetic_key "simplify the README.md"
+npx @vybestack/llxprt-code --provider synthetic --model hf:zai-org/GLM-4.7 --keyfile ~/.synthetic_key "simplify the README.md"
 ```
 
 ## What is LLxprt Code?
@@ -85,9 +98,12 @@ llxprt
 
 ## Key Features
 
-- **Free & Subscription Options** - Gemini, Qwen (free), Claude Pro/Max (subscription)
-- **Extensive Provider Support** - Any Anthropic, Gemini, or OpenAI-compatible provider [**Provider Guide →**](./docs/providers/quick-reference.md)
-- **Top Open Models** - GLM 4.6, MiniMax-2, Qwen 3 Coder
+- **Subscription OAuth** - Use Claude Pro/Max, ChatGPT Plus/Pro (Codex), or Kimi subscriptions directly
+- **Free Tiers** - Gemini, Qwen free tiers with generous limits
+- **Multi-Account Failover** - Configure multiple OAuth buckets that failover automatically on rate limits
+- **Load Balancer Profiles** - Balance across providers/accounts with roundrobin or failover policies
+- **Extensive Provider Support** - Anthropic, Gemini, OpenAI, Kimi, and any OpenAI-compatible provider [**Provider Guide →**](./docs/providers/quick-reference.md)
+- **Top Open Models** - GLM-4.7, Kimi K2 Thinking, MiniMax M2.1, Qwen 3 Coder
 - **Local Model Support** - LM Studio, llama.cpp, Ollama for complete privacy
 - **Profile System** - Save provider configurations and model settings
 - **Advanced Subagents** - Isolated AI assistants with different models/providers
@@ -122,23 +138,39 @@ llxprt "Generate unit tests for payment module" > tests/payment.test.js
 
 LLxprt Code works seamlessly with the best open-weight models:
 
-### GLM 4.6
+### Kimi K2 Thinking
+
+- **Context Window**: 262,144 tokens
+- **Architecture**: Trillion-parameter MoE (32B active)
+- **Strengths**: Deep reasoning, multi-step tool orchestration, 200-300 sequential tool calls
+- **Special**: Native thinking/reasoning mode with tool interleaving
+
+```bash
+/provider kimi
+/model kimi-k2-thinking
+# Or via Synthetic/Chutes:
+/provider synthetic
+/model hf:moonshotai/Kimi-K2-Thinking
+```
+
+### GLM-4.7
 
 - **Context Window**: 200,000 tokens
+- **Max Output**: 131,072 tokens
 - **Architecture**: Mixture-of-Experts with 355B total parameters (32B active)
 - **Strengths**: Coding, multi-step planning, tool integration
-- **15% fewer tokens** for equivalent tasks vs previous generation
 
-### MiniMax-2
+### MiniMax M2.1
 
-- **Context Window**: ~204,800 tokens
+- **Context Window**: 196,608 tokens
 - **Architecture**: MoE with 230B total parameters (10B active)
 - **Strengths**: Coding workflows, multi-step agents, tool calling
 - **Cost**: Only 8% of Claude Sonnet, ~2x faster
 
-### Qwen 3 Coder
+### Qwen3 Coder 480B
 
-- **Context Window**: 256,000 tokens (extendable to 1M)
+- **Context Window**: 262,144 tokens
+- **Max Output**: 65,536 tokens
 - **Architecture**: MoE with 480B total parameters (35B active)
 - **Strengths**: Agentic coding, browser automation, tool usage
 - **Performance**: State-of-the-art on SWE-bench Verified (69.6%)
@@ -179,7 +211,7 @@ Create specialized AI assistants with isolated contexts and different configurat
 Each subagent can be configured with:
 
 - **Different providers** (Gemini vs Anthropic vs Qwen vs Local)
-- **Different models** (Flash vs Sonnet vs GLM 4.6 vs Custom)
+- **Different models** (Flash vs Sonnet vs GLM-4.7 vs Custom)
 - **Different tool access** (Restrict or allow specific tools)
 - **Different settings** (Temperature, timeouts, max turns)
 - **Isolated runtime context** (No memory or state crossover)

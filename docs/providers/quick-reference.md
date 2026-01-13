@@ -39,43 +39,101 @@ For providers without aliases, use the OpenAI protocol:
 
 When you set a model, configure both context-limit (ephemeral) and max_tokens (model param):
 
-- Effective prompt budget = context-limit − max_tokens − safety-margin
-- Safety margin: 256–2048 tokens (recommend 1024) to avoid last-second overflows from tool wrappers, system prompt, and LLXPRT.md.
-- Tip: If you see "would exceed the token context window" errors, lower max_tokens first or reduce LLXPRT.md size.
+- **context-limit**: The total tokens allowed for the entire request (prompt + output)
+- **max_tokens**: The maximum tokens reserved for the model's response (output only)
+- **Effective prompt budget** = context-limit − max_tokens − safety-margin
+
+**Important constraint**: You cannot set context-limit + max_tokens to exceed the model's actual limit. For example:
+
+- If a model supports 200k total context, you CANNOT set context-limit=200000 AND max_tokens=100000
+- The system needs room for both your prompt AND the response within the limit
+
+**Safety margin**: 256–2048 tokens (recommend 1024) to avoid last-second overflows from tool wrappers, system prompt, and LLXPRT.md.
+
+**Tip**: If you see "would exceed the token context window" errors, lower max_tokens first or reduce LLXPRT.md size.
 
 Examples:
 
 - Large coding session: context-limit 121000, max_tokens 10000 → prompt budget ≈ 110k (minus safety).
-- Writing mode: context-limit 200000, max_tokens 4000 → prompt budget ≈ 196k (minus safety).
+- Writing mode: context-limit 190000, max_tokens 8000 → prompt budget ≈ 181k (minus safety).
 
 > **Reasoning tips:**  
-> MiniMax M2 relies on interleaved thinking tokens, so keep prior reasoning in context (`/set reasoning.stripFromContext none`).  
+> MiniMax M2.1 relies on interleaved thinking tokens, so keep prior reasoning in context (`/set reasoning.stripFromContext none`).  
 > Kimi K2 can trim older reasoning when you need to manage its 256k window (`/set reasoning.stripFromContext allButLast` or `all`) while still surfacing recent thinking blocks.
 
-### OpenAI
+### OpenAI (API Key)
 
 ```bash
 /provider openai
-/key sk-your-openai-key
-/model gpt-5
+/keyfile ~/.openai_key
+/model gpt-5.2
 ```
 
 #### Model geometry & recommended settings (OpenAI)
 
-Common models: gpt-5, gpt-5-mini, gpt-5-nano, gpt-5-thinking, gpt-5-pro, gpt-5.2-instant
+Common models: gpt-5.2, gpt-5.2-nano
 
 Guidance:
 
-- Start with context-limit 200000 unless you know the model's smaller limit; adjust down if you get limit errors.
-- Typical defaults:
-  - gpt-5/gpt-5-thinking: context-limit 200000
-  - gpt-5.2-instant / gpt-5.2-pro: context-limit 165000
-  - Example setup:
+- gpt-5.2 context: 200k (via Codex/API key), max output 32k
+- gpt-5.2-nano: Faster, smaller variant for simpler tasks
+- **Note**: gpt-5.2 does NOT support temperature - use `/set reasoning.effort` instead
+- Reasoning effort: `low`, `medium`, `high`, `xhigh`
+- Example setup:
 
 ```bash
 /set context-limit 200000
 /set modelparam max_tokens 4096
-/set modelparam temperature 0.2  # code-oriented
+/set reasoning.effort high  # replaces temperature for reasoning models
+```
+
+**Common models:** `gpt-5.2`, `gpt-5.2-nano`
+
+### OpenAI Codex (ChatGPT Plus/Pro OAuth)
+
+Use your ChatGPT Plus or Pro subscription directly:
+
+```bash
+/auth codex enable
+/provider codex
+/model gpt-5.2
+```
+
+This uses OAuth to authenticate with your ChatGPT subscription - no API key needed.
+
+### Kimi (Moonshot AI)
+
+Kimi offers the K2 Thinking model with deep reasoning and multi-step tool orchestration.
+
+#### Using OAuth (Subscription)
+
+```bash
+/auth kimi enable
+/provider kimi
+/model kimi-k2-thinking
+```
+
+#### Using API Key
+
+```bash
+/provider kimi
+/keyfile ~/.kimi_key
+/model kimi-k2-thinking
+```
+
+#### Model geometry & recommended settings (Kimi)
+
+- Context: 262,144 tokens
+- Architecture: Trillion-parameter MoE (32B active)
+- Strengths: Deep reasoning, 200-300 sequential tool calls, native thinking mode
+
+Example setup:
+
+```bash
+/set context-limit 262000
+/set modelparam max_tokens 8192
+/set reasoning.enabled true
+/set reasoning.includeInResponse true
 ```
 
 **Profile JSON:**
@@ -83,16 +141,32 @@ Guidance:
 ```json
 {
   "version": 1,
-  "provider": "openai",
-  "model": "gpt-5",
-  "modelParams": { "temperature": 0.2, "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 200000 }
+  "provider": "kimi",
+  "model": "kimi-k2-thinking",
+  "modelParams": { "max_tokens": 8192 },
+  "ephemeralSettings": {
+    "context-limit": 262000,
+    "reasoning.enabled": true,
+    "reasoning.includeInResponse": true
+  }
 }
 ```
 
-**Common models:** `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-thinking`, `gpt-5-pro`, `gpt-5.2-instant`
+#### Kimi K2 via Synthetic/Chutes
 
-**Environment variable:** `export OPENAI_API_KEY=sk-...`
+Kimi K2 Thinking is also available through third-party providers:
+
+```bash
+# Via Synthetic
+/provider synthetic
+/keyfile ~/.synthetic_key
+/model hf:moonshotai/Kimi-K2-Thinking
+
+# Via Chutes
+/provider chutes
+/keyfile ~/.chutes_key
+/model kimi-k2-thinking
+```
 
 ### Anthropic (Claude)
 
@@ -151,20 +225,21 @@ Guidance:
 ```bash
 /provider gemini
 /key your-gemini-key
-/model gemini-2.5-flash
+/model gemini-3-flash-preview
 ```
 
 #### Model geometry & recommended settings (Gemini)
 
-Common models: gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro
+Common models: gemini-3-flash-preview, gemini-3-pro-preview
 
 Guidance:
 
-- Use context-limit 200000 as a safe starting value; lower if you see provider limit errors.
+- Use context-limit 1048576 for Gemini 3 models; lower if you see provider limit errors.
+- Max output tokens: 65536
 - Example setup:
 
 ```bash
-/set context-limit 200000
+/set context-limit 1048576
 /set modelparam max_tokens 4096   # Gemini often uses camelCase params in native SDKs, but LLxprt forwards what you set
 ```
 
@@ -174,15 +249,15 @@ Guidance:
 {
   "version": 1,
   "provider": "gemini",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3-flash-preview",
   "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 200000 }
+  "ephemeralSettings": { "context-limit": 1048576 }
 }
 ```
 
 #### Model geometry & recommended settings (Synthetic)
 
-Popular models: hf:zai-org/GLM-4.6, hf:mistralai/Mixtral-8x7B
+Popular models: hf:zai-org/GLM-4.7, hf:mistralai/Mixtral-8x7B
 
 Guidance:
 
@@ -200,7 +275,7 @@ Guidance:
 {
   "version": 1,
   "provider": "synthetic",
-  "model": "hf:zai-org/GLM-4.6",
+  "model": "hf:zai-org/GLM-4.7",
   "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
   "ephemeralSettings": {}
 }
@@ -214,7 +289,7 @@ Guidance:
 
 Note: OAuth is lazy - authentication happens when you first use the provider.
 
-**Common models:** `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.5-pro`
+**Common models:** `gemini-3-flash-preview`, `gemini-3-pro-preview`
 
 **Environment variable:** `export GEMINI_API_KEY=...`
 
@@ -251,11 +326,11 @@ Guidance:
 }
 ```
 
-/model hf:zai-org/GLM-4.6
+/model hf:zai-org/GLM-4.7
 
 ````
 
-**Popular models:** `hf:zai-org/GLM-4.6`, `hf:mistralai/Mixtral-8x7B`
+**Popular models:** `hf:zai-org/GLM-4.7`, `hf:mistralai/Mixtral-8x7B`
 
 ### Qwen (Free)
 
@@ -388,22 +463,22 @@ Example model: accounts/fireworks/models/llama-v3p3-70b-instruct
 /model accounts/fireworks/models/llama-v3p3-70b-instruct
 ```
 
-#### Cerebras (GLM‑4.6)
+#### Cerebras (GLM-4.7)
 
 ```bash
 /provider openai
 /baseurl https://api.cerebras.ai/v1/
 /key your-cerebras-key
-/model zai-glm-4.6
+/model zai-glm-4.7
 # Recommended runtime tuning:
-/set context-limit 121000
+/set context-limit 131000
 /set modelparam max_tokens 10000
 /set modelparam temperature 1
 ```
 
 **Notes:**
 
-- GLM‑4.6 generally supports large context (often cited ~200k), but the Cerebras endpoint typically performs best with a reduced effective window. We recommend context-limit 121000 and max_tokens 10000 as a reliable starting point.
+- GLM-4.7 model supports 200k context, but **Cerebras endpoint limits to ~131k**.
 - Budget room for completions: effective prompt budget = context-limit − max_tokens − safety.
 - The /provider qwen alias is for Qwen's own service, not for Cerebras.
 
@@ -413,13 +488,13 @@ Example model: accounts/fireworks/models/llama-v3p3-70b-instruct
 {
   "version": 1,
   "provider": "openai",
-  "model": "zai-glm-4.6",
+  "model": "zai-glm-4.7",
   "modelParams": {
     "temperature": 1,
     "max_tokens": 10000
   },
   "ephemeralSettings": {
-    "context-limit": 121000,
+    "context-limit": 131000,
     "base-url": "https://api.cerebras.ai/v1",
     "shell-replacement": true
   }

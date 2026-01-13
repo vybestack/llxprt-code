@@ -1,6 +1,6 @@
 # LLxprt Code
 
-Within LLxprt Code, `packages/cli` is the frontend for users to send and receive prompts with the Gemini AI model and its associated tools. For a general overview of LLxprt Code, see the [main documentation page](../index.md).
+LLxprt Code is an AI-powered coding assistant that works with any LLM provider. Within LLxprt Code, `packages/cli` is the frontend for users to send and receive prompts and interact with AI-powered tools. For a general overview of LLxprt Code, see the [main documentation page](../index.md).
 
 ## Navigating this section
 
@@ -16,16 +16,46 @@ Within LLxprt Code, `packages/cli` is the frontend for users to send and receive
 
 ## Non-interactive mode
 
-LLxprt Code can be run in a non-interactive mode, which is useful for scripting and automation. In this mode, you pipe input to the CLI, it executes the command, and then it exits.
+LLxprt Code can be run in a non-interactive mode, which is useful for scripting and automation.
 
-The following example pipes a command to LLxprt Code from your terminal:
+### Basic non-interactive usage
 
-```bash
-echo "What is fine tuning?" | gemini
-```
-
-LLxprt Code executes the command and prints the output to your terminal. Note that you can achieve the same behavior by using the `--prompt` or `-p` flag. For example:
+Pass a prompt directly as an argument:
 
 ```bash
-gemini -p "What is fine tuning?"
+llxprt "What is fine tuning?"
 ```
+
+Or pipe input:
+
+```bash
+echo "What is fine tuning?" | llxprt
+```
+
+### Using profiles in non-interactive mode
+
+Load a saved profile for consistent configuration:
+
+```bash
+llxprt --profile-load my-claude-profile "Explain this code"
+```
+
+### Interactive mode with initial prompt (`-i`)
+
+The `-i` flag starts an interactive session with an initial prompt. Unlike non-interactive mode, the session continues after the first response:
+
+```bash
+llxprt -i "Let's work on improving this codebase"
+```
+
+This is useful when you want to start a conversation with context but continue interacting afterward.
+
+### Comparison of modes
+
+| Flag/Usage                   | Mode            | Session continues? |
+| ---------------------------- | --------------- | ------------------ |
+| `llxprt "prompt"`            | Non-interactive | No                 |
+| `llxprt -p "prompt"`         | Non-interactive | No                 |
+| `llxprt -i "prompt"`         | Interactive     | Yes                |
+| `llxprt --profile-load name` | Interactive     | Yes                |
+| `echo "prompt" \| llxprt`    | Non-interactive | No                 |
