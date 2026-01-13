@@ -82,7 +82,7 @@ Each provider offers different models. You can select a specific model using the
 /model
 
 # Select a specific model
-/model gpt-4.1
+/model gpt-5.2
 /model o3
 /model claude-opus-4
 ```
@@ -93,7 +93,7 @@ Each provider offers different models. You can select a specific model using the
 
 - Supports o3 (including o3-pro which REQUIRES Responses API), o1, GPT-4.1, GPT-4o, and other OpenAI models
 - Tool calling support (tool outputs are sent to the model as plain multi-line text; see [Tool output format](../tool-output-format.md))
-- Responses API support for advanced models (o3, o1, gpt-4.1)
+- Responses API support for advanced models (o3, o1, gpt-5.2)
 - **OAuth support**: ChatGPT Plus/Pro subscribers can use OAuth authentication instead of API keys (see [OAuth Setup](../oauth-setup.md))
 
 ### Anthropic
@@ -219,7 +219,7 @@ llxprt
 /provider openai
 
 # Select GPT-4.1
-/model gpt-4.1
+/model gpt-5.2
 
 # Have a conversation
 Hello! Can you help me with Python?

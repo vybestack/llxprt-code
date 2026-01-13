@@ -270,7 +270,7 @@ A profile JSON file looks like:
 {
   "version": 1,
   "provider": "anthropic",
-  "model": "claude-3-5-sonnet-20240620",
+  "model": "claude-sonnet-4-5-20250929",
   "modelParams": {
     "temperature": 0.7,
     "max_tokens": 4096,
@@ -305,7 +305,7 @@ llxprt --profile-load my-profile --key sk-ant-...
 llxprt --keyfile ~/.keys/anthropic.key
 
 # Set provider and model
-llxprt --provider anthropic --model claude-3-5-sonnet-20240620
+llxprt --provider anthropic --model claude-sonnet-4-5-20250929
 ```
 
 ### Inline Profiles for CI/CD
@@ -314,14 +314,14 @@ For GitHub Actions and other CI/CD environments where filesystem access is limit
 
 ```bash
 # Basic inline profile
-llxprt --profile '{"provider":"openai","model":"gpt-4","key":"sk-xxx"}' --prompt "Hello"
+llxprt --profile '{"provider":"openai","model":"gpt-5.2","key":"sk-xxx"}' --prompt "Hello"
 
 # From environment variable (recommended for CI/CD)
 PROFILE_JSON='{"provider":"anthropic","model":"claude-sonnet-4","key":"sk-ant-xxx"}'
 llxprt --profile "$PROFILE_JSON" --prompt "Review code"
 
 # With CLI overrides (CLI flags take precedence)
-llxprt --profile '{"provider":"openai","model":"gpt-3.5-turbo"}' --model gpt-4
+llxprt --profile '{"provider":"openai","model":"gpt-5.2"}' --model gpt-5.2
 ```
 
 **GitHub Actions Example:**
@@ -435,7 +435,7 @@ LLxprt Code provides fine-grained control over tool outputs to prevent context o
 ```bash
 # Configure for creative writing
 /provider anthropic
-/model claude-3-5-sonnet-20240620
+/model claude-sonnet-4-5-20250929
 /set modelparam temperature 0.9
 /set modelparam max_tokens 8000
 /set context-limit 150000
@@ -471,7 +471,7 @@ LLxprt Code provides fine-grained control over tool outputs to prevent context o
 ```bash
 # Enable thinking for complex reasoning
 /provider anthropic
-/model claude-3-5-sonnet-20240620
+/model claude-sonnet-4-5-20250929
 /set modelparam thinking {"type":"enabled","budget_tokens":8192}
 /profile save deep-thinking
 ```
