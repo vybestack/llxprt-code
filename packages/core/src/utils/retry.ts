@@ -323,7 +323,8 @@ export async function retryWithBackoff<T>(
       }
 
       const errorStatus = getErrorStatus(error);
-      const is429 = errorStatus === 429;
+      const isOverload = isOverloadError(error);
+      const is429 = errorStatus === 429 || isOverload;
       const is402 = errorStatus === 402;
       const is401 = errorStatus === 401;
 
@@ -482,6 +483,25 @@ export async function retryWithBackoff<T>(
 }
 
 /**
+ * Determines if an error is an Anthropic overloaded_error.
+ * Anthropic returns overloaded_error as an error type (not HTTP status):
+ * {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+ * @param error The error object.
+ * @returns True if the error is an overloaded_error, false otherwise.
+ */
+export function isOverloadError(error: unknown): boolean {
+  if (error && typeof error === 'object') {
+    const errorObj = error as {
+      error?: { type?: string; message?: string };
+      type?: string;
+    };
+    const errorType = errorObj.error?.type || errorObj.type;
+    return errorType === 'overloaded_error';
+  }
+  return false;
+}
+
+/**
  * Extracts the HTTP status code from an error object.
  * @param error The error object.
  * @returns The HTTP status code, or undefined if not found.
@@ -556,9 +576,10 @@ function getDelayDurationAndStatus(error: unknown): {
   errorStatus: number | undefined;
 } {
   const errorStatus = getErrorStatus(error);
+  const isOverload = isOverloadError(error);
   let delayDurationMs = 0;
 
-  if (errorStatus === 429) {
+  if (errorStatus === 429 || isOverload) {
     delayDurationMs = getRetryAfterDelayMs(error);
   }
   return { delayDurationMs, errorStatus };
