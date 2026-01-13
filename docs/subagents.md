@@ -116,6 +116,218 @@ Subagents are stored under `~/.llxprt/subagents/` as JSON files. Each file inclu
 /subagent save deep-review claude-max manual "Perform deep architectural analysis and list risks."
 ```
 
+## Advanced Subagent Configuration
+
+Subagents inherit all capabilities of the profiles they bind to, including load balancing, OAuth buckets, and provider-specific settings.
+
+### Subagent with Load Balancer Profile
+
+Use a load balancer profile for resilient automated tasks that need high availability:
+
+```bash
+# First, create individual model profiles
+/provider anthropic
+/model claude-sonnet-4-5
+/profile save model claude-primary
+
+/provider openai
+/model gpt-5.1
+/profile save model openai-backup
+
+# Create a failover load balancer
+/profile save loadbalancer resilient-lb failover claude-primary openai-backup
+
+# Create subagent using the load balancer
+/subagent save auto-reviewer resilient-lb manual "Review code changes for correctness and security. Flag any issues."
+```
+
+If the primary Claude endpoint fails (rate limit, outage), requests automatically fail over to OpenAI without interrupting the subagent's work.
+
+### Subagent with Multi-Bucket OAuth Profile
+
+Combine OAuth buckets with subagents for high-throughput scenarios:
+
+```bash
+# Authenticate multiple buckets
+/auth anthropic login team1@company.com
+/auth anthropic login team2@company.com
+/auth anthropic login team3@company.com
+
+# Create profile with all buckets
+/provider anthropic
+/model claude-sonnet-4-5
+/profile save model claude-team team1@company.com team2@company.com team3@company.com
+
+# Create subagent with bucket failover
+/subagent save batch-processor claude-team manual "Process files in batch. Output results in JSON format."
+```
+
+When the subagent hits rate limits on one bucket, it automatically advances to the next, enabling sustained high-volume work.
+
+### Cost Optimization: Cheaper Model for Routine Work
+
+Use a less expensive model for routine tasks and reserve premium models for complex work:
+
+```bash
+# Create profiles for different cost tiers
+/provider gemini
+/model gemini-2.5-flash
+/profile save model gemini-fast
+
+/provider anthropic
+/model claude-opus-4-5
+/profile save model claude-premium
+
+# Cheap subagent for routine tasks
+/subagent save file-scanner gemini-fast auto "Scan files for patterns and report findings. Quick analysis only."
+
+# Premium subagent for complex analysis
+/subagent save architect-review claude-premium manual "Perform deep architectural analysis. Evaluate design patterns, dependencies, and long-term maintainability."
+```
+
+Delegate simple tasks (file scanning, formatting checks, basic summaries) to the cheaper subagent and reserve expensive models for tasks requiring deep reasoning.
+
+## Workflow Examples
+
+### Code Review Pipeline
+
+This workflow uses multiple subagents with different profiles to create a tiered review process:
+
+```bash
+# Step 1: Create profiles
+/provider gemini
+/model gemini-2.5-flash
+/profile save model fast-gemini
+
+/provider anthropic
+/model claude-sonnet-4-5
+/profile save model claude-review
+
+# Step 2: Create specialized subagents
+/subagent save lint-checker fast-gemini manual "Check code for style issues, unused imports, and formatting problems. Output a bulleted list of issues."
+
+/subagent save security-reviewer claude-review manual "Review code for security vulnerabilities. Check for injection risks, authentication issues, and data exposure. Provide severity ratings."
+
+/subagent save arch-reviewer claude-review manual "Evaluate code architecture. Check for SOLID principles, proper abstractions, and maintainability concerns."
+```
+
+**Usage pattern:**
+
+1. Run `lint-checker` first for fast, cheap static analysis
+2. If lint passes, run `security-reviewer` for vulnerability assessment
+3. For significant changes, run `arch-reviewer` for deep analysis
+
+This approach uses the cheaper Gemini model for quick checks and Claude for nuanced review, optimizing both cost and quality.
+
+### Research and Implementation Workflow
+
+This workflow demonstrates handoff between subagents for research and implementation tasks:
+
+```bash
+# Step 1: Create profiles (Gemini free tier for research, Claude for implementation)
+/provider gemini
+/model gemini-2.5-flash
+/profile save model gemini-research
+
+/provider anthropic
+/model claude-sonnet-4-5
+/profile save model claude-impl
+
+# Step 2: Create specialized subagents
+/subagent save web-researcher gemini-research auto "Research topics using web search. Summarize findings with source URLs. Focus on recent, authoritative sources."
+
+/subagent save doc-analyst gemini-research auto "Analyze documentation and API references. Extract key patterns and usage examples."
+
+/subagent save implementer claude-impl manual "Implement features based on research findings. Follow project conventions. Write clean, tested code."
+```
+
+**Usage pattern:**
+
+1. Use `web-researcher` to gather background on libraries, APIs, or techniques
+2. Use `doc-analyst` to process specific documentation
+3. Feed research findings to `implementer` for actual code changes
+
+This leverages Gemini's free tier for high-volume research while using Claude's stronger reasoning for implementation.
+
+### Automated CI/CD Analysis Pipeline
+
+Combine load balancer profiles with specialized subagents for CI/CD integration:
+
+```bash
+# Create high-availability profile
+/profile save loadbalancer ci-resilient failover claude-primary openai-backup gemini-fallback
+
+# Create CI-focused subagents
+/subagent save test-failure-analyst ci-resilient manual "Analyze test failures. Identify root cause and suggest fixes. Output in structured format."
+
+/subagent save pr-summarizer ci-resilient auto "Summarize pull request changes. List modified files, key changes, and potential impacts."
+
+/subagent save release-noter ci-resilient auto "Generate release notes from commit history. Group by feature, fix, and breaking change."
+```
+
+These subagents remain available even during provider outages, ensuring CI/CD pipelines continue functioning.
+
+## Profile Requirements for Subagents
+
+### Why Subagents Bind to Profiles
+
+Subagents must bind to profiles rather than providers directly for several reasons:
+
+1. **Configuration encapsulation**: Profiles capture provider, model, auth method, and settings as a single unit. Subagents inherit all of these without specifying each individually.
+
+2. **Centralized updates**: Change a profile once to update every subagent that uses it. If you switch from Claude Sonnet to Claude Opus, update the profile and all referencing subagents immediately use the new model.
+
+3. **Auth abstraction**: Profiles handle OAuth buckets, API keys, and load balancer auth transparently. Subagents don't need to know authentication details.
+
+4. **Reproducibility**: The same subagent definition works across environments if the profile name exists, even when underlying credentials differ.
+
+### Updating All Subagents via Profile Changes
+
+When you update a profile, all subagents using that profile automatically inherit the changes:
+
+```bash
+# Initial setup
+/provider anthropic
+/model claude-sonnet-4-5
+/profile save model team-claude
+
+/subagent save reviewer team-claude manual "Review code."
+/subagent save documenter team-claude manual "Write docs."
+/subagent save tester team-claude manual "Analyze tests."
+
+# Later: upgrade all subagents to a new model
+/provider anthropic
+/model claude-opus-4-5
+/profile save model team-claude   # Overwrites existing profile
+
+# All three subagents now use claude-opus-4-5
+```
+
+This pattern is especially useful for:
+
+- Rolling out model upgrades across teams
+- Switching OAuth buckets when credentials rotate
+- Adding load balancing to existing subagents
+
+### Security Considerations for Subagent Tool Access
+
+Subagents operate within the same tool access policies as your main session:
+
+1. **Tool inheritance**: Subagents have access to the same tools as the main session. They cannot bypass tool restrictions.
+
+2. **Approval mode**: If your session requires approval for file writes, subagents also require approval for file writes.
+
+3. **Sandboxing**: Subagents run in the same sandbox (or lack thereof) as the main session.
+
+4. **OAuth scope**: Subagents using OAuth-authenticated profiles operate under the same OAuth scopes and permissions.
+
+**Best practices:**
+
+- Create purpose-specific profiles with appropriate settings for automated work
+- Use load balancer profiles for unattended subagent work to handle transient failures
+- Monitor subagent activity through session logs
+- Consider using profiles with lower-capability models for routine tasks to limit potential impact
+
 ## Related commands
 
 - `/profile list` to see available profiles.

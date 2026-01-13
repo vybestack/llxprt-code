@@ -58,6 +58,8 @@ Save a profile with multiple OAuth buckets for automatic failover when rate limi
 - On 402 (quota/payment): advance to next bucket immediately
 - On 401 (auth failure): attempt token refresh, retry once, then advance
 
+> **Need to create buckets first?** See the [OAuth Setup Guide](../oauth-setup.md#multi-account-failover) for step-by-step bucket creation instructions and practical failover scenarios (team accounts, personal+work, multi-provider).
+
 ### OpenAI-Compatible Endpoints
 
 Profiles work with any OpenAI-compatible endpoint. Here's an example using Synthetic with Kimi K2:
