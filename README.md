@@ -32,7 +32,7 @@ Get started immediately with powerful LLM options:
 
 - **Free Tier Support**: Start coding immediately with Gemini, Qwen, or your existing Claude account
 - **Provider Flexibility**: Switch between any Anthropic, Gemini, or OpenAI-compatible provider
-- **Top Open Models**: Works seamlessly with GLM 4.6, MiniMax-2, and Qwen 3 Coder
+- **Top Open Models**: Works seamlessly with GLM-4.7, MiniMax M2.1, and Qwen 3 Coder
 - **Local Models**: Run models locally with LM Studio, llama.cpp for complete privacy
 - **Privacy First**: No telemetry by default, local processing available
 - **Subagent Flexibility**: Create agents with different models, providers, or settings
@@ -45,7 +45,7 @@ npm install -g @vybestack/llxprt-code
 llxprt
 
 # Try without installing
-npx @vybestack/llxprt-code --provider synthetic --model hf:zai-org/GLM-4.6 --keyfile ~/.synthetic_key "simplify the README.md"
+npx @vybestack/llxprt-code --provider synthetic --model hf:zai-org/GLM-4.7 --keyfile ~/.synthetic_key "simplify the README.md"
 ```
 
 ## What is LLxprt Code?
@@ -87,7 +87,7 @@ llxprt
 
 - **Free & Subscription Options** - Gemini, Qwen (free), Claude Pro/Max (subscription)
 - **Extensive Provider Support** - Any Anthropic, Gemini, or OpenAI-compatible provider [**Provider Guide →**](./docs/providers/quick-reference.md)
-- **Top Open Models** - GLM 4.6, MiniMax-2, Qwen 3 Coder
+- **Top Open Models** - GLM-4.7, MiniMax M2.1, Qwen 3 Coder
 - **Local Model Support** - LM Studio, llama.cpp, Ollama for complete privacy
 - **Profile System** - Save provider configurations and model settings
 - **Advanced Subagents** - Isolated AI assistants with different models/providers
@@ -122,23 +122,24 @@ llxprt "Generate unit tests for payment module" > tests/payment.test.js
 
 LLxprt Code works seamlessly with the best open-weight models:
 
-### GLM 4.6
+### GLM-4.7
 
 - **Context Window**: 200,000 tokens
+- **Max Output**: 131,072 tokens
 - **Architecture**: Mixture-of-Experts with 355B total parameters (32B active)
 - **Strengths**: Coding, multi-step planning, tool integration
-- **15% fewer tokens** for equivalent tasks vs previous generation
 
-### MiniMax-2
+### MiniMax M2.1
 
-- **Context Window**: ~204,800 tokens
+- **Context Window**: 196,608 tokens
 - **Architecture**: MoE with 230B total parameters (10B active)
 - **Strengths**: Coding workflows, multi-step agents, tool calling
 - **Cost**: Only 8% of Claude Sonnet, ~2x faster
 
-### Qwen 3 Coder
+### Qwen3 Coder 480B
 
-- **Context Window**: 256,000 tokens (extendable to 1M)
+- **Context Window**: 262,144 tokens
+- **Max Output**: 65,536 tokens
 - **Architecture**: MoE with 480B total parameters (35B active)
 - **Strengths**: Agentic coding, browser automation, tool usage
 - **Performance**: State-of-the-art on SWE-bench Verified (69.6%)
@@ -179,7 +180,7 @@ Create specialized AI assistants with isolated contexts and different configurat
 Each subagent can be configured with:
 
 - **Different providers** (Gemini vs Anthropic vs Qwen vs Local)
-- **Different models** (Flash vs Sonnet vs GLM 4.6 vs Custom)
+- **Different models** (Flash vs Sonnet vs GLM-4.7 vs Custom)
 - **Different tool access** (Restrict or allow specific tools)
 - **Different settings** (Temperature, timeouts, max turns)
 - **Isolated runtime context** (No memory or state crossover)
