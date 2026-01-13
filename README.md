@@ -227,24 +227,29 @@ Subagents are designed for:
 
 ## Zed Integration
 
-Native Zed editor support for seamless development workflow:
+LLxprt Code integrates with the [Zed editor](https://zed.dev) using the Agent Communication Protocol (ACP):
 
-```bash
-# Install Zed extension
-zed:install llxprt-code
-
-# Use within Zed
-# (See docs for Zed integration setup)
+```json
+{
+  "agent_servers": {
+    "llxprt": {
+      "command": "/opt/homebrew/bin/llxprt",
+      "args": ["--experimental-acp", "--profile-load", "my-profile", "--yolo"]
+    }
+  }
+}
 ```
+
+Configure in Zed's `settings.json` under `agent_servers`. Use `which llxprt` to find your binary path.
 
 Features:
 
 - **In-editor chat**: Direct AI interaction without leaving Zed
 - **Code selection**: Ask about specific code selections
-- **Inline suggestions**: Get AI help while typing
 - **Project awareness**: Full context of your open workspace
+- **Multiple providers**: Configure different agents for Claude, OpenAI, Gemini, etc.
 
-** [Zed Integration Guide →](./docs/zed-integration.md)**
+**[Zed Integration Guide →](./docs/zed-integration.md)**
 
 ** [Complete Provider Guide →](./docs/cli/providers.md)**
 

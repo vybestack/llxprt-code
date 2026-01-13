@@ -29,6 +29,7 @@ Power features for advanced users:
 
 - **[OAuth Setup](./oauth-setup.md):** Configure OAuth authentication for subscription access.
 - **[Local Models](./local-models.md):** Complete guide to using local AI models with LM Studio, Ollama, llama.cpp, and more.
+- **[Zed Editor Integration](./zed-integration.md):** Connect LLxprt Code to the Zed editor as an AI assistant.
 - **[OpenAI Responses API](./cli/providers-openai-responses.md):** Using OpenAI's enhanced Responses API.
 - **[Prompt Configuration](./prompt-configuration.md):** How to customize AI behavior with prompts.
 - **[Settings and Profiles](./settings-and-profiles.md):** How to manage settings and use profiles.
