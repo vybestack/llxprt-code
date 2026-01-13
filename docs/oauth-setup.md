@@ -37,19 +37,19 @@ The `/auth` command manages OAuth authentication for all providers:
 # Enable OAuth for a provider (authentication happens on first use)
 /auth gemini enable
 /auth anthropic enable
-/auth openai enable
+/auth codex enable
 /auth qwen enable
 
 # Disable OAuth for a provider
 /auth gemini disable
 /auth anthropic disable
-/auth openai disable
+/auth codex disable
 /auth qwen disable
 
 # Log out from a provider (clears stored tokens)
 /auth gemini logout
 /auth anthropic logout
-/auth openai logout
+/auth codex logout
 /auth qwen logout
 ```
 
@@ -87,7 +87,7 @@ If you have a ChatGPT Plus or Pro subscription, you can authenticate using OAuth
 1. Enable OAuth for OpenAI:
 
    ```bash
-   /auth openai enable
+   /auth codex enable
    ```
 
 2. Make your first request to OpenAI
@@ -127,7 +127,7 @@ You can enable OAuth for multiple providers simultaneously:
 ```bash
 /auth gemini enable     # Enable Gemini OAuth
 /auth anthropic enable  # Enable Anthropic OAuth
-/auth openai enable     # Enable OpenAI Codex OAuth
+/auth codex enable     # Enable OpenAI Codex OAuth
 /auth qwen enable       # Enable Qwen OAuth
 ```
 
@@ -161,7 +161,7 @@ OAuth tokens are stored as plain JSON files:
 - **Files**:
   - `gemini.json` - Gemini OAuth tokens
   - `anthropic.json` - Anthropic OAuth tokens
-  - `openai.json` - OpenAI Codex OAuth tokens
+  - `codex.json` - OpenAI Codex OAuth tokens
   - `qwen.json` - Qwen OAuth tokens
 - **Permissions**: `0600` (user read/write only)
 - **Note**: Tokens are stored as plain text JSON files. For enhanced security in production environments, consider using system keychains or encrypted storage.
@@ -290,7 +290,7 @@ If you already have Gemini OAuth:
 | `/auth <provider> disable` | Disable OAuth for provider            |
 | `/auth <provider> logout`  | Clear OAuth tokens for provider       |
 
-Supported providers: `gemini`, `anthropic`, `openai`, `qwen`
+Supported providers: `gemini`, `anthropic`, `codex`, `qwen`
 
 ## File Locations
 
@@ -299,7 +299,7 @@ Supported providers: `gemini`, `anthropic`, `openai`, `qwen`
 | `~/.llxprt/oauth/`               | OAuth token storage directory |
 | `~/.llxprt/oauth/gemini.json`    | Gemini OAuth tokens           |
 | `~/.llxprt/oauth/anthropic.json` | Anthropic OAuth tokens        |
-| `~/.llxprt/oauth/openai.json`    | OpenAI Codex OAuth tokens     |
+| `~/.llxprt/oauth/codex.json`     | OpenAI Codex OAuth tokens     |
 | `~/.llxprt/oauth/qwen.json`      | Qwen OAuth tokens             |
 
 ## Support

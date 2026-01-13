@@ -212,7 +212,7 @@ OAuth buckets let you manage multiple authentication contexts per provider. This
 /auth anthropic login personal@gmail.com
 
 # OpenAI OAuth for ChatGPT Plus/Pro subscribers
-/auth openai login
+/auth codex login
 ```
 
 **Viewing buckets:**

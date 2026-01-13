@@ -495,8 +495,8 @@ This example demonstrates a complete high-availability configuration combining:
 /auth anthropic login personal@gmail.com
 
 # OpenAI buckets
-/auth openai login enterprise@company.com
-/auth openai login backup@company.com
+/auth codex login enterprise@company.com
+/auth codex login backup@company.com
 ```
 
 **Step 2: Create model profiles with bucket chains**
