@@ -11,7 +11,6 @@ import {
   ShellTool,
   EditTool,
   WriteFileTool,
-  DEFAULT_FILE_FILTERING_OPTIONS,
   DEFAULT_GEMINI_MODEL,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -764,13 +763,19 @@ describe('loadCliConfig', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const config = await loadCliConfig(settings, [], 'test-session', argv);
-    expect(config.getFileFilteringRespectGitIgnore()).toBe(
-      DEFAULT_FILE_FILTERING_OPTIONS.respectGitIgnore,
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
     );
-    expect(config.getFileFilteringRespectGeminiIgnore()).toBe(
-      DEFAULT_FILE_FILTERING_OPTIONS.respectGeminiIgnore,
-    );
+    // DEFAULT_FILE_FILTERING_OPTIONS has respectGitIgnore: true and respectLlxprtIgnore: true
+    expect(config.getFileFilteringRespectGitIgnore()).toBe(true);
+    expect(config.getFileFilteringRespectLlxprtIgnore()).toBe(true);
   });
 });
 
@@ -1162,11 +1167,23 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
       [],
       false,
       expect.any(Object),
-      [
-        '/path/to/ext1/GEMINI.md',
-        '/path/to/ext3/context1.md',
-        '/path/to/ext3/context2.md',
-      ],
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'ext1',
+          contextFiles: ['/path/to/ext1/GEMINI.md'],
+        }),
+        expect.objectContaining({
+          name: 'ext2',
+          contextFiles: [],
+        }),
+        expect.objectContaining({
+          name: 'ext3',
+          contextFiles: [
+            '/path/to/ext3/context1.md',
+            '/path/to/ext3/context2.md',
+          ],
+        }),
+      ]),
       true,
       'tree',
       {
@@ -1717,7 +1734,16 @@ describe('Approval mode tool exclusion logic', () => {
     const extensions: GeminiCLIExtension[] = [];
 
     await expect(
-      loadCliConfig(settings, extensions, 'test-session', argv),
+      loadCliConfig(
+        settings,
+        extensions,
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'test-session',
+        argv,
+      ),
     ).rejects.toThrow(
       'Cannot start in YOLO mode when it is disabled by settings',
     );

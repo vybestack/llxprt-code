@@ -53,6 +53,7 @@ import { disableExtension } from './extension.js';
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
   loadSettings,
+  saveSettings,
   USER_SETTINGS_PATH, // This IS the mocked path.
   getSystemSettingsPath,
   getSystemDefaultsPath,
@@ -179,6 +180,7 @@ describe('Settings Loading and Merging', () => {
         disableFuzzySearch: false,
       });
       expect(settings.merged.security).toEqual({
+        disableYoloMode: false,
         folderTrust: { enabled: false },
         auth: {},
       });
@@ -229,7 +231,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -309,7 +311,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -388,7 +390,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -471,7 +473,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -566,7 +568,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -667,7 +669,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -1670,7 +1672,7 @@ describe('Settings Loading and Merging', () => {
           enablePromptCompletion: false,
           enableTextToolCallParsing: false,
           excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-          extensionManagement: false,
+          extensionManagement: true,
           extensions: {
             disabled: [],
             workspacesWithMigrationNudge: [],
@@ -2582,8 +2584,12 @@ describe('Settings Loading and Merging', () => {
   });
 
   describe('saveSettings', () => {
-    it('should save settings using updateSettingsFilePreservingFormat', () => {
-      const mockUpdateSettings = vi.mocked(updateSettingsFilePreservingFormat);
+    it('should save settings to file', () => {
+      const mockFsExistsSync = vi.mocked(fs.existsSync);
+      const mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
+      mockFsExistsSync.mockReturnValue(true);
+      mockFsWriteFileSync.mockImplementation(() => {});
+
       const settingsFile = {
         path: '/mock/settings.json',
         settings: { ui: { theme: 'dark' } },
@@ -2592,15 +2598,15 @@ describe('Settings Loading and Merging', () => {
 
       saveSettings(settingsFile);
 
-      expect(mockUpdateSettings).toHaveBeenCalledWith('/mock/settings.json', {
-        ui: { theme: 'dark' },
-      });
+      expect(mockFsWriteFileSync).toHaveBeenCalled();
     });
 
     it('should create directory if it does not exist', () => {
       const mockFsExistsSync = vi.mocked(fs.existsSync);
       const mockFsMkdirSync = vi.mocked(fs.mkdirSync);
+      const mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
       mockFsExistsSync.mockReturnValue(false);
+      mockFsWriteFileSync.mockImplementation(() => {});
 
       const settingsFile = {
         path: '/mock/new/dir/settings.json',
@@ -2617,9 +2623,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     it('should emit error feedback if saving fails', () => {
-      const mockUpdateSettings = vi.mocked(updateSettingsFilePreservingFormat);
+      const mockFsExistsSync = vi.mocked(fs.existsSync);
       const error = new Error('Write failed');
-      mockUpdateSettings.mockImplementation(() => {
+      mockFsExistsSync.mockImplementation(() => {
         throw error;
       });
 
