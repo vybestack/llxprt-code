@@ -63,25 +63,38 @@ Deletes the configuration after confirmation.
 
 ## Auto vs manual mode
 
+The mode determines how the subagent's system prompt is created:
+
 ### Manual mode
 
-Manual mode stores the exact system prompt you provide.
+Manual mode stores the exact system prompt you provide verbatim. The text you specify becomes the subagent's system prompt without modification.
 
 ```bash
 /subagent save code-reviewer my-profile manual "You are a careful reviewer focused on security and readability."
 ```
 
-Use manual mode when you already know the prompt you want.
+**Use manual mode when:**
+
+- You know exactly what system prompt you want
+- You need precise control over the subagent's behavior
+- You're porting a prompt from another tool
+- You want reproducible, unchanging behavior
 
 ### Auto mode
 
-Auto mode uses your description to generate a system prompt automatically.
+Auto mode uses your description as input to generate a more detailed system prompt automatically. LLxprt Code sends your description to the bound profile's model and asks it to create an appropriate system prompt.
 
 ```bash
 /subagent save docs-helper my-profile auto "Help write concise developer documentation."
 ```
 
-Auto mode requires a provider that can generate the prompt; if it fails, fall back to manual mode.
+**Use auto mode when:**
+
+- You have a general idea but want the model to flesh out details
+- You want the prompt optimized for the specific model
+- You're experimenting and want quick iteration
+
+**Note:** Auto mode requires the profile's provider to be available and working. If generation fails (network issues, rate limits), fall back to manual mode.
 
 ## Profiles and subagents
 
@@ -309,11 +322,34 @@ This pattern is especially useful for:
 - Switching OAuth buckets when credentials rotate
 - Adding load balancing to existing subagents
 
+### Restricting Tool Access for Subagents
+
+You can create profiles that restrict which tools a subagent can access. This is useful for:
+
+- Read-only analysis subagents that shouldn't modify files
+- Documentation subagents that only need read and search tools
+- Security-sensitive workflows where you want to limit potential impact
+
+Configure tool restrictions in your settings before saving a profile:
+
+```bash
+# Create a read-only profile
+/provider anthropic
+/model claude-sonnet-4-5-20250929
+# Configure coreTools in settings to restrict to read-only tools
+/profile save model read-only-claude
+
+# Create subagent with restricted tools
+/subagent save analyzer read-only-claude manual "Analyze code without making changes. Report findings only."
+```
+
+Tool restrictions are configured via `coreTools` and `excludeTools` in `settings.json`. See the [configuration documentation](./cli/configuration.md) for details.
+
 ### Security Considerations for Subagent Tool Access
 
 Subagents operate within the same tool access policies as your main session:
 
-1. **Tool inheritance**: Subagents have access to the same tools as the main session. They cannot bypass tool restrictions.
+1. **Tool inheritance**: Subagents have access to the same tools as the main session unless the profile restricts them via `coreTools` or `excludeTools` settings.
 
 2. **Approval mode**: If your session requires approval for file writes, subagents also require approval for file writes.
 
@@ -323,7 +359,8 @@ Subagents operate within the same tool access policies as your main session:
 
 **Best practices:**
 
-- Create purpose-specific profiles with appropriate settings for automated work
+- Create purpose-specific profiles with appropriate tool restrictions for automated work
+- Use `coreTools` to create read-only profiles for analysis subagents
 - Use load balancer profiles for unattended subagent work to handle transient failures
 - Monitor subagent activity through session logs
 - Consider using profiles with lower-capability models for routine tasks to limit potential impact

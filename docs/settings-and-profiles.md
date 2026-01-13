@@ -310,48 +310,32 @@ llxprt --provider anthropic --model claude-sonnet-4-5-20250929
 
 ### Inline Profiles for CI/CD
 
-For GitHub Actions and other CI/CD environments where filesystem access is limited or inconvenient, use the `--profile` flag to pass profile configuration as an inline JSON string:
+For CI/CD environments, the `--profile` flag accepts inline JSON. However, for most use cases we recommend:
+
+1. **Save profiles in the TUI** using `/profile save model <name>`
+2. **Use `--profile-load`** in CI/CD to load saved profiles
+3. **Store API keys securely** in CI secrets, passed via `--keyfile` or environment variables
 
 ```bash
-# Basic inline profile
-llxprt --profile '{"provider":"openai","model":"gpt-5.2","key":"sk-xxx"}' --prompt "Hello"
+# Recommended: Load saved profile
+llxprt --profile-load my-ci-profile "Review this code"
 
-# From environment variable (recommended for CI/CD)
-PROFILE_JSON='{"provider":"anthropic","model":"claude-sonnet-4","key":"sk-ant-xxx"}'
-llxprt --profile "$PROFILE_JSON" --prompt "Review code"
-
-# With CLI overrides (CLI flags take precedence)
-llxprt --profile '{"provider":"openai","model":"gpt-5.2"}' --model gpt-5.2
+# With keyfile from CI secrets
+llxprt --profile-load my-ci-profile --keyfile /tmp/api_key "Review this code"
 ```
 
-**GitHub Actions Example:**
+For advanced CI/CD scenarios where inline profiles are needed:
 
-```yaml
-name: AI Code Review
-on: [pull_request]
-
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run AI Review
-        env:
-          PROFILE: '{"provider":"anthropic","model":"claude-sonnet-4","key":"${{ secrets.ANTHROPIC_KEY }}"}'
-        run: |
-          llxprt --profile "$PROFILE" --prompt "Review this PR for security issues"
+```bash
+# Inline profile (advanced use case)
+llxprt --profile '{"provider":"anthropic","model":"claude-sonnet-4-5-20250929"}' --keyfile /tmp/api_key "Review code"
 ```
 
 **Important Notes:**
 
-- `--profile` and `--profile-load` are mutually exclusive (cannot use both)
-- Inline profiles support all the same fields as file-based profiles
-- CLI arguments (`--model`, `--provider`, `--key`) override profile values
-- Maximum JSON size: 10KB
-- Shell escaping varies by platform:
-  - Bash/Zsh: Use single quotes `'{"provider":"openai"}'`
-  - PowerShell: Use single quotes or escape double quotes
-  - GitHub Actions YAML: Use environment variables to avoid escaping issues
+- `--profile` and `--profile-load` are mutually exclusive
+- Prefer `--profile-load` with saved profiles over inline JSON
+- Use `--keyfile` for API keys rather than embedding in JSON
 
 ### Authentication Best Practices
 

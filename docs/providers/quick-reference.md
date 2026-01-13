@@ -61,11 +61,11 @@ Examples:
 > MiniMax M2.1 relies on interleaved thinking tokens, so keep prior reasoning in context (`/set reasoning.stripFromContext none`).  
 > Kimi K2 can trim older reasoning when you need to manage its 256k window (`/set reasoning.stripFromContext allButLast` or `all`) while still surfacing recent thinking blocks.
 
-### OpenAI
+### OpenAI (API Key)
 
 ```bash
 /provider openai
-/key sk-your-openai-key
+/keyfile ~/.openai_key
 /model gpt-5.2
 ```
 
@@ -87,24 +87,86 @@ Guidance:
 /set reasoning.effort high  # replaces temperature for reasoning models
 ```
 
+**Common models:** `gpt-5.2`, `gpt-5.2-nano`
+
+### OpenAI Codex (ChatGPT Plus/Pro OAuth)
+
+Use your ChatGPT Plus or Pro subscription directly:
+
+```bash
+/auth codex enable
+/provider codex
+/model gpt-5.2
+```
+
+This uses OAuth to authenticate with your ChatGPT subscription - no API key needed.
+
+### Kimi (Moonshot AI)
+
+Kimi offers the K2 Thinking model with deep reasoning and multi-step tool orchestration.
+
+#### Using OAuth (Subscription)
+
+```bash
+/auth kimi enable
+/provider kimi
+/model kimi-k2-thinking
+```
+
+#### Using API Key
+
+```bash
+/provider kimi
+/keyfile ~/.kimi_key
+/model kimi-k2-thinking
+```
+
+#### Model geometry & recommended settings (Kimi)
+
+- Context: 262,144 tokens
+- Architecture: Trillion-parameter MoE (32B active)
+- Strengths: Deep reasoning, 200-300 sequential tool calls, native thinking mode
+
+Example setup:
+
+```bash
+/set context-limit 262000
+/set modelparam max_tokens 8192
+/set reasoning.enabled true
+/set reasoning.includeInResponse true
+```
+
 **Profile JSON:**
 
 ```json
 {
   "version": 1,
-  "provider": "openai",
-  "model": "gpt-5.2",
-  "modelParams": { "max_tokens": 4096 },
+  "provider": "kimi",
+  "model": "kimi-k2-thinking",
+  "modelParams": { "max_tokens": 8192 },
   "ephemeralSettings": {
-    "context-limit": 200000,
-    "reasoning.effort": "high"
+    "context-limit": 262000,
+    "reasoning.enabled": true,
+    "reasoning.includeInResponse": true
   }
 }
 ```
 
-**Common models:** `gpt-5.2`, `gpt-5.2-nano`
+#### Kimi K2 via Synthetic/Chutes
 
-**Environment variable:** `export OPENAI_API_KEY=sk-...`
+Kimi K2 Thinking is also available through third-party providers:
+
+```bash
+# Via Synthetic
+/provider synthetic
+/keyfile ~/.synthetic_key
+/model hf:moonshotai/Kimi-K2-Thinking
+
+# Via Chutes
+/provider chutes
+/keyfile ~/.chutes_key
+/model kimi-k2-thinking
+```
 
 ### Anthropic (Claude)
 

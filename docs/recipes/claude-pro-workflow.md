@@ -52,27 +52,10 @@ A dialog will prompt you for your authorization code. Visit the Anthropic consol
 ### Step 5: Save Profile
 
 ```bash
-/profile save claude-pro
+/profile save model claude-pro
 ```
 
-### Complete Basic Claude Profile JSON
-
-Save this to `~/.llxprt/profiles/claude-pro.json`:
-
-```json
-{
-  "version": 1,
-  "provider": "anthropic",
-  "model": "claude-sonnet-4-5-20250929",
-  "modelParams": {
-    "temperature": 0.7,
-    "max_tokens": 8192
-  },
-  "ephemeralSettings": {
-    "context-limit": 200000
-  }
-}
-```
+The profile is saved to `~/.llxprt/profiles/claude-pro.json` automatically.
 
 ## Enabling Thinking Mode
 
@@ -81,7 +64,8 @@ Thinking mode allows Claude to reason through complex problems step-by-step befo
 ### Step 1: Enable Thinking
 
 ```bash
-/set modelparam thinking {"type":"enabled","budget_tokens":8192}
+/set reasoning.enabled true
+/set reasoning.budget_tokens 8192
 ```
 
 The `budget_tokens` parameter controls how many tokens Claude can use for thinking:
@@ -102,107 +86,63 @@ When using thinking mode, increase `max_tokens` to accommodate both thinking and
 ### Step 3: Save Thinking Profile
 
 ```bash
-/profile save claude-thinking
+/profile save model claude-thinking
 ```
 
-### Complete Thinking Mode Profile JSON
-
-Save this to `~/.llxprt/profiles/claude-thinking.json`:
-
-```json
-{
-  "version": 1,
-  "provider": "anthropic",
-  "model": "claude-sonnet-4-5-20250929",
-  "modelParams": {
-    "temperature": 0.7,
-    "max_tokens": 16384,
-    "thinking": {
-      "type": "enabled",
-      "budget_tokens": 8192
-    }
-  },
-  "ephemeralSettings": {
-    "context-limit": 200000
-  }
-}
-```
+The profile captures all your current settings including reasoning configuration.
 
 ## Multi-Bucket Failover for Rate Limits
 
-Claude Pro/Max subscriptions have rate limits. Configure multiple authentication buckets to maximize throughput:
+Claude Pro/Max subscriptions have rate limits. Configure multiple authentication buckets to maximize throughput.
 
-### Option 1: Multiple OAuth Sessions
+### Setting Up Multi-Bucket OAuth
 
-If you have multiple Claude subscriptions (personal + work):
+If you have multiple Claude accounts (personal + work), authenticate each as a bucket:
 
-```json
-{
-  "version": 1,
-  "provider": "lb",
-  "model": "claude-sonnet-4-5-20250929",
-  "ephemeralSettings": {
-    "context-limit": 200000,
-    "lb": {
-      "type": "failover",
-      "buckets": [
-        {
-          "provider": "anthropic",
-          "model": "claude-sonnet-4-5-20250929",
-          "note": "Primary OAuth account"
-        },
-        {
-          "provider": "anthropic",
-          "model": "claude-sonnet-4-5-20250929",
-          "key": "sk-ant-api03-secondary-key...",
-          "note": "Backup API key account"
-        }
-      ]
-    }
-  }
-}
+```bash
+# Authenticate your primary account
+/auth anthropic login primary@personal.com
+
+# Authenticate your work account
+/auth anthropic login work@company.com
+
+# Check bucket status
+/auth anthropic status
 ```
 
-### Option 2: Model Tier Failover
+### Create Profile with Bucket Failover
 
-Fall back to faster/cheaper models when rate limited:
+Save a model profile with multiple buckets - LLxprt will automatically failover on rate limits (429) or quota errors (402):
 
-Save this to `~/.llxprt/profiles/claude-tiered.json`:
+```bash
+/profile save model claude-ha primary@personal.com work@company.com
+```
 
-```json
-{
-  "version": 1,
-  "provider": "lb",
-  "model": "claude-sonnet-4-5-20250929",
-  "ephemeralSettings": {
-    "context-limit": 200000,
-    "lb": {
-      "type": "failover",
-      "buckets": [
-        {
-          "provider": "anthropic",
-          "model": "claude-sonnet-4-5-20250929",
-          "modelParams": {
-            "temperature": 0.7,
-            "max_tokens": 16384,
-            "thinking": {
-              "type": "enabled",
-              "budget_tokens": 8192
-            }
-          }
-        },
-        {
-          "provider": "anthropic",
-          "model": "claude-haiku-4-5-20251001",
-          "modelParams": {
-            "temperature": 0.7,
-            "max_tokens": 8192
-          }
-        }
-      ]
-    }
-  }
-}
+### Model Tier Failover
+
+For production workflows, create profiles for each tier and combine them in a load balancer:
+
+```bash
+# Create primary profile with thinking
+/provider anthropic
+/model claude-sonnet-4-5-20250929
+/set reasoning.enabled true
+/set reasoning.budget_tokens 8192
+/profile save model claude-primary
+
+# Create fallback profile (faster, cheaper)
+/model claude-haiku-4-5-20251001
+/set reasoning.enabled false
+/profile save model claude-fallback
+
+# Create load balancer with failover
+/profile save loadbalancer claude-tiered failover claude-primary claude-fallback
+```
+
+Now load the tiered profile:
+
+```bash
+/profile load claude-tiered
 ```
 
 ## Interactive Commands Reference
@@ -272,7 +212,7 @@ If you see rate limit errors:
 
 ```bash
 # Quick fix: reduce thinking budget
-/set modelparam thinking {"type":"enabled","budget_tokens":4096}
+/set reasoning.budget_tokens 4096
 ```
 
 ### OAuth Token Issues
@@ -327,5 +267,5 @@ Ensure you're using a compatible model:
 ## Next Steps
 
 - [High Availability Setup](./high-availability.md) - Multi-provider redundancy
-- [CI/CD Automation](./ci-cd-automation.md) - Use Claude in pipelines
 - [Free Tier Setup](./free-tier-setup.md) - Add free providers as backup
+- [Profiles Documentation](../cli/profiles.md) - Full profile management guide
