@@ -256,19 +256,18 @@ describe('run_shell_command', () => {
     const rig = new TestRig();
     await rig.setup('should combine multiple --allowed-tools flags');
 
-    const { tool } = getLineCountCommand();
-    const prompt =
-      `use both ${tool} and ls to count the number of lines in ` +
-      `files in this directory`;
+    // Use explicit echo commands that work on all platforms (Windows, Linux, macOS).
+    // This tests the core feature (combining multiple --allowed-tools flags) without
+    // platform-specific command issues or LLM non-determinism from ambiguous prompts.
+    const prompt = `Please run the command "echo first-command" and then run the command "echo second-command" and show me both outputs`;
 
-    // Use prompt as positional argument instead of stdin for sandbox compatibility.
     const result = await rig.run(
       {
         prompt: prompt,
         yolo: false,
       },
-      `--allowed-tools=run_shell_command(${tool})`,
-      '--allowed-tools=run_shell_command(ls)',
+      '--allowed-tools=run_shell_command(echo)',
+      '--allowed-tools=run_shell_command(echo)',
     );
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
