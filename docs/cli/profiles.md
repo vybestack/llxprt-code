@@ -155,6 +155,103 @@ Create profiles with buckets, then reference them in a load balancer:
 /profile save loadbalancer team-lb roundrobin claude-team1 claude-team2
 ```
 
+### Cache Considerations
+
+When using load balancer profiles, token caching behavior differs from single-backend configurations:
+
+**Token Cache Locality**
+
+- Each backend in a load balancer maintains its own token cache
+- Cached prompt tokens are not shared across backends
+- Round-robin distribution may reduce cache hit rates compared to single-backend setups
+
+**Cache Loss on Failover**
+
+- When failover occurs, the new backend starts with a cold cache
+- Previously cached conversation context must be re-processed
+- This can increase token usage and latency for the first request after failover
+
+**Best Practices for Cache-Aware Configuration**
+
+1. **Use failover policy for cache efficiency**: Keeps requests on the same backend until failure, maximizing cache hits
+2. **Consider sticky sessions**: For conversation-heavy workloads, failover policy preserves context better than round-robin
+3. **Monitor cache metrics**: Use `/stats lb` to track cache hit rates per backend
+4. **Plan for cold start latency**: First request after failover may be slower due to cache rebuild
+
+```bash
+# Failover policy preserves cache better than round-robin
+/profile save loadbalancer cache-aware failover primary-claude backup-claude
+```
+
+### Failover Behavior
+
+Load balancer failover is triggered by specific HTTP status codes and network conditions. Understanding these behaviors helps you configure resilient setups.
+
+**Default Failover Status Codes**
+
+By default, failover occurs on these HTTP status codes:
+
+| Code | Meaning           | Failover Reason                          |
+| ---- | ----------------- | ---------------------------------------- |
+| 429  | Too Many Requests | Rate limit exceeded, try another backend |
+| 500  | Internal Error    | Server error, backend may be unhealthy   |
+| 502  | Bad Gateway       | Upstream failure, try alternative        |
+| 503  | Service Unavail   | Backend temporarily unavailable          |
+| 504  | Gateway Timeout   | Request timed out, try faster backend    |
+
+**Customizing Failover Status Codes**
+
+Override the default codes using the `failover_status_codes` setting:
+
+```bash
+# Only failover on rate limits and 503
+/set failover_status_codes [429,503]
+/profile save loadbalancer custom-failover failover profile1 profile2
+
+# Add 400 errors to trigger failover (not recommended for most cases)
+/set failover_status_codes [400,429,500,502,503,504]
+```
+
+**Bucket vs. Load Balancer Failover Interaction**
+
+When using profiles with multiple OAuth buckets inside a load balancer, failover happens at two levels:
+
+1. **Bucket-level failover** (within a profile): Cycles through buckets on 401/402/429
+2. **Load balancer failover** (across profiles): Moves to next backend profile on configured status codes
+
+```
+Request → Profile A (bucket1 → bucket2 → bucket3) → Profile B (bucket1 → bucket2)
+              ↑ bucket failover                         ↑ LB failover
+```
+
+The bucket failover is exhausted first before the load balancer moves to the next profile.
+
+**Retry Behavior**
+
+Control retry attempts before failover with these settings:
+
+```bash
+# Retry 3 times with 1 second delay before failing over
+/set failover_retry_count 3
+/set failover_retry_delay_ms 1000
+/profile save loadbalancer retry-tolerant failover profile1 profile2
+```
+
+- `failover_retry_count`: Number of retries per backend (default: 1)
+- `failover_retry_delay_ms`: Milliseconds between retries (default: 0)
+
+Retries occur on the same backend before advancing to the next one. Set higher values for transient errors, lower for faster failover.
+
+**Network Error Handling**
+
+By default, network errors (TCP connection failures, DNS resolution errors, timeouts) trigger failover:
+
+```bash
+# Disable network error failover (only fail on HTTP status codes)
+/set failover_on_network_errors false
+/profile save loadbalancer http-only-failover failover profile1 profile2
+```
+
 ## Managing Profiles
 
 ### Loading a Profile
