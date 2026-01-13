@@ -123,7 +123,11 @@ describe('ShellTool', () => {
       expect(isCommandAllowed('ls -l', mockConfig).allowed).toBe(true);
     });
 
-    it('should block a command with command substitution using $()', () => {
+    it('should block a command with command substitution using $() when shell-replacement is none', () => {
+      // Configure to block all substitution
+      (mockConfig.getShellReplacement as Mock) = vi
+        .fn()
+        .mockReturnValue('none');
       expect(isCommandAllowed('echo $(rm -rf /)', mockConfig).allowed).toBe(
         false,
       );
