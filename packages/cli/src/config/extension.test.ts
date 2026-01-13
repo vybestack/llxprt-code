@@ -620,10 +620,9 @@ describe('extension tests', () => {
       );
     });
 
-    it('should log an error for unknown extensions', () => {
-      const consoleSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+    it('should emit feedback for unknown extensions', async () => {
+      const { coreEvents } = await import('@vybestack/llxprt-code-core');
+      const feedbackSpy = vi.spyOn(coreEvents, 'emitFeedback');
       annotateActiveExtensions(
         extensions,
         '/path/to/workspace',
@@ -632,8 +631,11 @@ describe('extension tests', () => {
           ['ext4'],
         ),
       );
-      expect(consoleSpy).toHaveBeenCalledWith('Extension not found: ext4');
-      consoleSpy.mockRestore();
+      expect(feedbackSpy).toHaveBeenCalledWith(
+        'error',
+        'Extension not found: ext4',
+      );
+      feedbackSpy.mockRestore();
     });
 
     describe('autoUpdate', () => {
@@ -786,7 +788,7 @@ describe('extension tests', () => {
           async (_) => true,
         ),
       ).rejects.toThrow(
-        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json file.`,
+        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json or gemini-extension.json file.`,
       );
 
       const targetExtDir = path.join(userExtensionsDir, 'bad-extension');
@@ -805,7 +807,7 @@ describe('extension tests', () => {
           async (_) => true,
         ),
       ).rejects.toThrow(
-        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json file.`,
+        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json or gemini-extension.json file.`,
       );
     });
 

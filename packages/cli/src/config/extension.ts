@@ -234,7 +234,7 @@ export function loadExtension(
   try {
     const configContent = fs.readFileSync(configFilePath, 'utf-8');
     let config = recursivelyHydrateStrings(JSON.parse(configContent), {
-      extensionPath: extensionDir,
+      extensionPath: effectiveExtensionPath,
       workspacePath: workspaceDir,
       '/': path.sep,
       pathSeparator: path.sep,
