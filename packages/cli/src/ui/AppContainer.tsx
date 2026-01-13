@@ -343,16 +343,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
         if (!historyService && lastHistoryServiceRef.current === null) {
           tokenLogger.debug(() => 'No history service available yet');
-        } else if (historyService) {
-          // Always get the current token count even if not a new instance
-          const currentTokens = historyService.getTotalTokens();
-          if (
-            currentTokens > 0 &&
-            currentTokens !== lastPublishedHistoryTokensRef.current
-          ) {
-            lastPublishedHistoryTokensRef.current = currentTokens;
-            updateHistoryTokenCount(currentTokens);
-          }
         }
 
         // Check if we have a new history service instance (happens after compression)
