@@ -196,6 +196,8 @@ LLxprt Code supports authentication with multiple AI providers beyond Google. Us
 
 OAuth buckets let you manage multiple authentication contexts per provider. This is useful when you have multiple accounts or API credentials for the same provider.
 
+> **Why use multiple buckets?** When you hit rate limits (429 errors) or quota limits (402 errors) on one account, llxprt-code can automatically fail over to another bucket. This is especially valuable for teams sharing multiple Claude Pro accounts or developers who want personal accounts as backup. For complete setup instructions and example scenarios, see the [Multi-Account Failover Guide](../oauth-setup.md#multi-account-failover).
+
 **Creating buckets:**
 
 ```bash
