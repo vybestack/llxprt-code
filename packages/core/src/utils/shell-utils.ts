@@ -403,7 +403,7 @@ export function checkCommandPermissions(
   // Handle shell replacement modes:
   // - 'none': Block ALL command substitution (most restrictive)
   // - 'allowlist': Allow substitution, validate inner commands against coreTools (default, matches upstream)
-  // - 'all': Allow all substitution unconditionally (least restrictive)
+  // - 'all': Allow all substitution unconditionally (least restrictive, legacy true behavior)
   if (shellReplacementMode === 'none' && detectCommandSubstitution(command)) {
     return {
       allAllowed: false,
@@ -413,31 +413,42 @@ export function checkCommandPermissions(
       isHardDenial: true,
     };
   }
-  // For 'allowlist' and 'all' modes, we use tree-sitter to walk the entire AST
-  // and extract ALL commands including those inside substitutions, function bodies, etc.
-  // This is critical for security - we must validate every command that will execute.
 
   const normalize = (cmd: string): string => cmd.trim().replace(/\s+/g, ' ');
   let commandsToValidate: string[];
 
-  // Try to use tree-sitter for deep command extraction
-  const parseResult = parseCommandDetails(command);
-  if (parseResult && !parseResult.hasError && parseResult.details.length > 0) {
-    // Use tree-sitter results - extracts ALL commands including nested ones
-    commandsToValidate = parseResult.details
-      .map((detail) => normalize(detail.text))
-      .filter(Boolean);
-  } else if (parseResult?.hasError) {
-    // Tree-sitter detected a syntax error - reject for safety
-    return {
-      allAllowed: false,
-      disallowedCommands: [command],
-      blockReason: 'Command rejected because it could not be parsed safely',
-      isHardDenial: true,
-    };
+  // Mode behavior for command extraction:
+  // - 'allowlist': validate ALL nested commands (tree-sitter deep walk when available)
+  // - 'all': allow substitution without deep validation (legacy behavior)
+  // - 'none': handled above
+  if (shellReplacementMode === 'allowlist') {
+    // Try to use tree-sitter for deep command extraction
+    const parseResult = parseCommandDetails(command);
+    if (
+      parseResult &&
+      !parseResult.hasError &&
+      parseResult.details.length > 0
+    ) {
+      // Use tree-sitter results - extracts ALL commands including nested ones
+      commandsToValidate = parseResult.details
+        .map((detail) => normalize(detail.text))
+        .filter(Boolean);
+    } else if (parseResult?.hasError) {
+      // Tree-sitter detected a syntax error - reject for safety
+      return {
+        allAllowed: false,
+        disallowedCommands: [command],
+        blockReason: 'Command rejected because it could not be parsed safely',
+        isHardDenial: true,
+      };
+    } else {
+      // Tree-sitter not available, fall back to splitCommands
+      // This is less secure but allows basic functionality
+      commandsToValidate = splitCommands(command).map(normalize);
+    }
   } else {
-    // Tree-sitter not available, fall back to splitCommands
-    // This is less secure but allows basic functionality
+    // 'all' mode: do not attempt deep extraction/validation.
+    // Just use simple command splitting (legacy behavior)
     commandsToValidate = splitCommands(command).map(normalize);
   }
   const invocation: AnyToolInvocation & { params: { command: string } } = {

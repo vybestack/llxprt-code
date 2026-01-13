@@ -601,7 +601,6 @@ describe('Turn', () => {
 
       const events = [];
       for await (const event of turn.run(
-        'test-model',
         [{ text: 'Hi' }],
         new AbortController().signal,
       )) {
@@ -634,7 +633,6 @@ describe('Turn', () => {
 
       const events = [];
       for await (const event of turn.run(
-        'test-model',
         [{ text: 'Hi' }],
         new AbortController().signal,
       )) {

@@ -15,7 +15,7 @@ import {
 } from '../tools/memoryTool.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
-import type { GeminiCLIExtension } from '../extensions/types.js';
+import type { GeminiCLIExtension } from '../config/config.js';
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
