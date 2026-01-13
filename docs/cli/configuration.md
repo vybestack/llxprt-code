@@ -885,13 +885,13 @@ Arguments passed directly when running the CLI can override other configurations
   - A comma-separated list of tool names that will bypass the confirmation dialog.
   - Example: `llxprt --allowed-tools "ShellTool(git status)"`
 - **`--telemetry`**:
-  - Enables [telemetry](../telemetry.md).
+  - Enables [telemetry](./telemetry.md).
 - **`--telemetry-target`**:
-  - Sets the telemetry target. See [telemetry](../telemetry.md) for more information.
+  - Sets the telemetry target. See [telemetry](./telemetry.md) for more information.
 - **`--telemetry-otlp-endpoint`**:
-  - Sets the OTLP endpoint for telemetry. See [telemetry](../telemetry.md) for more information.
+  - Sets the OTLP endpoint for telemetry. See [telemetry](./telemetry.md) for more information.
 - **`--telemetry-log-prompts`**:
-  - Enables logging of prompts for telemetry. See [telemetry](../telemetry.md) for more information.
+  - Enables logging of prompts for telemetry. See [telemetry](./telemetry.md) for more information.
 - **`--checkpointing`**:
   - Enables [checkpointing](../checkpointing.md).
 - **`--extensions <extension_name ...>`** (**`-e <extension_name ...>`**):

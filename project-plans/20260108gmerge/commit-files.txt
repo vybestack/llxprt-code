@@ -1,0 +1,879 @@
+=== 59985138f7d9f013e8fee8a63c6f64576cfdf4f1 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== ce655436ef97535247daa9d27f572c1ca3ed62ac ===
+packages/cli/src/ui/hooks/useToolScheduler.test.ts
+
+=== 0bf2a0353d55f4f94119a45519fbde00d806e717 ===
+packages/cli/src/commands/extensions.tsx
+
+=== 5bb9cd1a13a9bfab3a8b491e093e789de0fd032d ===
+.github/workflows/deflake.yml
+docs/integration-tests.md
+package.json
+
+=== 6d75005afc3517cd00d3bea766f0e8ff146a0859 ===
+docs/cli/enterprise.md
+integration-tests/file-system-interactive.test.ts
+packages/cli/src/config/config.test.ts
+packages/cli/src/config/config.ts
+packages/cli/src/config/settings.test.ts
+packages/cli/src/config/settingsSchema.ts
+packages/cli/src/ui/hooks/useAutoAcceptIndicator.test.ts
+packages/cli/src/ui/hooks/useAutoAcceptIndicator.ts
+packages/core/src/config/config.test.ts
+packages/core/src/config/config.ts
+
+=== a7faa2080fb5d9bee3eac81f0fc5365cd663f010 ===
+.github/workflows/test_chained_e2e.yml
+
+=== b40f67b76ae49049e979592a37dd122e1bcd7d71 ===
+packages/a2a-server/src/config/settings.ts
+packages/cli/src/ui/components/SettingsDialog.test.tsx
+packages/cli/src/ui/utils/CodeColorizer.tsx
+packages/cli/src/zed-integration/zedIntegration.ts
+packages/core/src/config/config.ts
+packages/core/src/core/client.test.ts
+packages/core/src/tools/memoryTool.ts
+packages/core/src/utils/summarizer.test.ts
+packages/core/src/utils/summarizer.ts
+
+=== 30dd2f1dfebc8b9ac1f4726807be5482909532fb ===
+docs/cli/keyboard-shortcuts.md
+docs/get-started/configuration.md
+docs/index.md
+docs/sidebar.json
+docs/tools/index.md
+docs/tools/todos.md
+
+=== 4f220e945ab3c7b6a119a4c306a683a835e0bea7 ===
+packages/cli/src/ui/AppContainer.test.tsx
+packages/cli/src/ui/AppContainer.tsx
+packages/core/src/telemetry/index.ts
+packages/core/src/telemetry/metrics.test.ts
+packages/core/src/telemetry/metrics.ts
+
+=== 2ede47d5ee30f815edb1ba41862a8b03c52c7fff ===
+packages/cli/src/ui/components/InputPrompt.test.tsx
+
+=== eee3452948a4337f811a9f7b1fc11b8d2a2de91c ===
+docs/changelogs/index.md
+
+=== a90b9fe977acc8249c98cb6adcb7ded55ad82054 ===
+packages/a2a-server/src/persistence/gcs.test.ts
+
+=== 8f8a6897224e341d20c6148675fe199e721af855 ===
+scripts/lint.js
+
+=== d9f0b9c66844ab9b94c053401ce105f5874a976e ===
+packages/cli/src/ui/hooks/useGitBranchName.test.ts
+packages/cli/src/ui/hooks/useGitBranchName.ts
+
+=== 92d412e542cf04cfa6d50bf15f0cfd95f439582e ===
+packages/core/src/services/fileDiscoveryService.test.ts
+packages/core/src/services/fileDiscoveryService.ts
+packages/core/src/tools/glob.ts
+packages/core/src/tools/ls.test.ts
+packages/core/src/tools/ls.ts
+packages/core/src/tools/read-many-files.ts
+
+=== 047bc44032d5eb33defe4f5a2e9c6da6765602e3 ===
+packages/core/src/services/fileDiscoveryService.ts
+packages/core/src/tools/read-many-files.ts
+
+=== 1202dced7339ef05e0638442853ee614bab0be03 ===
+packages/cli/src/ui/contexts/KeypressContext.tsx
+
+=== 8e9f71b7a34953fca0fd77745d448198556f35f0 ===
+packages/cli/src/ui/components/InputPrompt.tsx
+
+=== 5ebe40e91982b7210d6c2720d56c32cdce6a8619 ===
+packages/cli/src/ui/components/InputPrompt.test.tsx
+
+=== 445ef4fbed7701e51a1f0ab3e982b661186ff7cb ===
+docs/cli/configuration.md
+
+=== 3f38f95b1dde572a05e30e80efa0adb0a98024af ===
+packages/a2a-server/src/commands/command-registry.test.ts
+packages/a2a-server/src/commands/command-registry.ts
+packages/a2a-server/src/commands/list-extensions.test.ts
+packages/a2a-server/src/commands/list-extensions.ts
+packages/a2a-server/src/config/config.ts
+packages/a2a-server/src/http/app.test.ts
+packages/a2a-server/src/http/app.ts
+packages/cli/src/ui/commands/extensionsCommand.test.ts
+packages/cli/src/ui/commands/extensionsCommand.ts
+packages/cli/src/ui/components/HistoryItemDisplay.tsx
+packages/cli/src/ui/components/views/ExtensionsList.test.tsx
+packages/cli/src/ui/components/views/ExtensionsList.tsx
+packages/cli/src/ui/types.ts
+packages/core/src/commands/extensions.test.ts
+packages/core/src/commands/extensions.ts
+packages/core/src/index.ts
+
+=== 5ae9fe69495ea60cd55b25d05b2506862da424fd ===
+.lycheeignore
+docs/cli/configuration.md
+
+=== bde5d61812a1aae62d77997f087ebda1209e1f6d ===
+integration-tests/run_shell_command.test.ts
+
+=== 750c0e366f2074c35975ca192aebb4f87a7bc731 ===
+docs/extensions/index.md
+docs/get-started/configuration.md
+package-lock.json
+package.json
+packages/cli/package.json
+packages/cli/src/commands/extensions/install.ts
+packages/cli/src/config/extension.test.ts
+packages/cli/src/config/extension.ts
+packages/cli/src/config/extensions/extensionSettings.test.ts
+packages/cli/src/config/extensions/extensionSettings.ts
+packages/cli/src/config/extensions/update.ts
+packages/cli/src/test-utils/createExtension.ts
+packages/cli/src/utils/envVarResolver.ts
+
+=== d3e4ff2cfc2038dba36ef663ec9e0829d916f89f ===
+.github/workflows/ci.yml
+.github/workflows/links.yml
+
+=== 8ad72ec1ae67696a0c29f90652156c1fe1677040 ===
+.github/workflows/test_chained_e2e.yml
+
+=== 9e91aafe40591166002af1254a0f2a541c460512 ===
+packages/cli/src/ui/AppContainer.tsx
+packages/cli/src/ui/hooks/useReactToolScheduler.test.ts
+packages/cli/src/ui/hooks/useReactToolScheduler.ts
+packages/core/src/core/coreToolScheduler.ts
+
+=== 7787a31f81ce17fe1a0e96c0c625b8f63e2068b7 ===
+.github/workflows/test_chained_e2e.yml
+
+=== 3a501196f0f49f693a531a56e43d56f41bd872b9 ===
+packages/cli/src/config/settings.test.ts
+packages/cli/src/config/settings.ts
+packages/cli/src/nonInteractiveCli.test.ts
+packages/cli/src/nonInteractiveCli.ts
+packages/cli/src/ui/AppContainer.test.tsx
+packages/cli/src/ui/AppContainer.tsx
+packages/core/src/index.ts
+packages/core/src/utils/events.test.ts
+packages/core/src/utils/events.ts
+
+=== c4c0c0d182f6fc05d2054f30c0e9067effee543e ===
+packages/cli/src/commands/extensions/disable.ts
+packages/cli/src/commands/extensions/enable.ts
+packages/cli/src/commands/extensions/install.test.ts
+packages/cli/src/commands/extensions/install.ts
+packages/cli/src/commands/extensions/link.ts
+packages/cli/src/commands/extensions/list.ts
+packages/cli/src/commands/extensions/uninstall.ts
+packages/cli/src/commands/extensions/update.ts
+packages/cli/src/commands/mcp/list.test.ts
+packages/cli/src/commands/mcp/list.ts
+packages/cli/src/config/extension-manager.ts
+packages/cli/src/config/extension.test.ts
+packages/cli/src/config/extension.ts
+packages/cli/src/config/extensions/consent.ts
+packages/cli/src/config/extensions/extensionEnablement.ts
+packages/cli/src/config/extensions/extensionSettings.test.ts
+packages/cli/src/config/extensions/extensionSettings.ts
+packages/cli/src/config/extensions/github.test.ts
+packages/cli/src/config/extensions/github.ts
+packages/cli/src/config/extensions/storage.ts
+
+=== 48ff9e1555da32f7919fbb4ed0043441d386ab91 ===
+.github/workflows/test_chained_e2e.yml
+
+=== 5e70a7dd461d817dcc8e26aecf41c82111752d13 ===
+integration-tests/run_shell_command.test.ts
+packages/core/src/tools/shell.test.ts
+packages/core/src/tools/shell.ts
+
+=== aa6ae954efeab1beb2b1a41ccd5d39c204bd728d ===
+packages/cli/src/ui/contexts/KeypressContext.test.tsx
+packages/cli/src/ui/hooks/useKeypress.test.ts
+
+=== 9814f86a2540096eeec0c7121aff380fe92d0c36 ===
+packages/core/src/core/__snapshots__/prompts.test.ts.snap
+packages/core/src/core/prompts.test.ts
+packages/core/src/mcp/token-storage/base-token-storage.test.ts
+
+=== b77381750cdc4321851d6f0123025978fa8abfde ===
+package-lock.json
+packages/core/package.json
+
+=== b16fe7b646a75b57132a64568050c87ce7ba92a1 ===
+integration-tests/context-compress-interactive.compress-empty.json
+integration-tests/context-compress-interactive.compress-failure.json
+integration-tests/context-compress-interactive.compress.json
+integration-tests/context-compress-interactive.test.ts
+integration-tests/test-helper.ts
+packages/cli/src/config/config.ts
+packages/cli/src/gemini.test.tsx
+packages/core/src/config/config.ts
+packages/core/src/core/contentGenerator.test.ts
+packages/core/src/core/contentGenerator.ts
+packages/core/src/core/fakeContentGenerator.test.ts
+packages/core/src/core/fakeContentGenerator.ts
+
+=== 0fe82a2f4e624fd70229be49da4a501f2f401d84 ===
+packages/cli/src/ui/contexts/KeypressContext.test.tsx
+
+=== 884d838a1e0e41e67c8614fdb7f6f2eddfe2066c ===
+packages/cli/src/nonInteractiveCli.ts
+
+=== a889c15e389fc747299ecc2784862ea888562ada ===
+packages/core/src/utils/ignorePatterns.test.ts
+packages/core/src/utils/paths.test.ts
+
+=== c079084ca454ef3e83261cfeba1b8719d6163931 ===
+packages/core/src/mcp/google-auth-provider.test.ts
+packages/core/src/mcp/google-auth-provider.ts
+packages/core/src/mcp/oauth-utils.test.ts
+packages/core/src/mcp/oauth-utils.ts
+packages/core/src/mcp/sa-impersonation-provider.ts
+
+=== d915525c8e31a8ecb4aa3fb0768aec822758c2b4 ===
+docs/cli/telemetry.md
+
+=== 978fbcf95ee53c6c2f5e60b5cdfaf0f9043f9224 ===
+integration-tests/utf-bom-encoding.test.ts
+
+=== 8bdef8754e59a5a0408c4249f44b8cf3e7471c9d ===
+packages/core/src/telemetry/clearcut-logger/clearcut-logger.test.ts
+packages/core/src/telemetry/clearcut-logger/clearcut-logger.ts
+
+=== a123a813b25ae9f64a39c2d0033f3a9196106b0a ===
+packages/cli/src/config/extension-manager.ts
+packages/cli/src/config/extension.test.ts
+
+=== 25996ae037c5d05a1cee515ae9f1c187986f6c4d ===
+packages/core/src/mcp/token-storage/keychain-token-storage.test.ts
+packages/core/src/mcp/token-storage/keychain-token-storage.ts
+
+=== c2104a14fbd0de383a2ecd2e70889252bef36c33 ===
+packages/core/src/mcp/oauth-token-storage.test.ts
+packages/core/src/mcp/oauth-token-storage.ts
+
+=== ee92db7533d33335f4146359a9338d451296105f ===
+packages/cli/src/ui/hooks/useQuotaAndFallback.test.ts
+packages/cli/src/ui/hooks/useQuotaAndFallback.ts
+packages/core/index.ts
+packages/core/src/index.ts
+packages/core/src/utils/errorParsing.test.ts
+packages/core/src/utils/errorParsing.ts
+packages/core/src/utils/flashFallback.test.ts
+packages/core/src/utils/googleErrors.test.ts
+packages/core/src/utils/googleErrors.ts
+packages/core/src/utils/googleQuotaErrors.test.ts
+packages/core/src/utils/googleQuotaErrors.ts
+packages/core/src/utils/quotaErrorDetection.ts
+packages/core/src/utils/retry.test.ts
+packages/core/src/utils/retry.ts
+
+=== 4960c472571ac737a3e4287745ecfdae0ac5cb7b ===
+.github/workflows/test_chained_e2e.yml
+.github/workflows/trigger_e2e.yml
+
+=== 31b7c010d028e0548d3b0756a7eeaa100b258368 ===
+integration-tests/run_shell_command.test.ts
+packages/core/src/utils/shell-utils.test.ts
+
+=== ca94dabd4f84bcf2399a7b90799fe6c89491f6d9 ===
+packages/cli/src/config/extension.test.ts
+
+=== 63a90836fe6a9a2539dade85f303ab461bf82cf6 ===
+packages/cli/src/config/extension.test.ts
+
+=== b188a51c32322f7167943ebe06023c0bc11dd4fa ===
+integration-tests/run_shell_command.test.ts
+packages/core/src/core/coreToolScheduler.ts
+packages/core/src/core/nonInteractiveToolExecutor.ts
+packages/core/src/tools/edit.ts
+packages/core/src/tools/mcp-tool.ts
+packages/core/src/tools/memoryTool.ts
+packages/core/src/tools/shell.ts
+packages/core/src/tools/smart-edit.ts
+packages/core/src/tools/tool-registry.ts
+packages/core/src/tools/tools.ts
+packages/core/src/tools/web-fetch.test.ts
+packages/core/src/tools/web-fetch.ts
+packages/core/src/tools/write-file.ts
+packages/core/src/tools/write-todos.ts
+packages/core/src/utils/errors.ts
+
+=== 40057b55f0c725458b4f3291e85985fcf1716bd8 ===
+packages/cli/src/config/config.test.ts
+packages/cli/src/config/config.ts
+
+=== 7e2642b9f109b1ddc64b3fadbe2a66da9489157d ===
+packages/core/src/services/loopDetectionService.ts
+
+=== 810d940e578c160e7c6e6da6a03d951c00114f1e ===
+package-lock.json
+package.json
+packages/cli/package.json
+packages/cli/src/config/config.ts
+packages/cli/src/ui/utils/updateCheck.test.ts
+packages/cli/src/ui/utils/updateCheck.ts
+packages/cli/src/utils/handleAutoUpdate.ts
+
+=== c20b88cee2ed488ad611878e7c96716fb12ed071 ===
+packages/cli/src/config/extensions/extensionEnablement.test.ts
+packages/cli/src/config/extensions/extensionEnablement.ts
+
+=== d91484eb4dc276e9ccfbeec71e85e1a304f1d950 ===
+packages/cli/src/config/config.test.ts
+packages/cli/src/config/settings.test.ts
+packages/core/src/telemetry/metrics.test.ts
+
+=== cdff69b7b255b8ce1df0c4a7fc09a1d5342e2da2 ===
+packages/cli/src/config/extensions/github_fetch.test.ts
+packages/cli/src/config/extensions/github_fetch.ts
+
+=== f934f018818f3f66e0a141fe9bbccdd03254f191 ===
+packages/core/src/tools/tools.ts
+
+=== 81006605c82becc468b3dc4a6707993e214c4ac8 ===
+packages/cli/src/ui/components/views/ExtensionsList.tsx
+packages/cli/src/ui/hooks/useExtensionUpdates.ts
+
+=== 145e099ca54524fa1198a607bc0b54082f1661c9 ===
+packages/cli/src/ui/components/InputPrompt.test.tsx
+packages/cli/src/ui/components/SettingsDialog.test.tsx
+packages/cli/src/ui/contexts/KeypressContext.test.tsx
+packages/cli/src/ui/contexts/KeypressContext.tsx
+packages/cli/src/ui/hooks/useKeypress.test.ts
+
+=== b1059f891f18c478c2afa0c44766f36654fd7001 ===
+packages/cli/src/zed-integration/zedIntegration.ts
+packages/core/src/services/fileDiscoveryService.test.ts
+packages/core/src/services/fileDiscoveryService.ts
+packages/core/src/tools/read-file.test.ts
+packages/core/src/tools/read-file.ts
+packages/core/src/utils/getFolderStructure.ts
+
+=== bcd9735a739e05d4c7b3eebaf658e3b2f32e8a66 ===
+packages/cli/src/utils/handleAutoUpdate.ts
+
+=== ce26b58f09c2e30daad408cd2f8bac30a5ae298a ===
+CONTRIBUTING.md
+
+=== ef70e6323016f4391aa1f449408c70a381f1711c ===
+packages/cli/src/ui/components/InputPrompt.test.tsx
+packages/cli/src/ui/components/SettingsDialog.test.tsx
+packages/cli/src/ui/contexts/KeypressContext.tsx
+packages/cli/src/ui/hooks/useKeypress.test.ts
+
+=== 51578397a5f0e48ac0e73b2dec42b97a2ad4febc ===
+packages/cli/src/ui/components/InputPrompt.test.tsx
+packages/cli/src/ui/components/__snapshots__/InputPrompt.test.tsx.snap
+
+=== 73570f1c86e7f5e4b027a5879fa2a705be4be6a3 ===
+packages/core/src/utils/paths.test.ts
+packages/core/src/utils/paths.ts
+
+=== a2d7f82b499f8d9ed44b732056267ec8e181ebeb ===
+packages/core/src/services/loopDetectionService.test.ts
+packages/core/src/services/loopDetectionService.ts
+
+=== 8352980f014743625f5058cd73d5c3abdd69a518 ===
+package.json
+
+=== ee66732ad258f097455ca0664b7084a88a4586d1 ===
+packages/cli/src/config/extension.test.ts
+packages/cli/src/config/extensions/update.test.ts
+packages/cli/src/gemini.test.tsx
+packages/cli/src/ui/components/FolderTrustDialog.test.tsx
+packages/cli/src/ui/components/InputPrompt.test.tsx
+packages/cli/src/ui/components/ModelDialog.test.tsx
+packages/cli/src/ui/components/PermissionsModifyTrustDialog.test.tsx
+packages/cli/src/ui/components/SettingsDialog.test.tsx
+packages/cli/src/ui/components/ThemeDialog.test.tsx
+packages/cli/src/ui/components/__snapshots__/InputPrompt.test.tsx.snap
+packages/cli/src/ui/components/shared/BaseSelectionList.test.tsx
+packages/cli/src/ui/components/shared/text-buffer.test.ts
+packages/cli/src/ui/contexts/KeypressContext.test.tsx
+packages/cli/src/ui/contexts/SessionContext.test.tsx
+packages/cli/src/ui/hooks/shellCommandProcessor.test.tsx
+packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx
+packages/cli/src/ui/hooks/useAutoAcceptIndicator.test.ts
+packages/cli/src/ui/hooks/useCommandCompletion.test.tsx
+packages/cli/src/ui/hooks/useConsoleMessages.test.tsx
+packages/cli/src/ui/hooks/useEditorSettings.test.tsx
+
+=== 2fa13420aeb67adcbba0ca0fa8c4827be34b8f0d ===
+packages/core/src/tools/edit.test.ts
+packages/core/src/tools/edit.ts
+packages/core/src/tools/read-file.test.ts
+packages/core/src/tools/read-file.ts
+
+=== c7817aee305712c74a139ecb08333fec81a633b9 ===
+package-lock.json
+packages/cli/src/__snapshots__/nonInteractiveCli.test.ts.snap
+packages/cli/src/nonInteractiveCli.test.ts
+packages/cli/src/nonInteractiveCli.ts
+packages/cli/src/ui/utils/__snapshots__/textOutput.test.ts.snap
+packages/cli/src/ui/utils/textOutput.test.ts
+packages/cli/src/ui/utils/textOutput.ts
+
+=== 23c906b0855e4553cc47321c040e4b28e6c60b15 ===
+packages/core/src/mcp/oauth-provider.test.ts
+packages/core/src/mcp/oauth-provider.ts
+
+=== 541eeb7a50254b9bca0545992906a313d49d00c0 ===
+packages/a2a-server/src/agent/task.test.ts
+packages/a2a-server/src/agent/task.ts
+packages/a2a-server/src/http/app.test.ts
+packages/cli/src/ui/hooks/useGeminiStream.test.tsx
+packages/cli/src/ui/hooks/useGeminiStream.ts
+packages/cli/src/ui/hooks/useReactToolScheduler.ts
+packages/cli/src/ui/hooks/useToolScheduler.test.ts
+packages/core/src/core/coreToolScheduler.test.ts
+packages/core/src/core/coreToolScheduler.ts
+
+=== 5ded674ad6071fbfade3a56f75894c613b24b580 ===
+packages/cli/src/ui/hooks/vim.test.tsx
+
+=== e115083fac3799ac91b40d2915d3a2eab4103bc8 ===
+.github/pull_request_template.md
+
+=== 0e4dce23b245eac8855fcd003143d53b96bf7af0 ===
+packages/cli/src/ui/AppContainer.tsx
+packages/core/src/tools/glob.ts
+packages/core/src/tools/grep.ts
+packages/core/src/tools/ls.test.ts
+packages/core/src/tools/ls.ts
+
+=== 29efebe38f5491da822c3f97fe377dbdb31223d2 ===
+packages/a2a-server/src/agent/task.test.ts
+packages/a2a-server/src/agent/task.ts
+packages/a2a-server/src/types.ts
+
+=== 4ef3c09332d8a272db40028e99b646999c1088e6 ===
+packages/core/src/services/loopDetectionService.test.ts
+packages/core/src/services/loopDetectionService.ts
+
+=== 44c62c8e5d0285df7b9ab21f1fa67931cfaf31bd ===
+CONTRIBUTING.md
+
+=== 9e8f7c074c03eb49d4f4f2e9b1260ad14fdfc737 ===
+packages/core/src/code_assist/oauth2.test.ts
+packages/core/src/code_assist/oauth2.ts
+packages/core/src/code_assist/server.ts
+packages/core/src/code_assist/setup.ts
+
+=== abd22a753deee186f995ce2d98fd058e12965e35 ===
+docs/tools/mcp-server.md
+packages/core/src/config/config.ts
+packages/core/src/mcp/google-auth-provider.test.ts
+packages/core/src/mcp/google-auth-provider.ts
+
+=== 6db64aab2bf761c1943a42b1d04871cc224fc96b ===
+packages/cli/src/core/initializer.ts
+packages/cli/src/gemini.test.tsx
+packages/core/src/config/config.test.ts
+packages/core/src/config/config.ts
+
+=== 2a87d663d293ea7211b78ad7348285502819e7d0 ===
+packages/core/src/core/client.test.ts
+packages/core/src/core/client.ts
+packages/core/src/services/chatCompressionService.test.ts
+packages/core/src/services/chatCompressionService.ts
+packages/core/src/utils/environmentContext.ts
+
+=== cb0947c5019ae6b6251199a9a3b9ac6b6c8ce3ef ===
+packages/core/tsconfig.json
+
+=== 2dfb813c90457d2261424b4941a8788bfdd9d123 ===
+packages/cli/src/test-utils/render.tsx
+packages/cli/src/ui/AppContainer.tsx
+packages/cli/src/ui/components/Footer.test.tsx
+packages/cli/src/ui/components/Footer.tsx
+packages/core/src/fallback/handler.ts
+packages/core/src/utils/events.ts
+
+=== a9cb8f4958ef4077df276c868c0f6d362a1d1fe5 ===
+README.md
+docs/local-development.md
+packages/cli/src/ui/hooks/useGeminiStream.ts
+packages/core/src/core/coreToolScheduler.ts
+packages/core/src/core/loggingContentGenerator.ts
+packages/core/src/telemetry/index.ts
+packages/core/src/telemetry/trace.ts
+
+=== e9f8ccd51abdb61dfc4cbe9dff1b08429276171c ===
+packages/cli/src/config/config.test.ts
+
+=== 85f3a8c21090c6ea4f0b23915716fe52ad50427a ===
+packages/core/src/code_assist/oauth2.test.ts
+packages/core/src/code_assist/oauth2.ts
+packages/core/src/tools/mcp-client-manager.ts
+packages/core/src/tools/mcp-client.test.ts
+packages/core/src/tools/mcp-client.ts
+packages/core/src/tools/tool-registry.ts
+
+=== cb208f53d8631e4272816ff64e86389d804127fb ===
+.gitignore
+docs/local-development.md
+scripts/telemetry.js
+scripts/telemetry_genkit.js
+scripts/telemetry_utils.js
+
+=== ecf0a2487361916784f6e034c5af8150f949f2e1 ===
+packages/core/src/tools/glob.test.ts
+
+=== cca5a12839e5fb257d337c4ce1de35b70c555c69 ===
+README.md
+
+=== 034ca93907ececea1c675e2f4feb1cb74b5d965f ===
+docs/tools/mcp-server.md
+packages/core/src/config/config.ts
+packages/core/src/mcp/google-auth-provider.test.ts
+packages/core/src/mcp/google-auth-provider.ts
+
+=== d465a26e305865ce3f5a145d216466ecbe44de26 ===
+packages/core/src/mcp/sa-impersonation-provider.ts
+
+=== 25f27509c0f4512455c88213d75c691858919aca ===
+.github/workflows/release-nightly.yml
+
+=== 1b302deefffbbc51f414b560a333025efc0c5e15 ===
+packages/a2a-server/src/agent/executor.ts
+packages/a2a-server/src/config/config.ts
+packages/a2a-server/src/http/app.ts
+packages/cli/src/commands/extensions/disable.ts
+packages/cli/src/commands/extensions/enable.ts
+packages/cli/src/commands/extensions/install.test.ts
+packages/cli/src/commands/extensions/install.ts
+packages/cli/src/commands/extensions/link.ts
+packages/cli/src/commands/extensions/list.ts
+packages/cli/src/commands/extensions/uninstall.ts
+packages/cli/src/commands/extensions/update.ts
+packages/cli/src/commands/mcp/list.ts
+packages/cli/src/config/config.test.ts
+packages/cli/src/config/config.ts
+packages/cli/src/config/extension-manager.ts
+packages/cli/src/config/extension.test.ts
+packages/cli/src/config/extensions/github.test.ts
+packages/cli/src/config/extensions/github.ts
+packages/cli/src/config/extensions/update.test.ts
+packages/cli/src/config/extensions/update.ts
+
+=== 064edc52f528f61760e06919850a4055a872613f ===
+packages/cli/src/config/config.ts
+packages/cli/src/config/policies/read-only.toml
+packages/cli/src/config/policies/write.toml
+packages/cli/src/config/policies/yolo.toml
+packages/cli/src/config/policy-engine.integration.test.ts
+packages/cli/src/config/policy-toml-loader.test.ts
+packages/cli/src/config/policy-toml-loader.ts
+packages/cli/src/config/policy.test.ts
+packages/cli/src/config/policy.ts
+packages/cli/src/ui/AppContainer.tsx
+packages/core/src/config/config.ts
+packages/core/src/config/storage.ts
+packages/core/src/policy/policy-engine.ts
+packages/core/src/tools/mcp-client.test.ts
+packages/core/src/tools/mcp-client.ts
+packages/core/src/tools/mcp-tool.ts
+packages/core/src/tools/shell.ts
+packages/core/src/tools/tool-registry.ts
+packages/core/src/tools/write-todos.ts
+scripts/copy_files.js
+
+=== 4e6eef588298fe608039fbef642c5805e64fa0c8 ===
+packages/cli/src/ui/hooks/atCommandProcessor.ts
+
+=== 5d61adf804e607af974117601d6f1e5b5900fa60 ===
+packages/core/src/tools/tools.ts
+
+=== 13aa0148e7a533750c82c293e98f02984629d45b ===
+package-lock.json
+packages/cli/src/config/extension.test.ts
+packages/cli/src/config/extensions/update.test.ts
+packages/cli/src/test-utils/render.test.tsx
+packages/cli/src/test-utils/render.tsx
+packages/cli/src/ui/components/FolderTrustDialog.test.tsx
+packages/cli/src/ui/components/Help.test.tsx
+packages/cli/src/ui/components/ModelDialog.test.tsx
+packages/cli/src/ui/components/PermissionsModifyTrustDialog.test.tsx
+packages/cli/src/ui/components/SettingsDialog.test.tsx
+packages/cli/src/ui/components/shared/BaseSelectionList.test.tsx
+packages/cli/src/ui/components/shared/text-buffer.test.ts
+packages/cli/src/ui/contexts/KeypressContext.test.tsx
+packages/cli/src/ui/contexts/SessionContext.test.tsx
+packages/cli/src/ui/hooks/useAtCompletion.test.ts
+packages/cli/src/ui/hooks/useAutoAcceptIndicator.test.ts
+packages/cli/src/ui/hooks/useFlickerDetector.test.ts
+packages/cli/src/ui/hooks/useFolderTrust.test.ts
+packages/cli/src/ui/hooks/useGeminiStream.test.tsx
+packages/cli/src/ui/hooks/useHistoryManager.test.ts
+
+=== c2d60d61ac7e2ad71603fd35d1d67f379cccfe6f ===
+packages/cli/src/ui/commands/extensionsCommand.test.ts
+packages/cli/src/ui/commands/extensionsCommand.ts
+
+=== 7a238bd938ac76aa84af3b81a31181ae566db42f ===
+.github/workflows/e2e.yml
+
+=== 7e987113a21d3d15934fb9e76729c0d61e3663bd ===
+docs/extensions/index.md
+packages/cli/src/commands/extensions/disable.ts
+packages/cli/src/commands/extensions/enable.ts
+packages/cli/src/commands/extensions/install.ts
+packages/cli/src/commands/extensions/link.ts
+packages/cli/src/commands/extensions/list.ts
+packages/cli/src/commands/extensions/uninstall.ts
+packages/cli/src/commands/extensions/update.ts
+packages/cli/src/commands/mcp/list.ts
+packages/cli/src/config/config.ts
+packages/cli/src/config/extension-manager.ts
+packages/cli/src/config/extension.test.ts
+packages/cli/src/config/extensions/extensionSettings.test.ts
+packages/cli/src/config/extensions/extensionSettings.ts
+packages/cli/src/config/extensions/update.test.ts
+packages/cli/src/config/extensions/update.ts
+packages/cli/src/config/settings.test.ts
+packages/cli/src/ui/hooks/useExtensionUpdates.test.tsx
+packages/core/index.ts
+packages/core/src/mcp/token-storage/keychain-token-storage.test.ts
+
+=== e750da987d7e7a2be5e6e7bf6e4d2302d187a8e2 ===
+packages/cli/src/ui/hooks/useGeminiStream.test.tsx
+packages/cli/src/ui/hooks/useGeminiStream.ts
+
+=== 39eb6ed9ccaec380a0baed3edabd8276c829fc30 ===
+packages/core/src/utils/workspaceContext.ts
+
+=== ab1f195508cf2d4ab5288279eed0114eedd6bf99 ===
+docs/cli/keyboard-shortcuts.md
+packages/cli/src/config/keyBindings.ts
+packages/cli/src/ui/components/ConsoleSummaryDisplay.tsx
+packages/cli/src/ui/components/DetailedMessagesDisplay.tsx
+packages/cli/src/ui/hooks/usePhraseCycler.ts
+packages/cli/src/ui/keyMatchers.test.ts
+
+=== 44bdd3ad11d4698295a967f8a8f4d95015b8cd40 ===
+docs/integration-tests.md
+integration-tests/context-compress-interactive.compress-empty.json
+integration-tests/context-compress-interactive.compress-empty.responses
+integration-tests/context-compress-interactive.compress-failure.json
+integration-tests/context-compress-interactive.compress-failure.responses
+integration-tests/context-compress-interactive.compress.json
+integration-tests/context-compress-interactive.compress.responses
+integration-tests/context-compress-interactive.test.ts
+integration-tests/test-helper.ts
+packages/cli/src/config/config.ts
+packages/cli/src/gemini.test.tsx
+packages/core/src/config/config.ts
+packages/core/src/core/contentGenerator.test.ts
+packages/core/src/core/contentGenerator.ts
+packages/core/src/core/fakeContentGenerator.test.ts
+packages/core/src/core/fakeContentGenerator.ts
+packages/core/src/core/recordingContentGenerator.test.ts
+packages/core/src/core/recordingContentGenerator.ts
+packages/core/src/index.ts
+
+=== 70996bfdee652fae2d28d02a2c59f77161d0c5ec ===
+docs/cli/telemetry.md
+packages/core/src/core/loggingContentGenerator.ts
+packages/core/src/telemetry/clearcut-logger/clearcut-logger.ts
+packages/core/src/telemetry/loggers.test.ts
+packages/core/src/telemetry/loggers.ts
+packages/core/src/telemetry/metrics.ts
+packages/core/src/telemetry/semantic.test.ts
+packages/core/src/telemetry/semantic.ts
+packages/core/src/telemetry/types.ts
+packages/core/src/telemetry/uiTelemetry.test.ts
+packages/core/src/telemetry/uiTelemetry.ts
+
+=== f6423ea45a5fccdc6d7793c42ee309cb1dfc5a99 ===
+packages/core/src/core/__snapshots__/prompts.test.ts.snap
+
+=== 601a639f95ee7df4d8c3f09966ce471c5e303b81 ===
+packages/core/src/config/config.test.ts
+packages/core/src/config/config.ts
+
+=== cca41edc6e09fc0b2972ebbf058540bfece58e67 ===
+CONTRIBUTING.md
+docs/CONTRIBUTING.md
+docs/sidebar.json
+
+=== fe98c855359365be1f4286243b574f9392aa7812 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== b4a63bf73b6b9271cc785a6bcd62f89218ad27e7 ===
+eslint.config.js
+package.json
+packages/core/src/mcp/oauth-token-storage.test.ts
+packages/core/src/mcp/oauth-token-storage.ts
+
+=== 7124551aa5976db143bcdf8301f1585526d82877 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== 3876379bf7ab3a00d1c6ca8ec648bdaf154f052c ===
+docs/cli/keyboard-shortcuts.md
+packages/cli/src/ui/contexts/KeypressContext.test.tsx
+packages/cli/src/ui/contexts/KeypressContext.tsx
+
+=== cd4bebba9ec33886daf815c41f67c237e31bf696 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== 66b61a13b4d91780a60eeb77f8c21f2563eed07f ===
+packages/core/src/services/chatCompressionService.ts
+
+=== 30dc89c8aff3290a7378947f7d61555e1dc232ac ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== 174462f4a443ac9796d804e42325f38c3826d753 ===
+packages/core/src/config/config.test.ts
+packages/core/src/config/config.ts
+
+=== 2072d90ab22e6a702aa112e09cc51ef35bac010f ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== fe44afe8928a03a283554cc531f6d26504537cdc ===
+docs/get-started/configuration-v1.md
+docs/get-started/configuration.md
+packages/cli/src/config/config.test.ts
+packages/cli/src/config/config.ts
+packages/cli/src/config/settings.test.ts
+packages/cli/src/config/settings.ts
+packages/cli/src/config/settingsSchema.ts
+packages/core/src/config/config.ts
+packages/core/src/services/chatCompressionService.test.ts
+packages/core/src/services/chatCompressionService.ts
+
+=== a0198269e84d5723664f0ebca43864207de7d574 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== 9fbea50ee5978a886c1e98c463925e77b49a06c0 ===
+docs/cli/telemetry.md
+packages/core/src/telemetry/loggers.test.ts
+packages/core/src/telemetry/loggers.ts
+packages/core/src/telemetry/metrics.test.ts
+packages/core/src/telemetry/metrics.ts
+
+=== 3d44880ea6505ba029e47229c4d1bdf418b5b2d0 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== cc076e95a84b23e9589e5b42ace44780e41919f6 ===
+packages/core/src/services/loopDetectionService.test.ts
+packages/core/src/services/loopDetectionService.ts
+
+=== 5d7772ff585936a58288f5917e7487681e6fbe39 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== d756ef64f2e5861edf60b219c2169c75cd0946b0 ===
+packages/cli/src/config/settingsSchema.test.ts
+packages/cli/src/config/settingsSchema.ts
+packages/cli/src/ui/components/Footer.test.tsx
+packages/cli/src/ui/components/Footer.tsx
+
+=== 09a65920970d32655a6611cdcbd870e44c679f3b ===
+packages/cli/src/config/settingsSchema.ts
+
+=== a893c8c7fe4961a4990e12d62fb6dc3d152d4ac9 ===
+packages/core/src/utils/googleQuotaErrors.ts
+
+=== 1c4458658295656e97c8b6fc028793568832ed27 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== a2cb116980ad98c09562154c59a47e916b96e543 ===
+integration-tests/json-output.error.responses
+packages/core/src/config/config.test.ts
+packages/core/src/config/config.ts
+
+=== 51a415f2b9f10c1c0dcafef18f06fa8cf49e378c ===
+packages/cli/src/config/settingsSchema.ts
+packages/cli/src/ui/AppContainer.test.tsx
+packages/cli/src/ui/AppContainer.tsx
+packages/core/src/config/config.test.ts
+packages/core/src/config/config.ts
+packages/core/src/config/models.ts
+packages/core/src/utils/events.test.ts
+packages/core/src/utils/events.ts
+
+=== d6f977cb8ffb87269de5f15b519b3381ee153fa2 ===
+packages/cli/src/ui/components/Notifications.tsx
+
+=== 9e7c80f2761ec3ee2a000f4db885faeb542a2021 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+
+=== 5839bb5381621f4892802bea2004e4b1dc3c1e91 ===
+package-lock.json
+package.json
+packages/a2a-server/package.json
+packages/cli/package.json
+packages/core/package.json
+packages/test-utils/package.json
+packages/vscode-ide-companion/package.json
+

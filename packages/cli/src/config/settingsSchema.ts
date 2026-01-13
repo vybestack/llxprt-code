@@ -1014,6 +1014,15 @@ export const SETTINGS_SCHEMA = {
     description: 'Security-related settings.',
     showInDialog: false,
     properties: {
+      disableYoloMode: {
+        type: 'boolean',
+        label: 'Disable YOLO Mode',
+        category: 'Security',
+        requiresRestart: true,
+        default: false,
+        description: 'Disable YOLO mode, even if enabled by a flag.',
+        showInDialog: true,
+      },
       folderTrust: {
         type: 'object',
         label: 'Folder Trust',
@@ -1210,7 +1219,7 @@ export const SETTINGS_SCHEMA = {
     label: 'Extension Management',
     category: 'Feature Flag',
     requiresRestart: true,
-    default: false,
+    default: true,
     description: 'Enable extension management features.',
     showInDialog: false,
   },
@@ -1354,13 +1363,19 @@ export const SETTINGS_SCHEMA = {
 
   // Shell replacement setting
   shellReplacement: {
-    type: 'boolean',
+    type: 'enum',
     label: 'Shell Replacement',
     category: 'Advanced',
     requiresRestart: false,
-    default: false,
-    description: 'Allow command substitution in shell commands.',
+    default: 'allowlist',
+    description:
+      'Control command substitution in shell commands: "allowlist" (validate inner commands against coreTools), "all" (allow all), "none" (block all).',
     showInDialog: false,
+    options: [
+      { value: 'allowlist', label: 'Validate against coreTools (default)' },
+      { value: 'all', label: 'Allow all substitution' },
+      { value: 'none', label: 'Block all substitution' },
+    ] satisfies ReadonlyArray<{ value: string; label: string }>,
   },
 
   // OAuth enablement configuration per provider

@@ -53,6 +53,7 @@ import { disableExtension } from './extension.js';
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
   loadSettings,
+  saveSettings,
   USER_SETTINGS_PATH, // This IS the mocked path.
   getSystemSettingsPath,
   getSystemDefaultsPath,
@@ -83,6 +84,19 @@ vi.mock('fs', async (importOriginal) => {
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     realpathSync: (p: string) => p,
+  };
+});
+
+const mockCoreEvents = vi.hoisted(() => ({
+  emitFeedback: vi.fn(),
+}));
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...actual,
+    coreEvents: mockCoreEvents,
   };
 });
 
@@ -166,6 +180,7 @@ describe('Settings Loading and Merging', () => {
         disableFuzzySearch: false,
       });
       expect(settings.merged.security).toEqual({
+        disableYoloMode: false,
         folderTrust: { enabled: false },
         auth: {},
       });
@@ -216,7 +231,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -242,7 +257,7 @@ describe('Settings Loading and Merging', () => {
         providerToolFormatOverrides: {},
         security: {},
         selectedAuthType: 'provider',
-        shellReplacement: false,
+        shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
         showLineNumbers: false,
         showStatusInTitle: false,
@@ -296,7 +311,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -322,7 +337,7 @@ describe('Settings Loading and Merging', () => {
         providerToolFormatOverrides: {},
         security: {},
         selectedAuthType: 'provider',
-        shellReplacement: false,
+        shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
         showLineNumbers: false,
         showStatusInTitle: false,
@@ -375,7 +390,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -402,7 +417,7 @@ describe('Settings Loading and Merging', () => {
         sandbox: true,
         security: {},
         selectedAuthType: 'provider',
-        shellReplacement: false,
+        shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
         showLineNumbers: false,
         showStatusInTitle: false,
@@ -458,7 +473,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -485,7 +500,7 @@ describe('Settings Loading and Merging', () => {
         sandbox: true,
         security: {},
         selectedAuthType: 'provider',
-        shellReplacement: false,
+        shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
         showLineNumbers: false,
         showStatusInTitle: false,
@@ -553,7 +568,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -580,7 +595,7 @@ describe('Settings Loading and Merging', () => {
         sandbox: false,
         security: {},
         selectedAuthType: 'provider',
-        shellReplacement: false,
+        shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
         showLineNumbers: false,
         showStatusInTitle: false,
@@ -654,7 +669,7 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
         excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
+        extensionManagement: true,
         extensions: {
           disabled: [],
           workspacesWithMigrationNudge: [],
@@ -687,7 +702,7 @@ describe('Settings Loading and Merging', () => {
         sandbox: false,
         security: {},
         selectedAuthType: 'provider',
-        shellReplacement: false,
+        shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
         showLineNumbers: false,
         showStatusInTitle: false,
@@ -757,6 +772,40 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
       expect(settings.merged.folderTrust).toBe(true); // System setting should be used
+    });
+
+    it('should not allow user or workspace to override system disableYoloMode', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userSettingsContent = {
+        security: {
+          disableYoloMode: false,
+        },
+      };
+      const workspaceSettingsContent = {
+        security: {
+          disableYoloMode: false, // This should be ignored
+        },
+      };
+      const systemSettingsContent = {
+        security: {
+          disableYoloMode: true,
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === getSystemSettingsPath())
+            return JSON.stringify(systemSettingsContent);
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      expect(settings.merged.security?.disableYoloMode).toBe(true); // System setting should be used
     });
 
     it('should handle contextFileName correctly when only in user settings', () => {
@@ -1623,7 +1672,7 @@ describe('Settings Loading and Merging', () => {
           enablePromptCompletion: false,
           enableTextToolCallParsing: false,
           excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-          extensionManagement: false,
+          extensionManagement: true,
           extensions: {
             disabled: [],
             workspacesWithMigrationNudge: [],
@@ -1649,7 +1698,7 @@ describe('Settings Loading and Merging', () => {
           providerToolFormatOverrides: {},
           security: {},
           selectedAuthType: 'provider',
-          shellReplacement: false,
+          shellReplacement: 'allowlist',
           shouldUseNodePtyShell: false,
           showLineNumbers: false,
           showStatusInTitle: false,
@@ -2531,6 +2580,68 @@ describe('Settings Loading and Merging', () => {
 
       expect(mockDisableExtension).not.toHaveBeenCalled();
       expect(setValueSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('saveSettings', () => {
+    it('should save settings to file', () => {
+      const mockFsExistsSync = vi.mocked(fs.existsSync);
+      const mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
+      mockFsExistsSync.mockReturnValue(true);
+      mockFsWriteFileSync.mockImplementation(() => {});
+
+      const settingsFile = {
+        path: '/mock/settings.json',
+        settings: { ui: { theme: 'dark' } },
+        originalSettings: { ui: { theme: 'dark' } },
+      } as unknown as SettingsFile;
+
+      saveSettings(settingsFile);
+
+      expect(mockFsWriteFileSync).toHaveBeenCalled();
+    });
+
+    it('should create directory if it does not exist', () => {
+      const mockFsExistsSync = vi.mocked(fs.existsSync);
+      const mockFsMkdirSync = vi.mocked(fs.mkdirSync);
+      const mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
+      mockFsExistsSync.mockReturnValue(false);
+      mockFsWriteFileSync.mockImplementation(() => {});
+
+      const settingsFile = {
+        path: '/mock/new/dir/settings.json',
+        settings: {},
+        originalSettings: {},
+      } as unknown as SettingsFile;
+
+      saveSettings(settingsFile);
+
+      expect(mockFsExistsSync).toHaveBeenCalledWith('/mock/new/dir');
+      expect(mockFsMkdirSync).toHaveBeenCalledWith('/mock/new/dir', {
+        recursive: true,
+      });
+    });
+
+    it('should emit error feedback if saving fails', () => {
+      const mockFsExistsSync = vi.mocked(fs.existsSync);
+      const error = new Error('Write failed');
+      mockFsExistsSync.mockImplementation(() => {
+        throw error;
+      });
+
+      const settingsFile = {
+        path: '/mock/settings.json',
+        settings: {},
+        originalSettings: {},
+      } as unknown as SettingsFile;
+
+      saveSettings(settingsFile);
+
+      expect(mockCoreEvents.emitFeedback).toHaveBeenCalledWith(
+        'error',
+        'There was an error saving your latest settings changes.',
+        error,
+      );
     });
   });
 });

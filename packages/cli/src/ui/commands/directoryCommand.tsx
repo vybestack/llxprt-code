@@ -102,7 +102,7 @@ export const directoryCommand: SlashCommand = {
                 ],
                 config.getDebugMode(),
                 config.getFileService(),
-                config.getExtensionContextFilePaths(),
+                config.getExtensions(),
                 config.getFolderTrust(),
                 context.services.settings.merged.ui?.memoryImportFormat ||
                   'tree', // Use setting or default to 'tree'

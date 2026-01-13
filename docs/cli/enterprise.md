@@ -145,6 +145,26 @@ Alternatively, you can add specific tools that are considered dangerous in your 
 
 **Security Note:** Blocklisting with `excludeTools` is less secure than allowlisting with `coreTools`, as it relies on blocking known-bad commands, and clever users may find ways to bypass simple string-based blocks. **Allowlisting is the recommended approach.**
 
+### Disabling YOLO Mode
+
+To ensure that users cannot bypass the confirmation prompt for tool execution,
+you can disable YOLO mode at the policy level. This adds a critical layer of
+safety, as it prevents the model from executing tools without explicit user
+approval.
+
+**Example:** Force all tool executions to require user confirmation.
+
+```json
+{
+  "security": {
+    "disableYoloMode": true
+  }
+}
+```
+
+This setting is highly recommended in an enterprise environment to prevent
+unintended tool execution.
+
 ## Managing Custom Tools (MCP Servers)
 
 If your organization uses custom tools via [Model-Context Protocol (MCP) servers](../core/tools-api.md), it is crucial to understand how server configurations are managed to apply security policies effectively.

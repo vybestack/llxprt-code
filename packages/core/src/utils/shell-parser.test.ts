@@ -14,6 +14,7 @@ import {
   splitCommandsWithTree,
   resetParser,
   getInitializationError,
+  collectCommandDetails,
 } from './shell-parser.js';
 
 /**
@@ -303,6 +304,66 @@ describe('shell-parser', () => {
 
       // Restore parserInitialized for potential other tests
       parserInitialized = reinitialized;
+    });
+  });
+
+  describe('collectCommandDetails', () => {
+    beforeAll(async () => {
+      await initializeParser();
+    });
+
+    it('should extract commands from simple command', () => {
+      if (!isParserAvailable()) return;
+
+      const tree = parseShellCommand('echo hello');
+      expect(tree).not.toBeNull();
+      const details = collectCommandDetails(tree!, 'echo hello');
+      expect(details).toHaveLength(1);
+      expect(details[0].name).toBe('echo');
+    });
+
+    it('should extract commands from command substitution $()', () => {
+      if (!isParserAvailable()) return;
+
+      const tree = parseShellCommand('echo $(curl google.com)');
+      expect(tree).not.toBeNull();
+      const details = collectCommandDetails(tree!, 'echo $(curl google.com)');
+      expect(details.map((d) => d.name)).toContain('echo');
+      expect(details.map((d) => d.name)).toContain('curl');
+    });
+
+    it('should extract commands from backtick substitution', () => {
+      if (!isParserAvailable()) return;
+
+      const tree = parseShellCommand('echo `rm -rf /`');
+      expect(tree).not.toBeNull();
+      const details = collectCommandDetails(tree!, 'echo `rm -rf /`');
+      expect(details.map((d) => d.name)).toContain('echo');
+      expect(details.map((d) => d.name)).toContain('rm');
+    });
+
+    it('should extract commands from process substitution <()', () => {
+      if (!isParserAvailable()) return;
+
+      const tree = parseShellCommand('diff <(curl a) <(echo b)');
+      expect(tree).not.toBeNull();
+      const details = collectCommandDetails(tree!, 'diff <(curl a) <(echo b)');
+      expect(details.map((d) => d.name)).toContain('diff');
+      expect(details.map((d) => d.name)).toContain('curl');
+      expect(details.map((d) => d.name)).toContain('echo');
+    });
+
+    it('should extract commands from function definitions', () => {
+      if (!isParserAvailable()) return;
+
+      const tree = parseShellCommand('echo () (curl google.com) ; echo Hello');
+      expect(tree).not.toBeNull();
+      const details = collectCommandDetails(
+        tree!,
+        'echo () (curl google.com) ; echo Hello',
+      );
+      expect(details.map((d) => d.name)).toContain('curl');
+      expect(details.map((d) => d.name)).toContain('echo');
     });
   });
 });

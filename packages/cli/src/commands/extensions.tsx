@@ -16,6 +16,7 @@ import { newCommand } from './extensions/new.js';
 
 export const extensionsCommand: CommandModule = {
   command: 'extensions <command>',
+  aliases: ['extension', 'ext'],
   describe: 'Manage LLxprt Code extensions.',
   builder: (yargs) =>
     yargs

@@ -21,7 +21,8 @@ export const EXTENSIONS_DIRECTORY_NAME = path.join(
   LLXPRT_CONFIG_DIR,
   'extensions',
 );
-export const EXTENSIONS_CONFIG_FILENAME = 'gemini-extension.json';
+export const EXTENSIONS_CONFIG_FILENAME = 'llxprt-extension.json';
+export const EXTENSIONS_CONFIG_FILENAME_FALLBACK = 'gemini-extension.json';
 export const INSTALL_METADATA_FILENAME = '.gemini-extension-install.json';
 
 /**
@@ -86,10 +87,17 @@ function loadExtension(extensionDir: string): GeminiCLIExtension | null {
     return null;
   }
 
-  const configFilePath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME);
+  // Try llxprt-extension.json first, then fall back to gemini-extension.json
+  let configFilePath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME);
+  if (!fs.existsSync(configFilePath)) {
+    configFilePath = path.join(
+      extensionDir,
+      EXTENSIONS_CONFIG_FILENAME_FALLBACK,
+    );
+  }
   if (!fs.existsSync(configFilePath)) {
     logger.error(
-      `Warning: extension directory ${extensionDir} does not contain a config file ${configFilePath}.`,
+      `Warning: extension directory ${extensionDir} does not contain a config file (${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK}).`,
     );
     return null;
   }

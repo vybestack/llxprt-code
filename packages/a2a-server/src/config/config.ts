@@ -68,16 +68,17 @@ export async function loadConfig(
         settings.fileFiltering?.enableRecursiveFileSearch,
     },
     ideMode: false,
+    folderTrust: settings.folderTrust === true,
+    extensions,
   };
 
   const fileService = new FileDiscoveryService(workspaceDir);
-  const extensionContextFilePaths = extensions.flatMap((e) => e.contextFiles);
   const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
     workspaceDir,
     [workspaceDir],
     false,
     fileService,
-    extensionContextFilePaths,
+    extensions,
     true, /// TODO: Wire up folder trust logic here.
   );
   configParams.userMemory = memoryContent;

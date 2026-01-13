@@ -15,12 +15,12 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type {
   Config,
-  SchedulerCallbacks,
   ToolCallRequestInfo,
   ToolCall,
   CompletedToolCall,
   CoreToolScheduler,
 } from '@vybestack/llxprt-code-core';
+import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core';
 
 import { expect, vi } from 'vitest';
 

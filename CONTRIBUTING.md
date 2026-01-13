@@ -22,7 +22,7 @@ for this purpose.
 
 ### Self Assigning Issues
 
-If you're looking for an issue to work on, check out our list of issues that are labeled ["help wanted"](https://github.com/google-gemini/gemini-cli/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22).
+If you're looking for an issue to work on, check out our list of issues that are labeled ["help wanted"](https://github.com/vybestack/llxprt-code/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22).
 
 To assign an issue to yourself, simply add a comment with the text `/assign`. The comment must contain only that text and nothing else. This command will assign the issue to you, provided it is not already assigned.
 
@@ -95,8 +95,8 @@ This section guides contributors on how to build, modify, and understand the dev
 To clone the repository:
 
 ```bash
-git clone https://github.com/acoliver/llxprt-code.git # Or your fork's URL
-cd gemini-cli
+git clone https://github.com/vybestack/llxprt-code.git # Or your fork's URL
+cd llxprt-code
 ```
 
 To install dependencies defined in `package.json` as well as root dependencies:
@@ -127,13 +127,13 @@ To skip building the sandbox container, you can use `npm run build` instead.
 
 ### Running
 
-To start the Gemini CLI from the source code (after building), run the following command from the root directory:
+To start LLxprt Code from the source code (after building), run the following command from the root directory:
 
 ```bash
 npm start
 ```
 
-If you'd like to run the source build outside of the gemini-cli folder you can utilize `npm link path/to/gemini-cli/packages/cli` (see: [docs](https://docs.npmjs.com/cli/v9/commands/npm-link)) or `alias gemini="node path/to/gemini-cli/packages/cli"` to run with `gemini`
+If you'd like to run the source build outside of the llxprt-code folder you can utilize `npm link path/to/llxprt-code/packages/cli` (see: [docs](https://docs.npmjs.com/cli/v9/commands/npm-link)) or `alias llxprt="node path/to/llxprt-code/packages/cli"` to run with `llxprt`
 
 ### Running Tests
 
@@ -151,7 +151,7 @@ This will run tests located in the `packages/core` and `packages/cli` directorie
 
 #### Integration Tests
 
-The integration tests are designed to validate the end-to-end functionality of the Gemini CLI. They are not run as part of the default `npm run test` command.
+The integration tests are designed to validate the end-to-end functionality of LLxprt Code. They are not run as part of the default `npm run test` command.
 
 To run the integration tests, use the following command:
 
@@ -212,8 +212,13 @@ npm run lint
 ### Project Structure
 
 - `packages/`: Contains the individual sub-packages of the project.
+  - `a2a-server`: A2A server implementation for LLxprt Code. (Experimental)
   - `cli/`: The command-line interface.
-  - `core/`: The core backend logic for the Gemini CLI.
+  - `core/`: The core backend logic for LLxprt Code.
+  - `test-utils`: Utilities for creating and cleaning temporary file systems for
+    testing.
+  - `vscode-ide-companion/`: The LLxprt Code Companion extension pairs with
+    LLxprt Code.
 - `docs/`: Contains all project documentation.
 - `scripts/`: Utility scripts for building, testing, and development tasks.
 
@@ -279,7 +284,7 @@ On macOS, `gemini` uses Seatbelt (`sandbox-exec`) under a `permissive-open` prof
 
 For stronger container-based sandboxing on macOS or other platforms, you can set `LLXPRT_SANDBOX=true|docker|podman|<command>` in your environment or `.env` file. The specified command (or if `true` then either `docker` or `podman`) must be installed on the host machine. Once enabled, `npm run build:all` will build a minimal container ("sandbox") image and `npm start` will launch inside a fresh instance of that container. The first build can take 20-30s (mostly due to downloading of the base image) but after that both build and start overhead should be minimal. Default builds (`npm run build`) will not rebuild the sandbox.
 
-Container-based sandboxing mounts the project directory (and system temp directory) with read-write access and is started/stopped/removed automatically as you start/stop Gemini CLI. Files created within the sandbox should be automatically mapped to your user/group on host machine. You can easily specify additional mounts, ports, or environment variables by setting `SANDBOX_{MOUNTS,PORTS,ENV}` as needed. You can also fully customize the sandbox for your projects by creating the files `.gemini/sandbox.Dockerfile` and/or `.gemini/sandbox.bashrc` under your project settings directory (`.gemini`) and running `gemini` with `BUILD_SANDBOX=1` to trigger building of your custom sandbox.
+Container-based sandboxing mounts the project directory (and system temp directory) with read-write access and is started/stopped/removed automatically as you start/stop LLxprt Code. Files created within the sandbox should be automatically mapped to your user/group on host machine. You can easily specify additional mounts, ports, or environment variables by setting `SANDBOX_{MOUNTS,PORTS,ENV}` as needed. You can also fully customize the sandbox for your projects by creating the files `.llxprt/sandbox.Dockerfile` and/or `.llxprt/sandbox.bashrc` under your project settings directory (`.llxprt`) and running `llxprt` with `BUILD_SANDBOX=1` to trigger building of your custom sandbox.
 
 #### Proxied Networking
 

@@ -45,12 +45,6 @@ const buildRequest = (
   agentId: overrides.agentId ?? 'primary',
 });
 
-const flushAllTimers = async (iterations = 5) => {
-  for (let i = 0; i < iterations; i += 1) {
-    await vi.runOnlyPendingTimersAsync();
-  }
-};
-
 const mockToolRegistry = {
   getTool: vi.fn(),
   getAllToolNames: vi.fn(() => ['mockTool', 'anotherTool']),
@@ -731,7 +725,9 @@ describe('useReactToolScheduler', () => {
     });
 
     await act(async () => {
-      await flushAllTimers(10);
+      for (let i = 0; i < 10; i++) {
+        await vi.runOnlyPendingTimersAsync();
+      }
     });
 
     expect(mockToolRequiresConfirmation.executeFn).toHaveBeenCalledWith(
@@ -741,7 +737,9 @@ describe('useReactToolScheduler', () => {
     );
 
     await act(async () => {
-      await flushAllTimers(10);
+      for (let i = 0; i < 10; i++) {
+        await vi.runOnlyPendingTimersAsync();
+      }
     });
 
     expect(onComplete).toHaveBeenCalledWith(

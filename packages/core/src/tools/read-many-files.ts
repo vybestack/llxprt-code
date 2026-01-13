@@ -133,14 +133,10 @@ ${this.config.getTargetDir()}
     const paramUseDefaultExcludes = this.params.useDefaultExcludes !== false;
     const finalExclusionPatternsForDescription: string[] =
       paramUseDefaultExcludes
-        ? [
-            ...getDefaultExcludes(this.config),
-            ...paramExcludes,
-            ...this.llxprtIgnorePatterns,
-          ]
-        : [...paramExcludes, ...this.llxprtIgnorePatterns];
+        ? [...getDefaultExcludes(this.config), ...paramExcludes]
+        : [...paramExcludes];
 
-    let excludeDesc = `Excluding: ${
+    const excludeDesc = `Excluding: ${
       finalExclusionPatternsForDescription.length > 0
         ? `patterns like 
 ${finalExclusionPatternsForDescription
@@ -150,16 +146,6 @@ ${finalExclusionPatternsForDescription
   )}${finalExclusionPatternsForDescription.length > 2 ? '...`' : '`'}`
         : 'none specified'
     }`;
-
-    // Add a note if .llxprtignore patterns contributed to the final list of exclusions
-    if (this.llxprtIgnorePatterns.length > 0) {
-      const llxprtPatternsInEffect = this.llxprtIgnorePatterns.filter((p) =>
-        finalExclusionPatternsForDescription.includes(p),
-      ).length;
-      if (llxprtPatternsInEffect > 0) {
-        excludeDesc += ` (includes ${llxprtPatternsInEffect} from .llxprtignore)`;
-      }
-    }
 
     return `Will attempt to read and concatenate files ${pathDesc}. ${excludeDesc}. File encoding: ${DEFAULT_ENCODING}. Separator: "${DEFAULT_OUTPUT_SEPARATOR_FORMAT.replace(
       '{filePath}',

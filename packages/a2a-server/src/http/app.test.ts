@@ -63,6 +63,8 @@ vi.mock('../utils/logger.js', () => ({
 let config: Config;
 const getToolRegistrySpy = vi.fn().mockReturnValue(ApprovalMode.DEFAULT);
 const getApprovalModeSpy = vi.fn();
+const getExtensionsSpy = vi.fn();
+
 vi.mock('../config/config.js', async () => {
   const actual = await vi.importActual('../config/config.js');
   return {
@@ -71,6 +73,7 @@ vi.mock('../config/config.js', async () => {
       const mockConfig = createMockConfig({
         getToolRegistry: getToolRegistrySpy,
         getApprovalMode: getApprovalModeSpy,
+        getExtensions: getExtensionsSpy,
       });
       config = mockConfig as Config;
       return config;
@@ -594,5 +597,91 @@ describe('E2E Tests', () => {
 
     assertUniqueFinalEventIsLast(events);
     expect(events.length).toBe(9);
+  });
+
+  it('should include traceId in status updates when available', async () => {
+    const traceId = 'test-trace-id';
+    sendMessageStreamSpy.mockImplementation(async function* () {
+      yield* [
+        { type: 'content', value: 'Hello', traceId },
+        { type: 'thought', value: { subject: 'Thinking...' }, traceId },
+      ];
+    });
+
+    const agent = request.agent(app);
+    const res = await agent
+      .post('/')
+      .send(createStreamMessageRequest('hello', 'a2a-trace-id-test'))
+      .set('Content-Type', 'application/json')
+      .expect(200);
+
+    const events = streamToSSEEvents(res.text);
+
+    // The first two events are task-creation and working status
+    const textContentEvent = events[2].result as TaskStatusUpdateEvent;
+    expect(textContentEvent.kind).toBe('status-update');
+    expect(textContentEvent.metadata?.['traceId']).toBe(traceId);
+
+    const thoughtEvent = events[3].result as TaskStatusUpdateEvent;
+    expect(thoughtEvent.kind).toBe('status-update');
+    expect(thoughtEvent.metadata?.['traceId']).toBe(traceId);
+  });
+
+  describe('/executeCommand', () => {
+    const mockExtensions = [{ name: 'test-extension', version: '0.0.1' }];
+
+    beforeEach(() => {
+      getExtensionsSpy.mockReturnValue(mockExtensions);
+    });
+
+    afterEach(() => {
+      getExtensionsSpy.mockClear();
+    });
+
+    it('should return extensions for valid command', async () => {
+      const agent = request.agent(app);
+      const res = await agent
+        .post('/executeCommand')
+        .send({ command: 'extensions list', args: [] })
+        .set('Content-Type', 'application/json')
+        .expect(200);
+
+      expect(res.body).toEqual(mockExtensions);
+      expect(getExtensionsSpy).toHaveBeenCalled();
+    });
+
+    it('should return 404 for invalid command', async () => {
+      const agent = request.agent(app);
+      const res = await agent
+        .post('/executeCommand')
+        .send({ command: 'invalid command' })
+        .set('Content-Type', 'application/json')
+        .expect(404);
+
+      expect(res.body.error).toBe('Command not found: invalid command');
+      expect(getExtensionsSpy).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for missing command', async () => {
+      const agent = request.agent(app);
+      await agent
+        .post('/executeCommand')
+        .send({ args: [] })
+        .set('Content-Type', 'application/json')
+        .expect(400);
+      expect(getExtensionsSpy).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 if args is not an array', async () => {
+      const agent = request.agent(app);
+      const res = await agent
+        .post('/executeCommand')
+        .send({ command: 'extensions.list', args: 'not-an-array' })
+        .set('Content-Type', 'application/json')
+        .expect(400);
+
+      expect(res.body.error).toBe('"args" field must be an array.');
+      expect(getExtensionsSpy).not.toHaveBeenCalled();
+    });
   });
 });

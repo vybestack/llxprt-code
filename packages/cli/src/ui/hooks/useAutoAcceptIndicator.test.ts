@@ -37,6 +37,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
 interface MockConfigInstanceShape {
   getApprovalMode: Mock<() => ApprovalMode>;
   setApprovalMode: Mock<(value: ApprovalMode) => void>;
+  isYoloModeDisabled: Mock<() => boolean>;
   isTrustedFolder: Mock<() => boolean>;
   getCoreTools: Mock<() => string[]>;
   getToolDiscoveryCommand: Mock<() => string | undefined>;
@@ -76,6 +77,7 @@ describe('useAutoAcceptIndicator', () => {
         setApprovalMode: instanceSetApprovalModeMock as Mock<
           (value: ApprovalMode) => void
         >,
+        isYoloModeDisabled: vi.fn().mockReturnValue(false),
         isTrustedFolder: vi.fn().mockReturnValue(true) as Mock<() => boolean>,
         getCoreTools: vi.fn().mockReturnValue([]) as Mock<() => string[]>,
         getToolDiscoveryCommand: vi.fn().mockReturnValue(undefined) as Mock<

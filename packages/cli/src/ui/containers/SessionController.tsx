@@ -190,7 +190,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         config.getDebugMode(),
         config.getFileService(),
         settings.merged,
-        config.getExtensionContextFilePaths(),
+        config.getExtensions(),
         config.getFolderTrust(),
         settings.merged.ui?.memoryImportFormat || 'tree',
         config.getFileFilteringOptions(),

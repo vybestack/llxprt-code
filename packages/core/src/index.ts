@@ -28,6 +28,9 @@ export * from './services/git-stats-service.js';
 // Export types
 export * from './types/modelParams.js';
 
+// Export Commands logic
+export * from './commands/extensions.js';
+
 // Export Core Logic
 export * from './core/client.js';
 export * from './core/baseLlmClient.js';
@@ -78,6 +81,7 @@ export * from './utils/ignorePatterns.js';
 export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
 export * from './utils/thoughtUtils.js';
+export * from './utils/events.js';
 
 // Export auth system
 export {

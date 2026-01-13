@@ -123,7 +123,11 @@ describe('ShellTool', () => {
       expect(isCommandAllowed('ls -l', mockConfig).allowed).toBe(true);
     });
 
-    it('should block a command with command substitution using $()', () => {
+    it('should block a command with command substitution using $() when shell-replacement is none', () => {
+      // Configure to block all substitution
+      (mockConfig.getShellReplacement as Mock) = vi
+        .fn()
+        .mockReturnValue('none');
       expect(isCommandAllowed('echo $(rm -rf /)', mockConfig).allowed).toBe(
         false,
       );
@@ -694,6 +698,18 @@ describe('ShellTool', () => {
         await expect(
           invocation.shouldConfirmExecute(new AbortController().signal),
         ).rejects.toThrow('wc');
+      });
+
+      it('should require all segments of a chained command to be allowlisted', async () => {
+        (mockConfig.getAllowedTools as Mock).mockReturnValue([
+          'ShellTool(echo)',
+        ]);
+        const invocation = shellTool.build({ command: 'echo "foo" && ls -l' });
+        await expect(
+          invocation.shouldConfirmExecute(new AbortController().signal),
+        ).rejects.toThrow(
+          'Command "echo "foo" && ls -l" is not in the list of allowed tools for non-interactive mode.',
+        );
       });
     });
   });

@@ -15,6 +15,7 @@ import {
 } from '../tools/memoryTool.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
+import type { GeminiCLIExtension } from '../config/config.js';
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
@@ -475,12 +476,21 @@ My code memory
       'Extension memory content',
     );
 
+    // Create extension object with contextFiles array (refactored signature)
+    const extension: GeminiCLIExtension = {
+      name: 'ext1',
+      path: path.join(testRootDir, 'extensions/ext1'),
+      version: '1.0.0',
+      isActive: true,
+      contextFiles: [extensionFilePath],
+    };
+
     const result = await loadServerHierarchicalMemory(
       cwd,
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [extensionFilePath],
+      [extension],
       DEFAULT_FOLDER_TRUST,
     );
 

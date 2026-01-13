@@ -300,6 +300,128 @@ describe('parseArguments', () => {
     expect(argv.prompt).toBeUndefined();
   });
 
+  it('should convert positional query argument to prompt by default', async () => {
+    process.argv = ['node', 'script.js', 'Hi Gemini'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.query).toBe('Hi Gemini');
+    expect(argv.prompt).toBe('Hi Gemini');
+    expect(argv.promptInteractive).toBeUndefined();
+  });
+
+  it('should map @path to prompt (one-shot) when it starts with @', async () => {
+    process.argv = ['node', 'script.js', '@path ./file.md'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.query).toBe('@path ./file.md');
+    expect(argv.prompt).toBe('@path ./file.md');
+    expect(argv.promptInteractive).toBeUndefined();
+  });
+
+  it('should map @path to prompt even when config flags are present', async () => {
+    // @path queries should now go to one-shot mode regardless of other flags
+    process.argv = [
+      'node',
+      'script.js',
+      '@path',
+      './file.md',
+      '--model',
+      'gemini-2.5-pro',
+    ];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.query).toBe('@path ./file.md');
+    expect(argv.prompt).toBe('@path ./file.md'); // Should map to one-shot
+    expect(argv.promptInteractive).toBeUndefined();
+    expect(argv.model).toBe('gemini-2.5-pro');
+  });
+
+  it('maps unquoted positional @path + arg to prompt (one-shot)', async () => {
+    // Simulate: gemini @path ./file.md
+    process.argv = ['node', 'script.js', '@path', './file.md'];
+    const argv = await parseArguments({} as Settings);
+    // After normalization, query is a single string
+    expect(argv.query).toBe('@path ./file.md');
+    // And it's mapped to one-shot prompt when no -p/-i flags are set
+    expect(argv.prompt).toBe('@path ./file.md');
+    expect(argv.promptInteractive).toBeUndefined();
+  });
+
+  it('should handle multiple @path arguments in a single command (one-shot)', async () => {
+    // Simulate: gemini @path ./file1.md @path ./file2.md
+    process.argv = [
+      'node',
+      'script.js',
+      '@path',
+      './file1.md',
+      '@path',
+      './file2.md',
+    ];
+    const argv = await parseArguments({} as Settings);
+    // After normalization, all arguments are joined with spaces
+    expect(argv.query).toBe('@path ./file1.md @path ./file2.md');
+    // And it's mapped to one-shot prompt
+    expect(argv.prompt).toBe('@path ./file1.md @path ./file2.md');
+    expect(argv.promptInteractive).toBeUndefined();
+  });
+
+  it('should handle mixed quoted and unquoted @path arguments (one-shot)', async () => {
+    // Simulate: gemini "@path ./file1.md" @path ./file2.md "additional text"
+    process.argv = [
+      'node',
+      'script.js',
+      '@path ./file1.md',
+      '@path',
+      './file2.md',
+      'additional text',
+    ];
+    const argv = await parseArguments({} as Settings);
+    // After normalization, all arguments are joined with spaces
+    expect(argv.query).toBe(
+      '@path ./file1.md @path ./file2.md additional text',
+    );
+    // And it's mapped to one-shot prompt
+    expect(argv.prompt).toBe(
+      '@path ./file1.md @path ./file2.md additional text',
+    );
+    expect(argv.promptInteractive).toBeUndefined();
+  });
+
+  it('should map @path to prompt with ambient flags (debug)', async () => {
+    // Ambient flags like debug should NOT affect routing
+    process.argv = ['node', 'script.js', '@path', './file.md', '--debug'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.query).toBe('@path ./file.md');
+    expect(argv.prompt).toBe('@path ./file.md'); // Should map to one-shot
+    expect(argv.promptInteractive).toBeUndefined();
+    expect(argv.debug).toBe(true);
+  });
+
+  it('should map any @command to prompt (one-shot)', async () => {
+    // Test that all @commands now go to one-shot mode
+    const testCases = [
+      '@path ./file.md',
+      '@include src/',
+      '@search pattern',
+      '@web query',
+      '@git status',
+    ];
+
+    for (const testQuery of testCases) {
+      process.argv = ['node', 'script.js', testQuery];
+      const argv = await parseArguments({} as Settings);
+      expect(argv.query).toBe(testQuery);
+      expect(argv.prompt).toBe(testQuery);
+      expect(argv.promptInteractive).toBeUndefined();
+    }
+  });
+
+  it('should handle @command with leading whitespace', async () => {
+    // Test that trim() + routing handles leading whitespace correctly
+    process.argv = ['node', 'script.js', '  @path ./file.md'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.query).toBe('  @path ./file.md');
+    expect(argv.prompt).toBe('  @path ./file.md');
+    expect(argv.promptInteractive).toBeUndefined();
+  });
+
   it('should throw an error when both --yolo and --approval-mode are used together', async () => {
     process.argv = [
       'node',
@@ -635,6 +757,25 @@ describe('loadCliConfig', () => {
       );
       expect(config.getProxy()).toBe('http://localhost:7890');
     });
+  });
+
+  it('should use default fileFilter options when unconfigured', async () => {
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {};
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    // DEFAULT_FILE_FILTERING_OPTIONS has respectGitIgnore: true and respectLlxprtIgnore: true
+    expect(config.getFileFilteringRespectGitIgnore()).toBe(true);
+    expect(config.getFileFilteringRespectLlxprtIgnore()).toBe(true);
   });
 });
 
@@ -1026,11 +1167,23 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
       [],
       false,
       expect.any(Object),
-      [
-        '/path/to/ext1/GEMINI.md',
-        '/path/to/ext3/context1.md',
-        '/path/to/ext3/context2.md',
-      ],
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'ext1',
+          contextFiles: ['/path/to/ext1/GEMINI.md'],
+        }),
+        expect.objectContaining({
+          name: 'ext2',
+          contextFiles: [],
+        }),
+        expect.objectContaining({
+          name: 'ext3',
+          contextFiles: [
+            '/path/to/ext3/context1.md',
+            '/path/to/ext3/context2.md',
+          ],
+        }),
+      ]),
       true,
       'tree',
       {
@@ -1570,6 +1723,32 @@ describe('Approval mode tool exclusion logic', () => {
     expect(excludedTools).not.toContain(WriteFileTool.Name); // Should be allowed in auto_edit
   });
 
+  it('should throw an error if YOLO mode is attempted when disableYoloMode is true', async () => {
+    process.argv = ['node', 'script.js', '--yolo'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {
+      security: {
+        disableYoloMode: true,
+      },
+    };
+    const extensions: GeminiCLIExtension[] = [];
+
+    await expect(
+      loadCliConfig(
+        settings,
+        extensions,
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'test-session',
+        argv,
+      ),
+    ).rejects.toThrow(
+      'Cannot start in YOLO mode when it is disabled by settings',
+    );
+  });
+
   it('should throw an error for invalid approval mode values in loadCliConfig', async () => {
     // Create a mock argv with an invalid approval mode that bypasses argument parsing validation
     const invalidArgv: Partial<CliArgs> & { approvalMode: string } = {
@@ -1935,7 +2114,7 @@ describe('loadCliConfig model selection', () => {
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
       {
-        model: 'gemini-9001-ultra',
+        model: 'gemini-2.5-pro',
       },
       [],
       new ExtensionEnablementManager(
@@ -1946,7 +2125,7 @@ describe('loadCliConfig model selection', () => {
       argv,
     );
 
-    expect(config.getModel()).toBe('gemini-9001-ultra');
+    expect(config.getModel()).toBe('gemini-2.5-pro');
   });
 
   // Skip: llxprt-code always configures a default model via LLXPRT_DEFAULT_MODEL env var
@@ -1986,12 +2165,12 @@ describe('loadCliConfig model selection', () => {
     }
   });
 
-  it('always prefers model from argvs', async () => {
-    process.argv = ['node', 'script.js', '--model', 'gemini-8675309-ultra'];
+  it('always prefers model from argv', async () => {
+    process.argv = ['node', 'script.js', '--model', 'gemini-2.5-flash-preview'];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
       {
-        model: 'gemini-9001-ultra',
+        model: 'gemini-2.5-pro',
       },
       [],
       new ExtensionEnablementManager(
@@ -2002,11 +2181,11 @@ describe('loadCliConfig model selection', () => {
       argv,
     );
 
-    expect(config.getModel()).toBe('gemini-8675309-ultra');
+    expect(config.getModel()).toBe('gemini-2.5-flash-preview');
   });
 
-  it('selects the model from argvs if provided', async () => {
-    process.argv = ['node', 'script.js', '--model', 'gemini-8675309-ultra'];
+  it('selects the model from argv if provided', async () => {
+    process.argv = ['node', 'script.js', '--model', 'gemini-2.5-flash-preview'];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
       {
@@ -2021,7 +2200,7 @@ describe('loadCliConfig model selection', () => {
       argv,
     );
 
-    expect(config.getModel()).toBe('gemini-8675309-ultra');
+    expect(config.getModel()).toBe('gemini-2.5-flash-preview');
   });
 });
 
@@ -2666,7 +2845,7 @@ describe('loadCliConfig interactive', () => {
 
   it('should not be interactive if positional prompt words are provided with other flags', async () => {
     process.stdin.isTTY = true;
-    process.argv = ['node', 'script.js', '--model', 'gemini-1.5-pro', 'Hello'];
+    process.argv = ['node', 'script.js', '--model', 'gemini-2.5-pro', 'Hello'];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
       {},
@@ -2687,8 +2866,8 @@ describe('loadCliConfig interactive', () => {
       'node',
       'script.js',
       '--model',
-      'gemini-1.5-pro',
-      '--sandbox',
+      'gemini-2.5-pro',
+      '--yolo',
       'Hello world',
     ];
     const argv = await parseArguments({} as Settings);
@@ -2749,7 +2928,7 @@ describe('loadCliConfig interactive', () => {
       'node',
       'script.js',
       '--model',
-      'gemini-1.5-pro',
+      'gemini-2.5-pro',
       'write',
       'a',
       'function',
@@ -2770,7 +2949,7 @@ describe('loadCliConfig interactive', () => {
     );
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('write a function to sort array');
-    expect(argv.model).toBe('gemini-1.5-pro');
+    expect(argv.model).toBe('gemini-2.5-pro');
   });
 
   it('should handle empty positional arguments', async () => {
@@ -2822,7 +3001,7 @@ describe('loadCliConfig interactive', () => {
 
   it('should be interactive if no positional prompt words are provided with flags', async () => {
     process.stdin.isTTY = true;
-    process.argv = ['node', 'script.js', '--model', 'gemini-1.5-pro'];
+    process.argv = ['node', 'script.js', '--model', 'gemini-2.5-pro'];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
       {},

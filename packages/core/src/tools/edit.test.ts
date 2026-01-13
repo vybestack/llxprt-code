@@ -21,6 +21,14 @@ vi.mock('../utils/editor.js', () => ({
   openDiff: mockOpenDiff,
 }));
 
+interface EditFileParameterSchema {
+  properties: {
+    file_path: {
+      description: string;
+    };
+  };
+}
+
 import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
 import { applyReplacement, EditTool, EditToolParams } from './edit.js';
 import { FileDiff, ToolConfirmationOutcome } from './tools.js';
@@ -842,6 +850,38 @@ describe('EditTool', () => {
       };
       expect(() => tool.build(invalidPath)).toThrow(
         /File path must be within one of the workspace directories/,
+      );
+    });
+  });
+
+  describe('constructor', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should use windows-style path examples on windows', () => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+
+      const tool = new EditTool({} as unknown as Config);
+      const schema = tool.schema;
+      expect(
+        (schema.parametersJsonSchema as EditFileParameterSchema).properties
+          .file_path.description,
+      ).toBe(
+        "The absolute path to the file to modify (e.g., 'C:\\Users\\project\\file.txt'). Must be an absolute path.",
+      );
+    });
+
+    it('should use unix-style path examples on non-windows platforms', () => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+
+      const tool = new EditTool({} as unknown as Config);
+      const schema = tool.schema;
+      expect(
+        (schema.parametersJsonSchema as EditFileParameterSchema).properties
+          .file_path.description,
+      ).toBe(
+        "The absolute path to the file to modify (e.g., '/home/user/project/file.txt'). Must start with '/'.",
       );
     });
   });

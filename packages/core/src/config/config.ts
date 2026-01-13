@@ -212,6 +212,32 @@ export {
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
 };
 
+/** Shell replacement mode type */
+export type ShellReplacementMode = 'allowlist' | 'all' | 'none';
+
+/**
+ * Normalize shell-replacement setting to canonical mode.
+ * Handles legacy boolean values for backward compatibility.
+ */
+export function normalizeShellReplacement(
+  value: ShellReplacementMode | boolean | undefined,
+): ShellReplacementMode {
+  if (value === undefined) {
+    return 'allowlist'; // Default to upstream behavior
+  }
+  if (value === true || value === 'all') {
+    return 'all';
+  }
+  if (value === false || value === 'none') {
+    return 'none';
+  }
+  if (value === 'allowlist') {
+    return 'allowlist';
+  }
+  // Fallback for any unexpected value
+  return 'allowlist';
+}
+
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 4_000_000;
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 1000;
 export class MCPServerConfig {
@@ -349,7 +375,7 @@ export interface ConfigParameters {
   loadMemoryFromIncludeDirectories?: boolean;
   chatCompression?: ChatCompressionSettings;
   interactive?: boolean;
-  shellReplacement?: boolean;
+  shellReplacement?: 'allowlist' | 'all' | 'none' | boolean;
   trustedFolder?: boolean;
   useRipgrep?: boolean;
   shouldUseNodePtyShell?: boolean;
@@ -365,6 +391,7 @@ export interface ConfigParameters {
   continueOnFailedApiCall?: boolean;
   enableShellOutputEfficiency?: boolean;
   continueSession?: boolean;
+  disableYoloMode?: boolean;
 }
 
 export class Config {
@@ -514,7 +541,7 @@ export class Config {
   private readonly extensionManagement: boolean;
   private readonly enablePromptCompletion: boolean = false;
   private initialized: boolean = false;
-  private readonly shellReplacement: boolean = false;
+  private readonly shellReplacement: 'allowlist' | 'all' | 'none' = 'allowlist';
   readonly storage: Storage;
   private readonly fileExclusions: FileExclusions;
   private readonly eventEmitter?: EventEmitter;
@@ -526,6 +553,7 @@ export class Config {
   private readonly continueOnFailedApiCall: boolean;
   private readonly enableShellOutputEfficiency: boolean;
   private readonly continueSession: boolean;
+  private readonly disableYoloMode: boolean;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -649,7 +677,7 @@ export class Config {
       params.loadMemoryFromIncludeDirectories ?? false;
     this.chatCompression = params.chatCompression;
     this.interactive = params.interactive ?? false;
-    this.shellReplacement = params.shellReplacement ?? false;
+    this.shellReplacement = normalizeShellReplacement(params.shellReplacement);
     this.trustedFolder = params.trustedFolder;
     this.useRipgrep = params.useRipgrep ?? false;
     this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
@@ -675,6 +703,7 @@ export class Config {
     this.messageBus = new MessageBus(this.policyEngine, this.debugMode);
 
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
+    this.disableYoloMode = params.disableYoloMode ?? false;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -1051,6 +1080,10 @@ export class Config {
 
   getPolicyEngine(): PolicyEngine {
     return this.policyEngine;
+  }
+
+  isYoloModeDisabled(): boolean {
+    return this.disableYoloMode || !this.isTrustedFolder();
   }
 
   getShowMemoryUsage(): boolean {
@@ -1558,11 +1591,13 @@ export class Config {
     return Array.from(this.alwaysAllowedCommands);
   }
 
-  getShellReplacement(): boolean {
+  getShellReplacement(): ShellReplacementMode {
     // Check ephemeral setting first, fall back to constructor value
     const ephemeralValue = this.getEphemeralSetting('shell-replacement');
-    if (ephemeralValue === true) {
-      return true;
+    if (ephemeralValue !== undefined) {
+      return normalizeShellReplacement(
+        ephemeralValue as ShellReplacementMode | boolean,
+      );
     }
     return this.shellReplacement;
   }
@@ -1631,7 +1666,7 @@ export class Config {
           : [],
         this.getDebugMode(),
         this.getFileService(),
-        this.getExtensionContextFilePaths(),
+        this.getExtensions(),
         this.getFolderTrust(),
       );
 

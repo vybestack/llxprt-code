@@ -18,6 +18,7 @@ import {
   getCurrentLlxprtMdFilename,
   ApprovalMode,
   DEFAULT_GEMINI_MODEL,
+  DEFAULT_FILE_FILTERING_OPTIONS,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   FileDiscoveryService,
   TelemetryTarget,
@@ -33,6 +34,7 @@ import {
   createPolicyEngineConfig,
   SHELL_TOOL_NAMES,
   isRipgrepAvailable,
+  normalizeShellReplacement,
   type GeminiCLIExtension,
   type Profile,
 } from '@vybestack/llxprt-code-core';
@@ -587,10 +589,21 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
   // We no longer accept it as a CLI argument
 
   // Map camelCase names to match CliArgs interface
-  // Check if an MCP subcommand was handled
+  // Check if an MCP or extensions subcommand was handled
   // The _ array contains the commands that were run
   if (result._ && result._.length > 0 && result._[0] === 'mcp') {
     // An MCP subcommand was executed (like 'mcp list'), exit cleanly
+    process.exit(0);
+  }
+
+  if (
+    result._ &&
+    result._.length > 0 &&
+    (result._[0] === 'extensions' ||
+      result._[0] === 'extension' ||
+      result._[0] === 'ext')
+  ) {
+    // An extensions subcommand was executed (like 'extensions install'), exit cleanly
     process.exit(0);
   }
 
@@ -660,7 +673,7 @@ export async function loadHierarchicalLlxprtMemory(
   debugMode: boolean,
   fileService: FileDiscoveryService,
   settings: Settings,
-  extensionContextFilePaths: string[] = [],
+  extensions: GeminiCLIExtension[],
   folderTrust: boolean,
   memoryImportFormat: 'flat' | 'tree' = 'tree',
   fileFilteringOptions?: FileFilteringOptions,
@@ -686,7 +699,7 @@ export async function loadHierarchicalLlxprtMemory(
     includeDirectoriesToReadGemini,
     debugMode,
     fileService,
-    extensionContextFilePaths,
+    extensions,
     folderTrust,
     memoryImportFormat,
     fileFilteringOptions,
@@ -990,14 +1003,15 @@ export async function loadCliConfig(
     setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
   }
 
-  const extensionContextFilePaths = activeExtensions.flatMap(
-    (e) => e.contextFiles,
-  );
-
   const fileService = new FileDiscoveryService(cwd);
 
-  const fileFiltering = {
+  const memoryFileFiltering = {
     ...DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+    ...effectiveSettings.fileFiltering,
+  };
+
+  const fileFiltering = {
+    ...DEFAULT_FILE_FILTERING_OPTIONS,
     ...effectiveSettings.fileFiltering,
   };
 
@@ -1033,15 +1047,19 @@ export async function loadCliConfig(
       debugMode,
       fileService,
       effectiveSettings,
-      extensionContextFilePaths,
+      allExtensions,
       trustedFolder,
       memoryImportFormat,
-      fileFiltering,
+      memoryFileFiltering,
     );
 
   let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
   const question =
     argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+
+  const extensionContextFilePaths = allExtensions
+    .filter((ext) => ext.isActive)
+    .flatMap((ext) => ext.contextFiles);
 
   // Determine approval mode with backward compatibility
   let approvalMode: ApprovalMode;
@@ -1066,6 +1084,24 @@ export async function loadCliConfig(
     // Fallback to legacy --yolo flag behavior
     approvalMode =
       argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
+  }
+
+  // Override approval mode if disableYoloMode is set.
+  if (effectiveSettings.security?.disableYoloMode) {
+    if (approvalMode === ApprovalMode.YOLO) {
+      logger.error('YOLO mode is disabled by the "disableYoloMode" setting.');
+      throw new Error(
+        'Cannot start in YOLO mode when it is disabled by settings',
+      );
+    }
+    // Note: We only block YOLO mode here. AUTO_EDIT and other modes are still
+    // allowed since disableYoloMode specifically targets YOLO mode only.
+  }
+
+  if (approvalMode === ApprovalMode.YOLO) {
+    logger.warn(
+      'YOLO mode is enabled. All tool calls will be automatically approved.',
+    );
   }
 
   // Force approval mode to default if the folder is not trusted.
@@ -1273,6 +1309,7 @@ export async function loadCliConfig(
     approvalMode,
     showMemoryUsage:
       argv.showMemoryUsage || effectiveSettings.ui?.showMemoryUsage || false,
+    disableYoloMode: effectiveSettings.security?.disableYoloMode,
     accessibility: {
       ...effectiveSettings.accessibility,
       screenReader,
@@ -1331,7 +1368,14 @@ export async function loadCliConfig(
     interactive,
     folderTrust,
     trustedFolder,
-    shellReplacement: effectiveSettings.shellReplacement,
+    shellReplacement: normalizeShellReplacement(
+      effectiveSettings.shellReplacement as
+        | 'allowlist'
+        | 'all'
+        | 'none'
+        | boolean
+        | undefined,
+    ),
     useRipgrep: useRipgrepSetting,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
