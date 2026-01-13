@@ -155,92 +155,73 @@ Create profiles with buckets, then reference them in a load balancer:
 
 ## Cache Considerations
 
-When using load balancers, understanding cache behavior is critical for consistent conversations.
+When using load balancers, understanding cache behavior helps optimize performance.
 
-### Token Caching Across Backends
+### Conversation History is Always Preserved
 
-Load balancer profiles distribute requests across multiple backends (model profiles). Each backend maintains its own:
+**Important:** LLxprt Code maintains conversation history at the application layer (in the HistoryService), not at the provider level. This means:
 
-- **Conversation context**: The accumulated message history
-- **System prompt cache**: Cached tokenization of system prompts
-- **Provider-specific caches**: Some providers cache prompt prefixes for faster responses
-
-**Round-robin implications:**
+- **Full conversation history is sent with every request** to whichever backend handles it
+- **Switching backends does NOT lose conversation context** - the history travels with the request
+- Both round-robin and failover strategies preserve complete conversation continuity
 
 ```bash
-# With round-robin, requests cycle through backends
+# With round-robin, each backend receives the FULL conversation history
 /profile save loadbalancer multi roundrobin claude-work openai-work gemini-work
 
-# Request 1 → claude-work (builds context)
-# Request 2 → openai-work (starts fresh context)
-# Request 3 → gemini-work (starts fresh context)
-# Request 4 → claude-work (may have stale context)
+# Request 1 → claude-work (receives: [user message 1])
+# Request 2 → openai-work (receives: [user message 1, assistant response 1, user message 2])
+# Request 3 → gemini-work (receives: [full history including messages 1-3])
+# All backends see the complete conversation!
 ```
 
-Each provider sees a fragmented conversation, which can lead to:
+### What IS Lost on Backend Switch: Provider-Side Caching
 
-- Inconsistent responses due to missing context
-- Loss of conversation continuity
-- Increased token usage (re-sending context each time)
+While conversation history is preserved, **provider-side prompt caching** may be lost:
 
-**Failover implications:**
+- **Anthropic prompt caching**: Anthropic caches tokenized prefixes server-side for faster responses. Switching to a different backend (or even a different Anthropic bucket) invalidates this cache.
+- **OpenAI cached tokens**: Similar server-side optimization that resets on backend switch.
+- **Gemini context caching**: Google's cached context feature is tied to specific sessions.
 
-```bash
-# With failover, requests stay on primary until failure
-/profile save loadbalancer resilient failover primary-claude backup-openai
+**This means:**
 
-# All requests go to primary-claude until it fails
-# On failover, backup-openai starts with fresh context
-```
+1. **No loss of conversation context** - the new backend receives full history
+2. **Potential latency increase** - first request to new backend may be slower (no cached tokens)
+3. **Potential cost increase** - provider may charge for re-tokenizing the conversation prefix
 
-### Cache Loss on Failover
+### Best Practices for Cache-Optimized Configuration
 
-When failover occurs (switching from one backend to another), **all cached context is lost**:
-
-1. **Immediate loss**: The new backend has no knowledge of previous conversation turns
-2. **Provider cache invalidation**: Any provider-side prompt caching is lost
-3. **Token re-consumption**: The system must re-send conversation history to the new backend
-
-**What triggers cache loss:**
-
-- Rate limit (429) causing backend switch
-- Server error (500, 502, 503, 504) causing backend switch
-- Network timeout triggering failover
-- Manual backend rotation in round-robin
-
-### Best Practices for Cache-Aware Configuration
-
-**1. Prefer failover over round-robin for conversational workloads:**
+**1. Prefer failover over round-robin to maximize provider-side caching:**
 
 ```bash
-# Good for conversations - stays on one backend
+# Good for conversations - stays on one backend, maximizes prompt cache hits
 /profile save loadbalancer chat-resilient failover primary backup
 
-# Better for stateless batch jobs - distributes load
+# Better for stateless batch jobs where caching doesn't matter
 /profile save loadbalancer batch-jobs roundrobin worker1 worker2 worker3
 ```
 
 **2. Use bucket failover within a single profile for rate limit handling:**
 
 ```bash
-# Multiple buckets on same provider preserve context better
+# Multiple buckets on same provider - preserves provider-side cache
 /profile save model claude-multi bucket1 bucket2 bucket3
 
-# Buckets share the same model context, only auth rotates
+# Same provider = same tokenization = cache may still be valid
 ```
 
 **3. Set appropriate retry counts to avoid premature failover:**
 
 ```bash
-# Allow retries before switching backends
+# Allow retries before switching backends (preserves cache longer)
 /set failover_retry_count 3
 /set failover_retry_delay_ms 2000
 /profile save loadbalancer patient-lb failover primary backup
 ```
 
-**4. Consider sticky sessions for long conversations:**
+**4. For long conversations, prefer single-provider setups:**
 
-For extended conversations, consider loading a single model profile rather than a load balancer to maintain consistent context.
+Single-provider configurations maximize provider-side caching benefits. Load balancers are better suited for high-availability needs rather than routine conversations.
 
 ## Failover Behavior
 
