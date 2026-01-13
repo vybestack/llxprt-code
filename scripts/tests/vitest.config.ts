@@ -20,11 +20,10 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // @testing-library/react may be hoisted to packages/cli/node_modules
-      // instead of root node_modules - ensure it can be resolved
+      // @testing-library/react is hoisted to root node_modules
       '@testing-library/react': path.resolve(
         __dirname,
-        '../../packages/cli/node_modules/@testing-library/react',
+        '../../node_modules/@testing-library/react',
       ),
     },
   },
