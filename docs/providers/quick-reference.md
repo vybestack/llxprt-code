@@ -39,14 +39,23 @@ For providers without aliases, use the OpenAI protocol:
 
 When you set a model, configure both context-limit (ephemeral) and max_tokens (model param):
 
-- Effective prompt budget = context-limit − max_tokens − safety-margin
-- Safety margin: 256–2048 tokens (recommend 1024) to avoid last-second overflows from tool wrappers, system prompt, and LLXPRT.md.
-- Tip: If you see "would exceed the token context window" errors, lower max_tokens first or reduce LLXPRT.md size.
+- **context-limit**: The total tokens allowed for the entire request (prompt + output)
+- **max_tokens**: The maximum tokens reserved for the model's response (output only)
+- **Effective prompt budget** = context-limit − max_tokens − safety-margin
+
+**Important constraint**: You cannot set context-limit + max_tokens to exceed the model's actual limit. For example:
+
+- If a model supports 200k total context, you CANNOT set context-limit=200000 AND max_tokens=100000
+- The system needs room for both your prompt AND the response within the limit
+
+**Safety margin**: 256–2048 tokens (recommend 1024) to avoid last-second overflows from tool wrappers, system prompt, and LLXPRT.md.
+
+**Tip**: If you see "would exceed the token context window" errors, lower max_tokens first or reduce LLXPRT.md size.
 
 Examples:
 
 - Large coding session: context-limit 121000, max_tokens 10000 → prompt budget ≈ 110k (minus safety).
-- Writing mode: context-limit 200000, max_tokens 4000 → prompt budget ≈ 196k (minus safety).
+- Writing mode: context-limit 190000, max_tokens 8000 → prompt budget ≈ 181k (minus safety).
 
 > **Reasoning tips:**  
 > MiniMax M2.1 relies on interleaved thinking tokens, so keep prior reasoning in context (`/set reasoning.stripFromContext none`).  
@@ -62,20 +71,20 @@ Examples:
 
 #### Model geometry & recommended settings (OpenAI)
 
-Common models: gpt-5.2, o3-pro, o4-mini
+Common models: gpt-5.2, gpt-5.2-nano
 
 Guidance:
 
-- Start with context-limit 400000 for gpt-5.2, 200000 for o3-pro/o4-mini; adjust down if you get limit errors.
-- Typical defaults:
-  - gpt-5.2: context-limit 400000, max_tokens up to 128000
-  - o3-pro / o4-mini: context-limit 200000, max_tokens up to 100000
-  - Example setup:
+- gpt-5.2 context: 200k (via Codex/API key), max output 32k
+- gpt-5.2-nano: Faster, smaller variant for simpler tasks
+- **Note**: gpt-5.2 does NOT support temperature - use `/set reasoning.effort` instead
+- Reasoning effort: `low`, `medium`, `high`, `xhigh`
+- Example setup:
 
 ```bash
-/set context-limit 400000
+/set context-limit 200000
 /set modelparam max_tokens 4096
-/set modelparam temperature 0.2  # code-oriented
+/set reasoning.effort high  # replaces temperature for reasoning models
 ```
 
 **Profile JSON:**
@@ -85,12 +94,15 @@ Guidance:
   "version": 1,
   "provider": "openai",
   "model": "gpt-5.2",
-  "modelParams": { "temperature": 0.2, "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 400000 }
+  "modelParams": { "max_tokens": 4096 },
+  "ephemeralSettings": {
+    "context-limit": 200000,
+    "reasoning.effort": "high"
+  }
 }
 ```
 
-**Common models:** `gpt-5.2`, `o3-pro`, `o4-mini`
+**Common models:** `gpt-5.2`, `gpt-5.2-nano`
 
 **Environment variable:** `export OPENAI_API_KEY=sk-...`
 
@@ -397,14 +409,14 @@ Example model: accounts/fireworks/models/llama-v3p3-70b-instruct
 /key your-cerebras-key
 /model zai-glm-4.7
 # Recommended runtime tuning:
-/set context-limit 200000
+/set context-limit 131000
 /set modelparam max_tokens 10000
 /set modelparam temperature 1
 ```
 
 **Notes:**
 
-- GLM-4.7 supports 200k context with max output of 131,072 tokens.
+- GLM-4.7 model supports 200k context, but **Cerebras endpoint limits to ~131k**.
 - Budget room for completions: effective prompt budget = context-limit − max_tokens − safety.
 - The /provider qwen alias is for Qwen's own service, not for Cerebras.
 
@@ -420,7 +432,7 @@ Example model: accounts/fireworks/models/llama-v3p3-70b-instruct
     "max_tokens": 10000
   },
   "ephemeralSettings": {
-    "context-limit": 200000,
+    "context-limit": 131000,
     "base-url": "https://api.cerebras.ai/v1",
     "shell-replacement": true
   }

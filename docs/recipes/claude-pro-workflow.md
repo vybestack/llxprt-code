@@ -211,23 +211,29 @@ Save this to `~/.llxprt/profiles/claude-tiered.json`:
 
 ```bash
 # Enable thinking
-/set modelparam thinking {"type":"enabled","budget_tokens":8192}
+/set reasoning.enabled true
+/set reasoning.budget_tokens 8192
 
 # Disable thinking (for simpler tasks)
-/set modelparam thinking {"type":"disabled"}
+/set reasoning.enabled false
 
 # Check current parameters
-/set modelparam
+/set
 ```
 
 ### Adjust Thinking Budget On-the-fly
 
 ```bash
 # Light thinking for quick tasks
-/set modelparam thinking {"type":"enabled","budget_tokens":4096}
+/set reasoning.budget_tokens 4096
 
 # Deep thinking for complex problems
-/set modelparam thinking {"type":"enabled","budget_tokens":32768}
+/set reasoning.budget_tokens 32768
+
+# Control reasoning visibility
+/set reasoning.includeInContext true
+/set reasoning.includeInResponse true
+/set reasoning.stripFromContext none  # or: all, allButLast
 ```
 
 ### Quick Profile Switching
