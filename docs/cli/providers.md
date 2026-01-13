@@ -6,9 +6,9 @@ LLxprt Code supports multiple AI providers, allowing you to switch between diffe
 
 LLxprt Code currently supports the following providers:
 
-- **Google Gemini** (default) - Google's AI models
-- **OpenAI** - o3, o1, GPT-4.1, GPT-4o, and other OpenAI models
-- **Anthropic** - Claude Opus 4, Claude Sonnet 4, and other Anthropic models
+- **Google Gemini** (default) - Google's AI models including Gemini 3 Flash and Gemini 2.5 Flash
+- **OpenAI** - GPT-5.2, o3-pro, o4-mini, and other OpenAI models
+- **Anthropic** - Claude Opus 4.5, Claude Sonnet 4.5, Claude Haiku 4.5, and other Anthropic models
 
 Additionally, LLxprt Code supports any OpenAI-compatible API, including:
 
@@ -94,6 +94,7 @@ Each provider offers different models. You can select a specific model using the
 - Supports o3 (including o3-pro which REQUIRES Responses API), o1, GPT-4.1, GPT-4o, and other OpenAI models
 - Tool calling support (tool outputs are sent to the model as plain multi-line text; see [Tool output format](../tool-output-format.md))
 - Responses API support for advanced models (o3, o1, gpt-4.1)
+- **OAuth available:** Use `/auth codex enable` to authenticate via your ChatGPT Plus/Pro subscription instead of API keys. See the [OAuth Setup Guide](../oauth-setup.md#openai-codex-oauth-setup) for details.
 
 ### Anthropic
 

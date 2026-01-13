@@ -177,13 +177,22 @@ If none of these environment variables are set in a non-interactive session, the
 
 LLxprt Code supports authentication with multiple AI providers beyond Google. Use the `/auth` command to manage OAuth authentication for providers that support it.
 
+**OAuth-Supported Providers:**
+
+- **Gemini** (Google AI) - Browser-based OAuth flow
+- **Anthropic** - Authorization code via dialog
+- **Qwen** (Alibaba Cloud) - Device code flow
+- **Codex** (OpenAI) - Browser-based OAuth flow via ChatGPT subscription
+
+For detailed setup instructions, see the [OAuth Setup Guide](../oauth-setup.md).
+
 ### The `/auth` Command
 
 ```bash
 /auth <provider> <action> [bucket-name]
 ```
 
-**Providers:** `anthropic`, `gemini`, `qwen`, and others
+**Providers:** `anthropic`, `gemini`, `qwen`, `codex` (OpenAI), and others
 
 **Actions:**
 

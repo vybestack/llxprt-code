@@ -9,6 +9,7 @@ llxprt-code supports OAuth 2.0 authentication for multiple providers:
 - **Gemini** (Google AI) - Browser-based OAuth flow
 - **Anthropic** - Authorization code via dialog
 - **Qwen** (Alibaba Cloud) - Device code flow
+- **OpenAI Codex** - Browser-based OAuth flow (via ChatGPT subscription)
 
 OAuth provides secure authentication without requiring API keys, offering better security and user experience.
 
@@ -37,16 +38,19 @@ The `/auth` command manages OAuth authentication for all providers:
 /auth gemini enable
 /auth anthropic enable
 /auth qwen enable
+/auth codex enable
 
 # Disable OAuth for a provider
 /auth gemini disable
 /auth anthropic disable
 /auth qwen disable
+/auth codex disable
 
 # Log out from a provider (clears stored tokens)
 /auth gemini logout
 /auth anthropic logout
 /auth qwen logout
+/auth codex logout
 ```
 
 ### Gemini OAuth Setup
@@ -97,6 +101,28 @@ The `/auth` command manages OAuth authentication for all providers:
 5. Enter the device code when prompted
 6. Grant permissions to llxprt-code
 7. Authentication completes automatically
+
+### OpenAI Codex OAuth Setup
+
+OpenAI Codex OAuth allows you to use your ChatGPT Plus or Pro subscription with LLxprt Code without managing API keys.
+
+1. Enable OAuth for OpenAI:
+
+   ```bash
+   /auth codex enable
+   ```
+
+2. Make your first request to OpenAI
+3. Browser will open to ChatGPT login
+4. Authorize LLxprt Code to access your account
+5. Authentication complete!
+
+**Requirements:**
+
+- Active ChatGPT Plus ($20/month) or Pro subscription
+- Browser access for OAuth flow
+
+**Note:** Codex OAuth provides access to GPT-5 capabilities through your subscription rather than per-token API billing.
 
 ## Multi-Provider Authentication
 
@@ -265,7 +291,7 @@ If you already have Gemini OAuth:
 | `/auth <provider> disable` | Disable OAuth for provider            |
 | `/auth <provider> logout`  | Clear OAuth tokens for provider       |
 
-Supported providers: `gemini`, `anthropic`, `qwen`
+Supported providers: `gemini`, `anthropic`, `qwen`, `codex`
 
 ## File Locations
 
@@ -275,6 +301,7 @@ Supported providers: `gemini`, `anthropic`, `qwen`
 | `~/.llxprt/oauth/gemini.json`    | Gemini OAuth tokens           |
 | `~/.llxprt/oauth/anthropic.json` | Anthropic OAuth tokens        |
 | `~/.llxprt/oauth/qwen.json`      | Qwen OAuth tokens             |
+| `~/.llxprt/oauth/codex.json`     | OpenAI Codex OAuth tokens     |
 
 ## Multi-Account Failover
 
