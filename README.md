@@ -33,14 +33,14 @@ Get started immediately with powerful LLM options:
 /model gpt-5.2
 
 # Kimi subscription (K2 Thinking with reasoning)
-/auth kimi enable
 /provider kimi
+/key **************
 /model kimi-k2-thinking
 ```
 
 ## Why Choose LLxprt Code?
 
-- **Use Your Existing Subscriptions**: Use Claude Pro/Max, ChatGPT Plus/Pro (Codex), or Kimi subscriptions directly via OAuth
+- **Use Your Existing Subscriptions**: Use Claude Pro/Max, ChatGPT Plus/Pro (Codex) directly via OAuth. Use Kimi/Synthetic/Chutes subscriptions via keys.
 - **Multi-Account Failover**: Configure multiple OAuth accounts that automatically failover on rate limits
 - **Load Balancer Profiles**: Balance requests across providers or accounts with automatic failover
 - **Free Tier Support**: Start coding immediately with Gemini or Qwen free tiers
