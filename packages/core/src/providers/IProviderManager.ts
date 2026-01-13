@@ -5,7 +5,7 @@
  */
 
 import { type IProvider } from './IProvider.js';
-import { type IModel } from './IModel.js';
+import { type HydratedModel } from '../models/hydration.js';
 import { Config } from '../config/config.js';
 
 /**
@@ -48,9 +48,13 @@ export interface IProviderManager {
   getActiveProviderName(): string;
 
   /**
-   * Get available models from a provider
+   * Get available models from a provider, hydrated with models.dev data.
+   *
+   * Models are first fetched from provider.getModels(), then enriched with
+   * capabilities, pricing, and metadata from models.dev registry.
+   * If hydration fails, models are still returned with `hydrated: false`.
    */
-  getAvailableModels(providerName?: string): Promise<IModel[]>;
+  getAvailableModels(providerName?: string): Promise<HydratedModel[]>;
 
   /**
    * List all registered providers

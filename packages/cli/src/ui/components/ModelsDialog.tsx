@@ -4,28 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import {
-  getModelsRegistry,
-  initializeModelsRegistry,
-  type LlxprtModel,
-} from '@vybestack/llxprt-code-core';
-import { loadProviderAliasEntries } from '../../providers/providerAliases.js';
+import { type HydratedModel } from '@vybestack/llxprt-code-core';
 
 export interface CapabilityFilters {
-  tools: boolean;
   vision: boolean;
   reasoning: boolean;
-  audio: boolean;
 }
 
 export interface ModelsDialogProps {
-  onSelect: (model: LlxprtModel) => void;
+  onSelect: (model: HydratedModel) => void;
   onClose: () => void;
   initialSearch?: string;
   initialFilters?: Partial<CapabilityFilters>;
@@ -44,7 +37,7 @@ interface ModelsDialogState {
   selectedIndex: number;
   scrollOffset: number;
   mode: 'search' | 'filter';
-  allModels: LlxprtModel[];
+  allModels: HydratedModel[];
   isLoading: boolean;
   /** Current provider filter, null means "all providers" */
   providerFilter: string | null;
@@ -58,16 +51,15 @@ function formatContext(tokens: number | undefined): string {
   return String(tokens);
 }
 
-// Format capabilities as letters
+// Format capabilities as letters (V=vision, R=reasoning)
+// Note: All models now have tool support (filtered at provider level), audio not supported
 function formatCaps(
-  caps: LlxprtModel['capabilities'],
+  caps: HydratedModel['capabilities'],
   narrow: boolean,
 ): string {
   const letters: string[] = [];
-  if (caps?.toolCalling) letters.push('T');
   if (caps?.vision) letters.push('V');
   if (caps?.reasoning) letters.push('R');
-  if (caps?.audio) letters.push('A');
   return narrow ? letters.join('') : letters.join(' ');
 }
 
@@ -99,34 +91,6 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
     }
   }, [runtime]);
 
-  // Build mapping from our provider names to models.dev provider IDs
-  const providerToModelsDevId = useMemo(() => {
-    const mapping = new Map<string, string | null>();
-    try {
-      const aliases = loadProviderAliasEntries();
-      for (const entry of aliases) {
-        const name = entry.config.name || entry.alias;
-        const modelsDevId = entry.config.modelsDevProviderId ?? null;
-        mapping.set(name, modelsDevId);
-      }
-    } catch {
-      // Ignore errors loading aliases
-    }
-    return mapping;
-  }, []);
-
-  // Get all unique modelsDevProviderIds for our supported providers
-  const supportedModelsDevIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const providerName of supportedProviders) {
-      const modelsDevId = providerToModelsDevId.get(providerName);
-      if (modelsDevId) {
-        ids.add(modelsDevId);
-      }
-    }
-    return ids;
-  }, [supportedProviders, providerToModelsDevId]);
-
   // Determine initial provider filter:
   // 1. --all flag → null (show all)
   // 2. --provider X → X
@@ -141,10 +105,8 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   const [state, setState] = useState<ModelsDialogState>({
     searchTerm: initialSearch,
     filters: {
-      tools: initialFilters.tools ?? false,
       vision: initialFilters.vision ?? false,
       reasoning: initialFilters.reasoning ?? false,
-      audio: initialFilters.audio ?? false,
     },
     selectedIndex: 0,
     scrollOffset: 0,
@@ -154,82 +116,126 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
     providerFilter: computedInitialFilter,
   });
 
-  // Load models on mount
+  // Track which providers we've already fetched to avoid re-fetching
+  const fetchedProvidersRef = useRef<Set<string>>(new Set());
+
+  // Load models - only fetch from providers we need to display
   useEffect(() => {
+    let cancelled = false;
+
     const loadModels = async () => {
-      try {
-        await initializeModelsRegistry();
-        const registry = getModelsRegistry();
-        const models = registry.getAll();
-        setState((prev) => ({
-          ...prev,
-          allModels: models,
-          isLoading: false,
-        }));
-      } catch {
+      // Determine which providers to fetch from:
+      // - If providerFilter is set → only that provider (fast path)
+      // - If showing all (null) → fetch from all providers
+      const providersToFetch = state.providerFilter
+        ? [state.providerFilter]
+        : supportedProviders;
+
+      // Filter out providers we've already fetched
+      const newProviders = providersToFetch.filter(
+        (p) => !fetchedProvidersRef.current.has(p),
+      );
+
+      // If we have nothing new to fetch, just clear loading state
+      if (newProviders.length === 0) {
         setState((prev) => ({ ...prev, isLoading: false }));
+        return;
+      }
+
+      try {
+        // Fetch in parallel for better performance
+        const results = await Promise.allSettled(
+          newProviders.map((providerName) =>
+            runtime.listAvailableModels(providerName),
+          ),
+        );
+
+        const newModels: HydratedModel[] = [];
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            newModels.push(...result.value);
+          }
+        }
+
+        if (!cancelled) {
+          // Track which providers we've now fetched
+          newProviders.forEach((p) => fetchedProvidersRef.current.add(p));
+
+          // Merge new models with existing, deduplicating
+          setState((prev) => {
+            const seen = new Set<string>();
+            const mergedModels = [...prev.allModels, ...newModels].filter(
+              (m) => {
+                const key = `${m.provider}:${m.id}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              },
+            );
+
+            return {
+              ...prev,
+              allModels: mergedModels,
+              isLoading: false,
+            };
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setState((prev) => ({ ...prev, isLoading: false }));
+        }
       }
     };
+
+    setState((prev) => ({ ...prev, isLoading: true }));
     loadModels();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, supportedProviders, state.providerFilter]);
 
   // Filter models based on search and capability filters
   const filteredModels = useMemo(() => {
     let models = state.allModels;
 
-    // 1. Only supported providers - filter by modelsDevProviderIds
-    if (supportedModelsDevIds.size > 0) {
-      models = models.filter((m) => supportedModelsDevIds.has(m.providerId));
-    }
-
-    // 2. Provider filter - map our provider name to modelsDevProviderId
+    // 1. Provider filter - models already have provider name set
     if (state.providerFilter) {
-      const modelsDevId = providerToModelsDevId.get(state.providerFilter);
-      if (modelsDevId) {
-        models = models.filter((m) => m.providerId === modelsDevId);
-      } else {
-        // Fallback: try direct match (for backward compatibility)
-        models = models.filter((m) => m.providerId === state.providerFilter);
-      }
+      models = models.filter((m) => m.provider === state.providerFilter);
     }
 
-    // 3. Filter deprecated
+    // 2. Filter deprecated (only if hydrated with metadata)
     if (!includeDeprecated) {
       models = models.filter((m) => m.metadata?.status !== 'deprecated');
     }
 
-    // 4. Filter by search term
+    // 3. Filter by search term
     if (state.searchTerm) {
       const term = state.searchTerm.toLowerCase();
       models = models.filter(
         (m) =>
           m.id.toLowerCase().includes(term) ||
           m.name.toLowerCase().includes(term) ||
-          m.modelId.toLowerCase().includes(term) ||
-          m.providerId.toLowerCase().includes(term),
+          (m.modelId?.toLowerCase().includes(term) ?? false) ||
+          m.provider.toLowerCase().includes(term),
       );
     }
 
-    // 5. Filter by capabilities (AND logic)
-    if (state.filters.tools) {
-      models = models.filter((m) => m.capabilities?.toolCalling);
-    }
+    // 4. Filter by capabilities (AND logic) - only if hydrated
+    // Note: All models now have tool support (filtered at provider level)
     if (state.filters.vision) {
       models = models.filter((m) => m.capabilities?.vision);
     }
     if (state.filters.reasoning) {
       models = models.filter((m) => m.capabilities?.reasoning);
     }
-    if (state.filters.audio) {
-      models = models.filter((m) => m.capabilities?.audio);
-    }
 
     // Sort by provider, then model ID
     models.sort((a, b) => {
-      if (a.providerId !== b.providerId) {
-        return a.providerId.localeCompare(b.providerId);
+      if (a.provider !== b.provider) {
+        return a.provider.localeCompare(b.provider);
       }
-      return a.modelId.localeCompare(b.modelId);
+      return a.id.localeCompare(b.id);
     });
 
     return models;
@@ -239,8 +245,6 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
     state.searchTerm,
     state.filters,
     includeDeprecated,
-    supportedModelsDevIds,
-    providerToModelsDevId,
   ]);
 
   // Reset selection and scroll when filters change
@@ -251,10 +255,8 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   // Get active filter names for display
   const activeFilters = useMemo(() => {
     const active: string[] = [];
-    if (state.filters.tools) active.push('T');
     if (state.filters.vision) active.push('V');
     if (state.filters.reasoning) active.push('R');
-    if (state.filters.audio) active.push('A');
     return active;
   }, [state.filters]);
 
@@ -262,34 +264,18 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   const baselineCount = useMemo(() => {
     let models = state.allModels;
 
-    // 1. Only supported providers
-    if (supportedModelsDevIds.size > 0) {
-      models = models.filter((m) => supportedModelsDevIds.has(m.providerId));
-    }
-
-    // 2. Provider filter
+    // 1. Provider filter
     if (state.providerFilter) {
-      const modelsDevId = providerToModelsDevId.get(state.providerFilter);
-      if (modelsDevId) {
-        models = models.filter((m) => m.providerId === modelsDevId);
-      } else {
-        models = models.filter((m) => m.providerId === state.providerFilter);
-      }
+      models = models.filter((m) => m.provider === state.providerFilter);
     }
 
-    // 3. Filter deprecated
+    // 2. Filter deprecated
     if (!includeDeprecated) {
       models = models.filter((m) => m.metadata?.status !== 'deprecated');
     }
 
     return models.length;
-  }, [
-    state.allModels,
-    state.providerFilter,
-    includeDeprecated,
-    supportedModelsDevIds,
-    providerToModelsDevId,
-  ]);
+  }, [state.allModels, state.providerFilter, includeDeprecated]);
 
   // Check if search or capability filters are active
   const hasActiveFilters =
@@ -375,15 +361,8 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
         return;
       }
 
-      // Filter mode: toggle filters with letter keys
+      // Filter mode: toggle filters with letter keys (V=vision, R=reasoning)
       if (state.mode === 'filter') {
-        if (key.name === 't' || key.sequence === 't') {
-          setState((prev) => ({
-            ...prev,
-            filters: { ...prev.filters, tools: !prev.filters.tools },
-          }));
-          return;
-        }
         if (key.name === 'v' || key.sequence === 'v') {
           setState((prev) => ({
             ...prev,
@@ -395,13 +374,6 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
           setState((prev) => ({
             ...prev,
             filters: { ...prev.filters, reasoning: !prev.filters.reasoning },
-          }));
-          return;
-        }
-        if (key.name === 'a' || key.sequence === 'a') {
-          setState((prev) => ({
-            ...prev,
-            filters: { ...prev.filters, audio: !prev.filters.audio },
           }));
           return;
         }
@@ -453,7 +425,9 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   // Calculate max model ID length from filtered models
   const maxModelIdLen = useMemo(() => {
     if (filteredModels.length === 0) return 20;
-    return Math.max(...filteredModels.map((m) => m.modelId.length));
+    return Math.max(
+      ...filteredModels.map((m) => (m.modelId || m.id).length),
+    );
   }, [filteredModels]);
 
   // Model ID column: use actual max length, but cap at available space
@@ -489,7 +463,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   );
 
   // Render model row (visibleIndex is 0-based within visible slice)
-  const renderRow = (model: LlxprtModel, visibleIndex: number) => {
+  const renderRow = (model: HydratedModel, visibleIndex: number) => {
     const absoluteIndex = state.scrollOffset + visibleIndex;
     const isSelected = absoluteIndex === state.selectedIndex;
     const indicator = isSelected ? '\u25CF ' : '\u25CB ';
@@ -497,13 +471,16 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
       ? SemanticColors.text.accent
       : SemanticColors.text.primary;
 
+    // Use modelId if hydrated, otherwise use id
+    const displayId = model.modelId || model.id;
+
     return (
-      <Box key={model.id}>
+      <Box key={`${model.provider}:${model.id}:${visibleIndex}`}>
         <Text color={color}>
           {indicator}
-          {truncateModelId(model.modelId, modelIdWidth).padEnd(modelIdWidth)}
+          {truncateModelId(displayId, modelIdWidth).padEnd(modelIdWidth)}
           {'  '}
-          {!isNarrow && model.providerId.padEnd(providerWidth)}
+          {!isNarrow && model.provider.padEnd(providerWidth)}
           {formatContext(model.contextWindow).padStart(ctxWidth)}
           {'  '}
           {formatCaps(model.capabilities, isNarrow).padEnd(capsWidth)}
@@ -579,13 +556,9 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
         >
           Filters:{' '}
         </Text>
-        {renderFilterButton('T', state.filters.tools)}
-        <Text color={SemanticColors.text.secondary}> </Text>
         {renderFilterButton('V', state.filters.vision)}
         <Text color={SemanticColors.text.secondary}> </Text>
         {renderFilterButton('R', state.filters.reasoning)}
-        <Text color={SemanticColors.text.secondary}> </Text>
-        {renderFilterButton('A', state.filters.audio)}
         {activeFilters.length > 0 && (
           <Text color={SemanticColors.text.secondary}>
             {'  '}Active: {activeFilters.join(', ')}
@@ -634,7 +607,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
       {/* Legend */}
       <Box marginTop={1}>
         <Text color={SemanticColors.text.secondary}>
-          T=tools V=vision R=reasoning A=audio
+          V=vision R=reasoning (all models support tools)
         </Text>
       </Box>
 

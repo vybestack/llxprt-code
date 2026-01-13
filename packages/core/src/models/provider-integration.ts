@@ -25,7 +25,7 @@ const PROVIDER_ID_MAP: Record<string, string[]> = {
   openai: ['openai'],
   anthropic: ['anthropic'],
   'openai-responses': ['openai'],
-  openaivercel: ['openai'],
+  'openai-vercel': ['openai'],
   deepseek: ['deepseek'],
   groq: ['groq'],
   mistral: ['mistral'],
@@ -34,7 +34,21 @@ const PROVIDER_ID_MAP: Record<string, string[]> = {
   ollama: ['ollama'],
   togetherai: ['togetherai'],
   perplexity: ['perplexity'],
-  fireworks: ['fireworks'],
+  fireworks: ['fireworks-ai'],
+
+  // Alias provider display names -> models.dev provider IDs
+  'Chutes.ai': ['chutes'],
+  'xAI': ['xai'],
+  'Synthetic': ['synthetic'],
+  'Fireworks': ['fireworks-ai'],
+  'OpenRouter': ['openrouter'],
+  'Cerebras Code': ['cerebras'],
+  'LM Studio': ['lmstudio'],
+  'llama.cpp': ['llama'],
+  qwen: ['alibaba'],
+  qwenvercel: ['alibaba'],
+  codex: ['openai'],
+  kimi: ['kimi-for-coding'],
 };
 
 /**

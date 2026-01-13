@@ -5876,6 +5876,35 @@
           "output": 4096
         }
       },
+      "solar-pro3": {
+        "id": "solar-pro3",
+        "name": "solar-pro3",
+        "family": "solar-pro",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "knowledge": "2025-03",
+        "release_date": "2026-01",
+        "last_updated": "2026-01",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": false,
+        "cost": {
+          "input": 0.25,
+          "output": 0.25
+        },
+        "limit": {
+          "context": 131072,
+          "output": 8192
+        }
+      },
       "solar-pro2": {
         "id": "solar-pro2",
         "name": "solar-pro2",

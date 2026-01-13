@@ -8,6 +8,7 @@ import { Box, Text } from 'ink';
 import { useCallback, useMemo } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { HydratedModel } from '@vybestack/llxprt-code-core';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -76,9 +77,10 @@ export const DialogManager = ({
 
   // Handler for ModelsDialog selection
   const handleModelsDialogSelect = useCallback(
-    async (model: { modelId: string }) => {
+    async (model: HydratedModel) => {
       try {
-        const result = await runtime.setActiveModel(model.modelId);
+        // Use model.id (always present from IModel)
+        const result = await runtime.setActiveModel(model.id);
         addItem(
           {
             type: 'info',

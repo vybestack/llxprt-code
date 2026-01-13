@@ -90,3 +90,11 @@ export {
   getRecommendedModel,
   type GetModelsFromRegistryOptions,
 } from './provider-integration.js';
+
+// Hydration utilities
+export {
+  hydrateModelsWithRegistry,
+  getModelsDevProviderIds,
+  type HydratedModel,
+  type ModelHydrationData,
+} from './hydration.js';
