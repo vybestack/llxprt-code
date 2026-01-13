@@ -41,7 +41,7 @@ jobs:
             ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
         run: |
           set -euo pipefail
-          
+
           # For non-PR events (push, merge_group, workflow_dispatch), always run tests
           if [[ -z "${PR_NUMBER:-}" ]]; then
             echo "docs_only=false" >>"$GITHUB_OUTPUT"
