@@ -93,6 +93,17 @@ const truncateModeOptions = [
   { value: 'sample', description: 'sample' },
 ];
 
+const shellReplacementOptions = [
+  {
+    value: 'allowlist',
+    description: 'Validate inner commands against coreTools (default)',
+  },
+  { value: 'all', description: 'Allow all command substitution' },
+  { value: 'none', description: 'Block all command substitution' },
+  { value: 'true', description: 'Legacy: same as "all"' },
+  { value: 'false', description: 'Legacy: same as "none"' },
+];
+
 // Common model parameters - used for deep path completion flattening
 const commonParamOptions = [
   { value: 'temperature', description: 'Sampling temperature (0-2)' },
@@ -173,9 +184,9 @@ const directSettingSpecs: SettingLiteralSpec[] = [
   },
   {
     value: 'shell-replacement',
-    hint: 'true or false',
-    description: 'boolean value',
-    options: booleanOptions,
+    hint: 'allowlist, all, or none',
+    description: 'shell substitution mode',
+    options: shellReplacementOptions,
   },
   {
     value: 'tool-output-max-items',
@@ -552,8 +563,9 @@ const setSchema: CommandArgumentSchema = [
               return 'positive integer in milliseconds (e.g., 60000)';
             case 'socket-keepalive':
             case 'socket-nodelay':
-            case 'shell-replacement':
               return 'true or false';
+            case 'shell-replacement':
+              return 'allowlist, all, or none';
             case 'tool-output-truncate-mode':
               return 'warn, truncate, or sample';
             case 'maxTurnsPerPrompt':
@@ -576,12 +588,13 @@ const setSchema: CommandArgumentSchema = [
               enableFuzzy,
             });
           }
-          if (
-            setting === 'socket-keepalive' ||
-            setting === 'socket-nodelay' ||
-            setting === 'shell-replacement'
-          ) {
+          if (setting === 'socket-keepalive' || setting === 'socket-nodelay') {
             return filterCompletions(booleanOptions, partial, { enableFuzzy });
+          }
+          if (setting === 'shell-replacement') {
+            return filterCompletions(shellReplacementOptions, partial, {
+              enableFuzzy,
+            });
           }
           if (setting === 'tool-output-truncate-mode') {
             return filterCompletions(truncateModeOptions, partial, {

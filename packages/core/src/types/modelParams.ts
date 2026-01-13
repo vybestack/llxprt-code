@@ -85,8 +85,14 @@ export interface EphemeralSettings {
   'max-prompt-tokens'?: number;
   /** List of disabled tool names */
   'disabled-tools'?: string[];
-  /** Allow command substitution ($(), <(), backticks) in shell commands */
-  'shell-replacement'?: boolean;
+  /**
+   * Control command substitution ($(), <(), backticks) in shell commands.
+   * - 'allowlist': Allow substitution, validate inner commands against coreTools (default, matches upstream)
+   * - 'all': Allow all substitution unconditionally (same as legacy `true`)
+   * - 'none': Block all substitution (same as legacy `false`)
+   * - true/false: Legacy boolean values for backward compatibility
+   */
+  'shell-replacement'?: 'allowlist' | 'all' | 'none' | boolean;
   /** Enable todo continuation after stream completion (default: true) */
   'todo-continuation'?: boolean;
   /** Socket timeout in milliseconds for local AI servers */

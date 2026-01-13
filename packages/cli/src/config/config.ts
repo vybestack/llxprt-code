@@ -34,6 +34,7 @@ import {
   createPolicyEngineConfig,
   SHELL_TOOL_NAMES,
   isRipgrepAvailable,
+  normalizeShellReplacement,
   type GeminiCLIExtension,
   type Profile,
 } from '@vybestack/llxprt-code-core';
@@ -1367,7 +1368,14 @@ export async function loadCliConfig(
     interactive,
     folderTrust,
     trustedFolder,
-    shellReplacement: effectiveSettings.shellReplacement,
+    shellReplacement: normalizeShellReplacement(
+      effectiveSettings.shellReplacement as
+        | 'allowlist'
+        | 'all'
+        | 'none'
+        | boolean
+        | undefined,
+    ),
     useRipgrep: useRipgrepSetting,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
