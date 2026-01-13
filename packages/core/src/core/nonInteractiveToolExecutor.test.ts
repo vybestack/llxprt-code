@@ -694,57 +694,11 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     });
   });
 
-  describe('emoji filtering with systemFeedback', () => {
-    it('should append systemFeedback to successful response when emoji filtering warns', async () => {
-      const ephemerals = { emojifilter: 'warn' as const };
-      const config = createMockConfig({ ephemerals });
-
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-      mockTool.executeFn.mockReturnValue({
-        llmContent: 'Tool completed',
-        returnDisplay: 'Success',
-      });
-
-      const { response } = await executeToolCall(
-        config,
-        {
-          ...request,
-          name: 'write_file',
-          args: { content: 'Has content 😀' },
-        },
-        abortController.signal,
-      );
-
-      expect(response.error).toBeUndefined();
-      expect(getFullResponseText(response)).toContain('<system-reminder>');
-    });
-
-    it('should produce at most one system-reminder per execution', async () => {
-      const ephemerals = { emojifilter: 'warn' as const };
-      const config = createMockConfig({ ephemerals });
-
-      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-      mockTool.executeFn.mockReturnValue({
-        llmContent: 'Tool completed',
-        returnDisplay: 'Success',
-      });
-
-      const { response } = await executeToolCall(
-        config,
-        {
-          ...request,
-          name: 'write_file',
-          args: { content: 'Content here 😀' },
-        },
-        abortController.signal,
-      );
-
-      const responseText = getFullResponseText(response);
-      const reminderCount = (responseText.match(/<system-reminder>/g) || [])
-        .length;
-      expect(reminderCount).toBeLessThanOrEqual(1);
-    });
-  });
+  // Note: emoji filtering is now handled by the individual tools (edit.ts, write-file.ts)
+  // rather than in nonInteractiveToolExecutor. The tools themselves add system-reminder
+  // when emojis are filtered in 'warn' mode. These tests verified the old behavior
+  // where nonInteractiveToolExecutor did the filtering and appended the reminder.
+  // The actual filtering behavior is tested in write-file.test.ts and edit.test.ts.
 });
 
 function getFullResponseText(response: ToolCallResponseInfo): string {
