@@ -19,7 +19,7 @@ import { getModelsRegistry } from './registry.js';
  * Maps llxprt provider names to models.dev provider IDs
  * models.dev uses different naming in some cases
  */
-const PROVIDER_ID_MAP: Record<string, string[]> = {
+export const PROVIDER_ID_MAP: Record<string, string[]> = {
   // llxprt provider name -> models.dev provider ID(s)
   gemini: ['google', 'google-vertex'],
   openai: ['openai'],
