@@ -63,8 +63,8 @@ export class SkillManager {
   }
 
   /**
-   * Discovers skills from built-in, extension, user and project locations.
-   * Precedence: Built-in (lowest) -> Extensions -> User -> Project (highest).
+   * Discovers skills from built-in, extension, user and workspace locations.
+   * Precedence: Built-in (lowest) -> Extensions -> User -> Workspace (highest).
    */
   async discoverSkills(
     storage: Storage,
@@ -100,7 +100,7 @@ export class SkillManager {
     );
     this.addSkillsWithPrecedence(userSkills);
 
-    // 4. Project skills (highest precedence)
+    // 4. Workspace skills (highest precedence)
     const projectSkills = await loadSkillsFromDir(
       storage.getProjectSkillsDir(),
       'project',
