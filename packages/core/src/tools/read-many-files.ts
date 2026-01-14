@@ -133,14 +133,10 @@ ${this.config.getTargetDir()}
     const paramUseDefaultExcludes = this.params.useDefaultExcludes !== false;
     const finalExclusionPatternsForDescription: string[] =
       paramUseDefaultExcludes
-        ? [
-            ...getDefaultExcludes(this.config),
-            ...paramExcludes,
-            ...this.llxprtIgnorePatterns,
-          ]
-        : [...paramExcludes, ...this.llxprtIgnorePatterns];
+        ? [...getDefaultExcludes(this.config), ...paramExcludes]
+        : [...paramExcludes];
 
-    let excludeDesc = `Excluding: ${
+    const excludeDesc = `Excluding: ${
       finalExclusionPatternsForDescription.length > 0
         ? `patterns like 
 ${finalExclusionPatternsForDescription
@@ -150,16 +146,6 @@ ${finalExclusionPatternsForDescription
   )}${finalExclusionPatternsForDescription.length > 2 ? '...`' : '`'}`
         : 'none specified'
     }`;
-
-    // Add a note if .llxprtignore patterns contributed to the final list of exclusions
-    if (this.llxprtIgnorePatterns.length > 0) {
-      const llxprtPatternsInEffect = this.llxprtIgnorePatterns.filter((p) =>
-        finalExclusionPatternsForDescription.includes(p),
-      ).length;
-      if (llxprtPatternsInEffect > 0) {
-        excludeDesc += ` (includes ${llxprtPatternsInEffect} from .llxprtignore)`;
-      }
-    }
 
     return `Will attempt to read and concatenate files ${pathDesc}. ${excludeDesc}. File encoding: ${DEFAULT_ENCODING}. Separator: "${DEFAULT_OUTPUT_SEPARATOR_FORMAT.replace(
       '{filePath}',
@@ -235,28 +221,6 @@ ${finalExclusionPatternsForDescription
       }
       const entries = Array.from(allEntries);
 
-      const gitFilteredEntries = fileFilteringOptions.respectGitIgnore
-        ? fileDiscovery.filterFiles(entries, {
-            respectGitIgnore: true,
-            respectLlxprtIgnore: false,
-          })
-        : [...entries];
-
-      // Apply llxprt ignore filtering if enabled
-      const finalFilteredEntries = fileFilteringOptions.respectLlxprtIgnore
-        ? fileDiscovery.filterFiles(gitFilteredEntries, {
-            respectGitIgnore: false,
-            respectLlxprtIgnore: true,
-          })
-        : gitFilteredEntries;
-
-      const gitFilteredSet = new Set(
-        gitFilteredEntries.map((entry) => path.normalize(entry)),
-      );
-      const finalFilteredSet = new Set(
-        finalFilteredEntries.map((entry) => path.normalize(entry)),
-      );
-
       let gitIgnoredCount = 0;
       let llxprtIgnoredCount = 0;
 
@@ -276,19 +240,23 @@ ${finalExclusionPatternsForDescription
 
         const normalizedPath = path.normalize(absoluteFilePath);
 
-        // Check if this file was filtered out by git ignore
         if (
           fileFilteringOptions.respectGitIgnore &&
-          !gitFilteredSet.has(normalizedPath)
+          fileDiscovery.shouldIgnoreFile(absoluteFilePath, {
+            respectGitIgnore: true,
+            respectLlxprtIgnore: false,
+          })
         ) {
           gitIgnoredCount++;
           continue;
         }
 
-        // Check if this file was filtered out by llxprt ignore
         if (
           fileFilteringOptions.respectLlxprtIgnore &&
-          !finalFilteredSet.has(normalizedPath)
+          fileDiscovery.shouldIgnoreFile(absoluteFilePath, {
+            respectGitIgnore: false,
+            respectLlxprtIgnore: true,
+          })
         ) {
           llxprtIgnoredCount++;
           continue;

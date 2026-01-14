@@ -14,7 +14,7 @@ import {
   MockedFunction,
 } from 'vitest';
 import { act } from 'react';
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { useGitBranchName } from './useGitBranchName.js';
 import { EventEmitter } from 'node:events';
 import { exec as mockExec, type ChildProcess } from 'node:child_process';
@@ -35,7 +35,6 @@ const GIT_LOGS_HEAD_PATH = path.join(CWD, '.git', 'logs', 'HEAD');
 describe('useGitBranchName', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers(); // Use fake timers for async operations
 
     // Mock fsPromises.access to always succeed
     vi.mocked(fsPromises.access).mockResolvedValue(undefined);
@@ -43,7 +42,6 @@ describe('useGitBranchName', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.clearAllTimers();
   });
 
   it('should return branch name', async () => {
@@ -57,7 +55,6 @@ describe('useGitBranchName', () => {
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
 
     await act(async () => {
-      vi.runAllTimers(); // Advance timers to trigger useEffect and exec callback
       rerender(); // Rerender to get the updated state
     });
 
@@ -76,7 +73,6 @@ describe('useGitBranchName', () => {
     expect(result.current).toBeUndefined();
 
     await act(async () => {
-      vi.runAllTimers();
       rerender();
     });
     expect(result.current).toBeUndefined();
@@ -96,7 +92,6 @@ describe('useGitBranchName', () => {
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
     await act(async () => {
-      vi.runAllTimers();
       rerender();
     });
     expect(result.current).toBe('a1b2c3d');
@@ -116,7 +111,6 @@ describe('useGitBranchName', () => {
 
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
     await act(async () => {
-      vi.runAllTimers();
       rerender();
     });
     expect(result.current).toBeUndefined();
@@ -129,11 +123,12 @@ describe('useGitBranchName', () => {
     };
 
     let watchCallback: ((eventType: string) => void) | null = null;
-
-    vi.mocked(fs.watch).mockImplementation((path, callback) => {
-      watchCallback = callback as (eventType: string) => void;
-      return mockWatcher as unknown as fs.FSWatcher;
-    });
+    const watchSpy = vi
+      .mocked(fs.watch)
+      .mockImplementation((path, callback) => {
+        watchCallback = callback as (eventType: string) => void;
+        return mockWatcher as unknown as fs.FSWatcher;
+      });
 
     let callCount = 0;
     // Mock exec to return different values on each call
@@ -152,16 +147,18 @@ describe('useGitBranchName', () => {
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
 
     await act(async () => {
-      vi.runAllTimers();
       rerender();
     });
     expect(result.current).toBe('main');
-    expect(watchCallback).toBeTruthy();
+
+    // Wait for watcher to be set up
+    await waitFor(() => {
+      expect(watchSpy).toHaveBeenCalled();
+    });
 
     // Simulate file change event
     await act(async () => {
       watchCallback!('change');
-      vi.runAllTimers();
       rerender();
     });
 
@@ -186,7 +183,6 @@ describe('useGitBranchName', () => {
     const { result, rerender } = renderHook(() => useGitBranchName(CWD));
 
     await act(async () => {
-      vi.runAllTimers();
       rerender();
     });
 
@@ -204,7 +200,9 @@ describe('useGitBranchName', () => {
       ...watcherEmitter,
     };
 
-    vi.mocked(fs.watch).mockReturnValue(mockWatcher as unknown as fs.FSWatcher);
+    const watchMock = vi
+      .mocked(fs.watch)
+      .mockReturnValue(mockWatcher as unknown as fs.FSWatcher);
 
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
       (_command, _options, callback) => {
@@ -216,17 +214,17 @@ describe('useGitBranchName', () => {
     const { unmount, rerender } = renderHook(() => useGitBranchName(CWD));
 
     await act(async () => {
-      vi.runAllTimers();
       rerender();
     });
 
-    // Verify watcher was set up
-    expect(fs.watch).toHaveBeenCalledWith(
-      GIT_LOGS_HEAD_PATH,
-      expect.any(Function),
-    );
+    // Wait for watcher to be set up BEFORE unmounting
+    await waitFor(() => {
+      expect(watchMock).toHaveBeenCalledWith(
+        GIT_LOGS_HEAD_PATH,
+        expect.any(Function),
+      );
+    });
 
-    // Unmount and verify cleanup
     unmount();
     expect(closeMock).toHaveBeenCalled();
   });

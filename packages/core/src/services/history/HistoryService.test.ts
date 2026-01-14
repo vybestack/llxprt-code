@@ -18,11 +18,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HistoryService } from './HistoryService.js';
 import {
   IContent,
-  ContentFactory,
   ToolCallBlock,
   ToolResponseBlock,
+  createUserMessage as createUserMessageFromIContent,
+  createToolResponse as createToolResponseFromIContent,
 } from './IContent.js';
 import { ContentConverters } from './ContentConverters.js';
+
+const createUserMessage = createUserMessageFromIContent;
+const createToolResponse = createToolResponseFromIContent;
 
 describe('HistoryService - Behavioral Tests', () => {
   let service: HistoryService;
@@ -34,7 +38,7 @@ describe('HistoryService - Behavioral Tests', () => {
   describe('Realistic Conversation Flow', () => {
     it('should handle a complete tool-use conversation flow', () => {
       // 1. User asks to read a file
-      const userRequest = ContentFactory.createUserMessage(
+      const userRequest = createUserMessage(
         'Please read the file at /tmp/example.txt and summarize its contents',
         { timestamp: Date.now() },
       );
@@ -65,7 +69,7 @@ describe('HistoryService - Behavioral Tests', () => {
       service.add(aiToolCall);
 
       // 3. Tool responds with file contents
-      const toolResponse = ContentFactory.createToolResponse(
+      const toolResponse = createToolResponse(
         'call_123',
         'read_file',
         {
@@ -218,7 +222,7 @@ describe('HistoryService - Behavioral Tests', () => {
     });
 
     it('should handle parallel tool calls', () => {
-      const userRequest = ContentFactory.createUserMessage(
+      const userRequest = createUserMessage(
         'Check the weather in NYC and London',
       );
 
@@ -251,14 +255,14 @@ describe('HistoryService - Behavioral Tests', () => {
 
       // Both tool responses
       service.add(
-        ContentFactory.createToolResponse('call_nyc', 'get_weather', {
+        createToolResponse('call_nyc', 'get_weather', {
           temp: 72,
           condition: 'Sunny',
         }),
       );
 
       service.add(
-        ContentFactory.createToolResponse('call_london', 'get_weather', {
+        createToolResponse('call_london', 'get_weather', {
           temp: 15,
           condition: 'Rainy',
         }),
@@ -286,7 +290,7 @@ describe('HistoryService - Behavioral Tests', () => {
     });
 
     it('should handle failed tool calls', () => {
-      const userRequest = ContentFactory.createUserMessage(
+      const userRequest = createUserMessage(
         'Read the file at /nonexistent/file.txt',
       );
 
@@ -308,7 +312,7 @@ describe('HistoryService - Behavioral Tests', () => {
       service.add(aiToolCall);
 
       // Tool returns error
-      const toolError = ContentFactory.createToolResponse(
+      const toolError = createToolResponse(
         'call_fail',
         'read_file',
         null,
@@ -389,7 +393,7 @@ describe('HistoryService - Behavioral Tests', () => {
   describe('History Management', () => {
     it('should return curated history without empty or invalid content', () => {
       // Add valid content
-      service.add(ContentFactory.createUserMessage('Hello'));
+      service.add(createUserMessage('Hello'));
 
       // Add empty content
       service.add({
@@ -418,7 +422,7 @@ describe('HistoryService - Behavioral Tests', () => {
 
     it('should track conversation statistics', () => {
       // Add various message types
-      service.add(ContentFactory.createUserMessage('Question 1'));
+      service.add(createUserMessage('Question 1'));
       service.add({
         speaker: 'ai',
         blocks: [
@@ -429,10 +433,8 @@ describe('HistoryService - Behavioral Tests', () => {
           usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
         },
       });
-      service.add(
-        ContentFactory.createToolResponse('tc1', 'tool1', { result: 'data' }),
-      );
-      service.add(ContentFactory.createUserMessage('Question 2'));
+      service.add(createToolResponse('tc1', 'tool1', { result: 'data' }));
+      service.add(createUserMessage('Question 2'));
       service.add({
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Answer 2' }],
@@ -451,7 +453,7 @@ describe('HistoryService - Behavioral Tests', () => {
     });
 
     it('should handle recordTurn for complete conversation turns', () => {
-      const userInput = ContentFactory.createUserMessage('Calculate 5 + 3');
+      const userInput = createUserMessage('Calculate 5 + 3');
 
       const aiResponse: IContent = {
         speaker: 'ai',
@@ -467,7 +469,7 @@ describe('HistoryService - Behavioral Tests', () => {
       };
 
       const toolInteractions = [
-        ContentFactory.createToolResponse('calc1', 'calculator', { result: 8 }),
+        createToolResponse('calc1', 'calculator', { result: 8 }),
       ];
 
       const aiFinal: IContent = {
@@ -502,7 +504,7 @@ describe('HistoryService - Behavioral Tests', () => {
       });
 
       // Add another user message (tool response is missing)
-      service.add(ContentFactory.createUserMessage('Next question'));
+      service.add(createUserMessage('Next question'));
 
       const unmatched = service.findUnmatchedToolCalls();
       expect(unmatched).toHaveLength(1);
@@ -526,7 +528,7 @@ describe('HistoryService - Behavioral Tests', () => {
     });
 
     it('should synthesize tool responses for provider payloads without mutating stored history', () => {
-      service.add(ContentFactory.createUserMessage('Question'));
+      service.add(createUserMessage('Question'));
       service.add({
         speaker: 'ai',
         blocks: [
@@ -538,7 +540,7 @@ describe('HistoryService - Behavioral Tests', () => {
           },
         ],
       });
-      service.add(ContentFactory.createUserMessage('Next question'));
+      service.add(createUserMessage('Next question'));
 
       // Stored history remains unchanged.
       expect(service.getAll()).toHaveLength(3);
@@ -568,7 +570,7 @@ describe('HistoryService - Behavioral Tests', () => {
     });
 
     it('should synthesize tool responses when a new user message is provided as tail contents', () => {
-      service.add(ContentFactory.createUserMessage('Question'));
+      service.add(createUserMessage('Question'));
       service.add({
         speaker: 'ai',
         blocks: [
@@ -584,7 +586,7 @@ describe('HistoryService - Behavioral Tests', () => {
       // Stored history remains unchanged (tool call is still pending).
       expect(service.getAll()).toHaveLength(2);
 
-      const tail = [ContentFactory.createUserMessage('Next question')];
+      const tail = [createUserMessage('Next question')];
       const curated = service.getCuratedForProvider(tail);
 
       const toolCallIndex = curated.findIndex(
@@ -618,7 +620,7 @@ describe('HistoryService - Behavioral Tests', () => {
     it('should return history within token limits', () => {
       // Add messages with known token counts
       for (let i = 0; i < 10; i++) {
-        service.add(ContentFactory.createUserMessage(`Message ${i}`));
+        service.add(createUserMessage(`Message ${i}`));
         service.add({
           speaker: 'ai',
           blocks: [{ type: 'text', text: `Response ${i}` }],
@@ -643,7 +645,7 @@ describe('HistoryService - Behavioral Tests', () => {
     it('should handle history summarization for old messages', async () => {
       // Add many messages
       for (let i = 0; i < 20; i++) {
-        service.add(ContentFactory.createUserMessage(`Question ${i}`));
+        service.add(createUserMessage(`Question ${i}`));
         service.add({
           speaker: 'ai',
           blocks: [{ type: 'text', text: `Answer ${i}` }],
@@ -675,7 +677,7 @@ describe('HistoryService - Behavioral Tests', () => {
   describe('Import/Export', () => {
     it('should export and import history via JSON', () => {
       // Add some content
-      service.add(ContentFactory.createUserMessage('Test message'));
+      service.add(createUserMessage('Test message'));
       service.add({
         speaker: 'ai',
         blocks: [
@@ -798,14 +800,15 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(curated[0]?.speaker).toBe('ai');
       expect(curated[0]?.blocks[0]).toMatchObject({
         type: 'tool_call',
-        id: 'hist_tool_cancel_123',
         name: 'run_shell_command',
       });
+      const toolCallId = (curated[0]?.blocks[0] as ToolCallBlock).id;
+      expect(toolCallId).toMatch(/^hist_tool_[a-zA-Z0-9_-]+$/);
 
       expect(curated[1]?.speaker).toBe('tool');
       expect(curated[1]?.blocks[0]).toMatchObject({
         type: 'tool_response',
-        callId: 'hist_tool_cancel_123',
+        callId: toolCallId,
         toolName: 'run_shell_command',
       });
     });
@@ -813,9 +816,9 @@ describe('HistoryService - Behavioral Tests', () => {
     it('should synthesize missing tool_call entries so tool responses survive compression', () => {
       const orphanCallId = 'hist_tool_orphan';
 
-      service.add(ContentFactory.createUserMessage('Please list files.'));
+      service.add(createUserMessage('Please list files.'));
       service.add(
-        ContentFactory.createToolResponse(orphanCallId, 'run_shell_command', {
+        createToolResponse(orphanCallId, 'run_shell_command', {
           output: '[Operation Cancelled]',
         }),
       );
@@ -843,7 +846,7 @@ describe('HistoryService - Behavioral Tests', () => {
     it('should keep tool responses unchanged when a matching tool_call exists', () => {
       const callId = 'hist_tool_valid';
 
-      service.add(ContentFactory.createUserMessage('Please list files.'));
+      service.add(createUserMessage('Please list files.'));
       service.add({
         speaker: 'ai',
         blocks: [
@@ -856,7 +859,7 @@ describe('HistoryService - Behavioral Tests', () => {
         ],
       });
       service.add(
-        ContentFactory.createToolResponse(callId, 'run_shell_command', {
+        createToolResponse(callId, 'run_shell_command', {
           output: 'file.txt',
         }),
       );
@@ -885,7 +888,7 @@ describe('HistoryService - Behavioral Tests', () => {
     it('should drop duplicate late tool_responses to keep provider tool adjacency valid', () => {
       const callId = 'hist_tool_dupe';
 
-      service.add(ContentFactory.createUserMessage('Please list files.'));
+      service.add(createUserMessage('Please list files.'));
       service.add({
         speaker: 'ai',
         blocks: [
@@ -898,18 +901,19 @@ describe('HistoryService - Behavioral Tests', () => {
         ],
       });
       service.add(
-        ContentFactory.createToolResponse(callId, 'run_shell_command', {
+        createToolResponse(callId, 'run_shell_command', {
           output: 'file.txt',
         }),
       );
-      service.add(
-        ContentFactory.createAIMessage([{ type: 'text', text: 'file.txt' }]),
-      );
+      service.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'file.txt' }],
+      });
 
       // Corrupted history: the same tool result is written again after the
       // assistant has already continued with normal text.
       service.add(
-        ContentFactory.createToolResponse(callId, 'run_shell_command', {
+        createToolResponse(callId, 'run_shell_command', {
           output: 'file.txt',
         }),
       );
@@ -950,7 +954,7 @@ describe('HistoryService - Behavioral Tests', () => {
     it('should relocate out-of-order tool_responses to immediately follow their tool_call', () => {
       const callId = 'hist_tool_out_of_order';
 
-      service.add(ContentFactory.createUserMessage('Please list files.'));
+      service.add(createUserMessage('Please list files.'));
       service.add({
         speaker: 'ai',
         blocks: [
@@ -964,13 +968,12 @@ describe('HistoryService - Behavioral Tests', () => {
       });
 
       // Corrupted ordering: assistant continues before the tool result is recorded.
+      service.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: '...waiting for tool...' }],
+      });
       service.add(
-        ContentFactory.createAIMessage([
-          { type: 'text', text: '...waiting for tool...' },
-        ]),
-      );
-      service.add(
-        ContentFactory.createToolResponse(callId, 'run_shell_command', {
+        createToolResponse(callId, 'run_shell_command', {
           output: 'file.txt',
         }),
       );
@@ -1019,16 +1022,24 @@ describe('HistoryService - Behavioral Tests', () => {
         // FAILING TEST: HistoryService should have generateHistoryId method
         expect(typeof service.generateHistoryId).toBe('function');
 
-        const id1 = service.generateHistoryId();
-        const id2 = service.generateHistoryId();
+        const id1 = service.generateHistoryId(
+          'turn-test',
+          0,
+          'openai',
+          'raw-1',
+          'test_tool',
+        );
+        const id2 = service.generateHistoryId(
+          'turn-test',
+          1,
+          'openai',
+          'raw-2',
+          'test_tool',
+        );
 
-        // All IDs should have hist_tool_ format with UUID
-        expect(id1).toMatch(
-          /^hist_tool_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-        );
-        expect(id2).toMatch(
-          /^hist_tool_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-        );
+        // All IDs should have hist_tool_ format
+        expect(id1).toMatch(/^hist_tool_[a-zA-Z0-9_-]+$/);
+        expect(id2).toMatch(/^hist_tool_[a-zA-Z0-9_-]+$/);
 
         // Each call should generate unique IDs
         expect(id1).not.toBe(id2);
@@ -1038,21 +1049,19 @@ describe('HistoryService - Behavioral Tests', () => {
         // FAILING TEST: HistoryService should provide getIdGeneratorCallback method
         expect(typeof service.getIdGeneratorCallback).toBe('function');
 
-        const callback = service.getIdGeneratorCallback();
+        const callback = service.getIdGeneratorCallback('turn-test');
         expect(typeof callback).toBe('function');
 
         // Callback should generate proper history IDs
         const id = callback();
-        expect(id).toMatch(
-          /^hist_tool_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-        );
+        expect(id).toMatch(/^hist_tool_[a-zA-Z0-9_-]+$/);
       });
     });
 
     describe('Converter integration with HistoryService callbacks', () => {
       it('should provide ID generation callback for converters that need it', () => {
         // Test that HistoryService can provide ID generation callback
-        const generateIdCallback = service.getIdGeneratorCallback();
+        const generateIdCallback = service.getIdGeneratorCallback('turn-test');
         expect(typeof generateIdCallback).toBe('function');
 
         // Test that the callback generates valid IDs
@@ -1102,7 +1111,7 @@ describe('HistoryService - Behavioral Tests', () => {
           .mockResolvedValueOnce(20); // AI completion tokens
 
         service.add(
-          ContentFactory.createUserMessage('Summarize the requirements.'),
+          createUserMessage('Summarize the requirements.'),
           'claude-3',
         );
         await service.waitForTokenUpdates();
@@ -1218,6 +1227,144 @@ describe('HistoryService - Behavioral Tests', () => {
         expect(
           (service as unknown as { isCompressing: boolean }).isCompressing,
         ).toBe(false);
+      });
+    });
+
+    describe('Strict tool adjacency mode', () => {
+      it('should synthesize tool responses for orphaned tool calls when strictToolAdjacency is true', () => {
+        service.add(createUserMessage('Question'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_orphan1',
+              name: 'tool1',
+              parameters: {},
+            },
+          ],
+        });
+
+        expect(service.getAll()).toHaveLength(2);
+
+        const curated = service.getCuratedForProvider([], {
+          strictToolAdjacency: true,
+        });
+        expect(curated).toHaveLength(3);
+
+        const toolCallIndex = curated.findIndex(
+          (c) =>
+            c.speaker === 'ai' &&
+            c.blocks.some(
+              (b) =>
+                b.type === 'tool_call' &&
+                (b as ToolCallBlock).id === 'hist_tool_orphan1',
+            ),
+        );
+        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+        expect(curated[toolCallIndex + 1]?.speaker).toBe('tool');
+        expect(
+          curated[toolCallIndex + 1]?.blocks.some(
+            (b) =>
+              b.type === 'tool_response' &&
+              (b as ToolResponseBlock).callId === 'hist_tool_orphan1',
+          ),
+        ).toBe(true);
+      });
+
+      it('should NOT synthesize tool responses for orphaned tool calls without later non-tool message when strictToolAdjacency is false', () => {
+        service.add(createUserMessage('Question'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_orphan2',
+              name: 'tool1',
+              parameters: {},
+            },
+          ],
+        });
+
+        expect(service.getAll()).toHaveLength(2);
+
+        const curated = service.getCuratedForProvider([], {
+          strictToolAdjacency: false,
+        });
+        expect(curated).toHaveLength(2);
+
+        const toolCallIndex = curated.findIndex(
+          (c) =>
+            c.speaker === 'ai' &&
+            c.blocks.some(
+              (b) =>
+                b.type === 'tool_call' &&
+                (b as ToolCallBlock).id === 'hist_tool_orphan2',
+            ),
+        );
+        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+        expect(curated[toolCallIndex + 1]?.speaker).not.toBe('tool');
+      });
+
+      it('should synthesize tool responses in strict mode even without later non-tool message', () => {
+        service.add(createUserMessage('Question'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_pending',
+              name: 'tool1',
+              parameters: {},
+            },
+          ],
+        });
+
+        expect(service.getAll()).toHaveLength(2);
+
+        const curated = service.getCuratedForProvider([], {
+          strictToolAdjacency: true,
+        });
+        expect(curated).toHaveLength(3);
+
+        const syntheticToolMessage = curated[2];
+        expect(syntheticToolMessage.speaker).toBe('tool');
+        expect(syntheticToolMessage.metadata?.synthetic).toBe(true);
+        expect(syntheticToolMessage.metadata?.reason).toBe(
+          'reordered_tool_responses',
+        );
+      });
+
+      it('should handle strictToolAdjacency default as false', () => {
+        service.add(createUserMessage('Question'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_default',
+              name: 'tool1',
+              parameters: {},
+            },
+          ],
+        });
+
+        expect(service.getAll()).toHaveLength(2);
+
+        const curated = service.getCuratedForProvider();
+        expect(curated).toHaveLength(2);
+
+        const toolCallIndex = curated.findIndex(
+          (c) =>
+            c.speaker === 'ai' &&
+            c.blocks.some(
+              (b) =>
+                b.type === 'tool_call' &&
+                (b as ToolCallBlock).id === 'hist_tool_default',
+            ),
+        );
+        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+        expect(curated[toolCallIndex + 1]?.speaker).not.toBe('tool');
       });
     });
   });

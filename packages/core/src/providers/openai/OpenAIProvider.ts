@@ -20,7 +20,6 @@
  */
 
 import OpenAI from 'openai';
-import crypto from 'node:crypto';
 import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
@@ -1022,53 +1021,38 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
    */
   private normalizeToOpenAIToolId(id: string): string {
-    const sanitize = (value: string) =>
-      value.replace(/[^a-zA-Z0-9_]/g, '') ||
-      'call_' + crypto.randomUUID().replace(/-/g, '');
-    // If already in OpenAI format, return as-is
+    if (!id) {
+      return 'call_';
+    }
+
     if (id.startsWith('call_')) {
-      return sanitize(id);
+      return id;
     }
 
-    // For history format, extract the UUID and add OpenAI prefix
     if (id.startsWith('hist_tool_')) {
-      const uuid = id.substring('hist_tool_'.length);
-      return sanitize('call_' + uuid);
+      return `call_${id.substring('hist_tool_'.length)}`;
     }
 
-    // For Anthropic format, extract the UUID and add OpenAI prefix
-    if (id.startsWith('toolu_')) {
-      const uuid = id.substring('toolu_'.length);
-      return sanitize('call_' + uuid);
-    }
-
-    // Unknown format - assume it's a raw UUID
-    return sanitize('call_' + id);
+    return `call_${id}`;
   }
 
   /**
    * Normalize tool IDs from OpenAI format to history format
    */
   private normalizeToHistoryToolId(id: string): string {
-    // If already in history format, return as-is
+    if (!id) {
+      return 'hist_tool_';
+    }
+
     if (id.startsWith('hist_tool_')) {
       return id;
     }
 
-    // For OpenAI format, extract the UUID and add history prefix
     if (id.startsWith('call_')) {
-      const uuid = id.substring('call_'.length);
-      return 'hist_tool_' + uuid;
+      return `hist_tool_${id.substring('call_'.length)}`;
     }
 
-    // For Anthropic format, extract the UUID and add history prefix
-    if (id.startsWith('toolu_')) {
-      const uuid = id.substring('toolu_'.length);
-      return 'hist_tool_' + uuid;
-    }
-
-    // Unknown format - assume it's a raw UUID
-    return 'hist_tool_' + id;
+    return `hist_tool_${id}`;
   }
 
   /**

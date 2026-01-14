@@ -61,7 +61,7 @@ type UnionKeys<T> = T extends T ? keyof T : never;
 export class Task {
   id: string;
   contextId: string;
-  scheduler: CoreToolScheduler;
+  scheduler: CoreToolScheduler | null;
   config: Config;
   geminiClient: GeminiClient;
   pendingToolConfirmationDetails: Map<string, ToolCallConfirmationDetails>;
@@ -87,7 +87,7 @@ export class Task {
     this.id = id;
     this.contextId = contextId;
     this.config = config;
-    this.scheduler = this.createScheduler();
+    this.scheduler = null;
     const contentConfig = this.config.getContentGeneratorConfig();
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
@@ -114,7 +114,9 @@ export class Task {
     config: Config,
     eventBus?: ExecutionEventBus,
   ): Promise<Task> {
-    return new Task(id, contextId, config, eventBus);
+    const task = new Task(id, contextId, config, eventBus);
+    task.scheduler = await task.createScheduler();
+    return task;
   }
 
   // Note: `getAllMCPServerStatuses` retrieves the status of all MCP servers for the entire
@@ -229,12 +231,14 @@ export class Task {
     final = false,
     timestamp?: string,
     metadataError?: string,
+    traceId?: string,
   ): TaskStatusUpdateEvent {
     const metadata: {
       coderAgent: CoderAgentMessage;
       model: string;
       userTier?: UserTierId;
       error?: string;
+      traceId?: string;
     } = {
       coderAgent: coderAgentMessage,
       model: this.config.getModel(),
@@ -243,6 +247,10 @@ export class Task {
 
     if (metadataError) {
       metadata.error = metadataError;
+    }
+
+    if (traceId) {
+      metadata.traceId = traceId;
     }
 
     return {
@@ -266,6 +274,7 @@ export class Task {
     messageParts?: Part[], // For more complex messages
     final = false,
     metadataError?: string,
+    traceId?: string,
   ): void {
     this.taskState = newState;
     let message: Message | undefined;
@@ -290,6 +299,7 @@ export class Task {
       final,
       undefined,
       metadataError,
+      traceId,
     );
     this.eventBus?.publish(event);
   }
@@ -425,16 +435,18 @@ export class Task {
     }
   }
 
-  private createScheduler(): CoreToolScheduler {
-    const scheduler = new CoreToolScheduler({
+  private async createScheduler(): Promise<CoreToolScheduler> {
+    const sessionId = this.config.getSessionId();
+    if (!sessionId) {
+      throw new Error('Scheduler sessionId is required');
+    }
+    return await this.config.getOrCreateScheduler(sessionId, {
       outputUpdateHandler: this._schedulerOutputUpdate.bind(this),
       onAllToolCallsComplete: this._schedulerAllToolCallsComplete.bind(this),
       onToolCallsUpdate: this._schedulerToolCallsUpdate.bind(this),
       getPreferredEditor: () => 'vscode',
-      config: this.config,
       onEditorClose: () => {},
     });
-    return scheduler;
   }
 
   private _pickFields<
@@ -581,6 +593,9 @@ export class Task {
     };
     this.setTaskStateAndPublishUpdate('working', stateChange);
 
+    if (!this.scheduler) {
+      throw new Error('Scheduler not initialized');
+    }
     await this.scheduler.schedule(updatedRequests, abortSignal);
   }
 
@@ -588,10 +603,15 @@ export class Task {
     const stateChange: StateChange = {
       kind: CoderAgentEvent.StateChangeEvent,
     };
+    const traceId =
+      'traceId' in event && typeof event.traceId === 'string'
+        ? event.traceId
+        : undefined;
+
     switch (event.type) {
       case GeminiEventType.Content:
         logger.info('[Task] Sending agent message content...');
-        this._sendTextContent(event.value);
+        this._sendTextContent(event.value, traceId);
         break;
       case GeminiEventType.ToolCallRequest:
         // This is now handled by the agent loop, which collects all requests
@@ -630,11 +650,13 @@ export class Task {
           'Task cancelled by user',
           undefined,
           true,
+          undefined,
+          traceId,
         );
         break;
       case GeminiEventType.Thought:
         logger.info('[Task] Sending agent thought...');
-        this._sendThought(event.value);
+        this._sendThought(event.value, traceId);
         break;
       case GeminiEventType.ChatCompressed:
         break;
@@ -664,6 +686,7 @@ export class Task {
           undefined,
           false,
           errMessage,
+          traceId,
         );
         break;
       }
@@ -921,7 +944,7 @@ export class Task {
     }
   }
 
-  _sendTextContent(content: string): void {
+  _sendTextContent(content: string, traceId?: string): void {
     if (content === '') {
       return;
     }
@@ -936,11 +959,14 @@ export class Task {
         textContent,
         message,
         false,
+        undefined,
+        undefined,
+        traceId,
       ),
     );
   }
 
-  _sendThought(content: ThoughtSummary): void {
+  _sendThought(content: ThoughtSummary, traceId?: string): void {
     if (!content.subject && !content.description) {
       return;
     }
@@ -962,7 +988,15 @@ export class Task {
       kind: CoderAgentEvent.ThoughtEvent,
     };
     this.eventBus?.publish(
-      this._createStatusUpdateEvent(this.taskState, thought, message, false),
+      this._createStatusUpdateEvent(
+        this.taskState,
+        thought,
+        message,
+        false,
+        undefined,
+        undefined,
+        traceId,
+      ),
     );
   }
 }

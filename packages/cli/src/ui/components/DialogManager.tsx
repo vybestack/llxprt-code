@@ -23,7 +23,11 @@ import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { ProviderDialog } from './ProviderDialog.js';
 import { LoadProfileDialog } from './LoadProfileDialog.js';
 import { ProfileCreateWizard } from './ProfileCreateWizard/index.js';
+import { ProfileListDialog } from './ProfileListDialog.js';
+import { ProfileDetailDialog } from './ProfileDetailDialog.js';
+import { ProfileInlineEditor } from './ProfileInlineEditor.js';
 import { ToolsDialog } from './ToolsDialog.js';
+import type { Profile, Config } from '@vybestack/llxprt-code-core';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
 import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
 // import { ProQuotaDialog } from './ProQuotaDialog.js'; // TODO: Not yet ported from upstream
@@ -338,6 +342,58 @@ export const DialogManager = ({
           onClose={uiActions.exitCreateProfileDialog}
           onLoadProfile={uiActions.handleProfileSelect}
           availableProviders={uiState.providerOptions}
+        />
+      </Box>
+    );
+  }
+  if (uiState.isProfileListDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <ProfileListDialog
+          profiles={uiState.profileListItems}
+          onSelect={uiActions.loadProfileFromDetail}
+          onClose={uiActions.closeProfileListDialog}
+          onViewDetail={uiActions.viewProfileDetail}
+          isLoading={uiState.profileDialogLoading}
+          defaultProfileName={uiState.defaultProfileName ?? undefined}
+          activeProfileName={uiState.activeProfileName ?? undefined}
+        />
+      </Box>
+    );
+  }
+  if (uiState.isProfileDetailDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <ProfileDetailDialog
+          profileName={uiState.selectedProfileName ?? ''}
+          profile={uiState.selectedProfileData as Profile | null}
+          onClose={uiActions.closeProfileDetailDialog}
+          onLoad={uiActions.loadProfileFromDetail}
+          onDelete={uiActions.deleteProfileFromDetail}
+          onSetDefault={uiActions.setProfileAsDefault}
+          onEdit={uiActions.openProfileEditor}
+          isLoading={uiState.profileDialogLoading}
+          isDefault={uiState.selectedProfileName === uiState.defaultProfileName}
+          isActive={uiState.selectedProfileName === uiState.activeProfileName}
+          error={uiState.profileDialogError ?? undefined}
+        />
+      </Box>
+    );
+  }
+  if (uiState.isProfileEditorDialogOpen && uiState.selectedProfileData) {
+    return (
+      <Box flexDirection="column">
+        <ProfileInlineEditor
+          profileName={uiState.selectedProfileName ?? ''}
+          profile={uiState.selectedProfileData as Profile}
+          onSave={
+            uiActions.saveProfileFromEditor as (
+              name: string,
+              profile: Profile,
+            ) => void
+          }
+          onCancel={uiActions.closeProfileEditor}
+          error={uiState.profileDialogError ?? undefined}
         />
       </Box>
     );

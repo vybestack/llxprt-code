@@ -33,7 +33,6 @@ export class FileOutput {
       ? join(home, LLXPRT_DIR, 'debug')
       : join(process.cwd(), LLXPRT_DIR, 'debug');
     this.currentLogFile = this.generateLogFileName();
-    this.startFlushTimer();
   }
 
   static getInstance(): FileOutput {
@@ -46,6 +45,10 @@ export class FileOutput {
   async write(entry: LogEntry): Promise<void> {
     if (this.disposed) {
       return;
+    }
+
+    if (!this.flushTimeout) {
+      this.startFlushTimer();
     }
 
     // Add to queue
@@ -82,9 +85,16 @@ export class FileOutput {
       return;
     }
 
+    if (this.flushTimeout) {
+      return;
+    }
+
     this.flushTimeout = setTimeout(async () => {
       await this.flushQueue();
-      this.startFlushTimer();
+      this.flushTimeout = null;
+      if (this.writeQueue.length > 0) {
+        this.startFlushTimer();
+      }
     }, this.flushInterval);
   }
 

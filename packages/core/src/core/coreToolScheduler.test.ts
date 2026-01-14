@@ -41,6 +41,7 @@ import {
 import { ToolErrorType } from '../tools/tool-error.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
+import type { ToolCallBlock } from '../services/history/IContent.js';
 
 // Test constants for tool output truncation
 const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 30000;
@@ -1274,25 +1275,30 @@ describe('CoreToolScheduler edit cancellation', () => {
       parts: cancelledCall.response.responseParts as Part[],
     };
 
+    const turnKey = historyService.generateTurnKey();
     historyService.add(
       ContentConverters.toIContent(
         combinedContent,
-        historyService.getIdGeneratorCallback(),
+        historyService.getIdGeneratorCallback(turnKey),
+        undefined,
+        turnKey,
       ),
     );
 
     const curated = historyService.getCuratedForProvider();
     expect(curated).toHaveLength(2);
     expect(curated[0].speaker).toBe('ai');
+    expect(curated[0].blocks[0].type).toBe('tool_call');
     expect(curated[0].blocks[0]).toMatchObject({
       type: 'tool_call',
-      id: 'hist_tool_1',
       name: 'mockEditTool',
     });
+    const toolCallId = (curated[0].blocks[0] as ToolCallBlock).id;
+    expect(toolCallId).toMatch(/^hist_tool_[a-zA-Z0-9_-]+$/);
     expect(curated[1].speaker).toBe('tool');
     expect(curated[1].blocks[0]).toMatchObject({
       type: 'tool_response',
-      callId: 'hist_tool_1',
+      callId: toolCallId,
       toolName: 'mockEditTool',
     });
   });

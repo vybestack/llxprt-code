@@ -70,6 +70,9 @@ import {
   type IContent,
   type ToolCallBlock,
   type ToolResponseBlock,
+  coreEvents,
+  CoreEvent,
+  type UserFeedbackPayload,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { validateAuthMethod } from '../config/auth.js';
@@ -96,6 +99,7 @@ import { submitOAuthCode } from './oauth-submission.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from './hooks/useCreateProfileDialog.js';
+import { useProfileManagement } from './hooks/useProfileManagement.js';
 import { useToolsDialog } from './hooks/useToolsDialog.js';
 import {
   shouldUpdateTokenMetrics,
@@ -279,6 +283,30 @@ export const AppContainer = (props: AppContainerProps) => {
     onConsoleMessage: handleNewMessage,
   });
 
+  // Handle core event system for surfacing internal errors
+  useEffect(() => {
+    const handleUserFeedback = (payload: UserFeedbackPayload) => {
+      const messageType =
+        payload.severity === 'error'
+          ? 'error'
+          : payload.severity === 'warning'
+            ? 'warn'
+            : 'info';
+      handleNewMessage({
+        type: messageType,
+        content: payload.message,
+        count: 1,
+      });
+    };
+
+    coreEvents.on(CoreEvent.UserFeedback, handleUserFeedback);
+    coreEvents.drainFeedbackBacklog();
+
+    return () => {
+      coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
+    };
+  }, [handleNewMessage]);
+
   useEffect(() => {
     const consolePatcher = new ConsolePatcher({
       onNewMessage: handleNewMessage,
@@ -313,16 +341,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
         if (!historyService && lastHistoryServiceRef.current === null) {
           tokenLogger.debug(() => 'No history service available yet');
-        } else if (historyService) {
-          // Always get the current token count even if not a new instance
-          const currentTokens = historyService.getTotalTokens();
-          if (
-            currentTokens > 0 &&
-            currentTokens !== lastPublishedHistoryTokensRef.current
-          ) {
-            lastPublishedHistoryTokensRef.current = currentTokens;
-            updateHistoryTokenCount(currentTokens);
-          }
         }
 
         // Check if we have a new history service instance (happens after compression)
@@ -668,6 +686,13 @@ export const AppContainer = (props: AppContainerProps) => {
   useEffect(() => {
     if (!restoredSession || coreHistoryRestoredRef.current) {
       return;
+    }
+
+    const geminiClient = config.getGeminiClient();
+    if (geminiClient) {
+      geminiClient.resetChat().catch((err) => {
+        debug.error('Failed to initialize chat for session restore:', err);
+      });
     }
 
     const TIMEOUT_MS = 30000; // 30 second timeout
@@ -1235,6 +1260,36 @@ export const AppContainer = (props: AppContainerProps) => {
   });
 
   const {
+    showListDialog: isProfileListDialogOpen,
+    showDetailDialog: isProfileDetailDialogOpen,
+    showEditorDialog: isProfileEditorDialogOpen,
+    profiles: profileListItems,
+    isLoading: profileDialogLoading,
+    selectedProfileName,
+    selectedProfile: selectedProfileData,
+    defaultProfileName,
+    activeProfileName,
+    profileError: profileDialogError,
+    openListDialog: openProfileListDialog,
+    closeListDialog: closeProfileListDialog,
+    viewProfileDetail,
+    closeDetailDialog: closeProfileDetailDialog,
+    loadProfile: loadProfileFromDetail,
+    deleteProfile: deleteProfileFromDetail,
+    setDefault: setProfileAsDefault,
+    openEditor: openProfileEditor,
+    closeEditor: closeProfileEditor,
+    saveProfile: saveProfileFromEditor,
+  } = useProfileManagement({
+    addMessage: (msg) =>
+      addItem(
+        { type: msg.type as MessageType, text: msg.content },
+        msg.timestamp.getTime(),
+      ),
+    appState,
+  });
+
+  const {
     showDialog: isToolsDialogOpen,
     openDialog: openToolsDialogRaw,
     closeDialog: exitToolsDialog,
@@ -1276,7 +1331,7 @@ export const AppContainer = (props: AppContainerProps) => {
         config.getDebugMode(),
         config.getFileService(),
         settings.merged,
-        config.getExtensionContextFilePaths(),
+        config.getExtensions(),
         config.getFolderTrust(),
         settings.merged.ui?.memoryImportFormat || 'tree',
         config.getFileFilteringOptions(),
@@ -1423,6 +1478,9 @@ export const AppContainer = (props: AppContainerProps) => {
       openProviderDialog,
       openLoadProfileDialog,
       openCreateProfileDialog,
+      openProfileListDialog,
+      viewProfileDetail,
+      openProfileEditor,
       quit: setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
@@ -1443,6 +1501,9 @@ export const AppContainer = (props: AppContainerProps) => {
       openProviderDialog,
       openLoadProfileDialog,
       openCreateProfileDialog,
+      openProfileListDialog,
+      viewProfileDetail,
+      openProfileEditor,
       setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
@@ -2070,6 +2131,9 @@ export const AppContainer = (props: AppContainerProps) => {
     isProviderDialogOpen,
     isLoadProfileDialogOpen,
     isCreateProfileDialogOpen,
+    isProfileListDialogOpen,
+    isProfileDetailDialogOpen,
+    isProfileEditorDialogOpen,
     isToolsDialogOpen,
     isFolderTrustDialogOpen,
     showWorkspaceMigrationDialog,
@@ -2095,6 +2159,15 @@ export const AppContainer = (props: AppContainerProps) => {
     subagentDialogInitialView,
     subagentDialogInitialName,
     modelsDialogData,
+
+    // Profile management dialog data
+    profileListItems,
+    selectedProfileName,
+    selectedProfileData,
+    defaultProfileName,
+    activeProfileName,
+    profileDialogError,
+    profileDialogLoading,
 
     // Confirmation requests
     shellConfirmationRequest,
@@ -2242,6 +2315,18 @@ export const AppContainer = (props: AppContainerProps) => {
       openCreateProfileDialog,
       exitCreateProfileDialog,
 
+      // Profile management dialogs
+      openProfileListDialog,
+      closeProfileListDialog,
+      viewProfileDetail,
+      closeProfileDetailDialog,
+      loadProfileFromDetail,
+      deleteProfileFromDetail,
+      setProfileAsDefault,
+      openProfileEditor,
+      closeProfileEditor,
+      saveProfileFromEditor,
+
       // Tools dialog
       openToolsDialog,
       handleToolsSelect,
@@ -2343,6 +2428,16 @@ export const AppContainer = (props: AppContainerProps) => {
       exitLoadProfileDialog,
       openCreateProfileDialog,
       exitCreateProfileDialog,
+      openProfileListDialog,
+      closeProfileListDialog,
+      viewProfileDetail,
+      closeProfileDetailDialog,
+      loadProfileFromDetail,
+      deleteProfileFromDetail,
+      setProfileAsDefault,
+      openProfileEditor,
+      closeProfileEditor,
+      saveProfileFromEditor,
       openToolsDialog,
       handleToolsSelect,
       exitToolsDialog,

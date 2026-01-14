@@ -464,9 +464,9 @@ jobs:
   post_coverage_comment:
     name: 'Post Coverage Comment'
     runs-on: 'ubuntu-latest'
-    needs: 'test'
+    needs: ['test', 'doc_change_filter']
     if: |-
-      ${{ always() && github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name == github.repository) }}
+      ${{ always() && needs.test.result == 'success' && github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name == github.repository) }}
     continue-on-error: true
     permissions:
       contents: 'read' # For checkout

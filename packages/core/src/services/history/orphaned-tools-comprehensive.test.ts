@@ -1,4 +1,4 @@
-/**
+/*
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
@@ -17,7 +17,13 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
 
   describe('getCurated WITHOUT orphans', () => {
     it('should NOT add synthetic responses when tool responses exist', () => {
-      const toolCallId = historyService.generateHistoryId();
+      const toolCallId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'openai',
+        'raw-tool-id',
+        'test_tool',
+      );
 
       // Add user message
       historyService.add({
@@ -76,9 +82,27 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
 
     it('should handle multiple tool calls with all responses present', () => {
       const toolCallIds = [
-        historyService.generateHistoryId(),
-        historyService.generateHistoryId(),
-        historyService.generateHistoryId(),
+        historyService.generateHistoryId(
+          'turn-test',
+          0,
+          'openai',
+          'raw-0',
+          'tool',
+        ),
+        historyService.generateHistoryId(
+          'turn-test',
+          1,
+          'openai',
+          'raw-1',
+          'tool',
+        ),
+        historyService.generateHistoryId(
+          'turn-test',
+          2,
+          'openai',
+          'raw-2',
+          'tool',
+        ),
       ];
 
       historyService.add({
@@ -129,7 +153,13 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
 
   describe.skip('getCuratedForProvider WITH orphans (OBSOLETE - atomic implementation prevents orphans)', () => {
     it('should add synthetic response for truly orphaned tool call', () => {
-      const toolCallId = historyService.generateHistoryId();
+      const toolCallId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'openai',
+        'raw-orphaned',
+        'orphaned_tool',
+      );
 
       historyService.add({
         speaker: 'human',
@@ -173,9 +203,27 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
     });
 
     it('should handle mixed orphaned and completed tool calls', () => {
-      const completedId = historyService.generateHistoryId();
-      const orphanedId1 = historyService.generateHistoryId();
-      const orphanedId2 = historyService.generateHistoryId();
+      const completedId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'openai',
+        'raw-completed',
+        'tool1',
+      );
+      const orphanedId1 = historyService.generateHistoryId(
+        'turn-test',
+        1,
+        'openai',
+        'raw-orphaned-1',
+        'tool2',
+      );
+      const orphanedId2 = historyService.generateHistoryId(
+        'turn-test',
+        2,
+        'openai',
+        'raw-orphaned-2',
+        'tool3',
+      );
 
       historyService.add({
         speaker: 'human',
@@ -248,7 +296,13 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
 
   describe('getCuratedForProvider should not create circular references', () => {
     it('should return serializable history without circular references', () => {
-      const toolCallId = historyService.generateHistoryId();
+      const toolCallId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'openai',
+        'raw-serializable',
+        'test',
+      );
 
       historyService.add({
         speaker: 'human',
@@ -285,7 +339,13 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
     });
 
     it('should not modify original history when patching', () => {
-      const toolCallId = historyService.generateHistoryId();
+      const toolCallId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'openai',
+        'raw-patching',
+        'test',
+      );
 
       historyService.add({
         speaker: 'ai',
@@ -350,7 +410,13 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
     });
 
     it.skip('should not add duplicate synthetic responses on repeated calls - OBSOLETE', () => {
-      const toolCallId = historyService.generateHistoryId();
+      const toolCallId = historyService.generateHistoryId(
+        'turn-test',
+        0,
+        'openai',
+        'raw-duplicate',
+        'test',
+      );
 
       historyService.add({
         speaker: 'ai',

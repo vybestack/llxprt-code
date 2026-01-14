@@ -32,6 +32,15 @@ describe('Task', () => {
       mockEventBus,
     );
 
+    // Create a mock scheduler
+    task.scheduler = {
+      schedule: vi.fn().mockResolvedValue(undefined),
+      cancelAll: vi.fn(),
+      dispose: vi.fn(),
+      toolCalls: [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
     task['setTaskStateAndPublishUpdate'] = vi.fn();
     task['getProposedContent'] = vi.fn().mockResolvedValue('new content');
 
@@ -55,5 +64,43 @@ describe('Task', () => {
     await task.scheduleToolCalls(requests, abortController.signal);
 
     expect(requests).toEqual(originalRequests);
+  });
+
+  describe('acceptAgentMessage', () => {
+    it('should set currentTraceId when event has traceId', async () => {
+      const mockConfig = createMockConfig();
+      const mockEventBus: ExecutionEventBus = {
+        publish: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        once: vi.fn(),
+        removeAllListeners: vi.fn(),
+        finished: vi.fn(),
+      };
+
+      // @ts-expect-error - Calling private constructor for test purposes.
+      const task = new Task(
+        'task-id',
+        'context-id',
+        mockConfig as Config,
+        mockEventBus,
+      );
+
+      const event = {
+        type: 'content',
+        value: 'test',
+        traceId: 'test-trace-id',
+      };
+
+      await task.acceptAgentMessage(event);
+
+      expect(mockEventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            traceId: 'test-trace-id',
+          }),
+        }),
+      );
+    });
   });
 });

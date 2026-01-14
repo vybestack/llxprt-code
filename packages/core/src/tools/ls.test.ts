@@ -246,7 +246,7 @@ describe('LSTool', () => {
       expect(result.llmContent).toContain('file1.js');
       expect(result.llmContent).toContain('file2.js');
       expect(result.llmContent).not.toContain('ignored.js');
-      expect(result.returnDisplay).toBe('Listed 2 item(s). (1 git-ignored)');
+      expect(result.returnDisplay).toBe('Listed 2 item(s). (1 ignored)');
     });
 
     it('should respect llxprtignore patterns', async () => {
@@ -275,7 +275,7 @@ describe('LSTool', () => {
       expect(result.llmContent).toContain('file1.js');
       expect(result.llmContent).toContain('file2.js');
       expect(result.llmContent).not.toContain('private.js');
-      expect(result.returnDisplay).toBe('Listed 2 item(s). (1 llxprt-ignored)');
+      expect(result.returnDisplay).toBe('Listed 2 item(s). (1 ignored)');
     });
 
     it('should handle non-directory paths', async () => {

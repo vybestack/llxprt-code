@@ -69,6 +69,9 @@ interface SlashCommandProcessorActions {
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void;
   openCreateProfileDialog: () => void;
+  openProfileListDialog: () => void;
+  viewProfileDetail: (profileName: string, openedDirectly?: boolean) => void;
+  openProfileEditor: (profileName: string, openedDirectly?: boolean) => void;
   quit: (messages: HistoryItem[]) => void;
   setDebugMessage: (message: string) => void;
   toggleCorgiMode: () => void;
@@ -497,6 +500,48 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'createProfile':
                       actions.openCreateProfileDialog();
+                      return { type: 'handled' };
+                    case 'profileList':
+                      slashCommandLogger.log(
+                        () => 'opening profileList dialog',
+                      );
+                      actions.openProfileListDialog();
+                      return { type: 'handled' };
+                    case 'profileDetail':
+                      if (
+                        result.dialogData &&
+                        typeof result.dialogData === 'object' &&
+                        'profileName' in result.dialogData &&
+                        typeof (result.dialogData as { profileName: unknown })
+                          .profileName === 'string'
+                      ) {
+                        const profileName = (
+                          result.dialogData as { profileName: string }
+                        ).profileName;
+                        slashCommandLogger.log(
+                          () => `opening profileDetail for ${profileName}`,
+                        );
+                        // Pass true for openedDirectly since this came from /profile show
+                        actions.viewProfileDetail(profileName, true);
+                      }
+                      return { type: 'handled' };
+                    case 'profileEditor':
+                      if (
+                        result.dialogData &&
+                        typeof result.dialogData === 'object' &&
+                        'profileName' in result.dialogData &&
+                        typeof (result.dialogData as { profileName: unknown })
+                          .profileName === 'string'
+                      ) {
+                        const profileName = (
+                          result.dialogData as { profileName: string }
+                        ).profileName;
+                        slashCommandLogger.log(
+                          () => `opening profileEditor for ${profileName}`,
+                        );
+                        // Pass true for openedDirectly since this came from /profile edit
+                        actions.openProfileEditor(profileName, true);
+                      }
                       return { type: 'handled' };
                     case 'saveProfile':
                       return { type: 'handled' };

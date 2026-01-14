@@ -154,7 +154,7 @@ export const memoryCommand: SlashCommand = {
                 config.getDebugMode(),
                 config.getFileService(),
                 settings.merged,
-                config.getExtensionContextFilePaths(),
+                config.getExtensions(),
                 config.isTrustedFolder(),
                 context.services.settings.merged.ui?.memoryImportFormat ||
                   'tree', // Use setting or default to 'tree'

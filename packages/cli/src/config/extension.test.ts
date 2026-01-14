@@ -293,6 +293,40 @@ describe('extension tests', () => {
       ]);
     });
 
+    it('should hydrate ${extensionPath} correctly for linked extensions', async () => {
+      const sourceExtDir = createExtension({
+        extensionsDir: tempWorkspaceDir,
+        name: 'my-linked-extension-with-path',
+        version: '1.0.0',
+        mcpServers: {
+          'test-server': {
+            command: 'node',
+            args: ['${extensionPath}${/}server${/}index.js'],
+            cwd: '${extensionPath}${/}server',
+          },
+        },
+      });
+
+      await installOrUpdateExtension(
+        {
+          source: sourceExtDir,
+          type: 'link',
+        },
+        async (_) => true,
+      );
+
+      const extensions = loadExtensions(
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+      );
+      expect(extensions).toHaveLength(1);
+      expect(extensions[0].mcpServers?.['test-server'].cwd).toBe(
+        path.join(sourceExtDir, 'server'),
+      );
+      expect(extensions[0].mcpServers?.['test-server'].args).toEqual([
+        path.join(sourceExtDir, 'server', 'index.js'),
+      ]);
+    });
+
     it('should resolve environment variables in extension configuration', () => {
       process.env['TEST_API_KEY'] = 'test-api-key-123';
       process.env['TEST_DB_URL'] = 'postgresql://localhost:5432/testdb';
@@ -586,10 +620,9 @@ describe('extension tests', () => {
       );
     });
 
-    it('should log an error for unknown extensions', () => {
-      const consoleSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+    it('should emit feedback for unknown extensions', async () => {
+      const { coreEvents } = await import('@vybestack/llxprt-code-core');
+      const feedbackSpy = vi.spyOn(coreEvents, 'emitFeedback');
       annotateActiveExtensions(
         extensions,
         '/path/to/workspace',
@@ -598,8 +631,11 @@ describe('extension tests', () => {
           ['ext4'],
         ),
       );
-      expect(consoleSpy).toHaveBeenCalledWith('Extension not found: ext4');
-      consoleSpy.mockRestore();
+      expect(feedbackSpy).toHaveBeenCalledWith(
+        'error',
+        'Extension not found: ext4',
+      );
+      feedbackSpy.mockRestore();
     });
 
     describe('autoUpdate', () => {
@@ -752,7 +788,7 @@ describe('extension tests', () => {
           async (_) => true,
         ),
       ).rejects.toThrow(
-        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json file.`,
+        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json or gemini-extension.json file.`,
       );
 
       const targetExtDir = path.join(userExtensionsDir, 'bad-extension');
@@ -771,7 +807,7 @@ describe('extension tests', () => {
           async (_) => true,
         ),
       ).rejects.toThrow(
-        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json file.`,
+        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json or gemini-extension.json file.`,
       );
     });
 

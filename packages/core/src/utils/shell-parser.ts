@@ -140,6 +140,138 @@ export function extractCommandNames(tree: Tree): string[] {
 }
 
 /**
+ * Parsed command detail containing the command name and full text.
+ */
+export interface ParsedCommandDetail {
+  name: string;
+  text: string;
+}
+
+/**
+ * Result of parsing command details.
+ */
+export interface CommandParseResult {
+  details: ParsedCommandDetail[];
+  hasError: boolean;
+}
+
+/**
+ * Normalize a command name by removing quotes and extracting the base name.
+ */
+function normalizeCommandName(raw: string): string {
+  if (raw.length >= 2) {
+    const first = raw[0];
+    const last = raw[raw.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return raw.slice(1, -1);
+    }
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  return trimmed.split(/[\\/]/).pop() ?? trimmed;
+}
+
+/**
+ * Extract command name from a tree-sitter node.
+ * Handles different node types: command, declaration_command, unset_command, test_command.
+ */
+function extractNameFromNode(node: Node): string | null {
+  switch (node.type) {
+    case 'command': {
+      const nameNode = node.childForFieldName('name');
+      if (!nameNode) {
+        return null;
+      }
+      return normalizeCommandName(nameNode.text);
+    }
+    case 'declaration_command':
+    case 'unset_command':
+    case 'test_command': {
+      const firstChild = node.child(0);
+      if (!firstChild) {
+        return null;
+      }
+      return normalizeCommandName(firstChild.text);
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Collect all command details from a tree by walking the entire AST.
+ * This includes commands inside command substitutions ($(), ``), process substitutions (<(), >()),
+ * function bodies, subshells, and any other nested contexts.
+ *
+ * This is essential for security - we need to validate ALL commands that will execute,
+ * not just top-level commands.
+ */
+export function collectCommandDetails(
+  tree: Tree,
+  source: string,
+): ParsedCommandDetail[] {
+  const stack: Node[] = [tree.rootNode];
+  const details: ParsedCommandDetail[] = [];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+
+    const commandName = extractNameFromNode(current);
+    if (commandName) {
+      details.push({
+        name: commandName,
+        text: source.slice(current.startIndex, current.endIndex).trim(),
+      });
+    }
+
+    // Push children in reverse order so we process them left-to-right
+    for (let i = current.namedChildCount - 1; i >= 0; i -= 1) {
+      const child = current.namedChild(i);
+      if (child) {
+        stack.push(child);
+      }
+    }
+  }
+
+  return details;
+}
+
+/**
+ * Parse a shell command and extract all command details including nested commands.
+ * Returns null if parsing fails or tree-sitter is not available.
+ */
+export function parseCommandDetails(
+  command: string,
+): CommandParseResult | null {
+  if (!parser || !bashLanguage) {
+    return null;
+  }
+
+  try {
+    const tree = parser.parse(command);
+    if (!tree) {
+      return { details: [], hasError: true };
+    }
+
+    // Check for syntax errors in the tree
+    const hasError = tree.rootNode.hasError;
+    if (hasError) {
+      return { details: [], hasError: true };
+    }
+
+    const details = collectCommandDetails(tree, command);
+    return { details, hasError: false };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check if a command contains command substitution patterns.
  * Uses tree-sitter AST to accurately detect:
  * - $() command substitution

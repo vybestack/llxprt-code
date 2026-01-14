@@ -642,6 +642,55 @@ describe('retryWithBackoff', () => {
     });
 
     /**
+     * @requirement issue1081 - Anthropic overloaded_error bucket failover
+     * @scenario Bucket failover on Anthropic overloaded_error
+     * @given A request that returns Anthropic overloaded_error (no HTTP status)
+     * @when onPersistent429 callback returns true (switch succeeded)
+     * @then Retry should continue with new bucket
+     */
+    it('should call onPersistent429 callback on Anthropic overloaded_error', async () => {
+      vi.useFakeTimers();
+      let attempt = 0;
+      let failoverCalled = false;
+
+      const mockFn = vi.fn(async () => {
+        attempt++;
+        if (attempt <= 1) {
+          // Simulate Anthropic's overloaded_error response structure
+          const error: HttpError & {
+            error?: { type?: string; message?: string };
+          } = new Error('Overloaded');
+          error.error = {
+            type: 'overloaded_error',
+            message: 'Overloaded',
+          };
+          throw error;
+        }
+        return 'success after bucket switch';
+      });
+
+      const failoverCallback = vi.fn(async () => {
+        failoverCalled = true;
+        return true; // Indicate bucket switch succeeded
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 1,
+        initialDelayMs: 100,
+        onPersistent429: failoverCallback,
+        authType: 'oauth-bucket',
+      });
+
+      await vi.runAllTimersAsync();
+      await expect(promise).resolves.toBe('success after bucket switch');
+
+      // onPersistent429 should be called after the first overloaded_error
+      expect(failoverCallback).toHaveBeenCalled();
+      expect(failoverCalled).toBe(true);
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
+    /**
      * @requirement PLAN-20251213issue490 Bucket failover
      * @scenario Bucket failover on 402 errors
      * @given A request that returns 402 for first bucket
@@ -752,6 +801,52 @@ describe('retryWithBackoff', () => {
       expect(result.message).toBe('Rate limit exceeded');
       expect(failoverCallback).toHaveBeenCalledTimes(1);
       expect(mockFn).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * @requirement issue1081 - Anthropic overloaded_error consecutive tracking
+     * @scenario Consecutive overloaded_error tracking for bucket failover
+     * @given A request that returns multiple Anthropic overloaded_error responses
+     * @when onPersistent429 callback is configured
+     * @then Should track consecutive overloaded_errors like 429s
+     */
+    it('should track consecutive overloaded_errors for bucket failover', async () => {
+      vi.useFakeTimers();
+      let failoverCalled = false;
+
+      const mockFn = vi.fn(async () => {
+        if (!failoverCalled) {
+          // Simulate Anthropic's overloaded_error response structure
+          const error: HttpError & {
+            error?: { type?: string; message?: string };
+          } = new Error('Overloaded');
+          error.error = {
+            type: 'overloaded_error',
+            message: 'Overloaded',
+          };
+          throw error;
+        }
+        return 'success after bucket switch';
+      });
+
+      const failoverCallback = vi.fn(async () => {
+        failoverCalled = true;
+        return true;
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 100,
+        onPersistent429: failoverCallback,
+        authType: 'oauth-bucket',
+      });
+
+      await vi.runAllTimersAsync();
+      await expect(promise).resolves.toBe('success after bucket switch');
+
+      // onPersistent429 should be called after the first overloaded_error
+      expect(failoverCallback).toHaveBeenCalledTimes(1);
+      expect(mockFn).toHaveBeenCalledTimes(2);
     });
   });
 

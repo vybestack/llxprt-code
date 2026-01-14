@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 import { PartListUnion, PartUnion } from '@google/genai';
 import {
@@ -464,8 +465,31 @@ export async function handleAtCommand({
           if (match) {
             const filePathSpecInContent = match[1]; // This is a resolved pathSpec
             const fileActualContent = match[2].trim();
+            let displayPathSpec = filePathSpecInContent;
+            if (path.isAbsolute(filePathSpecInContent)) {
+              let targetDir = config.getTargetDir();
+              try {
+                targetDir = fsSync.realpathSync(targetDir);
+              } catch {
+                targetDir = path.normalize(targetDir);
+              }
+              let contentPath = filePathSpecInContent;
+              try {
+                contentPath = fsSync.realpathSync(filePathSpecInContent);
+              } catch {
+                contentPath = path.normalize(filePathSpecInContent);
+              }
+              const relativePathSpec = path.relative(targetDir, contentPath);
+              if (
+                relativePathSpec &&
+                !relativePathSpec.startsWith('..') &&
+                !path.isAbsolute(relativePathSpec)
+              ) {
+                displayPathSpec = relativePathSpec;
+              }
+            }
             processedQueryParts.push({
-              text: `\nContent from @${filePathSpecInContent}:\n`,
+              text: `\nContent from @${displayPathSpec}:\n`,
             });
             processedQueryParts.push({ text: fileActualContent });
           } else {

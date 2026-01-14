@@ -24,10 +24,10 @@ The Checkpointing feature is disabled by default. To enable it, you can either u
 
 ### Using the Command-Line Flag
 
-You can enable checkpointing for the current session by using the `--checkpointing` flag when starting the LLxprt Code:
+You can enable checkpointing for the current session by using the `--checkpointing` flag when starting LLxprt Code:
 
 ```bash
-gemini --checkpointing
+llxprt --checkpointing
 ```
 
 ### Using the `settings.json` File

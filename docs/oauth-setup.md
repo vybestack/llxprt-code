@@ -8,6 +8,7 @@ llxprt-code supports OAuth 2.0 authentication for multiple providers:
 
 - **Gemini** (Google AI) - Browser-based OAuth flow
 - **Anthropic** - Authorization code via dialog
+- **OpenAI** (Codex) - Browser-based OAuth flow for ChatGPT Plus/Pro subscribers
 - **Qwen** (Alibaba Cloud) - Device code flow
 
 OAuth provides secure authentication without requiring API keys, offering better security and user experience.
@@ -36,16 +37,19 @@ The `/auth` command manages OAuth authentication for all providers:
 # Enable OAuth for a provider (authentication happens on first use)
 /auth gemini enable
 /auth anthropic enable
+/auth codex enable
 /auth qwen enable
 
 # Disable OAuth for a provider
 /auth gemini disable
 /auth anthropic disable
+/auth codex disable
 /auth qwen disable
 
 # Log out from a provider (clears stored tokens)
 /auth gemini logout
 /auth anthropic logout
+/auth codex logout
 /auth qwen logout
 ```
 
@@ -76,6 +80,24 @@ The `/auth` command manages OAuth authentication for all providers:
 5. Paste the code into the dialog
 6. Authentication complete!
 
+### OpenAI Codex OAuth Setup (ChatGPT Plus/Pro)
+
+If you have a ChatGPT Plus or Pro subscription, you can authenticate using OAuth:
+
+1. Enable OAuth for OpenAI:
+
+   ```bash
+   /auth codex enable
+   ```
+
+2. Make your first request to OpenAI
+3. Browser will open to ChatGPT login page
+4. Sign in with your ChatGPT Plus/Pro account
+5. Authorize llxprt-code to access your account
+6. Authentication complete!
+
+**Note:** This requires an active ChatGPT Plus ($20/month) or Pro subscription. For pay-per-token API access, use API keys instead.
+
 ### Qwen OAuth Setup
 
 1. Enable OAuth for Qwen:
@@ -105,6 +127,7 @@ You can enable OAuth for multiple providers simultaneously:
 ```bash
 /auth gemini enable     # Enable Gemini OAuth
 /auth anthropic enable  # Enable Anthropic OAuth
+/auth codex enable     # Enable OpenAI Codex OAuth
 /auth qwen enable       # Enable Qwen OAuth
 ```
 
@@ -138,6 +161,7 @@ OAuth tokens are stored as plain JSON files:
 - **Files**:
   - `gemini.json` - Gemini OAuth tokens
   - `anthropic.json` - Anthropic OAuth tokens
+  - `codex.json` - OpenAI Codex OAuth tokens
   - `qwen.json` - Qwen OAuth tokens
 - **Permissions**: `0600` (user read/write only)
 - **Note**: Tokens are stored as plain text JSON files. For enhanced security in production environments, consider using system keychains or encrypted storage.
@@ -166,8 +190,9 @@ Different providers have different timeout behaviors:
 
 1. **Gemini**: No timeout - browser flow waits for user
 2. **Anthropic**: Dialog waits indefinitely for code input
-3. **Qwen**: Device flow has polling timeout (typically 5-15 minutes)
-4. **Solution**: Complete authentication promptly after initiating
+3. **OpenAI**: No timeout - browser flow waits for user
+4. **Qwen**: Device flow has polling timeout (typically 5-15 minutes)
+5. **Solution**: Complete authentication promptly after initiating
 
 ### Token Refresh Issues
 
@@ -265,7 +290,7 @@ If you already have Gemini OAuth:
 | `/auth <provider> disable` | Disable OAuth for provider            |
 | `/auth <provider> logout`  | Clear OAuth tokens for provider       |
 
-Supported providers: `gemini`, `anthropic`, `qwen`
+Supported providers: `gemini`, `anthropic`, `codex`, `qwen`
 
 ## File Locations
 
@@ -274,6 +299,7 @@ Supported providers: `gemini`, `anthropic`, `qwen`
 | `~/.llxprt/oauth/`               | OAuth token storage directory |
 | `~/.llxprt/oauth/gemini.json`    | Gemini OAuth tokens           |
 | `~/.llxprt/oauth/anthropic.json` | Anthropic OAuth tokens        |
+| `~/.llxprt/oauth/codex.json`     | OpenAI Codex OAuth tokens     |
 | `~/.llxprt/oauth/qwen.json`      | Qwen OAuth tokens             |
 
 ## Support

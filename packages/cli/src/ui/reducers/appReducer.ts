@@ -21,6 +21,9 @@ export type AppAction =
         | 'privacy'
         | 'loadProfile'
         | 'createProfile'
+        | 'profileList'
+        | 'profileDetail'
+        | 'profileEditor'
         | 'tools'
         | 'oauthCode';
     }
@@ -34,6 +37,9 @@ export type AppAction =
         | 'privacy'
         | 'loadProfile'
         | 'createProfile'
+        | 'profileList'
+        | 'profileDetail'
+        | 'profileEditor'
         | 'tools'
         | 'oauthCode';
     }
@@ -52,6 +58,9 @@ export interface AppState {
     privacy: boolean;
     loadProfile: boolean;
     createProfile: boolean;
+    profileList: boolean;
+    profileDetail: boolean;
+    profileEditor: boolean;
     tools: boolean;
     oauthCode: boolean;
   };
@@ -76,6 +85,9 @@ export const initialAppState: AppState = {
     privacy: false,
     loadProfile: false,
     createProfile: false,
+    profileList: false,
+    profileDetail: false,
+    profileEditor: false,
     tools: false,
     oauthCode: false,
   },

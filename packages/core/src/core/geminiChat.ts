@@ -472,11 +472,12 @@ export class GeminiChat {
     });
 
     if (initialHistory.length > 0) {
-      const idGen = this.historyService.getIdGeneratorCallback();
       for (const content of initialHistory) {
+        const turnKey = this.historyService.generateTurnKey();
+        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
         const matcher = this.makePositionMatcher();
         this.historyService.add(
-          ContentConverters.toIContent(content, idGen, matcher),
+          ContentConverters.toIContent(content, idGen, matcher, turnKey),
           model,
         );
       }
@@ -693,11 +694,26 @@ export class GeminiChat {
 
     const userContent = normalizeToolInteractionInput(params.message);
 
-    const idGen = this.historyService.getIdGeneratorCallback();
-    const matcher = this.makePositionMatcher();
     const userIContents: IContent[] = Array.isArray(userContent)
-      ? userContent.map((c) => ContentConverters.toIContent(c, idGen, matcher))
-      : [ContentConverters.toIContent(userContent, idGen, matcher)];
+      ? userContent.map((c) => {
+          const turnKey = this.historyService.generateTurnKey();
+          const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+          const matcher = this.makePositionMatcher();
+          return ContentConverters.toIContent(c, idGen, matcher, turnKey);
+        })
+      : [
+          (() => {
+            const turnKey = this.historyService.generateTurnKey();
+            const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+            const matcher = this.makePositionMatcher();
+            return ContentConverters.toIContent(
+              userContent,
+              idGen,
+              matcher,
+              turnKey,
+            );
+          })(),
+        ];
 
     const pendingTokens = await this.estimatePendingTokens(userIContents);
     await this.ensureCompressionBeforeSend(prompt_id, pendingTokens, 'send');
@@ -734,7 +750,10 @@ export class GeminiChat {
 
     // Build a provider-safe request transcript that includes the new message(s)
     // without committing them to history yet.
-    const iContents = this.historyService.getCuratedForProvider(userIContents);
+    const strictToolAdjacency = provider.name.includes('anthropic');
+    const iContents = this.historyService.getCuratedForProvider(userIContents, {
+      strictToolAdjacency,
+    });
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-004.1
@@ -897,29 +916,38 @@ export class GeminiChat {
             fullAutomaticFunctionCallingHistory.slice(index) ?? [];
 
           for (const content of automaticFunctionCallingHistory) {
-            const idGen = this.historyService.getIdGeneratorCallback();
+            const turnKey = this.historyService.generateTurnKey();
+            const idGen = this.historyService.getIdGeneratorCallback(turnKey);
             const matcher = this.makePositionMatcher();
             this.historyService.add(
-              ContentConverters.toIContent(content, idGen, matcher),
+              ContentConverters.toIContent(content, idGen, matcher, turnKey),
               currentModel,
             );
           }
         } else {
           // Regular case: Add user content first
-          const idGen = this.historyService.getIdGeneratorCallback();
-          const matcher = this.makePositionMatcher();
-
           // Handle both single Content and Content[] from normalizeToolInteractionInput
           if (Array.isArray(userContent)) {
             for (const content of userContent) {
+              const turnKey = this.historyService.generateTurnKey();
+              const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+              const matcher = this.makePositionMatcher();
               this.historyService.add(
-                ContentConverters.toIContent(content, idGen, matcher),
+                ContentConverters.toIContent(content, idGen, matcher, turnKey),
                 currentModel,
               );
             }
           } else {
+            const turnKey = this.historyService.generateTurnKey();
+            const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+            const matcher = this.makePositionMatcher();
             this.historyService.add(
-              ContentConverters.toIContent(userContent, idGen, matcher),
+              ContentConverters.toIContent(
+                userContent,
+                idGen,
+                matcher,
+                turnKey,
+              ),
               currentModel,
             );
           }
@@ -930,9 +958,15 @@ export class GeminiChat {
           // Check if this is pure thinking content that should be filtered
           if (!this.isThoughtContent(outputContent)) {
             // Not pure thinking, add it
-            const idGen = this.historyService.getIdGeneratorCallback();
+            const turnKey = this.historyService.generateTurnKey();
+            const idGen = this.historyService.getIdGeneratorCallback(turnKey);
             this.historyService.add(
-              ContentConverters.toIContent(outputContent, idGen),
+              ContentConverters.toIContent(
+                outputContent,
+                idGen,
+                undefined,
+                turnKey,
+              ),
               currentModel,
             );
           }
@@ -945,9 +979,15 @@ export class GeminiChat {
             fullAutomaticFunctionCallingHistory.length === 0
           ) {
             const emptyModelContent: Content = { role: 'model', parts: [] };
-            const idGen = this.historyService.getIdGeneratorCallback();
+            const turnKey = this.historyService.generateTurnKey();
+            const idGen = this.historyService.getIdGeneratorCallback(turnKey);
             this.historyService.add(
-              ContentConverters.toIContent(emptyModelContent, idGen),
+              ContentConverters.toIContent(
+                emptyModelContent,
+                idGen,
+                undefined,
+                turnKey,
+              ),
               currentModel,
             );
           }
@@ -1031,13 +1071,26 @@ export class GeminiChat {
     const userContent: Content | Content[] = normalizeToolInteractionInput(
       params.message,
     );
-    const idGen = this.historyService.getIdGeneratorCallback();
-    const matcher = this.makePositionMatcher();
     const userIContents: IContent[] = Array.isArray(userContent)
-      ? userContent.map((content) =>
-          ContentConverters.toIContent(content, idGen, matcher),
-        )
-      : [ContentConverters.toIContent(userContent, idGen, matcher)];
+      ? userContent.map((content) => {
+          const turnKey = this.historyService.generateTurnKey();
+          const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+          const matcher = this.makePositionMatcher();
+          return ContentConverters.toIContent(content, idGen, matcher, turnKey);
+        })
+      : [
+          (() => {
+            const turnKey = this.historyService.generateTurnKey();
+            const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+            const matcher = this.makePositionMatcher();
+            return ContentConverters.toIContent(
+              userContent,
+              idGen,
+              matcher,
+              turnKey,
+            );
+          })(),
+        ];
     const pendingTokens = await this.estimatePendingTokens(userIContents);
     await this.ensureCompressionBeforeSend(prompt_id, pendingTokens, 'stream');
 
@@ -1148,13 +1201,26 @@ export class GeminiChat {
     }
 
     const userContent = normalizeToolInteractionInput(params.message);
-    const idGen = this.historyService.getIdGeneratorCallback();
-    const matcher = this.makePositionMatcher();
     const userIContents: IContent[] = Array.isArray(userContent)
-      ? userContent.map((content) =>
-          ContentConverters.toIContent(content, idGen, matcher),
-        )
-      : [ContentConverters.toIContent(userContent, idGen, matcher)];
+      ? userContent.map((content) => {
+          const turnKey = this.historyService.generateTurnKey();
+          const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+          const matcher = this.makePositionMatcher();
+          return ContentConverters.toIContent(content, idGen, matcher, turnKey);
+        })
+      : [
+          (() => {
+            const turnKey = this.historyService.generateTurnKey();
+            const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+            const matcher = this.makePositionMatcher();
+            return ContentConverters.toIContent(
+              userContent,
+              idGen,
+              matcher,
+              turnKey,
+            );
+          })(),
+        ];
 
     const requestContents = ContentConverters.toGeminiContents(userIContents);
     // @plan PLAN-20251027-STATELESS5.P10
@@ -1335,30 +1401,41 @@ export class GeminiChat {
 
     const apiCall = async () => {
       // Convert user content to IContent first so we can check if it's a tool response
-      const idGen = this.historyService.getIdGeneratorCallback();
-      const matcher = this.makePositionMatcher();
-
       let requestContents: IContent[];
       if (Array.isArray(userContent)) {
         // This is a paired tool call/response - convert each separately
-        const userIContents = userContent.map((content) =>
-          ContentConverters.toIContent(content, idGen, matcher),
-        );
+        const userIContents = userContent.map((content) => {
+          const turnKey = this.historyService.generateTurnKey();
+          const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+          const matcher = this.makePositionMatcher();
+          return ContentConverters.toIContent(content, idGen, matcher, turnKey);
+        });
         // Build a provider-safe request transcript that includes the new message(s)
         // without committing them to history yet.
-        requestContents =
-          this.historyService.getCuratedForProvider(userIContents);
+        const strictToolAdjacency = provider.name.includes('anthropic');
+        requestContents = this.historyService.getCuratedForProvider(
+          userIContents,
+          {
+            strictToolAdjacency,
+          },
+        );
       } else {
+        const turnKey = this.historyService.generateTurnKey();
+        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+        const matcher = this.makePositionMatcher();
         const userIContent = ContentConverters.toIContent(
           userContent,
           idGen,
           matcher,
+          turnKey,
         );
         // Build a provider-safe request transcript that includes the new message
         // without committing it to history yet.
-        requestContents = this.historyService.getCuratedForProvider([
-          userIContent,
-        ]);
+        const strictToolAdjacency = provider.name.includes('anthropic');
+        requestContents = this.historyService.getCuratedForProvider(
+          [userIContent],
+          { strictToolAdjacency },
+        );
       }
 
       // DEBUG: Check for malformed entries
@@ -1509,8 +1586,9 @@ export class GeminiChat {
    * Adds a new entry to the chat history.
    */
   addHistory(content: Content): void {
+    const turnKey = this.historyService.generateTurnKey();
     this.historyService.add(
-      ContentConverters.toIContent(content),
+      ContentConverters.toIContent(content, undefined, undefined, turnKey),
       this.runtimeState.model,
     );
   }
@@ -1518,8 +1596,9 @@ export class GeminiChat {
     this.historyService.clear();
     const currentModel = this.runtimeState.model;
     for (const content of history) {
+      const turnKey = this.historyService.generateTurnKey();
       this.historyService.add(
-        ContentConverters.toIContent(content),
+        ContentConverters.toIContent(content, undefined, undefined, turnKey),
         currentModel,
       );
     }
@@ -2363,30 +2442,38 @@ export class GeminiChat {
     ) {
       const curatedAfc = extractCuratedHistory(automaticFunctionCallingHistory);
       for (const content of curatedAfc) {
-        newHistoryEntries.push(ContentConverters.toIContent(content));
+        const turnKey = this.historyService.generateTurnKey();
+        newHistoryEntries.push(
+          ContentConverters.toIContent(content, undefined, undefined, turnKey),
+        );
       }
     } else {
       // Handle both single Content and Content[] (for paired tool call/response)
-      const idGen = this.historyService.getIdGeneratorCallback();
-      const matcher = this.makePositionMatcher();
-
       if (Array.isArray(userInput)) {
         // This is a paired tool call/response from the executor
         // Add each part to history
         for (const content of userInput) {
+          const turnKey = this.historyService.generateTurnKey();
+          const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+          const matcher = this.makePositionMatcher();
           const userIContent = ContentConverters.toIContent(
             content,
             idGen,
             matcher,
+            turnKey,
           );
           newHistoryEntries.push(userIContent);
         }
       } else {
         // Normal user message
+        const turnKey = this.historyService.generateTurnKey();
+        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
+        const matcher = this.makePositionMatcher();
         const userIContent = ContentConverters.toIContent(
           userInput,
           idGen,
           matcher,
+          turnKey,
         );
         newHistoryEntries.push(userIContent);
       }
@@ -2441,7 +2528,13 @@ export class GeminiChat {
       if (!hasToolCalls) {
         // Only add non-tool-call responses to history immediately
         // Tool calls will be added when the executor returns with the response
-        const iContent = ContentConverters.toIContent(content);
+        const turnKey = this.historyService.generateTurnKey();
+        const iContent = ContentConverters.toIContent(
+          content,
+          undefined,
+          undefined,
+          turnKey,
+        );
 
         // Add usage metadata if available from streaming
         if (usageMetadata) {

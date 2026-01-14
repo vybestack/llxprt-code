@@ -22,14 +22,68 @@ on:
         type: 'string'
 
 jobs:
+  e2e_doc_change_filter:
+    name: 'Detect doc-only changes for E2E'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      docs_only: '${{ steps.detect.outputs.docs_only }}'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: 'Determine documentation-only PR'
+        id: 'detect'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+          PR_NUMBER: >-
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
+        run: |
+          set -euo pipefail
+
+          # For non-PR events (push, merge_group, workflow_dispatch), always run tests
+          if [[ -z "${PR_NUMBER:-}" ]]; then
+            echo "docs_only=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files="$(gh api \
+            --paginate \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --jq '.[].filename' || true)"
+
+          if [[ -z "$files" ]]; then
+            echo "docs_only=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          docs_only=true
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              docs/*|README.md|README.*|*.md|*.mdx|*.rst|*.txt|*.adoc)
+                ;;
+              *)
+                docs_only=false
+                break
+                ;;
+            esac
+          done <<<"$files"
+
+          echo "docs_only=${docs_only}" >>"$GITHUB_OUTPUT"
+
   e2e_linux:
     name: 'E2E Test (Linux) - ${{ matrix.sandbox }}'
+    needs: e2e_doc_change_filter
     if: |
-      github.event_name == 'push' ||
+      (github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event.label.name == 'maintainer:e2e:ok')
+      (github.event.label.name == 'maintainer:e2e:ok')) &&
+      needs.e2e_doc_change_filter.outputs.docs_only != 'true'
     runs-on: 'ubuntu-latest'
     strategy:
       fail-fast: false
@@ -92,12 +146,14 @@ jobs:
 
   e2e_mac:
     name: 'E2E Test (macOS)'
+    needs: e2e_doc_change_filter
     if: |
-      github.event_name == 'push' ||
+      (github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event.label.name == 'maintainer:e2e:ok')
+      (github.event.label.name == 'maintainer:e2e:ok')) &&
+      needs.e2e_doc_change_filter.outputs.docs_only != 'true'
     runs-on: 'macos-latest'
     continue-on-error: true
     steps:
@@ -148,12 +204,14 @@ jobs:
 
   e2e_windows:
     name: 'Slow E2E - Win'
+    needs: e2e_doc_change_filter
     if: |
-      github.event_name == 'push' ||
+      (github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event.label.name == 'maintainer:e2e:ok')
+      (github.event.label.name == 'maintainer:e2e:ok')) &&
+      needs.e2e_doc_change_filter.outputs.docs_only != 'true'
     runs-on: 'windows-latest'
     continue-on-error: true
 

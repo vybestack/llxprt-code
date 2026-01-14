@@ -789,7 +789,11 @@ export class GeminiClient {
       // @requirement REQ-STAT5-003.1
       const currentModel = this.runtimeState.model;
       for (const content of extraHistory) {
-        historyService.add(ContentConverters.toIContent(content), currentModel);
+        const turnKey = historyService.generateTurnKey();
+        historyService.add(
+          ContentConverters.toIContent(content, undefined, undefined, turnKey),
+          currentModel,
+        );
       }
     }
 

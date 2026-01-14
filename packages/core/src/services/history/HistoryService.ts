@@ -28,6 +28,7 @@ import { AnthropicTokenizer } from '../../providers/tokenizers/AnthropicTokenize
 import { type TokensUpdatedEvent } from './HistoryEvents.js';
 import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
+import { canonicalizeToolCallId } from './canonicalToolIds.js';
 import { estimateTokens as estimateTextTokens } from '../../utils/toolOutputLimiter.js';
 
 /**
@@ -103,19 +104,37 @@ export class HistoryService
   }
 
   /**
-   * Generate a new normalized history tool ID.
-   * Format: hist_tool_<uuid-v4>
+   * Generate a new canonical history tool ID.
+   * Format: hist_tool_<hash>
    */
-  generateHistoryId(): string {
-    return `hist_tool_${randomUUID()}`;
+  generateHistoryId(
+    turnKey: string,
+    callIndex: number,
+    providerName?: string,
+    rawId?: string,
+    toolName?: string,
+  ): string {
+    return canonicalizeToolCallId({
+      providerName,
+      rawId,
+      toolName,
+      turnKey,
+      callIndex,
+    });
   }
 
   /**
    * Get a callback suitable for passing into converters
    * which will generate normalized history IDs on demand.
    */
-  getIdGeneratorCallback(): () => string {
-    return () => this.generateHistoryId();
+  getIdGeneratorCallback(turnKey?: string): () => string {
+    let callIndex = 0;
+    const stableTurnKey = turnKey ?? this.generateTurnKey();
+    return () => this.generateHistoryId(stableTurnKey, callIndex++);
+  }
+
+  generateTurnKey(): string {
+    return `turn_${randomUUID()}`;
   }
 
   /**
@@ -865,7 +884,12 @@ export class HistoryService
    * Get curated history with circular references removed for providers.
    * This ensures the history can be safely serialized and sent to providers.
    */
-  getCuratedForProvider(tailContents: IContent[] = []): IContent[] {
+  getCuratedForProvider(
+    tailContents: IContent[] = [],
+    options?: { strictToolAdjacency?: boolean },
+  ): IContent[] {
+    const strictToolAdjacency = options?.strictToolAdjacency ?? false;
+
     // Get the curated history
     const curated = this.getCurated();
     const combined =
@@ -882,7 +906,10 @@ export class HistoryService
 
     // Ensure every tool call has some corresponding tool response in provider
     // payloads, even if the tool execution was interrupted or cancelled.
-    const completed = this.ensureToolResponseCompleteness(normalized);
+    const completed = this.ensureToolResponseCompleteness(
+      normalized,
+      strictToolAdjacency,
+    );
 
     // Providers like OpenAI Chat and Anthropic require strict tool adjacency:
     // tool results must appear directly after the assistant tool call message.
@@ -1015,10 +1042,17 @@ export class HistoryService
    * For provider-visible payloads, synthesize a minimal "cancelled" tool result
    * so the transcript remains structurally valid.
    *
+   * When strictToolAdjacency is true, synthesize tool responses for all orphaned
+   * tool calls regardless of whether a later non-tool message exists. This is
+   * required for providers like Anthropic that enforce strict tool-use/tool-result pairing.
+   *
    * This is intentionally non-mutating: it does not modify the stored history,
    * only the provider-facing view.
    */
-  private ensureToolResponseCompleteness(contents: IContent[]): IContent[] {
+  private ensureToolResponseCompleteness(
+    contents: IContent[],
+    strictToolAdjacency: boolean = false,
+  ): IContent[] {
     const respondedCallIds = new Set<string>();
 
     for (const content of contents) {
@@ -1032,14 +1066,17 @@ export class HistoryService
       }
     }
 
-    const hasLaterNonToolMessageByIndex = new Array<boolean>(
-      contents.length,
-    ).fill(false);
-    let seenNonToolAfter = false;
-    for (let i = contents.length - 1; i >= 0; i--) {
-      hasLaterNonToolMessageByIndex[i] = seenNonToolAfter;
-      if (contents[i]?.speaker !== 'tool') {
-        seenNonToolAfter = true;
+    const hasLaterNonToolMessageByIndex = strictToolAdjacency
+      ? []
+      : new Array<boolean>(contents.length).fill(false);
+
+    if (!strictToolAdjacency) {
+      let seenNonToolAfter = false;
+      for (let i = contents.length - 1; i >= 0; i--) {
+        hasLaterNonToolMessageByIndex[i] = seenNonToolAfter;
+        if (contents[i]?.speaker !== 'tool') {
+          seenNonToolAfter = true;
+        }
       }
     }
 
@@ -1061,11 +1098,14 @@ export class HistoryService
       );
       if (missing.length === 0) continue;
 
-      // If the conversation hasn't advanced past this tool call yet (e.g., tool
-      // execution is still in-flight), do not synthesize tool responses. This
-      // preserves the "pending tool call" state for callers like the UI while
-      // still allowing us to fix truly orphaned tool calls for provider payloads.
-      if (!hasLaterNonToolMessageByIndex[i]) continue;
+      // In strict mode or when the conversation has advanced past this tool call,
+      // synthesize tool responses for orphaned tool calls.
+      // Strict mode (e.g., for Anthropic): always synthesize tool responses.
+      // Non-strict mode: only synthesize if there's a later non-tool message.
+      // This preserves "pending tool call" state for UI while fixing orphaned calls.
+      if (!strictToolAdjacency && !hasLaterNonToolMessageByIndex[i]) {
+        continue;
+      }
 
       result.push({
         speaker: 'tool',

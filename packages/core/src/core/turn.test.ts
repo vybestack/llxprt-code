@@ -42,8 +42,11 @@ vi.mock('../utils/errorReporting', () => ({
 // Use the actual implementation from partUtils now that it's provided.
 vi.mock('../utils/generateContentResponseUtilities', () => ({
   getResponseText: (resp: GenerateContentResponse) =>
-    resp.candidates?.[0]?.content?.parts?.map((part) => part.text).join('') ||
-    undefined,
+    // Filter out thought parts - same as real implementation
+    resp.candidates?.[0]?.content?.parts
+      ?.filter((part) => !(part as { thought?: boolean }).thought)
+      .map((part) => part.text)
+      .join('') || undefined,
   getFunctionCalls: (resp: GenerateContentResponse) =>
     (resp.functionCalls as
       | Array<import('@google/genai').FunctionCall>
@@ -581,6 +584,67 @@ describe('Turn', () => {
       expect(events).toEqual([
         { type: GeminiEventType.Retry },
         { type: GeminiEventType.Content, value: 'Success' },
+      ]);
+    });
+
+    it('should yield content events with traceId', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
+            responseId: 'trace-123',
+          } as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events = [];
+      for await (const event of turn.run(
+        [{ text: 'Hi' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      expect(events).toEqual([
+        { type: GeminiEventType.Content, value: 'Hello', traceId: 'trace-123' },
+      ]);
+    });
+
+    it('should yield thought events with traceId', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [
+              {
+                content: {
+                  // thought must be boolean true, not a string - the filter checks !(part.thought)
+                  parts: [{ text: '[Thought: thinking]', thought: true }],
+                },
+              },
+            ],
+            responseId: 'trace-456',
+          } as unknown as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events = [];
+      for await (const event of turn.run(
+        [{ text: 'Hi' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      expect(events).toEqual([
+        {
+          type: GeminiEventType.Thought,
+          value: { subject: '', description: '[Thought: thinking]' },
+          traceId: 'trace-456',
+        },
       ]);
     });
   });

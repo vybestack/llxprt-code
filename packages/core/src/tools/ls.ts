@@ -172,12 +172,10 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
       };
 
       // Get centralized file discovery service
-
       const fileDiscovery = this.config.getFileService();
 
       const entries: FileEntry[] = [];
-      let gitIgnoredCount = 0;
-      let llxprtIgnoredCount = 0;
+      let ignoredCount = 0;
 
       if (files.length === 0) {
         // Changed error message to be more neutral for LLM
@@ -202,14 +200,14 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
           fileFilteringOptions.respectGitIgnore &&
           fileDiscovery.shouldGitIgnoreFile(relativePath)
         ) {
-          gitIgnoredCount++;
+          ignoredCount++;
           continue;
         }
         if (
           fileFilteringOptions.respectLlxprtIgnore &&
           fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
         ) {
-          llxprtIgnoredCount++;
+          ignoredCount++;
           continue;
         }
 
@@ -242,21 +240,13 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
         .join('\n');
 
       let resultMessage = `Directory listing for ${this.params.path}:\n${directoryContent}`;
-      const ignoredMessages = [];
-      if (gitIgnoredCount > 0) {
-        ignoredMessages.push(`${gitIgnoredCount} git-ignored`);
-      }
-      if (llxprtIgnoredCount > 0) {
-        ignoredMessages.push(`${llxprtIgnoredCount} llxprt-ignored`);
-      }
-
-      if (ignoredMessages.length > 0) {
-        resultMessage += `\n\n(${ignoredMessages.join(', ')})`;
+      if (ignoredCount > 0) {
+        resultMessage += `\n\n(${ignoredCount} ignored)`;
       }
 
       let displayMessage = `Listed ${entries.length} item(s).`;
-      if (ignoredMessages.length > 0) {
-        displayMessage += ` (${ignoredMessages.join(', ')})`;
+      if (ignoredCount > 0) {
+        displayMessage += ` (${ignoredCount} ignored)`;
       }
 
       return {

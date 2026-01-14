@@ -16,14 +16,13 @@
 
 /**
  * Tests for tool ID normalization in buildResponsesRequest
- * @issue https://github.com/vybestack/llxprt-code/issues/825
  */
 
 import { describe, it, expect } from 'vitest';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
 import type { IContent } from '../../services/history/IContent.js';
 
-describe('buildResponsesRequest - Tool ID Normalization (Issue #825)', () => {
+describe('buildResponsesRequest - Tool ID Normalization', () => {
   it('should normalize hist_tool IDs in function_call items', () => {
     const messages: IContent[] = [
       {
@@ -79,18 +78,15 @@ describe('buildResponsesRequest - Tool ID Normalization (Issue #825)', () => {
     ) as Array<{ type: string; call_id: string }>;
 
     expect(functionCalls.length).toBe(1);
-    expect(functionCalls[0].call_id).toMatch(/^call_/);
-    expect(functionCalls[0].call_id).not.toContain('hist_tool_');
+    expect(functionCalls[0].call_id).toBe('call_abc123def456');
 
     expect(functionCallOutputs.length).toBe(1);
-    expect(functionCallOutputs[0].call_id).toMatch(/^call_/);
-    expect(functionCallOutputs[0].call_id).not.toContain('hist_tool_');
+    expect(functionCallOutputs[0].call_id).toBe('call_abc123def456');
 
     expect(functionCalls[0].call_id).toBe(functionCallOutputs[0].call_id);
   });
 
   it('should normalize unknown format IDs', () => {
-    // In practice, all IDs should be hist_tool_ format, but test unknown format handling
     const messages: IContent[] = [
       {
         speaker: 'ai',
@@ -136,8 +132,8 @@ describe('buildResponsesRequest - Tool ID Normalization (Issue #825)', () => {
         (item as { type: string }).type === 'function_call_output',
     ) as Array<{ type: string; call_id: string }>;
 
-    expect(functionCalls[0].call_id).toMatch(/^call_/);
-    expect(functionCallOutputs[0].call_id).toMatch(/^call_/);
+    expect(functionCalls[0].call_id).toBe('call_unknown_xyz789');
+    expect(functionCallOutputs[0].call_id).toBe('call_unknown_xyz789');
     expect(functionCalls[0].call_id).toBe(functionCallOutputs[0].call_id);
   });
 
@@ -251,8 +247,8 @@ describe('buildResponsesRequest - Tool ID Normalization (Issue #825)', () => {
         (item as { type: string }).type === 'function_call_output',
     ) as Array<{ type: string; call_id: string }>;
 
-    expect(functionCalls[0].call_id).toMatch(/^call_/);
-    expect(functionCallOutputs[0].call_id).toMatch(/^call_/);
+    expect(functionCalls[0].call_id).toBe('call_cancelledXYZ789');
+    expect(functionCallOutputs[0].call_id).toBe('call_cancelledXYZ789');
     expect(functionCalls[0].call_id).toBe(functionCallOutputs[0].call_id);
   });
 });

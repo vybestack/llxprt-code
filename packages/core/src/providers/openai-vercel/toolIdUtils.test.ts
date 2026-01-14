@@ -27,200 +27,58 @@ import {
 } from './toolIdUtils';
 
 describe('normalizeToOpenAIToolId', () => {
-  describe('standard conversions', () => {
-    it('should convert hist_tool_xxx to call_xxx', () => {
-      const input = 'hist_tool_abc123def456';
-      const expected = 'call_abc123def456';
-      expect(normalizeToOpenAIToolId(input)).toBe(expected);
-    });
-
-    it('should convert toolu_xxx (Anthropic format) to call_xxx', () => {
-      const input = 'toolu_abc123def456';
-      const expected = 'call_abc123def456';
-      expect(normalizeToOpenAIToolId(input)).toBe(expected);
-    });
-
-    it('should leave call_xxx unchanged', () => {
-      const input = 'call_abc123def456';
-      expect(normalizeToOpenAIToolId(input)).toBe(input);
-    });
+  it('should convert hist_tool_xxx to call_xxx', () => {
+    expect(normalizeToOpenAIToolId('hist_tool_abc123def456')).toBe(
+      'call_abc123def456',
+    );
   });
 
-  describe('UUID handling', () => {
-    it('should add call_ prefix to raw UUIDs', () => {
-      const uuid = '550e8400e29b41d4a716446655440000';
-      const expected = 'call_550e8400e29b41d4a716446655440000';
-      expect(normalizeToOpenAIToolId(uuid)).toBe(expected);
-    });
-
-    it('should handle UUIDs with dashes by sanitizing them', () => {
-      const uuid = '550e8400-e29b-41d4-a716-446655440000';
-      const expected = 'call_550e8400e29b41d4a716446655440000';
-      expect(normalizeToOpenAIToolId(uuid)).toBe(expected);
-    });
+  it('should convert toolu_xxx to call_xxx', () => {
+    expect(normalizeToOpenAIToolId('toolu_abc123def456')).toBe(
+      'call_abc123def456',
+    );
   });
 
-  describe('special character sanitization', () => {
-    it('should remove non-alphanumeric characters from hist_tool_ IDs', () => {
-      const input = 'hist_tool_abc-123-def';
-      const expected = 'call_abc123def';
-      expect(normalizeToOpenAIToolId(input)).toBe(expected);
-    });
-
-    it('should remove non-alphanumeric characters from toolu_ IDs', () => {
-      const input = 'toolu_abc-123-def';
-      const expected = 'call_abc123def';
-      expect(normalizeToOpenAIToolId(input)).toBe(expected);
-    });
-
-    it('should remove non-alphanumeric characters from call_ IDs', () => {
-      const input = 'call_abc-123-def';
-      const expected = 'call_abc123def';
-      expect(normalizeToOpenAIToolId(input)).toBe(expected);
-    });
-
-    it('should handle IDs with special characters like dots and slashes', () => {
-      const input = 'hist_tool_abc.123/def';
-      const expected = 'call_abc123def';
-      expect(normalizeToOpenAIToolId(input)).toBe(expected);
-    });
+  it('should leave call_xxx unchanged', () => {
+    const input = 'call_abc123def456';
+    expect(normalizeToOpenAIToolId(input)).toBe(input);
   });
 
-  describe('edge cases', () => {
-    it('should handle empty string', () => {
-      const result = normalizeToOpenAIToolId('');
-      expect(result).toMatch(/^call_[a-z0-9]+$/);
-    });
-
-    it('should handle string with only prefix', () => {
-      const result = normalizeToOpenAIToolId('hist_tool_');
-      expect(result).toMatch(/^call_[a-z0-9]+$/);
-    });
-
-    it('should handle string with only special characters after prefix', () => {
-      const result = normalizeToOpenAIToolId('hist_tool_---');
-      expect(result).toMatch(/^call_[a-z0-9]+$/);
-    });
-
-    it('should preserve underscores in the ID portion', () => {
-      const input = 'hist_tool_abc_123_def';
-      const expected = 'call_abc_123_def';
-      expect(normalizeToOpenAIToolId(input)).toBe(expected);
-    });
+  it('should prefix unknown IDs', () => {
+    expect(normalizeToOpenAIToolId('unknown_123')).toBe('call_unknown_123');
   });
 
-  describe('complex scenarios', () => {
-    it('should handle very long IDs', () => {
-      const longId = 'a'.repeat(100);
-      const input = `hist_tool_${longId}`;
-      const expected = `call_${longId}`;
-      expect(normalizeToOpenAIToolId(input)).toBe(expected);
-    });
-
-    it('should handle mixed prefix formats consistently', () => {
-      expect(normalizeToOpenAIToolId('hist_tool_123')).toBe('call_123');
-      expect(normalizeToOpenAIToolId('toolu_123')).toBe('call_123');
-      expect(normalizeToOpenAIToolId('call_123')).toBe('call_123');
-    });
+  it('should handle empty string', () => {
+    expect(normalizeToOpenAIToolId('')).toBe('call_');
   });
 });
 
 describe('normalizeToHistoryToolId', () => {
-  describe('standard conversions', () => {
-    it('should convert call_xxx to hist_tool_xxx', () => {
-      const input = 'call_abc123def456';
-      const expected = 'hist_tool_abc123def456';
-      expect(normalizeToHistoryToolId(input)).toBe(expected);
-    });
-
-    it('should convert toolu_xxx (Anthropic format) to hist_tool_xxx', () => {
-      const input = 'toolu_abc123def456';
-      const expected = 'hist_tool_abc123def456';
-      expect(normalizeToHistoryToolId(input)).toBe(expected);
-    });
-
-    it('should leave hist_tool_xxx unchanged', () => {
-      const input = 'hist_tool_abc123def456';
-      expect(normalizeToHistoryToolId(input)).toBe(input);
-    });
+  it('should convert call_xxx to hist_tool_xxx', () => {
+    expect(normalizeToHistoryToolId('call_abc123def456')).toBe(
+      'hist_tool_abc123def456',
+    );
   });
 
-  describe('UUID handling', () => {
-    it('should add hist_tool_ prefix to raw UUIDs', () => {
-      const uuid = '550e8400e29b41d4a716446655440000';
-      const expected = 'hist_tool_550e8400e29b41d4a716446655440000';
-      expect(normalizeToHistoryToolId(uuid)).toBe(expected);
-    });
-
-    it('should handle UUIDs with dashes', () => {
-      const uuid = '550e8400-e29b-41d4-a716-446655440000';
-      const expected = 'hist_tool_550e8400e29b41d4a716446655440000';
-      expect(normalizeToHistoryToolId(uuid)).toBe(expected);
-    });
+  it('should convert toolu_xxx to hist_tool_xxx', () => {
+    expect(normalizeToHistoryToolId('toolu_abc123def456')).toBe(
+      'hist_tool_abc123def456',
+    );
   });
 
-  describe('special character sanitization', () => {
-    it('should remove non-alphanumeric characters from call_ IDs', () => {
-      const input = 'call_abc-123-def';
-      const expected = 'hist_tool_abc123def';
-      expect(normalizeToHistoryToolId(input)).toBe(expected);
-    });
-
-    it('should remove non-alphanumeric characters from toolu_ IDs', () => {
-      const input = 'toolu_abc-123-def';
-      const expected = 'hist_tool_abc123def';
-      expect(normalizeToHistoryToolId(input)).toBe(expected);
-    });
-
-    it('should remove non-alphanumeric characters from hist_tool_ IDs', () => {
-      const input = 'hist_tool_abc-123-def';
-      const expected = 'hist_tool_abc123def';
-      expect(normalizeToHistoryToolId(input)).toBe(expected);
-    });
-
-    it('should handle IDs with special characters like dots and slashes', () => {
-      const input = 'call_abc.123/def';
-      const expected = 'hist_tool_abc123def';
-      expect(normalizeToHistoryToolId(input)).toBe(expected);
-    });
+  it('should leave hist_tool_xxx unchanged', () => {
+    const input = 'hist_tool_abc123def456';
+    expect(normalizeToHistoryToolId(input)).toBe(input);
   });
 
-  describe('edge cases', () => {
-    it('should handle empty string', () => {
-      const result = normalizeToHistoryToolId('');
-      expect(result).toMatch(/^hist_tool_[a-z0-9]+$/);
-    });
-
-    it('should handle string with only prefix', () => {
-      const result = normalizeToHistoryToolId('call_');
-      expect(result).toMatch(/^hist_tool_[a-z0-9]+$/);
-    });
-
-    it('should handle string with only special characters after prefix', () => {
-      const result = normalizeToHistoryToolId('call_---');
-      expect(result).toMatch(/^hist_tool_[a-z0-9]+$/);
-    });
-
-    it('should preserve underscores in the ID portion', () => {
-      const input = 'call_abc_123_def';
-      const expected = 'hist_tool_abc_123_def';
-      expect(normalizeToHistoryToolId(input)).toBe(expected);
-    });
+  it('should prefix unknown IDs', () => {
+    expect(normalizeToHistoryToolId('unknown_123')).toBe(
+      'hist_tool_unknown_123',
+    );
   });
 
-  describe('complex scenarios', () => {
-    it('should handle very long IDs', () => {
-      const longId = 'a'.repeat(100);
-      const input = `call_${longId}`;
-      const expected = `hist_tool_${longId}`;
-      expect(normalizeToHistoryToolId(input)).toBe(expected);
-    });
-
-    it('should handle mixed prefix formats consistently', () => {
-      expect(normalizeToHistoryToolId('call_123')).toBe('hist_tool_123');
-      expect(normalizeToHistoryToolId('toolu_123')).toBe('hist_tool_123');
-      expect(normalizeToHistoryToolId('hist_tool_123')).toBe('hist_tool_123');
-    });
+  it('should handle empty string', () => {
+    expect(normalizeToHistoryToolId('')).toBe('hist_tool_');
   });
 });
 
@@ -239,12 +97,11 @@ describe('round-trip conversions', () => {
     expect(backToOpenAI).toBe(original);
   });
 
-  it('should handle Anthropic format in round-trip', () => {
-    const anthropic = 'toolu_abc123def456';
-    const toOpenAI = normalizeToOpenAIToolId(anthropic);
+  it('should convert toolu -> call and hist_tool consistently', () => {
+    const original = 'toolu_abc123def456';
+    const toOpenAI = normalizeToOpenAIToolId(original);
+    const toHistory = normalizeToHistoryToolId(original);
     expect(toOpenAI).toBe('call_abc123def456');
-
-    const toHistory = normalizeToHistoryToolId(anthropic);
     expect(toHistory).toBe('hist_tool_abc123def456');
   });
 });

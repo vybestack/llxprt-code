@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ReadFileTool, ReadFileToolParams } from './read-file.js';
 import path from 'path';
 import os from 'os';
@@ -16,6 +16,14 @@ import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { ToolInvocation, ToolResult } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
+
+interface ReadFileParameterSchema {
+  properties: {
+    absolute_path: {
+      description: string;
+    };
+  };
+}
 
 describe('ReadFileTool', () => {
   let tempRootDir: string;
@@ -125,6 +133,38 @@ describe('ReadFileTool', () => {
       const params = { offset: 0 } as unknown as ReadFileToolParams;
       expect(() => tool.build(params)).toThrow(
         `Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.`,
+      );
+    });
+  });
+
+  describe('constructor', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should use windows-style path examples on windows', () => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+
+      const tool = new ReadFileTool({} as unknown as Config);
+      const schema = tool.schema;
+      expect(
+        (schema.parametersJsonSchema as ReadFileParameterSchema).properties
+          .absolute_path.description,
+      ).toBe(
+        "The absolute path to the file to read (e.g., 'C:\\Users\\project\\file.txt'). Relative paths are not supported. You must provide an absolute path.",
+      );
+    });
+
+    it('should use unix-style path examples on non-windows platforms', () => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+
+      const tool = new ReadFileTool({} as unknown as Config);
+      const schema = tool.schema;
+      expect(
+        (schema.parametersJsonSchema as ReadFileParameterSchema).properties
+          .absolute_path.description,
+      ).toBe(
+        "The absolute path to the file to read (e.g., '/home/user/project/file.txt'). Relative paths are not supported. You must provide an absolute path.",
       );
     });
   });
