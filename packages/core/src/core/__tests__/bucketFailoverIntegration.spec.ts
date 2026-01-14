@@ -409,5 +409,66 @@ describe('bucketFailoverIntegration', () => {
       // Should return the last chunk
       expect(result.content).toEqual(chunk2);
     });
+    it('handles 403 permission_error (OAuth token revoked)', async () => {
+      const responseContent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Success!' }],
+      };
+
+      // eslint-disable-next-line require-yield
+      async function* failGenerator() {
+        const error = new Error(
+          'API Error: 403 {"type":"error","error":{"type":"permission_error","message":"OAuth token has been revoked."}}',
+        );
+        (error as { status?: number }).status = 403;
+        throw error;
+      }
+
+      async function* successGenerator() {
+        yield responseContent;
+      }
+
+      vi.mocked(mockProvider.generateChatCompletion!)
+        .mockReturnValueOnce(failGenerator())
+        .mockReturnValueOnce(successGenerator());
+
+      const config: BucketFailoverConfig = {
+        buckets: ['bucket1', 'bucket2'],
+        provider: mockProvider,
+      };
+
+      const result = await executeProviderWithBucketFailover(options, config);
+
+      expect(result.bucket).toBe('bucket2');
+    });
+
+    it('handles error message containing "revoked"', async () => {
+      const responseContent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Success!' }],
+      };
+
+      // eslint-disable-next-line require-yield
+      async function* failGenerator() {
+        throw new Error('OAuth token has been revoked');
+      }
+
+      async function* successGenerator() {
+        yield responseContent;
+      }
+
+      vi.mocked(mockProvider.generateChatCompletion!)
+        .mockReturnValueOnce(failGenerator())
+        .mockReturnValueOnce(successGenerator());
+
+      const config: BucketFailoverConfig = {
+        buckets: ['bucket1', 'bucket2'],
+        provider: mockProvider,
+      };
+
+      const result = await executeProviderWithBucketFailover(options, config);
+
+      expect(result.bucket).toBe('bucket2');
+    });
   });
 });

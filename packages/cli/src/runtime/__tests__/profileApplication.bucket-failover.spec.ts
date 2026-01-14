@@ -102,6 +102,29 @@ describe('shouldFailover - failover triggers', () => {
     );
     expect(shouldFailover(error)).toBe(true);
   });
+  it('should return true for 401 unauthorized errors (status code)', () => {
+    const error = new Error('Request failed with status code 401');
+    expect(shouldFailover(error)).toBe(true);
+  });
+
+  it('should return true for 403 permission errors (status code)', () => {
+    const error = new Error('Request failed with status code 403');
+    expect(shouldFailover(error)).toBe(true);
+  });
+
+  it('should return true for OAuth token revoked errors', () => {
+    const error = new Error(
+      'OAuth token has been revoked. Please obtain a new token.',
+    );
+    expect(shouldFailover(error)).toBe(true);
+  });
+
+  it('should return true for permission_error type in error message', () => {
+    const error = new Error(
+      '{"type":"error","error":{"type":"permission_error","message":"Token revoked"}}',
+    );
+    expect(shouldFailover(error)).toBe(true);
+  });
 });
 
 describe('executeWithBucketFailover - failover execution', () => {
