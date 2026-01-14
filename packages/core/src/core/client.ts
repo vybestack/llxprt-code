@@ -1323,8 +1323,19 @@ export class GeminiClient {
           escalate: this.toolCallReminderLevel === 'escalated',
         });
         if (reminderResult.reminder) {
+          // Filter out functionCall/functionResponse before appending reminder.
+          // These tool-related parts were already recorded in history.
+          // Including them again would create duplicate tool_call blocks (Issue #1135).
+          const textOnlyRequest = Array.isArray(request)
+            ? (request as Part[]).filter(
+                (part) =>
+                  typeof part === 'object' &&
+                  !('functionCall' in part) &&
+                  !('functionResponse' in part),
+              )
+            : [];
           request = this.appendSystemReminderToRequest(
-            request,
+            textOnlyRequest,
             reminderResult.reminder,
           );
           this.lastTodoSnapshot = reminderResult.todos;
@@ -1523,8 +1534,20 @@ export class GeminiClient {
         }
 
         // Set up retry request with reminder
+        // IMPORTANT: Filter out functionCall/functionResponse from baseRequest before retry.
+        // These tool-related parts were already recorded in history after the first request.
+        // Including them again would create duplicate tool_call blocks, causing Anthropic
+        // to reject with "tool_use ids were found without tool_result blocks" (Issue #1135).
+        const textOnlyBase = Array.isArray(baseRequest)
+          ? (baseRequest as Part[]).filter(
+              (part) =>
+                typeof part === 'object' &&
+                !('functionCall' in part) &&
+                !('functionResponse' in part),
+            )
+          : [];
         baseRequest = this.appendSystemReminderToRequest(
-          baseRequest,
+          textOnlyBase,
           followUpReminder,
         );
       } else {
