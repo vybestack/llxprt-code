@@ -863,8 +863,8 @@ export class ProviderManager implements IProviderManager {
         for (const providerId of modelsDevProviderIds) {
           const providerModels = registry.getByProvider(providerId);
           for (const rm of providerModels) {
-            // Only include models with tool support (required for CLI)
-            if (!rm.capabilities?.toolCalling) continue;
+            // Only exclude models that explicitly disable tool support
+            if (rm.capabilities?.toolCalling === false) continue;
 
             registryModels.push({
               id: rm.modelId,

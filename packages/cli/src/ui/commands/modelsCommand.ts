@@ -34,7 +34,11 @@ function parseArgs(args: string): ModelCommandArgs {
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
     if (part === '--provider' || part === '-p') {
-      result.provider = parts[++i];
+      // Check bounds and ensure next arg isn't another flag
+      if (i + 1 < parts.length && !parts[i + 1].startsWith('-')) {
+        result.provider = parts[++i];
+      }
+      // If no valid value, provider remains undefined
     } else if (part === '--reasoning' || part === '-r') {
       result.reasoning = true;
     } else if (part === '--tools' || part === '-t') {

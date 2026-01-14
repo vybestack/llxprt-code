@@ -64,8 +64,8 @@ export function getModelsDevProviderIds(providerName: string): string[] | null {
   if (ids && ids.length > 0) {
     return ids;
   }
-  // Fallback: use provider name as-is if no explicit mapping
-  return [providerName];
+  // No mapping found - return null so callers can handle unknown providers
+  return null;
 }
 
 /**
@@ -89,8 +89,8 @@ export async function hydrateModelsWithRegistry(
   // Collect all models from mapped provider IDs
   const registryModels: LlxprtModel[] = [];
   for (const providerId of modelsDevProviderIds) {
-    const models = registry.getByProvider(providerId);
-    registryModels.push(...models);
+    const providerModels = registry.getByProvider(providerId);
+    registryModels.push(...providerModels);
   }
 
   // Build lookup map: modelId -> LlxprtModel
@@ -136,8 +136,79 @@ export async function hydrateModelsWithRegistry(
 }
 
 /**
- * Find a partial match for a model ID in the registry map.
- * Handles cases where provider-specific prefixes/suffixes differ.
+ * Separators used for tokenizing model IDs
+ */
+const MODEL_ID_SEPARATORS = /[-_./]/;
+
+/**
+ * Minimum score threshold for a partial match to be considered valid.
+ * This prevents false positives from overly loose matching.
+ */
+const MATCH_SCORE_THRESHOLD = 50;
+
+/**
+ * Calculate match score between a model ID and a registry key.
+ * Higher scores indicate better matches.
+ *
+ * Scoring:
+ * - Exact match: 100
+ * - Exact prefix/suffix with separator: 80
+ * - Token overlap: proportional to matching tokens (max 60)
+ */
+function calculateMatchScore(
+  normalizedId: string,
+  normalizedKey: string,
+): number {
+  // Exact match is best
+  if (normalizedId === normalizedKey) {
+    return 100;
+  }
+
+  // Check for exact prefix/suffix with separator
+  // e.g., "gpt-4o-2024" matches "gpt-4o" as a prefix
+  if (normalizedId.startsWith(normalizedKey)) {
+    const remainder = normalizedId.slice(normalizedKey.length);
+    if (remainder.length === 0 || MODEL_ID_SEPARATORS.test(remainder[0])) {
+      return 80;
+    }
+  }
+  if (normalizedKey.startsWith(normalizedId)) {
+    const remainder = normalizedKey.slice(normalizedId.length);
+    if (remainder.length === 0 || MODEL_ID_SEPARATORS.test(remainder[0])) {
+      return 80;
+    }
+  }
+
+  // Token-based matching
+  const idTokens = new Set(
+    normalizedId.split(MODEL_ID_SEPARATORS).filter(Boolean),
+  );
+  const keyTokens = new Set(
+    normalizedKey.split(MODEL_ID_SEPARATORS).filter(Boolean),
+  );
+
+  if (idTokens.size === 0 || keyTokens.size === 0) {
+    return 0;
+  }
+
+  // Count matching tokens
+  let matchingTokens = 0;
+  for (const token of idTokens) {
+    if (keyTokens.has(token)) {
+      matchingTokens++;
+    }
+  }
+
+  // Score based on proportion of matching tokens
+  const maxTokens = Math.max(idTokens.size, keyTokens.size);
+  const tokenScore = (matchingTokens / maxTokens) * 60;
+
+  return tokenScore;
+}
+
+/**
+ * Find the best partial match for a model ID in the registry map.
+ * Uses scoring to prevent false positives from overly loose matching.
  */
 function findPartialMatch(
   modelId: string,
@@ -145,15 +216,22 @@ function findPartialMatch(
 ): LlxprtModel | undefined {
   const normalizedId = modelId.toLowerCase();
 
+  let bestMatch: LlxprtModel | undefined;
+  let bestScore = 0;
+
   for (const [key, model] of registryMap) {
     const normalizedKey = key.toLowerCase();
-    // Check if the registry key is contained in the model ID or vice versa
-    if (
-      normalizedId.includes(normalizedKey) ||
-      normalizedKey.includes(normalizedId)
-    ) {
-      return model;
+    const score = calculateMatchScore(normalizedId, normalizedKey);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = model;
     }
+  }
+
+  // Only return if score meets threshold
+  if (bestScore >= MATCH_SCORE_THRESHOLD) {
+    return bestMatch;
   }
 
   return undefined;

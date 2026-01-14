@@ -167,7 +167,7 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
       </Text>
       <Text color={Colors.Gray}>
         {focusedComponent === 'input'
-          ? 'Enter the model name exactly as it appears in your provider&apos;s documentation'
+          ? "Enter the model name exactly as it appears in your provider's documentation"
           : `Choose the AI model for ${providerOption?.label || state.config.provider}`}
       </Text>
       <Text color={Colors.Foreground}> </Text>

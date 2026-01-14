@@ -441,7 +441,7 @@ export class AnthropicProvider extends BaseProvider {
       {
         id: 'claude-opus-4-5-20251101',
         name: 'Claude Opus 4.5',
-        provider: 'anthropic',
+        provider: this.name,
         supportedToolFormats: ['anthropic'],
         contextWindow: 500000,
         maxOutputTokens: 32000,
@@ -449,7 +449,7 @@ export class AnthropicProvider extends BaseProvider {
       {
         id: 'claude-opus-4-1-20250805',
         name: 'Claude Opus 4.1',
-        provider: 'anthropic',
+        provider: this.name,
         supportedToolFormats: ['anthropic'],
         contextWindow: 500000,
         maxOutputTokens: 32000,
@@ -457,7 +457,7 @@ export class AnthropicProvider extends BaseProvider {
       {
         id: 'claude-sonnet-4-5-20250929',
         name: 'Claude Sonnet 4.5',
-        provider: 'anthropic',
+        provider: this.name,
         supportedToolFormats: ['anthropic'],
         contextWindow: 400000,
         maxOutputTokens: 64000,
@@ -465,7 +465,7 @@ export class AnthropicProvider extends BaseProvider {
       {
         id: 'claude-haiku-4-5-20251001',
         name: 'Claude Haiku 4.5',
-        provider: 'anthropic',
+        provider: this.name,
         supportedToolFormats: ['anthropic'],
         contextWindow: 500000,
         maxOutputTokens: 16000,

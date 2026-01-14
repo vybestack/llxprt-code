@@ -8,7 +8,11 @@ import { Box, Text } from 'ink';
 import { useCallback, useMemo } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { HydratedModel, Config, Profile } from '@vybestack/llxprt-code-core';
+import type {
+  HydratedModel,
+  Config,
+  Profile,
+} from '@vybestack/llxprt-code-core';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -126,7 +130,7 @@ export const DialogManager = ({
             addItem({ type: 'info', text: msg }, Date.now());
           }
         } else {
-          // Same provider (or no current provider) - just set model
+          // Same provider — just set model
           const result = await runtime.setActiveModel(model.id);
           addItem(
             {

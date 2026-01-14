@@ -176,18 +176,16 @@ export class ModelsRegistry {
    * Refresh models from models.dev API (non-blocking)
    */
   async refresh(): Promise<boolean> {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
+    try {
       const response = await fetch(MODELS_DEV_API_URL, {
         headers: {
           'User-Agent': 'llxprt/1.0',
         },
         signal: controller.signal,
       });
-
-      clearTimeout(timeout);
 
       if (!response.ok) {
         return false;
@@ -213,6 +211,8 @@ export class ModelsRegistry {
     } catch {
       this.emit('models:error');
       return false;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

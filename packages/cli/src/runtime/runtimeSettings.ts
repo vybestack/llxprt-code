@@ -22,6 +22,7 @@ import type {
   ModelParams,
   RuntimeAuthScopeFlushResult,
   LoadBalancerProfile,
+  HydratedModel,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
@@ -817,7 +818,7 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
 
 export async function listAvailableModels(
   providerName?: string,
-): Promise<IModel[]> {
+): Promise<HydratedModel[]> {
   const manager = getProviderManagerOrThrow();
   return manager.getAvailableModels(providerName);
 }

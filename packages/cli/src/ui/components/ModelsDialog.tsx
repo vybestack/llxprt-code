@@ -538,11 +538,11 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
           }
         >
           Search:{' '}
-          {state.mode === 'search' && (
-            <Text color={SemanticColors.text.accent}>{'\u258C'}</Text>
-          )}
         </Text>
         <Text color={SemanticColors.text.primary}>{state.searchTerm}</Text>
+        {state.mode === 'search' && (
+          <Text color={SemanticColors.text.accent}>{'\u258C'}</Text>
+        )}
         <Text color={SemanticColors.text.secondary}>
           {'  '}Found {filteredModels.length}
           {hasActiveFilters && ` of ${baselineCount}`}

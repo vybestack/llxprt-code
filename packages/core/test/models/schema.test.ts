@@ -214,7 +214,7 @@ describe('ModelsDevProviderSchema', () => {
   });
 
   describe('required fields', () => {
-    it('fails when id is missing', () => {
+    it('fails when env is missing', () => {
       const result = ModelsDevProviderSchema.safeParse(invalidProviderData);
       expect(result.success).toBe(false);
     });

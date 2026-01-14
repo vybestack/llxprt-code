@@ -21,6 +21,7 @@ import {
   type HistoryItem,
   type IndividualToolCallDisplay,
 } from './types.js';
+import { type ModelsDialogData } from './commands/types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useResponsive } from './hooks/useResponsive.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
@@ -920,17 +921,7 @@ export const AppContainer = (props: AppContainerProps) => {
   // Models dialog state
   const [isModelsDialogOpen, setIsModelsDialogOpen] = useState(false);
   const [modelsDialogData, setModelsDialogData] = useState<
-    | {
-        initialSearch?: string;
-        initialFilters?: {
-          tools?: boolean;
-          vision?: boolean;
-          reasoning?: boolean;
-          audio?: boolean;
-        };
-        includeDeprecated?: boolean;
-      }
-    | undefined
+    ModelsDialogData | undefined
   >(undefined);
 
   // Queue error message state (for preventing slash/shell commands from being queued)
@@ -962,22 +953,10 @@ export const AppContainer = (props: AppContainerProps) => {
     setSubagentDialogInitialName(undefined);
   }, []);
 
-  const openModelsDialog = useCallback(
-    (data?: {
-      initialSearch?: string;
-      initialFilters?: {
-        tools?: boolean;
-        vision?: boolean;
-        reasoning?: boolean;
-        audio?: boolean;
-      };
-      includeDeprecated?: boolean;
-    }) => {
-      setModelsDialogData(data);
-      setIsModelsDialogOpen(true);
-    },
-    [],
-  );
+  const openModelsDialog = useCallback((data?: ModelsDialogData) => {
+    setModelsDialogData(data);
+    setIsModelsDialogOpen(true);
+  }, []);
 
   const closeModelsDialog = useCallback(() => {
     setIsModelsDialogOpen(false);

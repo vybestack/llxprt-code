@@ -213,7 +213,11 @@ export interface OpenDialogActionReturn {
    * - 'profileDetail'/'profileEditor': ProfileDialogData
    * - others: undefined
    */
-  dialogData?: SubagentDialogData | LoggingDialogData | ModelsDialogData | ProfileDialogData;
+  dialogData?:
+    | SubagentDialogData
+    | LoggingDialogData
+    | ModelsDialogData
+    | ProfileDialogData;
 }
 
 /**
