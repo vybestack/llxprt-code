@@ -78,15 +78,61 @@ export const DialogManager = ({
   const handleModelsDialogSelect = useCallback(
     async (model: HydratedModel) => {
       try {
-        // Use model.id (always present from IModel)
-        const result = await runtime.setActiveModel(model.id);
-        addItem(
-          {
-            type: 'info',
-            text: `Switched from ${result.previousModel ?? 'unknown'} to ${result.nextModel} in provider '${result.providerName}'`,
-          },
-          Date.now(),
-        );
+        const selectedProvider = model.provider;
+
+        // Check if we need to switch providers
+        // Switch if: provider differs OR no current provider set
+        if (selectedProvider !== currentProvider) {
+          // 1. Switch provider first
+          const switchResult = await runtime.switchActiveProvider(
+            selectedProvider,
+            { addItem },
+          );
+
+          // 2. Build messages in correct order
+          const messages: string[] = [];
+
+          // Provider switch message
+          messages.push(
+            currentProvider
+              ? `Switched from ${currentProvider} to ${switchResult.nextProvider}`
+              : `Switched to ${switchResult.nextProvider}`,
+          );
+
+          // Base URL message (extract from switchResult)
+          const baseUrlMsg = (switchResult.infoMessages ?? []).find(
+            (m) => m?.includes('Base URL') || m?.includes('base URL'),
+          );
+          if (baseUrlMsg) messages.push(baseUrlMsg);
+
+          // Set the selected model (override provider's default)
+          await runtime.setActiveModel(model.id);
+
+          // Model message with user's selected model
+          messages.push(
+            `Active model is '${model.id}' for provider '${selectedProvider}'.`,
+          );
+
+          // /key reminder (if not gemini)
+          if (selectedProvider !== 'gemini') {
+            messages.push('Use /key to set API key if needed.');
+          }
+
+          // Show all messages
+          for (const msg of messages) {
+            addItem({ type: 'info', text: msg }, Date.now());
+          }
+        } else {
+          // Same provider (or no current provider) - just set model
+          const result = await runtime.setActiveModel(model.id);
+          addItem(
+            {
+              type: 'info',
+              text: `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
+            },
+            Date.now(),
+          );
+        }
       } catch (e) {
         const status = runtime.getActiveProviderStatus();
         addItem(
@@ -99,7 +145,7 @@ export const DialogManager = ({
       }
       uiActions.closeModelsDialog();
     },
-    [runtime, addItem, uiActions],
+    [runtime, addItem, uiActions, currentProvider],
   );
 
   // TODO: IdeTrustChangeDialog not yet ported from upstream
