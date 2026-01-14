@@ -67,6 +67,17 @@ export function llxprtModelToIModel(model: LlxprtModel): IModel {
 }
 
 /**
+ * Get the models.dev provider IDs for a given llxprt provider name.
+ * Falls back to using the provider name itself if no mapping exists.
+ *
+ * @param providerName - The llxprt provider name (e.g., 'gemini', 'openai')
+ * @returns Array of models.dev provider IDs
+ */
+export function getModelsDevProviderIds(providerName: string): string[] {
+  return PROVIDER_ID_MAP[providerName] ?? [providerName];
+}
+
+/**
  * Check if a specific model ID exists in the registry for a provider
  */
 export function hasModelInRegistry(
@@ -79,11 +90,9 @@ export function hasModelInRegistry(
       return false;
     }
 
-    const modelsDevProviderIds = PROVIDER_ID_MAP[providerName] ?? [
-      providerName,
-    ];
+    const providerIds = getModelsDevProviderIds(providerName);
 
-    for (const providerId of modelsDevProviderIds) {
+    for (const providerId of providerIds) {
       // Try both full ID format (provider/model) and short ID
       const fullId = `${providerId}/${modelId}`;
       if (registry.getById(fullId)) {
@@ -111,11 +120,9 @@ export function getExtendedModelInfo(
       return undefined;
     }
 
-    const modelsDevProviderIds = PROVIDER_ID_MAP[providerName] ?? [
-      providerName,
-    ];
+    const providerIds = getModelsDevProviderIds(providerName);
 
-    for (const providerId of modelsDevProviderIds) {
+    for (const providerId of providerIds) {
       const fullId = `${providerId}/${modelId}`;
       const model = registry.getById(fullId);
       if (model) {
@@ -147,13 +154,11 @@ export function getRecommendedModel(
       return undefined;
     }
 
-    const modelsDevProviderIds = PROVIDER_ID_MAP[providerName] ?? [
-      providerName,
-    ];
+    const providerIds = getModelsDevProviderIds(providerName);
 
     // Collect all models from mapped providers
     let candidates: LlxprtModel[] = [];
-    for (const providerId of modelsDevProviderIds) {
+    for (const providerId of providerIds) {
       candidates.push(...registry.getByProvider(providerId));
     }
 

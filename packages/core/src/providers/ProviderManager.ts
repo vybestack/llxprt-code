@@ -851,7 +851,7 @@ export class ProviderManager implements IProviderManager {
     const modelsDevProviderIds = getModelsDevProviderIds(provider.name);
 
     // Step 4: If provider returned no models, fall back to registry-only models
-    if (baseModels.length === 0 && modelsDevProviderIds) {
+    if (baseModels.length === 0 && modelsDevProviderIds.length > 0) {
       logger.debug(
         () =>
           `[getAvailableModels] Provider ${provider!.name} returned 0 models, falling back to registry`,

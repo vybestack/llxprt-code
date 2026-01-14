@@ -20,7 +20,6 @@ import type {
   LlxprtModelMetadata,
 } from './schema.js';
 import { getModelRegistry } from './registry.js';
-import { PROVIDER_ID_MAP } from './provider-integration.js';
 
 /**
  * Extended model data from models.dev hydration.
@@ -53,20 +52,8 @@ export interface ModelHydrationData {
  */
 export type HydratedModel = IModel & Partial<ModelHydrationData>;
 
-/**
- * Get the models.dev provider IDs for a given llxprt provider name.
- *
- * @param providerName - The llxprt provider name (e.g., 'gemini', 'openai')
- * @returns Array of models.dev provider IDs, or null if no mapping found
- */
-export function getModelsDevProviderIds(providerName: string): string[] | null {
-  const ids = PROVIDER_ID_MAP[providerName];
-  if (ids && ids.length > 0) {
-    return ids;
-  }
-  // No mapping found - return null so callers can handle unknown providers
-  return null;
-}
+// Re-export for backward compatibility
+export { getModelsDevProviderIds } from './provider-integration.js';
 
 /**
  * Hydrate a list of IModel with data from models.dev registry.
@@ -77,12 +64,12 @@ export function getModelsDevProviderIds(providerName: string): string[] | null {
  */
 export async function hydrateModelsWithRegistry(
   models: IModel[],
-  modelsDevProviderIds: string[] | null,
+  modelsDevProviderIds: string[],
 ): Promise<HydratedModel[]> {
   const registry = getModelRegistry();
 
   // If registry not initialized or no provider IDs, return unhydrated
-  if (!registry.isInitialized() || !modelsDevProviderIds) {
+  if (!registry.isInitialized() || modelsDevProviderIds.length === 0) {
     return models.map((m) => ({ ...m, hydrated: false }));
   }
 
@@ -95,11 +82,17 @@ export async function hydrateModelsWithRegistry(
 
   // Build lookup map: modelId -> LlxprtModel
   // Index by multiple keys for flexible matching
+  //
+  // NOTE: Name-based indexing can cause collisions if multiple models share
+  // the same display name. This is acceptable because:
+  // 1. modelsDevProviderIds typically maps to a single provider
+  // 2. Multi-provider IDs (e.g., ['google', 'google-vertex']) are same-vendor
+  // 3. Primary lookup is by model.id; name is a fallback only
   const registryMap = new Map<string, LlxprtModel>();
   for (const rm of registryModels) {
     registryMap.set(rm.modelId, rm); // Short ID (e.g., "gpt-4o")
     registryMap.set(rm.id, rm); // Full ID (e.g., "openai/gpt-4o")
-    registryMap.set(rm.name, rm); // Display name
+    registryMap.set(rm.name, rm); // Display name (fallback, may collide)
   }
 
   // Hydrate each model
