@@ -48,8 +48,10 @@ describe('ModelsRegistry', () => {
     });
 
     it('isInitialized returns true after init', async () => {
-      // Mock bundled fallback to load some data
+      // Mock fresh cache to load data
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -60,7 +62,9 @@ describe('ModelsRegistry', () => {
     });
 
     it('initialize is idempotent', async () => {
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -76,7 +80,9 @@ describe('ModelsRegistry', () => {
     });
 
     it('concurrent initialize calls do not duplicate work', async () => {
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -91,7 +97,7 @@ describe('ModelsRegistry', () => {
 
       await Promise.all(promises);
 
-      // readFileSync should only be called once (for bundled fallback)
+      // readFileSync should only be called once for cache
       // It may be called multiple times due to cache check, but initialization logic runs once
       expect(registry.isInitialized()).toBe(true);
     });
@@ -114,12 +120,10 @@ describe('ModelsRegistry', () => {
       expect(registry.getModelCount()).toBeGreaterThan(0);
     });
 
-    it('skips stale cache older than 7 days', async () => {
+    it('skips stale cache older than 7 days and triggers refresh', async () => {
       const now = Date.now();
       const eightDaysAgo = now - 8 * 24 * 60 * 60 * 1000;
 
-      // First call for cache check (stale)
-      // Second call for bundled fallback
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.statSync).mockReturnValue({
         mtimeMs: eightDaysAgo,
@@ -131,33 +135,30 @@ describe('ModelsRegistry', () => {
 
       await registry.initialize();
 
-      // Should still load from bundled fallback
-      expect(registry.getModelCount()).toBeGreaterThan(0);
+      // Stale cache is skipped, refresh fails, models remain empty
+      expect(registry.getModelCount()).toBe(0);
     });
 
-    it('falls back to bundled JSON when no cache', async () => {
-      // No cache exists, but bundled does
-      let existsCalls = 0;
-      vi.mocked(fs.existsSync).mockImplementation(() => {
-        existsCalls++;
-        // First call: cache check (false)
-        // Second call: bundled check (true)
-        return existsCalls > 1;
-      });
-      vi.mocked(fs.readFileSync).mockReturnValue(
-        JSON.stringify(mockApiResponse),
-      );
-      mockFetch.mockRejectedValue(new Error('Network error'));
+    it('loads from API when no cache exists', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => mockApiResponse,
+      } as Response);
 
       await registry.initialize();
+      // Wait for background refresh
+      await new Promise((r) => setTimeout(r, 100));
 
-      expect(registry.getModelCount()).toBeGreaterThan(0);
+      expect(registry.getModelCount()).toBe(7);
     });
   });
 
   describe('query API', () => {
     beforeEach(async () => {
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -248,7 +249,9 @@ describe('ModelsRegistry', () => {
 
   describe('provider API', () => {
     beforeEach(async () => {
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -275,7 +278,9 @@ describe('ModelsRegistry', () => {
 
   describe('counts', () => {
     beforeEach(async () => {
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -294,31 +299,32 @@ describe('ModelsRegistry', () => {
 
   describe('cache metadata', () => {
     it('getCacheMetadata returns null before refresh', async () => {
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
       await registry.initialize();
 
-      // No successful refresh yet (fetch failed)
+      // No successful refresh yet (loaded from cache, not via refresh())
       const metadata = registry.getCacheMetadata();
       expect(metadata).toBeNull();
     });
 
     it('getCacheMetadata returns data after successful refresh', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(
-        JSON.stringify(mockApiResponse),
-      );
+      vi.mocked(fs.existsSync).mockReturnValue(false);
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => mockApiResponse,
       } as Response);
 
       await registry.initialize();
+      // Explicitly call refresh to populate metadata
+      await registry.refresh();
 
-      // Wait a bit for background refresh
+      // Wait a bit for refresh to complete
       await new Promise((r) => setTimeout(r, 100));
 
       const metadata = registry.getCacheMetadata();

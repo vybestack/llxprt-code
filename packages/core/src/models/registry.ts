@@ -6,7 +6,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Storage } from '../config/storage.js';
 import {
   ModelsDevApiResponseSchema,
@@ -82,10 +81,7 @@ export class ModelsRegistry {
   }
 
   /**
-   * Load models with fallback strategy:
-   * 1. Try cache file
-   * 2. Try bundled fallback
-   * 3. Trigger fresh fetch (non-blocking)
+   * Load models from cache or trigger fresh fetch
    */
   private async loadModels(): Promise<void> {
     // Try cache first
@@ -95,15 +91,9 @@ export class ModelsRegistry {
       return;
     }
 
-    // Fallback to bundled data
-    const bundled = await this.loadBundledFallback();
-    if (bundled) {
-      this.populateModels(bundled);
-    }
-
-    // Trigger background refresh regardless
+    // No cache - trigger refresh
     this.refresh().catch(() => {
-      // Silent failure - we have fallback data
+      // Silent failure - models will be empty until next refresh
     });
   }
 
@@ -130,37 +120,6 @@ export class ModelsRegistry {
       const data = JSON.parse(content);
 
       // Validate schema
-      const validated = ModelsDevApiResponseSchema.safeParse(data);
-      if (!validated.success) {
-        return null;
-      }
-
-      return validated.data;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Load bundled fallback JSON
-   */
-  private async loadBundledFallback(): Promise<ModelsDevApiResponse | null> {
-    try {
-      // Dynamic import of bundled fallback
-      // This file is generated at build time by scripts/fetch-models.ts
-      const fallbackUrl = new URL(
-        '../assets/fallback-models.json',
-        import.meta.url,
-      );
-      const fallbackPath = fileURLToPath(fallbackUrl);
-
-      if (!fs.existsSync(fallbackPath)) {
-        return null;
-      }
-
-      const content = fs.readFileSync(fallbackPath, 'utf-8');
-      const data = JSON.parse(content);
-
       const validated = ModelsDevApiResponseSchema.safeParse(data);
       if (!validated.success) {
         return null;

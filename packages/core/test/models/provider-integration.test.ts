@@ -118,7 +118,9 @@ describe('hasModelInRegistry', () => {
 
   describe('with initialized registry', () => {
     beforeEach(async () => {
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -163,7 +165,9 @@ describe('getExtendedModelInfo', () => {
 
   describe('with initialized registry', () => {
     beforeEach(async () => {
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -211,7 +215,9 @@ describe('getRecommendedModel', () => {
 
   describe('with initialized registry', () => {
     beforeEach(async () => {
+      const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
