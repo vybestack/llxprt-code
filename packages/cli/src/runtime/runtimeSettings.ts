@@ -18,7 +18,6 @@ import {
 import type {
   ProviderManager,
   Profile,
-  IModel,
   ModelParams,
   RuntimeAuthScopeFlushResult,
   LoadBalancerProfile,
@@ -1694,7 +1693,7 @@ export async function switchActiveProvider(
     defaultModel ??
     '';
 
-  let availableModels: IModel[] = [];
+  let availableModels: HydratedModel[] = [];
   if (typeof providerManager.getAvailableModels === 'function') {
     try {
       availableModels = (await providerManager.getAvailableModels(name)) ?? [];

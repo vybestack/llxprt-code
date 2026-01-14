@@ -51,7 +51,9 @@ describe('ModelsRegistry', () => {
       // Mock fresh cache to load data
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -64,7 +66,9 @@ describe('ModelsRegistry', () => {
     it('initialize is idempotent', async () => {
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -82,7 +86,9 @@ describe('ModelsRegistry', () => {
     it('concurrent initialize calls do not duplicate work', async () => {
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -158,7 +164,9 @@ describe('ModelsRegistry', () => {
     beforeEach(async () => {
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -251,7 +259,9 @@ describe('ModelsRegistry', () => {
     beforeEach(async () => {
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -280,7 +290,9 @@ describe('ModelsRegistry', () => {
     beforeEach(async () => {
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -301,7 +313,9 @@ describe('ModelsRegistry', () => {
     it('getCacheMetadata returns null before refresh', async () => {
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );

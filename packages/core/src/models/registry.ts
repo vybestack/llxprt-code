@@ -74,10 +74,12 @@ export class ModelsRegistry {
     if (this.initialized) return;
     if (this.initPromise) return this.initPromise;
 
-    this.initPromise = this.loadModels();
+    this.initPromise = (async () => {
+      await this.loadModels();
+      this.initialized = true;
+      this.startBackgroundRefresh();
+    })();
     await this.initPromise;
-    this.startBackgroundRefresh();
-    this.initialized = true;
   }
 
   /**

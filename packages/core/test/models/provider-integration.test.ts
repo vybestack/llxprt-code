@@ -120,7 +120,9 @@ describe('hasModelInRegistry', () => {
     beforeEach(async () => {
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -167,7 +169,9 @@ describe('getExtendedModelInfo', () => {
     beforeEach(async () => {
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
@@ -217,7 +221,9 @@ describe('getRecommendedModel', () => {
     beforeEach(async () => {
       const now = Date.now();
       vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.statSync).mockReturnValue({ mtimeMs: now - 1000 } as fs.Stats);
+      vi.mocked(fs.statSync).mockReturnValue({
+        mtimeMs: now - 1000,
+      } as fs.Stats);
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify(mockApiResponse),
       );
