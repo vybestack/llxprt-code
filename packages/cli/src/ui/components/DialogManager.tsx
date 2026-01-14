@@ -8,7 +8,7 @@ import { Box, Text } from 'ink';
 import { useCallback, useMemo } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { HydratedModel, Config } from '@vybestack/llxprt-code-core';
+import type { HydratedModel, Config, Profile } from '@vybestack/llxprt-code-core';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -27,7 +27,6 @@ import { ProfileListDialog } from './ProfileListDialog.js';
 import { ProfileDetailDialog } from './ProfileDetailDialog.js';
 import { ProfileInlineEditor } from './ProfileInlineEditor.js';
 import { ToolsDialog } from './ToolsDialog.js';
-import type { Profile, Config } from '@vybestack/llxprt-code-core';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
 import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
 // import { ProQuotaDialog } from './ProQuotaDialog.js'; // TODO: Not yet ported from upstream
