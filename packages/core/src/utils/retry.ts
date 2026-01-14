@@ -290,7 +290,7 @@ export async function retryWithBackoff<T>(
   let attempt = 0;
   let currentDelay = initialDelayMs;
   let consecutive429s = 0;
-  let consecutive401s = 0;
+  let consecutiveAuthErrors = 0;
   const failoverThreshold = 1; // Attempt bucket failover after this many consecutive 429s
 
   while (attempt < maxAttempts) {
@@ -303,7 +303,7 @@ export async function retryWithBackoff<T>(
 
       // Reset error counters on success
       consecutive429s = 0;
-      consecutive401s = 0;
+      consecutiveAuthErrors = 0;
 
       if (
         shouldRetryOnContent &&
@@ -326,7 +326,7 @@ export async function retryWithBackoff<T>(
       const isOverload = isOverloadError(error);
       const is429 = errorStatus === 429 || isOverload;
       const is402 = errorStatus === 402;
-      const is401 = errorStatus === 401;
+      const isAuthError = errorStatus === 401 || errorStatus === 403;
 
       // Track consecutive 429 errors for bucket failover
       if (is429) {
@@ -339,22 +339,22 @@ export async function retryWithBackoff<T>(
         consecutive429s = 0;
       }
 
-      if (is401) {
-        consecutive401s++;
+      if (isAuthError) {
+        consecutiveAuthErrors++;
       } else {
-        consecutive401s = 0;
+        consecutiveAuthErrors = 0;
       }
 
       // Retry once to allow OAuth refresh or onPersistent429 to refresh before failover.
       // This retry relies on either automatic OAuth refresh during the next request
       // or refresh logic inside onPersistent429 before failover executes.
       const shouldAttemptRefreshRetry =
-        is401 && options?.onPersistent429 && consecutive401s === 1;
+        isAuthError && options?.onPersistent429 && consecutiveAuthErrors === 1;
 
       if (shouldAttemptRefreshRetry) {
         logger.debug(
           () =>
-            '401 error detected, retrying once to allow refresh before bucket failover',
+            `401/403 error detected, retrying once to allow refresh before bucket failover`,
         );
       }
 
@@ -363,13 +363,13 @@ export async function retryWithBackoff<T>(
         canAttemptFailover &&
         ((is429 && consecutive429s >= failoverThreshold) ||
           is402 ||
-          (is401 && consecutive401s > 1));
+          (isAuthError && consecutiveAuthErrors > 1));
 
       // @fix issue1029 - Enhanced debug logging for failover decision
       logger.debug(
         () =>
-          `[issue1029] Failover decision: errorStatus=${errorStatus}, is429=${is429}, is402=${is402}, is401=${is401}, ` +
-          `consecutive429s=${consecutive429s}, consecutive401s=${consecutive401s}, ` +
+          `[issue1029] Failover decision: errorStatus=${errorStatus}, is429=${is429}, is402=${is402}, isAuthError=${isAuthError}, ` +
+          `consecutive429s=${consecutive429s}, consecutiveAuthErrors=${consecutiveAuthErrors}, ` +
           `canAttemptFailover=${canAttemptFailover}, shouldAttemptFailover=${shouldAttemptFailover}`,
       );
 
@@ -398,7 +398,7 @@ export async function retryWithBackoff<T>(
             () => `Bucket failover successful, resetting retry state`,
           );
           consecutive429s = 0;
-          consecutive401s = 0;
+          consecutiveAuthErrors = 0;
           currentDelay = initialDelayMs;
           // Don't increment attempt counter - this is a fresh start with new bucket
           attempt--;

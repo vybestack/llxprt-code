@@ -848,6 +848,46 @@ describe('retryWithBackoff', () => {
       expect(failoverCallback).toHaveBeenCalledTimes(1);
       expect(mockFn).toHaveBeenCalledTimes(2);
     });
+    /**
+     * @requirement issue1123 - Handle 403 permission_error (revoked token)
+     * @scenario Bucket failover on 403 OAuth token revoked
+     * @given A request that returns 403 with "OAuth token has been revoked"
+     * @when onPersistent429 callback is configured
+     * @then Should retry once to allow refresh, then failover on second 403
+     */
+    it('should retry once on 403 before bucket failover (OAuth token revoked)', async () => {
+      vi.useFakeTimers();
+      let failoverCalled = false;
+
+      const mockFn = vi.fn(async () => {
+        if (!failoverCalled) {
+          const error: HttpError = new Error(
+            'API Error: 403 {"type":"error","error":{"type":"permission_error","message":"OAuth token has been revoked. Please obtain a new token."}}',
+          );
+          error.status = 403;
+          throw error;
+        }
+        return 'success after bucket switch';
+      });
+
+      const failoverCallback = vi.fn(async () => {
+        failoverCalled = true;
+        return true;
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 100,
+        onPersistent429: failoverCallback,
+        authType: 'oauth-bucket',
+      });
+
+      await vi.runAllTimersAsync();
+      await expect(promise).resolves.toBe('success after bucket switch');
+      expect(failoverCallback).toHaveBeenCalledTimes(1);
+      // Should retry once for refresh attempt, then failover, then succeed
+      expect(mockFn).toHaveBeenCalledTimes(3);
+    });
   });
 
   it('should abort the retry loop when the signal is aborted', async () => {

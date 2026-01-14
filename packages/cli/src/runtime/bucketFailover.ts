@@ -25,12 +25,22 @@
 export function shouldFailover(error: Error): boolean {
   const message = error.message.toLowerCase();
 
+  // Check for status code on error object (common pattern)
+  const errorStatus = (error as { status?: number }).status;
+  if (errorStatus === 401 || errorStatus === 403) {
+    return true;
+  }
+
   return (
     message.includes('429') ||
+    message.includes('401') ||
+    message.includes('403') ||
     message.includes('rate limit') ||
     message.includes('quota') ||
     message.includes('402') ||
     message.includes('payment') ||
+    message.includes('revoked') ||
+    message.includes('permission_error') ||
     (message.includes('token') && message.includes('expired'))
   );
 }
