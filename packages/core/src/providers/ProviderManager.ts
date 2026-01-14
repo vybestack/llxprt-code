@@ -14,8 +14,8 @@ import {
   type HydratedModel,
 } from '../models/hydration.js';
 import {
-  initializeModelsRegistry,
-  getModelsRegistry,
+  initializeModelRegistry,
+  getModelRegistry,
 } from '../models/registry.js';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
 import {
@@ -837,7 +837,7 @@ export class ProviderManager implements IProviderManager {
 
     // Step 2: Initialize registry if needed (non-blocking failure)
     try {
-      await initializeModelsRegistry();
+      await initializeModelRegistry();
     } catch {
       // Registry init failed - return unhydrated
       logger.debug(
@@ -856,7 +856,7 @@ export class ProviderManager implements IProviderManager {
         () =>
           `[getAvailableModels] Provider ${provider!.name} returned 0 models, falling back to registry`,
       );
-      const registry = getModelsRegistry();
+      const registry = getModelRegistry();
       if (registry.isInitialized()) {
         // Get models from registry for this provider (only those with tool support)
         const registryModels: HydratedModel[] = [];

@@ -12,7 +12,7 @@ import {
   type ModelsDevApiResponse,
   type LlxprtModel,
   type LlxprtProvider,
-  type ModelsCacheMetadata,
+  type ModelCacheMetadata,
 } from './schema.js';
 import { transformApiResponse } from './transformer.js';
 
@@ -37,12 +37,12 @@ export interface ModelSearchQuery {
 /**
  * Event types emitted by the registry
  */
-export type ModelsRegistryEvent = 'models:updated' | 'models:error';
+export type ModelRegistryEvent = 'models:updated' | 'models:error';
 
 type EventCallback = () => void;
 
 /**
- * ModelsRegistry - Central registry for AI model metadata from models.dev
+ * ModelRegistry - Central registry for AI model metadata from models.dev
  *
  * Provides:
  * - Automatic loading from cache or bundled fallback
@@ -50,7 +50,7 @@ type EventCallback = () => void;
  * - Search and filtering by capabilities, price, context
  * - Event emission for UI updates
  */
-export class ModelsRegistry {
+export class ModelRegistry {
   private models = new Map<string, LlxprtModel>();
   private providers = new Map<string, LlxprtProvider>();
   private lastRefresh: Date | null = null;
@@ -104,7 +104,7 @@ export class ModelsRegistry {
    */
   private async loadFromCache(): Promise<ModelsDevApiResponse | null> {
     try {
-      const cachePath = ModelsRegistry.getCachePath();
+      const cachePath = ModelRegistry.getCachePath();
 
       if (!fs.existsSync(cachePath)) {
         return null;
@@ -182,7 +182,7 @@ export class ModelsRegistry {
    */
   private async saveToCache(data: ModelsDevApiResponse): Promise<void> {
     try {
-      const cachePath = ModelsRegistry.getCachePath();
+      const cachePath = ModelRegistry.getCachePath();
       const cacheDir = path.dirname(cachePath);
 
       // Ensure cache directory exists
@@ -313,7 +313,7 @@ export class ModelsRegistry {
   /**
    * Get cache metadata
    */
-  getCacheMetadata(): ModelsCacheMetadata | null {
+  getCacheMetadata(): ModelCacheMetadata | null {
     if (!this.lastRefresh) return null;
 
     return {
@@ -350,7 +350,7 @@ export class ModelsRegistry {
   /**
    * Subscribe to registry events
    */
-  on(event: ModelsRegistryEvent, callback: EventCallback): void {
+  on(event: ModelRegistryEvent, callback: EventCallback): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, []);
     }
@@ -360,7 +360,7 @@ export class ModelsRegistry {
   /**
    * Unsubscribe from registry events
    */
-  off(event: ModelsRegistryEvent, callback: EventCallback): void {
+  off(event: ModelRegistryEvent, callback: EventCallback): void {
     const callbacks = this.listeners.get(event);
     if (callbacks) {
       const index = callbacks.indexOf(callback);
@@ -373,30 +373,30 @@ export class ModelsRegistry {
   /**
    * Emit an event
    */
-  private emit(event: ModelsRegistryEvent): void {
+  private emit(event: ModelRegistryEvent): void {
     const callbacks = this.listeners.get(event) || [];
     callbacks.forEach((cb) => cb());
   }
 }
 
 // Singleton instance
-let registryInstance: ModelsRegistry | null = null;
+let registryInstance: ModelRegistry | null = null;
 
 /**
- * Get the global ModelsRegistry instance
+ * Get the global ModelRegistry instance
  */
-export function getModelsRegistry(): ModelsRegistry {
+export function getModelRegistry(): ModelRegistry {
   if (!registryInstance) {
-    registryInstance = new ModelsRegistry();
+    registryInstance = new ModelRegistry();
   }
   return registryInstance;
 }
 
 /**
- * Initialize the global ModelsRegistry
+ * Initialize the global ModelRegistry
  */
-export async function initializeModelsRegistry(): Promise<ModelsRegistry> {
-  const registry = getModelsRegistry();
+export async function initializeModelRegistry(): Promise<ModelRegistry> {
+  const registry = getModelRegistry();
   await registry.initialize();
   return registry;
 }

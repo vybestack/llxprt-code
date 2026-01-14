@@ -19,7 +19,7 @@ import type {
   LlxprtModelLimits,
   LlxprtModelMetadata,
 } from './schema.js';
-import { getModelsRegistry } from './registry.js';
+import { getModelRegistry } from './registry.js';
 import { PROVIDER_ID_MAP } from './provider-integration.js';
 
 /**
@@ -79,7 +79,7 @@ export async function hydrateModelsWithRegistry(
   models: IModel[],
   modelsDevProviderIds: string[] | null,
 ): Promise<HydratedModel[]> {
-  const registry = getModelsRegistry();
+  const registry = getModelRegistry();
 
   // If registry not initialized or no provider IDs, return unhydrated
   if (!registry.isInitialized() || !modelsDevProviderIds) {

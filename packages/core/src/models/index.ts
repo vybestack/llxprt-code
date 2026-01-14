@@ -12,13 +12,13 @@
  *
  * @example
  * ```typescript
- * import { initializeModelsRegistry, getModelsRegistry } from '@vybestack/llxprt-code-core/models';
+ * import { initializeModelRegistry, getModelRegistry } from '@vybestack/llxprt-code-core/models';
  *
  * // Initialize on startup
- * await initializeModelsRegistry();
+ * await initializeModelRegistry();
  *
  * // Get registry instance
- * const registry = getModelsRegistry();
+ * const registry = getModelRegistry();
  *
  * // Query models
  * const allModels = registry.getAll();
@@ -29,11 +29,11 @@
 
 // Core registry
 export {
-  ModelsRegistry,
-  getModelsRegistry,
-  initializeModelsRegistry,
+  ModelRegistry,
+  getModelRegistry,
+  initializeModelRegistry,
   type ModelSearchQuery,
-  type ModelsRegistryEvent,
+  type ModelRegistryEvent,
 } from './registry.js';
 
 // Schemas and types
@@ -63,8 +63,8 @@ export {
   type LlxprtDefaultProfile,
 
   // Cache metadata
-  ModelsCacheMetadataSchema,
-  type ModelsCacheMetadata,
+  ModelCacheMetadataSchema,
+  type ModelCacheMetadata,
 } from './schema.js';
 
 // Transformers

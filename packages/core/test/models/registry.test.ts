@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
-import { ModelsRegistry } from '../../src/models/registry.js';
+import { ModelRegistry } from '../../src/models/registry.js';
 import { mockApiResponse } from './__fixtures__/mock-data.js';
 
 // Mock fs module
@@ -26,12 +26,12 @@ vi.mock('node:fs', async () => {
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-describe('ModelsRegistry', () => {
-  let registry: ModelsRegistry;
+describe('ModelRegistry', () => {
+  let registry: ModelRegistry;
 
   beforeEach(() => {
     // Create fresh registry for each test
-    registry = new ModelsRegistry();
+    registry = new ModelRegistry();
     vi.clearAllMocks();
 
     // Default: no cache, no bundled fallback

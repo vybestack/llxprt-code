@@ -13,7 +13,7 @@
 
 import type { IModel } from '../providers/IModel.js';
 import type { LlxprtModel } from './schema.js';
-import { getModelsRegistry } from './registry.js';
+import { getModelRegistry } from './registry.js';
 
 /**
  * Maps llxprt provider names to models.dev provider IDs
@@ -74,7 +74,7 @@ export function hasModelInRegistry(
   modelId: string,
 ): boolean {
   try {
-    const registry = getModelsRegistry();
+    const registry = getModelRegistry();
     if (!registry.isInitialized()) {
       return false;
     }
@@ -106,7 +106,7 @@ export function getExtendedModelInfo(
   modelId: string,
 ): LlxprtModel | undefined {
   try {
-    const registry = getModelsRegistry();
+    const registry = getModelRegistry();
     if (!registry.isInitialized()) {
       return undefined;
     }
@@ -142,7 +142,7 @@ export function getRecommendedModel(
   },
 ): LlxprtModel | undefined {
   try {
-    const registry = getModelsRegistry();
+    const registry = getModelRegistry();
     if (!registry.isInitialized()) {
       return undefined;
     }

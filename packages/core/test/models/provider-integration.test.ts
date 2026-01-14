@@ -12,10 +12,7 @@ import {
   getExtendedModelInfo,
   getRecommendedModel,
 } from '../../src/models/provider-integration.js';
-import {
-  ModelsRegistry,
-  getModelsRegistry,
-} from '../../src/models/registry.js';
+import { ModelRegistry, getModelRegistry } from '../../src/models/registry.js';
 import type { LlxprtModel } from '../../src/models/schema.js';
 import {
   mockApiResponse,
@@ -46,13 +43,13 @@ vi.mock('../../src/models/registry.js', async () => {
   const actual = await vi.importActual<
     typeof import('../../src/models/registry.js')
   >('../../src/models/registry.js');
-  let instance: ModelsRegistry | null = null;
+  let instance: ModelRegistry | null = null;
 
   return {
     ...actual,
-    getModelsRegistry: () => {
+    getModelRegistry: () => {
       if (!instance) {
-        instance = new actual.ModelsRegistry();
+        instance = new actual.ModelRegistry();
       }
       return instance;
     },
@@ -128,7 +125,7 @@ describe('hasModelInRegistry', () => {
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const registry = getModelsRegistry();
+      const registry = getModelRegistry();
       await registry.initialize();
     });
 
@@ -177,7 +174,7 @@ describe('getExtendedModelInfo', () => {
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const registry = getModelsRegistry();
+      const registry = getModelRegistry();
       await registry.initialize();
     });
 
@@ -229,7 +226,7 @@ describe('getRecommendedModel', () => {
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const registry = getModelsRegistry();
+      const registry = getModelRegistry();
       await registry.initialize();
     });
 

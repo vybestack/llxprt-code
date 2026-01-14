@@ -39,7 +39,7 @@ import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js'
 import { LoggingDialog } from './LoggingDialog.js';
 import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
-import { ModelsDialog } from './ModelsDialog.js';
+import { ModelsDialog } from './ModelDialog.js';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';

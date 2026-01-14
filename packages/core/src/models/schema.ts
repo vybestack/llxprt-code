@@ -199,11 +199,11 @@ export type LlxprtProvider = z.infer<typeof LlxprtProviderSchema>;
 /**
  * Cache metadata schema
  */
-export const ModelsCacheMetadataSchema = z.object({
+export const ModelCacheMetadataSchema = z.object({
   fetchedAt: z.string(), // ISO date string
   version: z.string(),
   providerCount: z.number(),
   modelCount: z.number(),
 });
 
-export type ModelsCacheMetadata = z.infer<typeof ModelsCacheMetadataSchema>;
+export type ModelCacheMetadata = z.infer<typeof ModelCacheMetadataSchema>;

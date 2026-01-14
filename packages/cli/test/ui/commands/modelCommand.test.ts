@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { modelCommand } from '../../../src/ui/commands/modelsCommand.js';
+import { modelCommand } from '../../../src/ui/commands/modelCommand.js';
 import {
   CommandContext,
   OpenDialogActionReturn,
