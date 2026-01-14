@@ -35,6 +35,7 @@ import {
   DEFAULT_AGENT_ID,
   type ThinkingBlock,
   tokenLimit,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -127,6 +128,8 @@ function showCitations(settings: LoadedSettings, config: Config): boolean {
   return (server && server.userTier !== UserTierId.FREE) ?? false;
 }
 
+const geminiStreamLogger = new DebugLogger('llxprt:ui:gemini-stream');
+
 /**
  * Manages the Gemini stream, including user input, command processing,
  * API interaction, and tool call lifecycle.
@@ -154,6 +157,11 @@ export const useGeminiStream = (
   const abortControllerRef = useRef<AbortController | null>(null);
   const turnCancelledRef = useRef(false);
   const [isResponding, setIsResponding] = useState<boolean>(false);
+  // Issue #1113: Track tool completions that happened while isResponding was true
+  // This handles the race condition where fast tools complete before the stream ends
+  // We store the actual completed tools because useReactToolScheduler clears toolCalls
+  // after onAllToolCallsComplete fires
+  const pendingToolCompletionsRef = useRef<TrackedToolCall[]>([]);
   const [thought, setThought] = useState<ThoughtSummary | null>(null);
   const [pendingHistoryItem, pendingHistoryItemRef, setPendingHistoryItem] =
     useStateAndRef<HistoryItemWithoutId | null>(null);
@@ -1187,11 +1195,58 @@ export const useGeminiStream = (
     }
   }, [streamingState, scheduleNextQueuedSubmission]);
 
+  // Issue #1113: When isResponding becomes false, process any tool completions
+  // that we stored while the stream was active. We store the actual tools because
+  // useReactToolScheduler clears toolCalls after onAllToolCallsComplete fires.
+  useEffect(() => {
+    geminiStreamLogger.debug(
+      `pendingToolCompletions effect: isResponding=${isResponding}, pendingCount=${pendingToolCompletionsRef.current.length}`,
+    );
+    if (!isResponding && pendingToolCompletionsRef.current.length > 0) {
+      const pendingTools = [...pendingToolCompletionsRef.current];
+      pendingToolCompletionsRef.current = [];
+      geminiStreamLogger.debug(
+        `pendingToolCompletions effect: processing ${pendingTools.length} queued tools`,
+      );
+      // Now that isResponding is false, we can safely process the completions
+      // Pass skipRespondingCheck=true because we already verified isResponding is false
+      void handleCompletedToolsRef.current?.(pendingTools, true);
+    }
+  }, [isResponding]);
+
+  // Ref to hold the latest handleCompletedTools for the effect above
+  const handleCompletedToolsRef = useRef<
+    | ((
+        tools: TrackedToolCall[],
+        skipRespondingCheck?: boolean,
+      ) => Promise<void>)
+    | null
+  >(null);
+
   const handleCompletedTools = useCallback(
-    async (completedToolCallsFromScheduler: TrackedToolCall[]) => {
-      if (isResponding) {
+    async (
+      completedToolCallsFromScheduler: TrackedToolCall[],
+      skipRespondingCheck = false,
+    ) => {
+      // Issue #1113: If tools complete while stream is active, store them for
+      // processing after the stream ends. This handles the race condition where
+      // fast tools (like list_directory) complete before isResponding becomes false.
+      // We must store the actual tools because useReactToolScheduler clears
+      // toolCalls array after onAllToolCallsComplete fires.
+      // skipRespondingCheck is true when called from the useEffect that processes
+      // queued tools - in that case we've already verified isResponding is false.
+      if (!skipRespondingCheck && isResponding) {
+        geminiStreamLogger.debug(
+          `handleCompletedTools: stream active, queuing ${completedToolCallsFromScheduler.length} tool(s) for deferred processing`,
+        );
+        pendingToolCompletionsRef.current.push(
+          ...completedToolCallsFromScheduler,
+        );
         return;
       }
+      geminiStreamLogger.debug(
+        `handleCompletedTools: processing ${completedToolCallsFromScheduler.length} tool(s)`,
+      );
 
       // Issue #968: Don't process tool completions or start continuations
       // if the turn has been cancelled. Mark the tools as submitted to
@@ -1395,6 +1450,11 @@ export const useGeminiStream = (
       onTodoPause,
     ],
   );
+
+  // Issue #1113: Keep the ref updated with the latest handleCompletedTools
+  useEffect(() => {
+    handleCompletedToolsRef.current = handleCompletedTools;
+  }, [handleCompletedTools]);
 
   const pendingHistoryItems = useMemo(
     () =>
