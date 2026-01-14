@@ -6,7 +6,7 @@
 
 import updateNotifier, { UpdateInfo } from 'update-notifier';
 import semver from 'semver';
-import { getPackageJson, debugLogger } from '@vybestack/llxprt-code-core';
+import { getPackageJson } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';

@@ -5,7 +5,6 @@
  */
 
 import * as fs from 'fs/promises';
-import * as fsSync from 'fs';
 import * as path from 'path';
 import { PartListUnion, PartUnion } from '@google/genai';
 import {

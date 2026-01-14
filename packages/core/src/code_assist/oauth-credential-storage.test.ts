@@ -18,7 +18,7 @@ import { OAuthCredentialStorage } from './oauth-credential-storage.js';
 import { HybridTokenStorage } from '../mcp/token-storage/hybrid-token-storage.js';
 import type { OAuthCredentials } from '../mcp/token-storage/types.js';
 import { Storage } from '../config/storage.js';
-import { coreEvents } from '../events/core-events.js';
+import { coreEvents } from '../utils/events.js';
 
 import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
@@ -36,7 +36,7 @@ vi.mock('node:fs', () => ({
     rm: vi.fn(),
   },
 }));
-vi.mock('../events/core-events.js', () => ({
+vi.mock('../utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
   },
