@@ -15,7 +15,7 @@ import { GoogleCredentialProvider } from '../mcp/google-auth-provider.js';
 import { MCPOAuthProvider } from '../mcp/oauth-provider.js';
 import { MCPOAuthTokenStorage } from '../mcp/oauth-token-storage.js';
 import { OAuthUtils } from '../mcp/oauth-utils.js';
-import type { PromptRegistry } from '../prompts/index.js';
+import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import {
   connectToMcpServer,

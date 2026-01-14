@@ -144,6 +144,7 @@ export default tseslint.config(
             'memfs/lib/volume.js',
             'yargs/**',
             '@anthropic-ai/sdk/**',
+            '**/generated/**',
           ],
         },
       ],

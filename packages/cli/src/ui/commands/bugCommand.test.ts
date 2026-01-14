@@ -9,7 +9,7 @@ import open from 'open';
 import { bugCommand } from './bugCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { getCliVersion } from '../../utils/version.js';
-import { GIT_COMMIT_INFO } from '../../generated/index.js';
+import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 
 vi.mock('open');

@@ -7,7 +7,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
-import { GIT_COMMIT_INFO } from '../../generated/index.js';
+import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 
 interface AboutBoxProps {
   cliVersion: string;
