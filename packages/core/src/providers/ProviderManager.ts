@@ -870,7 +870,7 @@ export class ProviderManager implements IProviderManager {
               id: rm.modelId,
               name: rm.name,
               provider: provider!.name,
-              supportedToolFormats: ['openai'],
+              supportedToolFormats: [],
               contextWindow: rm.contextWindow,
               maxOutputTokens: rm.maxOutputTokens,
               capabilities: rm.capabilities,

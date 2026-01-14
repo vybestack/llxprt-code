@@ -93,7 +93,7 @@ export function hasModelInRegistry(
     const providerIds = getModelsDevProviderIds(providerName);
 
     for (const providerId of providerIds) {
-      // Try both full ID format (provider/model) and short ID
+      // Try full ID format (provider/model)
       const fullId = `${providerId}/${modelId}`;
       if (registry.getById(fullId)) {
         return true;
