@@ -56,12 +56,13 @@ export interface ProviderSettings {
     | 'gemma'
     | 'llama';
   /**
-   * Anthropic prompt caching configuration
+   * Anthropic/OpenAI prompt caching configuration
    * - 'off': No caching
-   * - '5m': 5-minute cache TTL
-   * - '1h': 1-hour cache TTL (default, requires extended-cache-ttl beta header)
+   * - '5m': 5-minute cache TTL (Anthropic only)
+   * - '1h': 1-hour cache TTL (default, Anthropic only)
+   * - '24h': 24-hour cache TTL (OpenAI only)
    */
-  'prompt-caching'?: 'off' | '5m' | '1h';
+  'prompt-caching'?: 'off' | '5m' | '1h' | '24h';
   /** Whether to include folder structure in system prompts (default: false) */
   'include-folder-structure'?: boolean;
   [key: string]: unknown;

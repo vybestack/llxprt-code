@@ -201,4 +201,54 @@ describe('parseErrorResponse', () => {
     );
     expect(error.message).toBe('I am a teapot');
   });
+
+  it('should parse cached_tokens from response.completed usage data', async () => {
+    const chunks = [
+      'data: {"type":"response.output_text.delta","delta":"Hello"}\n\n',
+      'data: {"type":"response.completed","response":{"id":"resp-123","object":"response","model":"o3-mini","status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"input_tokens_details":{"cached_tokens":50}}}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const messages = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages.push(message);
+    }
+
+    expect(messages.length).toBeGreaterThanOrEqual(2);
+    const usageMessage = messages.find((m) => m.metadata?.usage);
+    expect(usageMessage).toBeDefined();
+    expect(usageMessage?.metadata?.usage).toEqual({
+      promptTokens: 100,
+      completionTokens: 20,
+      totalTokens: 120,
+      cachedTokens: 50,
+    });
+  });
+
+  it('should default cachedTokens to 0 when not present in usage data', async () => {
+    const chunks = [
+      'data: {"type":"response.output_text.delta","delta":"Hello"}\n\n',
+      'data: {"type":"response.completed","response":{"id":"resp-123","object":"response","model":"o3-mini","status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const messages = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages.push(message);
+    }
+
+    expect(messages.length).toBeGreaterThanOrEqual(2);
+    const usageMessage = messages.find((m) => m.metadata?.usage);
+    expect(usageMessage).toBeDefined();
+    expect(usageMessage?.metadata?.usage).toEqual({
+      promptTokens: 100,
+      completionTokens: 20,
+      totalTokens: 120,
+      cachedTokens: 0,
+    });
+  });
 });

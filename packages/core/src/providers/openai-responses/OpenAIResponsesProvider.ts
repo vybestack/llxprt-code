@@ -764,13 +764,27 @@ export class OpenAIResponsesProvider extends BaseProvider {
       this.logger.debug(
         () => 'Codex mode: setting instructions and store=false',
       );
+    }
 
+    // Apply prompt caching for both Codex and non-Codex modes
+    // Check ephemeral settings first (from invocation snapshot), then provider settings
+    const promptCachingSetting =
+      (options.invocation?.ephemerals?.['prompt-caching'] as
+        | string
+        | undefined) ??
+      (options.settings?.getProviderSettings?.(this.name)?.[
+        'prompt-caching'
+      ] as string | undefined) ??
+      '1h'; // default to enabled
+
+    const isCachingEnabled = promptCachingSetting !== 'off';
+
+    if (isCachingEnabled) {
       const cacheKey =
-        requestOverrides.prompt_cache_key ??
-        options.invocation?.runtimeId ??
-        options.runtime?.runtimeId;
+        options.invocation?.runtimeId ?? options.runtime?.runtimeId;
       if (cacheKey && typeof cacheKey === 'string' && cacheKey.trim() !== '') {
         request.prompt_cache_key = cacheKey;
+        request.prompt_cache_retention = '24h';
       }
     }
 
