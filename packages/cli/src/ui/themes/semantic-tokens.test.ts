@@ -259,6 +259,7 @@ describe('semantic tokens system', () => {
           secondary: expect.any(String),
           link: expect.any(String),
           accent: expect.any(String),
+          response: expect.any(String),
         },
         status: {
           success: expect.any(String),

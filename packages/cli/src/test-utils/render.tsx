@@ -5,6 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
+import { renderHook as testingLibraryRenderHook } from '@testing-library/react';
 import React, { createContext, useContext } from 'react';
 import { LoadedSettings, type Settings } from '../config/settings.js';
 import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
@@ -147,3 +148,6 @@ export const renderWithProviders = (
       </UIStateContext.Provider>
     </SettingsContext.Provider>,
   );
+
+// Re-export renderHook from testing-library for convenience
+export { testingLibraryRenderHook as renderHook };

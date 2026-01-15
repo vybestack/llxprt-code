@@ -5,7 +5,6 @@
  */
 
 import { isValidColor, resolveColor, interpolateColor } from './color-utils.js';
-import { SemanticColors } from './semantic-tokens.js';
 
 // Type for syntax highlighter theme styles
 // These come from react-syntax-highlighter and include additional properties

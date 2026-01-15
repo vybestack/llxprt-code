@@ -18,6 +18,7 @@ export function resolveSemanticColors(theme: ColorsTheme): SemanticColors {
       secondary: theme.Gray,
       link: theme.AccentBlue,
       accent: theme.AccentPurple,
+      response: theme.Foreground,
     },
     background: {
       primary: theme.Background,

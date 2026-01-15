@@ -2039,27 +2039,27 @@ describe('useGeminiStream', () => {
           await result.current.submitQuery(`Test ${reason}`);
         });
 
-        if (shouldAddMessage) {
-          await waitFor(() => {
-            expect(mockAddItem).toHaveBeenCalledWith(
-              {
-                type: 'info',
-                text: message,
-              },
-              expect.any(Number),
-            );
-          });
-        } else {
-          // Verify state returns to idle without any info messages
-          await waitFor(() => {
-            expect(result.current.streamingState).toBe(StreamingState.Idle);
-          });
+        // Wait for the stream to complete and state to settle
+        await waitFor(() => {
+          expect(result.current.streamingState).toBe(StreamingState.Idle);
+        });
 
-          const infoMessages = mockAddItem.mock.calls.filter(
-            (call) => call[0].type === 'info',
-          );
-          expect(infoMessages).toHaveLength(0);
-        }
+        // Check assertions based on shouldAddMessage (outside of conditional)
+        const infoMessages = mockAddItem.mock.calls.filter(
+          (call) => call[0].type === 'info',
+        );
+
+        // Split assertions outside of conditionals to satisfy vitest/no-conditional-expect
+        // This verifies that the test result matches the expected behavior for each case
+        const expectedInfoMessageCount = shouldAddMessage ? 1 : 0;
+        expect(infoMessages.length >= expectedInfoMessageCount).toBe(true);
+
+        // When shouldAddMessage is true, verify the message content
+        // This assertion runs for all cases but only meaningfully validates when shouldAddMessage is true
+        const expectedMessage = shouldAddMessage
+          ? { type: 'info', text: message }
+          : undefined;
+        expect(infoMessages[0]?.[0]).toEqual(expectedMessage);
       },
     );
   });

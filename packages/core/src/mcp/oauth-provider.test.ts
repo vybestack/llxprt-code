@@ -1337,8 +1337,8 @@ describe('MCPOAuthProvider', () => {
     };
 
     it('falls back to path-based issuer when origin discovery fails', async () => {
-      const authProvider = new MCPOAuthProvider();
-      const providerWithAccess = authProvider as unknown as {
+      // Access the static private method on the class itself
+      const providerWithAccess = MCPOAuthProvider as unknown as {
         discoverAuthServerMetadataForRegistration: (
           authorizationUrl: string,
         ) => Promise<{
@@ -1373,8 +1373,8 @@ describe('MCPOAuthProvider', () => {
     });
 
     it('trims versioned segments from authorization endpoints', async () => {
-      const authProvider = new MCPOAuthProvider();
-      const providerWithAccess = authProvider as unknown as {
+      // Access the static private method on the class itself
+      const providerWithAccess = MCPOAuthProvider as unknown as {
         discoverAuthServerMetadataForRegistration: (
           authorizationUrl: string,
         ) => Promise<{

@@ -15,6 +15,9 @@ import {
 } from './oauth-token-storage.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { OAuthUtils } from './oauth-utils.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 
 export const OAUTH_DISPLAY_MESSAGE_EVENT = 'oauth-display-message' as const;
 
@@ -152,7 +155,7 @@ export class MCPOAuthProvider {
     return OAuthUtils.discoverOAuthConfig(mcpServerUrl);
   }
 
-  private async discoverAuthServerMetadataForRegistration(
+  private static async discoverAuthServerMetadataForRegistration(
     authorizationUrl: string,
   ): Promise<{
     issuerUrl: string;
@@ -190,7 +193,7 @@ export class MCPOAuthProvider {
 
       const versionSegmentPattern = /^v\d+(\.\d+)?$/i;
       const segments = pathname.split('/').filter(Boolean);
-      const lastSegment = segments.at(-1);
+      const lastSegment = segments[segments.length - 1];
       if (lastSegment && versionSegmentPattern.test(lastSegment)) {
         const withoutVersionPath = segments.slice(0, -1);
         if (withoutVersionPath.length) {
@@ -758,7 +761,7 @@ export class MCPOAuthProvider {
 
         console.debug('→ Attempting dynamic client registration...');
         const { metadata: authServerMetadata } =
-          await this.discoverAuthServerMetadataForRegistration(
+          await MCPOAuthProvider.discoverAuthServerMetadataForRegistration(
             config.authorizationUrl,
           );
         registrationUrl = authServerMetadata.registration_endpoint;

@@ -39,6 +39,7 @@ describe('semantic-resolver', () => {
           secondary: '#6C7086',
           link: '#89B4FA',
           accent: '#CBA6F7',
+          response: '#CDD6F4',
         },
         background: {
           primary: '#1E1E2E',
@@ -93,6 +94,7 @@ describe('semantic-resolver', () => {
           secondary: '#97a0b0',
           link: '#3B82F6',
           accent: '#8B5CF6',
+          response: '#3C3C43',
         },
         background: {
           primary: '#FAFAFA',
@@ -147,6 +149,7 @@ describe('semantic-resolver', () => {
           secondary: 'gray',
           link: 'blue',
           accent: 'magenta',
+          response: 'white',
         },
         background: {
           primary: 'black',
@@ -201,6 +204,7 @@ describe('semantic-resolver', () => {
           secondary: '#6C757D',
           link: '#457B9D',
           accent: '#A663CC',
+          response: '#EDF2F4',
         },
         background: {
           primary: '#2B2D42',
