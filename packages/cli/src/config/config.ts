@@ -84,6 +84,8 @@ export const READ_ONLY_TOOL_NAMES = [
   'google_web_search',
   'web_fetch',
   'todo_read',
+  'todo_write',
+  'todo_pause',
   'task',
   'self_emitvalue',
 ] as const;
