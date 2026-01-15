@@ -102,8 +102,9 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       setActiveProviderRuntimeContext,
       clearActiveProviderRuntimeContext,
     } = await import('../../runtime/providerRuntimeContext.js');
-    const { getSettingsService } =
-      await import('../../settings/settingsServiceInstance.js');
+    const { getSettingsService } = await import(
+      '../../settings/settingsServiceInstance.js'
+    );
     const tempRuntime = createProviderRuntimeContext({
       settingsService: new SettingsService(),
       runtimeId: 'test-global-runtime',

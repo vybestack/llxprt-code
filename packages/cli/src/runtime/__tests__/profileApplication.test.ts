@@ -244,8 +244,9 @@ vi.mock('../runtimeSettings.js', () => ({
   isCliRuntimeStatelessReady: isCliRuntimeStatelessReadyMock,
 }));
 
-const { applyProfileWithGuards, selectAvailableProvider } =
-  await import('../profileApplication.js');
+const { applyProfileWithGuards, selectAvailableProvider } = await import(
+  '../profileApplication.js'
+);
 
 describe('profileApplication helpers', () => {
   it('selects fallback provider when requested provider is missing @plan:PLAN-20251020-STATELESSPROVIDER3.P08 @requirement:REQ-SP3-002', () => {
