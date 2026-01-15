@@ -994,7 +994,7 @@ describe('EditTool', () => {
           result.returnDisplay.diffStat
         ) {
           actualLinesRemoved.push(
-            result.returnDisplay.diffStat?.model_removed_lines,
+            result.returnDisplay.diffStat?.ai_removed_lines,
           );
         } else if (result.error) {
           console.error(`Edit failed for ${file.path}:`, result.error);
