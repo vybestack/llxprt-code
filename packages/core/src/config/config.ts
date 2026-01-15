@@ -22,6 +22,8 @@ import { GlobTool } from '../tools/glob.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { EditTool } from '../tools/edit.js';
 import { ShellTool } from '../tools/shell.js';
+import { ASTEditTool } from '../tools/ast-edit.js';
+import { ASTReadFileTool } from '../tools/ast-edit.js';
 import { WriteFileTool } from '../tools/write-file.js';
 import { GoogleWebFetchTool } from '../tools/google-web-fetch.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
@@ -1770,10 +1772,12 @@ export class Config {
 
     registerCoreTool(GlobTool, this);
     registerCoreTool(EditTool, this);
+    registerCoreTool(ASTEditTool, this);
     registerCoreTool(WriteFileTool, this);
     registerCoreTool(GoogleWebFetchTool, this);
     registerCoreTool(ReadManyFilesTool, this);
     registerCoreTool(ReadLineRangeTool, this);
+    registerCoreTool(ASTReadFileTool, this);
     registerCoreTool(DeleteLineRangeTool, this);
     registerCoreTool(InsertAtLineTool, this);
     registerCoreTool(ShellTool, this);

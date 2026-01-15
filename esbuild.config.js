@@ -105,6 +105,17 @@ const baseConfig = {
     '@vybestack/llxprt-ui',
     '@vybestack/opentui-core',
     '@vybestack/opentui-react',
+    // [CCR] Reason: ast-grep uses native Node.js addons (.node files) that cannot be bundled.
+    // The resolver returns a path string instead of loading the module when bundled.
+    '@ast-grep/napi',
+    '@ast-grep/lang-python',
+    '@ast-grep/lang-go',
+    '@ast-grep/lang-rust',
+    '@ast-grep/lang-java',
+    '@ast-grep/lang-cpp',
+    '@ast-grep/lang-c',
+    '@ast-grep/lang-json',
+    '@ast-grep/lang-ruby',
   ],
   loader: { '.node': 'file' },
   write: true,
