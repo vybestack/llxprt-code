@@ -154,11 +154,10 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
           return;
         }
         if (
-          key.sequence &&
           typeof key.sequence === 'string' &&
           !key.ctrl &&
           !key.meta &&
-          key.insertable !== false
+          key.sequence.length === 1
         ) {
           setEditBuffer((prev) => prev + key.sequence);
           return;

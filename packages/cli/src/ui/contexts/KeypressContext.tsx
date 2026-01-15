@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@google/gemini-cli-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
-  debugLogger,
+  DebugLogger,
   KittySequenceOverflowEvent,
   logKittySequenceOverflow,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import { useStdin } from 'ink';
 import type React from 'react';
 import {
@@ -49,6 +49,7 @@ export const KITTY_SEQUENCE_TIMEOUT_MS = 50; // Flush incomplete kitty sequences
 export const PASTE_CODE_TIMEOUT_MS = 50; // Flush incomplete paste code after 50ms
 export const SINGLE_QUOTE = "'";
 export const DOUBLE_QUOTE = '"';
+const debugLogger = new DebugLogger('llxprt:ui:keypress');
 
 // On Mac, hitting alt+char will yield funny characters.
 // Remap these three since we listen for them.

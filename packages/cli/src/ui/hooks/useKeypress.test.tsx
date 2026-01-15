@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { render } from '../../test-utils/render.js';
+import { renderWithProviders as render } from '../../test-utils/render.js';
 import { useKeypress } from './useKeypress.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { useStdin } from 'ink';

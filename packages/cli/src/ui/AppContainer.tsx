@@ -757,7 +757,6 @@ export const AppContainer = (props: AppContainerProps) => {
     paused: boolean;
     rawModeManaged: boolean;
   } | null>(null);
-  const keypressRefreshRef = useRef<() => void>(() => {});
 
   const useAlternateBuffer =
     settings.merged.ui?.useAlternateBuffer === true &&
@@ -781,13 +780,6 @@ export const AppContainer = (props: AppContainerProps) => {
       } catch (error) {
         console.error('Failed to re-enable raw mode:', error);
       }
-    }
-
-    if (keypressRefreshRef.current) {
-      keypressRefreshRef.current();
-      debug.debug(
-        () => 'Keypress refresh requested after external editor closed',
-      );
     }
 
     externalEditorStateRef.current = null;
@@ -1811,13 +1803,9 @@ export const AppContainer = (props: AppContainerProps) => {
     ],
   );
 
-  const { refresh: globalKeypressRefresh } = useKeypress(handleGlobalKeypress, {
+  useKeypress(handleGlobalKeypress, {
     isActive: true,
   });
-
-  useEffect(() => {
-    keypressRefreshRef.current = globalKeypressRefresh;
-  }, [globalKeypressRefresh]);
 
   useEffect(() => {
     if (config) {

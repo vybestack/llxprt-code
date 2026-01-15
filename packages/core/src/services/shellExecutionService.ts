@@ -416,6 +416,7 @@ export class ShellExecutionService {
     ptyInfo: PtyImplementation | undefined,
   ): ShellExecutionHandle {
     try {
+      const isWindows = os.platform() === 'win32';
       const cols = terminalColumns ?? 80;
       const rows = terminalRows ?? 30;
       const { executable, argsPrefix, shell } = getShellConfiguration();
