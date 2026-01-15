@@ -16,7 +16,7 @@ import { getErrorMessage } from '../utils/errors.js';
 import type { EventEmitter } from 'node:events';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import { coreEvents } from '../utils/events.js';
-import { DebugLogger } from '../utils/debugLogger.js';
+import { DebugLogger } from '../debug/index.js';
 
 const logger = new DebugLogger('llxprt:mcp-client-manager');
 
@@ -146,9 +146,6 @@ export class McpClientManager {
     config: MCPServerConfig,
   ): Promise<void> | void {
     if (!this.config.isTrustedFolder()) {
-      return;
-    }
-    if (config.extension && !config.extension.isActive) {
       return;
     }
 
