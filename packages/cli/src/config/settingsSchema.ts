@@ -12,6 +12,8 @@ import {
   ChatCompressionSettings,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+  HookDefinition,
+  HookEventName,
 } from '@vybestack/llxprt-code-core';
 import { CustomTheme } from '../ui/themes/theme.js';
 import { type WittyPhraseStyle } from '../ui/constants/phrasesCollections.js';
@@ -964,6 +966,16 @@ export const SETTINGS_SCHEMA = {
           'Absolute path to a TOML policy file that augments the built-in policy rules.',
         showInDialog: false,
       },
+      enableHooks: {
+        type: 'boolean',
+        label: 'Enable Hooks System',
+        category: 'Advanced',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Enable the hooks system for intercepting and customizing LLxprt CLI behavior. When enabled, hooks configured in settings will execute at appropriate lifecycle events (BeforeTool, AfterTool, BeforeModel, etc.). Requires MessageBus integration.',
+        showInDialog: false,
+      },
     },
   },
 
@@ -1465,6 +1477,18 @@ export const SETTINGS_SCHEMA = {
       { value: 'whimsical', label: 'Whimsical' },
       { value: 'custom', label: 'Custom Phrases Only' },
     ] satisfies ReadonlyArray<{ value: WittyPhraseStyle; label: string }>,
+  },
+
+  hooks: {
+    type: 'object',
+    label: 'Hooks',
+    category: 'Advanced',
+    requiresRestart: false,
+    default: {} as { [K in HookEventName]?: HookDefinition[] },
+    description:
+      'Hook configurations for intercepting and customizing agent behavior.',
+    showInDialog: false,
+    mergeStrategy: MergeStrategy.SHALLOW_MERGE,
   },
 } as const;
 

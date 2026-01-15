@@ -1385,6 +1385,9 @@ export async function loadCliConfig(
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
     continueSession: argv.continue ?? false,
+    // TODO: loading of hooks based on workspace trust
+    enableHooks: effectiveSettings.tools?.enableHooks ?? false,
+    hooks: effectiveSettings.hooks || {},
   });
 
   const enhancedConfig = config;

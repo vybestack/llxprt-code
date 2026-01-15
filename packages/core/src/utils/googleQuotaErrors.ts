@@ -17,11 +17,8 @@ import { parseGoogleApiError } from './googleErrors.js';
  */
 export class TerminalQuotaError extends Error {
   readonly cause: GoogleApiError;
-  
-  constructor(
-    message: string,
-    cause: GoogleApiError,
-  ) {
+
+  constructor(message: string, cause: GoogleApiError) {
     super(message);
     this.name = 'TerminalQuotaError';
     this.cause = cause;

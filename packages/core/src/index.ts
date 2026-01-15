@@ -6,6 +6,13 @@
 
 // Export config
 export * from './config/config.js';
+export type {
+  HookEventName,
+  HookDefinition,
+  HookType,
+  CommandHookConfig,
+  HookConfig,
+} from './config/config.js';
 export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
 export * from './config/schedulerSingleton.js';

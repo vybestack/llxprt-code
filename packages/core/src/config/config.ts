@@ -192,6 +192,7 @@ export interface GeminiCLIExtension {
   mcpServers?: Record<string, MCPServerConfig>;
   contextFiles: string[];
   excludeTools?: string[];
+  hooks?: { [K in HookEventName]?: HookDefinition[] };
 }
 
 export interface ExtensionInstallMetadata {
@@ -284,6 +285,50 @@ export enum AuthProviderType {
 export interface SandboxConfig {
   command: 'docker' | 'podman' | 'sandbox-exec';
   image: string;
+}
+
+/**
+ * Event names for the hook system
+ */
+export enum HookEventName {
+  BeforeTool = 'BeforeTool',
+  AfterTool = 'AfterTool',
+  BeforeAgent = 'BeforeAgent',
+  Notification = 'Notification',
+  AfterAgent = 'AfterAgent',
+  SessionStart = 'SessionStart',
+  SessionEnd = 'SessionEnd',
+  PreCompress = 'PreCompress',
+  BeforeModel = 'BeforeModel',
+  AfterModel = 'AfterModel',
+  BeforeToolSelection = 'BeforeToolSelection',
+}
+
+/**
+ * Hook configuration entry
+ */
+export interface CommandHookConfig {
+  type: HookType.Command;
+  command: string;
+  timeout?: number;
+}
+
+export type HookConfig = CommandHookConfig;
+
+/**
+ * Hook definition with matcher
+ */
+export interface HookDefinition {
+  matcher?: string;
+  sequential?: boolean;
+  hooks: HookConfig[];
+}
+
+/**
+ * Hook implementation types
+ */
+export enum HookType {
+  Command = 'command',
 }
 
 export interface ActiveExtension {
@@ -395,6 +440,11 @@ export interface ConfigParameters {
   enableShellOutputEfficiency?: boolean;
   continueSession?: boolean;
   disableYoloMode?: boolean;
+  enableMessageBusIntegration?: boolean;
+  enableHooks?: boolean;
+  hooks?: {
+    [K in HookEventName]?: HookDefinition[];
+  };
 }
 
 export class Config {
@@ -558,6 +608,10 @@ export class Config {
   private readonly enableShellOutputEfficiency: boolean;
   private readonly continueSession: boolean;
   private readonly disableYoloMode: boolean;
+  private readonly enableHooks: boolean;
+  private readonly hooks:
+    | { [K in HookEventName]?: HookDefinition[] }
+    | undefined;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -709,6 +763,26 @@ export class Config {
 
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
     this.disableYoloMode = params.disableYoloMode ?? false;
+    this.enableHooks = params.enableHooks ?? false;
+
+    // Enable MessageBus integration if:
+    // 1. Explicitly enabled via setting, OR
+    // 2. Hooks are enabled and hooks are configured
+    const hasHooks = params.hooks && Object.keys(params.hooks).length > 0;
+    const hooksNeedMessageBus = this.enableHooks && hasHooks;
+    const messageBusEnabled =
+      params.enableMessageBusIntegration ??
+      (hooksNeedMessageBus ? true : false);
+    // Update messageBus initialization to consider hooks
+    if (messageBusEnabled && !this.messageBus) {
+      // MessageBus is already initialized in constructor, just log that hooks may use it
+      const debugLogger = new DebugLogger('llxprt:config');
+      debugLogger.debug(
+        () =>
+          `MessageBus enabled for hooks (enableHooks=${this.enableHooks}, hasHooks=${hasHooks})`,
+      );
+    }
+    this.hooks = params.hooks;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -1909,6 +1983,17 @@ export class Config {
 
   disposeScheduler(sessionId: string): void {
     _disposeScheduler(sessionId);
+  }
+
+  getEnableHooks(): boolean {
+    return this.enableHooks;
+  }
+
+  /**
+   * Get hooks configuration
+   */
+  getHooks(): { [K in HookEventName]?: HookDefinition[] } | undefined {
+    return this.hooks;
   }
 }
 
