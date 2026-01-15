@@ -821,9 +821,19 @@ export class OpenAIResponsesProvider extends BaseProvider {
       const accountId = await this.getCodexAccountId();
       headers['ChatGPT-Account-ID'] = accountId;
       headers['originator'] = 'codex_cli_rs';
+
+      // @issue #1145: Add session_id header to bind requests into a single cache namespace
+      // This matches codex-rs behavior: tmp/codex/codex-rs/codex-api/src/requests/headers.rs
+      // The session_id header helps the Codex backend group requests for better cache hits
+      const sessionId =
+        options.invocation?.runtimeId ?? options.runtime?.runtimeId;
+      if (sessionId && typeof sessionId === 'string' && sessionId.trim()) {
+        headers['session_id'] = sessionId;
+      }
+
       this.logger.debug(
         () =>
-          `Codex mode: adding headers for account ${accountId.substring(0, 8)}...`,
+          `Codex mode: adding headers for account ${accountId.substring(0, 8)}..., session_id=${sessionId?.substring(0, 8) ?? 'none'}...`,
       );
     }
 
