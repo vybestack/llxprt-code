@@ -18,6 +18,7 @@ import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
+import { loadDefaultPolicies } from '../policy/toml-loader.js';
 
 /**
  * Configuration subset required for non-interactive tool execution.
@@ -81,7 +82,7 @@ export async function executeToolCall(
     }
   }
 
-  const schedulerConfig = createSchedulerConfigForNonInteractive(config);
+  const schedulerConfig = await createSchedulerConfigForNonInteractive(config);
 
   let completionResolver: ((calls: CompletedToolCall[]) => void) | null = null;
   const completionPromise = new Promise<CompletedToolCall[]>((resolve) => {
@@ -133,13 +134,15 @@ export async function executeToolCall(
  * Creates a PolicyEngine configured for non-interactive mode.
  * In non-interactive mode, ASK_USER decisions are converted to DENY.
  */
-function createNonInteractivePolicyEngine(
+async function createNonInteractivePolicyEngine(
   policyEngine: PolicyEngine | undefined,
-): PolicyEngine {
+): Promise<PolicyEngine> {
   if (!policyEngine) {
+    // Load default policies to ensure safe tools like todo_read/todo_write are allowed
+    const defaultRules = await loadDefaultPolicies();
     return new PolicyEngine({
-      rules: [],
-      defaultDecision: PolicyDecision.DENY,
+      rules: defaultRules,
+      defaultDecision: PolicyDecision.ASK_USER, // Will convert to DENY for ASK_USER in nonInteractive mode
       nonInteractive: true,
     });
   }
@@ -169,10 +172,10 @@ type SchedulerConfigMethods = Pick<
   | 'getPolicyEngine'
 >;
 
-function createSchedulerConfigForNonInteractive(
+async function createSchedulerConfigForNonInteractive(
   config: ToolExecutionConfig,
-): SchedulerConfigMethods {
-  const policyEngine = createNonInteractivePolicyEngine(
+): Promise<SchedulerConfigMethods> {
+  const policyEngine = await createNonInteractivePolicyEngine(
     config.getPolicyEngine?.(),
   );
   const messageBus = config.getMessageBus?.() ?? new MessageBus(policyEngine);

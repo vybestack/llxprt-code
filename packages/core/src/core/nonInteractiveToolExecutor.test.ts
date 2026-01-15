@@ -715,3 +715,90 @@ function getFullResponseText(response: ToolCallResponseInfo): string {
   }
   return chunks.join('\n');
 }
+
+describe('policy handling when policyEngine is undefined', () => {
+  it('should load default policies and allow todo_write when policyEngine is undefined', async () => {
+    // Create a mock todo_write tool
+    const todoWriteTool = new MockTool('todo_write');
+    todoWriteTool.executeFn.mockReturnValue({
+      llmContent: 'Todo updated',
+      returnDisplay: 'Todo updated',
+    });
+
+    const mockToolRegistry = {
+      getTool: vi.fn().mockImplementation((name: string) => {
+        if (name === 'todo_write') return todoWriteTool;
+        return undefined;
+      }),
+      getAllToolNames: vi.fn().mockReturnValue(['todo_write']),
+      getAllTools: vi.fn().mockReturnValue([todoWriteTool]),
+    } as unknown as ToolRegistry;
+
+    // Config with NO policyEngine (getPolicyEngine returns undefined)
+    const config: ToolExecutionConfig = {
+      getToolRegistry: () => mockToolRegistry,
+      getSessionId: () => 'test-session-id',
+      getTelemetryLogPromptsEnabled: () => false,
+      getExcludeTools: () => [],
+      getEphemeralSettings: () => ({}),
+      getEphemeralSetting: () => undefined,
+      getPolicyEngine: () => undefined as unknown as PolicyEngine,
+      // No getMessageBus - will create one internally
+    };
+
+    const request: ToolCallRequestInfo = {
+      callId: 'todo-call',
+      name: 'todo_write',
+      args: { todos: [] },
+      isClientInitiated: false,
+      prompt_id: 'prompt-todo',
+    };
+
+    const { response } = await executeToolCall(config, request);
+
+    // Should NOT be denied - todo_write is in read-only.toml as allow
+    expect(response.error).toBeUndefined();
+    expect(response.errorType).toBeUndefined();
+    expect(response.resultDisplay).toBe('Todo updated');
+  });
+
+  it('should load default policies and allow todo_read when policyEngine is undefined', async () => {
+    const todoReadTool = new MockTool('todo_read');
+    todoReadTool.executeFn.mockReturnValue({
+      llmContent: 'Todos: []',
+      returnDisplay: 'Todos: []',
+    });
+
+    const mockToolRegistry = {
+      getTool: vi.fn().mockImplementation((name: string) => {
+        if (name === 'todo_read') return todoReadTool;
+        return undefined;
+      }),
+      getAllToolNames: vi.fn().mockReturnValue(['todo_read']),
+      getAllTools: vi.fn().mockReturnValue([todoReadTool]),
+    } as unknown as ToolRegistry;
+
+    const config: ToolExecutionConfig = {
+      getToolRegistry: () => mockToolRegistry,
+      getSessionId: () => 'test-session-id',
+      getTelemetryLogPromptsEnabled: () => false,
+      getExcludeTools: () => [],
+      getEphemeralSettings: () => ({}),
+      getEphemeralSetting: () => undefined,
+      getPolicyEngine: () => undefined as unknown as PolicyEngine,
+    };
+
+    const request: ToolCallRequestInfo = {
+      callId: 'todo-read-call',
+      name: 'todo_read',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-todo-read',
+    };
+
+    const { response } = await executeToolCall(config, request);
+
+    expect(response.error).toBeUndefined();
+    expect(response.errorType).toBeUndefined();
+  });
+});
