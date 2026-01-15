@@ -252,7 +252,8 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       expect(event.input_token_count).toBe(100);
       expect(event.output_token_count).toBe(50);
-      expect(event.cached_content_token_count).toBe(0);
+      // cachedTokens from provider metadata flows to cached_content_token_count for UI telemetry
+      expect(event.cached_content_token_count).toBe(10);
     });
   });
 
