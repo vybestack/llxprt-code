@@ -20,7 +20,7 @@ describe('AST Tools', () => {
     }),
     getTargetDir: () => '/test',
     getFileSystemService: () => ({
-      readTextFile: async () => 'test content',
+      readTextFile: async () => 'const x = 1;',
       writeTextFile: async () => {},
     }),
     getApprovalMode: () => 'manual',
