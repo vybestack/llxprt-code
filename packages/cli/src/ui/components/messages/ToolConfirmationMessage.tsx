@@ -254,7 +254,7 @@ export const ToolConfirmationMessage: React.FC<
           <Box flexDirection="column" marginTop={1}>
             <Text color={theme.text.primary}>URLs to fetch:</Text>
             {infoProps.urls.map((url) => (
-              <Text key={url}>
+              <Text key={url} color={theme.text.primary}>
                 {' '}
                 - <RenderInline text={url} />
               </Text>

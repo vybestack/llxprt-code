@@ -187,7 +187,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
     } else if (hrMatch) {
       addContentBlock(
         <Box key={key}>
-          <Text dimColor>---</Text>
+          <Text color={theme.ui.comment}>---</Text>
         </Box>,
       );
     } else if (headerMatch) {
