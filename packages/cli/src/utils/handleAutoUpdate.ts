@@ -31,7 +31,8 @@ function isLockStale(lockFilePath: string): boolean {
     }
 
     // Check if the locking process is still alive
-    if (lockData.pid) {
+    // PID must be a positive number (PID 0 is kernel scheduler, not a valid updater)
+    if (typeof lockData.pid === 'number' && lockData.pid > 0) {
       try {
         process.kill(lockData.pid, 0);
         // Process exists, lock is valid
@@ -42,7 +43,8 @@ function isLockStale(lockFilePath: string): boolean {
       }
     }
 
-    return false;
+    // No valid PID in lock data, treat as stale
+    return true;
   } catch {
     // Can't read lock file, treat as stale
     return true;
@@ -185,8 +187,14 @@ export function handleAutoUpdate(
       ? path.dirname(nodeModulesMatch[1])
       : 'the parent directory of node_modules';
 
+    // Platform-appropriate cleanup command
+    const isWindows = process.platform === 'win32';
+    const cleanupCommand = isWindows
+      ? `rmdir /s /q ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`
+      : `rm -rf ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`;
+
     updateEventEmitter.emit('update-info', {
-      message: `Temporary directories from a previous failed update were detected. Please clean them up manually:\n  rm -rf ${tempDirs.map((d) => path.join(cleanupPath, d)).join(' ')}`,
+      message: `Temporary directories from a previous failed update were detected. Please clean them up manually:\n  ${cleanupCommand}`,
     });
     return;
   }
