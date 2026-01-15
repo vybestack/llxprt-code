@@ -157,7 +157,8 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.completed':
-                // Usage data
+              case 'response.done':
+                // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
                 if (event.response?.usage) {
                   yield {
                     speaker: 'ai',
