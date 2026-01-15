@@ -181,9 +181,8 @@ export async function getOrCreateScheduler(
   }
 
   const creationPromise = (async () => {
-    const { CoreToolScheduler: CoreToolSchedulerClass } = await import(
-      '../core/coreToolScheduler.js'
-    );
+    const { CoreToolScheduler: CoreToolSchedulerClass } =
+      await import('../core/coreToolScheduler.js');
     return new CoreToolSchedulerClass({
       config,
       outputUpdateHandler: callbacks.outputUpdateHandler,

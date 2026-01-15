@@ -22,9 +22,9 @@ vi.mock('../../utils/retry.js', () => ({
   isNetworkTransientError: vi.fn((error: unknown) =>
     Boolean(
       error &&
-        typeof error === 'object' &&
-        'message' in error &&
-        String((error as { message?: unknown }).message).includes('terminated'),
+      typeof error === 'object' &&
+      'message' in error &&
+      String((error as { message?: unknown }).message).includes('terminated'),
     ),
   ),
 }));
