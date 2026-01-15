@@ -53,7 +53,7 @@ export interface ColorsTheme {
   GradientColors?: string[];
 }
 
-export interface CustomTheme extends ColorsTheme {
+export interface CustomTheme {
   type: 'custom';
   name: string;
 
@@ -285,6 +285,34 @@ export class Theme {
  * @returns A new Theme instance.
  */
 export function createCustomTheme(customTheme: CustomTheme): Theme {
+  const colors: ColorsTheme = {
+    type: 'custom',
+    Background: customTheme.background?.primary ?? customTheme.Background ?? '',
+    Foreground: customTheme.text?.primary ?? customTheme.Foreground ?? '',
+    LightBlue: customTheme.text?.link ?? customTheme.LightBlue ?? '',
+    AccentBlue: customTheme.text?.link ?? customTheme.AccentBlue ?? '',
+    AccentPurple: customTheme.text?.accent ?? customTheme.AccentPurple ?? '',
+    AccentCyan: customTheme.text?.link ?? customTheme.AccentCyan ?? '',
+    AccentGreen: customTheme.status?.success ?? customTheme.AccentGreen ?? '',
+    AccentYellow: customTheme.status?.warning ?? customTheme.AccentYellow ?? '',
+    AccentRed: customTheme.status?.error ?? customTheme.AccentRed ?? '',
+    DiffAdded:
+      customTheme.background?.diff?.added ?? customTheme.DiffAdded ?? '',
+    DiffRemoved:
+      customTheme.background?.diff?.removed ?? customTheme.DiffRemoved ?? '',
+    Comment: customTheme.ui?.comment ?? customTheme.Comment ?? '',
+    DimComment: customTheme.ui?.comment ?? customTheme.DimComment ?? '',
+    Gray: customTheme.text?.secondary ?? customTheme.Gray ?? '',
+    DarkGray:
+      customTheme.DarkGray ??
+      interpolateColor(
+        customTheme.text?.secondary ?? customTheme.Gray ?? '',
+        customTheme.background?.primary ?? customTheme.Background ?? '',
+        0.5,
+      ),
+    GradientColors: customTheme.ui?.gradient ?? customTheme.GradientColors,
+  };
+
   // Generate CSS properties mappings based on the custom theme colors
   const rawMappings: Record<string, HighlightJSStyle> = {
     hljs: {

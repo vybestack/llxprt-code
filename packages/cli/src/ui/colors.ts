@@ -98,6 +98,9 @@ export const SemanticColors: SemanticColorsInterface = {
       get accent() {
         return themeManager.getSemanticColors().text.accent;
       },
+      get response() {
+        return themeManager.getSemanticColors().text.response;
+      },
     };
   },
   get status() {
@@ -253,6 +256,9 @@ export const theme = {
     },
     get accent() {
       return themeManager.getSemanticColors().text.accent;
+    },
+    get response() {
+      return themeManager.getSemanticColors().text.response;
     },
   },
   status: {
