@@ -12,6 +12,7 @@ import {
   shutdownTelemetry,
   GeminiEventType,
   ServerGeminiStreamEvent,
+  OutputFormat,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
@@ -79,26 +80,7 @@ describe('runNonInteractive', () => {
   let mockGeminiClient: {
     sendMessageStream: vi.Mock;
   };
-  const MOCK_SESSION_METRICS: SessionMetrics = {
-    models: {},
-    tools: {
-      totalCalls: 0,
-      totalSuccess: 0,
-      totalFail: 0,
-      totalDurationMs: 0,
-      totalDecisions: {
-        accept: 0,
-        reject: 0,
-        modify: 0,
-        auto_accept: 0,
-      },
-      byName: {},
-    },
-    files: {
-      totalLinesAdded: 0,
-      totalLinesRemoved: 0,
-    },
-  };
+  let processStderrSpy: vi.SpyInstance;
 
   beforeEach(async () => {
     mockCoreExecuteToolCall = vi.mocked(executeToolCall);
@@ -112,6 +94,9 @@ describe('runNonInteractive', () => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+    processStderrSpy = vi
+      .spyOn(process.stderr, 'write')
       .mockImplementation(() => true);
 
     mockToolRegistry = {

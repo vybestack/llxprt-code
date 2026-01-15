@@ -354,7 +354,7 @@ export async function loadGlobalMemory(
       }
       return globalPath;
     } catch {
-      debugLogger.debug('A global memory file was not found.');
+      logger.debug('A global memory file was not found.');
       return null;
     }
   });
@@ -431,6 +431,10 @@ async function findUpwardGeminiFiles(
   return upwardPaths;
 }
 
+interface ExtensionLoader {
+  getExtensions(): GeminiCLIExtension[];
+}
+
 export async function loadEnvironmentMemory(
   trustedRoots: string[],
   extensionLoader: ExtensionLoader,
@@ -455,9 +459,9 @@ export async function loadEnvironmentMemory(
   // Extensions
   const extensionPaths = extensionLoader
     .getExtensions()
-    .filter((ext) => ext.isActive)
-    .flatMap((ext) => ext.contextFiles);
-  extensionPaths.forEach((p) => allPaths.add(p));
+    .filter((ext: GeminiCLIExtension) => ext.isActive)
+    .flatMap((ext: GeminiCLIExtension) => ext.contextFiles ?? []);
+  extensionPaths.forEach((p: string) => allPaths.add(p));
 
   const sortedPaths = Array.from(allPaths).sort();
   const contents = await readGeminiMdFiles(sortedPaths, debugMode, 'tree');
