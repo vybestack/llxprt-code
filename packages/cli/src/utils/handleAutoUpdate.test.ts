@@ -11,6 +11,9 @@ import { UpdateObject } from '../ui/utils/updateCheck.js';
 import { LoadedSettings } from '../config/settings.js';
 import EventEmitter from 'node:events';
 import { handleAutoUpdate } from './handleAutoUpdate.js';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 vi.mock('./installationInfo.js', async () => {
   const actual = await vi.importActual('./installationInfo.js');
@@ -31,6 +34,32 @@ vi.mock('./updateEventEmitter.js', async () => {
   };
 });
 
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof fs>();
+  return {
+    ...actual,
+    existsSync: vi.fn(),
+    readFileSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    writeSync: vi.fn(),
+    openSync: vi.fn(),
+    closeSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    unlinkSync: vi.fn(),
+    readdirSync: vi.fn(),
+    realpathSync: vi.fn(),
+    constants: actual.constants,
+  };
+});
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof os>();
+  return {
+    ...actual,
+    homedir: vi.fn(),
+  };
+});
+
 interface MockChildProcess extends EventEmitter {
   stdin: EventEmitter & {
     write: Mock;
@@ -41,6 +70,17 @@ interface MockChildProcess extends EventEmitter {
 
 const mockGetInstallationInfo = vi.mocked(getInstallationInfo);
 const mockUpdateEventEmitter = vi.mocked(updateEventEmitter);
+const mockExistsSync = vi.mocked(fs.existsSync);
+const mockReadFileSync = vi.mocked(fs.readFileSync);
+const _mockWriteFileSync = vi.mocked(fs.writeFileSync);
+const mockWriteSync = vi.mocked(fs.writeSync);
+const mockOpenSync = vi.mocked(fs.openSync);
+const mockCloseSync = vi.mocked(fs.closeSync);
+const mockMkdirSync = vi.mocked(fs.mkdirSync);
+const mockUnlinkSync = vi.mocked(fs.unlinkSync);
+const mockReaddirSync = vi.mocked(fs.readdirSync);
+const mockRealpathSync = vi.mocked(fs.realpathSync);
+const mockHomedir = vi.mocked(os.homedir);
 
 describe('handleAutoUpdate', () => {
   let mockSpawn: Mock;
@@ -78,6 +118,12 @@ describe('handleAutoUpdate', () => {
     mockSpawn.mockReturnValue(
       mockChildProcess as unknown as ReturnType<typeof mockSpawn>,
     );
+
+    // Default mock behavior
+    mockHomedir.mockReturnValue('/home/test');
+    mockExistsSync.mockReturnValue(false);
+    mockReaddirSync.mockReturnValue([]);
+    mockOpenSync.mockReturnValue(42); // Mock file descriptor
   });
 
   afterEach(() => {
@@ -284,6 +330,230 @@ describe('handleAutoUpdate', () => {
     expect(mockUpdateEventEmitter.emit).toHaveBeenCalledWith('update-success', {
       message:
         'Update successful! The new version will be used on your next run.',
+    });
+  });
+
+  describe('lock file mechanism', () => {
+    it('should skip auto-update if lock file exists and is recent', () => {
+      mockGetInstallationInfo.mockReturnValue({
+        updateCommand: 'npm i -g @vybestack/llxprt-code@latest',
+        updateMessage: 'This is an additional message.',
+        isGlobal: true,
+        packageManager: PackageManager.NPM,
+      });
+
+      const lockFilePath = path.join(
+        '/home/test',
+        '.llxprt',
+        'locks',
+        'cli-update.lock',
+      );
+      const recentLockData = JSON.stringify({
+        timestamp: Date.now() - 1000, // 1 second ago
+        pid: process.pid,
+      });
+
+      mockExistsSync.mockImplementation((p) => p === lockFilePath);
+      mockReadFileSync.mockReturnValue(recentLockData);
+      // Simulate atomic lock acquisition failure (EEXIST)
+      const eexistError = new Error('EEXIST') as NodeJS.ErrnoException;
+      eexistError.code = 'EEXIST';
+      mockOpenSync.mockImplementation(() => {
+        throw eexistError;
+      });
+
+      handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
+
+      expect(mockUpdateEventEmitter.emit).toHaveBeenCalledWith('update-info', {
+        message: 'Another update is already in progress. Skipping auto-update.',
+      });
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
+    it('should acquire lock and release it after update completes', async () => {
+      await new Promise<void>((resolve) => {
+        mockGetInstallationInfo.mockReturnValue({
+          updateCommand: 'npm i -g @vybestack/llxprt-code@latest',
+          updateMessage: 'This is an additional message.',
+          isGlobal: true,
+          packageManager: PackageManager.NPM,
+        });
+
+        const lockFilePath = path.join(
+          '/home/test',
+          '.llxprt',
+          'locks',
+          'cli-update.lock',
+        );
+        mockExistsSync.mockReturnValue(false);
+        mockOpenSync.mockReturnValue(42);
+
+        setTimeout(() => {
+          mockChildProcess.emit('close', 0);
+          resolve();
+        }, 0);
+
+        handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
+
+        // Verify lock was created atomically
+        expect(mockMkdirSync).toHaveBeenCalledWith(
+          path.join('/home/test', '.llxprt', 'locks'),
+          { recursive: true },
+        );
+        expect(mockOpenSync).toHaveBeenCalledWith(
+          lockFilePath,
+          fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY,
+        );
+        expect(mockWriteSync).toHaveBeenCalledWith(42, expect.any(String));
+        expect(mockCloseSync).toHaveBeenCalledWith(42);
+      });
+
+      // Verify lock was released after completion
+      const lockFilePath = path.join(
+        '/home/test',
+        '.llxprt',
+        'locks',
+        'cli-update.lock',
+      );
+      expect(mockUnlinkSync).toHaveBeenCalledWith(lockFilePath);
+    });
+
+    it('should release lock even if update fails', async () => {
+      const lockFilePath = path.join(
+        '/home/test',
+        '.llxprt',
+        'locks',
+        'cli-update.lock',
+      );
+
+      await new Promise<void>((resolve) => {
+        mockGetInstallationInfo.mockReturnValue({
+          updateCommand: 'npm i -g @vybestack/llxprt-code@latest',
+          updateMessage: 'This is an additional message.',
+          isGlobal: true,
+          packageManager: PackageManager.NPM,
+        });
+
+        mockExistsSync.mockReturnValue(false);
+        mockOpenSync.mockReturnValue(42);
+
+        setTimeout(() => {
+          mockChildProcess.stderr.emit('data', 'An error occurred');
+          mockChildProcess.emit('close', 1);
+          resolve();
+        }, 0);
+
+        handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
+      });
+
+      // Verify lock was released after failure
+      expect(mockUnlinkSync).toHaveBeenCalledWith(lockFilePath);
+    });
+
+    it('should ignore stale lock files (older than 5 minutes)', () => {
+      mockGetInstallationInfo.mockReturnValue({
+        updateCommand: 'npm i -g @vybestack/llxprt-code@latest',
+        updateMessage: 'This is an additional message.',
+        isGlobal: true,
+        packageManager: PackageManager.NPM,
+      });
+
+      const lockFilePath = path.join(
+        '/home/test',
+        '.llxprt',
+        'locks',
+        'cli-update.lock',
+      );
+      const staleLockData = JSON.stringify({
+        timestamp: Date.now() - 6 * 60 * 1000, // 6 minutes ago
+        pid: 99999, // Non-existent PID
+      });
+
+      mockExistsSync.mockImplementation((p) => p === lockFilePath);
+      mockReadFileSync.mockReturnValue(staleLockData);
+      mockOpenSync.mockReturnValue(42);
+
+      setTimeout(() => {
+        mockChildProcess.emit('close', 0);
+      }, 0);
+
+      handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
+
+      // Should proceed with update since lock is stale
+      expect(mockSpawn).toHaveBeenCalled();
+      // Should clean up stale lock and create new one atomically
+      expect(mockUnlinkSync).toHaveBeenCalledWith(lockFilePath);
+      expect(mockOpenSync).toHaveBeenCalledWith(
+        lockFilePath,
+        fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY,
+      );
+    });
+  });
+
+  describe('temp directory detection', () => {
+    it('should skip auto-update if temp directories from previous failed install exist', () => {
+      mockGetInstallationInfo.mockReturnValue({
+        updateCommand: 'npm i -g @vybestack/llxprt-code@latest',
+        updateMessage: 'This is an additional message.',
+        isGlobal: true,
+        packageManager: PackageManager.NPM,
+      });
+
+      // Mock process.argv[1] to simulate installation path
+      const originalArgv1 = process.argv[1];
+      const testPath =
+        '/usr/local/lib/node_modules/@vybestack/llxprt-code/dist/index.js';
+      process.argv[1] = testPath;
+
+      mockRealpathSync.mockReturnValue(testPath);
+      mockReaddirSync.mockReturnValue([
+        '.llxprt-code-abc123',
+        '@vybestack',
+        'some-other-package',
+      ] as unknown as fs.Dirent[]);
+
+      handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
+
+      expect(mockUpdateEventEmitter.emit).toHaveBeenCalledWith('update-info', {
+        message: expect.stringContaining(
+          'Temporary directories from a previous failed update were detected',
+        ),
+      });
+      expect(mockSpawn).not.toHaveBeenCalled();
+
+      // Restore
+      process.argv[1] = originalArgv1;
+    });
+
+    it('should emit update-info message suggesting cleanup when temp dirs exist', () => {
+      mockGetInstallationInfo.mockReturnValue({
+        updateCommand: 'npm i -g @vybestack/llxprt-code@latest',
+        updateMessage: 'This is an additional message.',
+        isGlobal: true,
+        packageManager: PackageManager.NPM,
+      });
+
+      const originalArgv1 = process.argv[1];
+      const testPath =
+        '/usr/local/lib/node_modules/@vybestack/llxprt-code/dist/index.js';
+      process.argv[1] = testPath;
+
+      mockRealpathSync.mockReturnValue(testPath);
+      mockReaddirSync.mockReturnValue([
+        '.llxprt-code-temp',
+        '@vybestack',
+      ] as unknown as fs.Dirent[]);
+
+      handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
+
+      // Platform-appropriate cleanup command (rm -rf for Unix, rmdir /s /q for Windows)
+      const expectedCommand =
+        process.platform === 'win32' ? 'rmdir /s /q' : 'rm -rf';
+      expect(mockUpdateEventEmitter.emit).toHaveBeenCalledWith('update-info', {
+        message: expect.stringContaining(expectedCommand),
+      });
+
+      process.argv[1] = originalArgv1;
     });
   });
 });

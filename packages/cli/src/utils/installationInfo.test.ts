@@ -40,16 +40,19 @@ const mockedExecSync = vi.mocked(childProcess.execSync);
 describe('getInstallationInfo', () => {
   const projectRoot = '/path/to/project';
   let originalArgv: string[];
+  let originalPlatform: NodeJS.Platform;
 
   beforeEach(() => {
     vi.resetAllMocks();
     originalArgv = [...process.argv];
+    originalPlatform = process.platform;
     // Mock process.cwd() for isGitRepository
     vi.spyOn(process, 'cwd').mockReturnValue(projectRoot);
   });
 
   afterEach(() => {
     process.argv = originalArgv;
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
   it('should return UNKNOWN when cliPath is not available', () => {
@@ -313,5 +316,47 @@ describe('getInstallationInfo', () => {
 
     const infoDisabled = getInstallationInfo(projectRoot, true);
     expect(infoDisabled.updateMessage).toContain('Please run npm install');
+  });
+
+  describe('Homebrew global npm path detection', () => {
+    it('should detect Homebrew global npm path and return message-only', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'darwin',
+      });
+      const homebrewNpmPath = `/opt/homebrew/lib/node_modules/@vybestack/llxprt-code/dist/index.js`;
+      process.argv[1] = homebrewNpmPath;
+      mockedRealPathSync.mockReturnValue(homebrewNpmPath);
+      mockedExecSync.mockImplementation(() => {
+        throw new Error('brew not found');
+      });
+
+      const info = getInstallationInfo(projectRoot, false);
+
+      expect(info.packageManager).toBe(PackageManager.NPM);
+      expect(info.isGlobal).toBe(true);
+      expect(info.updateCommand).toBeUndefined();
+      expect(info.updateMessage).toContain('Homebrew-managed npm');
+      expect(info.updateMessage).toContain('brew upgrade node');
+    });
+
+    it('should detect /opt/homebrew path even without brew command available', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'darwin',
+      });
+      const homebrewPath = `/opt/homebrew/lib/node_modules/@vybestack/llxprt-code/dist/index.js`;
+      process.argv[1] = homebrewPath;
+      mockedRealPathSync.mockReturnValue(homebrewPath);
+      mockedExecSync.mockImplementation(() => {
+        throw new Error('Command failed');
+      });
+
+      const info = getInstallationInfo(projectRoot, false);
+
+      // Should still detect Homebrew npm even if brew command fails
+      expect(info.packageManager).toBe(PackageManager.NPM);
+      expect(info.isGlobal).toBe(true);
+      expect(info.updateCommand).toBeUndefined();
+      expect(info.updateMessage).toContain('Homebrew-managed npm');
+    });
   });
 });
