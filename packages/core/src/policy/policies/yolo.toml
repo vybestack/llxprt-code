@@ -5,4 +5,5 @@
 [[rule]]
 # No toolName specified = wildcard (matches all tools)
 decision = "allow"
-priority = 1.999
+priority = 999
+modes = ["yolo"]

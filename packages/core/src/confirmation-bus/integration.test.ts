@@ -85,28 +85,31 @@ describe('Message Bus Integration Tests', () => {
 
     it('should enforce priority order in TOML policies', async () => {
       const path = join(testDir, 'priority.toml');
+      // TOML priorities are integers 0-999, transformed by tier (tier + priority/1000)
+      // priority = 10 in tier 1 becomes 1.010
+      // priority = 100 in tier 1 becomes 1.100 (higher priority)
       const content = `
 [[rule]]
 toolName = "shell"
 decision = "ask_user"
-priority = 1.01
+priority = 10
 
 [[rule]]
 toolName = "shell"
 argsPattern = "rm\\\\s+-rf\\\\s+/"
 decision = "deny"
-priority = 2.0
+priority = 100
 `;
       await writeFile(path, content);
 
       const rules = await loadPolicyFromToml(path);
       const policyEngine = new PolicyEngine({ rules });
 
-      // Normal shell command should ask user (priority 1.01)
+      // Normal shell command should ask user (priority 1.010)
       const normalDecision = policyEngine.evaluate('shell', { command: 'ls' });
       expect(normalDecision).toBe(PolicyDecision.ASK_USER);
 
-      // Dangerous command should be denied (priority 2.0 - higher priority)
+      // Dangerous command should be denied (priority 1.100 - higher priority)
       const dangerousDecision = policyEngine.evaluate('shell', {
         command: 'rm -rf /',
       });
@@ -115,12 +118,13 @@ priority = 2.0
 
     it('should load policies with argsPattern regex', async () => {
       const path = join(testDir, 'regex.toml');
+      // TOML priorities are integers 0-999, priority = 50 in tier 1 becomes 1.050
       const content = `
 [[rule]]
 toolName = "replace"
 argsPattern = "\\\\.md"
 decision = "allow"
-priority = 1.5
+priority = 50
 `;
       await writeFile(path, content);
 
@@ -334,11 +338,12 @@ priority = 1.5
   describe('Discovered Tools Integration', () => {
     it('should enforce discovered_tool_ prefix in policy rules', async () => {
       const path = join(testDir, 'discovered.toml');
+      // TOML priorities are integers 0-999, priority = 10 in tier 1 becomes 1.010
       const content = `
 [[rule]]
 toolName = "discovered_tool_"
 decision = "ask_user"
-priority = 1.01
+priority = 10
 `;
       await writeFile(path, content);
 
@@ -413,21 +418,24 @@ priority = 1.01
   describe('End-to-End Policy Flow', () => {
     it('should process complete flow: policy check → message bus → response', async () => {
       const path = join(testDir, 'e2e.toml');
+      // TOML priorities are integers 0-999
+      // priority = 50 in tier 1 becomes 1.050
+      // priority = 10 in tier 1 becomes 1.010
       const content = `
 [[rule]]
 toolName = "glob"
 decision = "allow"
-priority = 1.05
+priority = 50
 
 [[rule]]
 toolName = "edit"
 decision = "ask_user"
-priority = 1.01
+priority = 10
 
 [[rule]]
 toolName = "shell"
 decision = "deny"
-priority = 1.01
+priority = 10
 `;
       await writeFile(path, content);
 
@@ -646,16 +654,18 @@ priority = 1.01
 
     it('should validate priority bands', async () => {
       const path = join(testDir, 'bad-priority.toml');
+      // Priority must be an integer 0-999 in TOML
+      // 5000 is out of range
       const content = `
 [[rule]]
 toolName = "edit"
 decision = "allow"
-priority = 5.0
+priority = 5000
 `;
       await writeFile(path, content);
 
       await expect(loadPolicyFromToml(path)).rejects.toThrow(
-        'Invalid priority',
+        'priority must be <= 999',
       );
     });
   });

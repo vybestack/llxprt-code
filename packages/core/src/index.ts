@@ -9,14 +9,26 @@ export * from './config/config.js';
 export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
 export * from './config/schedulerSingleton.js';
-export * from './policy/config.js';
 export * from './policy/index.js';
 export { PolicyEngine } from './policy/policy-engine.js';
 export {
   PolicyDecision,
+  ApprovalMode,
   PolicyRule,
   type PolicyEngineConfig,
+  type PolicySettings,
 } from './policy/types.js';
+export {
+  createPolicyEngineConfig,
+  createPolicyUpdater,
+  DEFAULT_CORE_POLICIES_DIR,
+  DEFAULT_POLICY_TIER,
+  USER_POLICY_TIER,
+  ADMIN_POLICY_TIER,
+  getPolicyDirectories,
+  getPolicyTier,
+  formatPolicyError,
+} from './policy/config.js';
 
 // Export hook types
 export * from './hooks/types.js';

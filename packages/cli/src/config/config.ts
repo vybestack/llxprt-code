@@ -31,7 +31,6 @@ import {
   MCPServerConfig,
   SettingsService,
   DebugLogger,
-  createPolicyEngineConfig,
   SHELL_TOOL_NAMES,
   isRipgrepAvailable,
   normalizeShellReplacement,
@@ -40,6 +39,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import { Settings } from './settings.js';
+import { createPolicyEngineConfig } from './policy.js';
 
 import { annotateActiveExtensions } from './extension.js';
 import { getCliVersion } from '../utils/version.js';
@@ -1254,19 +1254,11 @@ export async function loadCliConfig(
       ? argv.screenReader
       : (effectiveSettings.accessibility?.screenReader ?? false);
 
-  const policyPathSetting = effectiveSettings.tools?.policyPath;
-  const resolvedPolicyPath = policyPathSetting
-    ? resolvePath(policyPathSetting)
-    : undefined;
-
-  // Create policy engine config from legacy approval mode and allowed tools
-  const policyEngineConfig = await createPolicyEngineConfig({
-    getApprovalMode: () => approvalMode,
-    getAllowedTools: () =>
-      argv.allowedTools || settings.allowedTools || undefined,
-    getNonInteractive: () => !interactive,
-    getUserPolicyPath: () => resolvedPolicyPath,
-  });
+  // Create policy engine config from settings and approval mode
+  const policyEngineConfig = await createPolicyEngineConfig(
+    effectiveSettings,
+    approvalMode,
+  );
 
   const outputFormat =
     argv.outputFormat === OutputFormat.JSON

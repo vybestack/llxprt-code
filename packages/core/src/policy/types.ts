@@ -1,18 +1,73 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 export enum PolicyDecision {
   ALLOW = 'allow',
   DENY = 'deny',
   ASK_USER = 'ask_user',
 }
 
+export enum ApprovalMode {
+  DEFAULT = 'default',
+  AUTO_EDIT = 'autoEdit',
+  YOLO = 'yolo',
+}
+
 export interface PolicyRule {
-  toolName?: string; // undefined = wildcard (all tools)
-  argsPattern?: RegExp; // Pattern to match against stable-stringified args
+  /**
+   * The name of the tool this rule applies to.
+   * If undefined, the rule applies to all tools.
+   */
+  toolName?: string;
+
+  /**
+   * Pattern to match against tool arguments.
+   * Can be used for more fine-grained control.
+   */
+  argsPattern?: RegExp;
+
+  /**
+   * The decision to make when this rule matches.
+   */
   decision: PolicyDecision;
-  priority?: number; // Higher wins, default 0
+
+  /**
+   * Priority of this rule. Higher numbers take precedence.
+   * Default is 0.
+   */
+  priority?: number;
 }
 
 export interface PolicyEngineConfig {
+  /**
+   * List of policy rules to apply.
+   */
   rules?: PolicyRule[];
+
+  /**
+   * Default decision when no rules match.
+   * Defaults to ASK_USER.
+   */
   defaultDecision?: PolicyDecision;
-  nonInteractive?: boolean; // ASK_USER → DENY when true
+
+  /**
+   * Whether to allow tools in non-interactive mode.
+   * When true, ASK_USER decisions become DENY.
+   */
+  nonInteractive?: boolean;
+}
+
+export interface PolicySettings {
+  mcp?: {
+    excluded?: string[];
+    allowed?: string[];
+  };
+  tools?: {
+    exclude?: string[];
+    allowed?: string[];
+  };
+  mcpServers?: Record<string, { trust?: boolean }>;
 }

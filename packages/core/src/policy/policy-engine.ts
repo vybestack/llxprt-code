@@ -160,4 +160,16 @@ export class PolicyEngine {
   isNonInteractive(): boolean {
     return this.nonInteractive;
   }
+
+  /**
+   * Adds a new rule to the policy engine at runtime.
+   * The rule is inserted into the sorted rules list based on its priority.
+   *
+   * @param rule - The policy rule to add
+   */
+  addRule(rule: PolicyRule): void {
+    this.rules.push(rule);
+    // Re-sort rules by priority (highest first)
+    this.rules.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  }
 }

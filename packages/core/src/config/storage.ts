@@ -57,6 +57,27 @@ export class Storage {
     return path.join(Storage.getGlobalLlxprtDir(), 'memory.md');
   }
 
+  static getUserPoliciesDir(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'policies');
+  }
+
+  static getSystemSettingsPath(): string {
+    if (process.env['LLXPRT_SYSTEM_SETTINGS_PATH']) {
+      return process.env['LLXPRT_SYSTEM_SETTINGS_PATH'];
+    }
+    if (os.platform() === 'darwin') {
+      return '/Library/Application Support/LlxprtCode/settings.json';
+    } else if (os.platform() === 'win32') {
+      return 'C:\\ProgramData\\llxprt-code\\settings.json';
+    } else {
+      return '/etc/llxprt-code/settings.json';
+    }
+  }
+
+  static getSystemPoliciesDir(): string {
+    return path.join(path.dirname(Storage.getSystemSettingsPath()), 'policies');
+  }
+
   static getGlobalTempDir(): string {
     return path.join(Storage.getGlobalLlxprtDir(), TMP_DIR_NAME);
   }
