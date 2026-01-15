@@ -47,6 +47,7 @@ import { ListSubagentsTool } from '../tools/list-subagents.js';
 import { GeminiClient } from '../core/client.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
+import type { HookDefinition, HookEventName } from '../hooks/types.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -285,50 +286,6 @@ export enum AuthProviderType {
 export interface SandboxConfig {
   command: 'docker' | 'podman' | 'sandbox-exec';
   image: string;
-}
-
-/**
- * Event names for the hook system
- */
-export enum HookEventName {
-  BeforeTool = 'BeforeTool',
-  AfterTool = 'AfterTool',
-  BeforeAgent = 'BeforeAgent',
-  Notification = 'Notification',
-  AfterAgent = 'AfterAgent',
-  SessionStart = 'SessionStart',
-  SessionEnd = 'SessionEnd',
-  PreCompress = 'PreCompress',
-  BeforeModel = 'BeforeModel',
-  AfterModel = 'AfterModel',
-  BeforeToolSelection = 'BeforeToolSelection',
-}
-
-/**
- * Hook configuration entry
- */
-export interface CommandHookConfig {
-  type: HookType.Command;
-  command: string;
-  timeout?: number;
-}
-
-export type HookConfig = CommandHookConfig;
-
-/**
- * Hook definition with matcher
- */
-export interface HookDefinition {
-  matcher?: string;
-  sequential?: boolean;
-  hooks: HookConfig[];
-}
-
-/**
- * Hook implementation types
- */
-export enum HookType {
-  Command = 'command',
 }
 
 export interface ActiveExtension {
