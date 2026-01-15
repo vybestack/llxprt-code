@@ -21,7 +21,7 @@ describe('mouseCommand', () => {
 
   beforeEach(() => {
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    disableMouseEvents({ write: vi.fn() } as unknown as NodeJS.WriteStream);
+    disableMouseEvents();
   });
 
   it('enables mouse events when called with "on"', async () => {

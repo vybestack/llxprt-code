@@ -36,7 +36,12 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
-import { isMouseEventsActive, setMouseEventsActive } from './utils/mouse.js';
+import {
+  isMouseEventsActive,
+  setMouseEventsActive,
+  disableMouseEvents,
+  enableMouseEvents,
+} from './utils/mouse.js';
 import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
@@ -796,7 +801,9 @@ export const AppContainer = (props: AppContainerProps) => {
       return;
     }
 
-    stdout.write(ansiEscapes.clearTerminal);
+    if (settings.merged.ui?.useAlternateBuffer === false) {
+      stdout.write(ansiEscapes.clearTerminal);
+    }
     setStaticKey((prev) => prev + 1);
 
     restoreTerminalStateAfterEditor();
@@ -811,6 +818,7 @@ export const AppContainer = (props: AppContainerProps) => {
     setStaticKey,
     stdout,
     useAlternateBuffer,
+    settings,
   ]);
 
   const handleExternalEditorOpen = useCallback(() => {
@@ -869,6 +877,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
   const [showDebugProfiler, setShowDebugProfiler] = useState(false);
+  const [copyModeEnabled, setCopyModeEnabled] = useState(false);
   const [renderMarkdown, setRenderMarkdown] = useState<boolean>(true);
   const [isTodoPanelCollapsed, setIsTodoPanelCollapsed] = useState(false);
 
@@ -1692,9 +1701,25 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const handleGlobalKeypress = useCallback(
     (key: Key) => {
+      if (copyModeEnabled) {
+        setCopyModeEnabled(false);
+        enableMouseEvents();
+        // We don't want to process any other keys if we're in copy mode.
+        return;
+      }
+
       // Debug log keystrokes if enabled
       if (settings.merged.debugKeystrokeLogging) {
         console.log('[DEBUG] Keystroke:', JSON.stringify(key));
+      }
+
+      if (
+        settings.merged.ui?.useAlternateBuffer &&
+        keyMatchers[Command.TOGGLE_COPY_MODE](key)
+      ) {
+        setCopyModeEnabled(true);
+        disableMouseEvents();
+        return;
       }
 
       // Handle exit keys BEFORE dialog visibility check so exit prompts work even when dialogs are open
@@ -1800,6 +1825,9 @@ export const AppContainer = (props: AppContainerProps) => {
       addItem,
       settings.merged.debugKeystrokeLogging,
       refreshStatic,
+      setCopyModeEnabled,
+      copyModeEnabled,
+      settings.merged.ui?.useAlternateBuffer,
     ],
   );
 
@@ -2230,6 +2258,9 @@ export const AppContainer = (props: AppContainerProps) => {
     // Debug
     debugMessage,
     showDebugProfiler,
+
+    // Copy mode
+    copyModeEnabled,
 
     // Footer height
     footerHeight,

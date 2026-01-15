@@ -74,6 +74,7 @@ describe('keyMatchers', () => {
     [Command.TOGGLE_IDE_CONTEXT_DETAIL]: (key: Key) =>
       key.ctrl && key.name === 'g',
     [Command.TOGGLE_MARKDOWN]: (key: Key) => key.meta && key.name === 'm',
+    [Command.TOGGLE_COPY_MODE]: (key: Key) => key.ctrl && key.name === 'y',
     [Command.QUIT]: (key: Key) => key.ctrl && key.name === 'c',
     [Command.EXIT]: (key: Key) => key.ctrl && key.name === 'd',
     [Command.SHOW_MORE_LINES]: (key: Key) => key.ctrl && key.name === 's',
