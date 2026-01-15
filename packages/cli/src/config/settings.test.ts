@@ -259,7 +259,7 @@ describe('Settings Loading and Merging', () => {
         selectedAuthType: 'provider',
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
-        showLineNumbers: false,
+        
         showStatusInTitle: false,
         textToolCallModels: [],
         toolCallProcessingMode: 'legacy',
@@ -339,7 +339,7 @@ describe('Settings Loading and Merging', () => {
         selectedAuthType: 'provider',
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
-        showLineNumbers: false,
+        
         showStatusInTitle: false,
         textToolCallModels: [],
         theme: 'dark',
@@ -419,7 +419,7 @@ describe('Settings Loading and Merging', () => {
         selectedAuthType: 'provider',
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
-        showLineNumbers: false,
+        
         showStatusInTitle: false,
         textToolCallModels: [],
         toolCallProcessingMode: 'legacy',
@@ -502,7 +502,7 @@ describe('Settings Loading and Merging', () => {
         selectedAuthType: 'provider',
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
-        showLineNumbers: false,
+        
         showStatusInTitle: false,
         textToolCallModels: [],
         theme: 'dark',
@@ -597,7 +597,7 @@ describe('Settings Loading and Merging', () => {
         selectedAuthType: 'provider',
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
-        showLineNumbers: false,
+        
         showStatusInTitle: false,
         telemetry: { enabled: false },
         textToolCallModels: [],
@@ -704,7 +704,7 @@ describe('Settings Loading and Merging', () => {
         selectedAuthType: 'provider',
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
-        showLineNumbers: false,
+        
         showStatusInTitle: false,
         telemetry: false,
         textToolCallModels: [],
@@ -1700,7 +1700,7 @@ describe('Settings Loading and Merging', () => {
           selectedAuthType: 'provider',
           shellReplacement: 'allowlist',
           shouldUseNodePtyShell: false,
-          showLineNumbers: false,
+          
           showStatusInTitle: false,
           textToolCallModels: [],
           toolCallProcessingMode: 'legacy',
