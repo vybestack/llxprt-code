@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { promises as fsPromises } from 'fs';
+import { promises as fsPromises, existsSync, statSync } from 'fs';
 import * as path from 'path';
 import * as Diff from 'diff';
 import {
@@ -12,11 +12,11 @@ import {
   Kind,
   ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
-  ToolEditConfirmationDetails,
+  type ToolEditConfirmationDetails,
   ToolInvocation,
   ToolLocation,
-  ToolResult,
-  ToolResultDisplay,
+  type ToolResult,
+  type FileDiff,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
@@ -25,6 +25,7 @@ import { Config, ApprovalMode } from '../config/config.js';
 import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { spawnSync } from 'child_process';
+import FastGlob from 'fast-glob';
 import {
   parse,
   Lang,
@@ -788,10 +789,30 @@ class CrossFileRelationshipAnalyzer {
   }
 
   private resolveImportPath(module: string, fromFile: string): string | null {
-    // Simplified path resolution
+    // Enhanced path resolution supporting multiple extensions
     if (module.startsWith('./') || module.startsWith('../')) {
       const fromDir = path.dirname(fromFile);
-      return path.resolve(fromDir, module + '.ts');
+      const baseResolve = path.resolve(fromDir, module);
+
+      const extensions = [
+        '.ts',
+        '.tsx',
+        '.js',
+        '.jsx',
+        '.mjs',
+        '.cjs',
+        '/index.ts',
+        '/index.tsx',
+        '/index.js',
+        '/index.jsx',
+      ];
+
+      for (const ext of extensions) {
+        const fullPath = baseResolve + ext;
+        if (existsSync(fullPath) && statSync(fullPath).isFile()) {
+          return fullPath;
+        }
+      }
     }
     return null;
   }
@@ -1284,33 +1305,20 @@ class ASTContextCollector {
   }
 
   private async getWorkspaceFiles(workspaceRoot: string): Promise<string[]> {
-    // Simplified workspace file collection
+    // Cross-platform workspace file collection using fast-glob
     try {
-      const result = spawnSync(
-        'find',
-        [
-          workspaceRoot,
-          '-name',
-          '*.ts',
-          '-o',
-          '-name',
-          '*.js',
-          '-o',
-          '-name',
-          '*.py',
-        ],
-        { encoding: 'utf-8', stdio: 'pipe' },
-      );
-      if (result.status === 0) {
-        return result.stdout
-          .trim()
-          .split('\n')
-          .filter((file) => file.length > 0);
-      }
-    } catch (_error) {
-      // Ignore errors
+      const patterns = ['**/*.ts', '**/*.js', '**/*.py'];
+      const files = await FastGlob(patterns, {
+        cwd: workspaceRoot,
+        absolute: true,
+        onlyFiles: true,
+        ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+      });
+      return files.filter((file) => file.length > 0);
+    } catch (error) {
+      console.error(`Error discovering workspace files: ${error}`);
+      return [];
     }
-    return [];
   }
 
   private extractSymbolsFromContent(content: string): string[] {
@@ -1620,6 +1628,10 @@ class ASTEditToolInvocation implements ToolInvocation<
           this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
         }
       },
+      metadata: {
+        astValidation: editData.astValidation,
+        fileFreshness: editData.fileFreshness,
+      },
     };
 
     return confirmationDetails;
@@ -1762,17 +1774,16 @@ class ASTEditToolInvocation implements ToolInvocation<
         .filter(Boolean)
         .join('\n');
 
-      let returnDisplay: ToolResultDisplay;
-      if (currentContent === newContent) {
-        returnDisplay = currentContent;
-      } else {
-        returnDisplay = {
-          fileDiff,
-          fileName,
-          originalContent: currentContent,
-          newContent,
-        };
-      }
+      const returnDisplay: FileDiff = {
+        fileDiff,
+        fileName,
+        originalContent: currentContent,
+        newContent,
+        metadata: {
+          astValidation,
+          currentMtime,
+        },
+      };
 
       return {
         llmContent: editPreviewLlmContent,
@@ -1842,6 +1853,9 @@ class ASTEditToolInvocation implements ToolInvocation<
         originalContent: editData.currentContent,
         newContent: editData.newContent,
         applied: true,
+        metadata: {
+          astValidation: editData.astValidation,
+        },
       };
 
       const llmSuccessMessage = [
@@ -2162,7 +2176,15 @@ class ASTReadFileToolInvocation implements ToolInvocation<
 
       return {
         llmContent: readLlmContent,
-        returnDisplay: selectedContent,
+        returnDisplay: {
+          content: selectedContent,
+          fileName: path.basename(this.params.file_path),
+          filePath: this.params.file_path,
+          metadata: {
+            language: enhancedContext.language,
+            declarationsCount: enhancedContext.declarations.length,
+          },
+        },
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
