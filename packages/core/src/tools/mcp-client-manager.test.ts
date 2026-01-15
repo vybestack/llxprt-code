@@ -29,6 +29,7 @@ describe('McpClientManager', () => {
       discover: vi.fn(),
       disconnect: vi.fn(),
       getStatus: vi.fn(),
+      getServerConfig: vi.fn().mockReturnValue({}),
     };
     vi.mocked(McpClient).mockReturnValue(
       mockedMcpClient as unknown as McpClient,
@@ -44,20 +45,14 @@ describe('McpClientManager', () => {
       getWorkspaceContext: () => ({}) as WorkspaceContext,
       getEnableExtensionReloading: () => false,
       getExtensionEvents: () => undefined,
+      getAllowedMcpServers: () => undefined,
+      getBlockedMcpServers: () => undefined,
+      getGeminiClient: () => ({
+        isInitialized: () => false,
+      }),
     } as unknown as Config;
-    const manager = new McpClientManager(
-      {
-        'test-server': {},
-      },
-      '',
-      {} as ToolRegistry,
-      {} as PromptRegistry,
-      false,
-      {} as WorkspaceContext,
-      undefined,
-      mockConfig,
-    );
-    await manager.discoverAllMcpTools();
+    const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+    await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
     expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
   });
@@ -68,6 +63,7 @@ describe('McpClientManager', () => {
       discover: vi.fn(),
       disconnect: vi.fn(),
       getStatus: vi.fn(),
+      getServerConfig: vi.fn().mockReturnValue({}),
     };
     vi.mocked(McpClient).mockReturnValue(
       mockedMcpClient as unknown as McpClient,
@@ -83,20 +79,14 @@ describe('McpClientManager', () => {
       getWorkspaceContext: () => ({}) as WorkspaceContext,
       getEnableExtensionReloading: () => false,
       getExtensionEvents: () => undefined,
+      getAllowedMcpServers: () => undefined,
+      getBlockedMcpServers: () => undefined,
+      getGeminiClient: () => ({
+        isInitialized: () => false,
+      }),
     } as unknown as Config;
-    const manager = new McpClientManager(
-      {
-        'test-server': {},
-      },
-      '',
-      {} as ToolRegistry,
-      {} as PromptRegistry,
-      false,
-      {} as WorkspaceContext,
-      undefined,
-      mockConfig,
-    );
-    await manager.discoverAllMcpTools();
+    const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+    await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).not.toHaveBeenCalled();
     expect(mockedMcpClient.discover).not.toHaveBeenCalled();
   });

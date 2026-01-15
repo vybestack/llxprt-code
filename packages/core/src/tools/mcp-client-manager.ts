@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,7 +10,6 @@ import type {
   MCPServerConfig,
 } from '../config/config.js';
 import type { ToolRegistry } from './tool-registry.js';
-import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import {
   McpClient,
   MCPDiscoveryState,
@@ -18,7 +17,6 @@ import {
 } from './mcp-client.js';
 import { getErrorMessage } from '../utils/errors.js';
 import type { EventEmitter } from 'node:events';
-import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import { coreEvents } from '../utils/events.js';
 import { DebugLogger } from '../debug/index.js';
 
@@ -31,103 +29,82 @@ const logger = new DebugLogger('llxprt:mcp-client-manager');
  */
 export class McpClientManager {
   private clients: Map<string, McpClient> = new Map();
-  private readonly mcpServers: Record<string, MCPServerConfig>;
-  private readonly mcpServerCommand: string | undefined;
   private readonly toolRegistry: ToolRegistry;
-  private readonly promptRegistry: PromptRegistry;
-  private readonly debugMode: boolean;
-  private readonly workspaceContext: WorkspaceContext;
-  private readonly config: Config;
+  private readonly cliConfig: Config;
   // If we have ongoing MCP client discovery, this completes once that is done.
   private discoveryPromise: Promise<void> | undefined;
   private discoveryState: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
   private readonly eventEmitter?: EventEmitter;
+  private readonly blockedMcpServers: Array<{
+    name: string;
+    extensionName: string;
+  }> = [];
 
   constructor(
-    mcpServers: Record<string, MCPServerConfig>,
-    mcpServerCommand: string | undefined,
     toolRegistry: ToolRegistry,
-    promptRegistry: PromptRegistry,
-    debugMode: boolean,
-    workspaceContext: WorkspaceContext,
+    cliConfig: Config,
     eventEmitter?: EventEmitter,
-    config?: Config,
   ) {
-    this.mcpServers = mcpServers;
-    this.mcpServerCommand = mcpServerCommand;
     this.toolRegistry = toolRegistry;
-    this.promptRegistry = promptRegistry;
-    this.debugMode = debugMode;
-    this.workspaceContext = workspaceContext;
+    this.cliConfig = cliConfig;
     this.eventEmitter = eventEmitter;
-    this.config = config!;
+  }
 
-    // Subscribe to extension events if reloading is enabled
-    if (config?.getEnableExtensionReloading()) {
-      const extensionEvents = config.getExtensionEvents?.();
-      if (extensionEvents) {
-        extensionEvents
-          .on('extensionLoaded', (event: { extension: GeminiCLIExtension }) =>
-            this.loadExtension(event.extension),
-          )
-          .on('extensionEnabled', (event: { extension: GeminiCLIExtension }) =>
-            this.loadExtension(event.extension),
-          )
-          .on('extensionDisabled', (event: { extension: GeminiCLIExtension }) =>
-            this.unloadExtension(event.extension),
-          )
-          .on('extensionUnloaded', (event: { extension: GeminiCLIExtension }) =>
-            this.unloadExtension(event.extension),
-          );
-      }
-    }
+  getBlockedMcpServers() {
+    return this.blockedMcpServers;
   }
 
   /**
    * For all the MCP servers associated with this extension:
    *
-   *    - Removes all its MCP servers from the global configuration object.
    *    - Disconnects all MCP clients from their servers.
    *    - Updates the Gemini chat configuration to load the new tools.
    */
-  private async unloadExtension(extension: GeminiCLIExtension) {
+  async stopExtension(extension: GeminiCLIExtension) {
     logger.log(`Unloading extension: ${extension.name}`);
     await Promise.all(
-      Object.keys(extension.mcpServers ?? {}).map((name) => {
-        const newMcpServers = {
-          ...this.config.getMcpServers(),
-        };
-        delete newMcpServers[name];
-        this.config.setMcpServers(newMcpServers);
-        return this.disconnectClient(name);
-      }),
+      Object.keys(extension.mcpServers ?? {}).map(
+        this.disconnectClient.bind(this),
+      ),
     );
-    // This is required to update the content generator configuration with the
-    // new tool configuration.
-    this.config.getGeminiClient().setTools();
   }
 
   /**
    * For all the MCP servers associated with this extension:
    *
-   *    - Adds all its MCP servers to the global configuration object.
    *    - Connects MCP clients to each server and discovers their tools.
    *    - Updates the Gemini chat configuration to load the new tools.
    */
-  private async loadExtension(extension: GeminiCLIExtension) {
+  async startExtension(extension: GeminiCLIExtension) {
     logger.log(`Loading extension: ${extension.name}`);
     await Promise.all(
-      Object.entries(extension.mcpServers ?? {}).map(([name, config]) => {
-        this.config.setMcpServers({
-          ...this.config.getMcpServers(),
-          [name]: config,
-        });
-        return this.discoverMcpTools(name, config);
-      }),
+      Object.entries(extension.mcpServers ?? {}).map(([name, config]) =>
+        this.maybeDiscoverMcpServer(name, {
+          ...config,
+          extension,
+        }),
+      ),
     );
-    // This is required to update the content generator configuration with the
-    // new tool configuration.
-    this.config.getGeminiClient().setTools();
+  }
+
+  private isAllowedMcpServer(name: string) {
+    const allowedNames = this.cliConfig.getAllowedMcpServers();
+    if (
+      allowedNames &&
+      allowedNames.length > 0 &&
+      allowedNames.indexOf(name) === -1
+    ) {
+      return false;
+    }
+    const blockedServers = this.cliConfig.getBlockedMcpServers();
+    if (
+      blockedServers &&
+      blockedServers.length > 0 &&
+      blockedServers.some((s) => s.name === name)
+    ) {
+      return false;
+    }
+    return true;
   }
 
   private async disconnectClient(name: string) {
@@ -141,36 +118,71 @@ export class McpClientManager {
         logger.warn(
           `Error stopping client '${name}': ${getErrorMessage(error)}`,
         );
+      } finally {
+        // This is required to update the content generator configuration with the
+        // new tool configuration.
+        const geminiClient = this.cliConfig.getGeminiClient();
+        if (geminiClient.isInitialized()) {
+          await geminiClient.setTools();
+        }
       }
     }
   }
 
-  discoverMcpTools(
+  maybeDiscoverMcpServer(
     name: string,
     config: MCPServerConfig,
   ): Promise<void> | void {
-    if (!this.config.isTrustedFolder()) {
+    if (!this.isAllowedMcpServer(name)) {
+      if (!this.blockedMcpServers.find((s) => s.name === name)) {
+        this.blockedMcpServers?.push({
+          name,
+          extensionName: config.extension?.name ?? '',
+        });
+      }
+      return;
+    }
+    if (!this.cliConfig.isTrustedFolder()) {
+      return;
+    }
+    if (config.extension && !config.extension.isActive) {
+      return;
+    }
+    const existing = this.clients.get(name);
+    if (existing && existing.getServerConfig().extension !== config.extension) {
+      const extensionText = config.extension
+        ? ` from extension "${config.extension.name}"`
+        : '';
+      logger.warn(
+        `Skipping MCP config for server with name "${name}"${extensionText} as it already exists.`,
+      );
       return;
     }
 
     const currentDiscoveryPromise = new Promise<void>((resolve, _reject) => {
       (async () => {
         try {
-          await this.disconnectClient(name);
+          if (existing) {
+            await existing.disconnect();
+          }
 
-          const client = new McpClient(
-            name,
-            config,
-            this.toolRegistry,
-            this.promptRegistry,
-            this.workspaceContext,
-            this.debugMode,
-          );
-          this.clients.set(name, client);
-          this.eventEmitter?.emit('mcp-client-update', this.clients);
+          const client =
+            existing ??
+            new McpClient(
+              name,
+              config,
+              this.toolRegistry,
+              this.cliConfig.getPromptRegistry(),
+              this.cliConfig.getWorkspaceContext(),
+              this.cliConfig.getDebugMode(),
+            );
+          if (!existing) {
+            this.clients.set(name, client);
+            this.eventEmitter?.emit('mcp-client-update', this.clients);
+          }
           try {
             await client.connect();
-            await client.discover(this.config);
+            await client.discover(this.cliConfig);
             this.eventEmitter?.emit('mcp-client-update', this.clients);
           } catch (error) {
             this.eventEmitter?.emit('mcp-client-update', this.clients);
@@ -184,6 +196,12 @@ export class McpClientManager {
             );
           }
         } finally {
+          // This is required to update the content generator configuration with the
+          // new tool configuration.
+          const geminiClient = this.cliConfig.getGeminiClient();
+          if (geminiClient.isInitialized()) {
+            await geminiClient.setTools();
+          }
           resolve();
         }
       })();
@@ -197,6 +215,7 @@ export class McpClientManager {
       this.discoveryState = MCPDiscoveryState.IN_PROGRESS;
       this.discoveryPromise = currentDiscoveryPromise;
     }
+    this.eventEmitter?.emit('mcp-client-update', this.clients);
     const currentPromise = this.discoveryPromise;
     currentPromise.then((_) => {
       // If we are the last recorded discoveryPromise, then we are done, reset
@@ -210,27 +229,61 @@ export class McpClientManager {
   }
 
   /**
-   * Initiates the tool discovery process for all configured MCP servers.
+   * Initiates the tool discovery process for all configured MCP servers (via
+   * gemini settings or command line arguments).
+   *
    * It connects to each server, discovers its available tools, and registers
    * them with the `ToolRegistry`.
+   *
+   * For any server which is already connected, it will first be disconnected.
+   *
+   * This does NOT load extension MCP servers - this happens when the
+   * ExtensionLoader explicitly calls `loadExtension`.
    */
-  async discoverAllMcpTools(): Promise<void> {
-    if (!this.config.isTrustedFolder()) {
+  async startConfiguredMcpServers(): Promise<void> {
+    if (!this.cliConfig.isTrustedFolder()) {
       return;
     }
-    await this.stop();
 
     const servers = populateMcpServerCommand(
-      this.mcpServers,
-      this.mcpServerCommand,
+      this.cliConfig.getMcpServers() || {},
+      this.cliConfig.getMcpServerCommand(),
     );
 
     this.eventEmitter?.emit('mcp-client-update', this.clients);
     await Promise.all(
-      Object.entries(servers).map(async ([name, config]) =>
-        this.discoverMcpTools(name, config),
+      Object.entries(servers).map(([name, config]) =>
+        this.maybeDiscoverMcpServer(name, config),
       ),
     );
+  }
+
+  /**
+   * Restarts all active MCP Clients.
+   */
+  async restart(): Promise<void> {
+    await Promise.all(
+      Array.from(this.clients.entries()).map(async ([name, client]) => {
+        try {
+          await this.maybeDiscoverMcpServer(name, client.getServerConfig());
+        } catch (error) {
+          logger.error(
+            `Error restarting client '${name}': ${getErrorMessage(error)}`,
+          );
+        }
+      }),
+    );
+  }
+
+  /**
+   * Restart a single MCP server by name.
+   */
+  async restartServer(name: string) {
+    const client = this.clients.get(name);
+    if (!client) {
+      throw new Error(`No MCP server registered with the name "${name}"`);
+    }
+    await this.maybeDiscoverMcpServer(name, client.getServerConfig());
   }
 
   /**
@@ -256,5 +309,16 @@ export class McpClientManager {
 
   getDiscoveryState(): MCPDiscoveryState {
     return this.discoveryState;
+  }
+
+  /**
+   * All of the MCP server configurations currently loaded.
+   */
+  getMcpServers(): Record<string, MCPServerConfig> {
+    const mcpServers: Record<string, MCPServerConfig> = {};
+    for (const [name, client] of this.clients.entries()) {
+      mcpServers[name] = client.getServerConfig();
+    }
+    return mcpServers;
   }
 }

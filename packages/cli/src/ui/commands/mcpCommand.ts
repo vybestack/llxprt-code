@@ -445,8 +445,8 @@ const authCommand: SlashCommand = {
       );
 
       // Trigger tool re-discovery to pick up authenticated server
-      const toolRegistry = config.getToolRegistry();
-      if (toolRegistry) {
+      const mcpClientManager = config.getMcpClientManager();
+      if (mcpClientManager) {
         context.ui.addItem(
           {
             type: 'info',
@@ -454,7 +454,7 @@ const authCommand: SlashCommand = {
           },
           Date.now(),
         );
-        await toolRegistry.discoverToolsForServer(serverName);
+        await mcpClientManager.restartServer(serverName);
       }
       // Update the client with the new tools
       const geminiClient = config.getGeminiClient();

@@ -101,6 +101,11 @@ import { PolicyEngine } from '../policy/policy-engine.js';
 import type { PolicyEngineConfig } from '../policy/types.js';
 import { setGlobalProxy } from '../utils/fetch.js';
 import { coreEvents } from '../utils/events.js';
+import {
+  type ExtensionLoader,
+  SimpleExtensionLoader,
+} from '../utils/extensionLoader.js';
+import { McpClientManager } from '../tools/mcp-client-manager.js';
 
 // Import privacy-related types
 export interface RedactionConfig {
@@ -266,6 +271,7 @@ export class MCPServerConfig {
     readonly includeTools?: string[],
     readonly excludeTools?: string[],
     readonly extensionName?: string,
+    readonly extension?: GeminiCLIExtension,
     // OAuth configuration
     readonly oauth?: MCPOAuthConfig,
     readonly authProviderType?: AuthProviderType,
@@ -369,7 +375,10 @@ export interface ConfigParameters {
   providerManager?: ProviderManager;
   provider?: string;
   extensions?: GeminiCLIExtension[];
+  extensionLoader?: ExtensionLoader;
+  enabledExtensions?: string[];
   enableExtensionReloading?: boolean;
+  allowedMcpServers?: string[];
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
   noBrowser?: boolean;
   summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
@@ -406,6 +415,9 @@ export interface ConfigParameters {
 
 export class Config {
   private toolRegistry!: ToolRegistry;
+  private mcpClientManager?: McpClientManager;
+  private allowedMcpServers: string[];
+  private blockedMcpServers: Array<{ name: string; extensionName: string }>;
   private promptRegistry!: PromptRegistry;
   private readonly sessionId: string;
   private readonly settingsService: SettingsService;
@@ -462,12 +474,8 @@ export class Config {
   private readonly maxSessionTurns: number;
   private readonly _activeExtensions: ActiveExtension[];
   private readonly listExtensions: boolean;
-  private readonly _extensions: GeminiCLIExtension[];
+  private readonly _extensionLoader: ExtensionLoader;
   private readonly enableExtensionReloading: boolean;
-  private readonly _blockedMcpServers: Array<{
-    name: string;
-    extensionName: string;
-  }>;
   private providerManager?: ProviderManager;
   private profileManager?: ProfileManager;
   private subagentManager?: SubagentManager;
@@ -628,6 +636,8 @@ export class Config {
     this.toolCallCommand = params.toolCallCommand;
     this.mcpServerCommand = params.mcpServerCommand;
     this.mcpServers = params.mcpServers;
+    this.allowedMcpServers = params.allowedMcpServers ?? [];
+    this.blockedMcpServers = params.blockedMcpServers ?? [];
     this.userMemory = params.userMemory ?? '';
     this.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
     this.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
@@ -677,8 +687,9 @@ export class Config {
     this._activeExtensions = params.activeExtensions ?? [];
     this.providerManager = params.providerManager;
     this.provider = params.provider;
-    this._extensions = params.extensions ?? [];
-    this._blockedMcpServers = params.blockedMcpServers ?? [];
+    this._extensionLoader =
+      params.extensionLoader ??
+      new SimpleExtensionLoader(params.extensions ?? []);
     this.noBrowser = params.noBrowser ?? false;
     this.summarizeToolOutput = params.summarizeToolOutput;
     this.folderTrust = params.folderTrust ?? false;
@@ -796,6 +807,15 @@ export class Config {
     }
     this.promptRegistry = new PromptRegistry();
     this.toolRegistry = await this.createToolRegistry();
+    this.mcpClientManager = new McpClientManager(
+      this.toolRegistry,
+      this,
+      this.eventEmitter,
+    );
+    await Promise.all([
+      this.mcpClientManager.startConfiguredMcpServers(),
+      this.getExtensionLoader().start(this),
+    ]);
 
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
@@ -1067,8 +1087,23 @@ export class Config {
     return this.allowedTools;
   }
 
+  /**
+   * All the excluded tools from static configuration, loaded extensions, or
+   * other sources.
+   *
+   * May change over time.
+   */
   getExcludeTools(): string[] | undefined {
-    return this.excludeTools;
+    const excludeToolsSet = new Set([...(this.excludeTools ?? [])]);
+    for (const extension of this.getExtensionLoader().getExtensions()) {
+      if (!extension.isActive) {
+        continue;
+      }
+      for (const tool of extension.excludeTools || []) {
+        excludeToolsSet.add(tool);
+      }
+    }
+    return [...excludeToolsSet];
   }
 
   getToolDiscoveryCommand(): string | undefined {
@@ -1083,8 +1118,27 @@ export class Config {
     return this.mcpServerCommand;
   }
 
+  /**
+   * The user configured MCP servers (via gemini settings files).
+   *
+   * Does NOT include mcp servers configured by extensions.
+   */
   getMcpServers(): Record<string, MCPServerConfig> | undefined {
     return this.mcpServers;
+  }
+
+  getMcpClientManager(): McpClientManager | undefined {
+    return this.mcpClientManager;
+  }
+
+  getAllowedMcpServers(): string[] | undefined {
+    return this.allowedMcpServers;
+  }
+
+  getBlockedMcpServers():
+    | Array<{ name: string; extensionName: string }>
+    | undefined {
+    return this.blockedMcpServers;
   }
 
   setMcpServers(mcpServers: Record<string, MCPServerConfig>): void {
@@ -1369,8 +1423,12 @@ export class Config {
     return this.extensionManagement;
   }
 
+  getExtensionLoader(): ExtensionLoader {
+    return this._extensionLoader;
+  }
+
   getExtensions(): GeminiCLIExtension[] {
-    return this._extensions;
+    return this._extensionLoader.getExtensions();
   }
 
   getActiveExtensions(): ActiveExtension[] {
@@ -1383,10 +1441,6 @@ export class Config {
 
   getExtensionEvents(): EventEmitter | undefined {
     return this.eventEmitter;
-  }
-
-  getBlockedMcpServers(): Array<{ name: string; extensionName: string }> {
-    return this._blockedMcpServers;
   }
 
   getProvider(): string | undefined {
@@ -1740,7 +1794,7 @@ export class Config {
   }
 
   async createToolRegistry(): Promise<ToolRegistry> {
-    const registry = new ToolRegistry(this, this.eventEmitter);
+    const registry = new ToolRegistry(this);
 
     const baseCoreTools = this.getCoreTools();
     const effectiveCoreTools =

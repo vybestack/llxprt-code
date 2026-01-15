@@ -16,15 +16,12 @@ import { type ToolContext } from './tool-context.js';
 import { Config } from '../config/config.js';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
-import { connectAndDiscover } from './mcp-client.js';
-import { McpClientManager } from './mcp-client-manager.js';
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import { parse } from 'shell-quote';
 import { ToolErrorType } from './tool-error.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { DebugLogger } from '../debug/index.js';
 import { normalizeToolName } from './toolNameUtils.js';
-import type { EventEmitter } from 'node:events';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 type ToolParams = Record<string, unknown>;
 
@@ -188,22 +185,11 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
 export class ToolRegistry {
   private tools: Map<string, AnyDeclarativeTool> = new Map();
   private config: Config;
-  private mcpClientManager: McpClientManager;
   private logger = new DebugLogger('llxprt:tool-registry');
   private discoveryLock: Promise<void> | null = null;
 
-  constructor(config: Config, eventEmitter?: EventEmitter) {
+  constructor(config: Config) {
     this.config = config;
-    this.mcpClientManager = new McpClientManager(
-      this.config.getMcpServers() ?? {},
-      this.config.getMcpServerCommand(),
-      this,
-      this.config.getPromptRegistry(),
-      this.config.getDebugMode(),
-      this.config.getWorkspaceContext(),
-      eventEmitter,
-      config,
-    );
   }
 
   /**
@@ -306,7 +292,7 @@ export class ToolRegistry {
   /**
    * Discovers tools from project (if available and configured).
    * Can be called multiple times to update discovered tools.
-   * This will discover tools from the command line and from MCP servers.
+   * This will ONLY discover tools from the command line, NOT from MCP servers.
    * Uses truly atomic updates to prevent race conditions.
    */
   async discoverAllTools(): Promise<void> {
@@ -317,98 +303,7 @@ export class ToolRegistry {
 
       await this.discoverAndRegisterToolsFromCommand(newTools);
 
-      const previousTools = this.tools;
-      try {
-        this.tools = newTools;
-        await this.mcpClientManager.discoverAllMcpTools();
-      } catch (error) {
-        this.tools = previousTools;
-        throw error;
-      }
-    });
-  }
-
-  /**
-   * Discovers tools from project (if available and configured).
-   * Can be called multiple times to update discovered tools.
-   * This will NOT discover tools from the command line, only from MCP servers.
-   * Uses truly atomic updates to prevent race conditions.
-   */
-  async discoverMcpTools(): Promise<void> {
-    await this.withDiscoveryLock(async () => {
-      const newTools = this.buildCoreToolsMap();
-
-      for (const tool of this.tools.values()) {
-        if (
-          tool instanceof DiscoveredTool &&
-          !(tool instanceof DiscoveredMCPTool)
-        ) {
-          this.registerToolIntoMap(tool, newTools);
-        }
-      }
-
-      await this.config.getPromptRegistry().clear();
-
-      const previousTools = this.tools;
-      try {
-        this.tools = newTools;
-        await this.mcpClientManager.discoverAllMcpTools();
-      } catch (error) {
-        this.tools = previousTools;
-        throw error;
-      }
-    });
-  }
-
-  /**
-   * Restarts all MCP servers and re-discovers tools.
-   */
-  async restartMcpServers(): Promise<void> {
-    await this.discoverMcpTools();
-  }
-
-  /**
-   * Discover or re-discover tools for a single MCP server.
-   * Uses truly atomic updates to prevent race conditions.
-   * @param serverName - The name of the server to discover tools from.
-   */
-  async discoverToolsForServer(serverName: string): Promise<void> {
-    await this.withDiscoveryLock(async () => {
-      const newTools = new Map<string, AnyDeclarativeTool>();
-      for (const tool of this.tools.values()) {
-        if (
-          !(tool instanceof DiscoveredMCPTool && tool.serverName === serverName)
-        ) {
-          this.registerToolIntoMap(tool, newTools);
-        }
-      }
-
-      await this.config.getPromptRegistry().removePromptsByServer(serverName);
-      const mcpServers = this.config.getMcpServers() ?? {};
-      const serverConfig = mcpServers[serverName];
-
-      const previousTools = this.tools;
-      try {
-        this.tools = newTools;
-        if (serverConfig) {
-          const tempRegistry = Object.create(this) as ToolRegistry;
-          tempRegistry.registerTool = (tool: AnyDeclarativeTool) => {
-            this.registerToolIntoMap(tool, newTools);
-          };
-          await connectAndDiscover(
-            serverName,
-            serverConfig,
-            tempRegistry,
-            this.config.getPromptRegistry(),
-            this.config.getDebugMode(),
-            this.config.getWorkspaceContext(),
-            this.config,
-          );
-        }
-      } catch (error) {
-        this.tools = previousTools;
-        throw error;
-      }
+      this.tools = newTools;
     });
   }
 

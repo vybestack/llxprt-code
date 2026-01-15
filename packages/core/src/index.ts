@@ -364,6 +364,20 @@ export type { LogEntry as DebugLogEntry } from './debug/index.js';
 // Export Storage
 export { Storage } from './config/storage.js';
 
+// Export Extension Loader
+export {
+  ExtensionLoader,
+  SimpleExtensionLoader,
+  type ExtensionEvents,
+  type ExtensionsStartingEvent,
+  type ExtensionsStoppingEvent,
+  type GeminiCLIExtension,
+} from './utils/extensionLoader.js';
+
+// Export MCP Client Manager
+export { McpClientManager } from './tools/mcp-client-manager.js';
+export { McpClient } from './tools/mcp-client.js';
+
 // Export models
 export * from './config/models.js';
 

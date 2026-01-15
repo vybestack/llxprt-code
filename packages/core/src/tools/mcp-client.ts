@@ -157,6 +157,7 @@ export class McpClient {
       return;
     }
     this.toolRegistry.removeMcpToolsByServer(this.serverName);
+    this.promptRegistry.removePromptsByServer(this.serverName);
     this.updateStatus(MCPServerStatus.DISCONNECTING);
     const client = this.client;
     this.client = undefined;
@@ -202,6 +203,10 @@ export class McpClient {
   private async discoverPrompts(): Promise<Prompt[]> {
     this.assertConnected();
     return discoverPrompts(this.serverName, this.client!, this.promptRegistry);
+  }
+
+  getServerConfig(): MCPServerConfig {
+    return this.serverConfig;
   }
 }
 
