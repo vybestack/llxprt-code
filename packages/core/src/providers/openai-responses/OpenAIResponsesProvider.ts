@@ -784,7 +784,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
         options.invocation?.runtimeId ?? options.runtime?.runtimeId;
       if (cacheKey && typeof cacheKey === 'string' && cacheKey.trim() !== '') {
         request.prompt_cache_key = cacheKey;
-        request.prompt_cache_retention = '24h';
+        // Note: prompt_cache_retention is NOT supported by Codex API (causes 400 error)
+        // Only add it for non-Codex OpenAI Responses API
+        if (!isCodex) {
+          request.prompt_cache_retention = '24h';
+        }
       }
     }
 

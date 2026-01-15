@@ -93,7 +93,8 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     global.fetch = originalFetch;
   });
 
-  it('should include prompt_cache_key and prompt_cache_retention when prompt-caching is enabled in Codex mode', async () => {
+  it('should include prompt_cache_key (but NOT prompt_cache_retention) when prompt-caching is enabled in Codex mode', async () => {
+    // Note: Codex API does NOT support prompt_cache_retention - only prompt_cache_key
     const mockCodexToken: CodexOAuthToken = {
       provider: 'codex',
       access_token: 'test-access-token',
@@ -174,7 +175,8 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     const requestBody = JSON.parse(capturedBody!);
 
     expect(requestBody.prompt_cache_key).toBe('test-runtime-id-123');
-    expect(requestBody.prompt_cache_retention).toBe('24h');
+    // Codex does NOT support prompt_cache_retention - it causes 400 errors
+    expect(requestBody.prompt_cache_retention).toBeUndefined();
   });
 
   it('should include prompt_cache_key and prompt_cache_retention when prompt-caching is enabled in non-Codex mode', async () => {
@@ -331,7 +333,7 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     expect(requestBody.prompt_cache_retention).toBeUndefined();
   });
 
-  it('should default to 1h caching when no prompt-caching setting is provided', async () => {
+  it('should default to 1h caching when no prompt-caching setting is provided (Codex mode)', async () => {
     const mockCodexToken: CodexOAuthToken = {
       provider: 'codex',
       access_token: 'test-access-token',
@@ -407,7 +409,8 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     const requestBody = JSON.parse(capturedBody!);
 
     expect(requestBody.prompt_cache_key).toBe('fallback-runtime-id');
-    expect(requestBody.prompt_cache_retention).toBe('24h');
+    // Codex mode: no prompt_cache_retention (not supported)
+    expect(requestBody.prompt_cache_retention).toBeUndefined();
   });
 
   it('should support 24h as a valid prompt-caching value', async () => {
