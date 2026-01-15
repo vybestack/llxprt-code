@@ -27,7 +27,6 @@ export interface FilterReport {
 export class FileDiscoveryService {
   private gitIgnoreFilter: GitIgnoreFilter | null = null;
   private llxprtIgnoreFilter: GitIgnoreFilter | null = null;
-  private combinedIgnoreFilter: GitIgnoreFilter | null = null;
   private projectRoot: string;
 
   constructor(projectRoot: string) {
@@ -55,15 +54,6 @@ export class FileDiscoveryService {
       // ignore file not found
     }
     this.llxprtIgnoreFilter = gParser;
-
-    if (this.gitIgnoreFilter) {
-      const llxprtPatterns = this.llxprtIgnoreFilter.getPatterns();
-      // Create combined parser: .gitignore + .llxprtignore
-      this.combinedIgnoreFilter = new GitIgnoreParser(
-        this.projectRoot,
-        llxprtPatterns,
-      );
-    }
   }
 
   /**
@@ -76,21 +66,15 @@ export class FileDiscoveryService {
       respectLlxprtIgnore: true,
     },
   ): string[] {
-    const { respectGitIgnore = true, respectLlxprtIgnore = true } = options;
     return filePaths.filter((filePath) => {
-      if (
-        respectGitIgnore &&
-        respectLlxprtIgnore &&
-        this.combinedIgnoreFilter
-      ) {
-        return !this.combinedIgnoreFilter.isIgnored(filePath);
-      }
-
       const absolutePath = this.resolveAbsolutePath(filePath);
-      if (respectGitIgnore && this.shouldGitIgnoreFile(absolutePath)) {
+      if (options.respectGitIgnore && this.shouldGitIgnoreFile(absolutePath)) {
         return false;
       }
-      if (respectLlxprtIgnore && this.shouldLlxprtIgnoreFile(absolutePath)) {
+      if (
+        options.respectLlxprtIgnore &&
+        this.shouldLlxprtIgnoreFile(absolutePath)
+      ) {
         return false;
       }
       return true;

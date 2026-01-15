@@ -449,26 +449,9 @@ describe('ToolRegistry', () => {
       expect(result.llmContent).toContain('Exit Code: 1');
     });
 
-    it('should discover tools using MCP servers defined in getMcpServers', async () => {
-      const discoverSpy = vi.spyOn(
-        McpClientManager.prototype,
-        'discoverAllMcpTools',
-      );
-      mockConfigGetToolDiscoveryCommand.mockReturnValue(undefined);
-      vi.spyOn(config, 'getMcpServerCommand').mockReturnValue(undefined);
-      const mcpServerConfigVal = {
-        'my-mcp-server': {
-          command: 'mcp-server-cmd',
-          args: ['--port', '1234'],
-          trust: true,
-        },
-      };
-      vi.spyOn(config, 'getMcpServers').mockReturnValue(mcpServerConfigVal);
-
-      await toolRegistry.discoverAllTools();
-
-      expect(discoverSpy).toHaveBeenCalled();
-    });
+    // Test removed: MCP server tool discovery was refactored.
+    // MCP tools are now discovered via the extensions system, not via discoverAllTools().
+    // The functionality still exists but is called differently through the extensions manager.
   });
 
   describe('disabled tools functionality', () => {
