@@ -51,7 +51,7 @@ export const ephemeralSettingHelp: Record<string, string> = {
   dumpcontext:
     'Control context dumping: now (immediate), status (show current), on (before every request), error (only on errors), off (disabled, default)',
   'prompt-caching':
-    'Enable Anthropic prompt caching (off, 5m, 1h - default: 1h, Anthropic only)',
+    'Enable prompt caching (off, 5m, 1h, 24h - default: 1h). OpenAI always uses 24h retention.',
   'include-folder-structure':
     'Include folder structure in system prompts (true/false, default: false). Set true if you need directory context.',
   'rate-limit-throttle':
@@ -309,7 +309,7 @@ export function parseEphemeralSettingValue(
   }
 
   if (key === 'prompt-caching') {
-    const validModes = ['off', '5m', '1h'];
+    const validModes = ['off', '5m', '1h', '24h'];
     if (
       typeof parsedValue === 'string' &&
       validModes.includes(parsedValue.toLowerCase())

@@ -766,6 +766,32 @@ export class OpenAIResponsesProvider extends BaseProvider {
       );
     }
 
+    // Apply prompt caching for both Codex and non-Codex modes
+    // Check ephemeral settings first (from invocation snapshot), then provider settings
+    const promptCachingSetting =
+      (options.invocation?.ephemerals?.['prompt-caching'] as
+        | string
+        | undefined) ??
+      (options.settings?.getProviderSettings?.(this.name)?.[
+        'prompt-caching'
+      ] as string | undefined) ??
+      '1h'; // default to enabled
+
+    const isCachingEnabled = promptCachingSetting !== 'off';
+
+    if (isCachingEnabled) {
+      const cacheKey =
+        options.invocation?.runtimeId ?? options.runtime?.runtimeId;
+      if (cacheKey && typeof cacheKey === 'string' && cacheKey.trim() !== '') {
+        request.prompt_cache_key = cacheKey;
+        // Note: prompt_cache_retention is NOT supported by Codex API (causes 400 error)
+        // Only add it for non-Codex OpenAI Responses API
+        if (!isCodex) {
+          request.prompt_cache_retention = '24h';
+        }
+      }
+    }
+
     const responsesURL = `${baseURL}/responses`;
     const requestBody = JSON.stringify(request);
 
@@ -795,9 +821,19 @@ export class OpenAIResponsesProvider extends BaseProvider {
       const accountId = await this.getCodexAccountId();
       headers['ChatGPT-Account-ID'] = accountId;
       headers['originator'] = 'codex_cli_rs';
+
+      // @issue #1145: Add session_id header to bind requests into a single cache namespace
+      // This matches codex-rs behavior: tmp/codex/codex-rs/codex-api/src/requests/headers.rs
+      // The session_id header helps the Codex backend group requests for better cache hits
+      const sessionId =
+        options.invocation?.runtimeId ?? options.runtime?.runtimeId;
+      if (sessionId && typeof sessionId === 'string' && sessionId.trim()) {
+        headers['session_id'] = sessionId;
+      }
+
       this.logger.debug(
         () =>
-          `Codex mode: adding headers for account ${accountId.substring(0, 8)}...`,
+          `Codex mode: adding headers for account ${accountId.substring(0, 8)}..., session_id=${sessionId?.substring(0, 8) ?? 'none'}...`,
       );
     }
 

@@ -30,6 +30,9 @@ interface ResponsesEvent {
       input_tokens: number;
       output_tokens: number;
       total_tokens: number;
+      input_tokens_details?: {
+        cached_tokens?: number;
+      };
     };
   };
 }
@@ -154,7 +157,8 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.completed':
-                // Usage data
+              case 'response.done':
+                // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
                 if (event.response?.usage) {
                   yield {
                     speaker: 'ai',
@@ -164,6 +168,9 @@ export async function* parseResponsesStream(
                         promptTokens: event.response.usage.input_tokens,
                         completionTokens: event.response.usage.output_tokens,
                         totalTokens: event.response.usage.total_tokens,
+                        cachedTokens:
+                          event.response.usage.input_tokens_details
+                            ?.cached_tokens ?? 0,
                       },
                     },
                   };

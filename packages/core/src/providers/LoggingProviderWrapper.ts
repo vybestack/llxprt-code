@@ -1011,7 +1011,8 @@ export class LoggingProviderWrapper implements IProvider {
     return {
       input_token_count: Number(tokenUsage.promptTokens) || 0,
       output_token_count: Number(tokenUsage.completionTokens) || 0,
-      cached_content_token_count: 0, // Not available in basic UsageStats
+      // Use cacheReads for cached_content_token_count so it flows to UI telemetry
+      cached_content_token_count: cacheReads,
       thoughts_token_count: 0, // Not available in basic UsageStats
       tool_token_count: 0, // Not available in basic UsageStats
       cache_read_input_tokens: cacheReads,

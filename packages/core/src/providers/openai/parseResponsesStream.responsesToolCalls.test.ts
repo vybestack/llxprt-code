@@ -229,6 +229,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       promptTokens: 62,
       completionTokens: 23,
       totalTokens: 85,
+      cachedTokens: 0,
     });
   });
 
