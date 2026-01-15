@@ -25,19 +25,17 @@ import type {
   Status as ToolCallStatusType,
   AnyDeclarativeTool,
   AnyToolInvocation,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import {
-  DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-  DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
-  ToolConfirmationOutcome,
-  ApprovalMode,
-  MockTool,
-} from '@google/gemini-cli-core';
-import { ToolCallStatus } from '../types.js';
+  TOOL_CALL_TIMEOUT_MS,
+  type ToolName,
+  ToolErrorType,
+  ToolName as ToolNameEnum,
+  ToolCallResponseInfo,
+} from '@vybestack/llxprt-code-core';
 
-// Mocks
-vi.mock('@google/gemini-cli-core', async () => {
-  const actual = await vi.importActual<any>('@google/gemini-cli-core');
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual<any>('@vybestack/llxprt-code-core');
   // Patch CoreToolScheduler to have cancelAll if it's missing in the test environment
   if (
     actual.CoreToolScheduler &&

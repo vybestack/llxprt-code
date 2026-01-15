@@ -14,8 +14,8 @@ import type {
   ToolExecuteConfirmationDetails,
   ToolMcpConfirmationDetails,
   Config,
-} from '@google/gemini-cli-core';
-import { IdeClient, ToolConfirmationOutcome } from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
+import { IdeClient, ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import type { RadioSelectItem } from '../shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
@@ -253,7 +253,7 @@ export const ToolConfirmationMessage: React.FC<
         {displayUrls && infoProps.urls && infoProps.urls.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             <Text color={theme.text.primary}>URLs to fetch:</Text>
-            {infoProps.urls.map((url) => (
+            {infoProps.urls.map((url: string) => (
               <Text key={url} color={theme.text.primary}>
                 {' '}
                 - <RenderInline text={url} />
