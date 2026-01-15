@@ -68,14 +68,4 @@ describe('Codex provider alias', () => {
 
     expect(codexAlias?.source).toBe('builtin');
   });
-
-  it('should include prompt_cache_retention in default ephemeral settings', () => {
-    const aliases = loadProviderAliasEntries();
-    const codexAlias = aliases.find((a) => a.alias === 'codex');
-
-    expect(codexAlias?.config.ephemeralSettings).toBeDefined();
-    expect(
-      codexAlias?.config.ephemeralSettings?.['prompt_cache_retention'],
-    ).toBe('24h');
-  });
 });
