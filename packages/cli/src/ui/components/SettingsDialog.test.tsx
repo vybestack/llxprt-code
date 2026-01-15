@@ -852,10 +852,13 @@ describe('SettingsDialog', () => {
               | undefined;
 
             Object.entries(expectedSiblings).forEach(([key, value]) => {
+              // eslint-disable-next-line vitest/no-conditional-expect
               expect(shellSettings?.[key]).toBe(value);
+              // eslint-disable-next-line vitest/no-conditional-expect
               expect(modifiedKeys.has(`tools.shell.${key}`)).toBe(false);
             });
 
+            // eslint-disable-next-line vitest/no-conditional-expect
             expect(modifiedKeys.size).toBe(1);
           }
         });

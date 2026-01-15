@@ -5,10 +5,7 @@
  */
 
 import type { CommandModule } from 'yargs';
-import {
-  installOrUpdateExtension,
-  requestConsentNonInteractive,
-} from '../../config/extension.js';
+import { requestConsentNonInteractive } from '../../config/extension.js';
 import type { ExtensionInstallMetadata } from '@vybestack/llxprt-code-core';
 import {
   checkGitHubReleasesExist,
