@@ -867,11 +867,13 @@ describe('ShellExecutionService child_process fallback', () => {
           expect(result.aborted).toBe(true);
 
           if (platform === 'linux') {
+            // eslint-disable-next-line vitest/no-conditional-expect -- parameterized test requires platform-specific expectations
             expect(mockProcessKill).toHaveBeenCalledWith(
               -mockChildProcess.pid!,
               expectedSignal,
             );
           } else {
+            // eslint-disable-next-line vitest/no-conditional-expect -- parameterized test requires platform-specific expectations
             expect(mockCpSpawn).toHaveBeenCalledWith(expectedCommand, [
               '/pid',
               String(mockChildProcess.pid),

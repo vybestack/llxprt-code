@@ -196,18 +196,23 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
         stdin.write('do');
       });
 
+      // eslint-disable-next-line vitest/no-conditional-expect -- parameterized test requires conditional expectations
       if (useKitty) {
         vi.advanceTimersByTime(60); // wait for kitty timeout
+        // eslint-disable-next-line vitest/no-conditional-expect -- parameterized test requires conditional expectations
         expect(onKeypress).toHaveBeenCalledExactlyOnceWith(
           expect.objectContaining({ sequence: '\x1B[200do' }),
         );
       } else {
+        // eslint-disable-next-line vitest/no-conditional-expect -- parameterized test requires conditional expectations
         expect(onKeypress).toHaveBeenCalledWith(
           expect.objectContaining({ sequence: '\x1B[200d' }),
         );
+        // eslint-disable-next-line vitest/no-conditional-expect -- parameterized test requires conditional expectations
         expect(onKeypress).toHaveBeenCalledWith(
           expect.objectContaining({ sequence: 'o' }),
         );
+        // eslint-disable-next-line vitest/no-conditional-expect -- parameterized test requires conditional expectations
         expect(onKeypress).toHaveBeenCalledTimes(2);
       }
     });
