@@ -18,7 +18,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Storage } from '../config/storage.js';
 import * as Diff from 'diff';
-import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
+import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { tildeifyPath } from '../utils/paths.js';
 import {
   type ModifiableDeclarativeTool,
@@ -239,8 +239,8 @@ class MemoryToolInvocation extends BaseToolInvocation<
       newContent,
       'Current',
       'Proposed',
-      DEFAULT_DIFF_OPTIONS,
-    );
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    ) as string;
 
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',

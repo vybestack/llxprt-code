@@ -22,20 +22,19 @@ import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { isNodeError } from '../utils/errors.js';
 import { Config, ApprovalMode } from '../config/config.js';
-import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
+import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { spawnSync } from 'child_process';
 import FastGlob from 'fast-glob';
+import { DebugLogger } from '../debug/index.js';
+
+const logger = new DebugLogger('llxprt:tools:ast-edit');
 import {
   parse,
   Lang,
   findInFiles,
   registerDynamicLanguage,
 } from '@ast-grep/napi';
-
-function isLang(lang: string | Lang): lang is Lang {
-  return Object.values(Lang).includes(lang as Lang);
-}
 
 import python from '@ast-grep/lang-python';
 import go from '@ast-grep/lang-go';
@@ -267,7 +266,7 @@ class ASTQueryExtractor {
     }
 
     try {
-      const parseLang = isLang(lang) ? lang : (lang as Lang);
+      const parseLang = lang;
       const root = parse(parseLang, content);
       const declarations: EnhancedDeclaration[] = [];
       const sgRoot = root.root();
@@ -674,46 +673,91 @@ class CrossFileRelationshipAnalyzer {
   async findRelatedSymbols(
     symbolName: string,
     workspacePath: string,
+    lang?: Lang | string,
   ): Promise<SymbolReference[]> {
-    const extension = path.extname(workspacePath).substring(1);
-    const langMap: Record<string, string | Lang> = {
-      ts: Lang.TypeScript,
-      js: Lang.JavaScript,
-      tsx: Lang.Tsx,
-      jsx: Lang.JavaScript,
-      py: 'python',
-      rb: 'ruby',
-      go: 'go',
-      rs: 'rust',
-      java: 'java',
-      cpp: 'cpp',
-      c: 'c',
-    };
-
-    const lang = langMap[extension] || Lang.TypeScript;
-
     const references: SymbolReference[] = [];
+
     try {
-      const searchLang = isLang(lang) ? lang : (lang as Lang);
-      await findInFiles(
-        searchLang,
-        {
-          paths: [workspacePath],
-          matcher: { rule: { pattern: symbolName } },
-        },
-        (err, matches) => {
-          if (err || !matches) return;
-          matches.forEach((m) => {
-            const range = m.range();
-            references.push({
-              type: 'reference',
-              filePath: m.getRoot().filename(),
-              line: range.start.line + 1,
-              column: range.start.column,
+      if (lang) {
+        await findInFiles(
+          lang,
+          {
+            paths: [workspacePath],
+            matcher: { rule: { pattern: symbolName } },
+          },
+          (err, matches) => {
+            if (err || !matches) return;
+            matches.forEach((m) => {
+              const range = m.range();
+              references.push({
+                type: 'reference',
+                filePath: m.getRoot().filename(),
+                line: range.start.line + 1,
+                column: range.start.column,
+              });
             });
-          });
-        },
-      );
+          },
+        );
+      } else {
+        const langMap: Record<string, string | Lang> = {
+          ts: Lang.TypeScript,
+          js: Lang.JavaScript,
+          tsx: Lang.Tsx,
+          jsx: Lang.JavaScript,
+          py: 'python',
+          rb: 'ruby',
+          go: 'go',
+          rs: 'rust',
+          java: 'java',
+          cpp: 'cpp',
+          c: 'c',
+        };
+
+        const filesByLanguage = new Map<string | Lang, Set<string>>();
+
+        const files = await FastGlob(
+          Object.keys(langMap).map((ext) => `**/*.${ext}`),
+          {
+            cwd: workspacePath,
+            absolute: true,
+            onlyFiles: true,
+            ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+          },
+        );
+
+        for (const file of files) {
+          const extension = path.extname(file).substring(1);
+          const fileLang = langMap[extension];
+          if (fileLang) {
+            if (!filesByLanguage.has(fileLang)) {
+              filesByLanguage.set(fileLang, new Set());
+            }
+            filesByLanguage.get(fileLang)!.add(file);
+          }
+        }
+
+        for (const [searchLang, searchFiles] of filesByLanguage) {
+          await findInFiles(
+            searchLang,
+            {
+              paths: Array.from(searchFiles),
+              matcher: { rule: { pattern: symbolName } },
+            },
+            (err, matches) => {
+              if (err || !matches) return;
+              matches.forEach((m) => {
+                const range = m.range();
+                references.push({
+                  type: 'reference',
+                  filePath: m.getRoot().filename(),
+                  line: range.start.line + 1,
+                  column: range.start.column,
+                });
+              });
+            },
+          );
+        }
+      }
 
       return references.length > 0
         ? references
@@ -856,14 +900,22 @@ class ContextOptimizer {
   }
 
   /**
-   * Check UTF-8 character boundary
+   * Check UTF-16 character boundary
    */
   private static isCharBoundary(str: string, index: number): boolean {
     if (index <= 0) return true;
     if (index >= str.length) return true;
 
+    // Check for low surrogate (0xDC00–0xDFFF)
     const code = str.charCodeAt(index);
-    return (code & 0xc0) !== 0x80; // Not a UTF-8 continuation byte
+    if (code >= 0xdc00 && code <= 0xdfff) {
+      // If previous character is high surrogate (0xD800–0xDBFF), this is not a boundary
+      const prevCode = str.charCodeAt(index - 1);
+      if (prevCode >= 0xd800 && prevCode <= 0xdbff) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -1316,7 +1368,7 @@ class ASTContextCollector {
       });
       return files.filter((file) => file.length > 0);
     } catch (error) {
-      console.error(`Error discovering workspace files: ${error}`);
+      logger.error(`Error discovering workspace files`, error);
       return [];
     }
   }
@@ -1367,10 +1419,6 @@ export class ASTEditTool
     }
     if (oldString === '' && !isNewFile) {
       return currentContent;
-    }
-
-    if (oldString === '') {
-      throw new Error('Cannot perform replacement with empty old_string');
     }
 
     // For single replacement, use replace() instead of replaceAll()
@@ -1612,8 +1660,8 @@ class ASTEditToolInvocation implements ToolInvocation<
       editData.newContent,
       'Current',
       'Proposed',
-      DEFAULT_DIFF_OPTIONS,
-    );
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    ) as string;
 
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
@@ -1704,12 +1752,12 @@ class ASTEditToolInvocation implements ToolInvocation<
       const fileName = path.basename(this.params.file_path);
       const fileDiff = Diff.createPatch(
         fileName,
-        currentContent,
+        currentContent ?? '',
         newContent,
         'Current',
         'Proposed',
-        DEFAULT_DIFF_OPTIONS,
-      );
+        DEFAULT_CREATE_PATCH_OPTIONS,
+      ) as string;
 
       const editPreviewLlmContent = [
         `LLXPRT EDIT PREVIEW: ${this.params.file_path}`,
@@ -1844,8 +1892,8 @@ class ASTEditToolInvocation implements ToolInvocation<
         editData.newContent,
         'Current',
         'Applied',
-        DEFAULT_DIFF_OPTIONS,
-      );
+        DEFAULT_CREATE_PATCH_OPTIONS,
+      ) as string;
 
       const displayResult = {
         fileDiff,
@@ -2044,7 +2092,7 @@ class ASTEditToolInvocation implements ToolInvocation<
     }
 
     try {
-      const parseLang = isLang(lang) ? lang : (lang as Lang);
+      const parseLang = lang;
       parse(parseLang, content);
       return { valid: true, errors: [] };
     } catch (error) {
@@ -2188,12 +2236,38 @@ class ASTReadFileToolInvocation implements ToolInvocation<
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
+
+      let errorType = ToolErrorType.READ_CONTENT_FAILURE;
+      if (isNodeError(error)) {
+        switch (error.code) {
+          case 'ENOENT':
+            errorType = ToolErrorType.FILE_NOT_FOUND;
+            break;
+          case 'EACCES':
+            errorType = ToolErrorType.PERMISSION_DENIED;
+            break;
+          case 'EISDIR':
+            errorType = ToolErrorType.TARGET_IS_DIRECTORY;
+            break;
+          case 'EMFILE':
+          case 'ENFILE':
+            // Resource exhaustion, treat as generic read failure or maybe system limit?
+            // Using READ_CONTENT_FAILURE as best fit.
+            errorType = ToolErrorType.READ_CONTENT_FAILURE;
+            break;
+          default:
+            errorType = ToolErrorType.READ_CONTENT_FAILURE;
+        }
+      } else {
+        errorType = ToolErrorType.UNKNOWN;
+      }
+
       return {
         llmContent: `Error reading file: ${errorMsg}`,
         returnDisplay: `Error reading file: ${errorMsg}`,
         error: {
           message: errorMsg,
-          type: ToolErrorType.FILE_NOT_FOUND,
+          type: errorType,
         },
       };
     }

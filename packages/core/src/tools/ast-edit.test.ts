@@ -47,6 +47,31 @@ describe('AST Tools', () => {
   it('should return content string when no changes in preview', async () => {
     const tool = new ASTEditTool(mockConfig);
     expect(tool).toBeDefined();
+
+    const invocation = (
+      tool as unknown as {
+        createInvocation: (params: {
+          file_path: string;
+          old_string: string;
+          new_string: string;
+          force?: boolean;
+        }) => {
+          execute: (signal: AbortSignal) => Promise<{
+            returnDisplay: { newContent?: string; originalContent?: string };
+          }>;
+        };
+      }
+    ).createInvocation({
+      file_path: '/test/sample.ts',
+      old_string: 'const x = 1;',
+      new_string: 'const x = 1;',
+      force: false,
+    });
+
+    const result = await invocation.execute(new AbortController().signal);
+    const display = result.returnDisplay;
+    expect(display.newContent).toBe('const x = 1;');
+    expect(display.newContent).toBe(display.originalContent);
   });
 
   describe('AST extraction logic', () => {
@@ -101,14 +126,11 @@ describe('AST Tools', () => {
   });
 
   describe('Freshness Check', () => {
-    it('should include current_mtime in error payload when file is modified', () => {
-      // [CCR] Reason: Test the error structure, not internal implementation.
-      // We verify that the error type and payload schema are correct.
-      const expectedErrorType = 'file_modified_conflict';
-      expect(expectedErrorType).toBe('file_modified_conflict');
-      // The actual integration test for this logic requires invoking the tool
-      // via the execute() path which is complex to mock. This test confirms the
-      // error type constant is available.
-    });
+    // TODO: Implement integration test for freshness check behavior.
+    // The previous test was removed because it only verified a constant string equality
+    // ('file_modified_conflict' === 'file_modified_conflict').
+    // A proper test should mock the file system service to return a modified timestamp
+    // different from the one passed in params, and verify that the tool returns
+    // a ToolErrorType.FILE_MODIFIED_CONFLICT error.
   });
 });

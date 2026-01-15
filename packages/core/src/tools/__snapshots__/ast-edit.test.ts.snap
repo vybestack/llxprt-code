@@ -1,0 +1,173 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AST Tools > AST extraction logic > should extract Python declarations correctly 1`] = `
+[
+  {
+    "column": 8,
+    "line": 3,
+    "name": "my_func",
+    "range": {
+      "end": {
+        "column": 16,
+        "line": 4,
+      },
+      "start": {
+        "column": 8,
+        "line": 3,
+      },
+    },
+    "signature": "()",
+    "type": "function",
+    "visibility": "public",
+  },
+  {
+    "column": 12,
+    "line": 6,
+    "name": "__init__",
+    "range": {
+      "end": {
+        "column": 20,
+        "line": 7,
+      },
+      "start": {
+        "column": 12,
+        "line": 6,
+      },
+    },
+    "signature": "(self)",
+    "type": "function",
+    "visibility": "public",
+  },
+  {
+    "column": 8,
+    "line": 5,
+    "name": "PythonClass",
+    "range": {
+      "end": {
+        "column": 20,
+        "line": 7,
+      },
+      "start": {
+        "column": 8,
+        "line": 5,
+      },
+    },
+    "signature": undefined,
+    "type": "class",
+    "visibility": "public",
+  },
+]
+`;
+
+exports[`AST Tools > AST extraction logic > should extract TypeScript declarations correctly 1`] = `
+[
+  {
+    "column": 8,
+    "line": 4,
+    "name": "hello",
+    "range": {
+      "end": {
+        "column": 9,
+        "line": 6,
+      },
+      "start": {
+        "column": 8,
+        "line": 4,
+      },
+    },
+    "signature": "(name: string): string",
+    "type": "function",
+    "visibility": "public",
+  },
+  {
+    "column": 10,
+    "line": 8,
+    "name": "constructor",
+    "range": {
+      "end": {
+        "column": 26,
+        "line": 8,
+      },
+      "start": {
+        "column": 10,
+        "line": 8,
+      },
+    },
+    "signature": "()",
+    "type": "function",
+    "visibility": "public",
+  },
+  {
+    "column": 10,
+    "line": 9,
+    "name": "method",
+    "range": {
+      "end": {
+        "column": 28,
+        "line": 9,
+      },
+      "start": {
+        "column": 10,
+        "line": 9,
+      },
+    },
+    "signature": "()",
+    "type": "function",
+    "visibility": "public",
+  },
+  {
+    "column": 8,
+    "line": 7,
+    "name": "MyClass",
+    "range": {
+      "end": {
+        "column": 9,
+        "line": 11,
+      },
+      "start": {
+        "column": 8,
+        "line": 7,
+      },
+    },
+    "signature": undefined,
+    "type": "class",
+    "visibility": "public",
+  },
+  {
+    "column": 14,
+    "line": 3,
+    "name": "x",
+    "range": {
+      "end": {
+        "column": 28,
+        "line": 3,
+      },
+      "start": {
+        "column": 14,
+        "line": 3,
+      },
+    },
+    "signature": undefined,
+    "type": "variable",
+    "visibility": "public",
+  },
+  {
+    "column": 8,
+    "line": 2,
+    "name": ""./bar"",
+    "range": {
+      "end": {
+        "column": 36,
+        "line": 2,
+      },
+      "start": {
+        "column": 8,
+        "line": 2,
+      },
+    },
+    "signature": undefined,
+    "type": "import",
+    "visibility": "public",
+  },
+]
+`;
