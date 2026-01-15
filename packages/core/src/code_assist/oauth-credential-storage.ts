@@ -60,8 +60,14 @@ export class OAuthCredentialStorage {
       // Fallback: Try to migrate from old file-based storage
       return await this.migrateFromFileStorage();
     } catch (error: unknown) {
-      coreEvents.emitFeedback('error', 'Failed to load OAuth credentials', error);
-      throw error instanceof Error ? error : new Error('Failed to load OAuth credentials');
+      coreEvents.emitFeedback(
+        'error',
+        'Failed to load OAuth credentials',
+        error,
+      );
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to load OAuth credentials');
     }
   }
 
@@ -103,8 +109,14 @@ export class OAuthCredentialStorage {
         ),
       );
     } catch (error: unknown) {
-      coreEvents.emitFeedback('error', 'Failed to clear OAuth credentials', error);
-      throw error instanceof Error ? error : new Error('Failed to clear OAuth credentials');
+      coreEvents.emitFeedback(
+        'error',
+        'Failed to clear OAuth credentials',
+        error,
+      );
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to clear OAuth credentials');
     }
   }
 

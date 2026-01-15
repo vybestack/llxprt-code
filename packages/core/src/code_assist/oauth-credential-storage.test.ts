@@ -155,12 +155,10 @@ describe('OAuthCredentialStorage', () => {
 
     it('should throw an error if loading fails', async () => {
       const mockError = new Error('HybridTokenStorage error');
-      vi.spyOn(storage, 'getCredentials').mockRejectedValue(
-        mockError,
-      );
+      vi.spyOn(storage, 'getCredentials').mockRejectedValue(mockError);
 
       await expect(oauthStorage.loadCredentials()).rejects.toThrow(
-        'Failed to load OAuth credentials',
+        'HybridTokenStorage error',
       );
       expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
         'error',
@@ -171,13 +169,11 @@ describe('OAuthCredentialStorage', () => {
 
     it('should throw an error if read file fails', async () => {
       const mockError = new Error('Permission denied');
-      vi.spyOn(storage, 'getCredentials').mockResolvedValue(
-        null,
-      );
+      vi.spyOn(storage, 'getCredentials').mockResolvedValue(null);
       vi.spyOn(fs, 'readFile').mockRejectedValue(mockError);
 
       await expect(oauthStorage.loadCredentials()).rejects.toThrow(
-        'Failed to load OAuth credentials',
+        'Permission denied',
       );
       expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
         'error',
@@ -242,12 +238,10 @@ describe('OAuthCredentialStorage', () => {
 
     it('should throw an error if clearing from HybridTokenStorage fails', async () => {
       const mockError = new Error('Deletion error');
-      vi.spyOn(storage, 'deleteCredentials').mockRejectedValue(
-        mockError,
-      );
+      vi.spyOn(storage, 'deleteCredentials').mockRejectedValue(mockError);
 
       await expect(oauthStorage.clearCredentials()).rejects.toThrow(
-        'Failed to clear OAuth credentials',
+        'Deletion error',
       );
       expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
         'error',
