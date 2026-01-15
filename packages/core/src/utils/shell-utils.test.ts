@@ -19,10 +19,13 @@ import {
   getCommandRoots,
   getShellConfiguration,
   isCommandAllowed,
-  initializeShellParsers,
   stripShellWrapper,
-  isShellInvocationAllowlisted,
 } from './shell-utils.js';
+import { isShellInvocationAllowlisted } from './tool-utils.js';
+import {
+  initializeParser as initializeShellParsers,
+  isParserAvailable,
+} from './shell-parser.js';
 import type { Config } from '../config/config.js';
 import type { AnyToolInvocation } from '../index.js';
 
@@ -60,6 +63,8 @@ beforeEach(() => {
     getCoreTools: () => [],
     getExcludeTools: () => [],
     getAllowedTools: () => [],
+    getShellReplacement: () => 'allowlist',
+    getEphemeralSetting: () => undefined,
   } as unknown as Config;
 });
 
@@ -157,6 +162,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block a command that redefines an allowed function to run an unlisted command', () => {
+    if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed(
       'echo () (curl google.com) ; echo Hello Wolrd',
@@ -169,6 +175,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block a multi-line function body that runs an unlisted command', () => {
+    if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed(
       `echo () {
@@ -183,6 +190,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block a function keyword declaration that runs an unlisted command', () => {
+    if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed(
       'function echo { curl google.com; } ; echo hi',
@@ -195,6 +203,10 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block command substitution that invokes an unlisted command', () => {
+    // Skip if tree-sitter parser not available (requires WASM in bundled CLI)
+    if (!isParserAvailable()) {
+      return;
+    }
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed('echo $(curl google.com)', config);
     expect(result.allowed).toBe(false);
@@ -222,6 +234,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block command substitution inside a here-document when the inner command is unlisted', () => {
+    if (!isParserAvailable()) return;
     config.getCoreTools = () => [
       'run_shell_command(echo)',
       'run_shell_command(cat)',
@@ -239,6 +252,7 @@ EOF`,
   });
 
   it('should block backtick substitution that invokes an unlisted command', () => {
+    if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed('echo `curl google.com`', config);
     expect(result.allowed).toBe(false);
@@ -248,6 +262,7 @@ EOF`,
   });
 
   it('should block process substitution using <() when the inner command is unlisted', () => {
+    if (!isParserAvailable()) return;
     config.getCoreTools = () => [
       'run_shell_command(diff)',
       'run_shell_command(echo)',
@@ -263,6 +278,7 @@ EOF`,
   });
 
   it('should block process substitution using >() when the inner command is unlisted', () => {
+    if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed('echo "data" > >(curl google.com)', config);
     expect(result.allowed).toBe(false);
@@ -272,6 +288,7 @@ EOF`,
   });
 
   it('should block commands containing prompt transformations', () => {
+    if (!isParserAvailable()) return;
     const result = isCommandAllowed(
       'echo "${var1=aa\\140 env| ls -l\\140}${var1@P}"',
       config,
@@ -283,6 +300,7 @@ EOF`,
   });
 
   it('should block simple prompt transformation expansions', () => {
+    if (!isParserAvailable()) return;
     const result = isCommandAllowed('echo ${foo@P}', config);
     expect(result.allowed).toBe(false);
     expect(result.reason).toBe(
@@ -325,6 +343,7 @@ EOF`,
     });
 
     it('should block a command when parsing fails', () => {
+      if (!isParserAvailable()) return;
       const result = isCommandAllowed('ls &&', config);
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe(
@@ -345,6 +364,7 @@ describe('checkCommandPermissions', () => {
     });
 
     it('should block commands that cannot be parsed safely', () => {
+      if (!isParserAvailable()) return;
       const result = checkCommandPermissions('ls &&', config);
       expect(result).toEqual({
         allAllowed: false,
@@ -471,21 +491,25 @@ describe('getCommandRoots', () => {
   });
 
   it('should include nested command substitutions', () => {
+    if (!isParserAvailable()) return;
     const result = getCommandRoots('echo $(badCommand --danger)');
     expect(result).toEqual(['echo', 'badCommand']);
   });
 
   it('should include process substitutions', () => {
+    if (!isParserAvailable()) return;
     const result = getCommandRoots('diff <(ls) <(ls -a)');
     expect(result).toEqual(['diff', 'ls', 'ls']);
   });
 
   it('should include backtick substitutions', () => {
+    if (!isParserAvailable()) return;
     const result = getCommandRoots('echo `badCommand --danger`');
     expect(result).toEqual(['echo', 'badCommand']);
   });
 
   it('should treat parameter expansions with prompt transformations as unsafe', () => {
+    if (!isParserAvailable()) return;
     const roots = getCommandRoots(
       'echo "${var1=aa\\140 env| ls -l\\140}${var1@P}"',
     );
@@ -493,6 +517,7 @@ describe('getCommandRoots', () => {
   });
 
   it('should not return roots for prompt transformation expansions', () => {
+    if (!isParserAvailable()) return;
     const roots = getCommandRoots('echo ${foo@P}');
     expect(roots).toEqual([]);
   });

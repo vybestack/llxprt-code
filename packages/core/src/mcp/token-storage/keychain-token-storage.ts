@@ -85,8 +85,23 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       const module = await keytarLoader();
       this.keytarModule =
         'default' in module ? module.default || null : module || null;
-    } catch (_) {
-      // Keytar is optional so we suppress errors - will fall back to file storage
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      const isModuleMissing =
+        err?.code === 'ERR_MODULE_NOT_FOUND' ||
+        err?.code === 'MODULE_NOT_FOUND' ||
+        err?.code === 'ERR_DLOPEN_FAILED' ||
+        err?.message?.includes(`'keytar'`) ||
+        err?.message?.includes(`'@napi-rs/keyring'`);
+
+      if (isModuleMissing) {
+        console.warn(
+          '@napi-rs/keyring not available; falling back to encrypted file storage for MCP tokens.',
+        );
+      } else {
+        console.error('Failed to load @napi-rs/keyring module:', error);
+      }
+
       this.keytarModule = null;
     }
     return this.keytarModule;

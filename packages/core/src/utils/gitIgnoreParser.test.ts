@@ -331,6 +331,7 @@ src/*.tmp
 
       const extraPatterns = ['!important.txt', 'temp/'];
       parser = new GitIgnoreParser(projectRoot, extraPatterns);
+      parser.loadGitRepoPatterns(); // Need to load patterns for isIgnored to work
 
       expect(parser.isIgnored('file.txt')).toBe(true);
       expect(parser.isIgnored('important.txt')).toBe(false); // Un-ignored by extraPatterns
@@ -342,6 +343,7 @@ src/*.tmp
 
       const extraPatterns = ['!foo/', '!a/*/c/'];
       parser = new GitIgnoreParser(projectRoot, extraPatterns);
+      parser.loadGitRepoPatterns(); // Need to load patterns for isIgnored to work
 
       expect(parser.isIgnored('foo/bar/file.txt')).toBe(false);
       expect(parser.isIgnored('a/b/c/file.txt')).toBe(false);
@@ -353,6 +355,7 @@ src/*.tmp
 
       const extraPatterns = ['!foo/'];
       parser = new GitIgnoreParser(projectRoot, extraPatterns);
+      parser.loadGitRepoPatterns(); // Need to load patterns for isIgnored to work
 
       expect(parser.isIgnored('foo/bar/file.txt')).toBe(true);
       expect(parser.isIgnored('foo/bar/file2.txt')).toBe(false);

@@ -15,6 +15,7 @@ import { isGitRepository } from './gitUtils.js';
 export interface GitIgnoreFilter {
   isIgnored(filePath: string): boolean;
   getPatterns(): string[];
+  loadGitRepoPatterns(): void;
 }
 
 // Type assertion for the ignore library
@@ -28,6 +29,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
   private globalPatterns: string[] | undefined;
   private processedExtraPatterns: string[] = [];
   private patterns: string[] = [];
+  private isGitRepo: boolean = false;
 
   constructor(
     projectRoot: string,
@@ -45,6 +47,8 @@ export class GitIgnoreParser implements GitIgnoreFilter {
 
   loadGitRepoPatterns(): void {
     if (!isGitRepository(this.projectRoot)) return;
+
+    this.isGitRepo = true;
 
     // Always ignore .git directory regardless of .gitignore content
     this.patterns.push('.git');
@@ -222,68 +226,77 @@ export class GitIgnoreParser implements GitIgnoreFilter {
 
       const ig = ignore();
 
-      // Always ignore .git directory
-      ig.add('.git');
+      // Only load .gitignore patterns dynamically if this is a git repo
+      if (this.isGitRepo) {
+        // Always ignore .git directory when in git mode
+        ig.add('.git');
+        // Load global patterns from .git/info/exclude on first call
+        if (this.globalPatterns === undefined) {
+          const excludeFile = path.join(
+            this.projectRoot,
+            '.git',
+            'info',
+            'exclude',
+          );
+          this.globalPatterns = fs.existsSync(excludeFile)
+            ? this.loadPatternsForFile(excludeFile)
+            : [];
+        }
+        ig.add(this.globalPatterns);
 
-      // Load global patterns from .git/info/exclude on first call
-      if (this.globalPatterns === undefined) {
-        const excludeFile = path.join(
-          this.projectRoot,
-          '.git',
-          'info',
-          'exclude',
-        );
-        this.globalPatterns = fs.existsSync(excludeFile)
-          ? this.loadPatternsForFile(excludeFile)
-          : [];
-      }
-      ig.add(this.globalPatterns);
+        const pathParts = relativePath.split(path.sep);
 
-      const pathParts = relativePath.split(path.sep);
-
-      const dirsToVisit = [this.projectRoot];
-      let currentAbsDir = this.projectRoot;
-      // Collect all directories in the path
-      for (let i = 0; i < pathParts.length - 1; i++) {
-        currentAbsDir = path.join(currentAbsDir, pathParts[i]);
-        dirsToVisit.push(currentAbsDir);
-      }
-
-      for (const dir of dirsToVisit) {
-        const relativeDir = path.relative(this.projectRoot, dir);
-        if (relativeDir) {
-          const normalizedRelativeDir = relativeDir.replace(/\\/g, '/');
-          const igPlusExtras = ignore()
-            .add(ig)
-            .add(this.processedExtraPatterns);
-          if (igPlusExtras.ignores(normalizedRelativeDir)) {
-            // This directory is ignored by an ancestor's .gitignore.
-            // According to git behavior, we don't need to process this
-            // directory's .gitignore, as nothing inside it can be
-            // un-ignored.
-            break;
-          }
+        const dirsToVisit = [this.projectRoot];
+        let currentAbsDir = this.projectRoot;
+        // Collect all directories in the path
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          currentAbsDir = path.join(currentAbsDir, pathParts[i]);
+          dirsToVisit.push(currentAbsDir);
         }
 
-        if (this.cache.has(dir)) {
-          const patterns = this.cache.get(dir);
-          if (patterns) {
-            ig.add(patterns);
+        for (const dir of dirsToVisit) {
+          const relativeDir = path.relative(this.projectRoot, dir);
+          if (relativeDir) {
+            const normalizedRelativeDir = relativeDir.replace(/\\/g, '/');
+            const igPlusExtras = ignore()
+              .add(ig)
+              .add(this.processedExtraPatterns);
+            if (igPlusExtras.ignores(normalizedRelativeDir)) {
+              // This directory is ignored by an ancestor's .gitignore.
+              // According to git behavior, we don't need to process this
+              // directory's .gitignore, as nothing inside it can be
+              // un-ignored.
+              break;
+            }
           }
-        } else {
-          const gitignorePath = path.join(dir, '.gitignore');
-          if (fs.existsSync(gitignorePath)) {
-            const patterns = this.loadPatternsForFile(gitignorePath);
 
-            this.cache.set(dir, patterns);
-            ig.add(patterns);
+          if (this.cache.has(dir)) {
+            const patterns = this.cache.get(dir);
+            if (patterns) {
+              ig.add(patterns);
+            }
           } else {
-            this.cache.set(dir, []); // Cache miss
+            const gitignorePath = path.join(dir, '.gitignore');
+            if (fs.existsSync(gitignorePath)) {
+              const patterns = this.loadPatternsForFile(gitignorePath);
+
+              this.cache.set(dir, patterns);
+              ig.add(patterns);
+            } else {
+              this.cache.set(dir, []); // Cache miss
+            }
           }
         }
       }
 
-      // Apply extra patterns (e.g. from .llxprtignore) last for precedence
+      // Apply patterns loaded via loadPatterns() (e.g. standalone .llxprtignore)
+      // These are used when this parser is for a single ignore file, not combined
+      if (this.patterns.length > 0) {
+        ig.add(this.patterns);
+      }
+
+      // Apply extra patterns (e.g. from .llxprtignore) LAST for precedence
+      // This allows .llxprtignore to override .gitignore rules
       if (this.processedExtraPatterns.length > 0) {
         ig.add(this.processedExtraPatterns);
       }

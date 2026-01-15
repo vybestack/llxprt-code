@@ -64,12 +64,12 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
 
     const result = await promise.result;
 
-    // Should use shell: true on Windows
+    // Should use powershell.exe on Windows (new shell-utils architecture)
     expect(spawn).toHaveBeenCalledWith(
-      command,
-      [],
+      'powershell.exe',
+      ['-NoProfile', '-Command', command],
       expect.objectContaining({
-        shell: true,
+        shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: expect.objectContaining({ LLXPRT_CODE: '1' }),
       }),
@@ -142,11 +142,11 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       new AbortController().signal,
     );
 
-    // Should pass the command directly with shell: true, not wrap with extra quotes
+    // Should use powershell.exe with command as argument (no extra quote escaping)
     expect(spawn).toHaveBeenCalledWith(
-      command,
-      [],
-      expect.objectContaining({ shell: true }),
+      'powershell.exe',
+      ['-NoProfile', '-Command', command],
+      expect.objectContaining({ shell: false }),
     );
 
     // Should NOT be called with excessive quoting like:

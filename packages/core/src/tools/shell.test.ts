@@ -257,9 +257,10 @@ describe('ShellTool', () => {
         wrappedCommand,
         '/test/dir/subdir',
         expect.any(Function),
-        mockAbortSignal,
+        expect.any(AbortSignal),
         false,
-        {},
+        undefined,
+        undefined,
       );
     });
 

@@ -56,13 +56,16 @@ export class FileDiscoveryService {
     }
     this.llxprtIgnoreFilter = gParser;
 
-    if (this.gitIgnoreFilter) {
+    if (this.gitIgnoreFilter && resolvedGitRoot) {
       const llxprtPatterns = this.llxprtIgnoreFilter.getPatterns();
       // Create combined parser: .gitignore + .llxprtignore
+      // Use gitRoot so .gitignore at repo root is found
       this.combinedIgnoreFilter = new GitIgnoreParser(
-        this.projectRoot,
+        resolvedGitRoot,
         llxprtPatterns,
       );
+      // Load git repo patterns so isGitRepo is set correctly
+      this.combinedIgnoreFilter.loadGitRepoPatterns();
     }
   }
 

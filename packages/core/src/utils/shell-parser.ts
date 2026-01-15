@@ -66,7 +66,8 @@ export async function initializeParser(): Promise<boolean> {
     // Dynamic import to get the Parser class
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const TreeSitter = (await import('web-tree-sitter')) as any;
-    const Parser = TreeSitter.default || TreeSitter;
+    // web-tree-sitter exports Parser directly as a named export, not default
+    const Parser = TreeSitter.Parser || TreeSitter.default || TreeSitter;
 
     await Parser.init();
     parser = new Parser();
@@ -242,6 +243,44 @@ export function collectCommandDetails(
 }
 
 /**
+ * Check if a tree contains prompt command transformations like ${variable@P}.
+ * These are dangerous because they can execute arbitrary commands via PS1/PS2/PS4 expansion.
+ */
+function hasPromptCommandTransform(root: Node): boolean {
+  const stack: Node[] = [root];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+
+    if (current.type === 'expansion') {
+      for (let i = 0; i < current.childCount - 1; i += 1) {
+        const operatorNode = current.child(i);
+        const transformNode = current.child(i + 1);
+
+        if (
+          operatorNode?.type === '@' &&
+          transformNode?.text?.toLowerCase() === 'p'
+        ) {
+          return true;
+        }
+      }
+    }
+
+    for (let i = current.namedChildCount - 1; i >= 0; i -= 1) {
+      const child = current.namedChild(i);
+      if (child) {
+        stack.push(child);
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Parse a shell command and extract all command details including nested commands.
  * Returns null if parsing fails or tree-sitter is not available.
  */
@@ -258,14 +297,15 @@ export function parseCommandDetails(
       return { details: [], hasError: true };
     }
 
-    // Check for syntax errors in the tree
-    const hasError = tree.rootNode.hasError;
-    if (hasError) {
-      return { details: [], hasError: true };
-    }
-
     const details = collectCommandDetails(tree, command);
-    return { details, hasError: false };
+
+    // Check for syntax errors, empty command list, or dangerous prompt transformations
+    const hasError =
+      tree.rootNode.hasError ||
+      details.length === 0 ||
+      hasPromptCommandTransform(tree.rootNode);
+
+    return { details, hasError };
   } catch {
     return null;
   }
