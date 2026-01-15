@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-ui",
-  "version": "0.1.0",
+  "version": "0.8.0-nightly.260115.5ea41cda7",
   "description": "Experimental terminal UI for llxprt-code",
   "type": "module",
   "main": "src/index.ts",
@@ -41,7 +41,7 @@
     "react": "^19.2.1"
   },
   "peerDependencies": {
-    "@vybestack/llxprt-code-core": "^0.8.0"
+    "@vybestack/llxprt-code-core": "^0.8.0-nightly.260115.5ea41cda7"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
