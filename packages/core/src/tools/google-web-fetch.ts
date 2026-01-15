@@ -21,7 +21,7 @@ import { ApprovalMode, Config } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
 import { convert } from 'html-to-text';
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+// import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import type { GenerateContentResponse, UrlMetadata } from '@google/genai';
 import { DebugLogger } from '../debug/DebugLogger.js';
 

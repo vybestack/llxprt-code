@@ -172,52 +172,52 @@ describe('useSelectionList', () => {
       expect(result.current.activeIndex).toBe(3);
     });
 
-  it('should move up with "k" and "up" keys, skipping disabled items', () => {
-    const { result } = renderHook(() =>
-      useSelectionList({ items, initialIndex: 3, onSelect: mockOnSelect }),
-    );
-    expect(result.current.activeIndex).toBe(3);
-    pressKey('k');
-    expect(result.current.activeIndex).toBe(2);
-    pressKey('up');
-    expect(result.current.activeIndex).toBe(0);
-  });
+    it('should move up with "k" and "up" keys, skipping disabled items', () => {
+      const { result } = renderHook(() =>
+        useSelectionList({ items, initialIndex: 3, onSelect: mockOnSelect }),
+      );
+      expect(result.current.activeIndex).toBe(3);
+      pressKey('k');
+      expect(result.current.activeIndex).toBe(2);
+      pressKey('up');
+      expect(result.current.activeIndex).toBe(0);
+    });
 
-  it('should ignore navigation keys when shift is pressed', () => {
-    const { result } = renderHook(() =>
-      useSelectionList({
-        items,
-        initialIndex: 2, // Start at middle item 'C'
-        onSelect: mockOnSelect,
-      }),
-    );
-    expect(result.current.activeIndex).toBe(2);
+    it('should ignore navigation keys when shift is pressed', () => {
+      const { result } = renderHook(() =>
+        useSelectionList({
+          items,
+          initialIndex: 2, // Start at middle item 'C'
+          onSelect: mockOnSelect,
+        }),
+      );
+      expect(result.current.activeIndex).toBe(2);
 
-    // Shift+Down / Shift+J should not move down
-    pressKey('down', undefined, { shift: true });
-    expect(result.current.activeIndex).toBe(2);
-    pressKey('j', undefined, { shift: true });
-    expect(result.current.activeIndex).toBe(2);
+      // Shift+Down / Shift+J should not move down
+      pressKey('down', undefined, { shift: true });
+      expect(result.current.activeIndex).toBe(2);
+      pressKey('j', undefined, { shift: true });
+      expect(result.current.activeIndex).toBe(2);
 
-    // Shift+Up / Shift+K should not move up
-    pressKey('up', undefined, { shift: true });
-    expect(result.current.activeIndex).toBe(2);
-    pressKey('k', undefined, { shift: true });
-    expect(result.current.activeIndex).toBe(2);
+      // Shift+Up / Shift+K should not move up
+      pressKey('up', undefined, { shift: true });
+      expect(result.current.activeIndex).toBe(2);
+      pressKey('k', undefined, { shift: true });
+      expect(result.current.activeIndex).toBe(2);
 
-    // Verify normal navigation still works
-    pressKey('down');
-    expect(result.current.activeIndex).toBe(3);
-  });
+      // Verify normal navigation still works
+      pressKey('down');
+      expect(result.current.activeIndex).toBe(3);
+    });
 
-  it('should wrap navigation correctly', () => {
-    const { result } = renderHook(() =>
-      useSelectionList({
-        items,
-        initialIndex: items.length - 1,
-        onSelect: mockOnSelect,
-      }),
-    );
+    it('should wrap navigation correctly', () => {
+      const { result } = renderHook(() =>
+        useSelectionList({
+          items,
+          initialIndex: items.length - 1,
+          onSelect: mockOnSelect,
+        }),
+      );
       expect(result.current.activeIndex).toBe(3);
       pressKey('down');
       expect(result.current.activeIndex).toBe(0);

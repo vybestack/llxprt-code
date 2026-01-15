@@ -39,13 +39,8 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import chalk from 'chalk';
 import { cpSlice, cpLen, stripUnsafeCharacters } from '../utils/textUtils.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import {
-  SettingDefinition,
-  type SettingsValue,
-  TOGGLE_TYPES,
-} from '../../config/settingsSchema.js';
+import { SettingDefinition } from '../../config/settingsSchema.js';
 import { generateDynamicToolSettings } from '../../utils/dynamicSettings.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { keyMatchers, Command } from '../keyMatchers.js';
 
 interface SettingsDialogProps {
