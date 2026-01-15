@@ -263,7 +263,6 @@ describe('ShellTool', () => {
       );
     });
 
-    // eslint-disable-next-line vitest/no-standalone-expect
     itWindowsOnly(
       'should not wrap command on windows',
       async () => {
@@ -281,6 +280,7 @@ describe('ShellTool', () => {
           executionMethod: 'child_process',
         });
         await promise;
+        // eslint-disable-next-line vitest/no-standalone-expect -- platform-conditional test
         expect(mockShellExecutionService).toHaveBeenCalledWith(
           'dir',
           '/test/dir',
