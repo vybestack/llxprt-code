@@ -94,6 +94,16 @@ export function getInstallationInfo(
         // Brew is not installed or gemini-cli is not installed via brew.
         // Continue to the next check.
       }
+
+      // Check for Homebrew-managed npm global install
+      if (realPath.includes('/opt/homebrew/lib/node_modules/')) {
+        return {
+          packageManager: PackageManager.NPM,
+          isGlobal: true,
+          updateMessage:
+            'Installed in Homebrew-managed npm global directory. Auto-update disabled. Please update Node.js via "brew upgrade node" or manually reinstall with "npm install -g @vybestack/llxprt-code@latest".',
+        };
+      }
     }
 
     // Check for pnpm
