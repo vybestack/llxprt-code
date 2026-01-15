@@ -149,7 +149,7 @@ export function colorizeCode(
   const activeTheme = theme || themeManager.getActiveTheme();
   const showLineNumbers = hideLineNumbers
     ? false
-    : (settings?.merged.showLineNumbers ?? true);
+    : (settings?.merged.ui?.showLineNumbers ?? true);
 
   try {
     // Render the HAST tree using the adapted theme
