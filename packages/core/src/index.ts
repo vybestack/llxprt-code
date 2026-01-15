@@ -25,6 +25,16 @@ export {
   type PolicyEngineConfig,
 } from './policy/types.js';
 
+// Export hooks
+export {
+  HookTranslator,
+  HookTranslatorGenAIv1,
+  defaultHookTranslator,
+  type LLMRequest,
+  type LLMResponse,
+  type HookToolConfig,
+} from './hooks/hookTranslator.js';
+
 // Export message bus
 export * from './confirmation-bus/types.js';
 export * from './confirmation-bus/message-bus.js';
