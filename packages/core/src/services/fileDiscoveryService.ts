@@ -90,10 +90,7 @@ export class FileDiscoveryService {
       if (respectGitIgnore && this.shouldGitIgnoreFile(absolutePath)) {
         return false;
       }
-      if (
-        respectLlxprtIgnore &&
-        this.shouldLlxprtIgnoreFile(absolutePath)
-      ) {
+      if (respectLlxprtIgnore && this.shouldLlxprtIgnoreFile(absolutePath)) {
         return false;
       }
       return true;

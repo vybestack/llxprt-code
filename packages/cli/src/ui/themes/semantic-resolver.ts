@@ -33,6 +33,7 @@ export function resolveSemanticColors(theme: ColorsTheme): SemanticColors {
     ui: {
       comment: theme.Comment,
       symbol: theme.Gray,
+      dark: theme.DarkGray,
       gradient: theme.GradientColors,
     },
     status: {

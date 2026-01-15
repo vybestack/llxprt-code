@@ -28,6 +28,7 @@ describe('semantic-resolver', () => {
         Comment: '#6C7086',
         DimComment: '#505564',
         Gray: '#6C7086',
+        DarkGray: '#4a4a5a',
       };
 
       const semanticColors = resolveSemanticColors(darkTheme);
@@ -53,6 +54,7 @@ describe('semantic-resolver', () => {
         ui: {
           comment: '#6C7086',
           symbol: '#6C7086',
+          dark: '#4a4a5a',
           gradient: undefined,
         },
         status: {
@@ -80,6 +82,7 @@ describe('semantic-resolver', () => {
         Comment: '#008000',
         DimComment: '#006000',
         Gray: '#97a0b0',
+        DarkGray: '#7a8090',
       };
 
       const semanticColors = resolveSemanticColors(lightTheme);
@@ -105,6 +108,7 @@ describe('semantic-resolver', () => {
         ui: {
           comment: '#008000',
           symbol: '#97a0b0',
+          dark: '#7a8090',
           gradient: undefined,
         },
         status: {
@@ -132,6 +136,7 @@ describe('semantic-resolver', () => {
         Comment: 'gray',
         DimComment: '#5a5a5a',
         Gray: 'gray',
+        DarkGray: '#4a4a4a',
       };
 
       const semanticColors = resolveSemanticColors(ansiTheme);
@@ -157,6 +162,7 @@ describe('semantic-resolver', () => {
         ui: {
           comment: 'gray',
           symbol: 'gray',
+          dark: '#4a4a4a',
           gradient: undefined,
         },
         status: {
@@ -184,6 +190,7 @@ describe('semantic-resolver', () => {
         Comment: '#6C757D',
         DimComment: '#50555d',
         Gray: '#6C757D',
+        DarkGray: '#4c555d',
       };
 
       const semanticColors = resolveSemanticColors(customTheme);
@@ -209,6 +216,7 @@ describe('semantic-resolver', () => {
         ui: {
           comment: '#6C757D',
           symbol: '#6C757D',
+          dark: '#4c555d',
           gradient: undefined,
         },
         status: {
@@ -236,6 +244,7 @@ describe('semantic-resolver', () => {
         Comment: '#6C7086',
         DimComment: '#505564',
         Gray: '#6C7086',
+        DarkGray: '#4a4a5a',
       };
 
       const semanticColors = resolveSemanticColors(themeWithoutDiffAdded);
@@ -261,6 +270,7 @@ describe('semantic-resolver', () => {
         Comment: '#6C7086',
         DimComment: '#505564',
         Gray: '#6C7086',
+        DarkGray: '#4a4a5a',
       };
 
       const semanticColors = resolveSemanticColors(themeWithoutDiffRemoved);

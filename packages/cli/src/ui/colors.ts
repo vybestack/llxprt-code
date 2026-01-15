@@ -138,6 +138,9 @@ export const SemanticColors: SemanticColorsInterface = {
       get symbol() {
         return themeManager.getSemanticColors().ui.symbol;
       },
+      get dark() {
+        return themeManager.getSemanticColors().ui.dark;
+      },
       get gradient() {
         return themeManager.getSemanticColors().ui.gradient;
       },

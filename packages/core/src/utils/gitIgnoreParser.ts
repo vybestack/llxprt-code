@@ -17,9 +17,10 @@ export interface GitIgnoreFilter {
   getPatterns(): string[];
 }
 
-const createIgnore = ignore as unknown as (
-  options?: IgnoreOptions,
-) => IgnoreResult;
+// Type assertion for the ignore library
+type CreateIgnoreFn = (options?: IgnoreOptions) => IgnoreResult;
+const _createIgnore: CreateIgnoreFn = ignore as unknown as CreateIgnoreFn;
+void _createIgnore; // Suppress unused warning - kept for type documentation
 
 export class GitIgnoreParser implements GitIgnoreFilter {
   private projectRoot: string;
@@ -46,7 +47,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     if (!isGitRepository(this.projectRoot)) return;
 
     // Always ignore .git directory regardless of .gitignore content
-    this.addPatterns(['.git']);
+    this.patterns.push('.git');
 
     this.loadPatterns(path.join('.git', 'info', 'exclude'));
     const visitedPaths = new Set<string>();
@@ -296,8 +297,6 @@ export class GitIgnoreParser implements GitIgnoreFilter {
   getPatterns(): string[] {
     return this.patterns;
   }
-}
-__LLXPRT_CMD__:cat temp_method.txt
 
   private loadPatternsForFile(patternsFilePath: string): string[] {
     let content: string;
@@ -321,3 +320,4 @@ __LLXPRT_CMD__:cat temp_method.txt
     const rawPatterns = content.split('\n');
     return this.processPatterns(rawPatterns, relativeBaseDir);
   }
+}
