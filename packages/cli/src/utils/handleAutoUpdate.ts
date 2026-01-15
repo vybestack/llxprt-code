@@ -82,8 +82,11 @@ function tryAcquireLock(): string | null {
       lockFilePath,
       constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
     );
-    fs.writeSync(fd, lockData);
-    fs.closeSync(fd);
+    try {
+      fs.writeSync(fd, lockData);
+    } finally {
+      fs.closeSync(fd);
+    }
 
     return lockFilePath;
   } catch (error) {
@@ -172,7 +175,10 @@ export function handleAutoUpdate(
   const tempDirs = checkForTempDirectories();
   if (tempDirs.length > 0) {
     const cliPath = process.argv[1];
-    const realPath = fs.realpathSync(cliPath!);
+    if (!cliPath) {
+      return;
+    }
+    const realPath = fs.realpathSync(cliPath);
     // Cross-platform regex for node_modules path
     const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
     const cleanupPath = nodeModulesMatch

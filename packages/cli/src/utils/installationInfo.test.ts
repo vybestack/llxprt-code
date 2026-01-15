@@ -40,16 +40,19 @@ const mockedExecSync = vi.mocked(childProcess.execSync);
 describe('getInstallationInfo', () => {
   const projectRoot = '/path/to/project';
   let originalArgv: string[];
+  let originalPlatform: NodeJS.Platform;
 
   beforeEach(() => {
     vi.resetAllMocks();
     originalArgv = [...process.argv];
+    originalPlatform = process.platform;
     // Mock process.cwd() for isGitRepository
     vi.spyOn(process, 'cwd').mockReturnValue(projectRoot);
   });
 
   afterEach(() => {
     process.argv = originalArgv;
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
   it('should return UNKNOWN when cliPath is not available', () => {
