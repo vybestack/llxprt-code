@@ -764,6 +764,19 @@ export class OpenAIResponsesProvider extends BaseProvider {
       this.logger.debug(
         () => 'Codex mode: setting instructions and store=false',
       );
+
+      const cacheKey =
+        requestOverrides.prompt_cache_key ??
+        options.invocation?.runtimeId ??
+        options.runtime?.runtimeId;
+      if (cacheKey && typeof cacheKey === 'string' && cacheKey.trim() !== '') {
+        request.prompt_cache_key = cacheKey;
+      }
+
+      const cacheRetention = requestOverrides.prompt_cache_retention;
+      if (cacheRetention && typeof cacheRetention === 'string') {
+        request.prompt_cache_retention = cacheRetention;
+      }
     }
 
     const responsesURL = `${baseURL}/responses`;
