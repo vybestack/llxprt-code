@@ -100,7 +100,6 @@ const HTTP_OK = 200;
  * Provider for handling OAuth authentication for MCP servers.
  */
 export class MCPOAuthProvider {
-
   /**
    * Register a client dynamically with the OAuth server.
    *
@@ -118,7 +117,7 @@ export class MCPOAuthProvider {
       config.redirectUri || `http://localhost:${redirectPort}${REDIRECT_PATH}`;
 
     const registrationRequest: OAuthClientRegistrationRequest = {
-      client_name: 'Gemini CLI MCP Client',
+      client_name: 'LLxprt Code MCP Client',
       redirect_uris: [redirectUri],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
