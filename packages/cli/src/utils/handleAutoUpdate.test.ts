@@ -546,8 +546,11 @@ describe('handleAutoUpdate', () => {
 
       handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
 
+      // Platform-appropriate cleanup command (rm -rf for Unix, rmdir /s /q for Windows)
+      const expectedCommand =
+        process.platform === 'win32' ? 'rmdir /s /q' : 'rm -rf';
       expect(mockUpdateEventEmitter.emit).toHaveBeenCalledWith('update-info', {
-        message: expect.stringContaining('rm -rf'),
+        message: expect.stringContaining(expectedCommand),
       });
 
       process.argv[1] = originalArgv1;
