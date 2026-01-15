@@ -39,9 +39,9 @@ describe('McpClientManager', () => {
         'test-server': {},
       }),
       getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({} as PromptRegistry),
+      getPromptRegistry: () => ({}) as PromptRegistry,
       getDebugMode: () => false,
-      getWorkspaceContext: () => ({} as WorkspaceContext),
+      getWorkspaceContext: () => ({}) as WorkspaceContext,
       getEnableExtensionReloading: () => false,
       getExtensionEvents: () => undefined,
     } as unknown as Config;
@@ -78,9 +78,9 @@ describe('McpClientManager', () => {
         'test-server': {},
       }),
       getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({} as PromptRegistry),
+      getPromptRegistry: () => ({}) as PromptRegistry,
       getDebugMode: () => false,
-      getWorkspaceContext: () => ({} as WorkspaceContext),
+      getWorkspaceContext: () => ({}) as WorkspaceContext,
       getEnableExtensionReloading: () => false,
       getExtensionEvents: () => undefined,
     } as unknown as Config;
