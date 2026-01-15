@@ -1,20 +1,18 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type { CommandModule } from 'yargs';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import semver from 'semver';
 import { getErrorMessage } from '../../utils/errors.js';
-import type { ExtensionConfig } from '../../config/extension.js';
-import { ExtensionManager } from '../../config/extension-manager.js';
-import { requestConsentNonInteractive } from '../../config/extensions/consent.js';
-import { promptForSetting } from '../../config/extensions/extensionSettings.js';
-import { loadSettings } from '../../config/settings.js';
+import { loadExtensionConfig, validateName } from '../../config/extension.js';
+
+const debugLogger = DebugLogger.getLogger('llxprt:extensions:validate');
 
 interface ValidateArgs {
   path: string;
@@ -32,15 +30,27 @@ export async function handleValidate(args: ValidateArgs) {
 
 async function validateExtension(args: ValidateArgs) {
   const workspaceDir = process.cwd();
-  const extensionManager = new ExtensionManager({
-    workspaceDir,
-    requestConsent: requestConsentNonInteractive,
-    requestSetting: promptForSetting,
-    settings: loadSettings(workspaceDir).merged,
-  });
   const absoluteInputPath = path.resolve(args.path);
-  const extensionConfig: ExtensionConfig =
-    extensionManager.loadExtensionConfig(absoluteInputPath);
+
+  // Validate extension name from the path
+  const extensionName = path.basename(absoluteInputPath);
+  try {
+    validateName(extensionName);
+  } catch (e) {
+    debugLogger.error(getErrorMessage(e));
+    process.exit(1);
+  }
+
+  const extensionConfig = await loadExtensionConfig({
+    extensionDir: absoluteInputPath,
+    workspaceDir,
+  });
+  if (!extensionConfig) {
+    throw new Error(
+      `Invalid extension at ${absoluteInputPath}. Please make sure it has a valid llxprt-extension.json or gemini-extension.json file.`,
+    );
+  }
+
   const warnings: string[] = [];
   const errors: string[] = [];
 

@@ -7,6 +7,8 @@
 import type { CommandModule } from 'yargs';
 import {
   requestConsentNonInteractive,
+  installOrUpdateExtension,
+  loadExtensionByName,
   type ExtensionInstallMetadata,
 } from '../../config/extension.js';
 
@@ -23,17 +25,14 @@ export async function handleLink(args: InstallArgs) {
       type: 'link',
     };
     const workspaceDir = process.cwd();
-    const extensionManager = new ExtensionManager({
+    const extensionName = await installOrUpdateExtension(
+      installMetadata,
+      requestConsentNonInteractive,
       workspaceDir,
-      requestConsent: requestConsentNonInteractive,
-      requestSetting: promptForSetting,
-      settings: loadSettings(workspaceDir).merged,
-    });
-    await extensionManager.loadExtensions();
-    const extension =
-      await extensionManager.installOrUpdateExtension(installMetadata);
-    debugLogger.log(
-      `Extension "${extension.name}" linked successfully and enabled.`,
+    );
+    const extension = loadExtensionByName(extensionName, workspaceDir);
+    console.log(
+      `Extension "${extension?.name ?? extensionName}" linked successfully and enabled.`,
     );
   } catch (error) {
     console.error(getErrorMessage(error));
