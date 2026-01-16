@@ -21,9 +21,20 @@ export async function createPolicyEngineConfig(
 ): Promise<PolicyEngineConfig> {
   // Explicitly construct PolicySettings from Settings to ensure type safety
   // and avoid accidental leakage of other settings properties.
+  //
+  // Handle both legacy (settings.allowedTools) and new (settings.tools.allowed) structures
+  // to ensure compatibility during the transition period
+  const allowedTools =
+    settings.tools?.allowed || settings.allowedTools || undefined;
+  const excludeTools =
+    settings.tools?.exclude || settings.excludeTools || undefined;
+
   const policySettings: PolicySettings = {
     mcp: settings.mcp,
-    tools: settings.tools,
+    tools: {
+      allowed: allowedTools,
+      exclude: excludeTools,
+    },
     mcpServers: settings.mcpServers,
   };
 

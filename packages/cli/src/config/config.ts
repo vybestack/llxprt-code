@@ -1254,6 +1254,18 @@ export async function loadCliConfig(
       ? argv.screenReader
       : (effectiveSettings.accessibility?.screenReader ?? false);
 
+  // Merge CLI allowed tools into effectiveSettings for policy engine
+  // The allowedTools computed from CLI args needs to be available to the policy engine
+  if (allowedTools.length > 0) {
+    effectiveSettings = {
+      ...effectiveSettings,
+      tools: {
+        ...effectiveSettings.tools,
+        allowed: allowedTools,
+      },
+    };
+  }
+
   // Create policy engine config from settings and approval mode
   const policyEngineConfig = await createPolicyEngineConfig(
     effectiveSettings,
