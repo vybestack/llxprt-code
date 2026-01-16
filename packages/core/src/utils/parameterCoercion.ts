@@ -62,9 +62,14 @@ function coerceValue(value: unknown, propertySchema: PropertySchema): unknown {
     const trimmed = value.trim();
     if (/^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
       const num = Number(trimmed);
-      if (Number.isFinite(num)) {
-        return num;
+      if (!Number.isFinite(num)) {
+        return value;
       }
+      // For integer type, only coerce if the value is actually an integer
+      if (expectedType === 'integer' && !Number.isInteger(num)) {
+        return value;
+      }
+      return num;
     }
     return value;
   }

@@ -751,11 +751,14 @@ export class AnthropicProvider extends BaseProvider {
   ): unknown {
     if (!tools) return undefined;
 
-    // For OAuth, the tool name in the response is unprefixed, but we stored it prefixed
-    // So we need to match against the unprefixed name
+    // For OAuth, tool names in the tools array are prefixed (e.g., llxprt_read_file)
+    // but toolName from the response is unprefixed (e.g., read_file)
+    // So we need to unprefix the stored name before comparing
     for (const group of tools) {
       for (const decl of group.functionDeclarations) {
-        const declName = isOAuth ? decl.name : decl.name;
+        const declName = isOAuth
+          ? this.unprefixToolName(decl.name, true)
+          : decl.name;
         if (declName === toolName) {
           // Return parametersJsonSchema if available, otherwise parameters
           return decl.parametersJsonSchema ?? decl.parameters;
@@ -2203,11 +2206,16 @@ export class AnthropicProvider extends BaseProvider {
           );
 
           // Process tool parameters with double-escape handling
-          let processedParameters = processToolParameters(
-            JSON.stringify(contentBlock.input),
-            unprefixName,
-            'anthropic',
-          );
+          // Anthropic SDK returns contentBlock.input as already-parsed object, not string
+          // Only call processToolParameters (which expects string) if input is actually a string
+          let processedParameters =
+            typeof contentBlock.input === 'string'
+              ? processToolParameters(
+                  contentBlock.input,
+                  unprefixName,
+                  'anthropic',
+                )
+              : (contentBlock.input as Record<string, unknown>);
 
           // Apply schema-aware type coercion to fix LLM type errors (issue #1146)
           const toolSchema = this.findToolSchema(tools, unprefixName, isOAuth);

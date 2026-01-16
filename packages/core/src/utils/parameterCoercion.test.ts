@@ -304,6 +304,36 @@ describe('coerceParametersToSchema', () => {
       expect(result).toEqual({ offset: 50, limit: 100 });
     });
 
+    it('should not coerce float string to integer when schema expects integer', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          count: { type: 'integer' },
+        },
+      };
+      const params = { count: '1.5' };
+
+      const result = coerceParametersToSchema(params, schema);
+
+      // Should NOT coerce because 1.5 is not an integer
+      expect(result).toEqual({ count: '1.5' });
+    });
+
+    it('should coerce whole number float string to integer when schema expects integer', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          count: { type: 'integer' },
+        },
+      };
+      const params = { count: '10.0' };
+
+      const result = coerceParametersToSchema(params, schema);
+
+      // Should coerce because 10.0 is effectively an integer
+      expect(result).toEqual({ count: 10 });
+    });
+
     it('should handle complex nested JSON string arrays', () => {
       const schema = {
         type: 'object',
