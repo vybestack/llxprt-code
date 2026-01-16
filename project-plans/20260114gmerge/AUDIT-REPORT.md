@@ -289,3 +289,32 @@ The codebase is in a functional state with all tests passing.
 - **Remaining**: 2 tasks (large test migration)
 
 The test migration is a significant undertaking that should be tracked separately.
+
+---
+
+## Progress Update (Session 2 - Part 2)
+
+### Completed Tasks
+
+5. **Test act() migration** (54fa26ef) - PARTIAL
+   - Updated test-utils/render.tsx to wrap ink-testing-library render with act()
+   - Migrated all imports of `act` from `@testing-library/react` to `react` (33 files)
+   - Added jsdom back as devDependency (required by 5 tests using jsdom environment)
+   - Updated folder trust tests to reflect new behavior (consent prompt)
+   - Committed: 1fb8e219c
+
+### Remaining for Full Migration
+
+The following imports from `@testing-library/react` remain (48 files):
+- `renderHook` - Used for testing React hooks (26 files)
+- `waitFor` - Used for async testing (10 files)
+- `render` - Used for DOM testing, not Ink (4 files)
+- `cleanup` - Used for test cleanup (2 files)
+- `RenderResult` type - Used for type annotations (2 files)
+
+These cannot be removed without implementing replacements or changing test patterns.
+
+### Current State
+
+All tests pass (3002 passed, 52 skipped).
+Build succeeds. CLI works correctly.
