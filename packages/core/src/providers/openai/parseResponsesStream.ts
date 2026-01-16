@@ -1,4 +1,7 @@
 /**
+ * Parses OpenAI Responses API server-sent events (SSE) and yields IContent messages.
+ * Handles text output, tool calls, reasoning/thinking content, and usage metadata.
+ *
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
@@ -52,6 +55,7 @@ export async function* parseResponsesStream(
   const decoder = new TextDecoder();
   let buffer = '';
   const functionCalls = new Map<string, FunctionCallState>();
+  let reasoningText = '';
 
   try {
     while (true) {
@@ -86,6 +90,30 @@ export async function* parseResponsesStream(
                     blocks: [{ type: 'text', text: event.delta }],
                   };
                 }
+                break;
+
+              case 'response.reasoning_text.delta':
+                // Reasoning content chunk
+                if (event.delta) {
+                  reasoningText += event.delta;
+                }
+                break;
+
+              case 'response.reasoning_text.done':
+                // Reasoning completed - yield accumulated reasoning
+                if (reasoningText.trim()) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'thinking',
+                        thought: reasoningText,
+                        sourceField: 'reasoning_content',
+                      },
+                    ],
+                  };
+                }
+                reasoningText = '';
                 break;
 
               case 'response.output_item.added':
@@ -158,6 +186,21 @@ export async function* parseResponsesStream(
 
               case 'response.completed':
               case 'response.done':
+                // Yield any remaining reasoning before usage data
+                if (reasoningText.trim()) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'thinking',
+                        thought: reasoningText,
+                        sourceField: 'reasoning_content',
+                      },
+                    ],
+                  };
+                  reasoningText = '';
+                }
+
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
                 if (event.response?.usage) {
                   yield {
