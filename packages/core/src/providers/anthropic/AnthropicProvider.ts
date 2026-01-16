@@ -42,6 +42,7 @@ import {
   processToolParameters,
   logDoubleEscapingInChunk,
 } from '../../tools/doubleEscapeUtils.js';
+import { coerceParametersToSchema } from '../../utils/parameterCoercion.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
@@ -729,6 +730,40 @@ export class AnthropicProvider extends BaseProvider {
 
     // Return as-is if no prefix
     return name;
+  }
+
+  /**
+   * Find the JSON schema for a tool by name from the tools array.
+   * Used for schema-aware parameter coercion (issue #1146).
+   */
+  private findToolSchema(
+    tools:
+      | Array<{
+          functionDeclarations: Array<{
+            name: string;
+            parameters?: unknown;
+            parametersJsonSchema?: unknown;
+          }>;
+        }>
+      | undefined,
+    toolName: string,
+    isOAuth: boolean,
+  ): unknown {
+    if (!tools) return undefined;
+
+    // For OAuth, the tool name in the response is unprefixed, but we stored it prefixed
+    // So we need to match against the unprefixed name
+    for (const group of tools) {
+      for (const decl of group.functionDeclarations) {
+        const declName = isOAuth ? decl.name : decl.name;
+        if (declName === toolName) {
+          // Return parametersJsonSchema if available, otherwise parameters
+          return decl.parametersJsonSchema ?? decl.parameters;
+        }
+      }
+    }
+
+    return undefined;
   }
 
   /**
@@ -2041,11 +2076,29 @@ export class AnthropicProvider extends BaseProvider {
                 () => `Completed tool use: ${activeToolCall.name}`,
               );
               // Process tool parameters with double-escape handling
-              const processedParameters = processToolParameters(
+              let processedParameters = processToolParameters(
                 activeToolCall.input,
                 activeToolCall.name,
                 'anthropic',
               );
+
+              // Apply schema-aware type coercion to fix LLM type errors (issue #1146)
+              // Look up the tool schema from the tools passed to this request
+              const toolSchema = this.findToolSchema(
+                tools,
+                activeToolCall.name,
+                isOAuth,
+              );
+              if (
+                toolSchema &&
+                processedParameters &&
+                typeof processedParameters === 'object'
+              ) {
+                processedParameters = coerceParametersToSchema(
+                  processedParameters,
+                  toolSchema,
+                );
+              }
 
               yield {
                 speaker: 'ai',
@@ -2150,11 +2203,24 @@ export class AnthropicProvider extends BaseProvider {
           );
 
           // Process tool parameters with double-escape handling
-          const processedParameters = processToolParameters(
+          let processedParameters = processToolParameters(
             JSON.stringify(contentBlock.input),
             unprefixName,
             'anthropic',
           );
+
+          // Apply schema-aware type coercion to fix LLM type errors (issue #1146)
+          const toolSchema = this.findToolSchema(tools, unprefixName, isOAuth);
+          if (
+            toolSchema &&
+            processedParameters &&
+            typeof processedParameters === 'object'
+          ) {
+            processedParameters = coerceParametersToSchema(
+              processedParameters,
+              toolSchema,
+            );
+          }
 
           blocks.push({
             type: 'tool_call',
