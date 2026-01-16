@@ -48,7 +48,7 @@ const logger = DebugLogger.getLogger('llxprt:cli:react-tool-scheduler');
 export type ScheduleFn = (
   request: ToolCallRequestInfo | ToolCallRequestInfo[],
   signal: AbortSignal,
-) => void;
+) => Promise<void>;
 export type MarkToolsAsSubmittedFn = (callIds: string[]) => void;
 
 export type TrackedScheduledToolCall = ScheduledToolCall & {
@@ -403,6 +403,8 @@ export function useReactToolScheduler(
         agentId: req.agentId ?? DEFAULT_AGENT_ID,
       });
 
+      setToolCallsForDisplay([]);
+
       const normalizedRequest = Array.isArray(request)
         ? request.map(ensureAgentId)
         : ensureAgentId(request);
@@ -426,7 +428,7 @@ export function useReactToolScheduler(
         // when the user presses ESC to cancel queued tool calls
       });
     },
-    [scheduler],
+    [scheduler, setToolCallsForDisplay],
   );
 
   const markToolsAsSubmitted: MarkToolsAsSubmittedFn = useCallback(

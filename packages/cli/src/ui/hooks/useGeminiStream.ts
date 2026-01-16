@@ -620,7 +620,7 @@ export const useGeminiStream = (
                   prompt_id,
                   agentId: DEFAULT_AGENT_ID,
                 };
-                scheduleToolCalls([toolCallRequest], abortSignal);
+                await scheduleToolCalls([toolCallRequest], abortSignal);
                 return { queryToSend: null, shouldProceed: false };
               }
               case 'submit_prompt': {
@@ -1190,7 +1190,7 @@ export const useGeminiStream = (
         });
 
         if (dedupedToolCallRequests.length > 0) {
-          scheduleToolCalls(dedupedToolCallRequests, signal);
+          await scheduleToolCalls(dedupedToolCallRequests, signal);
         }
       }
       return StreamProcessingStatus.Completed;
