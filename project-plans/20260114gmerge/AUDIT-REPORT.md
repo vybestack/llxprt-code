@@ -234,3 +234,58 @@ The merge was **substantially complete** with all 8 REIMPLEMENT features fully i
 - **All major features** (hooks, settings autogen, alternate buffer, MCP refactor, PolicyEngine) are verified working
 
 The codebase is in a functional state with all tests passing.
+
+---
+
+## Progress Update (Session 2)
+
+### Completed Tasks
+
+1. **jsdom removal** (d72f8453) [OK]
+   - Removed unused jsdom dependency from packages/cli/package.json
+   - Had 0 imports in codebase
+   - Committed: 6766e04b4
+
+2. **Ink upgrade** (ab8c24f5, f4ee245b) [OK]
+   - Upgraded @jrichman/ink from 6.4.6 to 6.4.7
+   - Tests pass, build works
+   - Committed: 6766e04b4
+
+3. **Telemetry decoupling** (322feaaf) [OK]
+   - Added updateTelemetryTokenCount() helper to GeminiClient
+   - GeminiChat no longer directly calls uiTelemetryService
+   - Client.ts reads from chat.getLastPromptTokenCount()
+   - Client.ts keeps uiTelemetryService in sync
+   - Committed: a81637e2f
+
+4. **Untrusted folders prompt** (adddafe6) [OK]
+   - Instead of rejecting extension installs from untrusted workspaces, now prompts user
+   - If user agrees, saves trust preference
+   - Committed: 3e9397d1a
+
+### Skipped Tasks (With Justification)
+
+1. **Slow rendering logging** (6ee7165e) - SKIPPED
+   - Uses recordSlowRender which is Google telemetry
+   - LLxprt doesn't have this function
+   - Not applicable to LLxprt's architecture
+
+### Remaining Tasks
+
+1. **Test migration to act()** (54fa26ef)
+   - 50 files use @testing-library/react
+   - Major undertaking requiring careful migration
+   - Prerequisite for removing @testing-library/react
+   - **Recommendation**: Create separate PR for this migration
+
+2. **Remove @testing-library/react** (f875911a)
+   - Depends on completing test migration above
+   - Should be done after all tests use act() wrapper
+
+### Summary
+
+- **Completed**: 4 tasks
+- **Skipped**: 1 task (Google telemetry)
+- **Remaining**: 2 tasks (large test migration)
+
+The test migration is a significant undertaking that should be tracked separately.
