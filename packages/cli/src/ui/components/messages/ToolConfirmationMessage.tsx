@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { DiffRenderer } from './DiffRenderer.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
@@ -65,19 +65,24 @@ export const ToolConfirmationMessage: React.FC<
     };
   }, [config]);
 
-  const handleConfirm = async (outcome: ToolConfirmationOutcome) => {
-    if (confirmationDetails.type === 'edit') {
-      if (config.getIdeMode() && isDiffingEnabled) {
-        const cliOutcome =
-          outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
-        await ideClient?.resolveDiffFromCli(
-          confirmationDetails.filePath,
-          cliOutcome,
-        );
+  const handleConfirm = useCallback(
+    async (outcome: ToolConfirmationOutcome) => {
+      if (confirmationDetails.type === 'edit') {
+        if (config.getIdeMode() && isDiffingEnabled) {
+          const cliOutcome =
+            outcome === ToolConfirmationOutcome.Cancel
+              ? 'rejected'
+              : 'accepted';
+          await ideClient?.resolveDiffFromCli(
+            confirmationDetails.filePath,
+            cliOutcome,
+          );
+        }
       }
-    }
-    onConfirm(outcome);
-  };
+      onConfirm(outcome);
+    },
+    [confirmationDetails, config, isDiffingEnabled, ideClient, onConfirm],
+  );
 
   const isTrustedFolder = config.isTrustedFolder();
 
@@ -91,7 +96,10 @@ export const ToolConfirmationMessage: React.FC<
     { isActive: isFocused },
   );
 
-  const handleSelect = (item: ToolConfirmationOutcome) => handleConfirm(item);
+  const handleSelect = useCallback(
+    (item: ToolConfirmationOutcome) => handleConfirm(item),
+    [handleConfirm],
+  );
 
   let bodyContent: React.ReactNode | null = null; // Removed contextDisplay here
   let question: string;

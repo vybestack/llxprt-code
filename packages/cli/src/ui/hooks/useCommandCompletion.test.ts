@@ -7,13 +7,12 @@
 /** @vitest-environment jsdom */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { act, useEffect, useState, useCallback } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
-import { act } from 'react';
 import { useCommandCompletion } from './useCommandCompletion.js';
 import { CommandContext } from '../commands/types.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
-import { useEffect, useState, useCallback } from 'react';
 import { Suggestion } from '../components/SuggestionsDisplay.js';
 import { UseAtCompletionProps, useAtCompletion } from './useAtCompletion.js';
 import {

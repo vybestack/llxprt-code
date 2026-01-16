@@ -5,8 +5,13 @@
  */
 
 import { render as inkRender } from 'ink-testing-library';
-import React, { createContext, useContext } from 'react';
-import { act } from 'react';
+import React, { act, createContext, useContext } from 'react';
+
+import { LoadedSettings, type Settings } from '../config/settings.js';
+import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
+import { SettingsContext } from '../ui/contexts/SettingsContext.js';
+import { UIStateContext, type UIState } from '../ui/contexts/UIStateContext.js';
+import { StreamingState } from '../ui/types.js';
 
 // Wrapper around ink-testing-library's render that ensures act() is called
 // This fixes React 18+ warnings about state updates not being wrapped in act()
@@ -36,11 +41,6 @@ export const render = (
     },
   };
 };
-import { LoadedSettings, type Settings } from '../config/settings.js';
-import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
-import { SettingsContext } from '../ui/contexts/SettingsContext.js';
-import { UIStateContext, type UIState } from '../ui/contexts/UIStateContext.js';
-import { StreamingState } from '../ui/types.js';
 
 const mockSettings = new LoadedSettings(
   { path: '', settings: {} },
@@ -180,40 +180,51 @@ export const renderWithProviders = (
 
 interface RenderHookResult<T> {
   result: { current: T };
-  rerender: (props?: any) => void;
+  rerender: (props?: unknown) => void;
   unmount: () => void;
 }
 
-export function renderHook<T>(
-  hook: (props?: any) => T,
-  options?: { initialProps?: any; wrapper?: React.ComponentType<any> }
+interface RenderHookOptions<P> {
+  initialProps?: P;
+  wrapper?: React.ComponentType<{ children: React.ReactNode }>;
+}
+
+export function renderHook<T, P = undefined>(
+  hook: (props: P) => T,
+  options?: RenderHookOptions<P>,
 ): RenderHookResult<T> {
   const result = { current: undefined as T };
-  
-  function TestComponent({ hookProps }: { hookProps?: any }) {
+
+  function TestComponent({ hookProps }: { hookProps: P }) {
     result.current = hook(hookProps);
     return null;
   }
-  
+
   const Wrapper = options?.wrapper ?? React.Fragment;
-  
+
   let root: ReturnType<typeof render>;
   act(() => {
     root = render(
-      React.createElement(Wrapper, null,
-        React.createElement(TestComponent, { hookProps: options?.initialProps })
-      )
+      React.createElement(
+        Wrapper,
+        null,
+        React.createElement(TestComponent, {
+          hookProps: options?.initialProps as P,
+        }),
+      ),
     );
   });
-  
+
   return {
     result,
-    rerender: (props?: any) => {
+    rerender: (props?: unknown) => {
       act(() => {
         root.rerender(
-          React.createElement(Wrapper, null,
-            React.createElement(TestComponent, { hookProps: props })
-          )
+          React.createElement(
+            Wrapper,
+            null,
+            React.createElement(TestComponent, { hookProps: props as P }),
+          ),
         );
       });
     },
@@ -233,18 +244,18 @@ export function cleanup(): void {
 // Simple waitFor implementation - polls until callback succeeds or timeout
 export const waitFor = async (
   callback: () => void | Promise<void>,
-  options?: { timeout?: number; interval?: number }
+  options?: { timeout?: number; interval?: number },
 ): Promise<void> => {
   const timeout = options?.timeout ?? 1000;
   const interval = options?.interval ?? 50;
   const start = Date.now();
-  
+
   while (Date.now() - start < timeout) {
     try {
       await callback();
       return;
     } catch {
-      await new Promise(resolve => setTimeout(resolve, interval));
+      await new Promise((resolve) => setTimeout(resolve, interval));
     }
   }
   // Final attempt - let it throw if it fails

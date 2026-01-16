@@ -55,10 +55,7 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { ideContext } from '../ide/ideContext.js';
-import {
-  ComplexityAnalyzer,
-  type ComplexityAnalysisResult,
-} from '../services/complexity-analyzer.js';
+import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { tokenLimit } from './tokenLimits.js';
 import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
@@ -1529,8 +1526,9 @@ describe('Gemini Client (client.ts)', () => {
 
     it.skip('should stop infinite loop after MAX_TURNS when nextSpeaker always returns model', async () => {
       // Get the mocked checkNextSpeaker function and configure it to trigger infinite loop
-      const { checkNextSpeaker } =
-        await import('../utils/nextSpeakerChecker.js');
+      const { checkNextSpeaker } = await import(
+        '../utils/nextSpeakerChecker.js'
+      );
       const mockCheckNextSpeaker = vi.mocked(checkNextSpeaker);
       mockCheckNextSpeaker.mockResolvedValue({
         next_speaker: 'model',
@@ -1695,8 +1693,9 @@ describe('Gemini Client (client.ts)', () => {
       // someone tries to bypass it by calling with a very large turns value
 
       // Get the mocked checkNextSpeaker function and configure it to trigger infinite loop
-      const { checkNextSpeaker } =
-        await import('../utils/nextSpeakerChecker.js');
+      const { checkNextSpeaker } = await import(
+        '../utils/nextSpeakerChecker.js'
+      );
       const mockCheckNextSpeaker = vi.mocked(checkNextSpeaker);
       mockCheckNextSpeaker.mockResolvedValue({
         next_speaker: 'model',
@@ -1922,26 +1921,36 @@ describe('Gemini Client (client.ts)', () => {
         .mockReturnValueOnce(mockStream1)
         .mockReturnValueOnce(mockStream2);
 
-        const mockChat: Partial<GeminiChat> = {
-          addHistory: vi.fn(),
-          getHistory: vi.fn().mockReturnValue([]),
-          getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        };
-        client['chat'] = mockChat as GeminiChat;
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as GeminiChat;
 
-        const initialRequest = [{ text: 'Hi' }];
-        const signal = new AbortController().signal;
-        const stream = client.sendMessageStream(
-          initialRequest,
-          signal,
-          'prompt-id',
-        );
-        const events = await fromAsync(stream);
+      const initialRequest = [{ text: 'Hi' }];
+      const promptId = 'prompt-id-invalid-stream';
+      const signal = new AbortController().signal;
 
-        // Check for 'content' event
-        const contentEvent = events.find(
-          (e) => e.type === GeminiEventType.Content,
-        );
+      // Act
+      const stream = client.sendMessageStream(initialRequest, signal, promptId);
+      const events = await fromAsync(stream);
+
+      // Assert
+      expect(events).toEqual([
+        { type: GeminiEventType.InvalidStream },
+        { type: GeminiEventType.Content, value: 'Continued content' },
+      ]);
+
+      // Verify that turn.run was called twice
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+
+      // First call with original request
+      expect(mockTurnRunFn).toHaveBeenNthCalledWith(
+        1,
+        initialRequest,
+        expect.any(Object),
+      );
 
       // Second call with "Please continue."
       expect(mockTurnRunFn).toHaveBeenNthCalledWith(

@@ -87,7 +87,6 @@ describe('SimpleExtensionLoader', () => {
         await loader.start(mockConfig);
         expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
         await loader.loadExtension(activeExtension);
-        /* eslint-disable vitest/no-conditional-expect -- parameterized test */
         if (reloadingEnabled) {
           expect(
             mockMcpClientManager.startExtension,
@@ -103,7 +102,6 @@ describe('SimpleExtensionLoader', () => {
         } else {
           expect(mockMcpClientManager.stopExtension).not.toHaveBeenCalled();
         }
-        /* eslint-enable vitest/no-conditional-expect */
       },
     );
   });

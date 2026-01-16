@@ -7,6 +7,7 @@
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import { Box, Text } from 'ink';
 import type React from 'react';
+import { useCallback } from 'react';
 import { theme } from '../semantic-colors.js';
 import { RenderInline } from '../utils/InlineMarkdownRenderer.js';
 import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
@@ -39,15 +40,18 @@ export const ShellConfirmationDialog: React.FC<
     { isActive: true },
   );
 
-  const handleSelect = (item: ToolConfirmationOutcome) => {
-    if (item === ToolConfirmationOutcome.Cancel) {
-      onConfirm(item);
-    } else {
-      // For both ProceedOnce and ProceedAlways, we approve all the
-      // commands that were requested.
-      onConfirm(item, commands);
-    }
-  };
+  const handleSelect = useCallback(
+    (item: ToolConfirmationOutcome) => {
+      if (item === ToolConfirmationOutcome.Cancel) {
+        onConfirm(item);
+      } else {
+        // For both ProceedOnce and ProceedAlways, we approve all the
+        // commands that were requested.
+        onConfirm(item, commands);
+      }
+    },
+    [onConfirm, commands],
+  );
 
   const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = [
     {

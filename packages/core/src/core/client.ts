@@ -1234,8 +1234,7 @@ export class GeminiClient {
     );
 
     const remainingTokenCount =
-      tokenLimit(modelForLimitCheck) -
-      this.getChat().getLastPromptTokenCount();
+      tokenLimit(modelForLimitCheck) - this.getChat().getLastPromptTokenCount();
 
     if (estimatedRequestTokenCount > remainingTokenCount * 0.95) {
       const contentGenConfig = this.config.getContentGeneratorConfig();

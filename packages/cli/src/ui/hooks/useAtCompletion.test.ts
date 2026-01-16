@@ -7,8 +7,8 @@
 /** @vitest-environment jsdom */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { act, useState } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
-import { act } from 'react';
 import { useAtCompletion } from './useAtCompletion.js';
 import {
   Config,
@@ -20,7 +20,6 @@ import {
   cleanupTmpDir,
   FileSystemStructure,
 } from '@vybestack/llxprt-code-test-utils';
-import { useState } from 'react';
 import { Suggestion } from '../components/SuggestionsDisplay.js';
 
 // Test harness to capture the state from the hook's callbacks.

@@ -25,7 +25,7 @@ Configure telemetry using one of the following methods:
 1.  **Settings files (recommended):**
     - **User settings file (`~/.llxprt/settings.json`):** Global configuration for all projects.
     - **Workspace settings file (`.llxprt/settings.json`):** Project-specific configuration.
-    
+
     Add a `telemetry` object to your settings file (see [Example settings](#example-settings) below).
 
 2.  **Environment variables:**

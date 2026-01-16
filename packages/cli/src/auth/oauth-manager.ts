@@ -1380,8 +1380,9 @@ export class OAuthManager {
     try {
       // Import ProviderManager to access active providers
       // Use dynamic import to avoid circular dependencies
-      const { getCliProviderManager, getCliRuntimeContext } =
-        await import('../runtime/runtimeSettings.js');
+      const { getCliProviderManager, getCliRuntimeContext } = await import(
+        '../runtime/runtimeSettings.js'
+      );
       const providerManager = getCliProviderManager();
 
       // Get the provider instance to clear its auth cache
@@ -1569,8 +1570,9 @@ export class OAuthManager {
   private async getProfileBuckets(providerName: string): Promise<string[]> {
     try {
       // Try to get profile from runtime settings
-      const { getCliRuntimeServices } =
-        await import('../runtime/runtimeSettings.js');
+      const { getCliRuntimeServices } = await import(
+        '../runtime/runtimeSettings.js'
+      );
       const { settingsService } = getCliRuntimeServices();
 
       // Get current profile name
@@ -1621,12 +1623,14 @@ export class OAuthManager {
     providerName: string,
     buckets: string[],
   ): Promise<void> {
-    const { MultiBucketAuthenticator } =
-      await import('./MultiBucketAuthenticator.js');
+    const { MultiBucketAuthenticator } = await import(
+      './MultiBucketAuthenticator.js'
+    );
 
     // Get ephemeral settings for timing controls
-    const { getEphemeralSetting: getRuntimeEphemeralSetting } =
-      await import('../runtime/runtimeSettings.js');
+    const { getEphemeralSetting: getRuntimeEphemeralSetting } = await import(
+      '../runtime/runtimeSettings.js'
+    );
     const getEphemeralSetting = <T>(key: string): T | undefined =>
       getRuntimeEphemeralSetting(key) as T | undefined;
 

@@ -91,8 +91,9 @@ priority = 100
         );
 
       const mockReaddir = vi.fn(async (_path: string): Promise<Dirent[]> => {
-        const error = new Error('ENOENT: no such file or directory') as Error &
-          { code: string };
+        const error = new Error(
+          'ENOENT: no such file or directory',
+        ) as Error & { code: string };
         error.code = 'ENOENT';
         throw error;
       });

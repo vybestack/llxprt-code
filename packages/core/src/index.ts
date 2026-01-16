@@ -30,18 +30,8 @@ export {
   formatPolicyError,
 } from './policy/config.js';
 
-// Export hook types
-export * from './hooks/types.js';
-
-// Export hooks
-export {
-  HookTranslator,
-  HookTranslatorGenAIv1,
-  defaultHookTranslator,
-  type LLMRequest,
-  type LLMResponse,
-  type HookToolConfig,
-} from './hooks/hookTranslator.js';
+// Export hooks system
+export * from './hooks/index.js';
 
 // Export message bus
 export * from './confirmation-bus/types.js';

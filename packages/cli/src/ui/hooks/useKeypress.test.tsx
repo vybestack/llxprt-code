@@ -196,7 +196,6 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
         stdin.write('do');
       });
 
-      /* eslint-disable vitest/no-conditional-expect -- parameterized test requires conditional expectations */
       if (useKitty) {
         vi.advanceTimersByTime(60); // wait for kitty timeout
         expect(onKeypress).toHaveBeenCalledExactlyOnceWith(
@@ -211,7 +210,6 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
         );
         expect(onKeypress).toHaveBeenCalledTimes(2);
       }
-      /* eslint-enable vitest/no-conditional-expect */
     });
 
     it('should handle back to back pastes', () => {
