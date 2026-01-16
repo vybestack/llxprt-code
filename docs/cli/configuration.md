@@ -43,6 +43,654 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 ### Available settings in `settings.json`:
 
+<!-- SETTINGS-AUTOGEN:START -->
+
+#### `accessibility`
+
+- **`accessibility.disableLoadingPhrases`** (boolean):
+  - **Description:** Disable loading phrases for accessibility
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`accessibility.screenReader`** (boolean):
+  - **Description:** Render output in plain-text to be more screen reader accessible
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `checkpointing`
+
+- **`checkpointing.enabled`** (boolean):
+  - **Description:** Enable session checkpointing for recovery
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `emojifilter`
+
+- **`emojifilter`** (string):
+  - **Description:** Filter emojis from AI-generated content and file operations. Options: allowed (no filtering), auto (silent filtering), warn (filter with warnings to AI), error (block operations with emojis).
+  - **Default:** `"auto"`
+
+#### `fileFiltering`
+
+- **`fileFiltering.respectGitIgnore`** (boolean):
+  - **Description:** Respect .gitignore files when searching
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`fileFiltering.respectLlxprtIgnore`** (boolean):
+  - **Description:** Respect .llxprtignore files when searching
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`fileFiltering.enableRecursiveFileSearch`** (boolean):
+  - **Description:** Enable recursive file search functionality
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`fileFiltering.disableFuzzySearch`** (boolean):
+  - **Description:** Disable fuzzy search when searching for files.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `disableAutoUpdate`
+
+- **`disableAutoUpdate`** (boolean):
+  - **Description:** Disable automatic updates
+  - **Default:** `false`
+
+#### `shouldUseNodePtyShell`
+
+- **`shouldUseNodePtyShell`** (boolean):
+  - **Description:** Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty. Falls back to child_process when disabled.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `selectedAuthType`
+
+- **`selectedAuthType`** (string):
+  - **Description:** The currently selected authentication type.
+  - **Default:** `"provider"`
+  - **Requires restart:** Yes
+
+#### `useExternalAuth`
+
+- **`useExternalAuth`** (boolean):
+  - **Description:** Whether to use an external authentication flow.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `sandbox`
+
+- **`sandbox`** (object):
+  - **Description:** Sandbox execution environment (can be a boolean or a path string).
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `coreTools`
+
+- **`coreTools`** (array):
+  - **Description:** Paths to core tool definitions.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `allowedTools`
+
+- **`allowedTools`** (array):
+  - **Description:** A list of tool names that will bypass the confirmation dialog.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `excludeTools`
+
+- **`excludeTools`** (array):
+  - **Description:** Tool names to exclude from discovery.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `coreToolSettings`
+
+- **`coreToolSettings`** (object):
+  - **Description:** Manage core tool availability
+  - **Default:** `{}`
+  - **Requires restart:** Yes
+
+#### `toolDiscoveryCommand`
+
+- **`toolDiscoveryCommand`** (string):
+  - **Description:** Command to run for tool discovery.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `toolCallCommand`
+
+- **`toolCallCommand`** (string):
+  - **Description:** Command to run for tool calls.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `toolCallProcessingMode`
+
+- **`toolCallProcessingMode`** (enum):
+  - **Description:** Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.
+  - **Default:** `"legacy"`
+  - **Values:** `"legacy"`, `"pipeline"`
+  - **Requires restart:** Yes
+
+#### `mcpServerCommand`
+
+- **`mcpServerCommand`** (string):
+  - **Description:** Command to start an MCP server.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `sessionRetention`
+
+- **`sessionRetention`** (object):
+  - **Description:** Settings for automatic session cleanup.
+  - **Default:** `undefined`
+
+#### `output`
+
+- **`output.format`** (enum):
+  - **Description:** The format of the CLI output.
+  - **Default:** `"text"`
+  - **Values:** `"text"`, `"json"`
+
+#### `ui`
+
+- **`ui.theme`** (string):
+  - **Description:** The color theme for the UI.
+  - **Default:** `undefined`
+
+- **`ui.customThemes`** (object):
+  - **Description:** Custom theme definitions.
+  - **Default:** `{}`
+
+- **`ui.hideWindowTitle`** (boolean):
+  - **Description:** Hide the window title bar
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`ui.showStatusInTitle`** (boolean):
+  - **Description:** Show Gemini CLI status and thoughts in the terminal window title
+  - **Default:** `false`
+
+- **`ui.hideTips`** (boolean):
+  - **Description:** Hide helpful tips in the UI
+  - **Default:** `false`
+
+- **`ui.hideBanner`** (boolean):
+  - **Description:** Hide the application banner
+  - **Default:** `false`
+
+- **`ui.hideContextSummary`** (boolean):
+  - **Description:** Hide the context summary (LLXPRT.md, MCP servers) above the input.
+  - **Default:** `false`
+
+- **`ui.footer.hideCWD`** (boolean):
+  - **Description:** Hide the current working directory path in the footer.
+  - **Default:** `false`
+
+- **`ui.footer.hideSandboxStatus`** (boolean):
+  - **Description:** Hide the sandbox status indicator in the footer.
+  - **Default:** `false`
+
+- **`ui.footer.hideModelInfo`** (boolean):
+  - **Description:** Hide the model name and context usage in the footer.
+  - **Default:** `false`
+
+- **`ui.hideFooter`** (boolean):
+  - **Description:** Hide the footer from the UI
+  - **Default:** `false`
+
+- **`ui.useAlternateBuffer`** (boolean):
+  - **Description:** Use an alternate screen buffer for the UI, preserving shell history.
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`ui.incrementalRendering`** (boolean):
+  - **Description:** Enable incremental rendering for the UI. Only supported when useAlternateBuffer is enabled.
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`ui.enableMouseEvents`** (boolean):
+  - **Description:** Enable mouse event tracking for in-app scrolling. Disables terminal text selection and clickable links while active.
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`ui.showMemoryUsage`** (boolean):
+  - **Description:** Display memory usage information in the UI
+  - **Default:** `false`
+
+- **`ui.showLineNumbers`** (boolean):
+  - **Description:** Show line numbers in the chat.
+  - **Default:** `false`
+
+- **`ui.showCitations`** (boolean):
+  - **Description:** Show citations for generated text in the chat.
+  - **Default:** `false`
+
+- **`ui.customWittyPhrases`** (array):
+  - **Description:** Custom witty phrases to display during loading.
+  - **Default:** `[]`
+
+- **`ui.wittyPhraseStyle`** (enum):
+  - **Description:** Choose which collection of witty phrases to display during loading.
+  - **Default:** `"default"`
+  - **Values:** `"default"`, `"llxprt"`, `"gemini-cli"`, `"whimsical"`, `"custom"`
+
+- **`ui.vimMode`** (boolean):
+  - **Description:** Enable Vim keybindings in the input field.
+  - **Default:** `false`
+
+- **`ui.ideMode`** (boolean):
+  - **Description:** Enable IDE integration mode.
+  - **Default:** `false`
+
+- **`ui.preferredEditor`** (string):
+  - **Description:** The preferred code editor for opening files.
+  - **Default:** `undefined`
+
+- **`ui.autoConfigureMaxOldSpaceSize`** (boolean):
+  - **Description:** Automatically configure Node.js max old space size based on system memory.
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`ui.historyMaxItems`** (number):
+  - **Description:** Maximum number of history items to keep.
+  - **Default:** `100`
+
+- **`ui.historyMaxBytes`** (number):
+  - **Description:** Maximum size of history in bytes.
+  - **Default:** `1048576`
+
+- **`ui.memoryImportFormat`** (string):
+  - **Description:** Format for importing memory files (tree or flat).
+  - **Default:** `"tree"`
+
+- **`ui.memoryDiscoveryMaxDirs`** (number):
+  - **Description:** Maximum number of directories to scan for memory files.
+  - **Default:** `undefined`
+
+- **`ui.contextFileName`** (string | string[]):
+  - **Description:** The name of the context file or files to load into memory. Accepts either a single string or an array of strings.
+  - **Default:** `undefined`
+
+- **`ui.usageStatisticsEnabled`** (boolean):
+  - **Description:** Enable anonymous usage statistics collection.
+  - **Default:** `true`
+
+- **`ui.maxSessionTurns`** (number):
+  - **Description:** Maximum number of turns in a session (-1 for unlimited).
+  - **Default:** `-1`
+
+- **`ui.showTodoPanel`** (boolean):
+  - **Description:** Show the todo panel in the UI.
+  - **Default:** `true`
+
+- **`ui.useFullWidth`** (boolean):
+  - **Description:** Use the entire width of the terminal for output.
+  - **Default:** `false`
+
+- **`ui.disableLoadingPhrases`** (boolean):
+  - **Description:** Disable loading phrases for accessibility.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`ui.screenReader`** (boolean):
+  - **Description:** Render output in plain-text to be more screen reader accessible.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `ide`
+
+- **`ide`** (object):
+  - **Description:** IDE integration settings.
+  - **Default:** `{}`
+  - **Requires restart:** Yes
+
+#### `showStatusInTitle`
+
+- **`showStatusInTitle`** (boolean):
+  - **Description:** Show LLxprt status and thoughts in the terminal window title
+  - **Default:** `false`
+
+#### `hideCWD`
+
+- **`hideCWD`** (boolean):
+  - **Description:** Hide the current working directory path in the footer.
+  - **Default:** `false`
+
+#### `hideSandboxStatus`
+
+- **`hideSandboxStatus`** (boolean):
+  - **Description:** Hide the sandbox status indicator in the footer.
+  - **Default:** `false`
+
+#### `hideModelInfo`
+
+- **`hideModelInfo`** (boolean):
+  - **Description:** Hide the model name and context usage in the footer.
+  - **Default:** `false`
+
+#### `allowMCPServers`
+
+- **`allowMCPServers`** (array):
+  - **Description:** A whitelist of MCP servers to allow.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `excludeMCPServers`
+
+- **`excludeMCPServers`** (array):
+  - **Description:** A blacklist of MCP servers to exclude.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `bugCommand`
+
+- **`bugCommand`** (object):
+  - **Description:** Configuration for the bug report command.
+  - **Default:** `undefined`
+
+#### `summarizeToolOutput`
+
+- **`summarizeToolOutput`** (object):
+  - **Description:** Enables or disables summarization of tool output. Configure per-tool token budgets (for example {"run_shell_command": {"tokenBudget": 2000}}). Currently only the run_shell_command tool supports summarization.
+  - **Default:** `undefined`
+
+#### `dnsResolutionOrder`
+
+- **`dnsResolutionOrder`** (string):
+  - **Description:** The DNS resolution order.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `tools`
+
+- **`tools.sandbox`** (boolean | string):
+  - **Description:** Sandbox execution environment. Set to a boolean to enable or disable the sandbox, or provide a string path to a sandbox profile.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+- **`tools.autoAccept`** (boolean):
+  - **Description:** Automatically accept and execute tool calls that are considered safe (e.g., read-only operations).
+  - **Default:** `false`
+
+- **`tools.core`** (array):
+  - **Description:** Paths to core tool definitions.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+- **`tools.allowed`** (array):
+  - **Description:** A list of tool names that will bypass the confirmation dialog.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+- **`tools.exclude`** (array):
+  - **Description:** Tool names to exclude from discovery.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+- **`tools.discoveryCommand`** (string):
+  - **Description:** Command to run for tool discovery.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+- **`tools.callCommand`** (string):
+  - **Description:** Command to run for tool calls.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+- **`tools.useRipgrep`** (boolean):
+  - **Description:** Use ripgrep for file content search instead of the fallback implementation. When unset, ripgrep is auto-enabled if detected.
+  - **Default:** `undefined`
+
+- **`tools.enableToolOutputTruncation`** (boolean):
+  - **Description:** Enable truncation of large tool outputs.
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`tools.truncateToolOutputThreshold`** (number):
+  - **Description:** Truncate tool output if it is larger than this many characters. Set to -1 to disable.
+  - **Default:** `4000000`
+  - **Requires restart:** Yes
+
+- **`tools.truncateToolOutputLines`** (number):
+  - **Description:** The number of lines to keep when truncating tool output.
+  - **Default:** `1000`
+  - **Requires restart:** Yes
+
+- **`tools.policyPath`** (string):
+  - **Description:** Absolute path to a TOML policy file that augments the built-in policy rules.
+  - **Default:** `undefined`
+
+- **`tools.enableHooks`** (boolean):
+  - **Description:** Enable the hooks system for intercepting and customizing LLxprt CLI behavior. When enabled, hooks configured in settings will execute at appropriate lifecycle events (BeforeTool, AfterTool, BeforeModel, etc.). Requires MessageBus integration.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `mcp`
+
+- **`mcp.serverCommand`** (string):
+  - **Description:** Command to start an MCP server.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+- **`mcp.allowed`** (array):
+  - **Description:** A list of MCP servers to allow.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+- **`mcp.excluded`** (array):
+  - **Description:** A list of MCP servers to exclude.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `security`
+
+- **`security.disableYoloMode`** (boolean):
+  - **Description:** Disable YOLO mode, even if enabled by a flag.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`security.folderTrust.enabled`** (boolean):
+  - **Description:** Setting to track whether Folder trust is enabled.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`security.auth.selectedType`** (string):
+  - **Description:** The currently selected authentication type.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+- **`security.auth.useExternal`** (boolean):
+  - **Description:** Whether to use an external authentication flow.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `excludedProjectEnvVars`
+
+- **`excludedProjectEnvVars`** (array):
+  - **Description:** Environment variables to exclude from project context.
+  - **Default:** `["DEBUG","DEBUG_MODE"]`
+
+#### `disableUpdateNag`
+
+- **`disableUpdateNag`** (boolean):
+  - **Description:** Disable update notification prompts.
+  - **Default:** `false`
+
+#### `includeDirectories`
+
+- **`includeDirectories`** (array):
+  - **Description:** Additional directories to include in the workspace context. Missing directories will be skipped with a warning.
+  - **Default:** `[]`
+
+#### `loadMemoryFromIncludeDirectories`
+
+- **`loadMemoryFromIncludeDirectories`** (boolean):
+  - **Description:** Whether to load memory files from include directories.
+  - **Default:** `false`
+
+#### `model`
+
+- **`model`** (string):
+  - **Description:** The Gemini model to use for conversations.
+  - **Default:** `undefined`
+
+#### `hasSeenIdeIntegrationNudge`
+
+- **`hasSeenIdeIntegrationNudge`** (boolean):
+  - **Description:** Whether the user has seen the IDE integration nudge.
+  - **Default:** `false`
+
+#### `folderTrustFeature`
+
+- **`folderTrustFeature`** (boolean):
+  - **Description:** Enable folder trust feature for enhanced security.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `folderTrust`
+
+- **`folderTrust`** (boolean):
+  - **Description:** Setting to track whether Folder trust is enabled.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `chatCompression`
+
+- **`chatCompression`** (object):
+  - **Description:** Chat compression settings.
+  - **Default:** `undefined`
+
+#### `experimental`
+
+- **`experimental.extensionReloading`** (boolean):
+  - **Description:** Enables extension loading/unloading within the CLI session.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `defaultProfile`
+
+- **`defaultProfile`** (string):
+  - **Description:** Default provider profile to use.
+  - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `providerApiKeys`
+
+- **`providerApiKeys`** (object):
+  - **Description:** API keys for different providers.
+  - **Default:** `{}`
+  - **Requires restart:** Yes
+
+#### `providerBaseUrls`
+
+- **`providerBaseUrls`** (object):
+  - **Description:** Base URLs for different providers.
+  - **Default:** `{}`
+  - **Requires restart:** Yes
+
+#### `providerToolFormatOverrides`
+
+- **`providerToolFormatOverrides`** (object):
+  - **Description:** Tool format overrides for different providers.
+  - **Default:** `{}`
+  - **Requires restart:** Yes
+
+#### `providerKeyfiles`
+
+- **`providerKeyfiles`** (object):
+  - **Description:** Keyfile paths for different providers.
+  - **Default:** `{}`
+  - **Requires restart:** Yes
+
+#### `extensionManagement`
+
+- **`extensionManagement`** (boolean):
+  - **Description:** Enable extension management features.
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+#### `enableTextToolCallParsing`
+
+- **`enableTextToolCallParsing`** (boolean):
+  - **Description:** Enable parsing of tool calls from text responses.
+  - **Default:** `false`
+
+#### `textToolCallModels`
+
+- **`textToolCallModels`** (array):
+  - **Description:** Models that support text-based tool call parsing.
+  - **Default:** `[]`
+
+#### `openaiResponsesEnabled`
+
+- **`openaiResponsesEnabled`** (boolean):
+  - **Description:** Enable OpenAI Responses API compatibility.
+  - **Default:** `false`
+
+#### `shellReplacement`
+
+- **`shellReplacement`** (enum):
+  - **Description:** Control command substitution in shell commands: "allowlist" (validate inner commands against coreTools), "all" (allow all), "none" (block all).
+  - **Default:** `"allowlist"`
+  - **Values:** `"allowlist"`, `"all"`, `"none"`
+
+#### `oauthEnabledProviders`
+
+- **`oauthEnabledProviders`** (object):
+  - **Description:** OAuth enablement configuration per provider.
+  - **Default:** `{}`
+  - **Requires restart:** Yes
+
+#### `useRipgrep`
+
+- **`useRipgrep`** (boolean):
+  - **Description:** Use ripgrep for file content search instead of the fallback implementation. When unset, ripgrep is auto-enabled if detected.
+  - **Default:** `undefined`
+
+#### `enablePromptCompletion`
+
+- **`enablePromptCompletion`** (boolean):
+  - **Description:** Enable AI-powered prompt completion suggestions while typing.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `enableFuzzyFiltering`
+
+- **`enableFuzzyFiltering`** (boolean):
+  - **Description:** Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., "prd" to match "production"). When disabled, only exact prefix matches are shown.
+  - **Default:** `true`
+
+#### `debugKeystrokeLogging`
+
+- **`debugKeystrokeLogging`** (boolean):
+  - **Description:** Enable debug logging of keystrokes to the console.
+  - **Default:** `false`
+
+#### `customWittyPhrases`
+
+- **`customWittyPhrases`** (array):
+  - **Description:** Custom witty phrases to display during loading. When provided, the CLI cycles through these instead of the defaults.
+  - **Default:** `[]`
+
+#### `wittyPhraseStyle`
+
+- **`wittyPhraseStyle`** (enum):
+  - **Description:** Choose which collection of witty phrases to display during loading.
+  - **Default:** `"default"`
+  - **Values:** `"default"`, `"llxprt"`, `"gemini-cli"`, `"whimsical"`, `"custom"`
+
+#### `hooks`
+
+- **`hooks`** (object):
+  - **Description:** Hook configurations for intercepting and customizing agent behavior.
+  - **Default:** `{}`
+  <!-- SETTINGS-AUTOGEN:END -->
+
 - **`contextFileName`** (string or array of strings):
   - **Description:** Specifies the filename(s) for context files that contain project instructions and context for the AI. Can be a single filename string or an array of accepted filenames. These files are loaded hierarchically from various locations (global, project root, ancestors, and subdirectories) to provide instructional context to the AI.
   - **Default:** `"LLXPRT.md"`
