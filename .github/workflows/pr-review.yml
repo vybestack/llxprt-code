@@ -385,6 +385,7 @@ jobs:
           set -euo pipefail
           prompt_file="review/prompt.md"
           llxprt_log="review/llxprt.log"
+          context_limit="${LLXPRT_CONTEXT_LIMIT:-200000}"
           set +e
           cat "${prompt_file}" | llxprt \
             --provider "${LLXPRT_DEFAULT_PROVIDER}" \
@@ -393,7 +394,7 @@ jobs:
             --key "${OPENAI_API_KEY}" \
             --set modelparam.temperature=1 \
             --set modelparam.max_tokens=10000 \
-            --set context-limit=121000 \
+            --set context-limit="${context_limit}" \
             --set base-url="${OPENAI_BASE_URL}" \
             --set shell-replacement=true | tee "${llxprt_log}"
           llxprt_status=${PIPESTATUS[1]}
