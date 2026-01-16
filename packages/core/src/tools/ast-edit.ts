@@ -729,25 +729,35 @@ class CrossFileRelationshipAnalyzer {
 
     try {
       if (lang) {
-        await findInFiles(
-          lang,
-          {
-            paths: [workspacePath],
-            matcher: { rule: { pattern: symbolName } },
-          },
-          (err, matches) => {
-            if (err || !matches) return;
-            matches.forEach((m) => {
-              const range = m.range();
-              references.push({
-                type: 'reference',
-                filePath: m.getRoot().filename(),
-                line: range.start.line + 1,
-                column: range.start.column,
+        // Wrap findInFiles in a Promise to ensure callback completes before continuing
+        await new Promise<void>((resolve) => {
+          findInFiles(
+            lang,
+            {
+              paths: [workspacePath],
+              matcher: { rule: { pattern: symbolName } },
+            },
+            (err, matches) => {
+              if (err || !matches) {
+                resolve();
+                return;
+              }
+              matches.forEach((m) => {
+                const range = m.range();
+                references.push({
+                  type: 'reference',
+                  filePath: m.getRoot().filename(),
+                  line: range.start.line + 1,
+                  column: range.start.column,
+                });
               });
-            });
-          },
-        );
+              resolve();
+            },
+          ).then(() => {
+            // Additional safety: ensure we resolve even if the Promise resolves first
+            resolve();
+          });
+        });
       } else {
         const filesByLanguage = new Map<string | Lang, Set<string>>();
 
@@ -772,27 +782,40 @@ class CrossFileRelationshipAnalyzer {
           }
         }
 
+        // Wait for all findInFiles calls to complete their callbacks
+        const promises: Array<Promise<void>> = [];
         for (const [searchLang, searchFiles] of filesByLanguage) {
-          await findInFiles(
-            searchLang,
-            {
-              paths: Array.from(searchFiles),
-              matcher: { rule: { pattern: symbolName } },
-            },
-            (err, matches) => {
-              if (err || !matches) return;
-              matches.forEach((m) => {
-                const range = m.range();
-                references.push({
-                  type: 'reference',
-                  filePath: m.getRoot().filename(),
-                  line: range.start.line + 1,
-                  column: range.start.column,
+          const promise = new Promise<void>((resolve) => {
+            findInFiles(
+              searchLang,
+              {
+                paths: Array.from(searchFiles),
+                matcher: { rule: { pattern: symbolName } },
+              },
+              (err, matches) => {
+                if (err || !matches) {
+                  resolve();
+                  return;
+                }
+                matches.forEach((m) => {
+                  const range = m.range();
+                  references.push({
+                    type: 'reference',
+                    filePath: m.getRoot().filename(),
+                    line: range.start.line + 1,
+                    column: range.start.column,
+                  });
                 });
-              });
-            },
-          );
+                resolve();
+              },
+            ).then(() => {
+              // Additional safety: ensure we resolve even if the Promise resolves first
+              resolve();
+            });
+          });
+          promises.push(promise);
         }
+        await Promise.all(promises);
       }
 
       return references.length > 0
@@ -2016,6 +2039,10 @@ class ASTEditToolInvocation implements ToolInvocation<
     params: ASTEditToolParams,
     _abortSignal: AbortSignal,
   ): Promise<CalculatedEdit> {
+    // Normalize all string parameters to LF for consistent matching
+    const normalizedOldString = params.old_string.replace(/\r\n/g, '\n');
+    const normalizedNewString = params.new_string.replace(/\r\n/g, '\n');
+
     let currentContent: string | null = null;
     let fileExists = false;
     let isNewFile = false;
@@ -2075,16 +2102,16 @@ class ASTEditToolInvocation implements ToolInvocation<
     } else if (currentContent !== null) {
       const occurrences = this.countOccurrences(
         currentContent,
-        params.old_string,
+        normalizedOldString,
       );
 
       if (occurrences === 0) {
         error = {
-          display: `Failed to edit, could not find the string to replace.`,
+          display: `Failed to edit, could not find string to replace.`,
           raw: `Failed to edit, 0 occurrences found for old_string in ${params.file_path}. No edits made.`,
           type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
         };
-      } else if (params.old_string === params.new_string) {
+      } else if (normalizedOldString === normalizedNewString) {
         error = {
           display: `No changes to apply. The old_string and new_string are identical.`,
           raw: `No changes to apply. The old_string and new_string are identical in file: ${params.file_path}`,
@@ -2096,8 +2123,8 @@ class ASTEditToolInvocation implements ToolInvocation<
     const newContent = !error
       ? ASTEditTool.applyReplacement(
           currentContent,
-          params.old_string,
-          params.new_string,
+          normalizedOldString,
+          normalizedNewString,
           isNewFile,
         )
       : (currentContent ?? '');
@@ -2121,7 +2148,7 @@ class ASTEditToolInvocation implements ToolInvocation<
       newContent,
       occurrences: this.countOccurrences(
         currentContent || '',
-        params.old_string,
+        normalizedOldString,
       ),
       error,
       isNewFile,

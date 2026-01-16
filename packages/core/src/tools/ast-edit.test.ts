@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import fs, { promises as fsPromises } from 'fs';
 import {
   ASTEditTool,
@@ -15,6 +15,9 @@ import { Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
 
 describe('AST Tools', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   const mockConfig = {
     getWorkspaceContext: () => ({
       isPathWithinWorkspace: () => true,
