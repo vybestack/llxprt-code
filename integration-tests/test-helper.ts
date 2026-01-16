@@ -669,6 +669,68 @@ export class TestRig {
     return promise;
   }
 
+  /**
+   * Runs a CLI command (non-interactive) and returns the output.
+   * Used for extension commands like install, list, update, uninstall.
+   */
+  runCommand(
+    args: string[],
+    options: { stdin?: string } = {},
+  ): Promise<string> {
+    const { command, initialArgs } = this._getCommandAndArgs();
+    const commandArgs = [...initialArgs, ...args];
+
+    const child = spawn(command, commandArgs, {
+      cwd: this.testDir!,
+      stdio: 'pipe',
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    if (options.stdin) {
+      child.stdin!.write(options.stdin);
+      child.stdin!.end();
+    }
+
+    child.stdout!.on('data', (data: Buffer) => {
+      stdout += data;
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
+        process.stdout.write(data);
+      }
+    });
+
+    child.stderr!.on('data', (data: Buffer) => {
+      stderr += data;
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
+        process.stderr.write(data);
+      }
+    });
+
+    const promise = new Promise<string>((resolve, reject) => {
+      child.on('close', (code: number) => {
+        if (code === 0) {
+          this._lastRunStdout = stdout;
+          let result = stdout;
+          if (stderr) {
+            result += `
+
+StdErr:
+${stderr}`;
+          }
+          resolve(result);
+        } else {
+          reject(
+            new Error(`Process exited with code ${code}:
+${stderr}`),
+          );
+        }
+      });
+    });
+
+    return promise;
+  }
+
   readFile(fileName: string) {
     const filePath = join(this.testDir!, fileName);
     const content = readFileSync(filePath, 'utf-8');

@@ -1,16 +1,42 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
+import React from 'react';
 import { act } from 'react';
 import { useChatStore } from './useChatStore';
 
-// Simple renderHook implementation for testing React hooks
+/**
+ * Proper renderHook implementation that wraps the hook in a React component
+ * to ensure React context is properly initialized.
+ */
 function renderHook<T>(hook: () => T): { result: { current: T } } {
-  const result = { current: hook() };
-  return { result };
+  const result: { current: T | undefined } = { current: undefined };
+
+  function TestComponent(): null {
+    result.current = hook();
+    return null;
+  }
+
+  // Use React.createElement to render the component in a way that
+  // properly initializes the React context
+  const element = React.createElement(TestComponent);
+
+  // Execute the render using act to ensure React state updates are processed
+  act(() => {
+    // Create a simple "render" by executing the component function
+    // This simulates what happy-dom/jsdom would do
+    const component = element.type as React.FC;
+    component(element.props);
+  });
+
+  return { result: result as { current: T } };
 }
 
 describe('useChatStore message handling', () => {
   let idCounter = 0;
   const makeId = () => `test-${idCounter++}`;
+
+  beforeEach(() => {
+    idCounter = 0;
+  });
 
   it('should append a system message', () => {
     const { result } = renderHook(() => useChatStore(makeId));

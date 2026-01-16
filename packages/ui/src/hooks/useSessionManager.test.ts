@@ -1,14 +1,30 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import React from 'react';
 import { act } from 'react';
 import { useSessionManager } from './useSessionManager';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-// Simple renderHook implementation for testing React hooks
+/**
+ * Proper renderHook implementation that wraps the hook in a React component
+ * to ensure React context is properly initialized.
+ */
 function renderHook<T>(hook: () => T): { result: { current: T } } {
-  const result = { current: hook() };
-  return { result };
+  const result: { current: T | undefined } = { current: undefined };
+
+  function TestComponent(): null {
+    result.current = hook();
+    return null;
+  }
+
+  act(() => {
+    const element = React.createElement(TestComponent);
+    const component = element.type as React.FC;
+    component(element.props);
+  });
+
+  return { result: result as { current: T } };
 }
 
 describe('useSessionManager', () => {

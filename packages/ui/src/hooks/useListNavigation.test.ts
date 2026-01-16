@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
+import React from 'react';
 import { act } from 'react';
 import { useListNavigation, useFilteredList } from './useListNavigation';
 
-// Simple renderHook implementation for testing React hooks
+/**
+ * Proper renderHook implementation that wraps the hook in a React component
+ * to ensure React context is properly initialized.
+ */
 interface RenderHookResult<T, P> {
   result: { current: T };
   rerender: (newProps: P) => void;
@@ -13,14 +17,29 @@ function renderHook<T, P = undefined>(
   options?: { initialProps: P },
 ): RenderHookResult<T, P> {
   let currentProps = options?.initialProps as P;
-  const result = { current: hook(currentProps) };
+  const result: { current: T | undefined } = { current: undefined };
+
+  function TestComponent(): null {
+    result.current = hook(currentProps);
+    return null;
+  }
+
+  const executeRender = () => {
+    act(() => {
+      const element = React.createElement(TestComponent);
+      const component = element.type as React.FC;
+      component(element.props);
+    });
+  };
+
+  executeRender();
 
   const rerender = (newProps: P) => {
     currentProps = newProps;
-    result.current = hook(currentProps);
+    executeRender();
   };
 
-  return { result, rerender };
+  return { result: result as { current: T }, rerender };
 }
 
 describe('useListNavigation', () => {
