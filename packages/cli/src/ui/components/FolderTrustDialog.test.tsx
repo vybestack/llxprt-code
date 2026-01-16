@@ -5,7 +5,8 @@
  */
 
 import { renderWithProviders } from '../../test-utils/render.js';
-import { waitFor, act } from '@testing-library/react';
+import { waitFor } from '@testing-library/react';
+import { act } from 'react';
 import { vi } from 'vitest';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 

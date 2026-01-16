@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render, act } from '@testing-library/react';
+import { render } from '@testing-library/react';
+import { act } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LayoutManager, useLayout } from '../LayoutManager.js';
 

@@ -7,7 +7,8 @@
 /** @vitest-environment jsdom */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
+import { act } from 'react';
 import { useSlashCompletion } from './useSlashCompletion.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';

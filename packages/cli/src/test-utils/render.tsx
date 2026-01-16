@@ -4,9 +4,39 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from 'ink-testing-library';
+import { render as inkRender } from 'ink-testing-library';
 import { renderHook as testingLibraryRenderHook } from '@testing-library/react';
 import React, { createContext, useContext } from 'react';
+import { act } from 'react';
+
+// Wrapper around ink-testing-library's render that ensures act() is called
+// This fixes React 18+ warnings about state updates not being wrapped in act()
+export const render = (
+  tree: React.ReactElement,
+): ReturnType<typeof inkRender> => {
+  let renderResult: ReturnType<typeof inkRender> =
+    undefined as unknown as ReturnType<typeof inkRender>;
+  act(() => {
+    renderResult = inkRender(tree);
+  });
+
+  const originalUnmount = renderResult.unmount;
+  const originalRerender = renderResult.rerender;
+
+  return {
+    ...renderResult,
+    unmount: () => {
+      act(() => {
+        originalUnmount();
+      });
+    },
+    rerender: (newTree: React.ReactElement) => {
+      act(() => {
+        originalRerender(newTree);
+      });
+    },
+  };
+};
 import { LoadedSettings, type Settings } from '../config/settings.js';
 import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
 import { SettingsContext } from '../ui/contexts/SettingsContext.js';

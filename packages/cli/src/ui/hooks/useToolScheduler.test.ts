@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
-import { renderHook, act, cleanup } from '@testing-library/react';
+import { renderHook, cleanup } from '@testing-library/react';
+import { act } from 'react';
 import {
   useReactToolScheduler,
   mapToDisplay,
