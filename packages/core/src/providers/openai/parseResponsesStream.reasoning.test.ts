@@ -171,6 +171,30 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     });
   });
 
+  it('should handle reasoning_summary_text events', async () => {
+    const chunks = [
+      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":1,"delta":"Summary: Key insight."}\n\n',
+      'data: {"type":"response.reasoning_summary_text.done","sequence_number":2,"text":"Summary: Key insight."}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const messages = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages.push(message);
+    }
+
+    const thinkingMessage = messages.find((m) =>
+      m.blocks.some((block) => block.type === 'thinking'),
+    );
+    expect(thinkingMessage).toBeDefined();
+    const thinkingBlock = thinkingMessage?.blocks[0] as {
+      type: 'thinking';
+      thought: string;
+    };
+    expect(thinkingBlock.thought).toBe('Summary: Key insight.');
+  });
+
   it('should yield reasoning before response.completed', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Reasoning content"}\n\n',

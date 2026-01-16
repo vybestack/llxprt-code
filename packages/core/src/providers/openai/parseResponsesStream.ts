@@ -14,6 +14,7 @@ interface ResponsesEvent {
   sequence_number?: number;
   output_index?: number;
   delta?: string;
+  text?: string;
   item?: {
     id: string;
     type: string;
@@ -93,6 +94,7 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.reasoning_text.delta':
+              case 'response.reasoning_summary_text.delta':
                 // Reasoning content chunk
                 if (event.delta) {
                   reasoningText += event.delta;
@@ -100,6 +102,7 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.reasoning_text.done':
+              case 'response.reasoning_summary_text.done':
                 // Reasoning completed - yield accumulated reasoning
                 if (reasoningText.trim()) {
                   yield {
@@ -107,7 +110,7 @@ export async function* parseResponsesStream(
                     blocks: [
                       {
                         type: 'thinking',
-                        thought: reasoningText,
+                        thought: event.text || reasoningText,
                         sourceField: 'reasoning_content',
                       },
                     ],
