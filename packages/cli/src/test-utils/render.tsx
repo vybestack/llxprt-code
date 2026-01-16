@@ -5,7 +5,6 @@
  */
 
 import { render as inkRender } from 'ink-testing-library';
-import { renderHook as testingLibraryRenderHook } from '@testing-library/react';
 import React, { createContext, useContext } from 'react';
 import { act } from 'react';
 
@@ -179,11 +178,57 @@ export const renderWithProviders = (
     </SettingsContext.Provider>,
   );
 
-// Re-export renderHook from testing-library for convenience
-export { testingLibraryRenderHook as renderHook };
+interface RenderHookResult<T> {
+  result: { current: T };
+  rerender: (props?: any) => void;
+  unmount: () => void;
+}
 
-// Re-export cleanup for test teardown
-export { cleanup } from '@testing-library/react';
+export function renderHook<T>(
+  hook: (props?: any) => T,
+  options?: { initialProps?: any; wrapper?: React.ComponentType<any> }
+): RenderHookResult<T> {
+  const result = { current: undefined as T };
+  
+  function TestComponent({ hookProps }: { hookProps?: any }) {
+    result.current = hook(hookProps);
+    return null;
+  }
+  
+  const Wrapper = options?.wrapper ?? React.Fragment;
+  
+  let root: ReturnType<typeof render>;
+  act(() => {
+    root = render(
+      React.createElement(Wrapper, null,
+        React.createElement(TestComponent, { hookProps: options?.initialProps })
+      )
+    );
+  });
+  
+  return {
+    result,
+    rerender: (props?: any) => {
+      act(() => {
+        root.rerender(
+          React.createElement(Wrapper, null,
+            React.createElement(TestComponent, { hookProps: props })
+          )
+        );
+      });
+    },
+    unmount: () => {
+      act(() => {
+        root.unmount();
+      });
+    },
+  };
+}
+
+export function cleanup(): void {
+  // ink-testing-library manages its own cleanup
+  // This is a no-op for compatibility
+}
 
 // Simple waitFor implementation - polls until callback succeeds or timeout
 export const waitFor = async (

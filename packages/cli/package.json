@@ -92,7 +92,6 @@
     "@babel/runtime": "^7.27.6",
     "@fast-check/vitest": "^0.2.2",
     "@testing-library/dom": "^10.4.0",
-    "@testing-library/react": "^16.3.0",
     "@types/archiver": "^6.0.3",
     "@types/command-exists": "^1.2.3",
     "@types/diff": "^7.0.2",
