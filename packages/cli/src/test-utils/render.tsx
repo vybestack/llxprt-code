@@ -181,3 +181,27 @@ export const renderWithProviders = (
 
 // Re-export renderHook from testing-library for convenience
 export { testingLibraryRenderHook as renderHook };
+
+// Re-export cleanup for test teardown
+export { cleanup } from '@testing-library/react';
+
+// Simple waitFor implementation - polls until callback succeeds or timeout
+export const waitFor = async (
+  callback: () => void | Promise<void>,
+  options?: { timeout?: number; interval?: number }
+): Promise<void> => {
+  const timeout = options?.timeout ?? 1000;
+  const interval = options?.interval ?? 50;
+  const start = Date.now();
+  
+  while (Date.now() - start < timeout) {
+    try {
+      await callback();
+      return;
+    } catch {
+      await new Promise(resolve => setTimeout(resolve, interval));
+    }
+  }
+  // Final attempt - let it throw if it fails
+  await callback();
+};

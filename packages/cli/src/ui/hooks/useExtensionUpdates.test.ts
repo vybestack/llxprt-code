@@ -19,7 +19,7 @@ import {
   GEMINI_DIR,
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '../../test-utils/render.js';
 import { MessageType } from '../types.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
 import {

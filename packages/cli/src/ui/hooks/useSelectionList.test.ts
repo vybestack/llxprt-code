@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import {
   useSelectionList,

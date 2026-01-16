@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from '@testing-library/react';
+import { render } from '../../test-utils/render.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProviderModelDialog } from './ProviderModelDialog.js';
 import { IModel } from '../../providers/index.js';
@@ -85,14 +85,11 @@ describe('ProviderModelDialog', () => {
         isWide: false,
       });
 
-      const { container } = render(<ProviderModelDialog {...defaultProps} />);
+      const { lastFrame } = render(<ProviderModelDialog {...defaultProps} />);
 
       // In narrow mode, should have single column layout
       // Each model should be in its own row
-      const modelElements = container.querySelectorAll(
-        '[data-testid="model-item"]',
-      );
-      expect(modelElements.length).toBe(0); // Need to add test IDs first
+      expect(lastFrame()).toContain('GPT-4');
     });
 
     it('should calculate appropriate column width based on longest model name', () => {
@@ -220,12 +217,12 @@ describe('ProviderModelDialog', () => {
         isWide: true,
       });
 
-      const { container } = render(<ProviderModelDialog {...defaultProps} />);
+      const { lastFrame } = render(<ProviderModelDialog {...defaultProps} />);
 
       // Dialog should have maximum width constraint to prevent it from
       // becoming too wide and causing overlapping dialogs
       // For now, just verify the component renders without error
-      expect(container.firstChild).toBeTruthy();
+      expect(lastFrame()).toBeTruthy();
     });
   });
 });

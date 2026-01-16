@@ -13,7 +13,7 @@ import {
   type MockedFunction,
   type Mock,
 } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useTodoContinuation } from './useTodoContinuation.js';
 import { useTodoContext } from '../contexts/TodoContext.js';

@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { act } from 'react';
-import { renderHook } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
 import type { Mock } from 'vitest';
 import { vi } from 'vitest';
 import type { Key } from './KeypressContext.js';

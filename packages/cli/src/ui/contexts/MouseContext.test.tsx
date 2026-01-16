@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { renderHook } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { vi, type Mock } from 'vitest';
 import { useStdin } from 'ink';

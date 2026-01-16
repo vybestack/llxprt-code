@@ -14,7 +14,7 @@ import {
   type MockedFunction,
 } from 'vitest';
 import React, { act } from 'react';
-import { renderHook } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
 import { useEditorSettings } from './useEditorSettings.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { MessageType, type HistoryItem } from '../types.js';

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
 import { useFlickerDetector } from './useFlickerDetector.js';
 import { measureElement, type DOMElement } from 'ink';
 import { appEvents, AppEvent } from '../../utils/events.js';
