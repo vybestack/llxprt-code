@@ -56,6 +56,71 @@ registerDynamicLanguage({
   ruby,
 } as any); // eslint-disable-line @typescript-eslint/no-explicit-any -- Required for ast-grep dynamic language registration (third-party API limitation)
 
+// ===== Shared Language Mapping =====
+/**
+ * Shared language mapping for file extensions to AST language types.
+ * This is the single source of truth for language mapping across all tools.
+ * Must be kept in sync with ast-grep's supported languages.
+ */
+export const LANGUAGE_MAP: Record<string, string | Lang> = {
+  ts: Lang.TypeScript,
+  js: Lang.JavaScript,
+  tsx: Lang.Tsx,
+  jsx: Lang.Tsx,
+  py: 'python',
+  rb: 'ruby',
+  go: 'go',
+  rs: 'rust',
+  java: 'java',
+  cpp: 'cpp',
+  c: 'c',
+  html: Lang.Html,
+  css: Lang.Css,
+  json: 'json',
+};
+
+// ===== Language Families =====
+/**
+ * File extensions that belong to JavaScript/TypeScript language family.
+ */
+export const JAVASCRIPT_FAMILY_EXTENSIONS: readonly string[] = [
+  'ts',
+  'js',
+  'tsx',
+  'jsx',
+];
+
+// ===== Code Keywords =====
+/**
+ * Code keywords used for pattern matching and analysis.
+ */
+export const KEYWORDS = {
+  FUNCTION: 'function',
+  DEF: 'def',
+  CLASS: 'class',
+  IF: 'if',
+  FOR: 'for',
+  WHILE: 'while',
+  RETURN: 'return',
+  IMPORT: 'import ',
+  FROM: 'from ',
+} as const;
+
+// ===== Comment Patterns =====
+/**
+ * Comment prefixes for various languages.
+ */
+export const COMMENT_PREFIXES = ['//', '#', '*', '/*', '*/'];
+
+// ===== Regex Patterns =====
+/**
+ * Regex patterns for code analysis.
+ */
+export const REGEX = {
+  IMPORT_MODULE: /(?:import|from)\s+['"]([^'"]+)['"]/,
+  IMPORT_ITEMS: /\{([^}]+)\}/,
+} as const;
+
 // ===== Core Context Interfaces =====
 interface ASTContext {
   filePath: string;
@@ -243,24 +308,7 @@ class ASTQueryExtractor {
     content: string,
   ): Promise<EnhancedDeclaration[]> {
     const extension = path.extname(filePath).substring(1);
-    const langMap: Record<string, string | Lang> = {
-      ts: Lang.TypeScript,
-      js: Lang.JavaScript,
-      tsx: Lang.Tsx,
-      jsx: Lang.JavaScript,
-      py: 'python',
-      rb: 'ruby',
-      go: 'go',
-      rs: 'rust',
-      java: 'java',
-      cpp: 'cpp',
-      c: 'c',
-      html: Lang.Html,
-      css: Lang.Css,
-      json: 'json',
-    };
-
-    const lang = langMap[extension];
+    const lang = LANGUAGE_MAP[extension];
     if (!lang) {
       return this.fallbackExtraction(content, 'unknown');
     }
@@ -272,7 +320,7 @@ class ASTQueryExtractor {
       const sgRoot = root.root();
 
       // Define extraction rules per language grouping
-      if (['ts', 'js', 'tsx', 'jsx'].includes(extension)) {
+      if (JAVASCRIPT_FAMILY_EXTENSIONS.includes(extension)) {
         // Functions
         sgRoot
           .findAll({ rule: { kind: 'function_declaration' } })
@@ -419,18 +467,20 @@ class ASTQueryExtractor {
 
     lines.forEach((line, index) => {
       const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#'))
-        return;
+      const isComment = COMMENT_PREFIXES.some((prefix) =>
+        trimmed.startsWith(prefix),
+      );
+      if (!trimmed || isComment) return;
 
       if (
-        line.includes('function ') ||
-        line.includes('def ') ||
-        line.includes('class ')
+        line.includes(KEYWORDS.FUNCTION) ||
+        line.includes(KEYWORDS.DEF) ||
+        line.includes(KEYWORDS.CLASS)
       ) {
         const name = this.extractNameBasic(trimmed);
         declarations.push({
           name,
-          type: trimmed.includes('class') ? 'class' : 'function',
+          type: trimmed.includes(KEYWORDS.CLASS) ? 'class' : 'function',
           line: index + 1,
           column: line.indexOf(name),
           signature: this.extractSignatureBasic(trimmed),
@@ -699,24 +749,10 @@ class CrossFileRelationshipAnalyzer {
           },
         );
       } else {
-        const langMap: Record<string, string | Lang> = {
-          ts: Lang.TypeScript,
-          js: Lang.JavaScript,
-          tsx: Lang.Tsx,
-          jsx: Lang.JavaScript,
-          py: 'python',
-          rb: 'ruby',
-          go: 'go',
-          rs: 'rust',
-          java: 'java',
-          cpp: 'cpp',
-          c: 'c',
-        };
-
         const filesByLanguage = new Map<string | Lang, Set<string>>();
 
         const files = await FastGlob(
-          Object.keys(langMap).map((ext) => `**/*.${ext}`),
+          Object.keys(LANGUAGE_MAP).map((ext) => `**/*.${ext}`),
           {
             cwd: workspacePath,
             absolute: true,
@@ -727,7 +763,7 @@ class CrossFileRelationshipAnalyzer {
 
         for (const file of files) {
           const extension = path.extname(file).substring(1);
-          const fileLang = langMap[extension];
+          const fileLang = LANGUAGE_MAP[extension];
           if (fileLang) {
             if (!filesByLanguage.has(fileLang)) {
               filesByLanguage.set(fileLang, new Set());
@@ -798,7 +834,7 @@ class CrossFileRelationshipAnalyzer {
     lines.forEach((line, index) => {
       const trimmed = line.trim();
       if (language === 'typescript' || language === 'javascript') {
-        if (trimmed.startsWith('import ')) {
+        if (trimmed.startsWith(KEYWORDS.IMPORT)) {
           imports.push({
             module: this.extractImportModule(trimmed),
             items: this.extractImportItems(trimmed),
@@ -806,7 +842,10 @@ class CrossFileRelationshipAnalyzer {
           });
         }
       } else if (language === 'python') {
-        if (trimmed.startsWith('import ') || trimmed.startsWith('from ')) {
+        if (
+          trimmed.startsWith(KEYWORDS.IMPORT) ||
+          trimmed.startsWith(KEYWORDS.FROM)
+        ) {
           imports.push({
             module: this.extractImportModule(trimmed),
             items: this.extractImportItems(trimmed),
@@ -820,12 +859,12 @@ class CrossFileRelationshipAnalyzer {
   }
 
   private extractImportModule(line: string): string {
-    const match = line.match(/(?:import|from)\s+['"]([^'"]+)['"]/);
+    const match = line.match(REGEX.IMPORT_MODULE);
     return match ? match[1] : 'unknown';
   }
 
   private extractImportItems(line: string): string[] {
-    const match = line.match(/\{([^}]+)\}/);
+    const match = line.match(REGEX.IMPORT_ITEMS);
     if (match) {
       return match[1].split(',').map((item) => item.trim());
     }
@@ -1128,7 +1167,7 @@ class ASTContextCollector {
     lines.forEach((line, index) => {
       const trimmed = line.trim();
       if (language === 'typescript' || language === 'javascript') {
-        if (trimmed.startsWith('import ')) {
+        if (trimmed.startsWith(KEYWORDS.IMPORT)) {
           imports.push({
             module: this.extractImportModule(trimmed),
             items: this.extractImportItems(trimmed),
@@ -1136,7 +1175,10 @@ class ASTContextCollector {
           });
         }
       } else if (language === 'python') {
-        if (trimmed.startsWith('import ') || trimmed.startsWith('from ')) {
+        if (
+          trimmed.startsWith(KEYWORDS.IMPORT) ||
+          trimmed.startsWith(KEYWORDS.FROM)
+        ) {
           imports.push({
             module: this.extractImportModule(trimmed),
             items: this.extractImportItems(trimmed),
@@ -1155,12 +1197,10 @@ class ASTContextCollector {
 
     lines.forEach((line, index) => {
       const trimmed = line.trim();
-      if (
-        trimmed.length > 10 &&
-        !trimmed.startsWith('//') &&
-        !trimmed.startsWith('#') &&
-        !trimmed.startsWith('*')
-      ) {
+      const isComment = COMMENT_PREFIXES.some((prefix) =>
+        trimmed.startsWith(prefix),
+      );
+      if (trimmed.length > 10 && !isComment) {
         snippets.push({
           text: trimmed,
           relevance: this.calculateRelevance(trimmed),
@@ -1191,38 +1231,37 @@ class ASTContextCollector {
   // Helper methods
   private isSignificantLine(line: string, _language: string): boolean {
     const trimmed = line.trim();
-    return (
-      trimmed.length > 0 &&
-      !trimmed.startsWith('//') &&
-      !trimmed.startsWith('#') &&
-      !trimmed.startsWith('*') &&
-      !trimmed.startsWith('/*') &&
-      !trimmed.startsWith('*/')
-    );
+    const isComment =
+      trimmed.startsWith('//') ||
+      trimmed.startsWith('#') ||
+      trimmed.startsWith('*') ||
+      trimmed.startsWith('/*') ||
+      trimmed.startsWith('*/');
+    return trimmed.length > 0 && !isComment;
   }
 
   private inferNodeType(line: string, _language: string): string {
     const trimmed = line.trim();
-    if (trimmed.includes('function') || trimmed.includes('def'))
+    if (trimmed.includes(KEYWORDS.FUNCTION) || trimmed.includes(KEYWORDS.DEF))
       return 'function';
-    if (trimmed.includes('class')) return 'class';
+    if (trimmed.includes(KEYWORDS.CLASS)) return 'class';
     if (
-      trimmed.includes('if') ||
-      trimmed.includes('for') ||
-      trimmed.includes('while')
+      trimmed.includes(KEYWORDS.IF) ||
+      trimmed.includes(KEYWORDS.FOR) ||
+      trimmed.includes(KEYWORDS.WHILE)
     )
       return 'control';
-    if (trimmed.includes('return')) return 'return';
+    if (trimmed.includes(KEYWORDS.RETURN)) return 'return';
     return 'statement';
   }
 
   private extractImportModule(line: string): string {
-    const match = line.match(/(?:import|from)\s+['"]([^'"]+)['"]/);
+    const match = line.match(REGEX.IMPORT_MODULE);
     return match ? match[1] : 'unknown';
   }
 
   private extractImportItems(line: string): string[] {
-    const match = line.match(/\{([^}]+)\}/);
+    const match = line.match(REGEX.IMPORT_ITEMS);
     if (match) {
       return match[1].split(',').map((item) => item.trim());
     }
@@ -1231,9 +1270,10 @@ class ASTContextCollector {
 
   private calculateRelevance(line: string): number {
     let relevance = 1;
-    if (line.includes('function') || line.includes('def')) relevance += 3;
-    if (line.includes('class')) relevance += 2;
-    if (line.includes('return')) relevance += 1;
+    if (line.includes(KEYWORDS.FUNCTION) || line.includes(KEYWORDS.DEF))
+      relevance += 3;
+    if (line.includes(KEYWORDS.CLASS)) relevance += 2;
+    if (line.includes(KEYWORDS.RETURN)) relevance += 1;
     if (line.length > 50) relevance += 1;
     return relevance;
   }
@@ -1284,7 +1324,7 @@ class ASTContextCollector {
 
     lines.forEach((line, index) => {
       const trimmed = line.trim();
-      if (trimmed.includes('class')) {
+      if (trimmed.includes(KEYWORDS.CLASS)) {
         const match = trimmed.match(/class\s+(\w+)/);
         if (match) {
           classes.push({
@@ -1513,7 +1553,7 @@ export class ASTEditTool
       getFilePath: (params: ASTEditToolParams) => params.file_path,
       getCurrentContent: async (params: ASTEditToolParams): Promise<string> => {
         try {
-          return this.config
+          return await this.config
             .getFileSystemService()
             .readTextFile(params.file_path);
         } catch (err) {
@@ -1602,6 +1642,26 @@ export class ASTReadFileTool extends BaseDeclarativeTool<
     );
 
     this.contextCollector = new ASTContextCollector();
+  }
+
+  protected override validateToolParamValues(
+    params: ASTReadFileToolParams,
+  ): string | null {
+    if (!params.file_path) {
+      return "The 'file_path' parameter must be non-empty.";
+    }
+
+    if (!path.isAbsolute(params.file_path)) {
+      return `File path must be absolute: ${params.file_path}`;
+    }
+
+    const workspaceContext = this.config.getWorkspaceContext();
+    if (!workspaceContext.isPathWithinWorkspace(params.file_path)) {
+      const directories = workspaceContext.getDirectories();
+      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    }
+
+    return null;
   }
 
   protected createInvocation(
@@ -1727,6 +1787,29 @@ class ASTEditToolInvocation implements ToolInvocation<
       const currentMtime = await this.getFileLastModified(
         this.params.file_path,
       );
+
+      // Freshness Check (must run first to prevent stale edits in concurrent scenarios)
+      if (
+        this.params.last_modified &&
+        currentMtime &&
+        currentMtime > this.params.last_modified
+      ) {
+        const errorMessage = `File ${this.params.file_path} mismatch. Expected mtime <= ${this.params.last_modified}, but found ${currentMtime}.`;
+        const displayMessage = `File has been modified since it was last read. Please read the file again to get the latest content.`;
+        const rawErrorMessage = JSON.stringify({
+          message: errorMessage,
+          current_mtime: currentMtime,
+          your_mtime: this.params.last_modified,
+        });
+        return {
+          llmContent: rawErrorMessage,
+          returnDisplay: `Error: ${displayMessage}`,
+          error: {
+            message: rawErrorMessage,
+            type: ToolErrorType.FILE_MODIFIED_CONFLICT,
+          },
+        };
+      }
 
       const workspaceRoot = this.config.getTargetDir();
       const enhancedContext =
@@ -1953,6 +2036,34 @@ class ASTEditToolInvocation implements ToolInvocation<
       fileExists = false;
     }
 
+    // Freshness Check (moved before old_string validation to ensure it runs first)
+    const currentMtime = await this.getFileLastModified(params.file_path);
+
+    if (
+      params.last_modified &&
+      currentMtime &&
+      currentMtime > params.last_modified
+    ) {
+      error = {
+        display: `File has been modified since it was last read. Please read the file again to get the latest content.`,
+        raw: JSON.stringify({
+          message: `File ${params.file_path} mismatch. Expected mtime <= ${params.last_modified}, but found ${currentMtime}.`,
+          current_mtime: currentMtime,
+          your_mtime: params.last_modified,
+        }),
+        type: ToolErrorType.FILE_MODIFIED_CONFLICT,
+      };
+      return {
+        currentContent,
+        newContent: currentContent ?? '',
+        occurrences: 0,
+        error,
+        isNewFile,
+        astValidation: undefined,
+        fileFreshness: currentMtime,
+      };
+    }
+
     if (params.old_string === '' && !fileExists) {
       isNewFile = true;
     } else if (!fileExists) {
@@ -2000,29 +2111,9 @@ class ASTEditToolInvocation implements ToolInvocation<
       };
     }
 
-    // 執行 AST 驗證
     let astValidation: { valid: boolean; errors: string[] } | undefined;
     if (!error) {
       astValidation = this.validateASTSyntax(params.file_path, newContent);
-    }
-
-    const currentMtime = await this.getFileLastModified(params.file_path);
-
-    // Freshness Check
-    if (
-      params.last_modified &&
-      currentMtime &&
-      currentMtime > params.last_modified
-    ) {
-      error = {
-        display: `File has been modified since it was last read. Please read the file again to get the latest content.`,
-        raw: JSON.stringify({
-          message: `File ${params.file_path} mismatch. Expected mtime <= ${params.last_modified}, but found ${currentMtime}.`,
-          current_mtime: currentMtime,
-          your_mtime: params.last_modified,
-        }),
-        type: ToolErrorType.FILE_MODIFIED_CONFLICT,
-      };
     }
 
     return {
@@ -2042,13 +2133,9 @@ class ASTEditToolInvocation implements ToolInvocation<
   private countOccurrences(content: string, searchString: string): number {
     if (!searchString) return 0;
 
-    let count = 0;
-    let pos = content.indexOf(searchString);
-    while (pos !== -1) {
-      count++;
-      pos = content.indexOf(searchString, pos + searchString.length);
-    }
-    return count;
+    // Since applyReplacement uses String.replace (single replacement),
+    // count occurrences that will actually be replaced (0 or 1)
+    return content.includes(searchString) ? 1 : 0;
   }
 
   private async readFileContent(): Promise<string> {
@@ -2069,24 +2156,7 @@ class ASTEditToolInvocation implements ToolInvocation<
     content: string,
   ): { valid: boolean; errors: string[] } {
     const extension = path.extname(filePath).substring(1);
-    const langMap: Record<string, string | Lang> = {
-      ts: Lang.TypeScript,
-      js: Lang.JavaScript,
-      tsx: Lang.Tsx,
-      jsx: Lang.JavaScript,
-      py: 'python',
-      rb: 'ruby',
-      go: 'go',
-      rs: 'rust',
-      java: 'java',
-      cpp: 'cpp',
-      c: 'c',
-      html: Lang.Html,
-      css: Lang.Css,
-      json: 'json',
-    };
-
-    const lang = langMap[extension];
+    const lang = LANGUAGE_MAP[extension];
     if (!lang) {
       return { valid: true, errors: [] };
     }

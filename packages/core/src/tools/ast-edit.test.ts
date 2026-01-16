@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import fs, { promises as fsPromises } from 'fs';
 import {
   ASTEditTool,
   ASTReadFileTool,
   EnhancedDeclaration,
 } from './ast-edit.js';
 import { Config } from '../config/config.js';
+import { ToolErrorType } from './tool-error.js';
 
 describe('AST Tools', () => {
   const mockConfig = {
@@ -22,6 +24,7 @@ describe('AST Tools', () => {
     getFileSystemService: () => ({
       readTextFile: async () => 'const x = 1;',
       writeTextFile: async () => {},
+      fileExists: async () => true,
     }),
     getApprovalMode: () => 'manual',
     setApprovalMode: () => {},
@@ -126,11 +129,45 @@ describe('AST Tools', () => {
   });
 
   describe('Freshness Check', () => {
-    // TODO: Implement integration test for freshness check behavior.
-    // The previous test was removed because it only verified a constant string equality
-    // ('file_modified_conflict' === 'file_modified_conflict').
-    // A proper test should mock the file system service to return a modified timestamp
-    // different from the one passed in params, and verify that the tool returns
-    // a ToolErrorType.FILE_MODIFIED_CONFLICT error.
+    it('should return FILE_MODIFIED_CONFLICT when file has been modified', async () => {
+      const olderTimestamp = Date.now() - 10000;
+      const newerTimestamp = Date.now();
+
+      vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+        mtime: new Date(newerTimestamp),
+      } as fs.Stats);
+
+      const tool = new ASTEditTool(mockConfig);
+      const invocation = (
+        tool as unknown as {
+          createInvocation: (params: {
+            file_path: string;
+            old_string: string;
+            new_string: string;
+            last_modified?: number;
+            force?: boolean;
+          }) => {
+            execute: (signal: AbortSignal) => Promise<{
+              returnDisplay:
+                | string
+                | { newContent?: string; originalContent?: string };
+              error?: { message: string; type: ToolErrorType };
+            }>;
+          };
+        }
+      ).createInvocation({
+        file_path: '/test/sample.ts',
+        old_string: 'const x = 1;',
+        new_string: 'const x = 2;',
+        last_modified: olderTimestamp,
+        force: false,
+      });
+
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.type).toBe(ToolErrorType.FILE_MODIFIED_CONFLICT);
+      expect(result.returnDisplay).toContain('Error:');
+    });
   });
 });
