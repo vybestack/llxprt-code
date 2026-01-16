@@ -20,7 +20,7 @@ function renderHook<T>(hook: () => T): { result: { current: T } } {
   const element = React.createElement(TestComponent);
 
   // Execute the render using act to ensure React state updates are processed
-  act(() => {
+  void act(() => {
     // Create a simple "render" by executing the component function
     // This simulates what happy-dom/jsdom would do
     const component = element.type as React.FC;

@@ -18,7 +18,7 @@ function renderHook<T>(hook: () => T): { result: { current: T } } {
     return null;
   }
 
-  act(() => {
+  void act(() => {
     const element = React.createElement(TestComponent);
     const component = element.type as React.FC;
     component(element.props);

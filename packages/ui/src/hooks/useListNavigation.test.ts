@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import React from 'react';
 import { act } from 'react';
 import { useListNavigation, useFilteredList } from './useListNavigation';
@@ -25,7 +25,7 @@ function renderHook<T, P = undefined>(
   }
 
   const executeRender = () => {
-    act(() => {
+    void act(() => {
       const element = React.createElement(TestComponent);
       const component = element.type as React.FC;
       component(element.props);
