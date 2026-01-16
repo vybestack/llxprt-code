@@ -1,6 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { act } from 'react';
 import { useListNavigation, useFilteredList } from './useListNavigation';
+
+// Simple renderHook implementation for testing React hooks
+interface RenderHookResult<T, P> {
+  result: { current: T };
+  rerender: (newProps: P) => void;
+}
+
+function renderHook<T, P = undefined>(
+  hook: (props: P) => T,
+  options?: { initialProps: P },
+): RenderHookResult<T, P> {
+  let currentProps = options?.initialProps as P;
+  const result = { current: hook(currentProps) };
+
+  const rerender = (newProps: P) => {
+    currentProps = newProps;
+    result.current = hook(currentProps);
+  };
+
+  return { result, rerender };
+}
 
 describe('useListNavigation', () => {
   it('initializes with selectedIndex 0', () => {

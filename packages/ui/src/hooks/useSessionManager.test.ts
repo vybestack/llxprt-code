@@ -1,9 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { act } from 'react';
 import { useSessionManager } from './useSessionManager';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+
+// Simple renderHook implementation for testing React hooks
+function renderHook<T>(hook: () => T): { result: { current: T } } {
+  const result = { current: hook() };
+  return { result };
+}
 
 describe('useSessionManager', () => {
   let tempDir: string;

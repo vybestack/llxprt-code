@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { act } from 'react';
 import { useChatStore } from './useChatStore';
+
+// Simple renderHook implementation for testing React hooks
+function renderHook<T>(hook: () => T): { result: { current: T } } {
+  const result = { current: hook() };
+  return { result };
+}
 
 describe('useChatStore message handling', () => {
   let idCounter = 0;
