@@ -398,6 +398,11 @@ jobs:
           prompt_file="review/prompt.md"
           llxprt_log="review/llxprt.log"
           context_limit="${LLXPRT_CONTEXT_LIMIT:-200000}"
+          if [[ -z "${LLXPRT_CONTEXT_LIMIT:-}" ]]; then
+            echo "LLXPRT_CONTEXT_LIMIT env var is empty; defaulting to ${context_limit}" >&2
+          else
+            echo "LLXPRT_CONTEXT_LIMIT env var set to ${LLXPRT_CONTEXT_LIMIT}" >&2
+          fi
           set +e
           cat "${prompt_file}" | llxprt \
             --provider "${LLXPRT_DEFAULT_PROVIDER}" \
