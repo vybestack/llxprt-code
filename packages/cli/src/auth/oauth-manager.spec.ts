@@ -125,6 +125,14 @@ class MockTokenStore implements TokenStore {
     return null;
   }
 
+  async acquireRefreshLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseRefreshLock(): Promise<void> {
+    // No-op
+  }
+
   // Test helpers
   clear(): void {
     this.tokens.clear();

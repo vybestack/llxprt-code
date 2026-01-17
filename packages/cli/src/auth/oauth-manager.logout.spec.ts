@@ -70,6 +70,8 @@ describe('OAuthManager.logout runtime cache handling', () => {
       listProviders: vi.fn().mockResolvedValue([]),
       listBuckets: vi.fn().mockResolvedValue(['default']),
       getBucketStats: vi.fn().mockResolvedValue(null),
+      acquireRefreshLock: vi.fn().mockResolvedValue(true),
+      releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
     };
 
     const manager = new OAuthManager(tokenStore);
@@ -109,6 +111,8 @@ describe('OAuthManager.logout runtime cache handling', () => {
       listProviders: vi.fn().mockResolvedValue([]),
       listBuckets: vi.fn().mockResolvedValue(['default', 'bucket-a']),
       getBucketStats: vi.fn().mockResolvedValue(null),
+      acquireRefreshLock: vi.fn().mockResolvedValue(true),
+      releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
     };
 
     const manager = new OAuthManager(tokenStore);
@@ -141,6 +145,8 @@ describe('OAuthManager.logout runtime cache handling', () => {
         .fn()
         .mockResolvedValue(['default', 'bucket-a', 'bucket-b']),
       getBucketStats: vi.fn().mockResolvedValue(null),
+      acquireRefreshLock: vi.fn().mockResolvedValue(true),
+      releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
     };
 
     const manager = new OAuthManager(tokenStore);

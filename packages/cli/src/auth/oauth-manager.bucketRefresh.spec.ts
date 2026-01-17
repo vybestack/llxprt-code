@@ -38,6 +38,8 @@ describe('OAuthManager bucket-aware refresh', () => {
       listProviders: vi.fn(async () => []),
       listBuckets: vi.fn(async () => ['default', 'bucket-a']),
       getBucketStats: vi.fn(async () => null),
+      acquireRefreshLock: vi.fn(async () => true),
+      releaseRefreshLock: vi.fn(async () => undefined),
     };
 
     const provider: OAuthProvider = {

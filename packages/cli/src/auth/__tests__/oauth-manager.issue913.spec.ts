@@ -63,6 +63,8 @@ function createMockTokenStore(): TokenStore {
         lastUsed: undefined,
       }),
     ),
+    acquireRefreshLock: vi.fn(async (): Promise<boolean> => true),
+    releaseRefreshLock: vi.fn(async (): Promise<void> => {}),
   };
 }
 
