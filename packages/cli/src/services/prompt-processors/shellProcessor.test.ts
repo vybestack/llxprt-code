@@ -8,14 +8,19 @@ import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { ConfirmationRequiredError, ShellProcessor } from './shellProcessor.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { CommandContext } from '../../ui/commands/types.js';
-import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
-import { quote } from 'shell-quote';
+import {
+  ApprovalMode,
+  Config,
+  escapeShellArg,
+  getShellConfiguration,
+} from '@vybestack/llxprt-code-core';
 
 // Helper function to determine the expected escaped string based on the current OS,
 // mirroring the logic in the actual `escapeShellArg` implementation. This makes
 // our tests robust and platform-agnostic.
 function getExpectedEscapedArgForPlatform(arg: string): string {
-  return quote([arg]);
+  const { shell } = getShellConfiguration();
+  return escapeShellArg(arg, shell);
 }
 
 const mockCheckCommandPermissions = vi.hoisted(() => vi.fn());
