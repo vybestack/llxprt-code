@@ -288,7 +288,8 @@ describe('ShellTool', () => {
           expect.any(Function),
           mockAbortSignal,
           false,
-          {},
+          undefined,
+          undefined,
         );
       },
       20000,

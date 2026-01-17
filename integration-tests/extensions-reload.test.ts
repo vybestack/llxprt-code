@@ -9,9 +9,26 @@ import { TestRig } from './test-helper.js';
 import { TestMcpServer } from './test-mcp-server.js';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { safeJsonStringify } from '@google/gemini-cli-core/src/utils/safeJsonStringify.js';
 import { env } from 'node:process';
 import { platform } from 'node:os';
+
+// Safely stringifies an object to JSON, handling circular references
+function safeJsonStringify(obj: unknown, space?: string | number): string {
+  const seen = new WeakSet();
+  return JSON.stringify(
+    obj,
+    (key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) {
+          return '[Circular]';
+        }
+        seen.add(value);
+      }
+      return value;
+    },
+    space,
+  );
+}
 
 const itIf = (condition: boolean) => (condition ? it : it.skip);
 
@@ -104,7 +121,7 @@ describe('extension reloading', () => {
       );
       await run.expectText('- goodbye');
       await run.sendText('/quit');
-      await run.sendKeys('\r');
+      await run.type('\r');
 
       // Clean things up.
       await serverA.stop();

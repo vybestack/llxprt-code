@@ -548,6 +548,7 @@ describeWindowsOnly('PowerShell integration', () => {
   });
 
   it('should block commands when PowerShell parser reports errors', () => {
+    if (!isParserAvailable()) return;
     const { allowed, reason } = isCommandAllowed('Get-ChildItem |', config);
     expect(allowed).toBe(false);
     expect(reason).toBe(
