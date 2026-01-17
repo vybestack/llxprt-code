@@ -178,6 +178,25 @@ export class InteractiveRun {
     expect(found, `Did not find expected text: "${text}"`).toBe(true);
   }
 
+  async expectAnyText(texts: string[], timeout?: number) {
+    if (!timeout) {
+      timeout = getDefaultTimeout();
+    }
+    const lowered = texts.map((text) => text.toLowerCase());
+    const found = await poll(
+      () => {
+        const output = stripAnsi(this.output).toLowerCase();
+        return lowered.some((text) => output.includes(text));
+      },
+      timeout,
+      200,
+    );
+    expect(
+      found,
+      `Did not find expected text: ${texts.map((text) => `"${text}"`).join(' or ')}`,
+    ).toBe(true);
+  }
+
   // Simulates typing a string one character at a time to avoid paste detection.
   async type(text: string) {
     const delay = 5;
@@ -483,6 +502,11 @@ export class TestRig {
       },
     };
 
+    const promptIsStdin =
+      typeof promptOrOptions === 'object' &&
+      promptOrOptions !== null &&
+      promptOrOptions.stdin;
+
     if (typeof promptOrOptions === 'string') {
       prompts.push(promptOrOptions);
     } else if (
@@ -497,6 +521,12 @@ export class TestRig {
       }
     }
 
+    const promptValue = prompts.join(' ');
+
+    if (promptValue && !promptIsStdin) {
+      commandArgs.push('--prompt', promptValue);
+    }
+
     // Add any additional args
     commandArgs.push(...args);
 
@@ -504,12 +534,6 @@ export class TestRig {
       const profileName = env['LLXPRT_TEST_PROFILE'].trim();
       // Keep 'node' and bundlePath at the front; insert flags after them.
       commandArgs.splice(2, 0, '--profile-load', profileName);
-    }
-
-    // Prefer stdin (or positional promptWords) rather than `--prompt`.
-    // `--prompt` is deprecated and isn't needed for sandbox/non-sandbox parity.
-    if (prompts.length > 0) {
-      commandArgs.push(...prompts);
     }
 
     const node = commandArgs.shift() as string;
@@ -1270,7 +1294,13 @@ ${stderr}`),
 
     const run = new InteractiveRun(ptyProcess);
     // Wait for the app to be ready (input prompt rendered).
-    await run.expectText('Type your message', 60000);
+    await run.expectAnyText(
+      [
+        'Type your message or @path/to/file',
+        'Type your message, @path/to/file or +path/to/file',
+      ],
+      60000,
+    );
     return run;
   }
 }

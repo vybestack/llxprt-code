@@ -376,7 +376,7 @@ describe('run_shell_command', () => {
       process.env[varName] = varValue;
 
       try {
-        const prompt = `Use echo to learn the value of the environment variable named ${varName} and tell me what it is.`;
+        const prompt = `Use the run_shell_command tool to run "echo $${varName}" and tell me the output.`;
         const result = await rig.run(prompt);
 
         const foundToolCall = await rig.waitForToolCall('run_shell_command');
