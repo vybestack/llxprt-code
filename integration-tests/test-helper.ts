@@ -1312,6 +1312,8 @@ ${stderr}`),
       [
         'Type your message or @path/to/file',
         'Type your message, @path/to/file or +path/to/file',
+        'Create LLXPRT.md files to customize your interactions',
+        'Create GEMINI.md files to customize your interactions',
       ],
       60000,
     );

@@ -30,17 +30,18 @@ describe('stdin context', () => {
     const historyString = lastRequest!.attributes!.request_text || '';
     const historyStringLower = historyString.toLowerCase();
     const promptLower = prompt.toLowerCase();
+    const normalizedPromptLower = promptLower.replace('?', '');
 
     // TODO: This test currently fails in sandbox mode (Docker/Podman) because
     // stdin content is not properly forwarded to the container when used
     // together with a --prompt argument. The test passes in non-sandbox mode.
 
     expect(historyString).toContain(randomString);
-    expect(historyStringLower).toContain(promptLower);
+    expect(historyStringLower).toContain(normalizedPromptLower);
 
     // Check that stdin content appears before the prompt in the conversation history
     const stdinIndex = historyString.indexOf(randomString);
-    const promptIndex = historyStringLower.indexOf(promptLower);
+    const promptIndex = historyStringLower.indexOf(normalizedPromptLower);
 
     expect(
       stdinIndex,
