@@ -40,8 +40,8 @@ SOFTWARE.
 License text not found.
 
 ============================================================
-ajv@6.12.6
-(https://github.com/ajv-validator/ajv.git)
+ajv@8.17.1
+(No repository found)
 
 The MIT License (MIT)
 
@@ -1078,7 +1078,7 @@ THE SOFTWARE.
 
 
 ============================================================
-qs@6.13.0
+qs@6.14.1
 (https://github.com/ljharb/qs.git)
 
 BSD 3-Clause License
@@ -2400,7 +2400,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ============================================================
-pkce-challenge@5.0.0
+pkce-challenge@5.0.1
 (git+https://github.com/crouchcd/pkce-challenge.git)
 
 MIT License

@@ -84,7 +84,7 @@
   ],
   "devDependencies": {
     "@fast-check/vitest": "^0.2.2",
-    "@modelcontextprotocol/sdk": "^1.18.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "@types/debug": "^4.1.12",
     "@types/marked": "^5.0.2",
     "@types/mime-types": "^3.0.1",
