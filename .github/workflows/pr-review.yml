@@ -40,7 +40,7 @@ jobs:
       OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
       LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
       LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-      LLXPRT_CONTEXT_LIMIT: '${{ vars.LLXPRT_CONTEXT_LIMIT }}'
+      LLXPRT_CONTEXT_LIMIT: '${{ vars.LLXPRT_CONTEXT_LIMIT || '200000' }}'
       LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
       DEBUG_OUTPUT: 'stderr'
     steps:
@@ -398,11 +398,8 @@ jobs:
           prompt_file="review/prompt.md"
           llxprt_log="review/llxprt.log"
           context_limit="${LLXPRT_CONTEXT_LIMIT:-200000}"
-          if [[ -z "${LLXPRT_CONTEXT_LIMIT:-}" ]]; then
-            echo "LLXPRT_CONTEXT_LIMIT env var is empty; defaulting to ${context_limit}" >&2
-          else
-            echo "LLXPRT_CONTEXT_LIMIT env var set to ${LLXPRT_CONTEXT_LIMIT}" >&2
-          fi
+          echo "LLXPRT_CONTEXT_LIMIT raw: '${LLXPRT_CONTEXT_LIMIT-<unset>}'" >&2
+          echo "LLXPRT_CONTEXT_LIMIT evaluated: '${context_limit}'" >&2
           set +e
           cat "${prompt_file}" | llxprt \
             --provider "${LLXPRT_DEFAULT_PROVIDER}" \
