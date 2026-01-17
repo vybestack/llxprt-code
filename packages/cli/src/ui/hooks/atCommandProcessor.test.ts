@@ -225,7 +225,7 @@ describe('handleAtCommand', () => {
     const relativeFilePath = path.join(relativeDirPath, 'file.txt');
     await createTestFile(path.join(testRootDir, relativeFilePath), fileContent);
     const query = `@${relativeDirPath}`;
-    const resolvedGlob = `${relativeDirPath}/**`;
+    const resolvedGlob = `${relativeDirPath}${path.sep}**`;
 
     const result = await handleAtCommand({
       query,

@@ -167,7 +167,12 @@ jobs:
 
       - name: 'Install UI dependencies (bun)'
         run: |-
-          cd packages/ui && bun install
+          cd packages/ui
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            bun install --no-save
+          else
+            bun install
+          fi
 
       - name: Fix rollup platform dependency
         run: |
@@ -380,7 +385,12 @@ jobs:
 
       - name: 'Install UI dependencies (bun)'
         run: |-
-          cd packages/ui && bun install
+          cd packages/ui
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            bun install --no-save
+          else
+            bun install
+          fi
 
       - name: 'Build project'
         run: |-
