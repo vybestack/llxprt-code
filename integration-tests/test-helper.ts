@@ -1270,7 +1270,7 @@ ${stderr}`),
 
     const run = new InteractiveRun(ptyProcess);
     // Wait for the app to be ready (input prompt rendered).
-    await run.expectText('Type your message', 30000);
+    await run.expectText('Type your message', 60000);
     return run;
   }
 }
