@@ -298,17 +298,15 @@ jobs:
           const issueSection = issues.length
             ? issues
                 .map((issue) => {
-                  const summary = clean(issue.body || "", 200);
+                  const summary = clean(issue.body || "", 120);
                   return `- #${issue.number} ${issue.title}
-            - URL: ${issue.url}
-            - State: ${issue.state}
             - Summary: ${summary}`;
                 })
                 .join("\n")
             : "No issues were expanded (this should not happen).";
 
           const prBody =
-            clean(pr.body || "", 600) || "No PR description provided.";
+            clean(pr.body || "", 400) || "No PR description provided.";
 
           const prompt = `You are LLxprt, an autonomous code reviewer for the LLxprt Code repository.
           Focus strictly on code introduced in this pull request. Ignore pre-existing code unless it directly interacts with the changes shown.
