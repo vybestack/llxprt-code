@@ -441,6 +441,8 @@ export class TestRig {
       model,
     ];
 
+    const prompts: string[] = [];
+
     // Add baseurl if using openai provider
     if (provider === 'openai' && baseUrl) {
       commandArgs.push('--baseurl', baseUrl);
@@ -482,13 +484,13 @@ export class TestRig {
     };
 
     if (typeof promptOrOptions === 'string') {
-      commandArgs.push(promptOrOptions);
+      prompts.push(promptOrOptions);
     } else if (
       typeof promptOrOptions === 'object' &&
       promptOrOptions !== null
     ) {
       if (promptOrOptions.prompt) {
-        commandArgs.push(promptOrOptions.prompt);
+        prompts.push(promptOrOptions.prompt);
       }
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
@@ -497,18 +499,6 @@ export class TestRig {
 
     // Add any additional args
     commandArgs.push(...args);
-
-    // Ensure flags come before any positional prompt.
-    // With yargs `.strict()` + a `[promptWords...]` positional command, any
-    // options that appear after the positional can be treated as "unknown".
-    // This affects `--output-format` and friends.
-    const prompts: string[] = [];
-    while (
-      commandArgs.length > 0 &&
-      !commandArgs[commandArgs.length - 1].startsWith('-')
-    ) {
-      prompts.unshift(commandArgs.pop() as string);
-    }
 
     if (env['LLXPRT_TEST_PROFILE']?.trim()) {
       const profileName = env['LLXPRT_TEST_PROFILE'].trim();
@@ -1262,6 +1252,12 @@ ${stderr}`),
         NO_BROWSER: 'true',
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
+        LLXPRT_DEFAULT_PROVIDER: env['LLXPRT_DEFAULT_PROVIDER'],
+        LLXPRT_DEFAULT_MODEL: env['LLXPRT_DEFAULT_MODEL'],
+        OPENAI_API_KEY: env['OPENAI_API_KEY'],
+        OPENAI_API_KEYFILE: env['OPENAI_API_KEYFILE'],
+        LLXPRT_TEST_PROFILE_KEYFILE: env['LLXPRT_TEST_PROFILE_KEYFILE'],
+        OPENAI_BASE_URL: env['OPENAI_BASE_URL'],
       },
     };
 

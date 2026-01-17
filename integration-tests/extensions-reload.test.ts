@@ -33,7 +33,7 @@ function safeJsonStringify(obj: unknown, space?: string | number): string {
 const itIf = (condition: boolean) => (condition ? it : it.skip);
 
 describe('extension reloading', () => {
-  const sandboxEnv = env['GEMINI_SANDBOX'];
+  const sandboxEnv = env['LLXPRT_SANDBOX'];
 
   // Fails in sandbox mode, can't check for local extension updates.
   itIf((!sandboxEnv || sandboxEnv === 'false') && platform() !== 'win32')(
