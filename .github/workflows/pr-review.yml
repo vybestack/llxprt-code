@@ -278,8 +278,12 @@ jobs:
             "review/coverage-latest.txt",
             "No coverage summary comment was found on this PR yet.",
           );
-          const diffstat = readIfExists("review/diffstat.txt", "");
-          const filesList = readIfExists("review/changed-files.txt", "");
+          const diffstat = process.env.DIFF_STAT_ENABLED === "true"
+            ? readIfExists("review/diffstat.txt", "")
+            : "";
+          const filesList = process.env.DIFF_FILES_ENABLED === "true"
+            ? readIfExists("review/changed-files.txt", "")
+            : "";
           const testFiles = readIfExists(
             "review/test-files.txt",
             "No explicit test files were touched.",
@@ -289,7 +293,7 @@ jobs:
                 "review/diff-truncated.patch",
                 "Patch omitted to keep prompt within context limit.",
               )
-            : "Patch omitted to keep prompt within context limit.";
+            : "";
 
           const issueSection = issues.length
             ? issues
@@ -339,7 +343,7 @@ jobs:
           ${testFiles}
 
           ## Patch (first 1000 lines)
-          ${diffPatch}
+          ${diffPatch || "Patch omitted to keep prompt within context limit."}
 
           ## Doc-only change
           ${process.env.DOCS_ONLY || 'unknown'}
@@ -386,6 +390,10 @@ jobs:
       - name: 'Run LLxprt review'
         if: steps.issue_gate.outputs.should_review == 'true'
         id: 'llxprt'
+        env:
+          DIFF_FILES_ENABLED: "true"
+          DIFF_STAT_ENABLED: "true"
+          DIFF_PATCH_ENABLED: "false"
         run: |
           set -euo pipefail
           prompt_file="review/prompt.md"
