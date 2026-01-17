@@ -65,7 +65,6 @@ if (existsSync(treeSitterWasmPath)) {
   copyFileSync(treeSitterWasmPath, join(bundleDir, 'tree-sitter.wasm'));
 }
 
-
 // Copy all markdown files from prompt-config/defaults preserving directory structure
 const promptMdFiles = glob.sync(
   'packages/core/src/prompt-config/defaults/**/*.md',
