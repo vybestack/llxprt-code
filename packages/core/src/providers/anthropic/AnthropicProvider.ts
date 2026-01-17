@@ -937,7 +937,7 @@ export class AnthropicProvider extends BaseProvider {
     // Anthropic's API requires ALL assistant messages with tool_use to start with thinking/redacted_thinking
     // when thinking is enabled. During streaming, thinking blocks may be stored separately from tool calls.
     // We need to look across multiple AI messages to find orphaned thinking blocks before deciding to disable.
-    let effectiveReasoningEnabled = reasoningEnabled;
+    const effectiveReasoningEnabled = reasoningEnabled;
     if (reasoningEnabled) {
       // Find all AI messages with tool calls
       const aiMessagesWithToolCalls = filteredContent
@@ -1010,11 +1010,8 @@ export class AnthropicProvider extends BaseProvider {
       if (hasMissingThinking) {
         this.getLogger().warn(
           () =>
-            `[AnthropicProvider] Disabling extended thinking for this request: ` +
-            `history contains tool calls without associated thinking blocks. ` +
-            `This prevents API error: "messages.N.content.0.type: Expected 'thinking' or 'redacted_thinking'"`,
+            `[AnthropicProvider] Missing thinking blocks for tool calls in history; inserting redacted thinking placeholders to satisfy Anthropic requirements.`,
         );
-        effectiveReasoningEnabled = false;
       } else if (aiMessagesWithToolCalls.length > 0) {
         this.getLogger().debug(
           () =>
@@ -1278,6 +1275,11 @@ export class AnthropicProvider extends BaseProvider {
                 });
               }
             }
+          } else if (effectiveReasoningEnabled) {
+            contentArray.push({
+              type: 'redacted_thinking',
+              data: '',
+            });
           }
 
           // Add text if present

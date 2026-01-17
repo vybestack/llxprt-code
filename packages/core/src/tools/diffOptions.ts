@@ -4,22 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  CreatePatchOptionsNonabortable,
-  StructuredPatch,
-  StructuredPatchHunk,
-  StructuredPatchOptionsNonabortable,
-} from 'diff';
+import type { Hunk, ParsedDiff, PatchOptions } from 'diff';
 import * as Diff from 'diff';
 import { type DiffStat } from './tools.js';
 
-export const DEFAULT_STRUCTURED_PATCH_OPTIONS: StructuredPatchOptionsNonabortable =
-  {
-    context: 3,
-    ignoreWhitespace: true,
-  };
+export const DEFAULT_STRUCTURED_PATCH_OPTIONS: PatchOptions = {
+  context: 3,
+  ignoreWhitespace: true,
+};
 
-export const DEFAULT_DIFF_OPTIONS: CreatePatchOptionsNonabortable = {
+export const DEFAULT_DIFF_OPTIONS: PatchOptions = {
   context: 3,
   ignoreWhitespace: true,
 };
@@ -30,10 +24,10 @@ export function getDiffStat(
   aiStr: string,
   userStr: string,
 ): DiffStat {
-  const countLines = (patch: StructuredPatch) => {
+  const countLines = (patch: ParsedDiff) => {
     let added = 0;
     let removed = 0;
-    patch.hunks.forEach((hunk: StructuredPatchHunk) => {
+    patch.hunks.forEach((hunk: Hunk) => {
       hunk.lines.forEach((line: string) => {
         if (line.startsWith('+')) {
           added++;

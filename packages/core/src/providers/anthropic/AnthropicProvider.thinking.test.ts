@@ -1208,8 +1208,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
 
-      // Thinking should be disabled (no thinking found for tool call)
-      expect(request.thinking).toBeUndefined();
+      expect(request.thinking).toBeDefined();
     });
 
     it('should find orphaned thinking up to 3 messages back', async () => {
