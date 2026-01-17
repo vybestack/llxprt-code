@@ -933,37 +933,93 @@ export class AnthropicProvider extends BaseProvider {
       filteredContent.push(current);
     }
 
-    // CRITICAL FIX: Check if there are tool calls in history without thinking blocks.
-    // Anthropic's API requires ALL assistant messages to start with thinking/redacted_thinking
-    // when thinking is enabled. Since our history system doesn't preserve thinking alongside
-    // tool calls, we must DISABLE thinking for multi-turn conversations with tool calls
-    // to avoid the API error "messages.1.content.0.type: Expected `thinking` or `redacted_thinking`"
-    //
-    // This is a workaround until thinking block preservation is fixed at the geminiChat level.
+    // Check if there are tool calls in history that need thinking blocks.
+    // Anthropic's API requires ALL assistant messages with tool_use to start with thinking/redacted_thinking
+    // when thinking is enabled. During streaming, thinking blocks may be stored separately from tool calls.
+    // We need to look across multiple AI messages to find orphaned thinking blocks before deciding to disable.
     let effectiveReasoningEnabled = reasoningEnabled;
     if (reasoningEnabled) {
-      for (const c of filteredContent) {
-        if (c.speaker === 'ai') {
-          const hasToolCalls = c.blocks.some((b) => b.type === 'tool_call');
-          const hasThinking = c.blocks.some(
-            (b) =>
-              b.type === 'thinking' &&
-              (b as ThinkingBlock).sourceField === 'thinking',
+      // Find all AI messages with tool calls
+      const aiMessagesWithToolCalls = filteredContent
+        .map((c, idx) => ({ content: c, index: idx }))
+        .filter(({ content }) => {
+          if (content.speaker !== 'ai') return false;
+          const hasToolCalls = content.blocks.some(
+            (b) => b.type === 'tool_call',
           );
+          return hasToolCalls;
+        });
 
-          // If this AI message has tool calls but NO thinking, we must disable thinking
-          // to avoid API error
-          if (hasToolCalls && !hasThinking) {
-            this.getLogger().warn(
-              () =>
-                `[AnthropicProvider] Disabling extended thinking for this request: ` +
-                `history contains tool calls without associated thinking blocks. ` +
-                `This is a known limitation - thinking blocks are not preserved alongside tool calls in history.`,
+      // Check if any AI message with tool calls is missing thinking blocks
+      let hasMissingThinking = false;
+      for (const {
+        content: aiMsg,
+        index: aiIndex,
+      } of aiMessagesWithToolCalls) {
+        const hasThinking = aiMsg.blocks.some(
+          (b) =>
+            b.type === 'thinking' &&
+            (b as ThinkingBlock).sourceField === 'thinking',
+        );
+
+        if (hasThinking) {
+          // This AI message has both tool calls and thinking - all good
+          continue;
+        }
+
+        // Look back up to 3 previous messages for orphaned thinking blocks
+        let foundOrphanedThinking = false;
+        const lookBackLimit = 3;
+        for (let i = 1; i <= lookBackLimit && aiIndex - i >= 0; i++) {
+          const prevContent = filteredContent[aiIndex - i];
+          if (prevContent.speaker === 'ai') {
+            const prevThinking = prevContent.blocks.filter(
+              (b) =>
+                b.type === 'thinking' &&
+                (b as ThinkingBlock).sourceField === 'thinking',
             );
-            effectiveReasoningEnabled = false;
-            break;
+            const prevNonThinking = prevContent.blocks.filter(
+              (b) =>
+                b.type !== 'thinking' ||
+                (b as ThinkingBlock).sourceField !== 'thinking',
+            );
+
+            // If previous AI message has ONLY thinking (no other content), treat it as orphaned
+            if (prevThinking.length > 0 && prevNonThinking.length === 0) {
+              foundOrphanedThinking = true;
+              this.getLogger().debug(
+                () =>
+                  `[AnthropicProvider] Found orphaned thinking ${i} messages back from tool_use message at index ${aiIndex}`,
+              );
+              break;
+            }
           }
         }
+
+        if (!foundOrphanedThinking) {
+          // No thinking found for this tool call message - need to disable
+          hasMissingThinking = true;
+          this.getLogger().debug(
+            () =>
+              `[AnthropicProvider] AI message at index ${aiIndex} has tool calls but no associated thinking blocks (checked ${lookBackLimit} previous messages)`,
+          );
+          break;
+        }
+      }
+
+      if (hasMissingThinking) {
+        this.getLogger().warn(
+          () =>
+            `[AnthropicProvider] Disabling extended thinking for this request: ` +
+            `history contains tool calls without associated thinking blocks. ` +
+            `This prevents API error: "messages.N.content.0.type: Expected 'thinking' or 'redacted_thinking'"`,
+        );
+        effectiveReasoningEnabled = false;
+      } else if (aiMessagesWithToolCalls.length > 0) {
+        this.getLogger().debug(
+          () =>
+            `[AnthropicProvider] Extended thinking check passed: all ${aiMessagesWithToolCalls.length} AI messages with tool calls have associated thinking blocks`,
+        );
       }
     }
 
@@ -1168,35 +1224,38 @@ export class AnthropicProvider extends BaseProvider {
           );
 
           // If no thinking blocks found but we have tool calls and thinking is enabled,
-          // look back at the previous content item for orphaned thinking blocks
+          // look back at previous content items for orphaned thinking blocks (up to 3 messages back)
           if (
             anthropicThinkingBlocks.length === 0 &&
             effectiveReasoningEnabled &&
-            toolCallBlocks.length > 0 &&
-            contentIndex > 0
+            toolCallBlocks.length > 0
           ) {
-            const prevContent = processedContent[contentIndex - 1];
-            if (prevContent.speaker === 'ai') {
-              const prevThinkingBlocks = prevContent.blocks.filter(
-                (b) =>
-                  b.type === 'thinking' &&
-                  (b as ThinkingBlock).sourceField === 'thinking',
-              ) as ThinkingBlock[];
-              // Check if prev content was ONLY thinking (no other content)
-              const prevNonThinkingBlocks = prevContent.blocks.filter(
-                (b) =>
-                  b.type !== 'thinking' ||
-                  (b as ThinkingBlock).sourceField !== 'thinking',
-              );
-              if (
-                prevThinkingBlocks.length > 0 &&
-                prevNonThinkingBlocks.length === 0
-              ) {
-                this.getLogger().debug(
-                  () =>
-                    `[AnthropicProvider] Found orphaned thinking block in previous content item, merging with tool_use message`,
+            const lookBackLimit = 3;
+            for (let i = 1; i <= lookBackLimit && contentIndex - i >= 0; i++) {
+              const prevContent = processedContent[contentIndex - i];
+              if (prevContent.speaker === 'ai') {
+                const prevThinkingBlocks = prevContent.blocks.filter(
+                  (b) =>
+                    b.type === 'thinking' &&
+                    (b as ThinkingBlock).sourceField === 'thinking',
+                ) as ThinkingBlock[];
+                // Check if prev content was ONLY thinking (no other content)
+                const prevNonThinkingBlocks = prevContent.blocks.filter(
+                  (b) =>
+                    b.type !== 'thinking' ||
+                    (b as ThinkingBlock).sourceField !== 'thinking',
                 );
-                anthropicThinkingBlocks = prevThinkingBlocks;
+                if (
+                  prevThinkingBlocks.length > 0 &&
+                  prevNonThinkingBlocks.length === 0
+                ) {
+                  this.getLogger().debug(
+                    () =>
+                      `[AnthropicProvider] Found orphaned thinking block ${i} messages back, merging with tool_use message at index ${contentIndex}`,
+                  );
+                  anthropicThinkingBlocks = prevThinkingBlocks;
+                  break;
+                }
               }
             }
           }

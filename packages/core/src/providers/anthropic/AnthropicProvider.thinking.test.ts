@@ -993,4 +993,305 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(thinkingBlock?.thinking).toBe('Original thought');
     });
   });
+
+  describe('Multi-Turn Thinking Persistence Tests @requirement:REQ-ISSUE1150-FIX', () => {
+    beforeEach(() => {
+      settingsService.setProviderSetting('anthropic', 'streaming', 'disabled');
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.includeInContext', true);
+      settingsService.set('reasoning.stripFromContext', 'none');
+    });
+
+    it('should NOT disable thinking when tool calls have associated thinking blocks in history', async () => {
+      // Simulate a multi-turn conversation with thinking + tool calls
+      const messages: IContent[] = [
+        // Turn 1: User asks
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'List files in current directory' }],
+        },
+        // Turn 2: AI responds with thinking + tool call
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'I need to list the files',
+              sourceField: 'thinking',
+              signature: 'sig1',
+            } as ThinkingBlock,
+            {
+              type: 'tool_call',
+              id: 'hist_tool_001',
+              name: 'list_directory',
+              parameters: { path: '.' },
+            },
+          ],
+        },
+        // Turn 3: Tool result
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'hist_tool_001',
+              toolName: 'list_directory',
+              result: 'file1.txt, file2.txt',
+            },
+          ],
+        },
+        // Turn 4: User asks follow-up
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'What is in file1.txt?' }],
+        },
+      ];
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [
+          {
+            type: 'thinking',
+            thinking: 'Now I need to read the file',
+            signature: 'sig2',
+          },
+          { type: 'text', text: 'Let me read that file' },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      // Verify thinking is still enabled (NOT disabled)
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('enabled');
+
+      // Verify the tool call message includes thinking block
+      const assistantMsg = request.messages.find(
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((b) => b.type === 'tool_use'),
+      );
+      expect(assistantMsg).toBeDefined();
+
+      const hasThinking = (
+        assistantMsg!.content as AnthropicContentBlock[]
+      ).some((b) => b.type === 'thinking' || b.type === 'redacted_thinking');
+      expect(hasThinking).toBe(true);
+    });
+
+    it('should handle orphaned thinking blocks separated by tool results', async () => {
+      // Simulate streaming scenario where thinking and tool calls are in separate IContent items
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Do something' }],
+        },
+        // Thinking block arrives first (orphaned - no tool call yet)
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Planning my approach',
+              sourceField: 'thinking',
+              signature: 'sig1',
+            } as ThinkingBlock,
+          ],
+        },
+        // Tool call arrives separately
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_002',
+              name: 'do_something',
+              parameters: {},
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'hist_tool_002',
+              toolName: 'do_something',
+              result: 'Done',
+            },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Continue' }],
+        },
+      ];
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [
+          {
+            type: 'thinking',
+            thinking: 'Continuing work',
+            signature: 'sig2',
+          },
+          { type: 'text', text: 'Continuing...' },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      // Thinking should still be enabled (orphaned block was found and merged)
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('enabled');
+    });
+
+    it('should disable thinking only when truly no thinking blocks exist for tool calls', async () => {
+      // Simulate a scenario where tool call has NO associated thinking at all
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Do something' }],
+        },
+        // AI responds with tool call but NO thinking block anywhere
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_003',
+              name: 'do_something',
+              parameters: {},
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'hist_tool_003',
+              toolName: 'do_something',
+              result: 'Done',
+            },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Continue' }],
+        },
+      ];
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      // Thinking should be disabled (no thinking found for tool call)
+      expect(request.thinking).toBeUndefined();
+    });
+
+    it('should find orphaned thinking up to 3 messages back', async () => {
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Start' }],
+        },
+        // Orphaned thinking block
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Deep thinking',
+              sourceField: 'thinking',
+              signature: 'sig1',
+            } as ThinkingBlock,
+          ],
+        },
+        // Some text in between
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Intermediate response' }],
+        },
+        // Tool result
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'hist_tool_004',
+              toolName: 'some_tool',
+              result: 'Result',
+            },
+          ],
+        },
+        // Tool call 3 messages after thinking
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_005',
+              name: 'another_tool',
+              parameters: {},
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'hist_tool_005',
+              toolName: 'another_tool',
+              result: 'Done',
+            },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Continue' }],
+        },
+      ];
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      // Thinking should still be enabled (found orphaned block within lookback window)
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('enabled');
+    });
+  });
 });
