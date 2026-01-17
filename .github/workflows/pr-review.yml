@@ -40,6 +40,7 @@ jobs:
       OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
       LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
       LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+      LLXPRT_CONTEXT_LIMIT: '${{ vars.LLXPRT_CONTEXT_LIMIT }}'
       LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
       DEBUG_OUTPUT: 'stderr'
     steps:

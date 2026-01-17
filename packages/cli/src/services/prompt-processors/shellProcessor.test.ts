@@ -11,8 +11,6 @@ import { CommandContext } from '../../ui/commands/types.js';
 import {
   ApprovalMode,
   Config,
-  escapeShellArg,
-  getShellConfiguration,
 } from '@vybestack/llxprt-code-core';
 
 // Helper function to determine the expected escaped string based on the current OS,
