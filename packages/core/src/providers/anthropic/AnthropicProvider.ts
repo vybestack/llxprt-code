@@ -1276,9 +1276,13 @@ export class AnthropicProvider extends BaseProvider {
               }
             }
           } else if (effectiveReasoningEnabled) {
+            const placeholderId = toolCallBlocks[0]?.id;
+            const placeholderData = placeholderId
+              ? `missing-thinking-${placeholderId}`
+              : 'missing-thinking';
             contentArray.push({
               type: 'redacted_thinking',
-              data: '',
+              data: placeholderData,
             });
           }
 

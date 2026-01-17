@@ -350,11 +350,12 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
 
     expect(toolCallMsg).toBeDefined();
     const content = toolCallMsg!.content as AnthropicContentBlock[];
-    const hasThinking = content.some(
-      (b) => b.type === 'thinking' || b.type === 'redacted_thinking',
-    );
+    const placeholderBlock = content.find(
+      (b) => b.type === 'redacted_thinking',
+    ) as { type: 'redacted_thinking'; data: string } | undefined;
 
-    expect(hasThinking).toBe(true);
+    expect(placeholderBlock).toBeDefined();
+    expect(placeholderBlock?.data).toContain('missing-thinking');
   });
 
   it('COMPLEX SCENARIO: Multiple tool calls in rapid succession with orphaned thinking', async () => {
