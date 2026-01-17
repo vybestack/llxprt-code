@@ -191,6 +191,10 @@ export class InteractiveRun {
       timeout,
       200,
     );
+    if (!found) {
+      console.error('Interactive output snapshot (last 2000 chars):');
+      console.error(stripAnsi(this.output).slice(-2000));
+    }
     expect(
       found,
       `Did not find expected text: ${texts.map((text) => `"${text}"`).join(' or ')}`,
@@ -499,6 +503,7 @@ export class TestRig {
         NO_BROWSER: 'true',
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
+        LLXPRT_SANDBOX: 'false',
       },
     };
 
@@ -1282,6 +1287,7 @@ ${stderr}`),
         OPENAI_API_KEYFILE: env['OPENAI_API_KEYFILE'],
         LLXPRT_TEST_PROFILE_KEYFILE: env['LLXPRT_TEST_PROFILE_KEYFILE'],
         OPENAI_BASE_URL: env['OPENAI_BASE_URL'],
+        LLXPRT_SANDBOX: 'false',
       },
     };
 
