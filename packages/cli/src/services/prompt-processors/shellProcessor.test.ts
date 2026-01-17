@@ -18,12 +18,12 @@ import {
 // Helper function to determine the expected escaped string based on the current OS,
 // mirroring the logic in the actual `escapeShellArg` implementation. This makes
 // our tests robust and platform-agnostic.
-  function getExpectedEscapedArgForPlatform(arg: string): string {
-    return quote([arg]);
-  }
-
+function getExpectedEscapedArgForPlatform(arg: string): string {
+  return quote([arg]);
+}
 
 const mockCheckCommandPermissions = vi.hoisted(() => vi.fn());
+
 const mockShellExecute = vi.hoisted(() => vi.fn());
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
