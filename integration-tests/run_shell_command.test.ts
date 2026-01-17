@@ -124,6 +124,8 @@ describe('run_shell_command', () => {
         prompt: prompt,
         yolo: false,
         stdinDoesNotEnd: true,
+        stdin: `${prompt}
+`,
       },
       `--allowed-tools=run_shell_command(${tool})`,
     );
@@ -161,6 +163,8 @@ describe('run_shell_command', () => {
         prompt: prompt,
         yolo: false,
         stdinDoesNotEnd: true,
+        stdin: `${prompt}
+`,
       },
       '--allowed-tools=run_shell_command',
     );
@@ -232,6 +236,8 @@ describe('run_shell_command', () => {
         prompt: prompt,
         yolo: false,
         stdinDoesNotEnd: true,
+        stdin: `${prompt}
+`,
       },
       `--allowed-tools=ShellTool(${tool})`,
     );
@@ -269,6 +275,8 @@ describe('run_shell_command', () => {
         prompt: prompt,
         yolo: false,
         stdinDoesNotEnd: true,
+        stdin: `${prompt}
+`,
       },
       '--allowed-tools=run_shell_command(echo)',
       '--allowed-tools=run_shell_command(echo)',
@@ -338,6 +346,8 @@ describe('run_shell_command', () => {
         prompt: prompt,
         yolo: false,
         stdinDoesNotEnd: true,
+        stdin: `${prompt}
+`,
       },
       `--allowed-tools=run_shell_command(${tool})`,
       '--allowed-tools=run_shell_command',
