@@ -1117,7 +1117,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     block: ToolResponseBlock,
     config?: Config,
   ): string {
-    const payload = buildToolResponsePayload(block, config);
+    const payload = buildToolResponsePayload(block, config, true);
     return ensureJsonSafe(
       formatToolResponseText({
         status: payload.status,
