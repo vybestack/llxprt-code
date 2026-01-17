@@ -391,9 +391,9 @@ jobs:
         if: steps.issue_gate.outputs.should_review == 'true'
         id: 'llxprt'
         env:
-          DIFF_FILES_ENABLED: "true"
-          DIFF_STAT_ENABLED: "true"
-          DIFF_PATCH_ENABLED: "false"
+          DIFF_FILES_ENABLED: 'true'
+          DIFF_STAT_ENABLED: 'true'
+          DIFF_PATCH_ENABLED: 'false'
         run: |
           set -euo pipefail
           prompt_file="review/prompt.md"
