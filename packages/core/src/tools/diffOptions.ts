@@ -4,19 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Hunk, ParsedDiff, PatchOptions } from 'diff';
 import * as Diff from 'diff';
 import { type DiffStat } from './tools.js';
 
-export const DEFAULT_STRUCTURED_PATCH_OPTIONS: PatchOptions = {
+export const DEFAULT_STRUCTURED_PATCH_OPTIONS = {
   context: 3,
   ignoreWhitespace: true,
-};
+} satisfies Diff.PatchOptions;
 
-export const DEFAULT_DIFF_OPTIONS: PatchOptions = {
+export const DEFAULT_DIFF_OPTIONS = {
   context: 3,
   ignoreWhitespace: true,
-};
+} satisfies Diff.PatchOptions;
 
 export function getDiffStat(
   fileName: string,
@@ -24,10 +23,10 @@ export function getDiffStat(
   aiStr: string,
   userStr: string,
 ): DiffStat {
-  const countLines = (patch: ParsedDiff) => {
+  const countLines = (patch: Diff.ParsedDiff) => {
     let added = 0;
     let removed = 0;
-    patch.hunks.forEach((hunk: Hunk) => {
+    patch.hunks.forEach((hunk: Diff.Hunk) => {
       hunk.lines.forEach((line: string) => {
         if (line.startsWith('+')) {
           added++;
