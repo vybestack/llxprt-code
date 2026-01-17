@@ -212,6 +212,8 @@ describe.skipIf(skipOnWindowsCi)(
       const run = await rig.runInteractive();
 
       try {
+        await run.expectText('Type your message', 30_000);
+
         // MCP discovery can be slow in sandbox/docker and on Windows. Retry `/mcp list`
         // until the tool appears (or we time out).
         const deadline = Date.now() + 120_000;

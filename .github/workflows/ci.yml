@@ -411,7 +411,6 @@ jobs:
           fi
         shell: 'bash'
 
-
       - name: 'Limit Vitest threads on Windows'
         if: runner.os == 'Windows'
         run: |
