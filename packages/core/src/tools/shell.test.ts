@@ -285,8 +285,8 @@ describe('ShellTool', () => {
           executionMethod: 'child_process',
         });
         await promise;
-        // eslint-disable-next-line vitest/no-standalone-expect -- platform-conditional test
         const expectedCwd = path.resolve('/test/dir', '');
+        // eslint-disable-next-line vitest/no-standalone-expect -- platform-conditional test
         expect(mockShellExecutionService).toHaveBeenCalledWith(
           'dir',
           expectedCwd,
