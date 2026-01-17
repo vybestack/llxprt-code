@@ -57,6 +57,7 @@ export async function* parseResponsesStream(
   let buffer = '';
   const functionCalls = new Map<string, FunctionCallState>();
   let reasoningText = '';
+  let reasoningSummaryText = '';
 
   try {
     while (true) {
@@ -94,15 +95,20 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.reasoning_text.delta':
-              case 'response.reasoning_summary_text.delta':
                 // Reasoning content chunk
                 if (event.delta) {
                   reasoningText += event.delta;
                 }
                 break;
 
+              case 'response.reasoning_summary_text.delta':
+                // Reasoning summary content chunk
+                if (event.delta) {
+                  reasoningSummaryText += event.delta;
+                }
+                break;
+
               case 'response.reasoning_text.done':
-              case 'response.reasoning_summary_text.done':
                 // Reasoning completed - yield accumulated reasoning
                 if (reasoningText.trim()) {
                   yield {
@@ -117,6 +123,23 @@ export async function* parseResponsesStream(
                   };
                 }
                 reasoningText = '';
+                break;
+
+              case 'response.reasoning_summary_text.done':
+                // Reasoning summary completed - yield accumulated summary
+                if (reasoningSummaryText.trim()) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'thinking',
+                        thought: event.text || reasoningSummaryText,
+                        sourceField: 'reasoning_content',
+                      },
+                    ],
+                  };
+                }
+                reasoningSummaryText = '';
                 break;
 
               case 'response.output_item.added':
@@ -202,6 +225,19 @@ export async function* parseResponsesStream(
                     ],
                   };
                   reasoningText = '';
+                }
+                if (reasoningSummaryText.trim()) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'thinking',
+                        thought: reasoningSummaryText,
+                        sourceField: 'reasoning_content',
+                      },
+                    ],
+                  };
+                  reasoningSummaryText = '';
                 }
 
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)

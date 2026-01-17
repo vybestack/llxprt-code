@@ -171,10 +171,12 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     });
   });
 
-  it('should handle reasoning_summary_text events', async () => {
+  it('should handle reasoning_summary_text events separately from reasoning_text', async () => {
     const chunks = [
-      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":1,"delta":"Summary: Key insight."}\n\n',
-      'data: {"type":"response.reasoning_summary_text.done","sequence_number":2,"text":"Summary: Key insight."}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Raw reasoning."}\n\n',
+      'data: {"type":"response.reasoning_text.done","sequence_number":2}\n\n',
+      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":3,"delta":"Summary: Key insight."}\n\n',
+      'data: {"type":"response.reasoning_summary_text.done","sequence_number":4,"text":"Summary: Key insight."}\n\n',
     ];
 
     const stream = createSSEStream(chunks);
@@ -184,15 +186,16 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages.push(message);
     }
 
-    const thinkingMessage = messages.find((m) =>
+    const thinkingMessages = messages.filter((m) =>
       m.blocks.some((block) => block.type === 'thinking'),
     );
-    expect(thinkingMessage).toBeDefined();
-    const thinkingBlock = thinkingMessage?.blocks[0] as {
-      type: 'thinking';
-      thought: string;
-    };
-    expect(thinkingBlock.thought).toBe('Summary: Key insight.');
+    // Should have two separate ThinkingBlocks
+    expect(thinkingMessages).toHaveLength(2);
+    const thoughts = thinkingMessages.map(
+      (m) => (m.blocks[0] as { type: 'thinking'; thought: string }).thought,
+    );
+    expect(thoughts).toContain('Raw reasoning.');
+    expect(thoughts).toContain('Summary: Key insight.');
   });
 
   it('should yield reasoning before response.completed', async () => {
