@@ -113,6 +113,34 @@ describe('toolResponsePayload', () => {
     });
   });
 
+  describe('humanizeJson', () => {
+    it('should render stdout/stderr/exitCode as multi-line blocks with stable spacing', () => {
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'test_tool',
+        result: {
+          exitCode: 2,
+          stdout: `hello
+world`,
+          stderr: `warn`,
+        },
+      };
+
+      const payload = buildToolResponsePayload(block, undefined, true);
+
+      expect(payload.result).toBe(`exitCode:
+2
+
+stdout:
+hello
+world
+
+stderr:
+warn`);
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty results', () => {
       const block: ToolResponseBlock = {

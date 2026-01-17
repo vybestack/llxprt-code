@@ -50,10 +50,92 @@ export interface ToolResponsePayload {
 
 export const EMPTY_TOOL_RESULT_PLACEHOLDER = '[no tool result]';
 
-function coerceToString(value: unknown): string {
+export function humanizeJsonForDisplay(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const obj = value as Record<string, unknown>;
+
+  // Prefer common text fields to avoid JSON-stringifying multi-line output.
+  for (const key of [
+    'error',
+    'error_text',
+    'message',
+    'llmContent',
+    'returnDisplay',
+  ]) {
+    const v = obj[key];
+    if (typeof v === 'string' && v.trim()) {
+      return v;
+    }
+  }
+
+  // Common shell-like result shape.
+  const stdout = obj.stdout;
+  const stderr = obj.stderr;
+  const exitCode = obj.exitCode;
+  const hasStdout = typeof stdout === 'string' && stdout.trim();
+  const hasStderr = typeof stderr === 'string' && stderr.trim();
+  const hasExitCode = typeof exitCode === 'number';
+
+  if (hasStdout || hasStderr || hasExitCode) {
+    const out: string[] = [];
+
+    if (hasExitCode) {
+      out.push('exitCode:');
+      out.push(String(exitCode));
+      out.push('');
+    }
+
+    if (hasStdout) {
+      out.push('stdout:');
+      out.push(
+        String(stdout)
+          .replace(/[\r\n]+$/, '')
+          .trimEnd(),
+      );
+      out.push('');
+    }
+
+    if (hasStderr) {
+      out.push('stderr:');
+      out.push(
+        String(stderr)
+          .replace(/[\r\n]+$/, '')
+          .trimEnd(),
+      );
+      out.push('');
+    }
+
+    return out.join('\n').trimEnd();
+  }
+
+  return undefined;
+}
+
+function coerceToString(value: unknown, humanizeJson?: boolean): string {
   if (typeof value === 'string') {
     return value;
   }
+
+  // Default behavior is JSON.stringify for non-strings. For OpenAI tool output we may prefer
+  // a human-readable multi-line rendering to preserve newlines.
+  if (humanizeJson) {
+    const human = humanizeJsonForDisplay(value);
+    if (typeof human === 'string' && human.trim()) {
+      return human;
+    }
+    // Fallback: pretty JSON (multi-line) instead of a single-line blob.
+    if (value && typeof value === 'object') {
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch {
+        // no-op
+      }
+    }
+  }
+
   try {
     return JSON.stringify(value);
   } catch {
@@ -76,7 +158,10 @@ function formatToolResultValue(text: string): {
   return { value: text, originalLength: text.length };
 }
 
-function formatToolResult(result: unknown): {
+function formatToolResult(
+  result: unknown,
+  humanizeJson?: boolean,
+): {
   value?: string;
   originalLength?: number;
   raw?: string;
@@ -97,7 +182,7 @@ function formatToolResult(result: unknown): {
     }
   }
 
-  const coerced = coerceToString(result);
+  const coerced = coerceToString(result, humanizeJson);
   return { value: coerced, raw: coerced };
 }
 
@@ -148,6 +233,7 @@ function limitToolPayload(
 export function buildToolResponsePayload(
   block: ToolResponseBlock,
   config?: Config,
+  humanizeJson?: boolean,
 ): ToolResponsePayload {
   const payload: ToolResponsePayload = {
     status: block.error ? 'error' : 'success',
@@ -155,7 +241,7 @@ export function buildToolResponsePayload(
     result: EMPTY_TOOL_RESULT_PLACEHOLDER,
   };
 
-  const formatted = formatToolResult(block.result);
+  const formatted = formatToolResult(block.result, humanizeJson);
   const serializedResult =
     config && formatted.raw ? formatted.raw : formatted.value;
   if (serializedResult) {
@@ -171,7 +257,7 @@ export function buildToolResponsePayload(
   }
 
   if (block.error) {
-    payload.error = coerceToString(block.error);
+    payload.error = coerceToString(block.error, humanizeJson);
   }
 
   return payload;
