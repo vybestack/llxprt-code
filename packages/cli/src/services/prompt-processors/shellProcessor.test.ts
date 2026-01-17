@@ -9,6 +9,7 @@ import { ConfirmationRequiredError, ShellProcessor } from './shellProcessor.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { CommandContext } from '../../ui/commands/types.js';
 import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
+import { quote } from 'shell-quote';
 
 // Helper function to determine the expected escaped string based on the current OS,
 // mirroring the logic in the actual `escapeShellArg` implementation. This makes

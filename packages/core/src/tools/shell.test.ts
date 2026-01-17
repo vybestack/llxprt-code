@@ -256,9 +256,10 @@ describe('ShellTool', () => {
       const expectedCommand = isWindows
         ? 'ls'
         : `{ ls; }; __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const expectedCwd = path.resolve('/test/dir', '/test/dir/subdir');
       expect(mockShellExecutionService).toHaveBeenCalledWith(
         expectedCommand,
-        '/test/dir/subdir',
+        expectedCwd,
         expect.any(Function),
         expect.any(AbortSignal),
         false,
@@ -285,9 +286,10 @@ describe('ShellTool', () => {
         });
         await promise;
         // eslint-disable-next-line vitest/no-standalone-expect -- platform-conditional test
+        const expectedCwd = path.resolve('/test/dir', '');
         expect(mockShellExecutionService).toHaveBeenCalledWith(
           'dir',
-          '/test/dir',
+          expectedCwd,
           expect.any(Function),
           expect.any(AbortSignal),
           false,
