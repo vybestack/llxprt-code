@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Hunk, ParsedDiff, PatchOptions } from 'diff';
+import type { ParsedDiff, PatchOptions } from 'diff';
 import * as Diff from 'diff';
 import { type DiffStat } from './tools.js';
 
@@ -29,7 +29,7 @@ export function getDiffStat(
   ): { added: number; removed: number } => {
     let added = 0;
     let removed = 0;
-    patch.hunks.forEach((hunk: Hunk) => {
+    patch.hunks.forEach((hunk) => {
       hunk.lines.forEach((line: string) => {
         if (line.startsWith('+')) {
           added++;
