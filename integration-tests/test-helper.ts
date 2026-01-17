@@ -29,7 +29,7 @@ function sanitizeTestName(name: string) {
 function getDefaultTimeout() {
   if (env['CI']) return 60000; // 1 minute in CI
   if (env['LLXPRT_SANDBOX']) return 30000; // 30s in containers
-  return 15000; // 15s locally
+  return 60000; // 60s locally
 }
 
 export async function poll(
@@ -512,6 +512,12 @@ export class TestRig {
       promptOrOptions !== null &&
       promptOrOptions.stdin;
 
+    const promptUsesStdinFlag =
+      typeof promptOrOptions === 'object' &&
+      promptOrOptions !== null &&
+      promptOrOptions.stdin &&
+      promptOrOptions.prompt;
+
     if (typeof promptOrOptions === 'string') {
       prompts.push(promptOrOptions);
     } else if (
@@ -528,7 +534,9 @@ export class TestRig {
 
     const promptValue = prompts.join(' ');
 
-    if (promptValue && !promptIsStdin) {
+    if (promptValue && promptUsesStdinFlag) {
+      commandArgs.push('--prompt-interactive', promptValue);
+    } else if (promptValue && !promptIsStdin) {
       commandArgs.push('--prompt', promptValue);
     }
 

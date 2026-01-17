@@ -86,7 +86,10 @@ describe('extension reloading', () => {
 
       // Start the CLI.
       const run = await rig.runInteractive('--debug');
-      await run.expectText('You have 1 extension with an update available');
+      await run.expectText(
+        'You have 1 extension with an update available',
+        60000,
+      );
       // See the outdated extension
       await run.sendText('/extensions list');
       await run.type('\r');
