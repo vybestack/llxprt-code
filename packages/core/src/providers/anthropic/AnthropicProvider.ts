@@ -1261,11 +1261,16 @@ export class AnthropicProvider extends BaseProvider {
             // Process existing thinking blocks
             for (const tb of anthropicThinkingBlocks) {
               if (shouldRedactThinking) {
-                // Use redacted_thinking with the signature as data
+                const fallbackData = Buffer.from(
+                  `missing-thinking-${tb.signature ?? 'unknown'}`,
+                ).toString('base64');
+                // Use redacted_thinking with base64-encoded signature data
                 // This satisfies Anthropic's requirement while saving tokens
                 contentArray.push({
                   type: 'redacted_thinking',
-                  data: tb.signature || '',
+                  data: tb.signature
+                    ? Buffer.from(tb.signature).toString('base64')
+                    : fallbackData,
                 });
               } else {
                 contentArray.push({
@@ -1277,9 +1282,11 @@ export class AnthropicProvider extends BaseProvider {
             }
           } else if (effectiveReasoningEnabled) {
             const placeholderId = toolCallBlocks[0]?.id;
-            const placeholderData = placeholderId
-              ? `missing-thinking-${placeholderId}`
-              : 'missing-thinking';
+            const placeholderData = Buffer.from(
+              placeholderId
+                ? `missing-thinking-${placeholderId}`
+                : 'missing-thinking',
+            ).toString('base64');
             contentArray.push({
               type: 'redacted_thinking',
               data: placeholderData,

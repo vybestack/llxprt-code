@@ -355,7 +355,83 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
     ) as { type: 'redacted_thinking'; data: string } | undefined;
 
     expect(placeholderBlock).toBeDefined();
-    expect(placeholderBlock?.data).toContain('missing-thinking');
+    expect(placeholderBlock?.data).toBeTruthy();
+    const decodedPlaceholder = Buffer.from(
+      placeholderBlock?.data ?? '',
+      'base64',
+    ).toString('utf8');
+    expect(decodedPlaceholder).toContain('missing-thinking');
+  });
+
+  it('uses non-empty redacted data when stripping thinking without signatures', async () => {
+    mockMessagesCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'Response' }],
+      usage: { input_tokens: 100, output_tokens: 50 },
+    });
+
+    settingsService.set('reasoning.stripFromContext', 'all');
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Question' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: 'Thought without signature',
+            sourceField: 'thinking',
+          } as ThinkingBlock,
+          {
+            type: 'tool_call',
+            id: 'hist_tool_004',
+            name: 'tool',
+            parameters: {},
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'hist_tool_004',
+            toolName: 'tool',
+            result: 'result',
+          },
+        ],
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Follow-up' }],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+    await generator.next();
+
+    const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
+
+    const assistantMsg = request.messages.find(
+      (m) => m.role === 'assistant' && Array.isArray(m.content),
+    );
+    expect(assistantMsg).toBeDefined();
+
+    const content = assistantMsg!.content as AnthropicContentBlock[];
+    const redactedBlock = content.find(
+      (b) => b.type === 'redacted_thinking',
+    ) as { type: 'redacted_thinking'; data: string } | undefined;
+    expect(redactedBlock).toBeDefined();
+    expect(redactedBlock?.data).toBeTruthy();
+    const decodedData = Buffer.from(
+      redactedBlock?.data ?? '',
+      'base64',
+    ).toString('utf8');
+    expect(decodedData).toContain('missing-thinking');
   });
 
   it('COMPLEX SCENARIO: Multiple tool calls in rapid succession with orphaned thinking', async () => {
