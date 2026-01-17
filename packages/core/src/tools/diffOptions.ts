@@ -4,9 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ParsedDiff, PatchOptions } from 'diff';
 import * as Diff from 'diff';
 import { type DiffStat } from './tools.js';
+
+type PatchOptions = {
+  context?: number;
+  ignoreWhitespace?: boolean;
+};
+
+type StructuredPatch = {
+  hunks: Array<{ lines: string[] }>;
+};
 
 export const DEFAULT_STRUCTURED_PATCH_OPTIONS: PatchOptions = {
   context: 3,
@@ -25,7 +33,7 @@ export function getDiffStat(
   userStr: string,
 ): DiffStat {
   const countLines = (
-    patch: ParsedDiff,
+    patch: StructuredPatch,
   ): { added: number; removed: number } => {
     let added = 0;
     let removed = 0;
