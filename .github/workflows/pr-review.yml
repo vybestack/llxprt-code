@@ -237,7 +237,7 @@ jobs:
           git diff --stat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diffstat.txt
           git diff --name-status "${BASE_SHA}" "${PR_HEAD_SHA}" > review/changed-files.txt
           git diff --numstat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/numstat.txt
-          git diff -U3 "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diff.patch
+          git diff -U0 "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diff.patch
           head -n 4000 review/diff.patch > review/diff-truncated.patch
           grep -Ei '(/tests?/|__tests__|\\.spec\\.|\\.test\\.)' review/changed-files.txt > review/test-files.txt || true
 
