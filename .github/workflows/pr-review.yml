@@ -127,7 +127,7 @@ jobs:
           if [[ ! -s "${issues_file}" ]]; then
             {
               echo "<!-- llxprt-pr-review -->"
-              echo "## ⚠️ LLxprt PR Review blocked"
+              echo "## LLxprt PR Review blocked"
               echo
               echo "- No linked issues were detected in this PR's description."
               echo "- Please reference an existing issue with text such as \`Fixes #123\` so the automated review knows what problem to evaluate."
@@ -284,7 +284,12 @@ jobs:
             "review/test-files.txt",
             "No explicit test files were touched.",
           );
-          const diffPatch = readIfExists("review/diff-truncated.patch", "");
+          const diffPatch = process.env.DIFF_PATCH_ENABLED === "true"
+            ? readIfExists(
+                "review/diff-truncated.patch",
+                "Patch omitted to keep prompt within context limit.",
+              )
+            : "Patch omitted to keep prompt within context limit.";
 
           const issueSection = issues.length
             ? issues
@@ -370,7 +375,7 @@ jobs:
           - Additional bullets on test gaps or strengths (mention if tests feel like “mock theater”).
 
           **Verdict**
-          - Default to \`⚠️ Needs Work\` unless you can cite specific evidence (code + tests) that risk is low; only start with \`✅ Ready\` when requirements are fully satisfied, the change is truly documentation-only, or adequate automated coverage exists.
+          - Default to Needs Work unless you can cite specific evidence (code + tests) that risk is low; only start with Ready when requirements are fully satisfied, the change is truly documentation-only, or adequate automated coverage exists.
 
           If information is missing, state assumptions explicitly. Keep the overall length under 350 words.
           `;
@@ -402,7 +407,7 @@ jobs:
           if [[ ${llxprt_status} -ne 0 ]]; then
             {
               echo "<!-- llxprt-pr-review -->"
-              echo "## ⚠️ LLxprt PR Review infrastructure failure"
+              echo "## WARNING: LLxprt PR Review infrastructure failure"
               echo
               echo "The automated reviewer failed with exit code ${llxprt_status}. Please inspect the workflow logs (LLxprt section) and re-run once resolved."
             } > review/comment.md
