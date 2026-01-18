@@ -86,13 +86,8 @@ describe('extension reloading', () => {
 
       // Start the CLI.
       const run = await rig.runInteractive('--debug');
-      await run.expectAnyText(
-        [
-          'You have 1 extension with an update available',
-          'Create LLXPRT.md files to customize your interactions',
-        ],
-        60000,
-      );
+      await run.expectText('test-extension (v0.0.1) - active');
+
       // See the outdated extension
       await run.sendText('/extensions list');
       await run.type('\r');
