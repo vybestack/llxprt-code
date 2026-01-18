@@ -417,6 +417,7 @@ jobs:
           echo "VITEST_MAX_THREADS=1" >> "$GITHUB_ENV"
           echo "VITEST_MIN_THREADS=1" >> "$GITHUB_ENV"
           echo "VITEST_TEST_TIMEOUT=30000" >> "$GITHUB_ENV"
+          echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
 
       - name: 'Run tests and generate reports'
         env:
