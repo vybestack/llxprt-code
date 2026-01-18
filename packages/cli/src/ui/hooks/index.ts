@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export * from './useProviderModelDialog.js';
 export * from './useProviderDialog.js';
 export * from './useToolsDialog.js';
 export * from './useTerminalSize.js';

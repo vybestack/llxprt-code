@@ -58,7 +58,6 @@ describe('useEditorSettings', () => {
         theme: false,
         auth: false,
         editor: false,
-        providerModel: false,
         provider: false,
         privacy: false,
         loadProfile: false,

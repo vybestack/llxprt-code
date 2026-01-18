@@ -37,6 +37,8 @@ export interface ProviderAliasConfig {
   description?: string;
   providerConfig?: Record<string, unknown>;
   apiKeyEnv?: string;
+  /** Provider ID from models.dev for filtering in ModelsDialog */
+  modelsDevProviderId?: string | null;
 }
 
 export interface ProviderAliasEntry {

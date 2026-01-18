@@ -64,11 +64,6 @@ export interface UIActions {
   handleProviderSelect: (provider: string) => Promise<void>;
   exitProviderDialog: () => void;
 
-  // Provider model dialog
-  openProviderModelDialog: () => Promise<void>;
-  handleProviderModelChange: (model: string) => void;
-  exitProviderModelDialog: () => void;
-
   // Load profile dialog
   openLoadProfileDialog: () => void;
   handleProfileSelect: (profile: string) => void;
@@ -134,6 +129,19 @@ export interface UIActions {
     initialName?: string,
   ) => void;
   closeSubagentDialog: () => void;
+
+  // Models dialog
+  openModelsDialog: (data?: {
+    initialSearch?: string;
+    initialFilters?: {
+      tools?: boolean;
+      vision?: boolean;
+      reasoning?: boolean;
+      audio?: boolean;
+    };
+    includeDeprecated?: boolean;
+  }) => void;
+  closeModelsDialog: () => void;
 
   // Workspace migration dialog
   onWorkspaceMigrationDialogOpen: () => void;

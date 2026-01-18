@@ -380,8 +380,11 @@ export {
 export { McpClientManager } from './tools/mcp-client-manager.js';
 export { McpClient } from './tools/mcp-client.js';
 
-// Export models
+// Export models (legacy constants)
 export * from './config/models.js';
+
+// Export models registry (models.dev integration)
+export * from './models/index.js';
 
 // --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---
 export { SubagentManager } from './config/subagentManager.js';

@@ -8,6 +8,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 
+// This test tests provider registration behavior, needs real providerAliases
+vi.unmock('./providerAliases.js');
+
 describe('Anthropic OAuth registration with environment key', () => {
   let ensureOAuthProviderRegisteredMock: ReturnType<typeof vi.fn>;
   let anthropicCtor: ReturnType<typeof vi.fn>;

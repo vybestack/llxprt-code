@@ -18,6 +18,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
+// This test writes real alias files, needs real providerAliases module
+vi.unmock('../../providers/providerAliases.js');
+
 const mocks = vi.hoisted(() => {
   const runtimeApi = {
     getActiveProviderName: vi.fn(),
