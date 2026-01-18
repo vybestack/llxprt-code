@@ -5,8 +5,14 @@
  */
 
 import { Box, Text } from 'ink';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import type {
+  HydratedModel,
+  Config,
+  Profile,
+} from '@vybestack/llxprt-code-core';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -19,14 +25,12 @@ import { AuthDialog } from './AuthDialog.js';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { ProviderDialog } from './ProviderDialog.js';
-import { ProviderModelDialog } from './ProviderModelDialog.js';
 import { LoadProfileDialog } from './LoadProfileDialog.js';
 import { ProfileCreateWizard } from './ProfileCreateWizard/index.js';
 import { ProfileListDialog } from './ProfileListDialog.js';
 import { ProfileDetailDialog } from './ProfileDetailDialog.js';
 import { ProfileInlineEditor } from './ProfileInlineEditor.js';
 import { ToolsDialog } from './ToolsDialog.js';
-import type { Profile, Config } from '@vybestack/llxprt-code-core';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
 import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
 // import { ProQuotaDialog } from './ProQuotaDialog.js'; // TODO: Not yet ported from upstream
@@ -35,6 +39,7 @@ import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js'
 import { LoggingDialog } from './LoggingDialog.js';
 import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
+import { ModelsDialog } from './ModelDialog.js';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
@@ -58,13 +63,97 @@ export const DialogManager = ({
 }: DialogManagerProps) => {
   const uiState = useUIState();
   const uiActions = useUIActions();
+  const runtime = useRuntimeApi();
   const { constrainHeight, terminalHeight, mainAreaWidth } = uiState;
   // staticExtraHeight not yet implemented in LLxprt
   const staticExtraHeight = 0;
 
+  // Get current provider for ModelsDialog
+  const currentProvider = useMemo(() => {
+    try {
+      return runtime.getActiveProviderName() || null;
+    } catch {
+      return null;
+    }
+  }, [runtime]);
+
   const handlePrivacyNoticeExit = useCallback(() => {
     uiActions.handlePrivacyNoticeExit();
   }, [uiActions]);
+
+  // Handler for ModelsDialog selection
+  const handleModelsDialogSelect = useCallback(
+    async (model: HydratedModel) => {
+      try {
+        const selectedProvider = model.provider;
+
+        // Check if we need to switch providers
+        // Switch if: provider differs OR no current provider set
+        if (selectedProvider !== currentProvider) {
+          // 1. Switch provider first
+          const switchResult = await runtime.switchActiveProvider(
+            selectedProvider,
+            { addItem },
+          );
+
+          // 2. Build messages in correct order
+          const messages: string[] = [];
+
+          // Provider switch message
+          messages.push(
+            currentProvider
+              ? `Switched from ${currentProvider} to ${switchResult.nextProvider}`
+              : `Switched to ${switchResult.nextProvider}`,
+          );
+
+          // Base URL message (extract from switchResult)
+          const baseUrlMsg = (switchResult.infoMessages ?? []).find(
+            (m) => m?.includes('Base URL') || m?.includes('base URL'),
+          );
+          if (baseUrlMsg) messages.push(baseUrlMsg);
+
+          // Set the selected model (override provider's default)
+          await runtime.setActiveModel(model.id);
+
+          // Model message with user's selected model
+          messages.push(
+            `Active model is '${model.id}' for provider '${selectedProvider}'.`,
+          );
+
+          // /key reminder (if not gemini)
+          if (selectedProvider !== 'gemini') {
+            messages.push('Use /key to set API key if needed.');
+          }
+
+          // Show all messages
+          for (const msg of messages) {
+            addItem({ type: 'info', text: msg }, Date.now());
+          }
+        } else {
+          // Same provider — just set model
+          const result = await runtime.setActiveModel(model.id);
+          addItem(
+            {
+              type: 'info',
+              text: `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
+            },
+            Date.now(),
+          );
+        }
+      } catch (e) {
+        const status = runtime.getActiveProviderStatus();
+        addItem(
+          {
+            type: 'error',
+            text: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
+          },
+          Date.now(),
+        );
+      }
+      uiActions.closeModelsDialog();
+    },
+    [runtime, addItem, uiActions, currentProvider],
+  );
 
   // TODO: IdeTrustChangeDialog not yet ported from upstream
   // if (uiState.showIdeRestartPrompt) {
@@ -238,18 +327,6 @@ export const DialogManager = ({
       </Box>
     );
   }
-  if (uiState.isProviderModelDialogOpen) {
-    return (
-      <Box flexDirection="column">
-        <ProviderModelDialog
-          models={uiState.providerModels}
-          currentModel={uiState.currentModel}
-          onSelect={uiActions.handleProviderModelChange}
-          onClose={uiActions.exitProviderModelDialog}
-        />
-      </Box>
-    );
-  }
   if (uiState.isLoadProfileDialogOpen) {
     return (
       <Box flexDirection="column">
@@ -386,6 +463,23 @@ export const DialogManager = ({
         initialView={uiState.subagentDialogInitialView ?? SubagentView.MENU}
         initialSubagentName={uiState.subagentDialogInitialName}
       />
+    );
+  }
+
+  if (uiState.isModelsDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <ModelsDialog
+          onSelect={handleModelsDialogSelect}
+          onClose={uiActions.closeModelsDialog}
+          initialSearch={uiState.modelsDialogData?.initialSearch}
+          initialFilters={uiState.modelsDialogData?.initialFilters}
+          includeDeprecated={uiState.modelsDialogData?.includeDeprecated}
+          currentProvider={currentProvider}
+          initialProviderFilter={uiState.modelsDialogData?.providerOverride}
+          showAllProviders={uiState.modelsDialogData?.showAllProviders}
+        />
+      </Box>
     );
   }
 

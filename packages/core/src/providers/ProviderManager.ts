@@ -6,9 +6,17 @@
  */
 
 import { type IProvider, type GenerateChatOptions } from './IProvider.js';
-import { type IModel } from './IModel.js';
 import { type IProviderManager } from './IProviderManager.js';
 import { Config } from '../config/config.js';
+import {
+  hydrateModelsWithRegistry,
+  getModelsDevProviderIds,
+  type HydratedModel,
+} from '../models/hydration.js';
+import {
+  initializeModelRegistry,
+  getModelRegistry,
+} from '../models/registry.js';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
 import {
   logProviderSwitch,
@@ -812,7 +820,7 @@ export class ProviderManager implements IProviderManager {
     return provider;
   }
 
-  async getAvailableModels(providerName?: string): Promise<IModel[]> {
+  async getAvailableModels(providerName?: string): Promise<HydratedModel[]> {
     let provider: IProvider | undefined;
 
     if (providerName) {
@@ -824,7 +832,77 @@ export class ProviderManager implements IProviderManager {
       provider = this.getActiveProvider();
     }
 
-    return provider.getModels();
+    // Step 1: Get models from provider (live API or fallback)
+    const baseModels = await provider.getModels();
+
+    // Step 2: Initialize registry if needed (non-blocking failure)
+    try {
+      await initializeModelRegistry();
+    } catch {
+      // Registry init failed - return unhydrated
+      logger.debug(
+        () =>
+          `[getAvailableModels] Registry init failed for provider: ${provider!.name}`,
+      );
+      return baseModels.map((m) => ({ ...m, hydrated: false }));
+    }
+
+    // Step 3: Get modelsDevProviderIds for hydration lookup
+    const modelsDevProviderIds = getModelsDevProviderIds(provider.name);
+
+    // Step 4: If provider returned no models, fall back to registry-only models
+    if (baseModels.length === 0 && modelsDevProviderIds.length > 0) {
+      logger.debug(
+        () =>
+          `[getAvailableModels] Provider ${provider!.name} returned 0 models, falling back to registry`,
+      );
+      const registry = getModelRegistry();
+      if (registry.isInitialized()) {
+        // Get models from registry for this provider (only those with tool support)
+        const registryModels: HydratedModel[] = [];
+        for (const providerId of modelsDevProviderIds) {
+          const providerModels = registry.getByProvider(providerId);
+          for (const rm of providerModels) {
+            // Only exclude models that explicitly disable tool support
+            if (rm.capabilities?.toolCalling === false) continue;
+
+            registryModels.push({
+              id: rm.modelId,
+              name: rm.name,
+              provider: provider!.name,
+              supportedToolFormats: [],
+              contextWindow: rm.contextWindow,
+              maxOutputTokens: rm.maxOutputTokens,
+              capabilities: rm.capabilities,
+              pricing: rm.pricing,
+              limits: rm.limits,
+              metadata: rm.metadata,
+              providerId: rm.providerId,
+              modelId: rm.modelId,
+              family: rm.family,
+              hydrated: true,
+            });
+          }
+        }
+        if (registryModels.length > 0) {
+          return registryModels;
+        }
+      }
+    }
+
+    logger.debug(
+      () =>
+        `[getAvailableModels] Hydrating ${baseModels.length} models for provider: ${provider!.name} with modelsDevIds: ${JSON.stringify(modelsDevProviderIds)}`,
+    );
+
+    // Step 5: Hydrate with models.dev data
+    const hydratedModels = await hydrateModelsWithRegistry(
+      baseModels,
+      modelsDevProviderIds,
+    );
+
+    // Step 6: Filter to only models with tool support (required for CLI)
+    return hydratedModels.filter((m) => m.capabilities?.toolCalling !== false);
   }
 
   listProviders(): string[] {

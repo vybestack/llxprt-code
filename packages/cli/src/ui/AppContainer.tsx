@@ -21,6 +21,7 @@ import {
   type HistoryItem,
   type IndividualToolCallDisplay,
 } from './types.js';
+import { type ModelsDialogData } from './commands/types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useResponsive } from './hooks/useResponsive.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
@@ -61,7 +62,6 @@ import {
   EditorType,
   type IdeContext,
   ideContext,
-  type IModel,
   // type IdeInfo, // TODO: Fix IDE integration
   getSettingsService,
   DebugLogger,
@@ -97,7 +97,6 @@ import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
 import { useRuntimeApi } from './contexts/RuntimeContext.js';
 import { submitOAuthCode } from './oauth-submission.js';
-import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from './hooks/useCreateProfileDialog.js';
@@ -895,7 +894,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [providerModels, setProviderModels] = useState<IModel[]>([]);
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
 
   const openPermissionsDialog = useCallback(() => {
@@ -918,6 +916,12 @@ export const AppContainer = (props: AppContainerProps) => {
   >(undefined);
   const [subagentDialogInitialName, setSubagentDialogInitialName] = useState<
     string | undefined
+  >(undefined);
+
+  // Models dialog state
+  const [isModelsDialogOpen, setIsModelsDialogOpen] = useState(false);
+  const [modelsDialogData, setModelsDialogData] = useState<
+    ModelsDialogData | undefined
   >(undefined);
 
   // Queue error message state (for preventing slash/shell commands from being queued)
@@ -947,6 +951,16 @@ export const AppContainer = (props: AppContainerProps) => {
     setIsSubagentDialogOpen(false);
     setSubagentDialogInitialView(undefined);
     setSubagentDialogInitialName(undefined);
+  }, []);
+
+  const openModelsDialog = useCallback((data?: ModelsDialogData) => {
+    setModelsDialogData(data);
+    setIsModelsDialogOpen(true);
+  }, []);
+
+  const closeModelsDialog = useCallback(() => {
+    setIsModelsDialogOpen(false);
+    setModelsDialogData(undefined);
   }, []);
 
   const {
@@ -1162,31 +1176,6 @@ export const AppContainer = (props: AppContainerProps) => {
     appState,
     config,
   });
-
-  const {
-    showDialog: isProviderModelDialogOpen,
-    openDialog: openProviderModelDialogRaw,
-    handleSelect: handleProviderModelChange,
-    closeDialog: exitProviderModelDialog,
-  } = useProviderModelDialog({
-    addMessage: (msg) =>
-      addItem(
-        { type: msg.type as MessageType, text: msg.content },
-        msg.timestamp.getTime(),
-      ),
-    appState,
-  });
-
-  const openProviderModelDialog = useCallback(async () => {
-    try {
-      const models = await runtime.listAvailableModels();
-      setProviderModels(models);
-    } catch (e) {
-      console.error('Failed to load models:', e);
-      setProviderModels([]);
-    }
-    await openProviderModelDialogRaw();
-  }, [openProviderModelDialogRaw, runtime]);
 
   // Watch for model changes from config
   useEffect(() => {
@@ -1463,7 +1452,7 @@ export const AppContainer = (props: AppContainerProps) => {
       openSettingsDialog,
       openLoggingDialog,
       openSubagentDialog,
-      openProviderModelDialog,
+      openModelsDialog,
       openPermissionsDialog,
       openProviderDialog,
       openLoadProfileDialog,
@@ -1486,7 +1475,7 @@ export const AppContainer = (props: AppContainerProps) => {
       openSettingsDialog,
       openLoggingDialog,
       openSubagentDialog,
-      openProviderModelDialog,
+      openModelsDialog,
       openPermissionsDialog,
       openProviderDialog,
       openLoadProfileDialog,
@@ -2052,7 +2041,6 @@ export const AppContainer = (props: AppContainerProps) => {
       !isThemeDialogOpen &&
       !isEditorDialogOpen &&
       !isProviderDialogOpen &&
-      !isProviderModelDialogOpen &&
       !isToolsDialogOpen &&
       !isCreateProfileDialogOpen &&
       !showPrivacyNotice &&
@@ -2070,7 +2058,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isThemeDialogOpen,
     isEditorDialogOpen,
     isProviderDialogOpen,
-    isProviderModelDialogOpen,
     isToolsDialogOpen,
     isCreateProfileDialogOpen,
     showPrivacyNotice,
@@ -2121,7 +2108,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isAuthenticating,
     isEditorDialogOpen,
     isProviderDialogOpen,
-    isProviderModelDialogOpen,
     isLoadProfileDialogOpen,
     isCreateProfileDialogOpen,
     isProfileListDialogOpen,
@@ -2135,13 +2121,13 @@ export const AppContainer = (props: AppContainerProps) => {
     isPermissionsDialogOpen,
     isLoggingDialogOpen,
     isSubagentDialogOpen,
+    isModelsDialogOpen,
 
     // Dialog data
     providerOptions: isCreateProfileDialogOpen
       ? createProfileProviders
       : providerOptions,
     selectedProvider,
-    providerModels,
     currentModel,
     profiles,
     toolsDialogAction,
@@ -2151,6 +2137,7 @@ export const AppContainer = (props: AppContainerProps) => {
     loggingDialogData,
     subagentDialogInitialView,
     subagentDialogInitialName,
+    modelsDialogData,
 
     // Profile management dialog data
     profileListItems,
@@ -2298,11 +2285,6 @@ export const AppContainer = (props: AppContainerProps) => {
       handleProviderSelect,
       exitProviderDialog,
 
-      // Provider model dialog
-      openProviderModelDialog,
-      handleProviderModelChange,
-      exitProviderModelDialog,
-
       // Load profile dialog
       openLoadProfileDialog,
       handleProfileSelect,
@@ -2347,6 +2329,10 @@ export const AppContainer = (props: AppContainerProps) => {
       // Subagent dialog
       openSubagentDialog,
       closeSubagentDialog,
+
+      // Models dialog
+      openModelsDialog,
+      closeModelsDialog,
 
       // Workspace migration dialog
       onWorkspaceMigrationDialogOpen,
@@ -2416,9 +2402,6 @@ export const AppContainer = (props: AppContainerProps) => {
       openProviderDialog,
       handleProviderSelect,
       exitProviderDialog,
-      openProviderModelDialog,
-      handleProviderModelChange,
-      exitProviderModelDialog,
       openLoadProfileDialog,
       handleProfileSelect,
       exitLoadProfileDialog,
@@ -2446,6 +2429,8 @@ export const AppContainer = (props: AppContainerProps) => {
       closeLoggingDialog,
       openSubagentDialog,
       closeSubagentDialog,
+      openModelsDialog,
+      closeModelsDialog,
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
       openPrivacyNotice,

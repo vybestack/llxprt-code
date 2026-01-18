@@ -142,6 +142,27 @@ export interface LoggingDialogData {
 }
 
 /**
+ * Type-safe dialog data for models dialog.
+ */
+export interface ModelsDialogData {
+  /** Pre-fill search term (from positional arg) */
+  initialSearch?: string;
+  /** Pre-set capability filters */
+  initialFilters?: {
+    tools?: boolean;
+    vision?: boolean;
+    reasoning?: boolean;
+    audio?: boolean;
+  };
+  /** Include deprecated models */
+  includeDeprecated?: boolean;
+  /** Override provider filter from --provider arg */
+  providerOverride?: string | null;
+  /** Show all providers (from --all flag) */
+  showAllProviders?: boolean;
+}
+
+/**
  * Type-safe dialog data for profile dialogs.
  */
 export interface ProfileDialogData {
@@ -157,13 +178,13 @@ export type DialogType =
   | 'privacy'
   | 'settings'
   | 'logging'
-  | 'providerModel'
   | 'permissions'
   | 'provider'
   | 'loadProfile'
   | 'createProfile'
   | 'saveProfile'
   | 'subagent'
+  | 'models'
   | 'profileList'
   | 'profileDetail'
   | 'profileEditor';
@@ -172,6 +193,7 @@ export type DialogType =
 export interface DialogDataMap {
   subagent: SubagentDialogData;
   logging: LoggingDialogData;
+  models: ModelsDialogData;
   profileDetail: ProfileDialogData;
   profileEditor: ProfileDialogData;
 }
@@ -187,10 +209,15 @@ export interface OpenDialogActionReturn {
    * Dialog-specific data. Type depends on dialog:
    * - 'subagent': SubagentDialogData
    * - 'logging': LoggingDialogData
+   * - 'models': ModelsDialogData
    * - 'profileDetail'/'profileEditor': ProfileDialogData
    * - others: undefined
    */
-  dialogData?: SubagentDialogData | LoggingDialogData | ProfileDialogData;
+  dialogData?:
+    | SubagentDialogData
+    | LoggingDialogData
+    | ModelsDialogData
+    | ProfileDialogData;
 }
 
 /**

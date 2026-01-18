@@ -16,6 +16,104 @@ if (process.env.NO_COLOR !== undefined) {
 import React from 'react';
 import { vi } from 'vitest';
 
+// Mock provider aliases globally so tests don't need real config files
+// This prevents "Provider not found" errors when fs is mocked
+vi.mock('./src/providers/providerAliases.js', () => ({
+  loadProviderAliasEntries: () => [
+    {
+      alias: 'gemini',
+      config: {
+        name: 'gemini',
+        modelsDevProviderId: 'google',
+        baseProvider: 'gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        defaultModel: 'gemini-2.0-flash',
+        apiKeyEnv: 'GEMINI_API_KEY',
+      },
+      filePath: '/mock/aliases/gemini.config',
+      source: 'builtin',
+    },
+    {
+      alias: 'openai',
+      config: {
+        name: 'openai',
+        modelsDevProviderId: 'openai',
+        baseProvider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        defaultModel: 'gpt-4o',
+        apiKeyEnv: 'OPENAI_API_KEY',
+      },
+      filePath: '/mock/aliases/openai.config',
+      source: 'builtin',
+    },
+    {
+      alias: 'anthropic',
+      config: {
+        name: 'anthropic',
+        modelsDevProviderId: 'anthropic',
+        baseProvider: 'anthropic',
+        baseUrl: 'https://api.anthropic.com/v1',
+        defaultModel: 'claude-sonnet-4-20250514',
+        apiKeyEnv: 'ANTHROPIC_API_KEY',
+      },
+      filePath: '/mock/aliases/anthropic.config',
+      source: 'builtin',
+    },
+    {
+      alias: 'kimi',
+      config: {
+        name: 'kimi',
+        modelsDevProviderId: 'kimi-for-coding',
+        baseProvider: 'openai',
+        baseUrl: 'https://api.kimi.com/coding/v1',
+        defaultModel: 'kimi-for-coding',
+        description: 'Kimi For Coding OpenAI-compatible endpoint',
+        ephemeralSettings: {
+          'context-limit': 262144,
+          max_tokens: 32768,
+          'reasoning.effort': 'medium',
+          'user-agent': 'RooCode/1.0',
+        },
+      },
+      filePath: '/mock/aliases/kimi.config',
+      source: 'builtin',
+    },
+    {
+      alias: 'openai-responses',
+      config: {
+        name: 'openai-responses',
+        modelsDevProviderId: 'openai',
+        baseProvider: 'openai-responses',
+        baseUrl: 'https://api.openai.com/v1',
+        defaultModel: 'gpt-4o',
+        apiKeyEnv: 'OPENAI_API_KEY',
+      },
+      filePath: '/mock/aliases/openai-responses.config',
+      source: 'builtin',
+    },
+    {
+      alias: 'codex',
+      config: {
+        name: 'codex',
+        modelsDevProviderId: 'openai',
+        baseProvider: 'openai-responses',
+        baseUrl: 'https://chatgpt.com/backend-api/codex',
+        defaultModel: 'gpt-5.2',
+        description: 'OpenAI Codex (ChatGPT backend with OAuth)',
+        ephemeralSettings: {
+          'context-limit': 262144,
+        },
+      },
+      filePath: '/mock/aliases/codex.config',
+      source: 'builtin',
+    },
+  ],
+  getUserAliasDir: () => '/mock/home/.llxprt/providers',
+  getAliasFilePath: (alias: string) =>
+    `/mock/home/.llxprt/providers/${alias}.config`,
+  writeProviderAliasConfig: vi.fn(),
+}));
+
 vi.mock('ink', () => import('./test-utils/ink-stub.ts'), {
   virtual: true,
 });
