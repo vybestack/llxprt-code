@@ -96,9 +96,10 @@ describe('extension reloading', () => {
       // See the outdated extension
       await run.sendText('/extensions list');
       await run.type('\r');
-      await run.expectText(
+      await run.expectAnyText([
         'test-extension (v0.0.1) - active (update available)',
-      );
+        'test-extension (v0.0.1) - active (update available, run "/extensions update test-extension")',
+      ]);
       await run.sendText('/mcp list');
       await run.type('\r');
       await run.expectText(

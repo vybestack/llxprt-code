@@ -534,10 +534,12 @@ export class TestRig {
 
     const promptValue = prompts.join(' ');
 
-    if (promptValue && promptUsesStdinFlag) {
-      commandArgs.push('--prompt-interactive', promptValue);
-    } else if (promptValue && !promptIsStdin) {
-      commandArgs.push('--prompt', promptValue);
+    if (promptValue) {
+      if (promptUsesStdinFlag) {
+        commandArgs.push('--prompt', promptValue);
+      } else if (!promptIsStdin) {
+        commandArgs.push('--prompt', promptValue);
+      }
     }
 
     // Add any additional args
