@@ -27,3 +27,4 @@ Notes:
 - `output` is intended to be raw multi-line text (for example, code or logs).
 - If there is no error, `error` is an empty string.
 - When output is missing, it is replaced with `[no tool result]`.
+- Some tools return structured (JSON-like) results. For OpenAI providers we prefer a human-readable multi-line rendering (e.g. `error` text, `stdout`/`stderr`) to avoid an extra JSON wrapper like `{"error":"..."}` and preserve real newlines.

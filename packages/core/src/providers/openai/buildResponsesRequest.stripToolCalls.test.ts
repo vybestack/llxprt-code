@@ -73,6 +73,56 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
     });
   });
 
+  it('does not double-wrap tool errors when result is {error: string}', () => {
+    const messages: IContent[] = [
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_doublewrap',
+            toolName: 'replace',
+            result: {
+              error: `Failed to edit file
+
+Diff: ...`,
+            },
+          },
+        ],
+      },
+    ];
+
+    const request = buildResponsesRequest({
+      model: 'o3',
+      messages,
+    });
+
+    expect(request.input?.length).toBe(1);
+    expect(request.input?.[0]).toEqual({
+      type: 'function_call_output',
+      call_id: 'call_doublewrap',
+      output: `status:
+success
+
+toolName:
+replace
+
+error:
+
+
+output:
+Failed to edit file
+
+Diff: ...`,
+    });
+
+    const output = (request.input?.[0] as { output?: string }).output ?? '';
+    expect(output).toContain(`output:
+Failed to edit file`);
+    expect(output).not.toContain(`output:
+{"error":`);
+  });
+
   it('should handle messages without tool_calls', () => {
     const messages: IContent[] = [
       {

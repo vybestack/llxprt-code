@@ -295,7 +295,7 @@
 
     "@vitest/utils": ["@vitest/utils@4.0.15", "", { "dependencies": { "@vitest/pretty-format": "4.0.15", "tinyrainbow": "^3.0.3" } }, "sha512-HXjPW2w5dxhTD0dLwtYHDnelK3j8sR8cWIaLxr22evTyY6q8pRCjZSmhRWVjBaOVXChQd6AwMzi9pucorXCPZA=="],
 
-    "@vybestack/opentui-core": ["@vybestack/opentui-core@0.1.62", "", { "dependencies": { "bun-ffi-structs": "0.1.2", "diff": "8.0.2", "sharp": "0.33.5", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@dimforge/rapier2d-simd-compat": "^0.17.3", "@vybestack/opentui-core-darwin-arm64": "0.1.62", "@vybestack/opentui-core-darwin-x64": "0.1.62", "@vybestack/opentui-core-linux-arm64": "0.1.62", "@vybestack/opentui-core-linux-x64": "0.1.62", "@vybestack/opentui-core-win32-arm64": "0.1.62", "@vybestack/opentui-core-win32-x64": "0.1.62", "bun-webgpu": "0.1.4", "planck": "^1.4.2", "three": "0.177.0" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-7bV642znET0E7HS+aaNKFaMRWXYkQGVZbXgE1IWdgQMHCjO/McZ5Z6EFREhnVY7BfnsEoQnS8cwP6DO9vNAhPw=="],
+    "@vybestack/opentui-core": ["@vybestack/opentui-core@0.1.62", "", { "dependencies": { "bun-ffi-structs": "0.1.2", "diff": "8.0.3", "sharp": "0.33.5", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@dimforge/rapier2d-simd-compat": "^0.17.3", "@vybestack/opentui-core-darwin-arm64": "0.1.62", "@vybestack/opentui-core-darwin-x64": "0.1.62", "@vybestack/opentui-core-linux-arm64": "0.1.62", "@vybestack/opentui-core-linux-x64": "0.1.62", "@vybestack/opentui-core-win32-arm64": "0.1.62", "@vybestack/opentui-core-win32-x64": "0.1.62", "bun-webgpu": "0.1.4", "planck": "^1.4.2", "three": "0.177.0" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-7bV642znET0E7HS+aaNKFaMRWXYkQGVZbXgE1IWdgQMHCjO/McZ5Z6EFREhnVY7BfnsEoQnS8cwP6DO9vNAhPw=="],
 
     "@vybestack/opentui-core-darwin-arm64": ["@vybestack/opentui-core-darwin-arm64@0.1.62", "", { "os": "darwin", "cpu": "arm64" }, "sha512-1FuxAD0ya4zB1DMTycy9CQHex4EgEx7tDtGbGKNqPGP+g4s4b04HEq0pdWXJIp0a25XtWvQ3x+9MAczzUhTEQA=="],
 
@@ -417,7 +417,7 @@
 
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
 
-    "diff": ["diff@8.0.2", "", {}, "sha512-sSuxWU5j5SR9QQji/o2qMvqRNYRDOcBTgsJ/DeCf4iSN4gW+gNMXM7wFIP+fdXZxoNiAnHUTGjCr+TSWXdRDKg=="],
+    "diff": ["diff@8.0.3", "", {}, "sha512-8kxCs9zZ1KAJXA4ogRzWllaBP3KUnp4+BKs+T844p7OEmFayGc6K8SSXepXsg8w7xDzs/a1rq9iLwr6voNNCVQ=="],
 
     "doctrine": ["doctrine@2.1.0", "", { "dependencies": { "esutils": "^2.0.2" } }, "sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw=="],
 
