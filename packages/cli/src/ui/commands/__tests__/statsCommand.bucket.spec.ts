@@ -27,6 +27,8 @@ const createMockTokenStore = (): TokenStore => ({
   listProviders: vi.fn(),
   listBuckets: vi.fn(),
   getBucketStats: vi.fn(),
+  acquireRefreshLock: vi.fn(),
+  releaseRefreshLock: vi.fn(),
 });
 
 // Mock OAuthManager

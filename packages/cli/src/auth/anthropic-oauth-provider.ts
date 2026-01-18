@@ -405,6 +405,13 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * @plan PLAN-20250823-AUTHFIXES.P08
    * @requirement REQ-001.1
    * @pseudocode lines 74-98
+   *
+   * Issue #1159: Prevents race conditions when multiple clients refresh the same token
+   * Flow:
+   * 1. Check disk for updated token (another client may have already refreshed)
+   * 2. Try to acquire refresh lock
+   * 3. If lock acquired, re-check disk and refresh if still needed
+   * 4. If lock not acquired, wait and re-check disk
    */
   async refreshIfNeeded(): Promise<OAuthToken | null> {
     await this.ensureInitialized();
@@ -422,9 +429,62 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     // @pseudocode line 81: Check if token is expired
     if (this.isTokenExpired(currentToken)) {
+      // Issue #1159: Check disk for updated token before attempting refresh
+      const diskToken = await this._tokenStore.getToken('anthropic');
+      if (
+        diskToken &&
+        !this.isTokenExpired(diskToken) &&
+        diskToken.access_token !== currentToken.access_token
+      ) {
+        // Token was already refreshed by another client
+        this.logger.debug(
+          () =>
+            'Token was already refreshed by another process, using updated version from disk',
+        );
+        return diskToken;
+      }
+
       // @pseudocode line 82: Check if refresh token exists and is valid
       if (this.hasValidRefreshToken(currentToken)) {
+        // Issue #1159: Try to acquire lock to prevent concurrent refreshes
+        const lockAcquired = await this._tokenStore.acquireRefreshLock(
+          'anthropic',
+          {
+            waitMs: 10000, // Wait up to 10 seconds
+            staleMs: 30000, // Break locks older than 30 seconds
+          },
+        );
+
+        if (!lockAcquired) {
+          // Failed to acquire lock, check disk again for updated token
+          this.logger.debug(
+            () =>
+              'Failed to acquire refresh lock, checking disk for updated token',
+          );
+          const updatedToken = await this._tokenStore.getToken('anthropic');
+          if (updatedToken && !this.isTokenExpired(updatedToken)) {
+            return updatedToken;
+          }
+          // Still expired, return null to trigger re-auth
+          return null;
+        }
+
         try {
+          // Re-check disk after acquiring lock (double-check pattern)
+          const recheckToken = await this._tokenStore.getToken('anthropic');
+          if (
+            recheckToken &&
+            !this.isTokenExpired(recheckToken) &&
+            recheckToken.access_token !== currentToken.access_token
+          ) {
+            // Another process refreshed while we were waiting for lock
+            this.logger.debug(
+              () =>
+                'Token was refreshed while waiting for lock, using updated version',
+            );
+            return recheckToken;
+          }
+
           // @pseudocode lines 84-86: Refresh the token
           const refreshedToken = await this.deviceFlow.refreshToken(
             currentToken.refresh_token,
@@ -468,6 +528,15 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
 
           return null;
+        } finally {
+          // Always release the lock
+          await this._tokenStore
+            .releaseRefreshLock('anthropic')
+            .catch((releaseError) => {
+              this.logger.debug(
+                () => `Failed to release refresh lock: ${releaseError}`,
+              );
+            });
         }
       } else {
         // @pseudocode lines 93-95: Remove token without refresh capability
