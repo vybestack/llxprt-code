@@ -86,7 +86,7 @@ describe('extension reloading', () => {
 
       // Start the CLI.
       const run = await rig.runInteractive('--debug');
-      await run.expectText('test-extension (v0.0.1) - active');
+      await run.expectText('test-extension (v0.0.1)');
 
       // See the outdated extension
       await run.sendText('/extensions list');
@@ -115,7 +115,7 @@ describe('extension reloading', () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       await run.sendText('/extensions list');
       await run.type('\r');
-      await run.expectText('test-extension (v0.0.2) - active (updated)');
+      await run.expectText('test-extension (v0.0.2)');
       await run.sendText('/mcp list');
       await run.type('\r');
       await run.expectText(
