@@ -29,6 +29,8 @@ describe('AnthropicOAuthProvider refreshIfNeeded', () => {
       listProviders: vi.fn(async () => []),
       listBuckets: vi.fn(async () => ['default']),
       getBucketStats: vi.fn(async () => null),
+      acquireRefreshLock: vi.fn(async () => true), // Issue #1159: Mock lock acquisition
+      releaseRefreshLock: vi.fn(async () => undefined), // Issue #1159: Mock lock release
     } satisfies TokenStore;
   });
 

@@ -25,6 +25,18 @@ function getLineCountCommand(): { command: string; tool: string } {
   }
 }
 
+function getFileListingCommand(): { command: string; tool: string } {
+  switch (shell) {
+    case 'powershell':
+      return { command: 'Get-ChildItem -Name', tool: 'Get-ChildItem' };
+    case 'cmd':
+      return { command: 'dir /b', tool: 'dir' };
+    case 'bash':
+    default:
+      return { command: 'ls -1', tool: 'ls' };
+  }
+}
+
 function getChainedEchoCommand(): { allowPattern: string; command: string } {
   const secondCommand = getAllowedListCommand();
   switch (shell) {
@@ -406,8 +418,15 @@ describe('run_shell_command', () => {
     const fileName = `test-file-${Math.random().toString(36).substring(7)}.txt`;
     rig.createFile(fileName, 'test content');
 
-    const prompt = `Run a shell command to list the files in the current directory and tell me what they are.`;
-    const result = await rig.run(prompt);
+    const { command, tool } = getFileListingCommand();
+    const prompt = `Use run_shell_command to execute "${command}" in the current directory and tell me if ${fileName} appears in the output. Use the ${tool} command exactly as specified.`;
+    const result = await rig.run(
+      {
+        prompt,
+        yolo: false,
+      },
+      `--allowed-tools=run_shell_command(${tool})`,
+    );
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command');
 
@@ -423,6 +442,11 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
+
+    const toolCall = rig
+      .readToolLogs()
+      .filter((t) => t.toolRequest.name === 'run_shell_command')[0];
+    expect(toolCall.toolRequest.success).toBe(true);
 
     validateModelOutput(result, fileName, 'Platform-specific listing test');
     expect(result).toContain(fileName);

@@ -46,6 +46,14 @@ class MemoryTokenStore implements TokenStore {
   async getBucketStats(): Promise<null> {
     return null;
   }
+
+  async acquireRefreshLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseRefreshLock(): Promise<void> {
+    // No-op
+  }
 }
 
 function makeToken(accessToken: string): OAuthToken {
