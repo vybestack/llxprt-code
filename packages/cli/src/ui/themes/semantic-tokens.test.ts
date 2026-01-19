@@ -108,6 +108,7 @@ describe('semantic tokens system', () => {
         Comment: '#7F8C8D',
         DimComment: '#5f6a6b',
         Gray: '#95A5A6',
+        DarkGray: '#6a6a6a',
       };
 
       themeManager.loadCustomThemes({ TestCustomTheme: customTheme });
@@ -141,6 +142,7 @@ describe('semantic tokens system', () => {
         Comment: '#7F8C8D',
         DimComment: '#5f6a6b',
         Gray: '#95A5A6',
+        DarkGray: '#6a6a6a',
       };
 
       themeManager.loadCustomThemes({ NoDiffTheme: customThemeNoDiff });
@@ -257,6 +259,7 @@ describe('semantic tokens system', () => {
           secondary: expect.any(String),
           link: expect.any(String),
           accent: expect.any(String),
+          response: expect.any(String),
         },
         status: {
           success: expect.any(String),
@@ -273,6 +276,7 @@ describe('semantic tokens system', () => {
         ui: {
           comment: expect.any(String),
           symbol: expect.any(String),
+          dark: expect.any(String),
           gradient: expect.anything(),
         },
         border: {
@@ -347,6 +351,7 @@ describe('semantic tokens system', () => {
         Comment: '#7F8C8D',
         DimComment: '#5f6a6b',
         Gray: '#95A5A6',
+        DarkGray: '#6a6a6a',
       };
 
       themeManager.loadCustomThemes({ CacheTestTheme: customTheme });

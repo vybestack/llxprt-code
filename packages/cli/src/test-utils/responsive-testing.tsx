@@ -5,9 +5,11 @@
  */
 
 import React from 'react';
-import { render, type RenderResult } from '@testing-library/react';
+import { render } from 'ink-testing-library';
 import { vi } from 'vitest';
 import { useTerminalSize } from '../ui/hooks/useTerminalSize.js';
+
+type RenderResult = ReturnType<typeof render>;
 
 export interface ResponsiveAssertions {
   narrow?: (result: RenderResult) => void;

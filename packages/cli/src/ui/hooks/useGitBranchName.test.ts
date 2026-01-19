@@ -14,7 +14,7 @@ import {
   MockedFunction,
 } from 'vitest';
 import { act } from 'react';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useGitBranchName } from './useGitBranchName.js';
 import { EventEmitter } from 'node:events';
 import { exec as mockExec, type ChildProcess } from 'node:child_process';

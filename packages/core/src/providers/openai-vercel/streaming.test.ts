@@ -462,9 +462,9 @@ describe('OpenAIVercelProvider - Streaming', () => {
         providerName: 'openaivercel',
       });
 
-      await expect(async () => {
-        await collectResults(provider.generateChatCompletion(options));
-      }).rejects.toThrow('Network error');
+      await expect(
+        collectResults(provider.generateChatCompletion(options)),
+      ).rejects.toThrow('Network error');
     });
   });
 

@@ -13,7 +13,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
+import { act } from 'react';
 import { useGeminiStream } from './useGeminiStream.js';
 import {
   Config,

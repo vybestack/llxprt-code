@@ -1175,7 +1175,7 @@ This extension will run the following MCP servers:
     });
 
     describe('folder trust', () => {
-      it('refuses to install extensions from untrusted folders', async () => {
+      it('refuses to install extensions from untrusted folders when user declines trust', async () => {
         vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
@@ -1190,13 +1190,13 @@ This extension will run the following MCP servers:
               workspaceDir: tempWorkspaceDir,
             })!,
           ],
-          async () => true,
+          async () => false, // User declines to trust workspace
         );
 
         expect(failed).toEqual(['ext1']);
       });
 
-      it('does not copy extensions to the user dir', async () => {
+      it('does not copy extensions to the user dir when user declines trust', async () => {
         vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
@@ -1211,7 +1211,7 @@ This extension will run the following MCP servers:
               workspaceDir: tempWorkspaceDir,
             })!,
           ],
-          async (_) => true,
+          async (_) => false, // User declines to trust workspace
         );
 
         const userExtensionsDir = path.join(
@@ -1222,7 +1222,7 @@ This extension will run the following MCP servers:
         expect(fs.readdirSync(userExtensionsDir).length).toBe(0);
       });
 
-      it('does not load any extensions in the workspace config', async () => {
+      it('does not load any extensions in the workspace config when user declines trust', async () => {
         vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
@@ -1237,7 +1237,7 @@ This extension will run the following MCP servers:
               workspaceDir: tempWorkspaceDir,
             })!,
           ],
-          async (_) => true,
+          async (_) => false, // User declines to trust workspace
         );
         const extensions = loadExtensions(
           new ExtensionEnablementManager(
@@ -1246,6 +1246,28 @@ This extension will run the following MCP servers:
         );
 
         expect(extensions).toEqual([]);
+      });
+
+      it('allows extension install when user approves trust prompt', async () => {
+        vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+        const ext1Path = createExtension({
+          extensionsDir: workspaceExtensionsDir,
+          name: 'ext1',
+          version: '1.0.0',
+        });
+
+        const failed = await performWorkspaceExtensionMigration(
+          [
+            loadExtension({
+              extensionDir: ext1Path,
+              workspaceDir: tempWorkspaceDir,
+            })!,
+          ],
+          async () => true, // User approves trust prompt
+        );
+
+        // Extension should install successfully when user approves
+        expect(failed).toEqual([]);
       });
     });
 

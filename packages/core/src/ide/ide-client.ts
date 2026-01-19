@@ -282,6 +282,14 @@ export class IdeClient {
     return this.currentIde?.displayName;
   }
 
+  /**
+   * Check if diffing functionality is enabled for this IDE client.
+   * Returns true when the client is connected and the IDE supports diff operations.
+   */
+  isDiffingEnabled(): boolean {
+    return this.state.status === IDEConnectionStatus.Connected;
+  }
+
   private setState(
     status: IDEConnectionStatus,
     details?: string,

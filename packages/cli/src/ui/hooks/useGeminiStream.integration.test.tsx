@@ -29,8 +29,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
-import React, { Dispatch, SetStateAction } from 'react';
+import React, { act, Dispatch, SetStateAction } from 'react';
+import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useGeminiStream } from './useGeminiStream.js';
 import {
   useReactToolScheduler,

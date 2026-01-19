@@ -273,7 +273,7 @@ describe('FileTokenStorage', () => {
   });
 
   describe('listServers', () => {
-    it('should return empty array when file does not exist', async () => {
+    it('should return empty list when file does not exist', async () => {
       mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
 
       const result = await storage.listServers();

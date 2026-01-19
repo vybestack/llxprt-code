@@ -710,6 +710,18 @@ export class GeminiClient {
     }
   }
 
+  /**
+   * Updates the UI telemetry service with the current prompt token count from chat.
+   * This decouples GeminiChat from directly knowing about uiTelemetryService.
+   */
+  private updateTelemetryTokenCount(): void {
+    if (this.chat) {
+      uiTelemetryService.setLastPromptTokenCount(
+        this.chat.getLastPromptTokenCount(),
+      );
+    }
+  }
+
   async resetChat(): Promise<void> {
     // If chat exists, clear its history service
     if (this.chat) {
@@ -727,6 +739,7 @@ export class GeminiClient {
       // No chat exists yet, create one with empty history
       this.chat = await this.startChat([]);
     }
+    this.updateTelemetryTokenCount();
     // Clear the stored history as well
     this._previousHistory = [];
   }
@@ -1221,8 +1234,7 @@ export class GeminiClient {
     );
 
     const remainingTokenCount =
-      tokenLimit(modelForLimitCheck) -
-      uiTelemetryService.getLastPromptTokenCount();
+      tokenLimit(modelForLimitCheck) - this.getChat().getLastPromptTokenCount();
 
     if (estimatedRequestTokenCount > remainingTokenCount * 0.95) {
       const contentGenConfig = this.config.getContentGeneratorConfig();
@@ -1414,6 +1426,10 @@ export class GeminiClient {
         } else {
           yield event;
         }
+
+        // Update telemetry token count after yielding stream events
+        // This keeps UI in sync with actual token usage
+        this.updateTelemetryTokenCount();
 
         if (event.type === GeminiEventType.Error) {
           for (const deferred of deferredEvents) {
@@ -1777,9 +1793,9 @@ export class GeminiClient {
       };
     }
 
-    // Use lastPromptTokenCount from telemetry service as the source of truth
+    // Use lastPromptTokenCount from chat as the source of truth
     // This is more accurate than estimating from history
-    const originalTokenCount = uiTelemetryService.getLastPromptTokenCount();
+    const originalTokenCount = this.getChat().getLastPromptTokenCount();
 
     const contextPercentageThreshold =
       this.config.getChatCompression()?.contextPercentageThreshold;
@@ -1929,8 +1945,8 @@ export class GeminiClient {
     } else {
       this.chat = compressedChat; // Chat compression successful, set new state.
 
-      // Update telemetry service with new token count
-      uiTelemetryService.setLastPromptTokenCount(newTokenCount);
+      // Update telemetry service with new token count from the chat
+      this.updateTelemetryTokenCount();
 
       // Emit token update event for the new compressed chat
       // This ensures the UI updates with the new token count

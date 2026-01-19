@@ -24,15 +24,20 @@ const mockGetPty = vi.hoisted(() => vi.fn());
 vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
-vi.mock('child_process', () => ({
-  spawn: mockCpSpawn,
-}));
+vi.mock('child_process', async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import('child_process');
+  return {
+    ...actual,
+    spawn: mockCpSpawn,
+  };
+});
 vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
 vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
+    homedir: () => '/tmp/test-home',
     constants: {
       signals: {
         SIGTERM: 15,
@@ -41,6 +46,7 @@ vi.mock('os', () => ({
     },
   },
   platform: mockPlatform,
+  homedir: () => '/tmp/test-home',
   constants: {
     signals: {
       SIGTERM: 15,
@@ -123,7 +129,10 @@ describe('ShellExecutionService', () => {
 
       expect(mockPtySpawn).toHaveBeenCalledWith(
         'bash',
-        ['-c', 'ls -l'],
+        [
+          '-c',
+          'shopt -u promptvars nullglob extglob nocaseglob dotglob; ls -l',
+        ],
         expect.any(Object),
       );
       expect(result.exitCode).toBe(0);
@@ -386,15 +395,15 @@ describe('ShellExecutionService', () => {
   });
 
   describe('Platform-Specific Behavior', () => {
-    it('should use cmd.exe on Windows', async () => {
+    it('should use powershell.exe on Windows', async () => {
       mockPlatform.mockReturnValue('win32');
       await simulateExecution('dir "foo bar"', (pty) =>
         pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null }),
       );
 
       expect(mockPtySpawn).toHaveBeenCalledWith(
-        'cmd.exe',
-        '/c dir "foo bar"',
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'dir "foo bar"'],
         expect.any(Object),
       );
     });
@@ -407,7 +416,10 @@ describe('ShellExecutionService', () => {
 
       expect(mockPtySpawn).toHaveBeenCalledWith(
         'bash',
-        ['-c', 'ls "foo bar"'],
+        [
+          '-c',
+          'shopt -u promptvars nullglob extglob nocaseglob dotglob; ls "foo bar"',
+        ],
         expect.any(Object),
       );
     });
@@ -472,9 +484,12 @@ describe('ShellExecutionService child_process fallback', () => {
       });
 
       expect(mockCpSpawn).toHaveBeenCalledWith(
-        'ls -l',
-        [],
-        expect.objectContaining({ shell: 'bash' }),
+        'bash',
+        [
+          '-c',
+          'shopt -u promptvars nullglob extglob nocaseglob dotglob; ls -l',
+        ],
+        expect.objectContaining({ shell: false }),
       );
       expect(result.exitCode).toBe(0);
       expect(result.signal).toBeNull();
@@ -770,17 +785,17 @@ describe('ShellExecutionService child_process fallback', () => {
   });
 
   describe('Platform-Specific Behavior', () => {
-    it('should use cmd.exe on Windows', async () => {
+    it('should use powershell.exe on Windows', async () => {
       mockPlatform.mockReturnValue('win32');
       await simulateExecution('dir "foo bar"', (cp) =>
         cp.emit('exit', 0, null),
       );
 
       expect(mockCpSpawn).toHaveBeenCalledWith(
-        'dir "foo bar"',
-        [],
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'dir "foo bar"'],
         expect.objectContaining({
-          shell: true,
+          shell: false,
           detached: false,
         }),
       );
@@ -791,10 +806,13 @@ describe('ShellExecutionService child_process fallback', () => {
       await simulateExecution('ls "foo bar"', (cp) => cp.emit('exit', 0, null));
 
       expect(mockCpSpawn).toHaveBeenCalledWith(
-        'ls "foo bar"',
-        [],
+        'bash',
+        [
+          '-c',
+          'shopt -u promptvars nullglob extglob nocaseglob dotglob; ls "foo bar"',
+        ],
         expect.objectContaining({
-          shell: 'bash',
+          shell: false,
           detached: true,
         }),
       );

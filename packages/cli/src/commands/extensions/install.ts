@@ -6,16 +6,18 @@
 
 import type { CommandModule } from 'yargs';
 import {
-  installOrUpdateExtension,
   requestConsentNonInteractive,
+  installOrUpdateExtension,
+  loadExtensionByName,
+  type ExtensionInstallMetadata,
 } from '../../config/extension.js';
-import type { ExtensionInstallMetadata } from '@vybestack/llxprt-code-core';
 import {
   checkGitHubReleasesExist,
   parseGitHubRepoForReleases,
 } from '../../config/extensions/github.js';
 
 import { getErrorMessage } from '../../utils/errors.js';
+import * as fs from 'node:fs/promises';
 
 interface InstallArgs {
   source?: string;
@@ -51,7 +53,7 @@ export async function handleInstall(args: InstallArgs) {
           autoUpdate: args.autoUpdate,
         };
       } else {
-        // Try to parse as org/repo format
+        // Try to parse as org/repo format first
         try {
           const { owner, repo } = parseGitHubRepoForReleases(source);
           // Check if releases exist
@@ -80,9 +82,19 @@ export async function handleInstall(args: InstallArgs) {
             };
           }
         } catch {
-          throw new Error(
-            `The source "${source}" is not a valid URL or "org/repo" format.`,
-          );
+          // Not org/repo format, check if it's a local path
+          try {
+            await fs.stat(source);
+            // It's a local path
+            installMetadata = {
+              source,
+              type: 'local',
+              autoUpdate: args.autoUpdate,
+            };
+          } catch {
+            console.error('Install source not found.');
+            process.exit(1);
+          }
         }
       }
     } else if (args.path) {
@@ -96,11 +108,16 @@ export async function handleInstall(args: InstallArgs) {
       throw new Error('Either --source or --path must be provided.');
     }
 
-    const name = await installOrUpdateExtension(
-      installMetadata,
+    const workspaceDir = process.cwd();
+    const extensionName = await installOrUpdateExtension(
+      installMetadata!,
       requestConsentNonInteractive,
+      workspaceDir,
     );
-    console.log(`Extension "${name}" installed successfully and enabled.`);
+    const extension = loadExtensionByName(extensionName, workspaceDir);
+    console.log(
+      `Extension "${extension?.name ?? extensionName}" installed successfully and enabled.`,
+    );
   } catch (error) {
     console.error(getErrorMessage(error));
     process.exit(1);

@@ -7,6 +7,7 @@
 import { useReducer, useRef, useEffect, useCallback } from 'react';
 import { useKeypress, type Key } from './useKeypress.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { keyMatchers, Command } from '../keyMatchers.js';
 
 export interface SelectionListItem<T> {
   key: string;
@@ -347,17 +348,17 @@ export function useSelectionList<T>({
         numberInputRef.current = '';
       }
 
-      if (name === 'k' || name === 'up') {
+      if (keyMatchers[Command.DIALOG_NAVIGATION_UP](key)) {
         dispatch({ type: 'MOVE_UP' });
         return;
       }
 
-      if (name === 'j' || name === 'down') {
+      if (keyMatchers[Command.DIALOG_NAVIGATION_DOWN](key)) {
         dispatch({ type: 'MOVE_DOWN' });
         return;
       }
 
-      if (name === 'return') {
+      if (keyMatchers[Command.RETURN](key)) {
         if (selectionLogger.enabled) {
           selectionLogger.debug(
             () =>

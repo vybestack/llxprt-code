@@ -115,7 +115,7 @@ export const ProfileListDialog: React.FC<ProfileListDialogProps> = ({
           typeof key.sequence === 'string' &&
           !key.ctrl &&
           !key.meta &&
-          key.insertable !== false
+          key.sequence.length === 1
         ) {
           setSearchTerm((prev) => prev + key.sequence);
         }

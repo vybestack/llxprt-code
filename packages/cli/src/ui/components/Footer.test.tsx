@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from '@testing-library/react';
+import { render } from '../../test-utils/render.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Footer } from './Footer.js';
 

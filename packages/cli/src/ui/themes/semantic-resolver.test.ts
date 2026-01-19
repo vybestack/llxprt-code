@@ -28,6 +28,7 @@ describe('semantic-resolver', () => {
         Comment: '#6C7086',
         DimComment: '#505564',
         Gray: '#6C7086',
+        DarkGray: '#4a4a5a',
       };
 
       const semanticColors = resolveSemanticColors(darkTheme);
@@ -38,6 +39,7 @@ describe('semantic-resolver', () => {
           secondary: '#6C7086',
           link: '#89B4FA',
           accent: '#CBA6F7',
+          response: '#CDD6F4',
         },
         background: {
           primary: '#1E1E2E',
@@ -53,6 +55,7 @@ describe('semantic-resolver', () => {
         ui: {
           comment: '#6C7086',
           symbol: '#6C7086',
+          dark: '#4a4a5a',
           gradient: undefined,
         },
         status: {
@@ -80,6 +83,7 @@ describe('semantic-resolver', () => {
         Comment: '#008000',
         DimComment: '#006000',
         Gray: '#97a0b0',
+        DarkGray: '#7a8090',
       };
 
       const semanticColors = resolveSemanticColors(lightTheme);
@@ -90,6 +94,7 @@ describe('semantic-resolver', () => {
           secondary: '#97a0b0',
           link: '#3B82F6',
           accent: '#8B5CF6',
+          response: '#3C3C43',
         },
         background: {
           primary: '#FAFAFA',
@@ -105,6 +110,7 @@ describe('semantic-resolver', () => {
         ui: {
           comment: '#008000',
           symbol: '#97a0b0',
+          dark: '#7a8090',
           gradient: undefined,
         },
         status: {
@@ -132,6 +138,7 @@ describe('semantic-resolver', () => {
         Comment: 'gray',
         DimComment: '#5a5a5a',
         Gray: 'gray',
+        DarkGray: '#4a4a4a',
       };
 
       const semanticColors = resolveSemanticColors(ansiTheme);
@@ -142,6 +149,7 @@ describe('semantic-resolver', () => {
           secondary: 'gray',
           link: 'blue',
           accent: 'magenta',
+          response: 'white',
         },
         background: {
           primary: 'black',
@@ -157,6 +165,7 @@ describe('semantic-resolver', () => {
         ui: {
           comment: 'gray',
           symbol: 'gray',
+          dark: '#4a4a4a',
           gradient: undefined,
         },
         status: {
@@ -184,6 +193,7 @@ describe('semantic-resolver', () => {
         Comment: '#6C757D',
         DimComment: '#50555d',
         Gray: '#6C757D',
+        DarkGray: '#4c555d',
       };
 
       const semanticColors = resolveSemanticColors(customTheme);
@@ -194,6 +204,7 @@ describe('semantic-resolver', () => {
           secondary: '#6C757D',
           link: '#457B9D',
           accent: '#A663CC',
+          response: '#EDF2F4',
         },
         background: {
           primary: '#2B2D42',
@@ -209,6 +220,7 @@ describe('semantic-resolver', () => {
         ui: {
           comment: '#6C757D',
           symbol: '#6C757D',
+          dark: '#4c555d',
           gradient: undefined,
         },
         status: {
@@ -236,6 +248,7 @@ describe('semantic-resolver', () => {
         Comment: '#6C7086',
         DimComment: '#505564',
         Gray: '#6C7086',
+        DarkGray: '#4a4a5a',
       };
 
       const semanticColors = resolveSemanticColors(themeWithoutDiffAdded);
@@ -261,6 +274,7 @@ describe('semantic-resolver', () => {
         Comment: '#6C7086',
         DimComment: '#505564',
         Gray: '#6C7086',
+        DarkGray: '#4a4a5a',
       };
 
       const semanticColors = resolveSemanticColors(themeWithoutDiffRemoved);

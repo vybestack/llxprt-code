@@ -36,6 +36,7 @@ import {
   type ThinkingBlock,
   tokenLimit,
   DebugLogger,
+  uiTelemetryService,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -1007,7 +1008,11 @@ export const useGeminiStream = (
             loopDetectedRef.current = true;
             break;
           case ServerGeminiEventType.UsageMetadata:
-            // Handle usage metadata - for now just ignore
+            if (event.value.promptTokenCount !== undefined) {
+              uiTelemetryService.setLastPromptTokenCount(
+                event.value.promptTokenCount,
+              );
+            }
             break;
           case ServerGeminiEventType.Citation:
             handleCitationEvent(

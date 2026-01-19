@@ -56,6 +56,15 @@ if (existsSync(tiktokenWasmPath)) {
   copyFileSync(tiktokenWasmPath, join(bundleDir, 'tiktoken_bg.wasm'));
 }
 
+// Copy tree-sitter WASM file for web-tree-sitter runtime
+const treeSitterWasmPath = join(
+  root,
+  'node_modules/web-tree-sitter/tree-sitter.wasm',
+);
+if (existsSync(treeSitterWasmPath)) {
+  copyFileSync(treeSitterWasmPath, join(bundleDir, 'tree-sitter.wasm'));
+}
+
 // Copy all markdown files from prompt-config/defaults preserving directory structure
 const promptMdFiles = glob.sync(
   'packages/core/src/prompt-config/defaults/**/*.md',

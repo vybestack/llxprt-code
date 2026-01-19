@@ -189,7 +189,7 @@ describe('ShellExecutionService programmatic integration tests', () => {
       process.env[varName] = varValue;
 
       try {
-        const command = `echo %${varName}%`;
+        const command = `cmd /c echo %${varName}%`;
         const onOutputEvent = vi.fn();
         const abortController = new AbortController();
 

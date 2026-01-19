@@ -5,6 +5,7 @@
  */
 
 import { type ColorsTheme, Theme } from './theme.js';
+import { interpolateColor } from './color-utils.js';
 
 const draculaColors: ColorsTheme = {
   type: 'dark',
@@ -26,6 +27,7 @@ const draculaColors: ColorsTheme = {
   Comment: '#6272a4',
   DimComment: '#4a5478',
   Gray: '#6272a4',
+  DarkGray: interpolateColor('#6272a4', '#282a36', 0.5),
   GradientColors: ['#ff79c6', '#8be9fd'],
 };
 

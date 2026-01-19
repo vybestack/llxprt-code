@@ -9,14 +9,29 @@ export * from './config/config.js';
 export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
 export * from './config/schedulerSingleton.js';
-export * from './policy/config.js';
 export * from './policy/index.js';
 export { PolicyEngine } from './policy/policy-engine.js';
 export {
   PolicyDecision,
+  ApprovalMode,
   PolicyRule,
   type PolicyEngineConfig,
+  type PolicySettings,
 } from './policy/types.js';
+export {
+  createPolicyEngineConfig,
+  createPolicyUpdater,
+  DEFAULT_CORE_POLICIES_DIR,
+  DEFAULT_POLICY_TIER,
+  USER_POLICY_TIER,
+  ADMIN_POLICY_TIER,
+  getPolicyDirectories,
+  getPolicyTier,
+  formatPolicyError,
+} from './policy/config.js';
+
+// Export hooks system
+export * from './hooks/index.js';
 
 // Export message bus
 export * from './confirmation-bus/types.js';
@@ -82,6 +97,7 @@ export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
 export * from './utils/thoughtUtils.js';
 export * from './utils/events.js';
+export * from './utils/package.js';
 
 // Export auth system
 export {
@@ -349,6 +365,20 @@ export type { LogEntry as DebugLogEntry } from './debug/index.js';
 
 // Export Storage
 export { Storage } from './config/storage.js';
+
+// Export Extension Loader
+export {
+  ExtensionLoader,
+  SimpleExtensionLoader,
+  type ExtensionEvents,
+  type ExtensionsStartingEvent,
+  type ExtensionsStoppingEvent,
+  type GeminiCLIExtension,
+} from './utils/extensionLoader.js';
+
+// Export MCP Client Manager
+export { McpClientManager } from './tools/mcp-client-manager.js';
+export { McpClient } from './tools/mcp-client.js';
 
 // Export models (legacy constants)
 export * from './config/models.js';

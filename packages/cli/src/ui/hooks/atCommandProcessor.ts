@@ -5,7 +5,6 @@
  */
 
 import * as fs from 'fs/promises';
-import * as fsSync from 'fs';
 import * as path from 'path';
 import { PartListUnion, PartUnion } from '@google/genai';
 import {
@@ -178,6 +177,7 @@ export async function handleAtCommand({
   const pathSpecsToRead: string[] = [];
   const atPathToResolvedSpecMap = new Map<string, string>();
   const contentLabelsForDisplay: string[] = [];
+  const absoluteToRelativePathMap = new Map<string, string>();
   const ignoredByReason: Record<string, string[]> = {
     git: [],
     llxprt: [],
@@ -262,17 +262,29 @@ export async function handleAtCommand({
     for (const dir of config.getWorkspaceContext().getDirectories()) {
       let currentPathSpec = pathName;
       let resolvedSuccessfully = false;
+      let relativePath = pathName;
       try {
-        const absolutePath = path.resolve(dir, pathName);
+        const absolutePath = path.isAbsolute(pathName)
+          ? pathName
+          : path.resolve(dir, pathName);
         const stats = await fs.stat(absolutePath);
+
+        // Convert absolute path to relative path
+        relativePath = path.isAbsolute(pathName)
+          ? path.relative(dir, absolutePath)
+          : pathName;
+
         if (stats.isDirectory()) {
-          currentPathSpec =
-            pathName + (pathName.endsWith(path.sep) ? `**` : `/**`);
+          currentPathSpec = path.join(relativePath, '**');
           onDebugMessage(
             `Path ${pathName} resolved to directory, using glob: ${currentPathSpec}`,
           );
         } else {
-          onDebugMessage(`Path ${pathName} resolved to file: ${absolutePath}`);
+          currentPathSpec = relativePath;
+          absoluteToRelativePathMap.set(absolutePath, relativePath);
+          onDebugMessage(
+            `Path ${pathName} resolved to file: ${absolutePath}, using relative path: ${relativePath}`,
+          );
         }
         resolvedSuccessfully = true;
       } catch (error) {
@@ -299,6 +311,10 @@ export async function handleAtCommand({
                 if (lines.length > 1 && lines[1]) {
                   const firstMatchAbsolute = lines[1].trim();
                   currentPathSpec = path.relative(dir, firstMatchAbsolute);
+                  absoluteToRelativePathMap.set(
+                    firstMatchAbsolute,
+                    currentPathSpec,
+                  );
                   onDebugMessage(
                     `Glob search for ${pathName} found ${firstMatchAbsolute}, using relative path: ${currentPathSpec}`,
                   );
@@ -338,7 +354,8 @@ export async function handleAtCommand({
       if (resolvedSuccessfully) {
         pathSpecsToRead.push(currentPathSpec);
         atPathToResolvedSpecMap.set(originalAtPath, currentPathSpec);
-        contentLabelsForDisplay.push(pathName);
+        const displayPath = path.isAbsolute(pathName) ? relativePath : pathName;
+        contentLabelsForDisplay.push(displayPath);
         break;
       }
     }
@@ -463,33 +480,27 @@ export async function handleAtCommand({
         if (typeof part === 'string') {
           const match = fileContentRegex.exec(part);
           if (match) {
-            const filePathSpecInContent = match[1]; // This is a resolved pathSpec
+            const filePathSpecInContent = match[1];
             const fileActualContent = match[2].trim();
-            let displayPathSpec = filePathSpecInContent;
-            if (path.isAbsolute(filePathSpecInContent)) {
-              let targetDir = config.getTargetDir();
-              try {
-                targetDir = fsSync.realpathSync(targetDir);
-              } catch {
-                targetDir = path.normalize(targetDir);
-              }
-              let contentPath = filePathSpecInContent;
-              try {
-                contentPath = fsSync.realpathSync(filePathSpecInContent);
-              } catch {
-                contentPath = path.normalize(filePathSpecInContent);
-              }
-              const relativePathSpec = path.relative(targetDir, contentPath);
-              if (
-                relativePathSpec &&
-                !relativePathSpec.startsWith('..') &&
-                !path.isAbsolute(relativePathSpec)
-              ) {
-                displayPathSpec = relativePathSpec;
+
+            let displayPath = absoluteToRelativePathMap.get(
+              filePathSpecInContent,
+            );
+
+            // Fallback: if no mapping found, try to convert absolute path to relative
+            if (!displayPath) {
+              for (const dir of config.getWorkspaceContext().getDirectories()) {
+                if (filePathSpecInContent.startsWith(dir)) {
+                  displayPath = path.relative(dir, filePathSpecInContent);
+                  break;
+                }
               }
             }
+
+            displayPath = displayPath || filePathSpecInContent;
+
             processedQueryParts.push({
-              text: `\nContent from @${displayPathSpec}:\n`,
+              text: `\nContent from @${displayPath}:\n`,
             });
             processedQueryParts.push({ text: fileActualContent });
           } else {

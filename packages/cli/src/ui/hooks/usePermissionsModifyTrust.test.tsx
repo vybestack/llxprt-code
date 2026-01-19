@@ -53,8 +53,9 @@ describe('usePermissionsModifyTrust', () => {
   });
 
   it('should have mocked loadTrustedFolders', async () => {
-    const { loadTrustedFolders } =
-      await import('../../config/trustedFolders.js');
+    const { loadTrustedFolders } = await import(
+      '../../config/trustedFolders.js'
+    );
     const folders = loadTrustedFolders();
 
     expect(folders).toBeDefined();

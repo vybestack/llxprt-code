@@ -63,6 +63,9 @@ vi.mock('../utils/summarizer.js', () => ({
 
 import * as summarizer from '../utils/summarizer.js';
 
+const originalComSpec = process.env['ComSpec'];
+const itWindowsOnly = process.platform === 'win32' ? it : it.skip;
+
 describe('ShellTool', () => {
   let shellTool: ShellTool;
   let mockConfig: Config;
@@ -114,6 +117,14 @@ describe('ShellTool', () => {
         }),
       };
     });
+  });
+
+  afterEach(() => {
+    if (originalComSpec === undefined) {
+      delete process.env['ComSpec'];
+    } else {
+      process.env['ComSpec'] = originalComSpec;
+    }
   });
 
   describe('isCommandAllowed', () => {
@@ -228,24 +239,27 @@ describe('ShellTool', () => {
       expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(tmpFile);
     });
 
-    it('should not wrap command on windows', async () => {
-      mockOsPlatform.mockReturnValue('win32');
-      const invocation = shellTool.build({ command: 'dir' });
-      const promise = invocation.execute(mockAbortSignal);
-      resolveShellExecution({
-        rawOutput: Buffer.from(''),
-        output: '',
-        exitCode: 0,
-        signal: null,
-        error: null,
-        aborted: false,
-        pid: 12345,
-        executionMethod: 'child_process',
+    it('should use the provided directory as cwd', async () => {
+      (mockConfig.getWorkspaceContext as Mock).mockReturnValue(
+        createMockWorkspaceContext('/test/dir'),
+      );
+      const invocation = shellTool.build({
+        command: 'ls',
+        directory: '/test/dir/subdir',
       });
+      const promise = invocation.execute(mockAbortSignal);
+      resolveShellExecution();
       await promise;
+
+      const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
+      const isWindows = os.platform() === 'win32';
+      const expectedCommand = isWindows
+        ? 'ls'
+        : `{ ls; }; __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const expectedCwd = path.resolve('/test/dir', '/test/dir/subdir');
       expect(mockShellExecutionService).toHaveBeenCalledWith(
-        'dir',
-        expect.any(String),
+        expectedCommand,
+        expectedCwd,
         expect.any(Function),
         expect.any(AbortSignal),
         false,
@@ -253,6 +267,38 @@ describe('ShellTool', () => {
         undefined,
       );
     });
+
+    itWindowsOnly(
+      'should not wrap command on windows',
+      async () => {
+        vi.mocked(os.platform).mockReturnValue('win32');
+        const invocation = shellTool.build({ command: 'dir' });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveShellExecution({
+          rawOutput: Buffer.from(''),
+          output: '',
+          exitCode: 0,
+          signal: null,
+          error: null,
+          aborted: false,
+          pid: 12345,
+          executionMethod: 'child_process',
+        });
+        await promise;
+        const expectedCwd = path.resolve('/test/dir', '');
+        // eslint-disable-next-line vitest/no-standalone-expect -- platform-conditional test
+        expect(mockShellExecutionService).toHaveBeenCalledWith(
+          'dir',
+          expectedCwd,
+          expect.any(Function),
+          expect.any(AbortSignal),
+          false,
+          undefined,
+          undefined,
+        );
+      },
+      20000,
+    );
 
     it('should format error messages correctly', async () => {
       const error = new Error('original command error');

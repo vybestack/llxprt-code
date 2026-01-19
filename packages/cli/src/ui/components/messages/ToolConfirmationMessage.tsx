@@ -1,32 +1,31 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
+import { Colors } from '../../colors.js';
 import { DiffRenderer } from './DiffRenderer.js';
-import { Colors, SemanticColors } from '../../colors.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
-import {
+import type {
   ToolCallConfirmationDetails,
-  ToolConfirmationOutcome,
   ToolEditConfirmationDetails,
   ToolExecuteConfirmationDetails,
   ToolMcpConfirmationDetails,
   Config,
-  MessageBusType,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import {
-  RadioButtonSelect,
-  RadioSelectItem,
-} from '../shared/RadioButtonSelect.js';
+  IdeClient,
+  ToolConfirmationOutcome,
+} from '@vybestack/llxprt-code-core';
+import type { RadioSelectItem } from '../shared/RadioButtonSelect.js';
+import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
-import { useResponsive } from '../../hooks/useResponsive.js';
-import { truncateEnd } from '../../utils/responsive.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
+import { theme } from '../../semantic-colors.js';
 
 export interface ToolConfirmationMessageProps {
   confirmationDetails: ToolCallConfirmationDetails;
@@ -35,8 +34,6 @@ export interface ToolConfirmationMessageProps {
   availableTerminalHeight?: number;
   terminalWidth: number;
 }
-
-const confirmationLogger = new DebugLogger('llxprt:ui:selection');
 
 export const ToolConfirmationMessage: React.FC<
   ToolConfirmationMessageProps
@@ -47,61 +44,46 @@ export const ToolConfirmationMessage: React.FC<
   availableTerminalHeight,
   terminalWidth,
 }) => {
+  const { onConfirm } = confirmationDetails;
   const childWidth = terminalWidth - 2; // 2 for padding
-  const { breakpoint } = useResponsive();
 
-  // State to track whether details are shown
-  const [showDetails, setShowDetails] = useState(false);
+  const [ideClient, setIdeClient] = useState<IdeClient | null>(null);
+  const [isDiffingEnabled, setIsDiffingEnabled] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (config.getIdeMode()) {
+      const getIdeClient = async () => {
+        const client = await IdeClient.getInstance();
+        if (isMounted) {
+          setIdeClient(client);
+          setIsDiffingEnabled(client?.isDiffingEnabled() ?? false);
+        }
+      };
+      getIdeClient();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [config]);
 
   const handleConfirm = useCallback(
-    (outcome: ToolConfirmationOutcome) => {
-      if (confirmationLogger.enabled) {
-        confirmationLogger.debug(
-          () =>
-            `ToolConfirmationMessage handleConfirm outcome=${outcome} correlationId=${confirmationDetails.correlationId}`,
-        );
-      }
-      const correlationId = confirmationDetails.correlationId;
-      if (!correlationId) {
-        console.error(
-          'Tool confirmation missing correlationId; falling back to direct confirmation callback.',
-        );
-        void confirmationDetails.onConfirm(outcome);
-        return;
-      }
-
-      const messageBus = config.getMessageBus();
-
-      messageBus.publish({
-        type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-        correlationId,
-        outcome,
-        confirmed:
-          outcome !== ToolConfirmationOutcome.Cancel &&
-          outcome !== ToolConfirmationOutcome.ModifyWithEditor,
-        requiresUserConfirmation: false,
-      });
-
-      // Handle IDE operations asynchronously without blocking
+    async (outcome: ToolConfirmationOutcome) => {
       if (confirmationDetails.type === 'edit') {
-        const ideClient = config.getIdeClient();
-        if (config.getIdeMode()) {
+        if (config.getIdeMode() && isDiffingEnabled) {
           const cliOutcome =
             outcome === ToolConfirmationOutcome.Cancel
               ? 'rejected'
               : 'accepted';
-          // Fire and forget with error handling to ensure it never blocks
-          setTimeout(() => {
-            ideClient
-              ?.resolveDiffFromCli(confirmationDetails.filePath, cliOutcome)
-              .catch((err) => {
-                console.error('Failed to resolve IDE diff:', err);
-              });
-          }, 0);
+          await ideClient?.resolveDiffFromCli(
+            confirmationDetails.filePath,
+            cliOutcome,
+          );
         }
       }
+      onConfirm(outcome);
     },
-    [confirmationDetails, config],
+    [confirmationDetails, config, isDiffingEnabled, ideClient, onConfirm],
   );
 
   const isTrustedFolder = config.isTrustedFolder();
@@ -112,10 +94,6 @@ export const ToolConfirmationMessage: React.FC<
       if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
         handleConfirm(ToolConfirmationOutcome.Cancel);
       }
-      // Handle 'd' key for details toggle
-      if (key.name === 'd') {
-        setShowDetails(!showDetails);
-      }
     },
     { isActive: isFocused },
   );
@@ -125,68 +103,12 @@ export const ToolConfirmationMessage: React.FC<
     [handleConfirm],
   );
 
-  // Helper function to determine if we should show details toggle
-  const shouldShowDetailsToggle = (type: string): boolean => {
-    if (type === 'edit') return false; // Edit diffs always show full content
-
-    // For exec commands, show toggle if command is long
-    if (type === 'exec') {
-      const execDetails = confirmationDetails as ToolExecuteConfirmationDetails;
-      return execDetails.command.length > 50;
-    }
-
-    // For info commands, show toggle if there are multiple URLs or long prompt
-    if (type === 'info') {
-      const infoDetails = confirmationDetails as {
-        urls?: string[];
-        prompt?: string;
-      };
-      const hasMultipleUrls = infoDetails.urls && infoDetails.urls.length > 2;
-      const hasLongPrompt =
-        infoDetails.prompt && infoDetails.prompt.length > 80;
-      return Boolean(hasMultipleUrls || hasLongPrompt);
-    }
-
-    // For MCP commands, always allow details toggle
-    return true;
-  };
-
-  // Helper function to create summary content
-  const createSummary = (type: string): string => {
-    if (type === 'exec') {
-      const execDetails = confirmationDetails as ToolExecuteConfirmationDetails;
-      return `Execute: ${execDetails.rootCommand}`;
-    }
-
-    if (type === 'info') {
-      const infoDetails = confirmationDetails as { prompt?: string };
-      return truncateEnd(infoDetails.prompt || 'Web fetch operation', 60);
-    }
-
-    if (type === 'mcp') {
-      const mcpDetails = confirmationDetails as ToolMcpConfirmationDetails;
-      return `MCP Tool: ${mcpDetails.toolName} from ${mcpDetails.serverName}`;
-    }
-
-    return 'Operation details';
-  };
-
-  let bodyContent: React.ReactNode | null = null;
+  let bodyContent: React.ReactNode | null = null; // Removed contextDisplay here
   let question: string;
 
   const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = new Array<
     RadioSelectItem<ToolConfirmationOutcome>
   >();
-
-  const enableDetailsToggle = shouldShowDetailsToggle(confirmationDetails.type);
-
-  // Different detail levels based on width
-  const shouldShowSummary =
-    enableDetailsToggle && !showDetails && breakpoint === 'NARROW';
-  const shouldShowPartialDetails =
-    enableDetailsToggle &&
-    !showDetails &&
-    (breakpoint === 'STANDARD' || breakpoint === 'WIDE');
 
   // Body content is now the DiffRenderer, passing filename to it
   // The bordered box is removed from here and handled within DiffRenderer
@@ -222,15 +144,15 @@ export const ToolConfirmationMessage: React.FC<
     if (confirmationDetails.isModifying) {
       return (
         <Box
-          minWidth="90%"
+          width={terminalWidth}
           borderStyle="round"
-          borderColor={Colors.Gray}
+          borderColor={theme.border.default}
           justifyContent="space-around"
           padding={1}
           overflow="hidden"
         >
-          <Text color={Colors.Foreground}>Modify in progress: </Text>
-          <Text color={Colors.AccentGreen}>
+          <Text color={theme.text.primary}>Modify in progress: </Text>
+          <Text color={theme.status.success}>
             Save and close external editor to continue
           </Text>
         </Box>
@@ -250,22 +172,11 @@ export const ToolConfirmationMessage: React.FC<
         key: 'Yes, allow always',
       });
     }
-    if (config.getIdeMode()) {
-      options.push({
-        label: 'No (esc)',
-        value: ToolConfirmationOutcome.Cancel,
-        key: 'No (esc)',
-      });
-    } else {
+    if (!config.getIdeMode() || !isDiffingEnabled) {
       options.push({
         label: 'Modify with external editor',
         value: ToolConfirmationOutcome.ModifyWithEditor,
         key: 'Modify with external editor',
-      });
-      options.push({
-        label: 'No, suggest changes (esc)',
-        value: ToolConfirmationOutcome.Cancel,
-        key: 'No, suggest changes (esc)',
       });
     }
     const editDetails = confirmationDetails as ToolEditConfirmationDetails;
@@ -273,6 +184,12 @@ export const ToolConfirmationMessage: React.FC<
     const astValidation = metadata?.astValidation as
       | { valid: boolean; errors: string[] }
       | undefined;
+
+    options.push({
+      label: 'No, suggest changes (esc)',
+      value: ToolConfirmationOutcome.Cancel,
+      key: 'No, suggest changes (esc)',
+    });
 
     bodyContent = (
       <Box flexDirection="column">
@@ -338,58 +255,20 @@ export const ToolConfirmationMessage: React.FC<
     if (bodyContentHeight !== undefined) {
       bodyContentHeight -= 2; // Account for padding;
     }
-
-    if (shouldShowSummary) {
-      // Show summary with details toggle
-      bodyContent = (
-        <Box flexDirection="column" paddingX={1} marginLeft={1}>
-          <Text color={SemanticColors.text.primary}>
-            {createSummary('exec')}
-          </Text>
-          <Text color={Colors.DimComment}>
-            Press &apos;d&apos; to see full details
-          </Text>
-        </Box>
-      );
-    } else if (shouldShowPartialDetails) {
-      // Show partial details with toggle for full details (at wide width)
-      const commandPreview =
-        executionProps.command.length > 50
-          ? executionProps.command.substring(0, 50) + '...'
-          : executionProps.command;
-
-      bodyContent = (
-        <Box flexDirection="column" paddingX={1} marginLeft={1}>
-          <Text color={Colors.AccentCyan}>{commandPreview}</Text>
-          <Text color={Colors.DimComment}>
-            Press &apos;d&apos; to see full details
-          </Text>
-        </Box>
-      );
-    } else {
-      // Show full details
-      bodyContent = (
-        <Box flexDirection="column">
-          {enableDetailsToggle && showDetails && (
-            <Box paddingX={1} marginLeft={1} marginBottom={1}>
-              <Text color={SemanticColors.text.secondary}>
-                Full Parameters:
-              </Text>
+    bodyContent = (
+      <Box flexDirection="column">
+        <Box paddingX={1} marginLeft={1}>
+          <MaxSizedBox
+            maxHeight={bodyContentHeight}
+            maxWidth={Math.max(childWidth - 4, 1)}
+          >
+            <Box>
+              <Text color={theme.text.link}>{executionProps.command}</Text>
             </Box>
-          )}
-          <Box paddingX={1} marginLeft={1}>
-            <MaxSizedBox
-              maxHeight={bodyContentHeight}
-              maxWidth={Math.max(childWidth - 4, 1)}
-            >
-              <Box>
-                <Text color={Colors.AccentCyan}>{executionProps.command}</Text>
-              </Box>
-            </MaxSizedBox>
-          </Box>
+          </MaxSizedBox>
         </Box>
-      );
-    }
+      </Box>
+    );
   } else if (confirmationDetails.type === 'info') {
     const infoProps = confirmationDetails;
     const displayUrls =
@@ -415,80 +294,32 @@ export const ToolConfirmationMessage: React.FC<
       key: 'No, suggest changes (esc)',
     });
 
-    if (shouldShowSummary) {
-      // Show summary with details toggle
-      bodyContent = (
-        <Box flexDirection="column" paddingX={1} marginLeft={1}>
-          <Text color={SemanticColors.text.primary}>
-            {createSummary('info')}
-          </Text>
-          <Text color={Colors.DimComment}>
-            Press &apos;d&apos; to see full details
-          </Text>
-        </Box>
-      );
-    } else {
-      // Show full details
-      bodyContent = (
-        <Box flexDirection="column" paddingX={1} marginLeft={1}>
-          {enableDetailsToggle && showDetails && (
-            <Box marginBottom={1}>
-              <Text color={SemanticColors.text.secondary}>
-                Full Parameters:
+    bodyContent = (
+      <Box flexDirection="column" paddingX={1} marginLeft={1}>
+        <RenderInline text={infoProps.prompt} defaultColor={theme.text.link} />
+        {displayUrls && infoProps.urls && infoProps.urls.length > 0 && (
+          <Box flexDirection="column" marginTop={1}>
+            <Text color={theme.text.primary}>URLs to fetch:</Text>
+            {infoProps.urls.map((url: string) => (
+              <Text key={url} color={theme.text.primary}>
+                {' '}
+                - <RenderInline text={url} />
               </Text>
-            </Box>
-          )}
-          <Text color={Colors.AccentCyan}>
-            <RenderInline text={infoProps.prompt} />
-          </Text>
-          {displayUrls && infoProps.urls && infoProps.urls.length > 0 && (
-            <Box flexDirection="column" marginTop={1}>
-              <Text color={Colors.Foreground}>URLs to fetch:</Text>
-              {infoProps.urls.map((url: string) => (
-                <Text key={url} color={Colors.Foreground}>
-                  {' '}
-                  - <RenderInline text={url} />
-                </Text>
-              ))}
-            </Box>
-          )}
-        </Box>
-      );
-    }
+            ))}
+          </Box>
+        )}
+      </Box>
+    );
   } else {
     // mcp tool confirmation
     const mcpProps = confirmationDetails as ToolMcpConfirmationDetails;
 
-    if (shouldShowSummary) {
-      // Show summary with details toggle
-      bodyContent = (
-        <Box flexDirection="column" paddingX={1} marginLeft={1}>
-          <Text color={SemanticColors.text.primary}>
-            {createSummary('mcp')}
-          </Text>
-          <Text color={Colors.DimComment}>
-            Press &apos;d&apos; to see full details
-          </Text>
-        </Box>
-      );
-    } else {
-      // Show full details
-      bodyContent = (
-        <Box flexDirection="column" paddingX={1} marginLeft={1}>
-          {enableDetailsToggle && showDetails && (
-            <Box marginBottom={1}>
-              <Text color={SemanticColors.text.secondary}>
-                Full Parameters:
-              </Text>
-            </Box>
-          )}
-          <Text color={Colors.AccentCyan}>
-            MCP Server: {mcpProps.serverName}
-          </Text>
-          <Text color={Colors.AccentCyan}>Tool: {mcpProps.toolName}</Text>
-        </Box>
-      );
-    }
+    bodyContent = (
+      <Box flexDirection="column" paddingX={1} marginLeft={1}>
+        <Text color={theme.text.link}>MCP Server: {mcpProps.serverName}</Text>
+        <Text color={theme.text.link}>Tool: {mcpProps.toolName}</Text>
+      </Box>
+    );
 
     question = `Allow execution of MCP tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"?`;
     options.push({
@@ -525,7 +356,7 @@ export const ToolConfirmationMessage: React.FC<
 
       {/* Confirmation Question */}
       <Box marginBottom={1} flexShrink={0}>
-        <Text wrap="truncate" color={SemanticColors.status.success}>
+        <Text color={theme.text.primary} wrap="truncate">
           {question}
         </Text>
       </Box>

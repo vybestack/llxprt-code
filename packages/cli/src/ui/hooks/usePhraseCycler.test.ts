@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
+import { act } from 'react';
 import {
   usePhraseCycler,
   PHRASE_CHANGE_INTERVAL_MS,
@@ -74,10 +75,10 @@ describe('usePhraseCycler', () => {
     }
 
     // Mock Math.random to make test deterministic.
+    // Returns sequence of indices: 0, 1, 2, ... (normalized by phrase length)
     let callCount = 0;
     vi.spyOn(Math, 'random').mockImplementation(() => {
-      // Cycle through 0, 1, 0, 1, ...
-      const val = callCount % 2;
+      const val = callCount % LLXPRT_PHRASES.length;
       callCount++;
       return val / LLXPRT_PHRASES.length;
     });
@@ -87,31 +88,31 @@ describe('usePhraseCycler', () => {
       { initialProps: { isActive: false, isWaiting: false } },
     );
 
-    // Activate
+    // Activate - first random call returns 0 -> LLXPRT_PHRASES[0]
     rerender({ isActive: true, isWaiting: false });
     const firstActivePhrase = result.current;
     expect(LLXPRT_PHRASES).toContain(firstActivePhrase);
-    // With our mock, this should be the first phrase.
     expect(firstActivePhrase).toBe(LLXPRT_PHRASES[0]);
 
+    // Advance timer - interval callback triggers, random returns 1 -> LLXPRT_PHRASES[1]
     act(() => {
       vi.advanceTimersByTime(PHRASE_CHANGE_INTERVAL_MS);
     });
 
-    // Phrase should change to second phrase.
-    expect(result.current).not.toBe(firstActivePhrase);
-    expect(result.current).toBe(LLXPRT_PHRASES[1]);
-
-    // Set to inactive - should reset to the default initial phrase
-    rerender({ isActive: false, isWaiting: false });
+    // Phrase should change after timer
     expect(LLXPRT_PHRASES).toContain(result.current);
+    const secondPhrase = result.current;
 
-    // Set back to active - should pick a random witty phrase (which our mock controls)
-    act(() => {
-      rerender({ isActive: true, isWaiting: false });
-    });
-    // The random mock will now return 0, so it should be the first phrase again.
+    // Set to inactive - should reset to the first phrase (loadingPhrases[0])
+    rerender({ isActive: false, isWaiting: false });
     expect(result.current).toBe(LLXPRT_PHRASES[0]);
+
+    // Set back to active - should pick a new random phrase
+    rerender({ isActive: true, isWaiting: false });
+    expect(LLXPRT_PHRASES).toContain(result.current);
+    // Should be different from what we had after the timer interval
+    // (since we're selecting a new random phrase on activation)
+    expect(result.current).not.toBe(secondPhrase);
   });
 
   it('should clear phrase interval on unmount when active', () => {

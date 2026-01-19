@@ -34,6 +34,7 @@ export async function updateExtension(
   requestConsent: (consent: string) => Promise<boolean>,
   currentState: ExtensionUpdateState,
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
+  enableExtensionReloading?: boolean,
 ): Promise<ExtensionUpdateInfo | undefined> {
   if (currentState === ExtensionUpdateState.UPDATING) {
     return undefined;
@@ -93,7 +94,9 @@ export async function updateExtension(
       type: 'SET_STATE',
       payload: {
         name: extension.name,
-        state: ExtensionUpdateState.UPDATED_NEEDS_RESTART,
+        state: enableExtensionReloading
+          ? ExtensionUpdateState.UPDATED
+          : ExtensionUpdateState.UPDATED_NEEDS_RESTART,
       },
     });
     return {
@@ -122,6 +125,7 @@ export async function updateAllUpdatableExtensions(
   extensions: GeminiCLIExtension[],
   extensionsState: Map<string, ExtensionUpdateStatus>,
   dispatch: (action: ExtensionUpdateAction) => void,
+  enableExtensionReloading?: boolean,
 ): Promise<ExtensionUpdateInfo[]> {
   return (
     await Promise.all(
@@ -138,6 +142,7 @@ export async function updateAllUpdatableExtensions(
             requestConsent,
             extensionsState.get(extension.name)!.status,
             dispatch,
+            enableExtensionReloading,
           ),
         ),
     )
@@ -155,34 +160,37 @@ export async function checkForAllExtensionUpdates(
   _cwd: string = process.cwd(),
 ): Promise<void> {
   dispatch({ type: 'BATCH_CHECK_START' });
-  const promises: Array<Promise<void>> = [];
-  for (const extension of extensions) {
-    if (!extension.installMetadata) {
+  try {
+    const promises: Array<Promise<void>> = [];
+    for (const extension of extensions) {
+      if (!extension.installMetadata) {
+        dispatch({
+          type: 'SET_STATE',
+          payload: {
+            name: extension.name,
+            state: ExtensionUpdateState.NOT_UPDATABLE,
+          },
+        });
+        continue;
+      }
       dispatch({
         type: 'SET_STATE',
         payload: {
           name: extension.name,
-          state: ExtensionUpdateState.NOT_UPDATABLE,
+          state: ExtensionUpdateState.CHECKING_FOR_UPDATES,
         },
       });
-      continue;
+      promises.push(
+        checkForExtensionUpdate(extension, (state) =>
+          dispatch({
+            type: 'SET_STATE',
+            payload: { name: extension.name, state },
+          }),
+        ),
+      );
     }
-    dispatch({
-      type: 'SET_STATE',
-      payload: {
-        name: extension.name,
-        state: ExtensionUpdateState.CHECKING_FOR_UPDATES,
-      },
-    });
-    promises.push(
-      checkForExtensionUpdate(extension, (state) =>
-        dispatch({
-          type: 'SET_STATE',
-          payload: { name: extension.name, state },
-        }),
-      ),
-    );
+    await Promise.all(promises);
+  } finally {
+    dispatch({ type: 'BATCH_CHECK_END' });
   }
-  await Promise.all(promises);
-  dispatch({ type: 'BATCH_CHECK_END' });
 }

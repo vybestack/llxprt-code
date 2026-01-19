@@ -40,6 +40,7 @@ jobs:
       OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
       LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
       LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+      LLXPRT_CONTEXT_LIMIT: "${{ vars.LLXPRT_CONTEXT_LIMIT || '200000' }}"
       LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
       DEBUG_OUTPUT: 'stderr'
     steps:
@@ -127,7 +128,7 @@ jobs:
           if [[ ! -s "${issues_file}" ]]; then
             {
               echo "<!-- llxprt-pr-review -->"
-              echo "## ⚠️ LLxprt PR Review blocked"
+              echo "## LLxprt PR Review blocked"
               echo
               echo "- No linked issues were detected in this PR's description."
               echo "- Please reference an existing issue with text such as \`Fixes #123\` so the automated review knows what problem to evaluate."
@@ -237,8 +238,8 @@ jobs:
           git diff --stat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diffstat.txt
           git diff --name-status "${BASE_SHA}" "${PR_HEAD_SHA}" > review/changed-files.txt
           git diff --numstat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/numstat.txt
-          git diff -U3 "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diff.patch
-          head -n 4000 review/diff.patch > review/diff-truncated.patch
+          git diff -U0 "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diff.patch
+          head -n 1000 review/diff.patch > review/diff-truncated.patch
           grep -Ei '(/tests?/|__tests__|\\.spec\\.|\\.test\\.)' review/changed-files.txt > review/test-files.txt || true
 
       - name: 'Build LLxprt prompt'
@@ -278,28 +279,35 @@ jobs:
             "review/coverage-latest.txt",
             "No coverage summary comment was found on this PR yet.",
           );
-          const diffstat = readIfExists("review/diffstat.txt", "");
-          const filesList = readIfExists("review/changed-files.txt", "");
+          const diffstat = process.env.DIFF_STAT_ENABLED === "true"
+            ? readIfExists("review/diffstat.txt", "")
+            : "";
+          const filesList = process.env.DIFF_FILES_ENABLED === "true"
+            ? readIfExists("review/changed-files.txt", "")
+            : "";
           const testFiles = readIfExists(
             "review/test-files.txt",
             "No explicit test files were touched.",
           );
-          const diffPatch = readIfExists("review/diff-truncated.patch", "");
+          const diffPatch = process.env.DIFF_PATCH_ENABLED === "true"
+            ? readIfExists(
+                "review/diff-truncated.patch",
+                "Patch omitted to keep prompt within context limit.",
+              )
+            : "";
 
           const issueSection = issues.length
             ? issues
                 .map((issue) => {
-                  const summary = clean(issue.body || "", 800);
+                  const summary = clean(issue.body || "", 120);
                   return `- #${issue.number} ${issue.title}
-            - URL: ${issue.url}
-            - State: ${issue.state}
             - Summary: ${summary}`;
                 })
                 .join("\n")
             : "No issues were expanded (this should not happen).";
 
           const prBody =
-            clean(pr.body || "", 2000) || "No PR description provided.";
+            clean(pr.body || "", 400) || "No PR description provided.";
 
           const prompt = `You are LLxprt, an autonomous code reviewer for the LLxprt Code repository.
           Focus strictly on code introduced in this pull request. Ignore pre-existing code unless it directly interacts with the changes shown.
@@ -333,8 +341,8 @@ jobs:
           ## Test-focused files touched
           ${testFiles}
 
-          ## Patch (first 4000 lines)
-          ${diffPatch}
+          ## Patch (first 1000 lines)
+          ${diffPatch || "Patch omitted to keep prompt within context limit."}
 
           ## Doc-only change
           ${process.env.DOCS_ONLY || 'unknown'}
@@ -370,7 +378,7 @@ jobs:
           - Additional bullets on test gaps or strengths (mention if tests feel like “mock theater”).
 
           **Verdict**
-          - Default to \`⚠️ Needs Work\` unless you can cite specific evidence (code + tests) that risk is low; only start with \`✅ Ready\` when requirements are fully satisfied, the change is truly documentation-only, or adequate automated coverage exists.
+          - Default to Needs Work unless you can cite specific evidence (code + tests) that risk is low; only start with Ready when requirements are fully satisfied, the change is truly documentation-only, or adequate automated coverage exists.
 
           If information is missing, state assumptions explicitly. Keep the overall length under 350 words.
           `;
@@ -381,10 +389,17 @@ jobs:
       - name: 'Run LLxprt review'
         if: steps.issue_gate.outputs.should_review == 'true'
         id: 'llxprt'
+        env:
+          DIFF_FILES_ENABLED: 'true'
+          DIFF_STAT_ENABLED: 'true'
+          DIFF_PATCH_ENABLED: 'false'
         run: |
           set -euo pipefail
           prompt_file="review/prompt.md"
           llxprt_log="review/llxprt.log"
+          context_limit="${LLXPRT_CONTEXT_LIMIT:-200000}"
+          echo "LLXPRT_CONTEXT_LIMIT raw: '${LLXPRT_CONTEXT_LIMIT-<unset>}'" >&2
+          echo "LLXPRT_CONTEXT_LIMIT evaluated: '${context_limit}'" >&2
           set +e
           cat "${prompt_file}" | llxprt \
             --provider "${LLXPRT_DEFAULT_PROVIDER}" \
@@ -393,7 +408,7 @@ jobs:
             --key "${OPENAI_API_KEY}" \
             --set modelparam.temperature=1 \
             --set modelparam.max_tokens=10000 \
-            --set context-limit=121000 \
+            --set context-limit="${context_limit}" \
             --set base-url="${OPENAI_BASE_URL}" \
             --set shell-replacement=true | tee "${llxprt_log}"
           llxprt_status=${PIPESTATUS[1]}
@@ -401,7 +416,7 @@ jobs:
           if [[ ${llxprt_status} -ne 0 ]]; then
             {
               echo "<!-- llxprt-pr-review -->"
-              echo "## ⚠️ LLxprt PR Review infrastructure failure"
+              echo "## WARNING: LLxprt PR Review infrastructure failure"
               echo
               echo "The automated reviewer failed with exit code ${llxprt_status}. Please inspect the workflow logs (LLxprt section) and re-run once resolved."
             } > review/comment.md

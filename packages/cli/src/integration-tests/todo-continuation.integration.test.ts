@@ -648,9 +648,7 @@ describe('Todo Continuation Integration Tests', () => {
       ];
 
       // TodoStore should validate and throw for invalid data
-      await expect(async () => {
-        await todoStore.writeTodos(malformedTodos);
-      }).rejects.toThrow();
+      await expect(todoStore.writeTodos(malformedTodos)).rejects.toThrow();
 
       // Test graceful handling of various configuration values
       expect(() => {

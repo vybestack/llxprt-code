@@ -121,6 +121,7 @@ describe('handleAtCommand', () => {
         getReadManyFilesExcludes: () => DEFAULT_FILE_EXCLUDES,
       }),
       getUsageStatisticsEnabled: () => false,
+      getEnableExtensionReloading: () => false,
     } as unknown as Config;
 
     const registry = new ToolRegistry(mockConfig);
@@ -224,7 +225,7 @@ describe('handleAtCommand', () => {
     const relativeFilePath = path.join(relativeDirPath, 'file.txt');
     await createTestFile(path.join(testRootDir, relativeFilePath), fileContent);
     const query = `@${relativeDirPath}`;
-    const resolvedGlob = `${relativeDirPath}/**`;
+    const resolvedGlob = `${relativeDirPath}${path.sep}**`;
 
     const result = await handleAtCommand({
       query,

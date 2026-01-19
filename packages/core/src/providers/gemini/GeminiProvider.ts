@@ -285,8 +285,9 @@ export class GeminiProvider extends BaseProvider {
     config: Config,
     baseURL?: string,
   ): Promise<CodeAssistContentGenerator> {
-    const { createCodeAssistContentGenerator } =
-      await import('../../code_assist/codeAssist.js');
+    const { createCodeAssistContentGenerator } = await import(
+      '../../code_assist/codeAssist.js'
+    );
     return createCodeAssistContentGenerator(
       httpOptions,
       AuthType.LOGIN_WITH_GOOGLE,

@@ -39,6 +39,10 @@ export enum Command {
   NAVIGATION_UP = 'navigationUp',
   NAVIGATION_DOWN = 'navigationDown',
 
+  // Dialog navigation
+  DIALOG_NAVIGATION_UP = 'dialogNavigationUp',
+  DIALOG_NAVIGATION_DOWN = 'dialogNavigationDown',
+
   // Auto-completion
   ACCEPT_SUGGESTION = 'acceptSuggestion',
   COMPLETION_UP = 'completionUp',
@@ -58,6 +62,7 @@ export enum Command {
   TOGGLE_TODO_DIALOG = 'toggleTodoDialog',
   TOGGLE_IDE_CONTEXT_DETAIL = 'toggleIDEContextDetail',
   TOGGLE_MARKDOWN = 'toggleMarkdown',
+  TOGGLE_COPY_MODE = 'toggleCopyMode',
   QUIT = 'quit',
   EXIT = 'exit',
   SHOW_MORE_LINES = 'showMoreLines',
@@ -107,8 +112,8 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.ESCAPE]: [{ key: 'escape' }],
 
   // Cursor movement
-  [Command.HOME]: [{ key: 'a', ctrl: true }],
-  [Command.END]: [{ key: 'e', ctrl: true }],
+  [Command.HOME]: [{ key: 'a', ctrl: true }, { key: 'home' }],
+  [Command.END]: [{ key: 'e', ctrl: true }, { key: 'end' }],
 
   // Text deletion
   [Command.KILL_LINE_RIGHT]: [{ key: 'k', ctrl: true }],
@@ -136,6 +141,18 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.HISTORY_DOWN]: [{ key: 'n', ctrl: true, shift: false }],
   [Command.NAVIGATION_UP]: [{ key: 'up', shift: false }],
   [Command.NAVIGATION_DOWN]: [{ key: 'down', shift: false }],
+
+  // Dialog navigation
+  // Navigation shortcuts appropriate for dialogs where we do not need to accept
+  // text input.
+  [Command.DIALOG_NAVIGATION_UP]: [
+    { key: 'up', shift: false },
+    { key: 'k', shift: false },
+  ],
+  [Command.DIALOG_NAVIGATION_DOWN]: [
+    { key: 'down', shift: false },
+    { key: 'j', shift: false },
+  ],
 
   // Auto-completion
   [Command.ACCEPT_SUGGESTION]: [{ key: 'tab' }, { key: 'return', ctrl: false }],
@@ -183,6 +200,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.TOGGLE_TODO_DIALOG]: [{ key: 'q', ctrl: true }],
   [Command.TOGGLE_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
   [Command.TOGGLE_MARKDOWN]: [{ key: 'm', command: true }],
+  [Command.TOGGLE_COPY_MODE]: [{ key: 'y', ctrl: true }],
   [Command.QUIT]: [{ key: 'c', ctrl: true }],
   [Command.EXIT]: [{ key: 'd', ctrl: true }],
   [Command.SHOW_MORE_LINES]: [{ key: 's', ctrl: true }],

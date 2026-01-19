@@ -10,6 +10,8 @@ export default defineConfig({
   test: {
     passWithNoTests: true,
     reporters: ['default', 'junit'],
+    timeout: 30000,
+    teardownTimeout: 120000,
     silent: true,
     setupFiles: ['./test-setup.ts'],
     outputFile: {

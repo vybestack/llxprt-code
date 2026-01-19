@@ -1062,8 +1062,8 @@ describe('mcpCommand', () => {
     });
 
     it('should authenticate with a specific server', async () => {
-      const mockToolRegistry = {
-        discoverToolsForServer: vi.fn(),
+      const mockMcpClientManager = {
+        restartServer: vi.fn(),
       };
       const mockGeminiClient = {
         setTools: vi.fn(),
@@ -1078,7 +1078,8 @@ describe('mcpCommand', () => {
                 oauth: { enabled: true },
               },
             }),
-            getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
+            getToolRegistry: vi.fn().mockReturnValue({}),
+            getMcpClientManager: vi.fn().mockReturnValue(mockMcpClientManager),
             getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
             getPromptRegistry: vi.fn().mockResolvedValue({
               removePromptsByServer: vi.fn(),
@@ -1102,7 +1103,7 @@ describe('mcpCommand', () => {
         'http://localhost:3000',
         expect.any(Object),
       );
-      expect(mockToolRegistry.discoverToolsForServer).toHaveBeenCalledWith(
+      expect(mockMcpClientManager.restartServer).toHaveBeenCalledWith(
         'test-server',
       );
       expect(mockGeminiClient.setTools).toHaveBeenCalled();

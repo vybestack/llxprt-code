@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
-import { renderHook, act, cleanup } from '@testing-library/react';
+import { renderHook, cleanup } from '../../test-utils/render.js';
+import { act } from 'react';
 import {
   useReactToolScheduler,
   mapToDisplay,
@@ -76,6 +77,9 @@ const buildMockScheduler = (
 ): MockScheduler => {
   const scheduler: MockScheduler = {
     schedule: vi.fn(async (request, _signal) => {
+      // IMPORTANT: Use scheduler.callbacks instead of callbacks closure
+      // so that callbacks updated via setCallbacks() are used
+      const currentCallbacks = scheduler.callbacks;
       const requests = Array.isArray(request) ? request : [request];
       scheduler.toolCalls = requests.map((req) => {
         const tool = scheduler.toolRegistry.getTool(req.name);
@@ -122,7 +126,7 @@ const buildMockScheduler = (
         } satisfies ToolCall;
       });
 
-      callbacks.onToolCallsUpdate?.(scheduler.toolCalls);
+      currentCallbacks.onToolCallsUpdate?.(scheduler.toolCalls);
 
       const completedCalls: CompletedToolCall[] = [];
       const activeCalls: ToolCall[] = [];
@@ -254,11 +258,11 @@ const buildMockScheduler = (
       }
 
       scheduler.toolCalls = [...activeCalls, ...completedCalls];
-      callbacks.onToolCallsUpdate?.(scheduler.toolCalls);
+      currentCallbacks.onToolCallsUpdate?.(scheduler.toolCalls);
       if (completedCalls.length > 0) {
-        await callbacks.onAllToolCallsComplete?.(completedCalls);
+        await currentCallbacks.onAllToolCallsComplete?.(completedCalls);
         scheduler.toolCalls = activeCalls;
-        callbacks.onToolCallsUpdate?.(scheduler.toolCalls);
+        currentCallbacks.onToolCallsUpdate?.(scheduler.toolCalls);
       }
     }) as unknown as CoreToolScheduler['schedule'],
     cancelAll: vi.fn(),
@@ -434,6 +438,8 @@ describe('useReactToolScheduler', () => {
   beforeEach(() => {
     onComplete = vi.fn();
     capturedOnConfirmForTest = undefined;
+    // Reset to DEFAULT approval mode (not YOLO from previous test suite)
+    (mockConfig.getApprovalMode as Mock).mockReturnValue(ApprovalMode.DEFAULT);
     setPendingHistoryItem = vi.fn((updaterOrValue) => {
       let pendingItem: HistoryItemWithoutId | null = null;
       if (typeof updaterOrValue === 'function') {

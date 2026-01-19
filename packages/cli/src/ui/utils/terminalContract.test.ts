@@ -25,7 +25,8 @@ describe('terminalContract', () => {
 
   describe('TERMINAL_CONTRACT_SEQUENCES', () => {
     it('includes mouse tracking sequences', () => {
-      expect(TERMINAL_CONTRACT_SEQUENCES).toContain('\x1b[?1000h');
+      // LLxprt uses only button event tracking (1002h) and SGR extended mode (1006h)
+      // Not basic X10 mode (1000h) for better drag detection
       expect(TERMINAL_CONTRACT_SEQUENCES).toContain('\x1b[?1002h');
       expect(TERMINAL_CONTRACT_SEQUENCES).toContain('\x1b[?1006h');
     });
@@ -58,7 +59,6 @@ describe('terminalContract', () => {
       });
 
       const writtenData = mockStdout.write.mock.calls[0][0];
-      expect(writtenData).not.toContain('\x1b[?1000h');
       expect(writtenData).not.toContain('\x1b[?1002h');
       expect(writtenData).not.toContain('\x1b[?1006h');
       // Should still include other sequences

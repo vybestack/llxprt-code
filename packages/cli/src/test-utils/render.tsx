@@ -4,13 +4,43 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from 'ink-testing-library';
-import React, { createContext, useContext } from 'react';
+import { render as inkRender } from 'ink-testing-library';
+import React, { act, createContext, useContext } from 'react';
+
 import { LoadedSettings, type Settings } from '../config/settings.js';
 import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
 import { SettingsContext } from '../ui/contexts/SettingsContext.js';
 import { UIStateContext, type UIState } from '../ui/contexts/UIStateContext.js';
 import { StreamingState } from '../ui/types.js';
+
+// Wrapper around ink-testing-library's render that ensures act() is called
+// This fixes React 18+ warnings about state updates not being wrapped in act()
+export const render = (
+  tree: React.ReactElement,
+): ReturnType<typeof inkRender> => {
+  let renderResult: ReturnType<typeof inkRender> =
+    undefined as unknown as ReturnType<typeof inkRender>;
+  act(() => {
+    renderResult = inkRender(tree);
+  });
+
+  const originalUnmount = renderResult.unmount;
+  const originalRerender = renderResult.rerender;
+
+  return {
+    ...renderResult,
+    unmount: () => {
+      act(() => {
+        originalUnmount();
+      });
+    },
+    rerender: (newTree: React.ReactElement) => {
+      act(() => {
+        originalRerender(newTree);
+      });
+    },
+  };
+};
 
 const mockSettings = new LoadedSettings(
   { path: '', settings: {} },
@@ -147,3 +177,87 @@ export const renderWithProviders = (
       </UIStateContext.Provider>
     </SettingsContext.Provider>,
   );
+
+interface RenderHookResult<T> {
+  result: { current: T };
+  rerender: (props?: unknown) => void;
+  unmount: () => void;
+}
+
+interface RenderHookOptions<P> {
+  initialProps?: P;
+  wrapper?: React.ComponentType<{ children: React.ReactNode }>;
+}
+
+export function renderHook<T, P = undefined>(
+  hook: (props: P) => T,
+  options?: RenderHookOptions<P>,
+): RenderHookResult<T> {
+  const result = { current: undefined as T };
+
+  function TestComponent({ hookProps }: { hookProps: P }) {
+    result.current = hook(hookProps);
+    return null;
+  }
+
+  const Wrapper = options?.wrapper ?? React.Fragment;
+
+  let root: ReturnType<typeof render>;
+  act(() => {
+    root = render(
+      React.createElement(
+        Wrapper,
+        null,
+        React.createElement(TestComponent, {
+          hookProps: options?.initialProps as P,
+        }),
+      ),
+    );
+  });
+
+  return {
+    result,
+    rerender: (props?: unknown) => {
+      act(() => {
+        root.rerender(
+          React.createElement(
+            Wrapper,
+            null,
+            React.createElement(TestComponent, { hookProps: props as P }),
+          ),
+        );
+      });
+    },
+    unmount: () => {
+      act(() => {
+        root.unmount();
+      });
+    },
+  };
+}
+
+export function cleanup(): void {
+  // ink-testing-library manages its own cleanup
+  // This is a no-op for compatibility
+}
+
+// Simple waitFor implementation - polls until callback succeeds or timeout
+export const waitFor = async (
+  callback: () => void | Promise<void>,
+  options?: { timeout?: number; interval?: number },
+): Promise<void> => {
+  const timeout = options?.timeout ?? 1000;
+  const interval = options?.interval ?? 50;
+  const start = Date.now();
+
+  while (Date.now() - start < timeout) {
+    try {
+      await callback();
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+  }
+  // Final attempt - let it throw if it fails
+  await callback();
+};

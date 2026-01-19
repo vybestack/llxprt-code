@@ -12,7 +12,7 @@ import {
   beforeEach,
   type MockedFunction,
 } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
 import { useResponsive } from './useResponsive.js';
 import { useTerminalSize } from './useTerminalSize.js';
 

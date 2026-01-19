@@ -37,7 +37,6 @@ const baseExcludePatterns = [
   // Issue #1034 converted them from snapshot to behavioral tests but CI rendering issue remains.
   '**/ui/components/messages/GeminiMessage.test.tsx',
   '**/ui/components/messages/ToolMessage.test.tsx',
-  '**/ui/components/messages/OAuthUrlMessage.test.tsx',
   '**/ui/components/messages/ToolConfirmationMessage.responsive.test.tsx',
   '**/ui/components/messages/ToolConfirmationMessage.test.tsx',
   '**/ui/components/messages/ToolGroupMessage.test.tsx',
@@ -103,6 +102,8 @@ export default defineConfig({
       'src/ui/hooks/useGeminiStream.dedup.test.tsx',
       // Include useToolScheduler test for issue #1055 - Phase 2
       'src/ui/hooks/useToolScheduler.test.ts',
+      // Include OAuthUrlMessage test (migrated from @testing-library/react)
+      'src/ui/components/messages/OAuthUrlMessage.test.tsx',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',

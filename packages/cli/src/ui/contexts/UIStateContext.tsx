@@ -210,6 +210,9 @@ export interface UIState {
   debugMessage: string;
   showDebugProfiler: boolean;
 
+  // Copy mode
+  copyModeEnabled: boolean;
+
   // Footer height
   footerHeight: number;
 
