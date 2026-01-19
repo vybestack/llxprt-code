@@ -1822,10 +1822,9 @@ export class ASTReadFileTool extends BaseDeclarativeTool<
 }
 
 // ===== Tool Invocation Classes =====
-class ASTEditToolInvocation implements ToolInvocation<
-  ASTEditToolParams,
-  ToolResult
-> {
+class ASTEditToolInvocation
+  implements ToolInvocation<ASTEditToolParams, ToolResult>
+{
   constructor(
     private readonly config: Config,
     public params: ASTEditToolParams,
@@ -2351,10 +2350,9 @@ class ASTEditToolInvocation implements ToolInvocation<
 }
 
 // ===== ASTReadFile 工具調用類別 =====
-class ASTReadFileToolInvocation implements ToolInvocation<
-  ASTReadFileToolParams,
-  ToolResult
-> {
+class ASTReadFileToolInvocation
+  implements ToolInvocation<ASTReadFileToolParams, ToolResult>
+{
   constructor(
     private readonly config: Config,
     public params: ASTReadFileToolParams,
