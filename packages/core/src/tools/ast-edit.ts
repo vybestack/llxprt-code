@@ -2,6 +2,16 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * ## Change Log
+ * - 2025-01-19: Performance Optimization (Phase 2)
+ *   - Disabled eager symbol indexing by default (ENABLE_SYMBOL_INDEXING = false).
+ *   - Implemented 'Lazy' on-demand `findInFiles` queries with strict limits.
+ *   - Added `prioritizeSymbolsFromDeclarations` for smarter symbol selection.
+ *   - Added timeout mechanism and `Promise.allSettled` for fault tolerance.
+ *   - Added performance metrics logging (duration, memory delta).
+ *   - Added env-based override: LLXPRT_ENABLE_SYMBOL_INDEXING.
+ *   - Added MAX_WORKSPACE_FILES guard to prevent OOM in large repos.
  */
 
 import { promises as fsPromises, existsSync, statSync } from 'fs';
@@ -242,6 +252,7 @@ export interface EnhancedDeclaration extends Declaration {
 }
 
 interface EnhancedASTContext extends ASTContext {
+  declarations: EnhancedDeclaration[];
   repositoryContext?: RepositoryContext;
   relatedFiles?: string[];
   relatedSymbols?: SymbolReference[];
@@ -523,6 +534,42 @@ class ASTConfig {
   static readonly MAX_SNIPPET_CHARS = 1000; // Increased budget
   static readonly CHUNK_SIZE = 500;
   static readonly SNIPPET_TRUNCATE_LENGTH = 200;
+
+  // Section: Performance Optimization Constants
+  /**
+   * Whether to build a full in-memory symbol index.
+   * [CCR] Reason: Disabled by default to prevent memory leaks and CLI crashes in large repos.
+   * Can be overridden via environment variable: LLXPRT_ENABLE_SYMBOL_INDEXING=true
+   */
+  static get ENABLE_SYMBOL_INDEXING(): boolean {
+    return process.env.LLXPRT_ENABLE_SYMBOL_INDEXING === 'true';
+  }
+  /**
+   * Maximum symbols to query across the workspace per file.
+   */
+  static readonly MAX_RELATED_SYMBOLS = 5;
+  /**
+   * Maximum results to return per symbol query.
+   */
+  static readonly MAX_RESULTS_PER_SYMBOL = 10;
+  /**
+   * Timeout for a single symbol relationship lookup.
+   */
+  static readonly FIND_RELATED_TIMEOUT_MS = 3000;
+  /**
+   * Minimum length for a symbol to be considered for cross-file lookup.
+   */
+  static readonly MIN_SYMBOL_LENGTH = 3;
+  /**
+   * Maximum workspace files to scan. Abort if exceeded to prevent OOM.
+   * [CCR] Reason: Safeguard against memory exhaustion in very large monorepos.
+   */
+  static readonly MAX_WORKSPACE_FILES = 10000;
+  /**
+   * Maximum display results for related symbols in output.
+   */
+  static readonly MAX_DISPLAY_RESULTS = 5;
+
   static readonly SUPPORTED_LANGUAGES = {
     ts: 'typescript',
     js: 'javascript',
@@ -668,7 +715,14 @@ class RepositoryContextProvider {
 class CrossFileRelationshipAnalyzer {
   private symbolIndex: Map<string, SymbolReference[]> = new Map();
 
+  /**
+   * @deprecated Symbol indexing is disabled by default due to performance issues.
+   * [CCR] Reason: Prefer on-demand queryViaFindInFiles to avoid OOM in large workspaces.
+   */
   async buildSymbolIndex(files: string[]): Promise<void> {
+    if (!ASTConfig.ENABLE_SYMBOL_INDEXING) {
+      return;
+    }
     this.symbolIndex.clear();
 
     for (const filePath of files) {
@@ -720,6 +774,11 @@ class CrossFileRelationshipAnalyzer {
     }
   }
 
+  /**
+   * Find related symbols using ast-grep's findInFiles with strict concurrency and quantity limits.
+   * [CCR] Relation: Core logic for 'Lazy' context gathering.
+   * Reason: Replaces eager indexing with atomic, timed-out queries to maintain CLI speed.
+   */
   async findRelatedSymbols(
     symbolName: string,
     workspacePath: string,
@@ -727,69 +786,29 @@ class CrossFileRelationshipAnalyzer {
   ): Promise<SymbolReference[]> {
     const references: SymbolReference[] = [];
 
+    // Helper for timeout
+    const withTimeout = (promise: Promise<void>, ms: number) => {
+      let timeoutId: NodeJS.Timeout;
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Timeout after ${ms}ms`));
+        }, ms);
+      });
+      return Promise.race([promise, timeoutPromise]).finally(() => {
+        clearTimeout(timeoutId);
+      });
+    };
+
     try {
-      if (lang) {
-        // Wrap findInFiles in a Promise to ensure callback completes before continuing
-        await new Promise<void>((resolve) => {
-          findInFiles(
-            lang,
-            {
-              paths: [workspacePath],
-              matcher: { rule: { pattern: symbolName } },
-            },
-            (err, matches) => {
-              if (err || !matches) {
-                resolve();
-                return;
-              }
-              matches.forEach((m) => {
-                const range = m.range();
-                references.push({
-                  type: 'reference',
-                  filePath: m.getRoot().filename(),
-                  line: range.start.line + 1,
-                  column: range.start.column,
-                });
-              });
-              resolve();
-            },
-          ).then(() => {
-            // Additional safety: ensure we resolve even if the Promise resolves first
-            resolve();
-          });
-        });
-      } else {
-        const filesByLanguage = new Map<string | Lang, Set<string>>();
+      let workspaceTooLarge = false;
 
-        const files = await FastGlob(
-          Object.keys(LANGUAGE_MAP).map((ext) => `**/*.${ext}`),
-          {
-            cwd: workspacePath,
-            absolute: true,
-            onlyFiles: true,
-            ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
-          },
-        );
-
-        for (const file of files) {
-          const extension = path.extname(file).substring(1);
-          const fileLang = LANGUAGE_MAP[extension];
-          if (fileLang) {
-            if (!filesByLanguage.has(fileLang)) {
-              filesByLanguage.set(fileLang, new Set());
-            }
-            filesByLanguage.get(fileLang)!.add(file);
-          }
-        }
-
-        // Wait for all findInFiles calls to complete their callbacks
-        const promises: Array<Promise<void>> = [];
-        for (const [searchLang, searchFiles] of filesByLanguage) {
-          const promise = new Promise<void>((resolve) => {
+      const queryPromise = (async (): Promise<void> => {
+        if (lang) {
+          await new Promise<void>((resolve) => {
             findInFiles(
-              searchLang,
+              lang,
               {
-                paths: Array.from(searchFiles),
+                paths: [workspacePath],
                 matcher: { rule: { pattern: symbolName } },
               },
               (err, matches) => {
@@ -797,33 +816,107 @@ class CrossFileRelationshipAnalyzer {
                   resolve();
                   return;
                 }
-                matches.forEach((m) => {
-                  const range = m.range();
-                  references.push({
-                    type: 'reference',
-                    filePath: m.getRoot().filename(),
-                    line: range.start.line + 1,
-                    column: range.start.column,
+                // Limit results per symbol
+                matches
+                  .slice(0, ASTConfig.MAX_RESULTS_PER_SYMBOL)
+                  .forEach((m) => {
+                    const range = m.range();
+                    references.push({
+                      type: 'reference',
+                      filePath: m.getRoot().filename(),
+                      line: range.start.line + 1,
+                      column: range.start.column,
+                    });
                   });
-                });
                 resolve();
               },
-            ).then(() => {
-              // Additional safety: ensure we resolve even if the Promise resolves first
-              resolve();
-            });
+            ).catch(() => resolve());
           });
-          promises.push(promise);
-        }
-        await Promise.all(promises);
-      }
+        } else {
+          const filesByLanguage = new Map<string | Lang, Set<string>>();
 
-      return references.length > 0
-        ? references
-        : this.symbolIndex.get(symbolName) || [];
-    } catch (_error) {
+          const files = await FastGlob(
+            Object.keys(LANGUAGE_MAP).map((ext) => `**/*.${ext}`),
+            {
+              cwd: workspacePath,
+              absolute: true,
+              onlyFiles: true,
+              ignore: ['**/node_modules/**', '**/dist/**', '**/build/**'],
+            },
+          );
+
+          // [CCR] Relation: Workspace size guard.
+          // Reason: Prevent OOM in very large monorepos by aborting if file count exceeds limit.
+          if (files.length > ASTConfig.MAX_WORKSPACE_FILES) {
+            logger.warn(
+              `Workspace has ${files.length} files, exceeding limit of ${ASTConfig.MAX_WORKSPACE_FILES}. Skipping cross-file symbol search for ${symbolName}.`,
+            );
+            workspaceTooLarge = true;
+            return;
+          }
+
+          for (const file of files) {
+            const extension = path.extname(file).substring(1);
+            const fileLang = LANGUAGE_MAP[extension];
+            if (fileLang) {
+              if (!filesByLanguage.has(fileLang)) {
+                filesByLanguage.set(fileLang, new Set());
+              }
+              filesByLanguage.get(fileLang)!.add(file);
+            }
+          }
+
+          const promises: Array<Promise<void>> = [];
+          for (const [searchLang, searchFiles] of filesByLanguage) {
+            const promise = new Promise<void>((resolve) => {
+              findInFiles(
+                searchLang,
+                {
+                  paths: Array.from(searchFiles),
+                  matcher: { rule: { pattern: symbolName } },
+                },
+                (err, matches) => {
+                  if (err || !matches) {
+                    resolve();
+                    return;
+                  }
+                  matches
+                    .slice(0, ASTConfig.MAX_RESULTS_PER_SYMBOL)
+                    .forEach((m) => {
+                      const range = m.range();
+                      references.push({
+                        type: 'reference',
+                        filePath: m.getRoot().filename(),
+                        line: range.start.line + 1,
+                        column: range.start.column,
+                      });
+                    });
+                  resolve();
+                },
+              ).catch(() => resolve());
+            });
+            promises.push(promise);
+          }
+          await Promise.all(promises);
+        }
+      })();
+
+      await withTimeout(queryPromise, ASTConfig.FIND_RELATED_TIMEOUT_MS);
+
+      if (workspaceTooLarge) return [];
+      if (references.length > 0) return references;
+    } catch (error) {
+      logger.warn(
+        `findRelatedSymbols failed or timed out for symbol '${symbolName}' in workspace '${workspacePath}' (lang: ${lang || 'mixed'})`,
+        error,
+      );
+    }
+
+    // Fallback to in-memory symbol index only if explicitly enabled
+    if (ASTConfig.ENABLE_SYMBOL_INDEXING) {
       return this.symbolIndex.get(symbolName) || [];
     }
+    return [];
   }
 
   async findRelatedFiles(filePath: string): Promise<string[]> {
@@ -1067,11 +1160,15 @@ class ASTContextCollector {
     content: string,
     workspaceRoot: string,
   ): Promise<EnhancedASTContext> {
+    const startTime = Date.now();
+    const startMemory = process.memoryUsage().heapUsed;
+
     // Base context
     const baseContext = await this.collectContext(targetFilePath, content);
 
     const enhancedContext: EnhancedASTContext = {
       ...baseContext,
+      declarations: baseContext.declarations as EnhancedDeclaration[],
       connectedFiles: [],
     };
 
@@ -1117,29 +1214,78 @@ class ASTContextCollector {
       }
     }
 
-    // Phase 3: Repository context
+    // Phase 3: Repository context and Cross-file Relationships
     const repoContext =
       await this.repoProvider.collectRepositoryContext(workspaceRoot);
     enhancedContext.repositoryContext = repoContext || undefined;
 
-    // Cross-file relationship analysis
+    // [CCR] Relation: Cross-file relationship analysis segment.
+    // Reason: Optimized to use on-demand findInFiles instead of eager indexing.
     if (repoContext) {
-      const workspaceFiles = await this.getWorkspaceFiles(workspaceRoot);
-      await this.relationshipAnalyzer.buildSymbolIndex(workspaceFiles);
+      if (ASTConfig.ENABLE_SYMBOL_INDEXING) {
+        const workspaceFiles = await this.getWorkspaceFiles(workspaceRoot);
+        await this.relationshipAnalyzer.buildSymbolIndex(workspaceFiles);
 
-      const relatedFiles =
-        await this.relationshipAnalyzer.findRelatedFiles(targetFilePath);
-      enhancedContext.relatedFiles = relatedFiles;
+        const relatedFiles =
+          await this.relationshipAnalyzer.findRelatedFiles(targetFilePath);
+        enhancedContext.relatedFiles = relatedFiles;
+      }
 
-      const symbols = this.extractSymbolsFromContent(content);
-      const relatedSymbolsTasks = symbols.map((symbol) =>
+      // Prioritize symbols for Lazy search
+      const topSymbols = this.prioritizeSymbolsFromDeclarations(
+        enhancedContext.declarations,
+      );
+
+      // Execute atomic queries with strict limits and Survivability (Promise.allSettled)
+      const relatedSymbolsTasks = topSymbols.map((symbol) =>
         this.relationshipAnalyzer.findRelatedSymbols(symbol, workspaceRoot),
       );
-      const relatedSymbolsResults = await Promise.all(relatedSymbolsTasks);
-      enhancedContext.relatedSymbols = relatedSymbolsResults.flat();
+
+      const relatedSymbolsResults =
+        await Promise.allSettled(relatedSymbolsTasks);
+      enhancedContext.relatedSymbols = relatedSymbolsResults
+        .filter(
+          (r): r is PromiseFulfilledResult<SymbolReference[]> =>
+            r.status === 'fulfilled',
+        )
+        .map((r) => r.value)
+        .flat();
     }
 
+    const duration = Date.now() - startTime;
+    const memoryDelta =
+      (process.memoryUsage().heapUsed - startMemory) / 1024 / 1024;
+    logger.debug(
+      `collectEnhancedContext Metrics: ${duration}ms, Delta: ${memoryDelta.toFixed(2)}MB, Symbols: ${enhancedContext.relatedSymbols?.length || 0}`,
+    );
+
     return enhancedContext;
+  }
+
+  /**
+   * Prioritize important symbols from declarations for lazy cross-file lookups.
+   * [CCR] Reason: Prevents querying low-value symbols (like parameters or local vars) to preserve I/O.
+   */
+  private prioritizeSymbolsFromDeclarations(
+    declarations: EnhancedDeclaration[],
+  ): string[] {
+    const scores = new Map<string, number>();
+
+    for (const decl of declarations) {
+      if (decl.name.length < ASTConfig.MIN_SYMBOL_LENGTH) continue;
+
+      let score = 0;
+      if (decl.type === 'class') score += 10;
+      if (decl.type === 'function') score += 5;
+      if (decl.visibility === 'public') score += 3;
+
+      scores.set(decl.name, (scores.get(decl.name) || 0) + score);
+    }
+
+    return Array.from(scores.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name)
+      .slice(0, ASTConfig.MAX_RELATED_SYMBOLS);
   }
 
   private detectLanguage(filePath: string): string {
@@ -1434,29 +1580,6 @@ class ASTContextCollector {
       logger.error(`Error discovering workspace files`, error);
       return [];
     }
-  }
-
-  private extractSymbolsFromContent(content: string): string[] {
-    const symbols: string[] = [];
-    const lines = content.split('\n');
-
-    lines.forEach((line) => {
-      const trimmed = line.trim();
-
-      // Extract function names
-      const funcMatch = trimmed.match(/(?:function|def)\s+(\w+)/);
-      if (funcMatch) symbols.push(funcMatch[1]);
-
-      // Extract class names
-      const classMatch = trimmed.match(/class\s+(\w+)/);
-      if (classMatch) symbols.push(classMatch[1]);
-
-      // Extract variable names
-      const varMatch = trimmed.match(/(?:const|let|var)\s+(\w+)/);
-      if (varMatch) symbols.push(varMatch[1]);
-    });
-
-    return [...new Set(symbols)]; // Deduplicate
   }
 }
 
@@ -1805,11 +1928,17 @@ class ASTEditToolInvocation implements ToolInvocation<
   private async executePreview(_signal: AbortSignal): Promise<ToolResult> {
     try {
       // Read file and collect context
-      const currentContent = await this.readFileContent();
+      const rawCurrentContent = await this.readFileContent();
+      // Normalize line endings to LF to match apply behavior
+      const currentContent = rawCurrentContent.replace(/\r\n/g, '\n');
       // Get timestamp for freshness check
       const currentMtime = await this.getFileLastModified(
         this.params.file_path,
       );
+
+      // Detect if this is a new file (same logic as apply path)
+      const isNewFile =
+        this.params.old_string === '' && rawCurrentContent === '';
 
       // Freshness Check (must run first to prevent stale edits in concurrent scenarios)
       if (
@@ -1842,12 +1971,12 @@ class ASTEditToolInvocation implements ToolInvocation<
           workspaceRoot,
         );
 
-      // Generate preview
+      // Generate preview (use normalized content and correct isNewFile flag)
       const newContent = ASTEditTool.applyReplacement(
         currentContent,
         this.params.old_string,
         this.params.new_string,
-        false,
+        isNewFile,
       );
       const astValidation = this.validateASTSyntax(
         this.params.file_path,
@@ -1914,7 +2043,7 @@ class ASTEditToolInvocation implements ToolInvocation<
               '',
               'RELATED SYMBOLS:',
               ...enhancedContext.relatedSymbols
-                .slice(0, 5)
+                .slice(0, ASTConfig.MAX_DISPLAY_RESULTS)
                 .map(
                   (symbol) =>
                     `- ${symbol.type}: ${symbol.filePath}:${symbol.line}`,
@@ -2288,7 +2417,7 @@ class ASTReadFileToolInvocation implements ToolInvocation<
         '',
         'RELEVANT SNIPPETS:',
         ...enhancedContext.relevantSnippets
-          .slice(0, 5)
+          .slice(0, ASTConfig.MAX_DISPLAY_RESULTS)
           .map(
             (snippet) =>
               `- Line ${snippet.line}: ${snippet.text.substring(0, 60)}...`,

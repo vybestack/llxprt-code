@@ -173,4 +173,74 @@ describe('AST Tools', () => {
       expect(result.returnDisplay).toContain('Error:');
     });
   });
+
+  describe('Performance Optimization', () => {
+    it('should not call buildSymbolIndex when indexing is disabled', async () => {
+      const tool = new ASTReadFileTool(mockConfig);
+      const collector = (
+        tool as unknown as {
+          contextCollector: {
+            relationshipAnalyzer: { buildSymbolIndex: () => void };
+            collectEnhancedContext: (
+              p: string,
+              c: string,
+              w: string,
+            ) => Promise<unknown>;
+          };
+        }
+      ).contextCollector;
+      const analyzer = collector.relationshipAnalyzer;
+      const spy = vi.spyOn(analyzer, 'buildSymbolIndex');
+
+      await collector.collectEnhancedContext(
+        '/test/file.ts',
+        'const x = 1;',
+        '/test',
+      );
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('should prioritize important symbols', () => {
+      const tool = new ASTReadFileTool(mockConfig);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Accessing internal method for testing
+      const collector = (tool as any).contextCollector;
+      const decls: EnhancedDeclaration[] = [
+        {
+          name: 'MyClass',
+          type: 'class',
+          line: 1,
+          column: 1,
+          range: {
+            start: { line: 1, column: 1 },
+            end: { line: 10, column: 1 },
+          },
+        },
+        {
+          name: 'myFunc',
+          type: 'function',
+          line: 11,
+          column: 1,
+          range: {
+            start: { line: 11, column: 1 },
+            end: { line: 12, column: 1 },
+          },
+        },
+        {
+          name: 'a',
+          type: 'variable',
+          line: 13,
+          column: 1,
+          range: {
+            start: { line: 13, column: 1 },
+            end: { line: 13, column: 2 },
+          },
+        },
+      ];
+
+      const prioritized = collector.prioritizeSymbolsFromDeclarations(decls);
+      expect(prioritized).toContain('MyClass');
+      expect(prioritized).toContain('myFunc');
+      expect(prioritized).not.toContain('a'); // 'a' is too short (length < 3)
+    });
+  });
 });
