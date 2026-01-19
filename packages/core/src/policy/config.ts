@@ -379,7 +379,7 @@ export async function createPolicyEngineConfig(
     if (settings.tools?.allowed) {
       for (const tool of settings.tools.allowed) {
         rules.push({
-          toolName: tool,
+          toolName: normalizeToolName(tool),
           decision: PolicyDecision.ALLOW,
           priority: 2.3,
         });
