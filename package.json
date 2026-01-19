@@ -120,6 +120,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.74",
+    "@hono/node-server": "^1.19.7",
     "@lvce-editor/ripgrep": "^1.6.0",
     "@testing-library/dom": "^10.4.1",
     "@vybestack/llxprt-code": "^0.8.0",

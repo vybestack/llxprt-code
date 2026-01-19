@@ -6,22 +6,19 @@
 
 import * as Diff from 'diff';
 import { type DiffStat } from './tools.js';
+import type {
+  StructuredPatch,
+  StructuredPatchHunk,
+  StructuredPatchOptionsNonabortable,
+  CreatePatchOptionsNonabortable,
+} from 'diff';
 
-type PatchOptions = {
-  context?: number;
-  ignoreWhitespace?: boolean;
-};
-
-type StructuredPatch = {
-  hunks: Array<{ lines: string[] }>;
-};
-
-export const DEFAULT_STRUCTURED_PATCH_OPTIONS: PatchOptions = {
+export const DEFAULT_DIFF_OPTIONS: StructuredPatchOptionsNonabortable = {
   context: 3,
   ignoreWhitespace: true,
 };
 
-export const DEFAULT_DIFF_OPTIONS: PatchOptions = {
+export const DEFAULT_CREATE_PATCH_OPTIONS: CreatePatchOptionsNonabortable = {
   context: 3,
   ignoreWhitespace: true,
 };
@@ -32,12 +29,10 @@ export function getDiffStat(
   aiStr: string,
   userStr: string,
 ): DiffStat {
-  const countLines = (
-    patch: StructuredPatch,
-  ): { added: number; removed: number } => {
+  const countLines = (patch: StructuredPatch) => {
     let added = 0;
     let removed = 0;
-    patch.hunks.forEach((hunk) => {
+    patch.hunks.forEach((hunk: StructuredPatchHunk) => {
       hunk.lines.forEach((line: string) => {
         if (line.startsWith('+')) {
           added++;
@@ -56,7 +51,7 @@ export function getDiffStat(
     aiStr,
     'Current',
     'Proposed',
-    DEFAULT_STRUCTURED_PATCH_OPTIONS,
+    DEFAULT_DIFF_OPTIONS,
   );
   const { added: aiAddedLines, removed: aiRemovedLines } = countLines(patch);
 
@@ -67,7 +62,7 @@ export function getDiffStat(
     userStr,
     'Proposed',
     'User',
-    DEFAULT_STRUCTURED_PATCH_OPTIONS,
+    DEFAULT_DIFF_OPTIONS,
   );
   const { added: userAddedLines, removed: userRemovedLines } =
     countLines(userPatch);

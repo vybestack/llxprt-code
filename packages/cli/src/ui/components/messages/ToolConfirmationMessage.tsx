@@ -12,6 +12,7 @@ import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
 import {
   ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
+  ToolEditConfirmationDetails,
   ToolExecuteConfirmationDetails,
   ToolMcpConfirmationDetails,
   Config,
@@ -267,13 +268,48 @@ export const ToolConfirmationMessage: React.FC<
         key: 'No, suggest changes (esc)',
       });
     }
+    const editDetails = confirmationDetails as ToolEditConfirmationDetails;
+    const metadata = editDetails.metadata;
+    const astValidation = metadata?.astValidation as
+      | { valid: boolean; errors: string[] }
+      | undefined;
+
     bodyContent = (
-      <DiffRenderer
-        diffContent={confirmationDetails.fileDiff}
-        filename={confirmationDetails.fileName}
-        availableTerminalHeight={availableBodyContentHeight()}
-        terminalWidth={childWidth}
-      />
+      <Box flexDirection="column">
+        <Box marginBottom={1} paddingX={1} flexDirection="column">
+          {astValidation && (
+            <Box>
+              {astValidation.valid ? (
+                <Text color={Colors.AccentGreen}>✦ AST Validation Passed</Text>
+              ) : (
+                <Box flexDirection="column">
+                  <Text color={Colors.AccentRed} bold>
+                    ⚠ AST Validation Failed
+                  </Text>
+                  {(astValidation.errors as string[]).map(
+                    (err: string, i: number) => (
+                      <Text key={i} color={Colors.AccentRed}>
+                        - {err}
+                      </Text>
+                    ),
+                  )}
+                </Box>
+              )}
+            </Box>
+          )}
+          {Boolean(metadata?.fileFreshness) && (
+            <Box>
+              <Text color={Colors.AccentGreen}>✦ File Freshness Verified</Text>
+            </Box>
+          )}
+        </Box>
+        <DiffRenderer
+          diffContent={confirmationDetails.fileDiff}
+          filename={confirmationDetails.fileName}
+          availableTerminalHeight={availableBodyContentHeight()}
+          terminalWidth={childWidth}
+        />
+      </Box>
     );
   } else if (confirmationDetails.type === 'exec') {
     const executionProps =

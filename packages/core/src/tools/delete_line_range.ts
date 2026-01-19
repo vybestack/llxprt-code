@@ -26,7 +26,7 @@ import {
   FileOperation,
 } from '../telemetry/metrics.js';
 import { getSpecificMimeType } from '../utils/fileUtils.js';
-import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
+import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 
 /**
@@ -118,8 +118,8 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
       newContent,
       'Current',
       'Proposed',
-      DEFAULT_DIFF_OPTIONS,
-    );
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    ) as string;
 
     const ideClient = this.config.getIdeClient();
     const ideConfirmation =

@@ -226,12 +226,80 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
               </MaxSizedBox>
             )}
             {typeof resultDisplay !== 'string' && (
-              <DiffRenderer
-                diffContent={resultDisplay.fileDiff}
-                filename={resultDisplay.fileName}
-                availableTerminalHeight={availableHeight}
-                terminalWidth={childWidth}
-              />
+              <Box flexDirection="column">
+                {'fileDiff' in resultDisplay && (
+                  <>
+                    {(() => {
+                      const astValidation = resultDisplay.metadata
+                        ?.astValidation as
+                        | { valid: boolean; errors: string[] }
+                        | undefined;
+                      if (!astValidation) return null;
+
+                      return (
+                        <Box marginBottom={1}>
+                          {astValidation.valid ? (
+                            <Text color={Colors.AccentGreen}>
+                              ✦ AST Validation Passed
+                            </Text>
+                          ) : (
+                            <Box flexDirection="column">
+                              <Text color={Colors.AccentRed} bold>
+                                ⚠ AST Validation Failed
+                              </Text>
+                              {astValidation.errors.map(
+                                (err: string, i: number) => (
+                                  <Text key={i} color={Colors.AccentRed}>
+                                    - {err}
+                                  </Text>
+                                ),
+                              )}
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })()}
+                    <DiffRenderer
+                      diffContent={resultDisplay.fileDiff}
+                      filename={resultDisplay.fileName}
+                      availableTerminalHeight={availableHeight}
+                      terminalWidth={childWidth}
+                    />
+                  </>
+                )}
+                {'content' in resultDisplay && (
+                  <Box flexDirection="column">
+                    <Box marginBottom={1} flexDirection="column">
+                      {(() => {
+                        const language = resultDisplay.metadata?.language;
+                        const declarationsCount =
+                          resultDisplay.metadata?.declarationsCount;
+                        return (
+                          <>
+                            {typeof language === 'string' && (
+                              <Text color={Colors.AccentGreen}>
+                                ✦ Language: {language}
+                              </Text>
+                            )}
+                            {typeof declarationsCount === 'number' && (
+                              <Text color={Colors.AccentGreen}>
+                                ✦ Declarations Found: {declarationsCount}
+                              </Text>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </Box>
+                    <MarkdownDisplay
+                      text={resultDisplay.content}
+                      isPending={false}
+                      availableTerminalHeight={availableHeight}
+                      terminalWidth={childWidth}
+                      renderMarkdown={renderMarkdown}
+                    />
+                  </Box>
+                )}
+              </Box>
             )}
           </Box>
         </Box>
