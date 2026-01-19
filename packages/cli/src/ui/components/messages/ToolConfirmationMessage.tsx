@@ -7,10 +7,12 @@
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
+import { Colors } from '../../colors.js';
 import { DiffRenderer } from './DiffRenderer.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
 import type {
   ToolCallConfirmationDetails,
+  ToolEditConfirmationDetails,
   ToolExecuteConfirmationDetails,
   ToolMcpConfirmationDetails,
   Config,
@@ -177,6 +179,11 @@ export const ToolConfirmationMessage: React.FC<
         key: 'Modify with external editor',
       });
     }
+    const editDetails = confirmationDetails as ToolEditConfirmationDetails;
+    const metadata = editDetails.metadata;
+    const astValidation = metadata?.astValidation as
+      | { valid: boolean; errors: string[] }
+      | undefined;
 
     options.push({
       label: 'No, suggest changes (esc)',
@@ -185,12 +192,41 @@ export const ToolConfirmationMessage: React.FC<
     });
 
     bodyContent = (
-      <DiffRenderer
-        diffContent={confirmationDetails.fileDiff}
-        filename={confirmationDetails.fileName}
-        availableTerminalHeight={availableBodyContentHeight()}
-        terminalWidth={childWidth}
-      />
+      <Box flexDirection="column">
+        <Box marginBottom={1} paddingX={1} flexDirection="column">
+          {astValidation && (
+            <Box>
+              {astValidation.valid ? (
+                <Text color={Colors.AccentGreen}>✦ AST Validation Passed</Text>
+              ) : (
+                <Box flexDirection="column">
+                  <Text color={Colors.AccentRed} bold>
+                    ⚠ AST Validation Failed
+                  </Text>
+                  {(astValidation.errors as string[]).map(
+                    (err: string, i: number) => (
+                      <Text key={i} color={Colors.AccentRed}>
+                        - {err}
+                      </Text>
+                    ),
+                  )}
+                </Box>
+              )}
+            </Box>
+          )}
+          {Boolean(metadata?.fileFreshness) && (
+            <Box>
+              <Text color={Colors.AccentGreen}>✦ File Freshness Verified</Text>
+            </Box>
+          )}
+        </Box>
+        <DiffRenderer
+          diffContent={confirmationDetails.fileDiff}
+          filename={confirmationDetails.fileName}
+          availableTerminalHeight={availableBodyContentHeight()}
+          terminalWidth={childWidth}
+        />
+      </Box>
     );
   } else if (confirmationDetails.type === 'exec') {
     const executionProps =

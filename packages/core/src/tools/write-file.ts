@@ -24,7 +24,7 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
-import { DEFAULT_DIFF_OPTIONS, getDiffStat } from './diffOptions.js';
+import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
 import {
   type ModifiableDeclarativeTool,
   type ModifyContext,
@@ -246,8 +246,8 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       correctedContent, // Content after correction and emoji filtering
       'Current',
       'Proposed',
-      DEFAULT_DIFF_OPTIONS,
-    );
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    ) as string;
 
     const ideClient = this.config.getIdeClient();
     const ideConfirmation =
@@ -392,8 +392,8 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         fileContent,
         'Original',
         'Written',
-        DEFAULT_DIFF_OPTIONS,
-      );
+        DEFAULT_CREATE_PATCH_OPTIONS,
+      ) as string;
 
       const originallyProposedContent =
         filteredParams.ai_proposed_content || filteredParams.content;
