@@ -16,6 +16,14 @@ export default defineConfig({
     outputFile: {
       junit: 'junit.xml',
     },
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: true,
+        maxThreads: 2,
+      },
+    },
+    teardownTimeout: 60000,
     coverage: {
       enabled: true,
       provider: 'v8',
