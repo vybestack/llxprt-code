@@ -377,40 +377,39 @@ describe('run_shell_command', () => {
     expect(toolCall.toolRequest.success).toBe(true);
   });
 
-  it.skipIf(process.env.LLXPRT_SANDBOX !== 'false')(
-    'should propagate environment variables to the child process',
-    async () => {
-      const rig = new TestRig();
-      await rig.setup('should propagate environment variables');
+  it.skipIf(
+    process.env.LLXPRT_SANDBOX !== 'false' || process.platform === 'win32',
+  )('should propagate environment variables to the child process', async () => {
+    const rig = new TestRig();
+    await rig.setup('should propagate environment variables');
 
-      const varName = 'LLXPRT_CODE_TEST_VAR';
-      const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
-      process.env[varName] = varValue;
+    const varName = 'LLXPRT_CODE_TEST_VAR';
+    const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
+    process.env[varName] = varValue;
 
-      try {
-        const prompt = `Use the run_shell_command tool to run "echo $${varName}" and tell me the output.`;
-        const result = await rig.run(prompt);
+    try {
+      const prompt = `Use the run_shell_command tool to run "echo $${varName}" and tell me the output.`;
+      const result = await rig.run(prompt);
 
-        const foundToolCall = await rig.waitForToolCall('run_shell_command');
+      const foundToolCall = await rig.waitForToolCall('run_shell_command');
 
-        if (!foundToolCall || !result.includes(varValue)) {
-          printDebugInfo(rig, result, {
-            'Found tool call': foundToolCall,
-            'Contains varValue': result.includes(varValue),
-          });
-        }
-
-        expect(
-          foundToolCall,
-          'Expected to find a run_shell_command tool call',
-        ).toBeTruthy();
-        validateModelOutput(result, varValue, 'Env var propagation test');
-        expect(result).toContain(varValue);
-      } finally {
-        delete process.env[varName];
+      if (!foundToolCall || !result.includes(varValue)) {
+        printDebugInfo(rig, result, {
+          'Found tool call': foundToolCall,
+          'Contains varValue': result.includes(varValue),
+        });
       }
-    },
-  );
+
+      expect(
+        foundToolCall,
+        'Expected to find a run_shell_command tool call',
+      ).toBeTruthy();
+      validateModelOutput(result, varValue, 'Env var propagation test');
+      expect(result).toContain(varValue);
+    } finally {
+      delete process.env[varName];
+    }
+  });
 
   it('should run a platform-specific file listing command', async () => {
     const rig = new TestRig();
