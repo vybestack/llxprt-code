@@ -121,7 +121,7 @@ export const useWelcomeOnboarding = (
           state.selectedProvider,
         );
         const modelInfos: ModelInfo[] = models.map((m) => ({
-          id: m.name,
+          id: m.id,
           name: m.name,
         }));
         setAvailableModels(modelInfos);
@@ -147,17 +147,25 @@ export const useWelcomeOnboarding = (
     setState((prev) => ({
       ...prev,
       selectedProvider: providerId,
-      step: 'model',
+      step: 'auth_method', // Auth before model selection to ensure models load properly
     }));
   }, []);
 
-  const selectModel = useCallback((modelId: string) => {
-    setState((prev) => ({
-      ...prev,
-      selectedModel: modelId,
-      step: 'auth_method',
-    }));
-  }, []);
+  const selectModel = useCallback(
+    async (modelId: string) => {
+      // Actually set the model on the runtime so it's captured in the profile
+      debug.log(`[selectModel] Setting model: ${modelId}`);
+      await runtime.setActiveModel(modelId);
+      debug.log(`[selectModel] Model set successfully: ${modelId}`);
+
+      setState((prev) => ({
+        ...prev,
+        selectedModel: modelId,
+        step: 'completion', // After model selection, go to completion (auth already done)
+      }));
+    },
+    [runtime],
+  );
 
   const selectAuthMethod = useCallback((method: 'oauth' | 'api_key') => {
     setState((prev) => ({
@@ -168,19 +176,43 @@ export const useWelcomeOnboarding = (
     }));
   }, []);
 
-  const onAuthComplete = useCallback(() => {
-    // Provider switch already happened in triggerAuth, just update UI state
+  const onAuthComplete = useCallback(async () => {
+    // Provider switch already happened in triggerAuth
     debug.log(
       `[onAuthComplete] Auth complete for provider: ${state.selectedProvider}`,
     );
 
+    // Refresh models now that auth is established
+    try {
+      if (state.selectedProvider) {
+        setState((prev) => ({ ...prev, modelsLoadStatus: 'loading' }));
+        const models = await runtime.listAvailableModels(
+          state.selectedProvider,
+        );
+        const modelInfos: ModelInfo[] = models.map((m) => ({
+          id: m.id,
+          name: m.name,
+        }));
+        setAvailableModels(modelInfos);
+        setState((prev) => ({ ...prev, modelsLoadStatus: 'success' }));
+        debug.log(
+          `[onAuthComplete] Loaded ${modelInfos.length} models for ${state.selectedProvider}`,
+        );
+      }
+    } catch (error) {
+      debug.log(`[onAuthComplete] Failed to reload models: ${error}`);
+      setAvailableModels([]);
+      setState((prev) => ({ ...prev, modelsLoadStatus: 'error' }));
+    }
+
+    // Go to model selection step (since we reordered: provider → auth → model)
     setState((prev) => ({
       ...prev,
-      step: 'completion',
+      step: 'model',
       authInProgress: false,
       error: undefined,
     }));
-  }, [state.selectedProvider]);
+  }, [runtime, state.selectedProvider]);
 
   const onAuthError = useCallback((error: string) => {
     setState((prev) => ({
@@ -198,10 +230,9 @@ export const useWelcomeOnboarding = (
   const goBack = useCallback(() => {
     setState((prev) => {
       switch (prev.step) {
-        case 'model':
-          return { ...prev, step: 'provider', selectedProvider: undefined };
         case 'auth_method':
-          return { ...prev, step: 'model', selectedModel: undefined };
+          // Going back from auth method goes to provider selection
+          return { ...prev, step: 'provider', selectedProvider: undefined };
         case 'authenticating':
           return {
             ...prev,
@@ -209,6 +240,9 @@ export const useWelcomeOnboarding = (
             selectedAuthMethod: undefined,
             authInProgress: false,
           };
+        case 'model':
+          // Going back from model selection goes to auth method
+          return { ...prev, step: 'auth_method', selectedModel: undefined };
         case 'provider':
           return { ...prev, step: 'welcome' };
         default:
@@ -271,6 +305,7 @@ export const useWelcomeOnboarding = (
   }, [state.step]);
 
   // Trigger authentication for the selected provider
+  // Flow is now: provider → auth → model, so we authenticate FIRST before setting provider/model
   const triggerAuth = useCallback(
     async (
       provider: string,
@@ -282,32 +317,30 @@ export const useWelcomeOnboarding = (
       const providerManager = runtime.getCliProviderManager();
 
       debug.log(
-        `[triggerAuth] Before switch - current active: ${providerManager?.getActiveProviderName()}`,
+        `[triggerAuth] Before auth - current active: ${providerManager?.getActiveProviderName()}`,
       );
 
-      // Use switchActiveProvider (not setActiveProvider) - it does full provider switch
-      // including config updates, ephemeral settings, and settingsService updates
+      // Authenticate FIRST before switching provider (prevents double OAuth)
+      if (method === 'oauth') {
+        if (!oauthManager) {
+          throw new Error('OAuth manager not available');
+        }
+        debug.log(`[triggerAuth] Starting OAuth for ${provider}`);
+        await oauthManager.authenticate(provider);
+        debug.log(`[triggerAuth] OAuth complete for ${provider}`);
+      }
+
+      // Now switch to the provider AFTER auth is complete
       const switchResult = await runtime.switchActiveProvider(provider);
       debug.log(
         `[triggerAuth] After switchActiveProvider - changed: ${switchResult.changed}, now active: ${providerManager?.getActiveProviderName()}`,
       );
 
-      // Set the selected model
-      if (state.selectedModel) {
-        debug.log(`[triggerAuth] Setting model to: ${state.selectedModel}`);
-        await runtime.setActiveModel(state.selectedModel);
-        debug.log(`[triggerAuth] Model set to: ${state.selectedModel}`);
-      }
-
-      if (method === 'oauth') {
-        // Trigger OAuth flow
-        if (!oauthManager) {
-          throw new Error('OAuth manager not available');
+      // For API key method, set the key after switching provider
+      if (method === 'api_key') {
+        if (!apiKey) {
+          throw new Error('API key is required for API key authentication');
         }
-        await oauthManager.authenticate(provider);
-        debug.log(`[triggerAuth] OAuth complete for ${provider}`);
-      } else if (apiKey) {
-        // API key path: set the key for the now-active provider
         debug.log(
           `[triggerAuth] Calling updateActiveProviderApiKey for ${provider}`,
         );
@@ -315,15 +348,13 @@ export const useWelcomeOnboarding = (
         debug.log(
           `[triggerAuth] API key result: ${result.message}, providerName=${result.providerName}`,
         );
-      } else {
-        throw new Error('API key is required for API key authentication');
       }
 
       debug.log(
         `[triggerAuth] END - active provider: ${providerManager?.getActiveProviderName()}`,
       );
     },
-    [runtime, state.selectedModel],
+    [runtime],
   );
 
   return {
