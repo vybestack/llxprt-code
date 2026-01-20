@@ -157,7 +157,7 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
       ...overrides,
     });
 
-  it('keeps thinking enabled even when the only thinking block is more than 3 AI messages back', async () => {
+  it('keeps thinking enabled when the only thinking block is more than 3 AI messages back', async () => {
     mockMessagesCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'Response' }],
       usage: { input_tokens: 100, output_tokens: 50 },
@@ -229,7 +229,7 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
     expect(request.thinking).toBeDefined();
   });
 
-  it('keeps thinking enabled when sourceField is not thinking by inserting redacted placeholder', async () => {
+  it('keeps thinking enabled when sourceField is not thinking and no signatures are present', async () => {
     mockMessagesCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'Response' }],
       usage: { input_tokens: 100, output_tokens: 50 },
@@ -283,7 +283,7 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
     expect(request.thinking).toBeDefined();
   });
 
-  it('inserts redacted thinking placeholder when tool calls are separated from thinking by text', async () => {
+  it('keeps thinking enabled when tool calls are separated from thinking by text', async () => {
     mockMessagesCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'Response' }],
       usage: { input_tokens: 100, output_tokens: 50 },
@@ -341,29 +341,10 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
 
     const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
 
-    const toolCallMsg = request.messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.some((b) => b.type === 'tool_use'),
-    );
-
-    expect(toolCallMsg).toBeDefined();
-    const content = toolCallMsg!.content as AnthropicContentBlock[];
-    const placeholderBlock = content.find(
-      (b) => b.type === 'redacted_thinking',
-    ) as { type: 'redacted_thinking'; data: string } | undefined;
-
-    expect(placeholderBlock).toBeDefined();
-    expect(placeholderBlock?.data).toBeTruthy();
-    const decodedPlaceholder = Buffer.from(
-      placeholderBlock?.data ?? '',
-      'base64',
-    ).toString('utf8');
-    expect(decodedPlaceholder).toContain('missing-thinking');
+    expect(request.thinking).toBeDefined();
   });
 
-  it('uses non-empty redacted data when stripping thinking without signatures', async () => {
+  it('keeps thinking enabled when stripping thinking without signatures', async () => {
     mockMessagesCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'Response' }],
       usage: { input_tokens: 100, output_tokens: 50 },
@@ -416,22 +397,7 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
 
     const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
 
-    const assistantMsg = request.messages.find(
-      (m) => m.role === 'assistant' && Array.isArray(m.content),
-    );
-    expect(assistantMsg).toBeDefined();
-
-    const content = assistantMsg!.content as AnthropicContentBlock[];
-    const redactedBlock = content.find(
-      (b) => b.type === 'redacted_thinking',
-    ) as { type: 'redacted_thinking'; data: string } | undefined;
-    expect(redactedBlock).toBeDefined();
-    expect(redactedBlock?.data).toBeTruthy();
-    const decodedData = Buffer.from(
-      redactedBlock?.data ?? '',
-      'base64',
-    ).toString('utf8');
-    expect(decodedData).toContain('missing-thinking');
+    expect(request.thinking).toBeDefined();
   });
 
   it('COMPLEX SCENARIO: Multiple tool calls in rapid succession with orphaned thinking', async () => {

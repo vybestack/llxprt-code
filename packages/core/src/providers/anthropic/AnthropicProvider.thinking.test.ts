@@ -719,6 +719,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
               type: 'thinking',
               thought: 'Previous thinking',
               sourceField: 'thinking',
+              signature: 'sig1',
             } as ThinkingBlock,
             { type: 'text', text: 'Previous response' },
           ],
@@ -770,6 +771,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
               type: 'thinking',
               thought: 'First thinking',
               sourceField: 'thinking',
+              signature: 'sig1',
             } as ThinkingBlock,
             { type: 'text', text: 'First response' },
           ],
@@ -785,6 +787,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
               type: 'thinking',
               thought: 'Second thinking',
               sourceField: 'thinking',
+              signature: 'sig2',
             } as ThinkingBlock,
             { type: 'text', text: 'Second response' },
           ],
@@ -846,6 +849,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
               type: 'thinking',
               thought: 'Thinking content',
               sourceField: 'thinking',
+              signature: 'sig1',
             } as ThinkingBlock,
             { type: 'text', text: 'Response' },
           ],
@@ -893,8 +897,9 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
           blocks: [
             {
               type: 'thinking',
-              thought: 'Should not be included',
+              thought: 'Thinking content',
               sourceField: 'thinking',
+              signature: 'sig1',
             } as ThinkingBlock,
             { type: 'text', text: 'Response' },
           ],
@@ -922,6 +927,8 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         assistantMsg!.content as AnthropicContentBlock[]
       ).some((block) => block.type === 'thinking');
       expect(hasThinking).toBe(false);
+
+      expect(request.thinking).toBeUndefined();
     });
 
     it('should handle thinking blocks round-trip in conversation history', async () => {
@@ -1159,7 +1166,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(request.thinking?.type).toBe('enabled');
     });
 
-    it('should disable thinking only when truly no thinking blocks exist for tool calls', async () => {
+    it('should keep thinking enabled even when no thinking blocks exist for tool calls', async () => {
       // Simulate a scenario where tool call has NO associated thinking at all
       const messages: IContent[] = [
         {
@@ -1209,6 +1216,54 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         .calls[0][0] as AnthropicRequestBody;
 
       expect(request.thinking).toBeDefined();
+    });
+
+    it('should merge orphaned thinking blocks into the next assistant message without tool calls', async () => {
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Question' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Reasoning',
+              sourceField: 'thinking',
+              signature: 'sig-merge',
+            } as ThinkingBlock,
+          ],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Final answer' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      const assistantMessages = request.messages.filter(
+        (m) => m.role === 'assistant' && Array.isArray(m.content),
+      );
+
+      const lastAssistant = assistantMessages[assistantMessages.length - 1];
+      const content = lastAssistant.content as AnthropicContentBlock[];
+
+      expect(content[0]).toMatchObject({
+        type: 'thinking',
+        signature: 'sig-merge',
+      });
     });
 
     it('should find orphaned thinking up to 3 messages back', async () => {

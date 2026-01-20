@@ -35,6 +35,7 @@ import type {
   ContentBlock,
   ToolCallBlock,
   ToolResponseBlock,
+  ThinkingBlock,
   UsageStats,
 } from '../services/history/IContent.js';
 import type {
@@ -161,6 +162,22 @@ function createUserContentWithFunctionResponseFix(
   return result;
 }
 
+type ThoughtPart = Part & {
+  thought: true;
+  text?: string;
+  thoughtSignature?: string;
+  llxprtSourceField?: ThinkingBlock['sourceField'];
+};
+
+function isThoughtPart(part: Part | undefined): part is ThoughtPart {
+  return Boolean(
+    part &&
+    typeof part === 'object' &&
+    'thought' in part &&
+    part.thought === true,
+  );
+}
+
 /**
  * Normalizes tool interaction input to prevent tool call loops.
  *
@@ -202,6 +219,7 @@ function normalizeToolInteractionInput(
   }
 
   const result: Content[] = [];
+
   let pendingRole: 'user' | null = null;
   let pendingParts: Part[] = [];
 
@@ -955,8 +973,13 @@ export class GeminiChat {
 
         // Add model response if we have one (but filter out pure thinking responses)
         if (outputContent) {
+          const includeThoughtsInHistory =
+            this.runtimeContext.ephemerals.reasoning.includeInContext();
           // Check if this is pure thinking content that should be filtered
-          if (!this.isThoughtContent(outputContent)) {
+          if (
+            !this.isThoughtContent(outputContent) ||
+            includeThoughtsInHistory
+          ) {
             // Not pure thinking, add it
             const turnKey = this.historyService.generateTurnKey();
             const idGen = this.historyService.getIdGeneratorCallback(turnKey);
@@ -970,7 +993,7 @@ export class GeminiChat {
               currentModel,
             );
           }
-          // If it's pure thinking content, don't add it to history
+          // If it's pure thinking content and includeInContext is false, don't add it to history
         } else if (response.candidates && response.candidates.length > 0) {
           // We have candidates but no content - add empty model response
           // This handles the case where the model returns empty content
@@ -2311,8 +2334,12 @@ export class GeminiChat {
             hasTextResponse = true;
           }
 
-          // Filter out thought parts from being added to history.
-          if (!this.isThoughtContent(content)) {
+          const includeThoughtsInHistory =
+            this.runtimeContext.ephemerals.reasoning.includeInContext();
+
+          if (includeThoughtsInHistory) {
+            modelResponseParts.push(...content.parts);
+          } else {
             modelResponseParts.push(
               ...content.parts.filter((part) => !part.thought),
             );
@@ -2480,9 +2507,30 @@ export class GeminiChat {
     }
 
     // Part 2: Handle the model's part of the turn, filtering out thoughts.
-    const nonThoughtModelOutput = modelOutput.filter(
-      (content) => !this.isThoughtContent(content),
-    );
+    const includeThoughtsInHistory =
+      this.runtimeContext.ephemerals.reasoning.includeInContext();
+
+    const nonThoughtModelOutput = modelOutput
+      .map((content) => ({
+        ...content,
+        parts: (content.parts ?? []).filter((part) => !isThoughtPart(part)),
+      }))
+      .filter((content) => (content.parts?.length ?? 0) > 0);
+
+    const thoughtBlocks: ThinkingBlock[] = includeThoughtsInHistory
+      ? modelOutput
+          .flatMap((content) => content.parts ?? [])
+          .filter(isThoughtPart)
+          .map(
+            (part): ThinkingBlock => ({
+              type: 'thinking',
+              thought: (part.text ?? '').trim(),
+              sourceField: part.llxprtSourceField ?? 'thought',
+              signature: part.thoughtSignature,
+            }),
+          )
+          .filter((block) => block.thought.length > 0)
+      : [];
 
     let outputContents: Content[] = [];
     if (nonThoughtModelOutput.length > 0) {
@@ -2495,6 +2543,10 @@ export class GeminiChat {
     ) {
       // Add an empty model response if the model truly returned nothing.
       outputContents.push({ role: 'model', parts: [] } as Content);
+    }
+
+    if (outputContents.length === 0 && thoughtBlocks.length > 0) {
+      outputContents = [{ role: 'model', parts: [] } as Content];
     }
 
     // Part 3: Consolidate the parts of this turn's model response.
@@ -2519,35 +2571,47 @@ export class GeminiChat {
     for (const entry of newHistoryEntries) {
       this.historyService.add(entry, currentModel);
     }
+
+    let didAttachThoughtBlocks = false;
     for (const content of consolidatedOutputContents) {
-      // Check if this contains tool calls
-      const hasToolCalls = content.parts?.some(
-        (part) => part && typeof part === 'object' && 'functionCall' in part,
+      const turnKey = this.historyService.generateTurnKey();
+      const iContent = ContentConverters.toIContent(
+        content,
+        undefined,
+        undefined,
+        turnKey,
       );
 
-      if (!hasToolCalls) {
-        // Only add non-tool-call responses to history immediately
-        // Tool calls will be added when the executor returns with the response
-        const turnKey = this.historyService.generateTurnKey();
-        const iContent = ContentConverters.toIContent(
-          content,
-          undefined,
-          undefined,
-          turnKey,
-        );
-
-        // Add usage metadata if available from streaming
-        if (usageMetadata) {
-          iContent.metadata = {
-            ...iContent.metadata,
-            usage: usageMetadata,
-          };
-        }
-
-        this.historyService.add(iContent, currentModel);
+      if (thoughtBlocks.length > 0 && !didAttachThoughtBlocks) {
+        iContent.blocks = [...thoughtBlocks, ...iContent.blocks];
+        didAttachThoughtBlocks = true;
       }
-      // Tool calls are NOT added here - they'll come back from the executor
-      // along with their responses and be added together
+
+      // Add usage metadata if available from streaming
+      if (usageMetadata) {
+        iContent.metadata = {
+          ...iContent.metadata,
+          usage: usageMetadata,
+        };
+      }
+
+      this.historyService.add(iContent, currentModel);
+    }
+
+    if (thoughtBlocks.length > 0 && !didAttachThoughtBlocks) {
+      const turnKey = this.historyService.generateTurnKey();
+      const iContent: IContent = {
+        speaker: 'ai',
+        blocks: thoughtBlocks,
+        metadata: { turnId: turnKey },
+      };
+      if (usageMetadata) {
+        iContent.metadata = {
+          ...iContent.metadata,
+          usage: usageMetadata,
+        };
+      }
+      this.historyService.add(iContent, currentModel);
     }
   }
 
@@ -2663,6 +2727,18 @@ export class GeminiChat {
     for (const part of parts) {
       if (typeof part === 'string') {
         blocks.push({ type: 'text', text: part });
+      } else if (isThoughtPart(part)) {
+        const thinkingBlock: ThinkingBlock = {
+          type: 'thinking',
+          thought: part.text ?? '',
+          isHidden: true,
+          sourceField: part.llxprtSourceField ?? 'thought',
+        };
+        if (part.thoughtSignature) {
+          thinkingBlock.signature = part.thoughtSignature;
+        }
+        blocks.push(thinkingBlock);
+        hasAIContent = true;
       } else if ('text' in part && part.text !== undefined) {
         blocks.push({ type: 'text', text: part.text });
       } else if ('functionCall' in part && part.functionCall) {
@@ -2731,13 +2807,22 @@ export class GeminiChat {
           });
           break;
         }
-        case 'thinking':
+        case 'thinking': {
+          const thinkingBlock = block as ThinkingBlock;
           // Include thinking blocks as thought parts
-          parts.push({
+          const thoughtPart: ThoughtPart = {
             thought: true,
-            text: block.thought,
-          });
+            text: thinkingBlock.thought,
+          };
+          if (thinkingBlock.signature) {
+            thoughtPart.thoughtSignature = thinkingBlock.signature;
+          }
+          if (thinkingBlock.sourceField) {
+            thoughtPart.llxprtSourceField = thinkingBlock.sourceField;
+          }
+          parts.push(thoughtPart);
           break;
+        }
         default:
           // Skip unsupported block types
           break;

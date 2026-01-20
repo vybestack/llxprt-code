@@ -1420,8 +1420,11 @@ export const useGeminiStream = (
         return;
       }
 
-      const responsesToSend: Part[] = geminiTools.flatMap(
-        (toolCall) => toolCall.response.responseParts,
+      const responsesToSend: Part[] = geminiTools.flatMap((toolCall) =>
+        toolCall.response.responseParts.filter(
+          (part) =>
+            !(part && typeof part === 'object' && 'functionCall' in part),
+        ),
       );
       const callIdsToMarkAsSubmitted = geminiTools.map(
         (toolCall) => toolCall.request.callId,

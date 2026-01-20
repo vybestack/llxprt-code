@@ -447,7 +447,7 @@ describe('AnthropicProvider Issue #1150: Thinking blocks disappear after tool ca
     expect(request.thinking?.type).toBe('enabled');
   });
 
-  it('should disable thinking only when NO thinking blocks found within lookback window', async () => {
+  it('should keep thinking enabled when tool calls appear without prior thinking', async () => {
     mockMessagesCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'Response' }],
       usage: { input_tokens: 100, output_tokens: 50 },

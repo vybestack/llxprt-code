@@ -898,7 +898,7 @@ export class AnthropicProvider extends BaseProvider {
         next &&
         next.speaker === 'ai'
       ) {
-        // Check if current has ONLY thinking blocks and next has tool_call blocks
+        // Check if current has ONLY thinking blocks and next is any AI message.
         const currentThinking = current.blocks.filter(
           (b) =>
             b.type === 'thinking' &&
@@ -909,17 +909,12 @@ export class AnthropicProvider extends BaseProvider {
             b.type !== 'thinking' ||
             (b as ThinkingBlock).sourceField !== 'thinking',
         );
-        const nextToolCalls = next.blocks.filter((b) => b.type === 'tool_call');
 
-        if (
-          currentThinking.length > 0 &&
-          currentOther.length === 0 &&
-          nextToolCalls.length > 0
-        ) {
+        if (currentThinking.length > 0 && currentOther.length === 0) {
           // Merge: combine thinking from current with all blocks from next
           this.getLogger().debug(
             () =>
-              `[AnthropicProvider] Merging orphaned thinking block with subsequent tool_use message`,
+              `[AnthropicProvider] Merging orphaned thinking block with subsequent assistant message`,
           );
           filteredContent.push({
             ...next,
@@ -933,92 +928,8 @@ export class AnthropicProvider extends BaseProvider {
       filteredContent.push(current);
     }
 
-    // Check if there are tool calls in history that need thinking blocks.
-    // Anthropic's API requires ALL assistant messages with tool_use to start with thinking/redacted_thinking
-    // when thinking is enabled. During streaming, thinking blocks may be stored separately from tool calls.
-    // We need to look across multiple AI messages to find orphaned thinking blocks before deciding to disable.
-    const effectiveReasoningEnabled = reasoningEnabled;
-    if (reasoningEnabled) {
-      // Find all AI messages with tool calls
-      const aiMessagesWithToolCalls = filteredContent
-        .map((c, idx) => ({ content: c, index: idx }))
-        .filter(({ content }) => {
-          if (content.speaker !== 'ai') return false;
-          const hasToolCalls = content.blocks.some(
-            (b) => b.type === 'tool_call',
-          );
-          return hasToolCalls;
-        });
-
-      // Check if any AI message with tool calls is missing thinking blocks
-      let hasMissingThinking = false;
-      for (const {
-        content: aiMsg,
-        index: aiIndex,
-      } of aiMessagesWithToolCalls) {
-        const hasThinking = aiMsg.blocks.some(
-          (b) =>
-            b.type === 'thinking' &&
-            (b as ThinkingBlock).sourceField === 'thinking',
-        );
-
-        if (hasThinking) {
-          // This AI message has both tool calls and thinking - all good
-          continue;
-        }
-
-        // Look back up to 3 previous messages for orphaned thinking blocks
-        let foundOrphanedThinking = false;
-        const lookBackLimit = 3;
-        for (let i = 1; i <= lookBackLimit && aiIndex - i >= 0; i++) {
-          const prevContent = filteredContent[aiIndex - i];
-          if (prevContent.speaker === 'ai') {
-            const prevThinking = prevContent.blocks.filter(
-              (b) =>
-                b.type === 'thinking' &&
-                (b as ThinkingBlock).sourceField === 'thinking',
-            );
-            const prevNonThinking = prevContent.blocks.filter(
-              (b) =>
-                b.type !== 'thinking' ||
-                (b as ThinkingBlock).sourceField !== 'thinking',
-            );
-
-            // If previous AI message has ONLY thinking (no other content), treat it as orphaned
-            if (prevThinking.length > 0 && prevNonThinking.length === 0) {
-              foundOrphanedThinking = true;
-              this.getLogger().debug(
-                () =>
-                  `[AnthropicProvider] Found orphaned thinking ${i} messages back from tool_use message at index ${aiIndex}`,
-              );
-              break;
-            }
-          }
-        }
-
-        if (!foundOrphanedThinking) {
-          // No thinking found for this tool call message - need to disable
-          hasMissingThinking = true;
-          this.getLogger().debug(
-            () =>
-              `[AnthropicProvider] AI message at index ${aiIndex} has tool calls but no associated thinking blocks (checked ${lookBackLimit} previous messages)`,
-          );
-          break;
-        }
-      }
-
-      if (hasMissingThinking) {
-        this.getLogger().warn(
-          () =>
-            `[AnthropicProvider] Missing thinking blocks for tool calls in history; inserting redacted thinking placeholders to satisfy Anthropic requirements.`,
-        );
-      } else if (aiMessagesWithToolCalls.length > 0) {
-        this.getLogger().debug(
-          () =>
-            `[AnthropicProvider] Extended thinking check passed: all ${aiMessagesWithToolCalls.length} AI messages with tool calls have associated thinking blocks`,
-        );
-      }
-    }
+    const shouldIncludeThinking =
+      reasoningEnabled === true && includeInContext !== false;
 
     // Group consecutive tool responses together for Anthropic API
     let pendingToolResults: Array<{
@@ -1216,15 +1127,20 @@ export class AnthropicProvider extends BaseProvider {
           // look back at previous content items to find an orphaned thinking block to associate
           // with this tool_use message. Anthropic requires ALL assistant messages to start with
           // thinking/redacted_thinking when thinking mode is enabled.
-          let anthropicThinkingBlocks = thinkingBlocks.filter(
-            (tb) => tb.sourceField === 'thinking',
+          const hasValidThinking = thinkingBlocks.some(
+            (tb) => tb.sourceField === 'thinking' && Boolean(tb.signature),
           );
+          let anthropicThinkingBlocks: ThinkingBlock[] = hasValidThinking
+            ? thinkingBlocks.filter(
+                (tb) => tb.sourceField === 'thinking' && Boolean(tb.signature),
+              )
+            : [];
 
           // If no thinking blocks found but we have tool calls and thinking is enabled,
           // look back at previous content items for orphaned thinking blocks (up to 3 messages back)
           if (
             anthropicThinkingBlocks.length === 0 &&
-            effectiveReasoningEnabled &&
+            shouldIncludeThinking &&
             toolCallBlocks.length > 0
           ) {
             const lookBackLimit = 3;
@@ -1234,7 +1150,8 @@ export class AnthropicProvider extends BaseProvider {
                 const prevThinkingBlocks = prevContent.blocks.filter(
                   (b) =>
                     b.type === 'thinking' &&
-                    (b as ThinkingBlock).sourceField === 'thinking',
+                    (b as ThinkingBlock).sourceField === 'thinking' &&
+                    Boolean((b as ThinkingBlock).signature),
                 ) as ThinkingBlock[];
                 // Check if prev content was ONLY thinking (no other content)
                 const prevNonThinkingBlocks = prevContent.blocks.filter(
@@ -1257,20 +1174,26 @@ export class AnthropicProvider extends BaseProvider {
             }
           }
 
+          if (
+            anthropicThinkingBlocks.length === 0 &&
+            shouldIncludeThinking &&
+            toolCallBlocks.length > 0
+          ) {
+            this.getLogger().warn(
+              () =>
+                `[AnthropicProvider] Missing thinking blocks with signatures for tool_use message at index ${contentIndex}. Extended thinking requires signed thinking blocks for tool calls.`,
+            );
+          }
+
           if (anthropicThinkingBlocks.length > 0) {
             // Process existing thinking blocks
             for (const tb of anthropicThinkingBlocks) {
               if (shouldRedactThinking) {
-                const fallbackData = Buffer.from(
-                  `missing-thinking-${tb.signature ?? 'unknown'}`,
-                ).toString('base64');
-                // Use redacted_thinking with base64-encoded signature data
+                // Use redacted_thinking with the signature data
                 // This satisfies Anthropic's requirement while saving tokens
                 contentArray.push({
                   type: 'redacted_thinking',
-                  data: tb.signature
-                    ? Buffer.from(tb.signature).toString('base64')
-                    : fallbackData,
+                  data: tb.signature || '',
                 });
               } else {
                 contentArray.push({
@@ -1280,17 +1203,6 @@ export class AnthropicProvider extends BaseProvider {
                 });
               }
             }
-          } else if (effectiveReasoningEnabled) {
-            const placeholderId = toolCallBlocks[0]?.id;
-            const placeholderData = Buffer.from(
-              placeholderId
-                ? `missing-thinking-${placeholderId}`
-                : 'missing-thinking',
-            ).toString('base64');
-            contentArray.push({
-              type: 'redacted_thinking',
-              data: placeholderData,
-            });
           }
 
           // Add text if present
@@ -1690,7 +1602,7 @@ export class AnthropicProvider extends BaseProvider {
       ...(anthropicTools && anthropicTools.length > 0
         ? { tools: anthropicTools }
         : {}),
-      ...(effectiveReasoningEnabled
+      ...(shouldIncludeThinking
         ? {
             thinking: {
               type: 'enabled' as const,
@@ -2108,6 +2020,7 @@ export class AnthropicProvider extends BaseProvider {
               this.getStreamingLogger().debug(() => 'Starting thinking block');
               currentThinkingBlock = {
                 thinking: '',
+                signature: chunk.content_block.signature,
               };
             }
           } else if (chunk.type === 'content_block_delta') {
