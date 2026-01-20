@@ -1190,6 +1190,11 @@ export const useGeminiStream = (
         });
 
         if (dedupedToolCallRequests.length > 0) {
+          // Flush pending rationale/history so it renders before tool calls
+          if (pendingHistoryItemRef.current) {
+            addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+            setPendingHistoryItem(null);
+          }
           await scheduleToolCalls(dedupedToolCallRequests, signal);
         }
       }
@@ -1207,6 +1212,8 @@ export const useGeminiStream = (
       handleContextWindowWillOverflowEvent,
       handleCitationEvent,
       sanitizeContent,
+      addItem,
+      pendingHistoryItemRef,
       setPendingHistoryItem,
     ],
   );
