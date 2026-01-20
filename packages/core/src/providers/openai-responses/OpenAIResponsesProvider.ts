@@ -40,7 +40,6 @@ import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
-import { CODEX_SYSTEM_PROMPT } from './CODEX_PROMPT.js';
 
 import {
   parseResponsesStream,
@@ -327,113 +326,6 @@ export class OpenAIResponsesProvider extends BaseProvider {
   /**
    * Generate a unique synthetic call ID to avoid collisions.
    * @issue #966
-   */
-  private generateSyntheticCallId(): string {
-    const randomSuffix = Math.random().toString(36).substring(2, 10);
-    return `call_synthetic_${randomSuffix}`;
-  }
-
-  /**
-   * Inject a synthetic tool call/result pair that makes GPT think it already read AGENTS.md.
-   *
-   * The CODEX_SYSTEM_PROMPT instructs GPT to read AGENTS.md for project instructions.
-   * However, the user may have configured LLXPRT.md instead (or both), and sometimes
-   * AGENTS.md is deliberately reserved for a different agent (like Codex itself).
-   *
-   * This method:
-   * 1. Always claims to have read "AGENTS.md" in the synthetic function call
-   * 2. Returns the actual userMemory content (from LLXPRT.md, AGENTS.md, or both)
-   * 3. Prevents GPT from wasting a tool call trying to read AGENTS.md
-   *
-   * @issue #966
-   */
-  private injectSyntheticConfigFileRead(
-    requestInput: Array<
-      | { role: 'user' | 'assistant' | 'system'; content?: string }
-      | {
-          type: 'function_call';
-          call_id: string;
-          name: string;
-          arguments: string;
-        }
-      | { type: 'function_call_output'; call_id: string; output: string }
-    >,
-    options: NormalizedGenerateChatOptions,
-    userMemory: string | undefined,
-  ): void {
-    const syntheticCallId = this.generateSyntheticCallId();
-
-    // Note: We intentionally don't use configRef/filePaths here anymore.
-    // The goal is to NOT reveal which files were actually loaded.
-    // We just need to know if userMemory has content.
-
-    let output: string;
-
-    // Always pretend we read AGENTS.md - this is what CODEX_SYSTEM_PROMPT tells GPT to do
-    const targetFile = 'AGENTS.md';
-
-    if (userMemory && userMemory.trim().length > 0) {
-      // Return the ACTUAL userMemory content so GPT sees what was loaded,
-      // while making it think this came from reading AGENTS.md.
-      // Do NOT reveal actual source files - the goal is to convince GPT it read AGENTS.md.
-      output = JSON.stringify({
-        content: userMemory,
-      });
-    } else {
-      output = JSON.stringify({
-        error: 'File not found: AGENTS.md',
-      });
-    }
-
-    requestInput.unshift(
-      {
-        type: 'function_call',
-        call_id: syntheticCallId,
-        name: 'read_file',
-        arguments: JSON.stringify({ absolute_path: targetFile }),
-      },
-      {
-        type: 'function_call_output',
-        call_id: syntheticCallId,
-        output,
-      },
-    );
-  }
-
-  /**
-   * Get the list of server tools supported by this provider
-   */
-  override getServerTools(): string[] {
-    return [];
-  }
-
-  /**
-   * Invoke a server tool (native provider tool)
-   */
-  override async invokeServerTool(
-    _toolName: string,
-    _params: unknown,
-    _config?: unknown,
-    _signal?: AbortSignal,
-  ): Promise<unknown> {
-    throw new Error('Server tools not supported by OpenAI Responses provider');
-  }
-
-  /**
-   * Get current model parameters
-   */
-
-  override getModelParams(): Record<string, unknown> | undefined {
-    try {
-      const providerSettings =
-        this.resolveSettingsService().getProviderSettings(this.name) as Record<
-          string,
-          unknown
-        >;
-
-      const {
-        temperature,
-        maxTokens,
         max_tokens: maxTokensSnake,
         enabled: _enabled,
         apiKey: _apiKey,
@@ -710,21 +602,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Detect Codex mode and handle accordingly
     const isCodex = this.isCodexMode(baseURL);
 
-    // Build request input - filter out system messages for Codex (uses instructions field instead)
-    let requestInput = input;
-    if (isCodex) {
-      // In Codex mode, system prompt goes in instructions field, not input array
-      // Only filter items that have a 'role' property (function_call/function_call_output don't)
-      requestInput = requestInput.filter(
-        (msg) => !('role' in msg) || msg.role !== 'system',
-      );
-
-      // @issue #966: Pre-inject synthetic tool call/result for config files (LLXPRT.md/AGENTS.md)
-      // This prevents the model from wasting tool calls re-reading files already injected.
-      // Note: We no longer inject a steering prompt - the system prompt is properly
-      // conveyed via the `instructions` field (see below).
-      this.injectSyntheticConfigFileRead(requestInput, options, userMemory);
-    }
+    // Note: Codex now accepts standard system prompts (OpenAI fixed the API in late 2025)
+    // No need for special handling like filtering system messages or injecting CODEX_SYSTEM_PROMPT
+    const requestInput = input;
 
     const request: {
       model: string;
@@ -747,10 +627,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan PLAN-20251214-ISSUE160.P05
     // Add Codex-specific request parameters
     if (isCodex) {
-      // @issue #966: Codex OAuth requires instructions to be EXACTLY CODEX_SYSTEM_PROMPT.
-      // Do NOT append userMemory or systemPrompt here - it will cause OAuth to fail.
-      // The userMemory content is conveyed via the synthetic AGENTS.md read instead.
-      request.instructions = CODEX_SYSTEM_PROMPT;
+      // Note: Codex now accepts standard system prompts (no CODEX_SYSTEM_PROMPT needed)
+      // Store is set to false to prevent OpenAI from storing Codex conversations
       request.store = false;
       // Codex API (ChatGPT backend) doesn't support max_output_tokens parameter
       // Remove it to prevent 400 errors
@@ -761,9 +639,6 @@ export class OpenAIResponsesProvider extends BaseProvider {
             'Codex mode: removed unsupported max_output_tokens from request',
         );
       }
-      this.logger.debug(
-        () => 'Codex mode: setting instructions and store=false',
-      );
     }
 
     // Apply prompt caching for both Codex and non-Codex modes
