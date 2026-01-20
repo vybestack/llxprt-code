@@ -928,6 +928,8 @@ export const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
   'reasoning.stripFromContext',
   'reasoning.effort',
   'reasoning.maxTokens',
+  'reasoning.summary',
+  'text.verbosity',
   // Prompt caching settings (Issue #680)
   'prompt-caching',
   'include-folder-structure',

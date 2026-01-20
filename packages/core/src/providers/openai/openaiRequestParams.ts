@@ -58,6 +58,7 @@ const OPENAI_REASONING_INTERNAL_KEYS = new Set<string>([
   'includeInResponse',
   'format',
   'stripFromContext',
+  'verbosity',
 ]);
 
 function stripInternalReasoningKeys(
@@ -76,6 +77,10 @@ function stripInternalReasoningKeys(
       nestedValue === null ||
       OPENAI_REASONING_INTERNAL_KEYS.has(key)
     ) {
+      continue;
+    }
+    // Filter out summary='none' - 'none' means don't include summary in the request
+    if (key === 'summary' && nestedValue === 'none') {
       continue;
     }
     sanitized[key] = nestedValue;

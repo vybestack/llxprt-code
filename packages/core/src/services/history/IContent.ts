@@ -188,6 +188,9 @@ export interface ThinkingBlock {
 
   /** Signature for Anthropic extended thinking */
   signature?: string;
+
+  /** Base64-encoded reasoning content (for OpenAI Codex/Responses API) */
+  encryptedContent?: string;
 }
 
 /**

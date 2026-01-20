@@ -74,6 +74,10 @@ export const ephemeralSettingHelp: Record<string, string> = {
     'How much the model should think before responding (minimal/low/medium/high/xhigh, default: undefined)',
   'reasoning.maxTokens':
     'Maximum token budget the model can use for reasoning (positive integer, default: undefined)',
+  'reasoning.summary':
+    'Summary format for reasoning output - OpenAI Responses API only (auto/concise/detailed/none, default: none)',
+  'text.verbosity':
+    'Control response verbosity for OpenAI Responses API models - affects thinking summary output (low/medium/high, default: undefined)',
   'enable-tool-prompts':
     'Load tool-specific prompts from ~/.llxprt/prompts/tools/** (true/false, default: false)',
 
@@ -436,6 +440,34 @@ export function parseEphemeralSettingValue(
     }
   }
 
+  if (key === 'reasoning.summary') {
+    const validModes = ['auto', 'concise', 'detailed', 'none'];
+    if (
+      typeof parsedValue !== 'string' ||
+      !validModes.includes(parsedValue.toLowerCase())
+    ) {
+      return {
+        success: false,
+        message: `${key} must be one of: ${validModes.join(', ')}`,
+      };
+    }
+    parsedValue = parsedValue.toLowerCase();
+  }
+
+  if (key === 'text.verbosity') {
+    const validModes = ['low', 'medium', 'high'];
+    if (
+      typeof parsedValue !== 'string' ||
+      !validModes.includes(parsedValue.toLowerCase())
+    ) {
+      return {
+        success: false,
+        message: `${key} must be one of: ${validModes.join(', ')}`,
+      };
+    }
+    parsedValue = parsedValue.toLowerCase();
+  }
+
   if (key === 'enable-tool-prompts') {
     if (typeof parsedValue !== 'boolean') {
       return {
@@ -512,4 +544,19 @@ function parseValue(value: string): unknown {
   } catch {
     return value;
   }
+}
+
+/**
+ * Validates whether a given key-value pair is a valid ephemeral setting.
+ * Used for runtime validation of ephemeral settings.
+ * @param key - The ephemeral setting key
+ * @param value - The value to validate
+ * @returns true if the setting is valid, false otherwise
+ */
+export function isValidEphemeralSetting(key: string, value: unknown): boolean {
+  if (!validEphemeralKeys.includes(key)) {
+    return false;
+  }
+  const result = parseEphemeralSettingValue(key, String(value));
+  return result.success;
 }

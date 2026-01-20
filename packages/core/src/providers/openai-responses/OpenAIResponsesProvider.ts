@@ -29,6 +29,7 @@ import { type IModel } from '../IModel.js';
 import {
   type IContent,
   type TextBlock,
+  type ThinkingBlock,
   type ToolCallBlock,
   type ToolResponseBlock,
 } from '../../services/history/IContent.js';
@@ -357,6 +358,12 @@ export class OpenAIResponsesProvider extends BaseProvider {
           arguments: string;
         }
       | { type: 'function_call_output'; call_id: string; output: string }
+      | {
+          type: 'reasoning';
+          id: string;
+          summary?: Array<{ type: string; text: string }>;
+          encrypted_content?: string;
+        }
     >,
     options: NormalizedGenerateChatOptions,
     userMemory: string | undefined,
@@ -531,7 +538,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       includeSubagentDelegation,
     });
 
-    // Responses API input types: messages, function_call, function_call_output
+    // Responses API input types: messages, function_call, function_call_output, reasoning
     type ResponsesInputItem =
       | { role: 'user' | 'assistant' | 'system'; content?: string }
       | {
@@ -540,7 +547,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
           name: string;
           arguments: string;
         }
-      | { type: 'function_call_output'; call_id: string; output: string };
+      | { type: 'function_call_output'; call_id: string; output: string }
+      | {
+          type: 'reasoning';
+          id: string;
+          summary?: Array<{ type: string; text: string }>;
+          encrypted_content?: string;
+        };
 
     const input: ResponsesInputItem[] = [];
 
@@ -550,6 +563,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
         content: systemPrompt,
       });
     }
+
+    // Check if reasoning should be included in context
+    const includeReasoningInContext =
+      options.settings?.get('reasoning.includeInContext') !== false;
 
     for (const c of patchedContent) {
       if (c.speaker === 'human') {
@@ -567,8 +584,27 @@ export class OpenAIResponsesProvider extends BaseProvider {
         const toolCallBlocks = c.blocks.filter(
           (b) => b.type === 'tool_call',
         ) as ToolCallBlock[];
+        const thinkingBlocks = c.blocks.filter(
+          (b) => b.type === 'thinking',
+        ) as ThinkingBlock[];
 
         const contentText = textBlocks.map((b) => b.text).join('');
+
+        // Add reasoning items if they have encrypted_content and reasoning should be included
+        if (includeReasoningInContext) {
+          for (const thinkingBlock of thinkingBlocks) {
+            if (thinkingBlock.encryptedContent) {
+              input.push({
+                type: 'reasoning',
+                id: `reasoning_${Date.now()}`,
+                summary: [
+                  { type: 'summary_text', text: thinkingBlock.thought },
+                ],
+                encrypted_content: thinkingBlock.encryptedContent,
+              });
+            }
+          }
+        }
 
         // Add assistant text content if present
         if (contentText) {
@@ -723,7 +759,15 @@ export class OpenAIResponsesProvider extends BaseProvider {
       // This prevents the model from wasting tool calls re-reading files already injected.
       // Note: We no longer inject a steering prompt - the system prompt is properly
       // conveyed via the `instructions` field (see below).
-      this.injectSyntheticConfigFileRead(requestInput, options, userMemory);
+      const requestInputWithoutReasoning = requestInput.filter(
+        (item) => !('type' in item && item.type === 'reasoning'),
+      );
+      this.injectSyntheticConfigFileRead(
+        requestInputWithoutReasoning,
+        options,
+        userMemory,
+      );
+      requestInput = requestInputWithoutReasoning;
     }
 
     const request: {
@@ -731,7 +775,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
       input: typeof requestInput;
       instructions?: string;
       tools?: typeof responsesTools;
+      tool_choice?: string;
+      parallel_tool_calls?: boolean;
       stream: boolean;
+      include?: string[];
       [key: string]: unknown;
     } = {
       model: resolvedModel,
@@ -742,6 +789,73 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     if (responsesTools && responsesTools.length > 0) {
       request.tools = responsesTools;
+      // Per codex-rs: always set tool_choice and parallel_tool_calls when tools are present
+      request.tool_choice = 'auto';
+      request.parallel_tool_calls = true;
+    }
+
+    // Add include parameter for reasoning when reasoning is enabled
+    const reasoningEnabled =
+      options.settings?.get('reasoning.enabled') === true;
+    const reasoningEffort =
+      (mergedParams.reasoning as { effort?: unknown } | undefined)?.effort ??
+      options.settings?.get('reasoning.effort');
+    const reasoningSummary =
+      (mergedParams.reasoning as { summary?: unknown } | undefined)?.summary ??
+      options.settings?.get('reasoning.summary');
+    const shouldRequestReasoning =
+      reasoningEnabled || reasoningEffort !== undefined;
+
+    this.logger.debug(
+      () =>
+        `Reasoning check: enabled=${reasoningEnabled}, effort=${String(reasoningEffort)}, summary=${String(reasoningSummary)}, shouldRequest=${shouldRequestReasoning}`,
+    );
+
+    if (shouldRequestReasoning) {
+      request.include = ['reasoning.encrypted_content'];
+      this.logger.debug(
+        () => `Added include parameter: ${JSON.stringify(request.include)}`,
+      );
+    }
+
+    // Add reasoning.summary to request if set and not 'none'
+    // Per codex-rs implementation, the summary goes inside reasoning.summary
+    if (
+      reasoningSummary &&
+      typeof reasoningSummary === 'string' &&
+      reasoningSummary !== 'none'
+    ) {
+      if (!request.reasoning) {
+        request.reasoning = {};
+      }
+      (request.reasoning as { summary?: string }).summary = reasoningSummary;
+      this.logger.debug(
+        () => `Added reasoning.summary to request: ${reasoningSummary}`,
+      );
+    }
+
+    // Debug: Log full request body for analysis
+    this.logger.debug(
+      () => `Full request reasoning config: ${JSON.stringify(request.reasoning)}`,
+    );
+
+    // @issue #922: Add text.verbosity to request for OpenAI Responses API
+    // This field controls response verbosity and enables thinking/reasoning summaries.
+    // codex-rs sends this via the 'text' field: { verbosity: "low" | "medium" | "high" }
+    const textVerbosity =
+      options.invocation?.ephemerals?.['text.verbosity'] ??
+      options.settings?.get('text.verbosity');
+    if (
+      textVerbosity &&
+      typeof textVerbosity === 'string' &&
+      ['low', 'medium', 'high'].includes(textVerbosity.toLowerCase())
+    ) {
+      request.text = {
+        verbosity: textVerbosity.toLowerCase(),
+      };
+      this.logger.debug(
+        () => `Added text.verbosity to request: ${textVerbosity}`,
+      );
     }
 
     // @plan PLAN-20251214-ISSUE160.P05
@@ -794,6 +908,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     const responsesURL = `${baseURL}/responses`;
     const requestBody = JSON.stringify(request);
+
+    // Debug: Dump FULL request body for analysis
+    this.logger.debug(
+      () => `Request body FULL: ${requestBody}`,
+    );
 
     // @plan PLAN-20251214-ISSUE160.P05
     // Codex API requires Content-Type without charset suffix

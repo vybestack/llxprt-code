@@ -7,6 +7,9 @@
  */
 import { type IContent } from '../../services/history/IContent.js';
 import { createStreamInterruptionError } from '../../utils/retry.js';
+import { DebugLogger } from '../../debug/index.js';
+
+const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
 
 // Types for Responses API events
 interface ResponsesEvent {
@@ -15,6 +18,8 @@ interface ResponsesEvent {
   output_index?: number;
   delta?: string;
   text?: string;
+  content_index?: number;
+  summary_index?: number;
   item?: {
     id: string;
     type: string;
@@ -22,6 +27,9 @@ interface ResponsesEvent {
     arguments?: string;
     call_id?: string;
     name?: string;
+    summary?: Array<{ type: string; text?: string }>;
+    content?: Array<{ type: string; text?: string }>;
+    encrypted_content?: string;
   };
   item_id?: string;
   arguments?: string;
@@ -59,6 +67,8 @@ export async function* parseResponsesStream(
   let reasoningText = '';
   let reasoningSummaryText = '';
 
+  let lastLoggedType: string | undefined;
+
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -82,6 +92,25 @@ export async function* parseResponsesStream(
           try {
             const event: ResponsesEvent = JSON.parse(data);
 
+            // SSE event visibility for debugging reasoning support.
+            // We log to stderr directly so it shows up in debug logs even if
+            // Track last logged type to avoid duplicate logs
+            if (event.type !== lastLoggedType) {
+              lastLoggedType = event.type;
+            }
+
+            // Debug: Log ALL events with full details
+            logger.debug(() => `SSE event: type=${event.type}, delta="${event.delta?.slice(0,50) ?? ''}", text="${event.text?.slice(0,50) ?? ''}", item_type=${event.item?.type ?? 'none'}, summary_index=${event.summary_index ?? 'none'}, content_index=${event.content_index ?? 'none'}`);
+            // Extra debug for any reasoning-related events
+            if (event.type.includes('reasoning') || event.item?.type === 'reasoning') {
+              logger.debug(() => `REASONING SSE: ${JSON.stringify(event).slice(0, 500)}`);
+            }
+
+            // Debug: Log raw reasoning items
+            if (event.item?.type === 'reasoning') {
+              logger.debug(() => `Reasoning item received: summary=${JSON.stringify(event.item?.summary)}, content=${JSON.stringify(event.item?.content)}, encrypted_content_length=${event.item?.encrypted_content?.length ?? 0}`);
+            }
+
             // Handle different event types
             switch (event.type) {
               case 'response.output_text.delta':
@@ -102,7 +131,7 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.reasoning_summary_text.delta':
-                // Reasoning summary content chunk
+                // Reasoning summary content chunk (streamed from Codex API)
                 if (event.delta) {
                   reasoningSummaryText += event.delta;
                 }
@@ -166,6 +195,56 @@ export async function* parseResponsesStream(
 
               case 'response.function_call_arguments.done':
               case 'response.output_item.done':
+                // Handle reasoning items
+                // Per codex-rs: thinking text comes from summary array and content array
+                // The encrypted_content is NOT decoded client-side - it's stored and sent back to API
+                if (event.item?.type === 'reasoning') {
+                  // First try summary text (from response.reasoning_summary_text.delta events)
+                  let thoughtText =
+                    event.item.summary
+                      ?.map((s: { text?: string }) => s.text)
+                      .filter(Boolean)
+                      .join(' ') || '';
+
+                  // If no summary, try content array (from response.reasoning_text.delta events)
+                  if (!thoughtText && event.item.content) {
+                    thoughtText = event.item.content
+                      .map((c: { text?: string }) => c.text)
+                      .filter(Boolean)
+                      .join(' ');
+                  }
+
+                  // If still no text from item, use accumulated deltas
+                  if (!thoughtText && reasoningSummaryText.trim()) {
+                    thoughtText = reasoningSummaryText.trim();
+                    reasoningSummaryText = '';
+                  }
+                  if (!thoughtText && reasoningText.trim()) {
+                    thoughtText = reasoningText.trim();
+                    reasoningText = '';
+                  }
+
+                  logger.debug(
+                    () =>
+                      `Reasoning item: thoughtText=${thoughtText.length} chars, summary=${event.item?.summary?.length ?? 0}, content=${event.item?.content?.length ?? 0}, encrypted=${event.item?.encrypted_content?.length ?? 0}`,
+                  );
+
+                  // Only yield if we have text to show
+                  if (thoughtText) {
+                    yield {
+                      speaker: 'ai',
+                      blocks: [
+                        {
+                          type: 'thinking',
+                          thought: thoughtText,
+                          sourceField: 'reasoning_content',
+                        },
+                      ],
+                    };
+                  }
+                  break;
+                }
+
                 // Function call completed
                 if (event.item?.type === 'function_call' || event.item_id) {
                   const itemId = event.item?.id || event.item_id;
