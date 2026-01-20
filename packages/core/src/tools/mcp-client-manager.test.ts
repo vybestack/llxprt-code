@@ -52,11 +52,57 @@ describe('McpClientManager', () => {
       getGeminiClient: () => ({
         isInitialized: () => false,
       }),
+      refreshMcpContext: vi.fn(),
     } as unknown as Config;
     const manager = new McpClientManager({} as ToolRegistry, mockConfig);
     await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
     expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
+    expect(mockConfig.refreshMcpContext).toHaveBeenCalledOnce();
+  });
+
+  it('should batch context refresh when starting multiple servers', async () => {
+    const mockedMcpClient = {
+      connect: vi.fn(),
+      discover: vi.fn(),
+      disconnect: vi.fn(),
+      getStatus: vi.fn(),
+      getServerConfig: vi.fn().mockReturnValue({}),
+    };
+    vi.mocked(McpClient).mockReturnValue(
+      mockedMcpClient as unknown as McpClient,
+    );
+    const refreshMcpContext = vi.fn();
+    const mockConfig = {
+      isTrustedFolder: () => true,
+      getMcpServers: () => ({
+        'server-1': {},
+        'server-2': {},
+        'server-3': {},
+      }),
+      getMcpServerCommand: () => '',
+      getPromptRegistry: () => ({}) as PromptRegistry,
+      getResourceRegistry: () => ({}) as ResourceRegistry,
+      getDebugMode: () => false,
+      getWorkspaceContext: () => ({}) as WorkspaceContext,
+      getEnableExtensionReloading: () => false,
+      getExtensionEvents: () => undefined,
+      getAllowedMcpServers: () => undefined,
+      getBlockedMcpServers: () => undefined,
+      getGeminiClient: () => ({
+        isInitialized: () => false,
+      }),
+      refreshMcpContext,
+    } as unknown as Config;
+    const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+    await manager.startConfiguredMcpServers();
+
+    // Each client should be connected/discovered
+    expect(mockedMcpClient.connect).toHaveBeenCalledTimes(3);
+    expect(mockedMcpClient.discover).toHaveBeenCalledTimes(3);
+
+    // Context refresh should happen once after all servers start
+    expect(refreshMcpContext).toHaveBeenCalledOnce();
   });
 
   it('should not discover tools if folder is not trusted', async () => {
@@ -123,6 +169,7 @@ describe('McpClientManager', () => {
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
       getGeminiClient: () => undefined,
+      refreshMcpContext: vi.fn(),
     } as unknown as Config;
     const manager = new McpClientManager({} as ToolRegistry, mockConfig);
 
@@ -177,15 +224,22 @@ describe('McpClientManager', () => {
         getGeminiClient: () => ({
           isInitialized: () => false,
         }),
+        refreshMcpContext: vi.fn(),
       } as unknown as Config;
 
       const manager = new McpClientManager({} as ToolRegistry, mockConfig);
       await manager.startConfiguredMcpServers();
 
       const instructions = manager.getMcpInstructions();
-      expect(instructions).toContain('server-1');
+      expect(instructions).toContain(
+        "The following are instructions provided by the tool server 'server-1':",
+      );
+      expect(instructions).toContain('---[start of server instructions]---');
       expect(instructions).toContain('Server 1 instructions');
-      expect(instructions).toContain('server-2');
+      expect(instructions).toContain('---[end of server instructions]---');
+      expect(instructions).toContain(
+        "The following are instructions provided by the tool server 'server-2':",
+      );
       expect(instructions).toContain('Server 2 instructions');
     });
 
@@ -220,6 +274,7 @@ describe('McpClientManager', () => {
         getGeminiClient: () => ({
           isInitialized: () => false,
         }),
+        refreshMcpContext: vi.fn(),
       } as unknown as Config;
 
       const manager = new McpClientManager({} as ToolRegistry, mockConfig);
@@ -229,7 +284,7 @@ describe('McpClientManager', () => {
       expect(instructions).toBe('');
     });
 
-    it('should skip servers that are not connected', async () => {
+    it('should include instructions from servers with content', async () => {
       const mockedMcpClient1 = {
         connect: vi.fn(),
         discover: vi.fn(),
@@ -244,11 +299,9 @@ describe('McpClientManager', () => {
         connect: vi.fn(),
         discover: vi.fn(),
         disconnect: vi.fn(),
-        getStatus: vi.fn().mockReturnValue('disconnected'),
+        getStatus: vi.fn().mockReturnValue('connected'),
         getServerConfig: vi.fn().mockReturnValue({}),
-        getInstructions: vi
-          .fn()
-          .mockReturnValue('Disconnected server instructions'),
+        getInstructions: vi.fn().mockReturnValue(''),
       };
 
       let callCount = 0;
@@ -261,8 +314,8 @@ describe('McpClientManager', () => {
       const mockConfig = {
         isTrustedFolder: () => true,
         getMcpServers: () => ({
-          'connected-server': {},
-          'disconnected-server': {},
+          'server-with-instructions': {},
+          'server-without-instructions': {},
         }),
         getMcpServerCommand: () => '',
         getPromptRegistry: () => ({}) as PromptRegistry,
@@ -276,14 +329,22 @@ describe('McpClientManager', () => {
         getGeminiClient: () => ({
           isInitialized: () => false,
         }),
+        refreshMcpContext: vi.fn(),
       } as unknown as Config;
 
       const manager = new McpClientManager({} as ToolRegistry, mockConfig);
       await manager.startConfiguredMcpServers();
 
       const instructions = manager.getMcpInstructions();
+      expect(instructions).toContain(
+        "The following are instructions provided by the tool server 'server-with-instructions':",
+      );
+      expect(instructions).toContain('---[start of server instructions]---');
       expect(instructions).toContain('Connected server instructions');
-      expect(instructions).not.toContain('Disconnected server instructions');
+      expect(instructions).toContain('---[end of server instructions]---');
+      expect(instructions).not.toContain(
+        "The following are instructions provided by the tool server 'server-without-instructions':",
+      );
     });
   });
 });
