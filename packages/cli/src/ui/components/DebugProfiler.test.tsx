@@ -1,17 +1,27 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { appEvents, AppEvent } from '../../utils/events.js';
+import { coreEvents } from '@vybestack/llxprt-code-core';
 import {
   profiler,
+  DebugProfiler,
   ACTION_TIMESTAMP_CAPACITY,
   FRAME_TIMESTAMP_CAPACITY,
 } from './DebugProfiler.js';
+import { render } from '../../test-utils/render.js';
+import { useUIState, type UIState } from '../contexts/UIStateContext.js';
 import { FixedDeque } from 'mnemonist';
 import { debugState } from '../debug.js';
+import { act } from 'react';
+
+vi.mock('../contexts/UIStateContext.js', () => ({
+  useUIState: vi.fn(),
+}));
 
 describe('DebugProfiler', () => {
   beforeEach(() => {
@@ -198,5 +208,44 @@ describe('DebugProfiler', () => {
     profiler.checkForIdleFrames();
 
     expect(profiler.totalIdleFrames).toBe(0);
+  });
+});
+
+describe('DebugProfiler Component', () => {
+  beforeEach(() => {
+    vi.mocked(useUIState).mockReturnValue({
+      showDebugProfiler: true,
+      constrainHeight: false,
+    } as unknown as UIState);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should report an action when a CoreEvent is emitted', async () => {
+    const reportActionSpy = vi.spyOn(profiler, 'reportAction');
+
+    const { unmount } = render(<DebugProfiler />);
+
+    act(() => {
+      coreEvents.emitModelChanged('new-model');
+    });
+
+    expect(reportActionSpy).toHaveBeenCalled();
+    unmount();
+  });
+
+  it('should report an action when an AppEvent is emitted', async () => {
+    const reportActionSpy = vi.spyOn(profiler, 'reportAction');
+
+    const { unmount } = render(<DebugProfiler />);
+
+    act(() => {
+      appEvents.emit(AppEvent.SelectionWarning);
+    });
+
+    expect(reportActionSpy).toHaveBeenCalled();
+    unmount();
   });
 });
