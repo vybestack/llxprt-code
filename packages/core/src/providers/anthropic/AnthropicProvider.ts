@@ -1178,11 +1178,16 @@ export class AnthropicProvider extends BaseProvider {
             // Process existing thinking blocks
             for (const tb of anthropicThinkingBlocks) {
               if (shouldRedactThinking) {
-                // Use redacted_thinking with the signature data
-                // This satisfies Anthropic's requirement while saving tokens
+                // Use redacted_thinking with base64-encoded signature data
+                // Anthropic requires the data field to be valid base64
+                const fallbackData = Buffer.from(
+                  `missing-thinking-${tb.signature ?? 'unknown'}`,
+                ).toString('base64');
                 contentArray.push({
                   type: 'redacted_thinking',
-                  data: tb.signature || '',
+                  data: tb.signature
+                    ? Buffer.from(tb.signature).toString('base64')
+                    : fallbackData,
                 });
               } else {
                 contentArray.push({
@@ -1197,13 +1202,20 @@ export class AnthropicProvider extends BaseProvider {
             // Anthropic API requires assistant messages with tool_use to start with
             // thinking or redacted_thinking when thinking mode is enabled.
             // Synthesize a redacted_thinking placeholder to satisfy this requirement.
+            // The data field MUST be valid base64-encoded content.
+            const placeholderId = toolCallBlocks[0]?.id;
+            const placeholderData = Buffer.from(
+              placeholderId
+                ? `missing-thinking-${placeholderId}`
+                : 'missing-thinking',
+            ).toString('base64');
             this.getLogger().debug(
               () =>
                 `[AnthropicProvider] Synthesizing redacted_thinking placeholder for tool_use message at index ${contentIndex} (no thinking block in history)`,
             );
             contentArray.push({
               type: 'redacted_thinking',
-              data: '', // Empty data since we have no signature to preserve
+              data: placeholderData,
             });
           }
 
