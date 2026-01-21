@@ -155,8 +155,17 @@ export const useWelcomeOnboarding = (
     async (modelId: string) => {
       // Actually set the model on the runtime so it's captured in the profile
       debug.log(`[selectModel] Setting model: ${modelId}`);
-      await runtime.setActiveModel(modelId);
-      debug.log(`[selectModel] Model set successfully: ${modelId}`);
+      try {
+        await runtime.setActiveModel(modelId);
+        debug.log(`[selectModel] Model set successfully: ${modelId}`);
+      } catch (error) {
+        debug.log(`[selectModel] Failed to set model: ${error}`);
+        setState((prev) => ({
+          ...prev,
+          error: `Failed to set model: ${error instanceof Error ? error.message : String(error)}`,
+        }));
+        return;
+      }
 
       setState((prev) => ({
         ...prev,
@@ -331,7 +340,11 @@ export const useWelcomeOnboarding = (
       }
 
       // Now switch to the provider AFTER auth is complete
-      const switchResult = await runtime.switchActiveProvider(provider);
+      // IMPORTANT: Pass autoOAuth: false to prevent switchActiveProvider from triggering
+      // a second OAuth flow - we already authenticated above
+      const switchResult = await runtime.switchActiveProvider(provider, {
+        autoOAuth: false,
+      });
       debug.log(
         `[triggerAuth] After switchActiveProvider - changed: ${switchResult.changed}, now active: ${providerManager?.getActiveProviderName()}`,
       );

@@ -12,6 +12,46 @@
 /* eslint-env node */
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+/**
+ * Resolves the @vybestack directory for cleanup.
+ * Prefers npm_config_prefix-based paths (correct for npm staging during global installs),
+ * falling back to __dirname-based paths if prefix is not available.
+ *
+ * @returns {string|null} Path to @vybestack directory or null if not found
+ */
+function resolveVybestackDir() {
+  const npmPrefix = process.env.npm_config_prefix;
+
+  // Try npm_config_prefix first (correct for npm staging during global installs)
+  if (npmPrefix) {
+    // On Unix: prefix/lib/node_modules
+    // On Windows: prefix/node_modules
+    const isWindows = os.platform() === 'win32';
+    const nodeModulesFromPrefix = isWindows
+      ? path.join(npmPrefix, 'node_modules')
+      : path.join(npmPrefix, 'lib', 'node_modules');
+
+    const vybestackFromPrefix = path.join(nodeModulesFromPrefix, '@vybestack');
+
+    if (fs.existsSync(vybestackFromPrefix)) {
+      return vybestackFromPrefix;
+    }
+  }
+
+  // Fall back to __dirname-based resolution
+  // For global installs, this will be something like /opt/homebrew/lib/node_modules/@vybestack/llxprt-code
+  const scriptDir = __dirname;
+  const packageDir = path.dirname(scriptDir);
+  const vybestackDir = path.dirname(packageDir);
+
+  if (fs.existsSync(vybestackDir)) {
+    return vybestackDir;
+  }
+
+  return null;
+}
 
 /**
  * Attempts to clean up leftover .llxprt-code-* temp directories that cause
@@ -27,22 +67,8 @@ function cleanupTempDirectories() {
   }
 
   try {
-    // Get the path where this package is being installed
-    // For global installs, this will be something like /opt/homebrew/lib/node_modules/@vybestack/llxprt-code
-    const scriptDir = __dirname;
-    const packageDir = path.dirname(scriptDir);
-
-    // The temp directories are created in the parent of node_modules/@vybestack
-    // e.g., /opt/homebrew/lib/node_modules/@vybestack/.llxprt-code-ofqtIqCy
-    const nodeModulesDir = path.dirname(path.dirname(packageDir));
-
-    if (!nodeModulesDir || !fs.existsSync(nodeModulesDir)) {
-      return;
-    }
-
-    // Look for @vybestack directory (parent of this package)
-    const vybestackDir = path.dirname(packageDir);
-    if (!fs.existsSync(vybestackDir)) {
+    const vybestackDir = resolveVybestackDir();
+    if (!vybestackDir) {
       return;
     }
 
