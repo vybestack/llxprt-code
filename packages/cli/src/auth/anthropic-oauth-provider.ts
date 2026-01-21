@@ -209,17 +209,22 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
         }
 
-        let authUrl =
-          deviceCodeResponse.verification_uri_complete ||
-          `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
-
+        // In interactive mode with local callback, use the redirect-based URL
+        // In non-interactive or fallback mode, use the device code URL
+        let authUrl: string;
         if (localCallback) {
+          // Browser-based OAuth with local callback server
           authUrl = this.deviceFlow.buildAuthorizationUrl(
             localCallback.redirectUri,
           );
+        } else {
+          // Device flow URL (for non-interactive or when callback server fails)
+          authUrl =
+            deviceCodeResponse.verification_uri_complete ||
+            `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
         }
 
-        // Always show the auth URL in the TUI first, before attempting browser (like Gemini does)
+        // Show the auth URL in the TUI
         const message = `Please visit the following URL to authorize with Anthropic Claude:\\n${authUrl}`;
         const historyItem: HistoryItemOAuthURL = {
           type: 'oauth_url',
@@ -258,12 +263,14 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
         }
 
+        // If we have a local callback server, wait for it - this is the primary flow
+        // for interactive mode. Only fall back to paste box if callback fails.
         if (localCallback) {
           try {
             const { code, state } = await localCallback.waitForCallback();
             await localCallback.shutdown();
             await this.completeAuth(`${code}#${state}`);
-            return;
+            return; // Success! Don't fall through to paste box.
           } catch (error) {
             await localCallback.shutdown().catch(() => undefined);
             this.logger.debug(
@@ -272,9 +279,20 @@ export class AnthropicOAuthProvider implements OAuthProvider {
                   error instanceof Error ? error.message : String(error)
                 }`,
             );
+            // Local callback failed - throw the error rather than falling back to paste box
+            // in interactive mode. The user should retry.
+            throw OAuthErrorFactory.fromUnknown(
+              this.name,
+              error instanceof Error
+                ? error
+                : new Error('OAuth callback failed'),
+              'local callback',
+            );
           }
         }
 
+        // Only reach here in non-interactive mode (no browser, no local callback)
+        // This is the device code / paste box flow for headless environments
         (global as unknown as { __oauth_provider: string }).__oauth_provider =
           'anthropic';
 

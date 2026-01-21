@@ -13,7 +13,13 @@ import {
 } from '../shared/RadioButtonSelect.js';
 
 // Providers that support OAuth
-const OAUTH_PROVIDERS = new Set(['anthropic', 'openai', 'gemini', 'qwen']);
+const OAUTH_PROVIDERS = new Set([
+  'anthropic',
+  'openai',
+  'gemini',
+  'qwen',
+  'codex',
+]);
 
 const API_KEY_URLS: Record<string, string> = {
   anthropic: 'console.anthropic.com/settings/keys',

@@ -425,7 +425,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     // Responses API input types: messages, function_call, function_call_output
     type ResponsesInputItem =
-      | { role: 'user' | 'assistant' | 'system'; content?: string }
+      | { role: 'user' | 'assistant'; content?: string }
       | {
           type: 'function_call';
           call_id: string;
@@ -435,13 +435,6 @@ export class OpenAIResponsesProvider extends BaseProvider {
       | { type: 'function_call_output'; call_id: string; output: string };
 
     const input: ResponsesInputItem[] = [];
-
-    if (systemPrompt) {
-      input.push({
-        role: 'system',
-        content: systemPrompt,
-      });
-    }
 
     for (const c of patchedContent) {
       if (c.speaker === 'human') {
@@ -598,40 +591,36 @@ export class OpenAIResponsesProvider extends BaseProvider {
       'https://api.openai.com/v1';
     const baseURL = baseURLCandidate.replace(/\/+$/u, '');
 
-    // @plan PLAN-20251213-ISSUE160.P03
-    // Detect Codex mode and handle accordingly
     const isCodex = this.isCodexMode(baseURL);
-
-    // Note: Codex now accepts standard system prompts (OpenAI fixed the API in late 2025)
-    // No need for special handling like filtering system messages or injecting CODEX_SYSTEM_PROMPT
-    const requestInput = input;
 
     const request: {
       model: string;
-      input: typeof requestInput;
+      input: typeof input;
       instructions?: string;
       tools?: typeof responsesTools;
       stream: boolean;
       [key: string]: unknown;
     } = {
       model: resolvedModel,
-      input: requestInput,
+      input,
       stream: true,
       ...(requestOverrides || {}),
     };
+
+    // Set the system prompt as instructions for the Responses API
+    if (systemPrompt) {
+      request.instructions = systemPrompt;
+    }
 
     if (responsesTools && responsesTools.length > 0) {
       request.tools = responsesTools;
     }
 
-    // @plan PLAN-20251214-ISSUE160.P05
-    // Add Codex-specific request parameters
+    // Codex-specific request parameters
     if (isCodex) {
-      // Note: Codex now accepts standard system prompts (no CODEX_SYSTEM_PROMPT needed)
       // Store is set to false to prevent OpenAI from storing Codex conversations
       request.store = false;
       // Codex API (ChatGPT backend) doesn't support max_output_tokens parameter
-      // Remove it to prevent 400 errors
       if ('max_output_tokens' in request) {
         delete request.max_output_tokens;
         this.logger.debug(

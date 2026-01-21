@@ -35,7 +35,6 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
 }) => {
   const [apiKey, setApiKey] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [authStarted, setAuthStarted] = useState(false);
 
   const providerDisplay = provider.charAt(0).toUpperCase() + provider.slice(1);
 
@@ -89,10 +88,13 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
     { isActive: isFocused },
   );
 
-  // Start OAuth flow automatically
+  // Start OAuth flow automatically - use ref to prevent double-execution
+  // React Strict Mode or dependency changes can cause this effect to re-run
+  const authStartedRef = React.useRef(false);
+
   useEffect(() => {
-    if (method === 'oauth' && !authStarted) {
-      setAuthStarted(true);
+    if (method === 'oauth' && !authStartedRef.current) {
+      authStartedRef.current = true;
       setIsAuthenticating(true);
       triggerAuth(provider, 'oauth')
         .then(() => {
@@ -103,7 +105,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
           onError(error instanceof Error ? error.message : String(error));
         });
     }
-  }, [method, provider, triggerAuth, onComplete, onError, authStarted]);
+  }, [method, provider, triggerAuth, onComplete, onError]);
 
   if (method === 'oauth') {
     return (
