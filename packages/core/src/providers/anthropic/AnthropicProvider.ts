@@ -1175,19 +1175,26 @@ export class AnthropicProvider extends BaseProvider {
           }
 
           if (anthropicThinkingBlocks.length > 0) {
-            // Process existing thinking blocks
+            // Process existing thinking blocks that have valid signatures
             for (const tb of anthropicThinkingBlocks) {
+              // Only process blocks with valid Anthropic signatures
+              // The signature IS the data value - it's already in the correct format
+              // from Anthropic's API response. Do NOT re-encode it.
+              if (!tb.signature) {
+                // Skip blocks without signatures - they're not valid Anthropic thinking
+                this.getLogger().debug(
+                  () =>
+                    `[AnthropicProvider] Skipping thinking block without signature at index ${contentIndex}`,
+                );
+                continue;
+              }
+
               if (shouldRedactThinking) {
-                // Use redacted_thinking with base64-encoded signature data
-                // Anthropic requires the data field to be valid base64
-                const fallbackData = Buffer.from(
-                  `missing-thinking-${tb.signature ?? 'unknown'}`,
-                ).toString('base64');
+                // Use redacted_thinking with the EXACT signature from Anthropic
+                // The signature IS the data - do NOT base64-encode it again
                 contentArray.push({
                   type: 'redacted_thinking',
-                  data: tb.signature
-                    ? Buffer.from(tb.signature).toString('base64')
-                    : fallbackData,
+                  data: tb.signature,
                 });
               } else {
                 contentArray.push({
@@ -1197,27 +1204,12 @@ export class AnthropicProvider extends BaseProvider {
                 });
               }
             }
-          } else if (shouldIncludeThinking && toolCallBlocks.length > 0) {
-            // No thinking blocks found but extended thinking is enabled and we have tool calls.
-            // Anthropic API requires assistant messages with tool_use to start with
-            // thinking or redacted_thinking when thinking mode is enabled.
-            // Synthesize a redacted_thinking placeholder to satisfy this requirement.
-            // The data field MUST be valid base64-encoded content.
-            const placeholderId = toolCallBlocks[0]?.id;
-            const placeholderData = Buffer.from(
-              placeholderId
-                ? `missing-thinking-${placeholderId}`
-                : 'missing-thinking',
-            ).toString('base64');
-            this.getLogger().debug(
-              () =>
-                `[AnthropicProvider] Synthesizing redacted_thinking placeholder for tool_use message at index ${contentIndex} (no thinking block in history)`,
-            );
-            contentArray.push({
-              type: 'redacted_thinking',
-              data: placeholderData,
-            });
           }
+          // NOTE: We do NOT synthesize fake redacted_thinking when no thinking exists.
+          // Anthropic cryptographically validates the signature/data field.
+          // If history has no thinking block, the assistant message simply won't have
+          // a thinking block - this is valid for messages from before thinking was enabled
+          // or from other providers.
 
           // Add text if present
           const contentText = textBlocks.map((b) => b.text).join('');
