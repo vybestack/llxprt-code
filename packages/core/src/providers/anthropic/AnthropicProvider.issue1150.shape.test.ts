@@ -738,6 +738,8 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
      */
     it('should preserve signature when using redacted_thinking', async () => {
       // Use stripFromContext to force redacted_thinking
+      // With 'allButLast', only the LAST thinking message keeps full thinking
+      // Earlier ones get redacted_thinking
       settingsService.set('reasoning.stripFromContext', 'allButLast');
 
       mockMessagesCreate.mockResolvedValueOnce({
@@ -745,6 +747,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
+      // Need TWO assistant messages with thinking so first one gets redacted
       const messages: IContent[] = [
         {
           speaker: 'human',
@@ -755,13 +758,13 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
           blocks: [
             {
               type: 'thinking',
-              thought: 'Deep analysis here',
+              thought: 'First analysis - should be redacted',
               sourceField: 'thinking',
-              signature: 'sig_preserve_me',
+              signature: 'sig_first_should_be_redacted',
             } as ThinkingBlock,
             {
               type: 'tool_call',
-              id: 'tool_sig',
+              id: 'tool_first',
               name: 'analyze',
               parameters: {},
             } as ToolCallBlock,
@@ -772,9 +775,41 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
           blocks: [
             {
               type: 'tool_response',
-              callId: 'tool_sig',
+              callId: 'tool_first',
               toolName: 'analyze',
-              result: 'analyzed',
+              result: 'first result',
+            } as ToolResponseBlock,
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Second question' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Second analysis - should stay as full thinking',
+              sourceField: 'thinking',
+              signature: 'sig_second_keep_full',
+            } as ThinkingBlock,
+            {
+              type: 'tool_call',
+              id: 'tool_second',
+              name: 'analyze',
+              parameters: {},
+            } as ToolCallBlock,
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'tool_second',
+              toolName: 'analyze',
+              result: 'second result',
             } as ToolResponseBlock,
           ],
         },

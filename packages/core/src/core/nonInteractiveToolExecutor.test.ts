@@ -93,6 +93,9 @@ describe('executeToolCall', () => {
     );
 
     // Behavior verified via response structure - no mock interaction checks needed
+    // responseParts now contains only functionResponse (not functionCall)
+    // The functionCall is already recorded in history from the original assistant message.
+    // Including it again would create duplicate tool_use blocks for Anthropic. (Issue #1150)
     expect(response).toStrictEqual({
       callId: 'call1',
       agentId: 'primary',
@@ -100,13 +103,6 @@ describe('executeToolCall', () => {
       errorType: undefined,
       resultDisplay: 'Success!',
       responseParts: [
-        {
-          functionCall: {
-            name: 'testTool',
-            id: 'call1',
-            args: { param1: 'value1' },
-          },
-        },
         {
           functionResponse: {
             name: 'testTool',
@@ -354,14 +350,10 @@ describe('executeToolCall', () => {
       error: undefined,
       errorType: undefined,
       resultDisplay: 'Image processed',
+      // responseParts now contains only functionResponse + inlineData (not functionCall)
+      // The functionCall is already recorded in history from the original assistant message.
+      // Including it again would create duplicate tool_use blocks for Anthropic. (Issue #1150)
       responseParts: [
-        {
-          functionCall: {
-            name: 'testTool',
-            id: 'call6',
-            args: {},
-          },
-        },
         {
           functionResponse: {
             name: 'testTool',
@@ -463,11 +455,14 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       expect(response.callId).toBe('call1');
       expect(response.resultDisplay).toBe('Success!');
       expect(response.responseParts).toBeDefined();
-      expect(response.responseParts.length).toBeGreaterThanOrEqual(2);
+      // responseParts now contains only functionResponse (not functionCall)
+      // The functionCall is already recorded in history from the original assistant message.
+      // Including it again would create duplicate tool_use blocks for Anthropic. (Issue #1150)
+      expect(response.responseParts.length).toBeGreaterThanOrEqual(1);
       expect(response.agentId).toBeDefined();
     });
 
-    it('should include functionCall and functionResponse in responseParts', async () => {
+    it('should include functionResponse in responseParts', async () => {
       vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
       mockTool.executeFn.mockReturnValue({
         llmContent: 'Success',
@@ -481,15 +476,15 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       );
 
       const parts = response.responseParts;
-      expect(parts.length).toBeGreaterThanOrEqual(2);
+      // responseParts now contains only functionResponse (not functionCall)
+      // The functionCall is already recorded in history from the original assistant message.
+      // Including it again would create duplicate tool_use blocks for Anthropic. (Issue #1150)
+      expect(parts.length).toBeGreaterThanOrEqual(1);
 
-      expect(parts[0].functionCall).toBeDefined();
-      expect(parts[0].functionCall?.id).toBe(request.callId);
-      expect(parts[0].functionCall?.name).toBe(request.name);
-
-      expect(parts[1].functionResponse).toBeDefined();
-      expect(parts[1].functionResponse?.id).toBe(request.callId);
-      expect(parts[1].functionResponse?.name).toBe(request.name);
+      // First part should be functionResponse (not functionCall anymore)
+      expect(parts[0].functionResponse).toBeDefined();
+      expect(parts[0].functionResponse?.id).toBe(request.callId);
+      expect(parts[0].functionResponse?.name).toBe(request.name);
     });
   });
 
@@ -646,7 +641,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       expect(response.callId).toBe(request.callId);
     });
 
-    it('should include functionCall and functionResponse in error responseParts', async () => {
+    it('should include functionResponse in error responseParts', async () => {
       vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
       mockTool.executeFn.mockImplementation(() => {
         throw new Error('Execution failed');
@@ -659,6 +654,8 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       );
 
       const parts = response.responseParts;
+      // Error responses still need functionCall + functionResponse for proper pairing
+      // in nonInteractiveToolExecutor (different from coreToolScheduler)
       expect(parts.length).toBeGreaterThanOrEqual(2);
       expect(parts[0].functionCall?.id).toBe(request.callId);
       expect(parts[1].functionResponse?.id).toBe(request.callId);

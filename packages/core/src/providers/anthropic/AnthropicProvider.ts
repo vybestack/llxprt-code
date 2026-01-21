@@ -1174,17 +1174,6 @@ export class AnthropicProvider extends BaseProvider {
             }
           }
 
-          if (
-            anthropicThinkingBlocks.length === 0 &&
-            shouldIncludeThinking &&
-            toolCallBlocks.length > 0
-          ) {
-            this.getLogger().warn(
-              () =>
-                `[AnthropicProvider] Missing thinking blocks with signatures for tool_use message at index ${contentIndex}. Extended thinking requires signed thinking blocks for tool calls.`,
-            );
-          }
-
           if (anthropicThinkingBlocks.length > 0) {
             // Process existing thinking blocks
             for (const tb of anthropicThinkingBlocks) {
@@ -1203,6 +1192,19 @@ export class AnthropicProvider extends BaseProvider {
                 });
               }
             }
+          } else if (shouldIncludeThinking && toolCallBlocks.length > 0) {
+            // No thinking blocks found but extended thinking is enabled and we have tool calls.
+            // Anthropic API requires assistant messages with tool_use to start with
+            // thinking or redacted_thinking when thinking mode is enabled.
+            // Synthesize a redacted_thinking placeholder to satisfy this requirement.
+            this.getLogger().debug(
+              () =>
+                `[AnthropicProvider] Synthesizing redacted_thinking placeholder for tool_use message at index ${contentIndex} (no thinking block in history)`,
+            );
+            contentArray.push({
+              type: 'redacted_thinking',
+              data: '', // Empty data since we have no signature to preserve
+            });
           }
 
           // Add text if present
