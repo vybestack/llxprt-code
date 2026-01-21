@@ -645,6 +645,18 @@ export class ToolRegistry {
       }
     }
 
+    // If still not found and the name includes '__', try fallback lookup by fully qualified name
+    if (!tool && name.includes('__')) {
+      for (const t of this.tools.values()) {
+        if (t instanceof DiscoveredMCPTool) {
+          if (t.getFullyQualifiedName() === name) {
+            tool = t;
+            break;
+          }
+        }
+      }
+    }
+
     if (!tool) {
       const missingTool: AnyDeclarativeTool | undefined = void 0;
       return missingTool;
