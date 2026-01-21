@@ -331,7 +331,11 @@ export const useWelcomeOnboarding = (
       }
 
       // Now switch to the provider AFTER auth is complete
-      const switchResult = await runtime.switchActiveProvider(provider);
+      // IMPORTANT: Pass autoOAuth: false to prevent switchActiveProvider from triggering
+      // a second OAuth flow - we already authenticated above
+      const switchResult = await runtime.switchActiveProvider(provider, {
+        autoOAuth: false,
+      });
       debug.log(
         `[triggerAuth] After switchActiveProvider - changed: ${switchResult.changed}, now active: ${providerManager?.getActiveProviderName()}`,
       );
