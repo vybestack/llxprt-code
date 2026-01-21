@@ -179,12 +179,13 @@ function isThoughtPart(part: Part | undefined): part is ThoughtPart {
 }
 
 /**
- * Normalizes tool interaction input to prevent tool call loops.
+ * Normalizes tool interaction input for the provider.
  *
- * When the UI flattens multiple tool call/response pairs into a single array
- * [call1, response1, call2, response2, ...], we need to restore the
- * alternating model/user turn structure so providers see `tool_use` blocks
- * immediately followed by their matching `tool_result`.
+ * Tool responses from coreToolScheduler include ONLY functionResponse parts
+ * (functionCall parts are filtered out by useGeminiStream because they're
+ * already in history from the original assistant turn).
+ *
+ * This function packages the responses as a user message for the provider.
  *
  * @param message - Raw input from caller (string, Part, or Part[])
  * @returns Single Content or array of Content objects with correct roles
@@ -205,73 +206,18 @@ function normalizeToolInteractionInput(
   // Now we have an array of parts - check if it contains tool interactions
   const parts = message as Part[];
 
-  // Detect if this is a tool interaction sequence
-  const hasFunctionCalls = parts.some(
-    (part) => part && typeof part === 'object' && 'functionCall' in part,
-  );
+  // Detect if this is a tool response sequence (functionResponse parts only)
   const hasFunctionResponses = parts.some(
     (part) => part && typeof part === 'object' && 'functionResponse' in part,
   );
 
-  // If no tool interactions, fall back to original behavior
-  if (!hasFunctionCalls && !hasFunctionResponses) {
+  // If no function responses, fall back to original behavior
+  if (!hasFunctionResponses) {
     return createUserContentWithFunctionResponseFix(message);
   }
 
-  const result: Content[] = [];
-
-  let pendingRole: 'user' | null = null;
-  let pendingParts: Part[] = [];
-
-  const flushPending = () => {
-    if (pendingRole && pendingParts.length > 0) {
-      result.push({ role: pendingRole, parts: pendingParts });
-    }
-    pendingRole = null;
-    pendingParts = [];
-  };
-
-  for (const part of parts) {
-    if (!part || typeof part !== 'object') {
-      continue;
-    }
-
-    if ('functionCall' in part) {
-      // Finish any accumulated user content before the next call
-      flushPending();
-      result.push({ role: 'model', parts: [part] });
-      continue;
-    }
-
-    if ('functionResponse' in part) {
-      if (pendingRole !== 'user') {
-        flushPending();
-        pendingRole = 'user';
-      }
-      pendingParts.push(part);
-      continue;
-    }
-
-    // Any other parts (text, inline data, etc.) belong with the most recent
-    // user-facing content.
-    if (pendingRole !== 'user') {
-      flushPending();
-      pendingRole = 'user';
-    }
-    pendingParts.push(part);
-  }
-
-  flushPending();
-
-  if (result.length === 0) {
-    return createUserContentWithFunctionResponseFix(message);
-  }
-
-  if (result.length === 1) {
-    return result[0];
-  }
-
-  return result;
+  // Tool responses go in a user message
+  return createUserContentWithFunctionResponseFix(parts);
 }
 
 /**

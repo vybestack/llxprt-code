@@ -684,7 +684,7 @@ describe('useGeminiStream', () => {
     );
   });
 
-  it('should drop functionCall parts when submitting tool responses', async () => {
+  it('should filter out functionCall parts when submitting tool responses', async () => {
     const toolCallResponseParts: Part[] = [
       {
         functionCall: {
@@ -767,6 +767,8 @@ describe('useGeminiStream', () => {
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
 
+    // functionCall parts should be filtered out - they're already in history
+    // from the original assistant turn
     expect(mockSendMessageStream).toHaveBeenCalledWith(
       [
         {

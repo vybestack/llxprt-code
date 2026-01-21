@@ -1420,6 +1420,9 @@ export const useGeminiStream = (
         return;
       }
 
+      // Only send functionResponse parts - functionCall parts are already in
+      // history from the original assistant turn. Sending them again would
+      // create duplicate tool_use blocks without matching tool_result.
       const responsesToSend: Part[] = geminiTools.flatMap((toolCall) =>
         toolCall.response.responseParts.filter(
           (part) =>
