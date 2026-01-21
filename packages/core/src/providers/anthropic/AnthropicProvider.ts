@@ -2062,6 +2062,21 @@ export class AnthropicProvider extends BaseProvider {
                 thinking: string;
               };
               currentThinkingBlock.thinking += thinkingDelta.thinking;
+            } else if (
+              chunk.delta.type === 'signature_delta' &&
+              currentThinkingBlock
+            ) {
+              // Signature delta is sent just before content_block_stop for thinking blocks
+              // This contains the cryptographic signature for the thinking block
+              const signatureDelta = chunk.delta as {
+                type: 'signature_delta';
+                signature: string;
+              };
+              this.getStreamingLogger().debug(
+                () =>
+                  `Received signature_delta: ${signatureDelta.signature.substring(0, 50)}...`,
+              );
+              currentThinkingBlock.signature = signatureDelta.signature;
             }
           } else if (chunk.type === 'content_block_stop') {
             if (currentToolCall) {
