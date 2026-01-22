@@ -3041,6 +3041,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         'apiKeyfile',
         'api-keyfile',
         'baseUrl',
+        'baseURL',
         'base-url',
         'model',
         'toolFormat',
