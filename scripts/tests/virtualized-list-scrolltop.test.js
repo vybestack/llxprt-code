@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import React, { createRef } from 'react';
 import { Box, Text } from 'ink';
 import { render } from 'ink-testing-library';
-import { act } from '@testing-library/react';
+import { act } from 'react';
 import {
   VirtualizedList,
   SCROLL_TO_ITEM_END,

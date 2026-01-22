@@ -150,7 +150,13 @@ jobs:
         run: npm ci
 
       - name: Install UI dependencies (bun)
-        run: cd packages/ui && bun install
+        run: |
+          cd packages/ui
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            bun install --no-save
+          else
+            bun install
+          fi
 
       - name: Get the version
         id: version

@@ -52,7 +52,10 @@ export const ExtensionsList: React.FC<ExtensionsListProps> = ({
               break;
             case ExtensionUpdateState.UP_TO_DATE:
             case ExtensionUpdateState.NOT_UPDATABLE:
+            case ExtensionUpdateState.UPDATED:
               stateColor = Colors.AccentGreen;
+              break;
+            case undefined:
               break;
             default:
               // No need to log error for undefined state - we show 'unknown state'

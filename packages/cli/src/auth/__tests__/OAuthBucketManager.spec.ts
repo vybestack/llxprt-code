@@ -60,6 +60,14 @@ class MockTokenStore implements TokenStore {
     return null;
   }
 
+  async acquireRefreshLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseRefreshLock(): Promise<void> {
+    // No-op for mock
+  }
+
   private getKey(provider: string, bucket?: string): string {
     return `${provider}:${bucket || 'default'}`;
   }

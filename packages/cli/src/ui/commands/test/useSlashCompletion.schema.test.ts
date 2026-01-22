@@ -25,7 +25,7 @@ vi.mock('../schema/index.js', () => ({
   createCompletionHandler: createHandlerMock,
 }));
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '../../../test-utils/render.js';
 import { useSlashCompletion } from '../../hooks/useSlashCompletion.js';
 import { useTextBuffer } from '../../components/shared/text-buffer.js';
 import { CommandContext, CommandKind, SlashCommand } from '../types.js';

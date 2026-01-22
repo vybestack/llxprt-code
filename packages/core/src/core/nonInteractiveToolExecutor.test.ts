@@ -551,6 +551,43 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       });
     });
 
+    it('should not emit MaxListenersExceededWarning when reusing an abort signal', async () => {
+      vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+      mockTool.executeFn.mockReturnValue({
+        llmContent: 'Success',
+        returnDisplay: 'Success!',
+      });
+
+      const warnings: Error[] = [];
+      const onWarning = (warning: Error): void => {
+        warnings.push(warning);
+      };
+
+      process.on('warning', onWarning);
+      try {
+        for (let i = 0; i < 15; i++) {
+          const { response } = await executeToolCall(
+            createMockConfig(),
+            { ...request, callId: `call-${i}` },
+            abortController.signal,
+          );
+          expect(response.error).toBeUndefined();
+        }
+      } finally {
+        process.removeListener('warning', onWarning);
+      }
+
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+
+      const maxListenerWarnings = warnings.filter(
+        (warning) => warning.name === 'MaxListenersExceededWarning',
+      );
+
+      expect(maxListenerWarnings).toHaveLength(0);
+    });
+
     it('should allow subsequent executions after failure', async () => {
       vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
 

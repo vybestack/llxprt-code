@@ -1,13 +1,14 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type { CommandModule } from 'yargs';
 import {
-  installOrUpdateExtension,
   requestConsentNonInteractive,
+  installOrUpdateExtension,
+  loadExtensionByName,
   type ExtensionInstallMetadata,
 } from '../../config/extension.js';
 
@@ -23,12 +24,15 @@ export async function handleLink(args: InstallArgs) {
       source: args.path,
       type: 'link',
     };
+    const workspaceDir = process.cwd();
     const extensionName = await installOrUpdateExtension(
       installMetadata,
       requestConsentNonInteractive,
+      workspaceDir,
     );
+    const extension = loadExtensionByName(extensionName, workspaceDir);
     console.log(
-      `Extension "${extensionName}" linked successfully and enabled.`,
+      `Extension "${extension?.name ?? extensionName}" linked successfully and enabled.`,
     );
   } catch (error) {
     console.error(getErrorMessage(error));

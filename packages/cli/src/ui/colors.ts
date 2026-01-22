@@ -72,6 +72,9 @@ export const Colors: ColorsTheme = {
   get Gray() {
     return themeManager.getActiveTheme().colors.Gray;
   },
+  get DarkGray() {
+    return themeManager.getActiveTheme().colors.DarkGray;
+  },
   get GradientColors() {
     return themeManager.getActiveTheme().colors.GradientColors;
   },
@@ -94,6 +97,9 @@ export const SemanticColors: SemanticColorsInterface = {
       },
       get accent() {
         return themeManager.getSemanticColors().text.accent;
+      },
+      get response() {
+        return themeManager.getSemanticColors().text.response;
       },
     };
   },
@@ -134,6 +140,9 @@ export const SemanticColors: SemanticColorsInterface = {
       },
       get symbol() {
         return themeManager.getSemanticColors().ui.symbol;
+      },
+      get dark() {
+        return themeManager.getSemanticColors().ui.dark;
       },
       get gradient() {
         return themeManager.getSemanticColors().ui.gradient;
@@ -247,6 +256,9 @@ export const theme = {
     },
     get accent() {
       return themeManager.getSemanticColors().text.accent;
+    },
+    get response() {
+      return themeManager.getSemanticColors().text.response;
     },
   },
   status: {

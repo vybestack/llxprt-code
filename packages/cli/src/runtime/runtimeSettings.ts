@@ -18,10 +18,10 @@ import {
 import type {
   ProviderManager,
   Profile,
-  IModel,
   ModelParams,
   RuntimeAuthScopeFlushResult,
   LoadBalancerProfile,
+  HydratedModel,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
@@ -817,7 +817,7 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
 
 export async function listAvailableModels(
   providerName?: string,
-): Promise<IModel[]> {
+): Promise<HydratedModel[]> {
   const manager = getProviderManagerOrThrow();
   return manager.getAvailableModels(providerName);
 }
@@ -1693,7 +1693,7 @@ export async function switchActiveProvider(
     defaultModel ??
     '';
 
-  let availableModels: IModel[] = [];
+  let availableModels: HydratedModel[] = [];
   if (typeof providerManager.getAvailableModels === 'function') {
     try {
       availableModels = (await providerManager.getAvailableModels(name)) ?? [];
@@ -2217,8 +2217,9 @@ export async function applyCliArgumentOverrides(
 ): Promise<void> {
   const { readFile } = await import('node:fs/promises');
   const { homedir } = await import('node:os');
-  const { applyCliSetArguments } =
-    await import('../config/cliEphemeralSettings.js');
+  const { applyCliSetArguments } = await import(
+    '../config/cliEphemeralSettings.js'
+  );
 
   const { config } = getCliRuntimeServices();
 

@@ -5,10 +5,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { type RenderResult } from '@testing-library/react';
+import { render } from 'ink-testing-library';
 import React from 'react';
 import { renderAtWidth, testResponsiveBehavior } from './responsive-testing.js';
 import { useResponsive } from '../ui/hooks/useResponsive.js';
+
+type RenderResult = ReturnType<typeof render>;
 
 // Mock the useTerminalSize hook
 vi.mock('../ui/hooks/useTerminalSize');
@@ -32,23 +34,26 @@ describe('responsive testing utilities', () => {
   describe('renderAtWidth', () => {
     it('should render component with mocked terminal width', () => {
       const result = renderAtWidth(<TestComponent />, 100);
+      const output = result.lastFrame();
 
-      expect(result.getByTestId('width').textContent).toBe('100');
-      expect(result.getByTestId('breakpoint').textContent).toBe('STANDARD');
+      expect(output).toContain('100');
+      expect(output).toContain('STANDARD');
     });
 
     it('should render component at narrow width', () => {
       const result = renderAtWidth(<TestComponent />, 60);
+      const output = result.lastFrame();
 
-      expect(result.getByTestId('width').textContent).toBe('60');
-      expect(result.getByTestId('breakpoint').textContent).toBe('NARROW');
+      expect(output).toContain('60');
+      expect(output).toContain('NARROW');
     });
 
     it('should render component at wide width', () => {
       const result = renderAtWidth(<TestComponent />, 200);
+      const output = result.lastFrame();
 
-      expect(result.getByTestId('width').textContent).toBe('200');
-      expect(result.getByTestId('breakpoint').textContent).toBe('WIDE');
+      expect(output).toContain('200');
+      expect(output).toContain('WIDE');
     });
   });
 
@@ -63,17 +68,18 @@ describe('responsive testing utilities', () => {
         <TestComponent />,
         {
           narrow: (result: RenderResult) => {
-            expect(result.getByTestId('breakpoint').textContent).toBe('NARROW');
+            const output = result.lastFrame();
+            expect(output).toContain('NARROW');
             narrowAssertionSpy();
           },
           standard: (result: RenderResult) => {
-            expect(result.getByTestId('breakpoint').textContent).toBe(
-              'STANDARD',
-            );
+            const output = result.lastFrame();
+            expect(output).toContain('STANDARD');
             standardAssertionSpy();
           },
           wide: (result: RenderResult) => {
-            expect(result.getByTestId('breakpoint').textContent).toBe('WIDE');
+            const output = result.lastFrame();
+            expect(output).toContain('WIDE');
             wideAssertionSpy();
           },
         },
@@ -105,9 +111,9 @@ describe('responsive testing utilities', () => {
     it('should provide RenderResult with expected methods', () => {
       testResponsiveBehavior('RenderResult validation', <TestComponent />, {
         standard: (result: RenderResult) => {
-          expect(result.getByTestId).toBeDefined();
-          expect(result.queryByTestId).toBeDefined();
-          expect(result.container).toBeDefined();
+          expect(result.lastFrame).toBeDefined();
+          expect(result.frames).toBeDefined();
+          expect(result.rerender).toBeDefined();
           expect(result.unmount).toBeDefined();
         },
       });

@@ -25,8 +25,9 @@ export class HybridTokenStorage extends BaseTokenStorage {
 
     if (!forceFileStorage) {
       try {
-        const { KeychainTokenStorage } =
-          await import('./keychain-token-storage.js');
+        const { KeychainTokenStorage } = await import(
+          './keychain-token-storage.js'
+        );
         const keychainStorage = new KeychainTokenStorage(this.serviceName);
 
         const isAvailable = await keychainStorage.isAvailable();

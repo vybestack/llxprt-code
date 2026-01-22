@@ -1,74 +1,85 @@
-# Default write tool policy
-# Priority band: 1.01 (Tier 1 - Default)
-# These tools require user confirmation by default
+# Priority system for policy rules:
+# - Higher priority numbers win over lower priority numbers
+# - When multiple rules match, the highest priority rule is applied
+# - Rules are evaluated in order of priority (highest first)
+#
+# Priority bands (tiers):
+# - Default policies (TOML): 1 + priority/1000 (e.g., priority 100 → 1.100)
+# - User policies (TOML): 2 + priority/1000 (e.g., priority 100 → 2.100)
+# - Admin policies (TOML): 3 + priority/1000 (e.g., priority 100 → 3.100)
+#
+# This ensures Admin > User > Default hierarchy is always preserved,
+# while allowing user-specified priorities to work within each tier.
+#
+# Settings-based and dynamic rules (all in user tier 2.x):
+#   2.95: Tools that the user has selected as "Always Allow" in the interactive UI
+#   2.9:  MCP servers excluded list (security: persistent server blocks)
+#   2.4:  Command line flag --exclude-tools (explicit temporary blocks)
+#   2.3:  Command line flag --allowed-tools (explicit temporary allows)
+#   2.2:  MCP servers with trust=true (persistent trusted servers)
+#   2.1:  MCP servers allowed list (persistent general server allows)
+#
+# TOML policy priorities (before transformation):
+#   10: Write tools default to ASK_USER (becomes 1.010 in default tier)
+#   15: Auto-edit tool override (becomes 1.015 in default tier)
+#   50: Read-only tools (becomes 1.050 in default tier)
+#   999: YOLO mode allow-all (becomes 1.999 in default tier)
 
 [[rule]]
 toolName = "replace"
 decision = "ask_user"
-priority = 1.01
+priority = 10
+
+[[rule]]
+toolName = "replace"
+decision = "allow"
+priority = 15
+modes = ["autoEdit"]
+
+[[rule]]
+toolName = "save_memory"
+decision = "ask_user"
+priority = 10
+
+[[rule]]
+toolName = "run_shell_command"
+decision = "ask_user"
+priority = 10
 
 [[rule]]
 toolName = "write_file"
 decision = "ask_user"
-priority = 1.01
+priority = 10
+
+[[rule]]
+toolName = "write_file"
+decision = "allow"
+priority = 15
+modes = ["autoEdit"]
+
+[[rule]]
+toolName = "web_fetch"
+decision = "ask_user"
+priority = 10
 
 [[rule]]
 toolName = "insert_at_line"
 decision = "ask_user"
-priority = 1.01
+priority = 10
+
+[[rule]]
+toolName = "insert_at_line"
+decision = "allow"
+priority = 15
+modes = ["autoEdit"]
 
 [[rule]]
 toolName = "delete_line_range"
 decision = "ask_user"
-priority = 1.01
+priority = 10
 
 [[rule]]
-toolName = "shell"
-decision = "ask_user"
-priority = 1.01
-
-[[rule]]
-toolName = "memory"
-decision = "ask_user"
-priority = 1.01
-
-[[rule]]
-toolName = "google_web_fetch"
-decision = "ask_user"
-priority = 1.01
-
-[[rule]]
-toolName = "direct_web_fetch"
-decision = "ask_user"
-priority = 1.01
-
-# Shell commands with dangerous patterns are denied
-[[rule]]
-toolName = "shell"
-argsPattern = "rm\\s+-rf\\s+/"
-decision = "deny"
-priority = 2.0
-
-[[rule]]
-toolName = "shell"
-argsPattern = "chmod\\s+777"
-decision = "deny"
-priority = 2.0
-
-[[rule]]
-toolName = "shell"
-argsPattern = "dd\\s+if="
-decision = "deny"
-priority = 2.0
-
-[[rule]]
-toolName = "shell"
-argsPattern = "mkfs\\."
-decision = "deny"
-priority = 2.0
-
-[[rule]]
-toolName = "shell"
-argsPattern = ":(){ :|:& };:"
-decision = "deny"
-priority = 2.0
+toolName = "delete_line_range"
+decision = "allow"
+priority = 15
+modes = ["autoEdit"]

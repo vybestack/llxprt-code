@@ -4,11 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { SandboxConfig } from '@vybestack/llxprt-code-core';
-import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import {
+  getPackageJson,
+  type SandboxConfig,
+  FatalSandboxError,
+} from '@vybestack/llxprt-code-core';
 import commandExists from 'command-exists';
 import * as os from 'node:os';
-import { getPackageJson } from '../utils/package.js';
 import { Settings } from './settings.js';
 import { resolvePath } from '../utils/resolvePath.js';
 import {
@@ -18,6 +20,11 @@ import {
   type SandboxProfileEngine,
   type SandboxProfileMount,
 } from './sandboxProfiles.js';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // This is a stripped-down version of the CliArgs interface from config.ts
 // to avoid circular dependencies.
@@ -27,7 +34,6 @@ interface SandboxCliArgs {
   sandboxEngine?: string;
   sandboxProfileLoad?: string;
 }
-
 const VALID_SANDBOX_COMMANDS: ReadonlyArray<SandboxConfig['command']> = [
   'docker',
   'podman',
@@ -452,7 +458,7 @@ export async function loadSandboxConfig(
     return undefined;
   }
 
-  const packageJson = await getPackageJson();
+  const packageJson = await getPackageJson(__dirname);
   const packageImage = packageJson?.config?.sandboxImageUri;
 
   let sandboxProfile: SandboxProfile | undefined;

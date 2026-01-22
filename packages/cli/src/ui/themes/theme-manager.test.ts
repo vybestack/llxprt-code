@@ -44,6 +44,7 @@ const validCustomTheme: CustomTheme = {
   Comment: 'gray',
   DimComment: '#5a5a5a',
   Gray: 'gray',
+  DarkGray: '#6a6a6a',
 };
 
 describe('ThemeManager', () => {
@@ -136,6 +137,7 @@ describe('ThemeManager', () => {
           secondary: expect.any(String),
           link: expect.any(String),
           accent: expect.any(String),
+          response: expect.any(String),
         },
         status: {
           success: expect.any(String),
@@ -152,6 +154,7 @@ describe('ThemeManager', () => {
         ui: {
           comment: expect.any(String),
           symbol: expect.any(String),
+          dark: expect.any(String),
           gradient: expect.anything(),
         },
         border: {

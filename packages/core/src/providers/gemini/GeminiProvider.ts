@@ -285,8 +285,9 @@ export class GeminiProvider extends BaseProvider {
     config: Config,
     baseURL?: string,
   ): Promise<CodeAssistContentGenerator> {
-    const { createCodeAssistContentGenerator } =
-      await import('../../code_assist/codeAssist.js');
+    const { createCodeAssistContentGenerator } = await import(
+      '../../code_assist/codeAssist.js'
+    );
     return createCodeAssistContentGenerator(
       httpOptions,
       AuthType.LOGIN_WITH_GOOGLE,
@@ -464,37 +465,55 @@ export class GeminiProvider extends BaseProvider {
    * Determine auth mode per call instead of using cached state
    */
   async getModels(): Promise<IModel[]> {
-    // Determine auth mode for this call
-    const { authMode } = await this.determineBestAuth();
+    // Full model list including OAuth-only models (gemini-3-*-preview)
+    // Used as fallback when no auth yet, and for OAuth mode
+    const oauthModels: IModel[] = [
+      {
+        id: 'gemini-2.5-pro',
+        name: 'Gemini 2.5 Pro',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+      {
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+      {
+        id: 'gemini-2.5-flash-lite',
+        name: 'Gemini 2.5 Flash Lite',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+      {
+        id: 'gemini-3-pro-preview',
+        name: 'Gemini 3 Pro Preview',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+      {
+        id: 'gemini-3-flash-preview',
+        name: 'Gemini 3 Flash Preview',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+    ];
 
-    // For OAuth mode, return fixed list of models
+    // Determine auth mode for this call (graceful when no auth yet)
+    let authMode: GeminiAuthMode;
+    try {
+      const result = await this.determineBestAuth();
+      authMode = result.authMode;
+    } catch (_e) {
+      // No auth configured yet (pre-onboarding) - return full model list
+      // including OAuth models so user can see all options when selecting
+      return oauthModels;
+    }
+
+    // For OAuth mode, return fixed list of models (including 3-*-preview)
     if (authMode === 'oauth') {
-      return [
-        {
-          id: 'gemini-2.5-pro',
-          name: 'Gemini 2.5 Pro',
-          provider: this.name,
-          supportedToolFormats: [],
-        },
-        {
-          id: 'gemini-2.5-flash',
-          name: 'Gemini 2.5 Flash',
-          provider: this.name,
-          supportedToolFormats: [],
-        },
-        {
-          id: 'gemini-2.5-flash-lite',
-          name: 'Gemini 2.5 Flash Lite',
-          provider: this.name,
-          supportedToolFormats: [],
-        },
-        {
-          id: 'gemini-3-pro-preview',
-          name: 'Gemini 3 Pro Preview',
-          provider: this.name,
-          supportedToolFormats: [],
-        },
-      ];
+      return oauthModels;
     }
 
     // For API key modes (gemini-api-key or vertex-ai), try to fetch real models
@@ -539,27 +558,8 @@ export class GeminiProvider extends BaseProvider {
       }
     }
 
-    // Return default models as fallback
-    return [
-      {
-        id: 'gemini-2.5-pro',
-        name: 'Gemini 2.5 Pro',
-        provider: this.name,
-        supportedToolFormats: [],
-      },
-      {
-        id: 'gemini-2.5-flash',
-        name: 'Gemini 2.5 Flash',
-        provider: this.name,
-        supportedToolFormats: [],
-      },
-      {
-        id: 'gemini-2.5-flash-exp',
-        name: 'Gemini 2.5 Flash Experimental',
-        provider: this.name,
-        supportedToolFormats: [],
-      },
-    ];
+    // Return default models as fallback (use same list as OAuth for consistency)
+    return oauthModels;
   }
 
   /**

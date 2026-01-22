@@ -209,17 +209,22 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
         }
 
-        let authUrl =
-          deviceCodeResponse.verification_uri_complete ||
-          `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
-
+        // In interactive mode with local callback, use the redirect-based URL
+        // In non-interactive or fallback mode, use the device code URL
+        let authUrl: string;
         if (localCallback) {
+          // Browser-based OAuth with local callback server
           authUrl = this.deviceFlow.buildAuthorizationUrl(
             localCallback.redirectUri,
           );
+        } else {
+          // Device flow URL (for non-interactive or when callback server fails)
+          authUrl =
+            deviceCodeResponse.verification_uri_complete ||
+            `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
         }
 
-        // Always show the auth URL in the TUI first, before attempting browser (like Gemini does)
+        // Show the auth URL in the TUI
         const message = `Please visit the following URL to authorize with Anthropic Claude:\\n${authUrl}`;
         const historyItem: HistoryItemOAuthURL = {
           type: 'oauth_url',
@@ -258,12 +263,14 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
         }
 
+        // If we have a local callback server, wait for it - this is the primary flow
+        // for interactive mode. Only fall back to paste box if callback fails.
         if (localCallback) {
           try {
             const { code, state } = await localCallback.waitForCallback();
             await localCallback.shutdown();
             await this.completeAuth(`${code}#${state}`);
-            return;
+            return; // Success! Don't fall through to paste box.
           } catch (error) {
             await localCallback.shutdown().catch(() => undefined);
             this.logger.debug(
@@ -272,9 +279,20 @@ export class AnthropicOAuthProvider implements OAuthProvider {
                   error instanceof Error ? error.message : String(error)
                 }`,
             );
+            // Local callback failed - throw the error rather than falling back to paste box
+            // in interactive mode. The user should retry.
+            throw OAuthErrorFactory.fromUnknown(
+              this.name,
+              error instanceof Error
+                ? error
+                : new Error('OAuth callback failed'),
+              'local callback',
+            );
           }
         }
 
+        // Only reach here in non-interactive mode (no browser, no local callback)
+        // This is the device code / paste box flow for headless environments
         (global as unknown as { __oauth_provider: string }).__oauth_provider =
           'anthropic';
 
@@ -405,6 +423,13 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * @plan PLAN-20250823-AUTHFIXES.P08
    * @requirement REQ-001.1
    * @pseudocode lines 74-98
+   *
+   * Issue #1159: Prevents race conditions when multiple clients refresh the same token
+   * Flow:
+   * 1. Check disk for updated token (another client may have already refreshed)
+   * 2. Try to acquire refresh lock
+   * 3. If lock acquired, re-check disk and refresh if still needed
+   * 4. If lock not acquired, wait and re-check disk
    */
   async refreshIfNeeded(): Promise<OAuthToken | null> {
     await this.ensureInitialized();
@@ -422,9 +447,62 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     // @pseudocode line 81: Check if token is expired
     if (this.isTokenExpired(currentToken)) {
+      // Issue #1159: Check disk for updated token before attempting refresh
+      const diskToken = await this._tokenStore.getToken('anthropic');
+      if (
+        diskToken &&
+        !this.isTokenExpired(diskToken) &&
+        diskToken.access_token !== currentToken.access_token
+      ) {
+        // Token was already refreshed by another client
+        this.logger.debug(
+          () =>
+            'Token was already refreshed by another process, using updated version from disk',
+        );
+        return diskToken;
+      }
+
       // @pseudocode line 82: Check if refresh token exists and is valid
       if (this.hasValidRefreshToken(currentToken)) {
+        // Issue #1159: Try to acquire lock to prevent concurrent refreshes
+        const lockAcquired = await this._tokenStore.acquireRefreshLock(
+          'anthropic',
+          {
+            waitMs: 10000, // Wait up to 10 seconds
+            staleMs: 30000, // Break locks older than 30 seconds
+          },
+        );
+
+        if (!lockAcquired) {
+          // Failed to acquire lock, check disk again for updated token
+          this.logger.debug(
+            () =>
+              'Failed to acquire refresh lock, checking disk for updated token',
+          );
+          const updatedToken = await this._tokenStore.getToken('anthropic');
+          if (updatedToken && !this.isTokenExpired(updatedToken)) {
+            return updatedToken;
+          }
+          // Still expired, return null to trigger re-auth
+          return null;
+        }
+
         try {
+          // Re-check disk after acquiring lock (double-check pattern)
+          const recheckToken = await this._tokenStore.getToken('anthropic');
+          if (
+            recheckToken &&
+            !this.isTokenExpired(recheckToken) &&
+            recheckToken.access_token !== currentToken.access_token
+          ) {
+            // Another process refreshed while we were waiting for lock
+            this.logger.debug(
+              () =>
+                'Token was refreshed while waiting for lock, using updated version',
+            );
+            return recheckToken;
+          }
+
           // @pseudocode lines 84-86: Refresh the token
           const refreshedToken = await this.deviceFlow.refreshToken(
             currentToken.refresh_token,
@@ -468,6 +546,15 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
 
           return null;
+        } finally {
+          // Always release the lock
+          await this._tokenStore
+            .releaseRefreshLock('anthropic')
+            .catch((releaseError) => {
+              this.logger.debug(
+                () => `Failed to release refresh lock: ${releaseError}`,
+              );
+            });
         }
       } else {
         // @pseudocode lines 93-95: Remove token without refresh capability

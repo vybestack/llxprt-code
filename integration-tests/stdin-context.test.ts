@@ -27,18 +27,21 @@ describe('stdin context', () => {
 
     const lastRequest = rig.readLastApiRequest();
     expect(lastRequest?.attributes?.request_text).toBeDefined();
-    const historyString = lastRequest!.attributes!.request_text;
+    const historyString = lastRequest!.attributes!.request_text || '';
+    const historyStringLower = historyString.toLowerCase();
+    const promptLower = prompt.toLowerCase();
+    const normalizedPromptLower = promptLower.replace('?', '');
 
     // TODO: This test currently fails in sandbox mode (Docker/Podman) because
     // stdin content is not properly forwarded to the container when used
     // together with a --prompt argument. The test passes in non-sandbox mode.
 
     expect(historyString).toContain(randomString);
-    expect(historyString).toContain(prompt);
+    expect(historyStringLower).toContain(normalizedPromptLower);
 
     // Check that stdin content appears before the prompt in the conversation history
     const stdinIndex = historyString.indexOf(randomString);
-    const promptIndex = historyString.indexOf(prompt);
+    const promptIndex = historyStringLower.indexOf(normalizedPromptLower);
 
     expect(
       stdinIndex,

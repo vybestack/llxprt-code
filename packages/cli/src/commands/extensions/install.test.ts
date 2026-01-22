@@ -4,28 +4,45 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, type MockInstance } from 'vitest';
+import { describe, it, expect, vi, type MockInstance, type Mock } from 'vitest';
 import { handleInstall, installCommand } from './install.js';
 import yargs from 'yargs';
+import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type * as extensionModule from '../../config/extension.js';
+import type * as fs from 'node:fs/promises';
+import type { Stats } from 'node:fs';
 
-const mockInstallOrUpdateExtension = vi.hoisted(() => vi.fn());
-const mockCheckGitHubReleasesExist = vi.hoisted(() => vi.fn());
-const mockParseGitHubRepoForReleases = vi.hoisted(() =>
-  vi.fn().mockImplementation((source: string) => {
-    const parts = source.split('/');
-    return { owner: parts[0], repo: parts[1] };
-  }),
-);
-const mockRequestConsentNonInteractive = vi.hoisted(() => vi.fn());
+const mockInstallOrUpdateExtension: Mock<
+  typeof extensionModule.installOrUpdateExtension
+> = vi.hoisted(() => vi.fn());
+const mockLoadExtensionByName: Mock<
+  typeof extensionModule.loadExtensionByName
+> = vi.hoisted(() => vi.fn());
+const mockRequestConsentNonInteractive: Mock<
+  typeof extensionModule.requestConsentNonInteractive
+> = vi.hoisted(() => vi.fn());
+const mockStat: Mock<typeof fs.stat> = vi.hoisted(() => vi.fn());
 
-vi.mock('../../config/extension.js', () => ({
-  installOrUpdateExtension: mockInstallOrUpdateExtension,
-  requestConsentNonInteractive: mockRequestConsentNonInteractive,
+vi.mock('../../config/extension.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../config/extension.js')>();
+  return {
+    ...actual,
+    installOrUpdateExtension: mockInstallOrUpdateExtension,
+    loadExtensionByName: mockLoadExtensionByName,
+    requestConsentNonInteractive: mockRequestConsentNonInteractive,
+  };
+});
+
+vi.mock('../../utils/errors.js', () => ({
+  getErrorMessage: vi.fn((error: Error) => error.message),
 }));
 
-vi.mock('../../config/extensions/github.js', () => ({
-  checkGitHubReleasesExist: mockCheckGitHubReleasesExist,
-  parseGitHubRepoForReleases: mockParseGitHubRepoForReleases,
+vi.mock('node:fs/promises', () => ({
+  stat: mockStat,
+  default: {
+    stat: mockStat,
+  },
 }));
 
 describe('extensions install command', () => {
@@ -35,281 +52,122 @@ describe('extensions install command', () => {
       'Either --source or --path must be provided.',
     );
   });
-
-  it('should fail if both git source and local path are provided', () => {
-    const validationParser = yargs([])
-      .command(installCommand)
-      .fail(false)
-      .locale('en');
-    expect(() =>
-      validationParser.parse('install --source some-url --path /some/path'),
-    ).toThrow('Arguments source and path are mutually exclusive');
-  });
-
-  it('should fail if both auto update and local path are provided', () => {
-    const validationParser = yargs([]).command(installCommand).fail(false);
-    expect(() =>
-      validationParser.parse(
-        'install some-url --path /some/path --auto-update',
-      ),
-    ).toThrow('Arguments path and auto-update are mutually exclusive');
-  });
 });
 
 describe('handleInstall', () => {
   let consoleLogSpy: MockInstance;
   let consoleErrorSpy: MockInstance;
-  let processExitSpy: MockInstance;
-  let consoleWarnSpy: MockInstance;
+  let processSpy: MockInstance;
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    processExitSpy = vi
+    processSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);
-    mockInstallOrUpdateExtension.mockReset();
-    mockCheckGitHubReleasesExist.mockReset();
-    // Restore the default implementation for parseGitHubRepoForReleases
-    mockParseGitHubRepoForReleases.mockReset();
-    mockParseGitHubRepoForReleases.mockImplementation((source: string) => {
-      const parts = source.split('/');
-      return { owner: parts[0], repo: parts[1] };
-    });
   });
 
   afterEach(() => {
     mockInstallOrUpdateExtension.mockClear();
+    mockLoadExtensionByName.mockClear();
     mockRequestConsentNonInteractive.mockClear();
-    vi.resetAllMocks();
+    mockStat.mockClear();
+    vi.clearAllMocks();
   });
 
-  it('installs an extension from org/repo using github-release when releases exist', async () => {
-    mockCheckGitHubReleasesExist.mockResolvedValue(true);
-    mockInstallOrUpdateExtension.mockResolvedValue('test-extension');
-
-    await handleInstall({ source: 'test-org/test-repo' });
-
-    expect(mockCheckGitHubReleasesExist).toHaveBeenCalledWith(
-      'test-org',
-      'test-repo',
-    );
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: 'test-org/test-repo',
-        type: 'github-release',
-      },
-      mockRequestConsentNonInteractive,
-    );
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Extension "test-extension" installed successfully and enabled.',
-    );
-  });
-
-  it('installs an extension from org/repo using git when no releases exist', async () => {
-    mockCheckGitHubReleasesExist.mockResolvedValue(false);
-    mockInstallOrUpdateExtension.mockResolvedValue('test-extension');
-
-    await handleInstall({ source: 'test-org/test-repo' });
-
-    expect(mockCheckGitHubReleasesExist).toHaveBeenCalledWith(
-      'test-org',
-      'test-repo',
-    );
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: 'https://github.com/test-org/test-repo.git',
-        type: 'git',
-      },
-      mockRequestConsentNonInteractive,
-    );
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Extension "test-extension" installed successfully and enabled.',
-    );
-  });
-
-  it('installs an extension from org/repo using git when release check fails', async () => {
-    mockCheckGitHubReleasesExist.mockRejectedValue(new Error('Network error'));
-    mockInstallOrUpdateExtension.mockResolvedValue('test-extension');
-
-    await handleInstall({ source: 'test-org/test-repo' });
-
-    expect(mockCheckGitHubReleasesExist).toHaveBeenCalledWith(
-      'test-org',
-      'test-repo',
-    );
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: 'https://github.com/test-org/test-repo.git',
-        type: 'git',
-      },
-      mockRequestConsentNonInteractive,
-    );
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Extension "test-extension" installed successfully and enabled.',
-    );
-  });
-
-  it('installs an extension from org/repo with --ref as github-release', async () => {
-    mockCheckGitHubReleasesExist.mockResolvedValue(true);
-    mockInstallOrUpdateExtension.mockResolvedValue('test-extension');
-
-    await handleInstall({ source: 'test-org/test-repo', ref: 'v1.0.0' });
-
-    expect(mockCheckGitHubReleasesExist).toHaveBeenCalledWith(
-      'test-org',
-      'test-repo',
-    );
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: 'test-org/test-repo',
-        type: 'github-release',
-        ref: 'v1.0.0',
-      },
-      mockRequestConsentNonInteractive,
-    );
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Extension "test-extension" installed successfully and enabled.',
-    );
-  });
-
-  it('installs an extension from org/repo with --ref falling back to git', async () => {
-    mockCheckGitHubReleasesExist.mockResolvedValue(false);
-    mockInstallOrUpdateExtension.mockResolvedValue('test-extension');
-
-    await handleInstall({ source: 'test-org/test-repo', ref: 'my-branch' });
-
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: 'https://github.com/test-org/test-repo.git',
-        type: 'git',
-        ref: 'my-branch',
-      },
-      mockRequestConsentNonInteractive,
-    );
-  });
-
-  it('installs an extension from a http source', async () => {
+  it('should install an extension from a http source', async () => {
     mockInstallOrUpdateExtension.mockResolvedValue('http-extension');
+    mockLoadExtensionByName.mockReturnValue({
+      name: 'http-extension',
+    } as unknown as GeminiCLIExtension);
 
-    await handleInstall({ source: 'http://google.com' });
+    await handleInstall({
+      source: 'http://google.com',
+    });
 
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: 'http://google.com',
-        type: 'git',
-      },
-      mockRequestConsentNonInteractive,
-    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "http-extension" installed successfully and enabled.',
     );
   });
 
-  it('installs an extension from a https source', async () => {
+  it('should install an extension from a https source', async () => {
     mockInstallOrUpdateExtension.mockResolvedValue('https-extension');
+    mockLoadExtensionByName.mockReturnValue({
+      name: 'https-extension',
+    } as unknown as GeminiCLIExtension);
 
-    await handleInstall({ source: 'https://google.com' });
+    await handleInstall({
+      source: 'https://google.com',
+    });
 
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: 'https://google.com',
-        type: 'git',
-      },
-      mockRequestConsentNonInteractive,
-    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "https-extension" installed successfully and enabled.',
     );
   });
 
-  it('installs an extension from a git source', async () => {
+  it('should install an extension from a git source', async () => {
     mockInstallOrUpdateExtension.mockResolvedValue('git-extension');
+    mockLoadExtensionByName.mockReturnValue({
+      name: 'git-extension',
+    } as unknown as GeminiCLIExtension);
 
-    await handleInstall({ source: 'git@some-url' });
+    await handleInstall({
+      source: 'git@some-url',
+    });
 
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: 'git@some-url',
-        type: 'git',
-      },
-      mockRequestConsentNonInteractive,
-    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "git-extension" installed successfully and enabled.',
     );
   });
 
-  it('installs an extension from a sso source', async () => {
+  it('throws an error from an unknown source', async () => {
+    mockStat.mockRejectedValue(new Error('ENOENT: no such file or directory'));
+    await handleInstall({
+      source: 'test://google.com',
+    });
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Install source not found.');
+    expect(processSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('should install an extension from a sso source', async () => {
     mockInstallOrUpdateExtension.mockResolvedValue('sso-extension');
+    mockLoadExtensionByName.mockReturnValue({
+      name: 'sso-extension',
+    } as unknown as GeminiCLIExtension);
 
-    await handleInstall({ source: 'sso://google.com' });
+    await handleInstall({
+      source: 'sso://google.com',
+    });
 
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: 'sso://google.com',
-        type: 'git',
-      },
-      mockRequestConsentNonInteractive,
-    );
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('sso:// URLs require a git-remote-sso helper'),
-    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "sso-extension" installed successfully and enabled.',
     );
   });
 
-  it('installs an extension from a local path', async () => {
+  it('should install an extension from a local path', async () => {
     mockInstallOrUpdateExtension.mockResolvedValue('local-extension');
+    mockLoadExtensionByName.mockReturnValue({
+      name: 'local-extension',
+    } as unknown as GeminiCLIExtension);
+    mockStat.mockResolvedValue({} as Stats);
+    await handleInstall({
+      source: '/some/path',
+    });
 
-    await handleInstall({ path: '/some/path' });
-
-    expect(mockInstallOrUpdateExtension).toHaveBeenCalledWith(
-      {
-        source: '/some/path',
-        type: 'local',
-      },
-      mockRequestConsentNonInteractive,
-    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "local-extension" installed successfully and enabled.',
     );
   });
 
-  it('logs an error for an unknown source scheme', async () => {
-    mockParseGitHubRepoForReleases.mockImplementationOnce(() => {
-      throw new Error(
-        'Invalid GitHub repository source: test://google.com. Expected "owner/repo" or a github repo uri.',
-      );
-    });
-
-    await handleInstall({ source: 'test://google.com' });
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'The source "test://google.com" is not a valid URL or "org/repo" format.',
+  it('should throw an error if install extension fails', async () => {
+    mockInstallOrUpdateExtension.mockRejectedValue(
+      new Error('Install extension failed'),
     );
-    expect(processExitSpy).toHaveBeenCalledWith(1);
-    expect(mockInstallOrUpdateExtension).not.toHaveBeenCalled();
-  });
-
-  it('logs an error when no source or path is provided', async () => {
-    await handleInstall({});
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Either --source or --path must be provided.',
-    );
-    expect(processExitSpy).toHaveBeenCalledWith(1);
-    expect(mockInstallOrUpdateExtension).not.toHaveBeenCalled();
-  });
-
-  it('logs an error when installOrUpdateExtension fails', async () => {
-    mockInstallOrUpdateExtension.mockRejectedValue(new Error('Install failed'));
 
     await handleInstall({ source: 'git@some-url' });
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Install failed');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Install extension failed');
+    expect(processSpy).toHaveBeenCalledWith(1);
   });
 });

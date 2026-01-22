@@ -300,4 +300,87 @@ describe('FileDiscoveryService', () => {
       ]);
     });
   });
+  describe('precedence (.llxprtignore over .gitignore)', () => {
+    beforeEach(async () => {
+      await fs.mkdir(path.join(projectRoot, '.git'));
+    });
+
+    it('should un-ignore a file in .llxprtignore that is ignored in .gitignore', async () => {
+      await createTestFile('.gitignore', '*.txt');
+      await createTestFile('.llxprtignore', '!important.txt');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const files = ['file.txt', 'important.txt'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      const filtered = service.filterFiles(files);
+      expect(filtered).toEqual([path.join(projectRoot, 'important.txt')]);
+    });
+
+    it('should un-ignore a directory in .llxprtignore that is ignored in .gitignore', async () => {
+      await createTestFile('.gitignore', 'logs/');
+      await createTestFile('.llxprtignore', '!logs/');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const files = ['logs/app.log', 'other/app.log'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      const filtered = service.filterFiles(files);
+      expect(filtered).toEqual(files);
+    });
+
+    it('should extend ignore rules in .llxprtignore', async () => {
+      await createTestFile('.gitignore', '*.log');
+      await createTestFile('.llxprtignore', 'temp/');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const files = ['app.log', 'temp/file.txt'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      const filtered = service.filterFiles(files);
+      expect(filtered).toEqual([]);
+    });
+
+    it('should use .gitignore rules if respectLlxprtIgnore is false', async () => {
+      await createTestFile('.gitignore', '*.txt');
+      await createTestFile('.llxprtignore', '!important.txt');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const files = ['file.txt', 'important.txt'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      const filtered = service.filterFiles(files, {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: false,
+      });
+
+      expect(filtered).toEqual([]);
+    });
+
+    it('should use .llxprtignore rules if respectGitIgnore is false', async () => {
+      await createTestFile('.gitignore', '*.txt');
+      await createTestFile('.llxprtignore', '!important.txt\ntemp/');
+
+      const service = new FileDiscoveryService(projectRoot);
+      const files = ['file.txt', 'important.txt', 'temp/file.js'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      const filtered = service.filterFiles(files, {
+        respectGitIgnore: false,
+        respectLlxprtIgnore: true,
+      });
+
+      // .gitignore is ignored, so *.txt is not applied.
+      // .llxprtignore un-ignores important.txt (which wasn't ignored anyway)
+      // and ignores temp/
+      expect(filtered).toEqual(
+        ['file.txt', 'important.txt'].map((f) => path.join(projectRoot, f)),
+      );
+    });
+  });
 });

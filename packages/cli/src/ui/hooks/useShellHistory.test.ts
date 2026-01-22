@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '../../test-utils/render.js';
+import { act } from 'react';
 import { useShellHistory } from './useShellHistory.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -30,13 +31,16 @@ vi.mock('fs', async (importOriginal) => {
     mkdirSync: vi.fn(),
   };
 });
-vi.mock('@vybestack/llxprt-code-core', () => {
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  const pathModule = await import('path');
   class Storage {
     getProjectTempDir(): string {
-      return path.join('/test/home/', '.llxprt', 'tmp', 'mocked_hash');
+      return pathModule.join('/test/home/', '.llxprt', 'tmp', 'mocked_hash');
     }
     getHistoryFilePath(): string {
-      return path.join(
+      return pathModule.join(
         '/test/home/',
         '.llxprt',
         'tmp',
@@ -44,10 +48,12 @@ vi.mock('@vybestack/llxprt-code-core', () => {
         'shell_history',
       );
     }
+    static getGlobalSettingsPath(): string {
+      return pathModule.join('/test/home/', '.llxprt', 'settings.json');
+    }
   }
   return {
-    isNodeError: (err: unknown): err is NodeJS.ErrnoException =>
-      typeof err === 'object' && err !== null && 'code' in err,
+    ...actual,
     Storage,
   };
 });

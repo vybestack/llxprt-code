@@ -13,14 +13,31 @@ import {
 } from '../shared/RadioButtonSelect.js';
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  anthropic: 'Anthropic (Claude)',
-  openai: 'OpenAI (GPT-4, etc.)',
   gemini: 'Google Gemini',
-  deepseek: 'DeepSeek',
+  codex: 'OpenAI Codex (ChatGPT Backend)',
+  anthropic: 'Anthropic (Claude)',
   qwen: 'Qwen',
+  synthetic: 'Synthetic (Testing)',
+  zai: 'Zai',
+  openai: 'OpenAI (GPT-4, etc.)',
   'openai-responses': 'OpenAI Responses API',
   openaivercel: 'OpenAI (Vercel AI SDK)',
+  deepseek: 'DeepSeek',
 };
+
+// Preferred order for provider display
+const PROVIDER_ORDER: string[] = [
+  'gemini',
+  'codex',
+  'anthropic',
+  'qwen',
+  'synthetic',
+  'zai',
+  'openai',
+  'openai-responses',
+  'openaivercel',
+  'deepseek',
+];
 
 interface ProviderSelectStepProps {
   providers: string[];
@@ -36,7 +53,17 @@ export const ProviderSelectStep: React.FC<ProviderSelectStepProps> = ({
   isFocused = true,
 }) => {
   const options: Array<RadioSelectItem<string>> = useMemo(() => {
-    const providerOptions = providers.map((provider) => ({
+    // Sort providers by preferred order
+    const sortedProviders = [...providers].sort((a, b) => {
+      const aIndex = PROVIDER_ORDER.indexOf(a);
+      const bIndex = PROVIDER_ORDER.indexOf(b);
+      // Providers not in the list go to the end
+      const aOrder = aIndex === -1 ? PROVIDER_ORDER.length : aIndex;
+      const bOrder = bIndex === -1 ? PROVIDER_ORDER.length : bIndex;
+      return aOrder - bOrder;
+    });
+
+    const providerOptions = sortedProviders.map((provider) => ({
       label: PROVIDER_DISPLAY_NAMES[provider] || provider,
       value: provider,
       key: provider,

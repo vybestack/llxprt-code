@@ -56,7 +56,6 @@ import type {
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
-import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -2297,9 +2296,6 @@ export class GeminiChat {
       if (chunk.usageMetadata) {
         if (chunk.usageMetadata.promptTokenCount !== undefined) {
           this.lastPromptTokenCount = chunk.usageMetadata.promptTokenCount;
-          uiTelemetryService.setLastPromptTokenCount(
-            chunk.usageMetadata.promptTokenCount,
-          );
         }
       }
 

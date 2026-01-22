@@ -329,8 +329,9 @@ describe('loadCliConfig memory discovery', () => {
       continue: undefined,
     };
 
-    const { ExtensionEnablementManager, ExtensionStorage } =
-      await import('./extension.js');
+    const { ExtensionEnablementManager, ExtensionStorage } = await import(
+      './extension.js'
+    );
     const config = await loadCliConfig(
       settings,
       [],

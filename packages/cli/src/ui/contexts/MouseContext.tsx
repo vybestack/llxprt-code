@@ -14,19 +14,20 @@ import {
   useMemo,
   useRef,
 } from 'react';
+import { ESC } from '../utils/input.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
   isIncompleteMouseSequence,
   parseMouseEvent,
   type MouseEvent,
+  type MouseEventName,
   type MouseHandler,
 } from '../utils/mouse.js';
-import { ESC } from '../utils/input.js';
 
-export type { MouseEvent } from '../utils/mouse.js';
-export type { MouseHandler } from '../utils/mouse.js';
+const debugLogger = new DebugLogger('llxprt:ui:mouse');
 
-const mouseLogger = new DebugLogger('llxprt:ui:mouse');
+export type { MouseEvent, MouseEventName, MouseHandler };
+
 const MAX_MOUSE_BUFFER_SIZE = 4096;
 
 interface MouseContextValue {
@@ -42,6 +43,19 @@ export function useMouseContext() {
     throw new Error('useMouseContext must be used within a MouseProvider');
   }
   return context;
+}
+
+export function useMouse(handler: MouseHandler, { isActive = true } = {}) {
+  const { subscribe, unsubscribe } = useMouseContext();
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    subscribe(handler);
+    return () => unsubscribe(handler);
+  }, [isActive, handler, subscribe, unsubscribe]);
 }
 
 export function MouseProvider({
@@ -84,8 +98,9 @@ export function MouseProvider({
     };
 
     const handleData = (data: Buffer | string) => {
-      mouseBuffer += typeof data === 'string' ? data : data.toString('utf8');
+      mouseBuffer += typeof data === 'string' ? data : data.toString('utf-8');
 
+      // Safety cap to prevent infinite buffer growth on garbage
       if (mouseBuffer.length > MAX_MOUSE_BUFFER_SIZE) {
         mouseBuffer = mouseBuffer.slice(-MAX_MOUSE_BUFFER_SIZE);
       }
@@ -94,10 +109,10 @@ export function MouseProvider({
         const parsed = parseMouseEvent(mouseBuffer);
 
         if (parsed) {
-          if (debugKeystrokeLogging && mouseLogger.enabled) {
-            mouseLogger.debug(
-              () =>
-                `[DEBUG] Mouse event parsed: ${JSON.stringify(parsed.event)}`,
+          if (debugKeystrokeLogging) {
+            debugLogger.log(
+              '[DEBUG] Mouse event parsed:',
+              JSON.stringify(parsed.event),
             );
           }
           broadcast(parsed.event);
@@ -106,12 +121,15 @@ export function MouseProvider({
         }
 
         if (isIncompleteMouseSequence(mouseBuffer)) {
-          break;
+          break; // Wait for more data
         }
 
+        // Not a valid sequence at start, and not waiting for more data.
+        // Discard garbage until next possible sequence start.
         const nextEsc = mouseBuffer.indexOf(ESC, 1);
         if (nextEsc !== -1) {
           mouseBuffer = mouseBuffer.slice(nextEsc);
+          // Loop continues to try parsing at new location
         } else {
           mouseBuffer = '';
           break;
@@ -120,6 +138,7 @@ export function MouseProvider({
     };
 
     stdin.on('data', handleData);
+
     return () => {
       stdin.removeListener('data', handleData);
     };

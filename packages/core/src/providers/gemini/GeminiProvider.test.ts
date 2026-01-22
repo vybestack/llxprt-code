@@ -382,6 +382,31 @@ describe('GeminiProvider', () => {
     });
   });
 
+  it('should include gemini-3-flash-preview in OAuth model list', async () => {
+    const provider = new GeminiProvider();
+
+    vi.spyOn(
+      provider as unknown as {
+        determineBestAuth: () => Promise<{ authMode: string; token: string }>;
+      },
+      'determineBestAuth',
+    ).mockResolvedValue({
+      authMode: 'oauth',
+      token: 'test-oauth-token',
+    });
+
+    const models = await provider.getModels();
+    const modelIds = models.map((m) => m.id);
+
+    expect(modelIds).toContain('gemini-3-flash-preview');
+
+    const flashPreview = models.find((m) => m.id === 'gemini-3-flash-preview');
+    expect(flashPreview).toBeDefined();
+    expect(flashPreview?.name).toBe('Gemini 3 Flash Preview');
+    expect(flashPreview?.provider).toBe('gemini');
+    expect(flashPreview?.supportedToolFormats).toEqual([]);
+  });
+
   describe('GeminiProvider Authentication', () => {
     it('should check AuthResolver before falling back to Vertex AI', async () => {
       // Mock authResolver to return a test key

@@ -6,9 +6,13 @@
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 const mockSpawn = vi.hoisted(() => vi.fn());
-vi.mock('child_process', () => ({
-  spawn: mockSpawn,
-}));
+vi.mock('child_process', async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import('child_process');
+  return {
+    ...actual,
+    spawn: mockSpawn,
+  };
+});
 
 import EventEmitter from 'events';
 import { Readable } from 'stream';
@@ -32,6 +36,7 @@ const mockPlatform = vi.hoisted(() => vi.fn());
 vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
+    homedir: () => '/tmp/test-home',
     constants: {
       signals: {
         SIGTERM: 15,
@@ -40,6 +45,7 @@ vi.mock('os', () => ({
     },
   },
   platform: mockPlatform,
+  homedir: () => '/tmp/test-home',
   constants: {
     signals: {
       SIGTERM: 15,

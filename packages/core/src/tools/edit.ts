@@ -24,7 +24,7 @@ import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { isNodeError } from '../utils/errors.js';
 import { Config, ApprovalMode } from '../config/config.js';
-import { DEFAULT_DIFF_OPTIONS, getDiffStat } from './diffOptions.js';
+import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
 import { ReadFileTool } from './read-file.js';
 import {
   type ModifiableDeclarativeTool,
@@ -472,8 +472,8 @@ class EditToolInvocation extends BaseToolInvocation<
       filteredNewContent,
       'Current',
       'Proposed',
-      DEFAULT_DIFF_OPTIONS,
-    );
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    ) as string;
     const ideClient = this.config.getIdeClient();
     const ideConfirmation =
       this.config.getIdeMode() &&
@@ -614,8 +614,8 @@ class EditToolInvocation extends BaseToolInvocation<
         editData.newContent,
         'Current',
         'Proposed',
-        DEFAULT_DIFF_OPTIONS,
-      );
+        DEFAULT_CREATE_PATCH_OPTIONS,
+      ) as string;
       const displayResult = {
         fileDiff,
         fileName,

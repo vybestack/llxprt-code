@@ -147,14 +147,14 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
       setConnected((val) => val + 1);
     };
 
-    appEvents.on('mcp-servers-discovery-start', onStart);
-    appEvents.on('mcp-server-connected', onChange);
-    appEvents.on('mcp-server-error', onChange);
+    appEvents.on(AppEvent.McpServersDiscoveryStart, onStart);
+    appEvents.on(AppEvent.McpServerConnected, onChange);
+    appEvents.on(AppEvent.McpServerError, onChange);
 
     return () => {
-      appEvents.off('mcp-servers-discovery-start', onStart);
-      appEvents.off('mcp-server-connected', onChange);
-      appEvents.off('mcp-server-error', onChange);
+      appEvents.off(AppEvent.McpServersDiscoveryStart, onStart);
+      appEvents.off(AppEvent.McpServerConnected, onChange);
+      appEvents.off(AppEvent.McpServerError, onChange);
     };
   }, []);
 
@@ -1101,8 +1101,18 @@ export async function main() {
     settings,
   );
 
+  const hasDeprecatedPromptArg = process.argv.some((arg) =>
+    arg.startsWith('--prompt'),
+  );
+
   try {
-    await runNonInteractive(nonInteractiveConfig, settings, input, prompt_id);
+    await runNonInteractive({
+      config: nonInteractiveConfig,
+      settings,
+      input,
+      prompt_id,
+      hasDeprecatedPromptArg,
+    });
   } catch (error) {
     if (nonInteractiveConfig.getOutputFormat() === OutputFormat.JSON) {
       const formatter = new JsonFormatter();

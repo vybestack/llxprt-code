@@ -913,16 +913,70 @@ export class OAuthManager {
       );
 
       if (token.expiry <= thirtySecondsFromNow) {
-        // 3. Token is expired or about to expire, try refresh
+        // 3. Token is expired or about to expire, try refresh with locking
         logger.debug(
           () =>
-            `[FLOW] Token expired or expiring soon for ${providerName}, attempting refresh...`,
+            `[FLOW] Token expired or expiring soon for ${providerName}, attempting refresh with lock...`,
         );
+
+        // Issue #1159: Acquire lock before refreshing to prevent concurrent refreshes
+        const lockAcquired = await this.tokenStore.acquireRefreshLock(
+          providerName,
+          { waitMs: 10000, staleMs: 30000, bucket: bucketToUse },
+        );
+
+        if (!lockAcquired) {
+          logger.debug(
+            () =>
+              `[FLOW] Failed to acquire refresh lock for ${providerName}, checking disk...`,
+          );
+          // Lock timeout - check disk again in case another process refreshed
+          const reloadedToken = await this.tokenStore.getToken(
+            providerName,
+            bucketToUse,
+          );
+          if (reloadedToken && reloadedToken.expiry > thirtySecondsFromNow) {
+            logger.debug(
+              () =>
+                `[FLOW] Token was refreshed by another process for ${providerName}`,
+            );
+            this.scheduleProactiveRenewal(
+              providerName,
+              bucketToUse,
+              reloadedToken,
+            );
+            return reloadedToken;
+          }
+          // Still expired after lock timeout - return null
+          return null;
+        }
+
         try {
-          const refreshedToken = await provider.refreshToken(token);
+          // Issue #1159: Double-check pattern - re-read token after acquiring lock
+          const recheckToken = await this.tokenStore.getToken(
+            providerName,
+            bucketToUse,
+          );
+          if (recheckToken && recheckToken.expiry > thirtySecondsFromNow) {
+            logger.debug(
+              () =>
+                `[FLOW] Token was refreshed by another process while waiting for lock for ${providerName}`,
+            );
+            this.scheduleProactiveRenewal(
+              providerName,
+              bucketToUse,
+              recheckToken,
+            );
+            return recheckToken;
+          }
+
+          // Token is still expired, proceed with refresh
+          const refreshedToken = await provider.refreshToken(
+            recheckToken || token,
+          );
           if (refreshedToken) {
             const mergedToken = mergeRefreshedToken(
-              token as OAuthTokenWithExtras,
+              (recheckToken || token) as OAuthTokenWithExtras,
               refreshedToken as OAuthTokenWithExtras,
             );
             // 4. Update stored token if refreshed
@@ -955,6 +1009,9 @@ export class OAuthManager {
               `[FLOW] Token refresh FAILED for ${providerName}: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
           );
           return null;
+        } finally {
+          // Always release lock
+          await this.tokenStore.releaseRefreshLock(providerName, bucketToUse);
         }
       }
 
@@ -1131,28 +1188,78 @@ export class OAuthManager {
         return;
       }
 
-      const refreshedToken = await provider.refreshToken(currentToken);
-      if (!refreshedToken) {
+      // Issue #1159: Acquire lock before refreshing
+      const lockAcquired = await this.tokenStore.acquireRefreshLock(
+        providerName,
+        { waitMs: 10000, staleMs: 30000, bucket: normalizedBucket },
+      );
+
+      if (!lockAcquired) {
+        // Lock timeout - retry later
         this.scheduleProactiveRetry(providerName, normalizedBucket);
         return;
       }
 
-      const mergedToken = mergeRefreshedToken(
-        currentToken as OAuthTokenWithExtras,
-        refreshedToken as OAuthTokenWithExtras,
-      );
+      try {
+        // Issue #1159: Double-check pattern - re-read token after acquiring lock
+        const recheckToken = await this.tokenStore.getToken(
+          providerName,
+          normalizedBucket,
+        );
 
-      await this.tokenStore.saveToken(
-        providerName,
-        mergedToken,
-        normalizedBucket,
-      );
-      this.proactiveRenewalFailures.delete(key);
-      this.scheduleProactiveRenewal(
-        providerName,
-        normalizedBucket,
-        mergedToken,
-      );
+        if (!recheckToken || !recheckToken.refresh_token) {
+          this.clearProactiveRenewal(key);
+          return;
+        }
+
+        // Check if token is still expired/expiring
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        const thirtySecondsFromNow = nowInSeconds + 30;
+        if (recheckToken.expiry > thirtySecondsFromNow) {
+          // Token was already refreshed by another process
+          logger.debug(
+            () =>
+              `[OAUTH] Token was already refreshed for ${providerName}:${normalizedBucket}, rescheduling`,
+          );
+          this.proactiveRenewalFailures.delete(key);
+          this.scheduleProactiveRenewal(
+            providerName,
+            normalizedBucket,
+            recheckToken,
+          );
+          return;
+        }
+
+        // Proceed with refresh
+        const refreshedToken = await provider.refreshToken(recheckToken);
+        if (!refreshedToken) {
+          this.scheduleProactiveRetry(providerName, normalizedBucket);
+          return;
+        }
+
+        const mergedToken = mergeRefreshedToken(
+          recheckToken as OAuthTokenWithExtras,
+          refreshedToken as OAuthTokenWithExtras,
+        );
+
+        await this.tokenStore.saveToken(
+          providerName,
+          mergedToken,
+          normalizedBucket,
+        );
+        this.proactiveRenewalFailures.delete(key);
+        this.scheduleProactiveRenewal(
+          providerName,
+          normalizedBucket,
+          mergedToken,
+        );
+      } finally {
+        // Always release lock
+        await this.tokenStore.releaseRefreshLock(
+          providerName,
+          normalizedBucket,
+        );
+      }
     } finally {
       this.proactiveRenewalInFlight.delete(key);
     }
@@ -1380,8 +1487,9 @@ export class OAuthManager {
     try {
       // Import ProviderManager to access active providers
       // Use dynamic import to avoid circular dependencies
-      const { getCliProviderManager, getCliRuntimeContext } =
-        await import('../runtime/runtimeSettings.js');
+      const { getCliProviderManager, getCliRuntimeContext } = await import(
+        '../runtime/runtimeSettings.js'
+      );
       const providerManager = getCliProviderManager();
 
       // Get the provider instance to clear its auth cache
@@ -1569,8 +1677,9 @@ export class OAuthManager {
   private async getProfileBuckets(providerName: string): Promise<string[]> {
     try {
       // Try to get profile from runtime settings
-      const { getCliRuntimeServices } =
-        await import('../runtime/runtimeSettings.js');
+      const { getCliRuntimeServices } = await import(
+        '../runtime/runtimeSettings.js'
+      );
       const { settingsService } = getCliRuntimeServices();
 
       // Get current profile name
@@ -1621,12 +1730,14 @@ export class OAuthManager {
     providerName: string,
     buckets: string[],
   ): Promise<void> {
-    const { MultiBucketAuthenticator } =
-      await import('./MultiBucketAuthenticator.js');
+    const { MultiBucketAuthenticator } = await import(
+      './MultiBucketAuthenticator.js'
+    );
 
     // Get ephemeral settings for timing controls
-    const { getEphemeralSetting: getRuntimeEphemeralSetting } =
-      await import('../runtime/runtimeSettings.js');
+    const { getEphemeralSetting: getRuntimeEphemeralSetting } = await import(
+      '../runtime/runtimeSettings.js'
+    );
     const getEphemeralSetting = <T>(key: string): T | undefined =>
       getRuntimeEphemeralSetting(key) as T | undefined;
 

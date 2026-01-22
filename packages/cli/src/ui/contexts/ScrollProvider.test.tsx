@@ -5,11 +5,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { useRef, forwardRef, useImperativeHandle } from 'react';
+import {
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+  act,
+  type RefObject,
+} from 'react';
 import { render } from 'ink-testing-library';
 import { Box, type DOMElement } from 'ink';
-import type { RefObject } from 'react';
-import { act } from '@testing-library/react';
 import {
   ScrollProvider,
   useScrollable,

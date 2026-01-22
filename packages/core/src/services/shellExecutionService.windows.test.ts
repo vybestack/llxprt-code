@@ -56,31 +56,39 @@ describe.skipIf(process.platform !== 'win32')(
       vi.mocked(os.platform).mockReturnValue('win32');
     });
 
-    it('uses shell: true mode on Windows', async () => {
+    it('uses PowerShell without shell: true on Windows', async () => {
       ShellExecutionService.execute(
         'echo a & echo b',
         '.',
         () => {},
         makeAbortSignal(),
+        false,
       );
       expect(spawn).toHaveBeenCalledWith(
-        'echo a & echo b',
-        [],
-        expect.objectContaining({ shell: true }),
+        expect.stringMatching(/powershell\.exe$/i),
+        ['-NoProfile', '-Command', 'echo a & echo b'],
+        expect.objectContaining({
+          shell: false,
+          windowsVerbatimArguments: false,
+        }),
       );
     });
 
-    it('uses shell: true mode on Windows for simple commands', async () => {
+    it('uses PowerShell without shell: true on Windows for simple commands', async () => {
       ShellExecutionService.execute(
         'node -v',
         '.',
         () => {},
         makeAbortSignal(),
+        false,
       );
       expect(spawn).toHaveBeenCalledWith(
-        'node -v',
-        [],
-        expect.objectContaining({ shell: true }),
+        expect.stringMatching(/powershell\.exe$/i),
+        ['-NoProfile', '-Command', 'node -v'],
+        expect.objectContaining({
+          shell: false,
+          windowsVerbatimArguments: false,
+        }),
       );
     });
 
@@ -118,6 +126,7 @@ describe.skipIf(process.platform !== 'win32')(
         '.',
         () => {},
         makeAbortSignal(),
+        false,
       );
 
       // emit stderr data and exit 0

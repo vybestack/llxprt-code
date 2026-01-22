@@ -16,7 +16,6 @@ import type {
 } from '../types.js';
 import type {
   IdeContext,
-  IModel,
   ApprovalMode,
   AnyDeclarativeTool,
   ThoughtSummary,
@@ -64,7 +63,6 @@ export interface UIState {
   isAuthenticating: boolean;
   isEditorDialogOpen: boolean;
   isProviderDialogOpen: boolean;
-  isProviderModelDialogOpen: boolean;
   isLoadProfileDialogOpen: boolean;
   isCreateProfileDialogOpen: boolean;
   isProfileListDialogOpen: boolean;
@@ -78,11 +76,11 @@ export interface UIState {
   isPermissionsDialogOpen: boolean;
   isLoggingDialogOpen: boolean;
   isSubagentDialogOpen: boolean;
+  isModelsDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];
   selectedProvider: string;
-  providerModels: IModel[];
   currentModel: string;
   profiles: string[];
   toolsDialogAction: 'enable' | 'disable';
@@ -92,6 +90,20 @@ export interface UIState {
   loggingDialogData: { entries: unknown[] };
   subagentDialogInitialView?: SubagentView;
   subagentDialogInitialName?: string;
+  modelsDialogData?: {
+    initialSearch?: string;
+    initialFilters?: {
+      tools?: boolean;
+      vision?: boolean;
+      reasoning?: boolean;
+      audio?: boolean;
+    };
+    includeDeprecated?: boolean;
+    /** Override provider filter from --provider arg */
+    providerOverride?: string | null;
+    /** Show all providers (from --all flag) */
+    showAllProviders?: boolean;
+  };
 
   // Profile management dialog data
   profileListItems: Array<{
@@ -197,6 +209,9 @@ export interface UIState {
   // Debug
   debugMessage: string;
   showDebugProfiler: boolean;
+
+  // Copy mode
+  copyModeEnabled: boolean;
 
   // Footer height
   footerHeight: number;

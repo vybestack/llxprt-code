@@ -4,9 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderWithProviders } from '../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { waitFor } from '@testing-library/react';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 import React from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
@@ -13,6 +13,8 @@ import { useKeypress } from '../../hooks/useKeypress.js';
 import { PROVIDER_OPTIONS } from './constants.js';
 import { getStepPosition } from './utils.js';
 import type { WizardState } from './types.js';
+import { useRuntimeApi } from '../../contexts/RuntimeContext.js';
+import type { HydratedModel } from '@vybestack/llxprt-code-core';
 
 interface ModelSelectStepProps {
   state: WizardState;
@@ -75,12 +77,42 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
     }
   }, [customModelInput, onUpdateModel, onContinue]);
 
+  // Fetch models from provider via runtime API (hydrated with models.dev data)
+  const runtime = useRuntimeApi();
+  const [models, setModels] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadModels = async () => {
+      if (!state.config.provider) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const hydratedModels: HydratedModel[] =
+          await runtime.listAvailableModels(state.config.provider);
+        // Filter out deprecated models and extract IDs
+        const modelIds = hydratedModels
+          .filter((m) => m.metadata?.status !== 'deprecated')
+          .map((m) => m.id);
+        setModels(modelIds);
+      } catch {
+        // If fetching fails, allow manual entry
+        setModels([]);
+      }
+      setIsLoading(false);
+    };
+    loadModels();
+  }, [runtime, state.config.provider]);
+
+  const hasKnownModels = models.length > 0;
+
+  // Still need providerOption for label display
   const providerOption = PROVIDER_OPTIONS.find(
     (p) => p.value === state.config.provider,
   );
-
-  const models = providerOption?.knownModels || [];
-  const hasKnownModels = models.length > 0;
 
   // Build model list with "custom" option if provider has known models
   const modelItems = hasKnownModels
@@ -111,6 +143,19 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
 
   const { current, total } = getStepPosition(state);
 
+  // Show loading state while fetching models
+  if (isLoading) {
+    return (
+      <Box flexDirection="column">
+        <Text bold color={Colors.AccentCyan}>
+          Create New Profile - Step {current} of {total}
+        </Text>
+        <Text color={Colors.Foreground}> </Text>
+        <Text color={Colors.Gray}>Loading models...</Text>
+      </Box>
+    );
+  }
+
   return (
     <Box flexDirection="column">
       <Text bold color={Colors.AccentCyan}>
@@ -122,7 +167,7 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
       </Text>
       <Text color={Colors.Gray}>
         {focusedComponent === 'input'
-          ? 'Enter the model name exactly as it appears in your provider&apos;s documentation'
+          ? "Enter the model name exactly as it appears in your provider's documentation"
           : `Choose the AI model for ${providerOption?.label || state.config.provider}`}
       </Text>
       <Text color={Colors.Foreground}> </Text>
