@@ -594,7 +594,8 @@ function createOpenAIAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIProvider | null {
-  const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
+  const resolvedBaseUrl =
+    entry.config['base-url'] || entry.config.baseUrl || openaiBaseUrl;
   if (!resolvedBaseUrl) {
     console.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -667,7 +668,8 @@ function createOpenAIResponsesAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIResponsesProvider | null {
-  const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
+  const resolvedBaseUrl =
+    entry.config['base-url'] || entry.config.baseUrl || openaiBaseUrl;
   if (!resolvedBaseUrl) {
     console.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -745,7 +747,8 @@ function createOpenAIVercelAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIVercelProvider | null {
-  const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
+  const resolvedBaseUrl =
+    entry.config['base-url'] || entry.config.baseUrl || openaiBaseUrl;
   if (!resolvedBaseUrl) {
     console.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -823,7 +826,7 @@ function createGeminiAliasProvider(
     }
   }
 
-  const resolvedBaseUrl = entry.config.baseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] || entry.config.baseUrl;
 
   const provider = new GeminiProvider(
     aliasApiKey || undefined,
@@ -865,7 +868,7 @@ function createAnthropicAliasProvider(
     }
   }
 
-  const resolvedBaseUrl = entry.config.baseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] || entry.config.baseUrl;
 
   const providerConfig: IProviderConfig = {};
   if (entry.config.providerConfig) {

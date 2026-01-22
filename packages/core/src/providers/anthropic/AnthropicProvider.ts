@@ -597,6 +597,7 @@ export class AnthropicProvider extends BaseProvider {
         'apiKeyfile',
         'api-keyfile',
         'baseUrl',
+        'baseURL',
         'base-url',
         'model',
         'toolFormat',

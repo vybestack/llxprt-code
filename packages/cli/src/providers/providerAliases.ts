@@ -36,7 +36,10 @@ export interface StaticModelEntry {
 export interface ProviderAliasConfig {
   name?: string;
   baseProvider: string;
+  /** @deprecated Use 'base-url' for consistency with profiles */
   baseUrl?: string;
+  /** Base URL for the provider API (consistent with profile ephemeral settings) */
+  'base-url'?: string;
   defaultModel?: string;
   ephemeralSettings?: Record<string, unknown>;
   description?: string;
