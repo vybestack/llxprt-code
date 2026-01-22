@@ -15,52 +15,13 @@
  * Current behavior: Step 3-5 lose the thinking block somehow.
  * Debug logs show: blockTypes: ["text","tool_call"] (no thinking!)
  */
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { GeminiChat } from './geminiChat.js';
-import type {
-  IContent,
-  ThinkingBlock,
-  ToolCallBlock,
-} from '../services/history/IContent.js';
-import type { Part, Content, GenerateContentResponse } from '@google/genai';
-import type { HistoryService } from '../services/history/HistoryService.js';
-import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
-
-// Mock the history service to capture what gets added
-const mockHistoryAdd = vi.fn();
-const mockHistoryService = {
-  add: mockHistoryAdd,
-  getContents: vi.fn(() => []),
-  getCurated: vi.fn(() => []),
-  generateTurnKey: vi.fn(() => 'turn_test'),
-  getIdGeneratorCallback: vi.fn(() => (prefix: string) => `${prefix}_test`),
-  getPendingToolCalls: vi.fn(() => []),
-  clear: vi.fn(),
-} as unknown as HistoryService;
-
-// Mock runtime context
-const mockRuntimeContext = {
-  ephemerals: {
-    reasoning: {
-      includeInContext: vi.fn(() => true),
-      stripFromContext: vi.fn(() => 'none'),
-    },
-  },
-  tools: {
-    listToolNames: vi.fn(() => []),
-  },
-  providerRuntime: {
-    config: null,
-  },
-  metadata: {},
-} as unknown as ProviderRuntimeContext;
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+import type { IContent, ToolCallBlock } from '../services/history/IContent.js';
+import type { Part, GenerateContentResponse } from '@google/genai';
 
 describe('Issue #1150: GeminiChat thinking block integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRuntimeContext.ephemerals.reasoning.includeInContext = vi.fn(
-      () => true,
-    );
   });
 
   describe('convertIContentToResponse behavior', () => {
@@ -77,9 +38,11 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
             thought: 'Analyzing the problem...',
             sourceField: 'thinking',
             signature: 'EqoBCkYIAxgCIkAKHgoSdGhpbmtpbmdfY29udGVudA==',
-          } as ThinkingBlock,
+          },
         ],
       };
+
+      expect(thinkingIContent.speaker).toBe('ai');
 
       // Create a minimal GeminiChat instance to test convertIContentToResponse
       // We need to access the private method, so we'll test the behavior indirectly

@@ -369,5 +369,53 @@ export class ProfileManager {
       settingsService.set('tools.disabled', disabledList);
       settingsService.set('disabled-tools', disabledList);
     }
+
+    const reasoningSettings = profile.ephemeralSettings as unknown as Record<
+      string,
+      unknown
+    >;
+
+    if (reasoningSettings['reasoning.enabled'] !== undefined) {
+      settingsService.set(
+        'reasoning.enabled',
+        reasoningSettings['reasoning.enabled'],
+      );
+    }
+    if (reasoningSettings['reasoning.includeInContext'] !== undefined) {
+      settingsService.set(
+        'reasoning.includeInContext',
+        reasoningSettings['reasoning.includeInContext'],
+      );
+    }
+    if (reasoningSettings['reasoning.includeInResponse'] !== undefined) {
+      settingsService.set(
+        'reasoning.includeInResponse',
+        reasoningSettings['reasoning.includeInResponse'],
+      );
+    }
+    if (reasoningSettings['reasoning.format'] !== undefined) {
+      settingsService.set(
+        'reasoning.format',
+        reasoningSettings['reasoning.format'],
+      );
+    }
+    if (reasoningSettings['reasoning.stripFromContext'] !== undefined) {
+      settingsService.set(
+        'reasoning.stripFromContext',
+        reasoningSettings['reasoning.stripFromContext'],
+      );
+    }
+    if (reasoningSettings['reasoning.effort'] !== undefined) {
+      settingsService.set(
+        'reasoning.effort',
+        reasoningSettings['reasoning.effort'],
+      );
+    }
+    if (reasoningSettings['reasoning.maxTokens'] !== undefined) {
+      settingsService.set(
+        'reasoning.maxTokens',
+        reasoningSettings['reasoning.maxTokens'],
+      );
+    }
   }
 }

@@ -60,6 +60,16 @@ export function createAgentRuntimeContext(
 
   const history = options.history ?? new HistoryService();
 
+  const getReasoningSetting = <T>(
+    key: string,
+    snapshotValue: T | undefined,
+  ): T | undefined => {
+    if (snapshotValue !== undefined) {
+      return snapshotValue;
+    }
+    return options.providerRuntime.settingsService.get(key) as T | undefined;
+  };
+
   const ephemerals = {
     compressionThreshold: (): number =>
       options.settings.compressionThreshold ??
@@ -87,34 +97,44 @@ export function createAgentRuntimeContext(
      */
     reasoning: {
       enabled: (): boolean =>
-        options.settings['reasoning.enabled'] ??
-        EPHEMERAL_DEFAULTS.reasoning.enabled,
+        getReasoningSetting(
+          'reasoning.enabled',
+          options.settings['reasoning.enabled'],
+        ) ?? EPHEMERAL_DEFAULTS.reasoning.enabled,
       includeInContext: (): boolean =>
-        options.settings['reasoning.includeInContext'] ??
-        EPHEMERAL_DEFAULTS.reasoning.includeInContext,
+        getReasoningSetting(
+          'reasoning.includeInContext',
+          options.settings['reasoning.includeInContext'],
+        ) ?? EPHEMERAL_DEFAULTS.reasoning.includeInContext,
       includeInResponse: (): boolean =>
-        options.settings['reasoning.includeInResponse'] ??
-        EPHEMERAL_DEFAULTS.reasoning.includeInResponse,
+        getReasoningSetting(
+          'reasoning.includeInResponse',
+          options.settings['reasoning.includeInResponse'],
+        ) ?? EPHEMERAL_DEFAULTS.reasoning.includeInResponse,
       format: (): 'native' | 'field' =>
-        (options.settings['reasoning.format'] as 'native' | 'field') ??
+        (getReasoningSetting(
+          'reasoning.format',
+          options.settings['reasoning.format'],
+        ) as 'native' | 'field' | undefined) ??
         EPHEMERAL_DEFAULTS.reasoning.format,
       stripFromContext: (): 'all' | 'allButLast' | 'none' =>
-        (options.settings['reasoning.stripFromContext'] as
-          | 'all'
-          | 'allButLast'
-          | 'none') ?? EPHEMERAL_DEFAULTS.reasoning.stripFromContext,
+        (getReasoningSetting(
+          'reasoning.stripFromContext',
+          options.settings['reasoning.stripFromContext'],
+        ) as 'all' | 'allButLast' | 'none' | undefined) ??
+        EPHEMERAL_DEFAULTS.reasoning.stripFromContext,
       effort: (): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined =>
-        options.settings['reasoning.effort'] as
-          | 'minimal'
-          | 'low'
-          | 'medium'
-          | 'high'
-          | 'xhigh'
-          | undefined,
-      maxTokens: (): number | undefined =>
-        typeof options.settings['reasoning.maxTokens'] === 'number'
-          ? options.settings['reasoning.maxTokens']
-          : undefined,
+        getReasoningSetting(
+          'reasoning.effort',
+          options.settings['reasoning.effort'],
+        ) as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined,
+      maxTokens: (): number | undefined => {
+        const maxTokensValue = getReasoningSetting(
+          'reasoning.maxTokens',
+          options.settings['reasoning.maxTokens'],
+        );
+        return typeof maxTokensValue === 'number' ? maxTokensValue : undefined;
+      },
     },
   };
 

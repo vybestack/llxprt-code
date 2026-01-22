@@ -19,7 +19,7 @@
  *
  * The bug: Step 3-5 are losing the thinking blocks.
  */
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import type {
   IContent,
   ThinkingBlock,
@@ -344,20 +344,6 @@ describe('Issue #1150: Thinking blocks in history', () => {
             sourceField: 'thinking',
             signature: 'EqoBCkYIAxgCIkAKHgoSdGhpbmtpbmdfY29udGVudA==',
           } as ThinkingBlock,
-        ],
-      };
-
-      // Step 2: AnthropicProvider yields IContent with text + tool_call
-      const toolCallIContent: IContent = {
-        speaker: 'ai',
-        blocks: [
-          { type: 'text', text: 'I will help you.' },
-          {
-            type: 'tool_call',
-            id: 'toolu_test',
-            name: 'read_file',
-            parameters: { path: '/tmp/test.txt' },
-          } as ToolCallBlock,
         ],
       };
 

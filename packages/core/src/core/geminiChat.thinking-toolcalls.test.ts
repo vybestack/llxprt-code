@@ -898,9 +898,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       },
     ];
 
-    // This is what recordHistory receives
-    const modelOutput = [{ role: 'model', parts: consolidatedParts }];
-
     // The isThoughtPart check from geminiChat.ts:
     const isThoughtPart = (
       part: unknown,
@@ -909,19 +906,16 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       text?: string;
       thoughtSignature?: string;
       llxprtSourceField?: string;
-    } => {
-      return Boolean(
+    } =>
+      Boolean(
         part &&
         typeof part === 'object' &&
         'thought' in part &&
         (part as { thought: unknown }).thought === true,
       );
-    };
 
     // Extract thought parts like recordHistory does
-    const thoughtParts = modelOutput
-      .flatMap((content) => content.parts ?? [])
-      .filter(isThoughtPart);
+    const thoughtParts = consolidatedParts.filter(isThoughtPart);
 
     // THIS SHOULD FIND THE THINKING PART
     expect(thoughtParts.length).toBe(1);
@@ -1159,26 +1153,21 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       },
     ];
 
-    // This is what recordHistory receives as modelOutput
-    const modelOutput = [{ role: 'model', parts: simulatedParts }];
-
     // Now simulate what recordHistory does:
     // 1. Filter out thought parts from nonThoughtModelOutput
     // 2. Extract thoughtBlocks from parts with thought=true
     // 3. Attach thoughtBlocks to first output content
 
     // The isThoughtPart check:
-    const isThoughtPart = (part: unknown): boolean => {
-      return Boolean(
+    const isThoughtPart = (part: unknown): boolean =>
+      Boolean(
         part &&
         typeof part === 'object' &&
         'thought' in part &&
         (part as { thought: unknown }).thought === true,
       );
-    };
 
     const thoughtParts = simulatedParts.filter(isThoughtPart);
-    const nonThoughtParts = simulatedParts.filter((p) => !isThoughtPart(p));
 
     // recordHistory creates ThinkingBlocks from thought parts:
     const thoughtBlocks = thoughtParts.map((part) => ({

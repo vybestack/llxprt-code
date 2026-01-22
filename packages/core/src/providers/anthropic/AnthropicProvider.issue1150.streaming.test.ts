@@ -178,9 +178,8 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
    */
   const getAssistantMessages = (
     request: AnthropicRequestBody,
-  ): AnthropicMessage[] => {
-    return request.messages.filter((m) => m.role === 'assistant');
-  };
+  ): AnthropicMessage[] =>
+    request.messages.filter((m) => m.role === 'assistant');
 
   /**
    * Helper to check if a content block is thinking-related
@@ -592,10 +591,10 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
 
       // First block should be thinking with original signature
       const firstBlock = content[0];
-      expect(firstBlock.type).toBe('thinking');
-      if (firstBlock.type === 'thinking') {
-        expect(firstBlock.signature).toBe(originalSignature);
-      }
+      expect(firstBlock).toMatchObject({
+        type: 'thinking',
+        signature: originalSignature,
+      });
     });
   });
 });
