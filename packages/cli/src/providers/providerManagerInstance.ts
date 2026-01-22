@@ -665,6 +665,18 @@ function createOpenAIAliasProvider(
       configuredDefaultModel || originalGetDefaultModel();
   }
 
+  // Override getModels() to return static models if configured
+  // This avoids API calls for providers that don't have a /models endpoint
+  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
+    const staticModels = entry.config.staticModels.map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: entry.alias,
+      supportedToolFormats: ['openai'] as string[],
+    }));
+    provider.getModels = async () => staticModels;
+  }
+
   bindOpenAIAliasIdentity(provider, entry.alias);
 
   return provider;
@@ -734,6 +746,17 @@ function createOpenAIResponsesAliasProvider(
       configuredDefaultModel || originalGetDefaultModel();
   }
 
+  // Override getModels() to return static models if configured
+  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
+    const staticModels = entry.config.staticModels.map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: entry.alias,
+      supportedToolFormats: ['openai'] as string[],
+    }));
+    provider.getModels = async () => staticModels;
+  }
+
   return provider;
 }
 
@@ -791,6 +814,17 @@ function createOpenAIVercelAliasProvider(
     const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
     provider.getDefaultModel = () =>
       configuredDefaultModel || originalGetDefaultModel();
+  }
+
+  // Override getModels() to return static models if configured
+  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
+    const staticModels = entry.config.staticModels.map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: entry.alias,
+      supportedToolFormats: ['openai'] as string[],
+    }));
+    provider.getModels = async () => staticModels;
   }
 
   bindProviderAliasIdentity(provider, entry.alias);

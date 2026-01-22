@@ -28,6 +28,11 @@ const BUILTIN_ALIAS_DIR = fs.existsSync(BUNDLE_ALIAS_DIR)
 
 export type ProviderAliasSource = 'user' | 'builtin';
 
+export interface StaticModelEntry {
+  id: string;
+  name: string;
+}
+
 export interface ProviderAliasConfig {
   name?: string;
   baseProvider: string;
@@ -37,6 +42,12 @@ export interface ProviderAliasConfig {
   description?: string;
   providerConfig?: Record<string, unknown>;
   apiKeyEnv?: string;
+  /**
+   * Static list of models to return from getModels() instead of fetching from API.
+   * Use this for providers that don't have a /models endpoint or when you want
+   * to restrict the available models to a specific set.
+   */
+  staticModels?: StaticModelEntry[];
 }
 
 export interface ProviderAliasEntry {
