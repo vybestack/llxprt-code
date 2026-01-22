@@ -597,6 +597,7 @@ export class AnthropicProvider extends BaseProvider {
         'apiKeyfile',
         'api-keyfile',
         'baseUrl',
+        'baseURL',
         'base-url',
         'model',
         'toolFormat',
@@ -1397,10 +1398,39 @@ export class AnthropicProvider extends BaseProvider {
     // Use invocation ephemerals for provider-specific request overrides (top_k, temperature, etc.)
     // This maintains backward compatibility with the existing invocation context flow
     const configEphemeralSettings = options.invocation?.ephemerals ?? {};
-    const requestOverrides =
+    const rawOverrides =
       (configEphemeralSettings['anthropic'] as
         | Record<string, unknown>
         | undefined) ?? {};
+
+    // Filter out reserved keys that should not be passed to the API
+    const reservedOverrideKeys = new Set([
+      'enabled',
+      'apiKey',
+      'api-key',
+      'apiKeyfile',
+      'api-keyfile',
+      'baseUrl',
+      'baseURL',
+      'base-url',
+      'model',
+      'toolFormat',
+      'tool-format',
+      'toolFormatOverride',
+      'tool-format-override',
+      'defaultModel',
+      'prompt-caching',
+    ]);
+    const requestOverrides: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rawOverrides)) {
+      if (
+        !reservedOverrideKeys.has(key) &&
+        value !== undefined &&
+        value !== null
+      ) {
+        requestOverrides[key] = value;
+      }
+    }
 
     // Get caching setting from options.settings or provider settings
     const providerSettings =

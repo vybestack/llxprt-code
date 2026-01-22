@@ -594,7 +594,8 @@ function createOpenAIAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIProvider | null {
-  const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
+  const resolvedBaseUrl =
+    entry.config['base-url'] || entry.config.baseUrl || openaiBaseUrl;
   if (!resolvedBaseUrl) {
     console.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -643,6 +644,18 @@ function createOpenAIAliasProvider(
       configuredDefaultModel || originalGetDefaultModel();
   }
 
+  // Override getModels() to return static models if configured
+  // This avoids API calls for providers that don't have a /models endpoint
+  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
+    const staticModels = entry.config.staticModels.map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: entry.alias,
+      supportedToolFormats: ['openai'] as string[],
+    }));
+    provider.getModels = async () => staticModels;
+  }
+
   bindOpenAIAliasIdentity(provider, entry.alias);
 
   return provider;
@@ -655,7 +668,8 @@ function createOpenAIResponsesAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIResponsesProvider | null {
-  const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
+  const resolvedBaseUrl =
+    entry.config['base-url'] || entry.config.baseUrl || openaiBaseUrl;
   if (!resolvedBaseUrl) {
     console.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -712,6 +726,17 @@ function createOpenAIResponsesAliasProvider(
       configuredDefaultModel || originalGetDefaultModel();
   }
 
+  // Override getModels() to return static models if configured
+  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
+    const staticModels = entry.config.staticModels.map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: entry.alias,
+      supportedToolFormats: ['openai'] as string[],
+    }));
+    provider.getModels = async () => staticModels;
+  }
+
   return provider;
 }
 
@@ -722,7 +747,8 @@ function createOpenAIVercelAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIVercelProvider | null {
-  const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
+  const resolvedBaseUrl =
+    entry.config['base-url'] || entry.config.baseUrl || openaiBaseUrl;
   if (!resolvedBaseUrl) {
     console.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -771,6 +797,17 @@ function createOpenAIVercelAliasProvider(
       configuredDefaultModel || originalGetDefaultModel();
   }
 
+  // Override getModels() to return static models if configured
+  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
+    const staticModels = entry.config.staticModels.map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: entry.alias,
+      supportedToolFormats: ['openai'] as string[],
+    }));
+    provider.getModels = async () => staticModels;
+  }
+
   bindProviderAliasIdentity(provider, entry.alias);
 
   return provider;
@@ -789,7 +826,7 @@ function createGeminiAliasProvider(
     }
   }
 
-  const resolvedBaseUrl = entry.config.baseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] || entry.config.baseUrl;
 
   const provider = new GeminiProvider(
     aliasApiKey || undefined,
@@ -831,7 +868,7 @@ function createAnthropicAliasProvider(
     }
   }
 
-  const resolvedBaseUrl = entry.config.baseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] || entry.config.baseUrl;
 
   const providerConfig: IProviderConfig = {};
   if (entry.config.providerConfig) {

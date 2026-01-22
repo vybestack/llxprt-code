@@ -646,6 +646,7 @@ export class GeminiProvider extends BaseProvider {
         'apiKeyfile',
         'api-keyfile',
         'baseUrl',
+        'baseURL',
         'base-url',
         'model',
         'toolFormat',

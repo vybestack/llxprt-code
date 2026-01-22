@@ -29,17 +29,19 @@ describe('Codex provider alias', () => {
 
     expect(codexAlias).toBeDefined();
     expect(codexAlias?.config.baseProvider).toBe('openai-responses');
-    expect(codexAlias?.config.baseUrl).toBe(
+    // Config uses 'base-url' (kebab-case) for consistency with profiles
+    expect(codexAlias?.config['base-url']).toBe(
       'https://chatgpt.com/backend-api/codex',
     );
     expect(codexAlias?.config.defaultModel).toBe('gpt-5.2');
   });
 
-  it('should set baseURL to chatgpt.com/backend-api/codex', () => {
+  it('should set base-url to chatgpt.com/backend-api/codex', () => {
     const aliases = loadProviderAliasEntries();
     const codexAlias = aliases.find((a) => a.alias === 'codex');
 
-    expect(codexAlias?.config.baseUrl).toBe(
+    // Config uses 'base-url' (kebab-case) for consistency with profiles
+    expect(codexAlias?.config['base-url']).toBe(
       'https://chatgpt.com/backend-api/codex',
     );
   });

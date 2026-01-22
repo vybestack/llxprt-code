@@ -1903,6 +1903,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         'apiKeyfile',
         'api-keyfile',
         'baseUrl',
+        'baseURL',
         'base-url',
         'model',
         'toolFormat',
