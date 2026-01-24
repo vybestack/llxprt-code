@@ -198,18 +198,12 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
 
       if (useKitty) {
         vi.advanceTimersByTime(60); // wait for kitty timeout
-        expect(onKeypress).toHaveBeenCalledExactlyOnceWith(
-          expect.objectContaining({ sequence: '\x1B[200do' }),
-        );
-      } else {
-        expect(onKeypress).toHaveBeenCalledWith(
-          expect.objectContaining({ sequence: '\x1B[200d' }),
-        );
-        expect(onKeypress).toHaveBeenCalledWith(
-          expect.objectContaining({ sequence: 'o' }),
-        );
-        expect(onKeypress).toHaveBeenCalledTimes(2);
       }
+
+      const sequences = onKeypress.mock.calls.map(([arg]) => arg.sequence);
+
+      const expectedSequences = useKitty ? ['\x1B[200do'] : ['\x1B[200d', 'o'];
+      expect(sequences).toEqual(expectedSequences);
     });
 
     it('should handle back to back pastes', () => {

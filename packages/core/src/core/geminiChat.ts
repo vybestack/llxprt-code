@@ -1026,10 +1026,12 @@ export class GeminiChat {
         if (usageMetadata?.promptTokenCount !== undefined) {
           const cacheReads = usageMetadata.cache_read_input_tokens || 0;
           const cacheWrites = usageMetadata.cache_creation_input_tokens || 0;
-          this.historyService.syncTotalTokens(
-            usageMetadata.promptTokenCount + cacheReads + cacheWrites,
-          );
-          await this.historyService.waitForTokenUpdates();
+          const combinedTokenCount =
+            usageMetadata.promptTokenCount + cacheReads + cacheWrites;
+          if (combinedTokenCount > 0) {
+            this.historyService.syncTotalTokens(combinedTokenCount);
+            await this.historyService.waitForTokenUpdates();
+          }
         } else {
           const usage = (
             response.data as { metadata?: { usage?: unknown } } | undefined
@@ -1041,14 +1043,10 @@ export class GeminiChat {
             | undefined;
           const cacheReads = usage?.cache_read_input_tokens || 0;
           const cacheWrites = usage?.cache_creation_input_tokens || 0;
-          if (
-            this.lastPromptTokenCount !== null ||
-            cacheReads > 0 ||
-            cacheWrites > 0
-          ) {
-            this.historyService.syncTotalTokens(
-              (this.lastPromptTokenCount ?? 0) + cacheReads + cacheWrites,
-            );
+          const combinedTokenCount =
+            (this.lastPromptTokenCount ?? 0) + cacheReads + cacheWrites;
+          if (combinedTokenCount > 0) {
+            this.historyService.syncTotalTokens(combinedTokenCount);
             await this.historyService.waitForTokenUpdates();
           }
         }
@@ -2522,19 +2520,23 @@ export class GeminiChat {
     // Sync token counts AFTER recording history to replace estimated tokens with actual API prompt tokens
     // Use explicit check for undefined to allow 0 values
     if (actualPromptTokens !== null && actualPromptTokens !== undefined) {
-      this.logger.debug(
-        () =>
-          `[GeminiChat] Syncing prompt token count to HistoryService: ${actualPromptTokens}`,
-      );
-      this.historyService.syncTotalTokens(actualPromptTokens);
-      await this.historyService.waitForTokenUpdates();
+      if (actualPromptTokens > 0) {
+        this.logger.debug(
+          () =>
+            `[GeminiChat] Syncing prompt token count to HistoryService: ${actualPromptTokens}`,
+        );
+        this.historyService.syncTotalTokens(actualPromptTokens);
+        await this.historyService.waitForTokenUpdates();
+      }
     } else if (this.lastPromptTokenCount !== null) {
-      this.logger.debug(
-        () =>
-          `[GeminiChat] Syncing prompt token count to HistoryService: ${this.lastPromptTokenCount}`,
-      );
-      this.historyService.syncTotalTokens(this.lastPromptTokenCount);
-      await this.historyService.waitForTokenUpdates();
+      if (this.lastPromptTokenCount > 0) {
+        this.logger.debug(
+          () =>
+            `[GeminiChat] Syncing prompt token count to HistoryService: ${this.lastPromptTokenCount}`,
+        );
+        this.historyService.syncTotalTokens(this.lastPromptTokenCount);
+        await this.historyService.waitForTokenUpdates();
+      }
     } else {
       this.logger.debug(
         () =>
