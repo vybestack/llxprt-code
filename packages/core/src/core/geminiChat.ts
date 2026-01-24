@@ -69,6 +69,11 @@ export type StreamEvent =
   | { type: StreamEventType.CHUNK; value: GenerateContentResponse }
   | { type: StreamEventType.RETRY };
 
+type UsageMetadataWithCache = GenerateContentResponseUsageMetadata & {
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+};
+
 /**
  * Aggregates text from content blocks while preserving spacing around non-text blocks.
  * When thinking blocks (or other non-text blocks) appear between text chunks, this ensures
@@ -406,7 +411,7 @@ export class EmptyStreamError extends Error {
  * The session maintains all the turns between user and model.
  */
 export class GeminiChat {
-  private static readonly TOKEN_SAFETY_MARGIN = 256;
+  private static readonly TOKEN_SAFETY_MARGIN = 1000;
   private static readonly DEFAULT_COMPLETION_BUDGET = 65_536;
   // A promise to represent the current state of the message being sent to the
   // model.
@@ -416,7 +421,7 @@ export class GeminiChat {
   private logger = new DebugLogger('llxprt:gemini:chat');
   // Cache the compression threshold to avoid recalculating
   private cachedCompressionThreshold: number | null = null;
-  private lastPromptTokenCount = 0;
+  private lastPromptTokenCount: number | null = null;
   private readonly generationConfig: GenerateContentConfig;
 
   /**
@@ -433,7 +438,7 @@ export class GeminiChat {
    * Gets the last prompt token count.
    */
   getLastPromptTokenCount(): number {
-    return this.lastPromptTokenCount;
+    return this.lastPromptTokenCount ?? 0;
   }
 
   /**
@@ -692,6 +697,10 @@ export class GeminiChat {
   ): Promise<GenerateContentResponse> {
     await this.sendPromise;
 
+    // Reset lastPromptTokenCount at the start of each send call to avoid leaking
+    // previous values across different API calls
+    this.lastPromptTokenCount = null;
+
     const userContent = normalizeToolInteractionInput(params.message);
 
     const userIContents: IContent[] = Array.isArray(userContent)
@@ -861,6 +870,22 @@ export class GeminiChat {
         // Collect all chunks from the stream
         let lastResponse: IContent | undefined;
         for await (const iContent of streamResponse) {
+          // Track prompt token count from provider usage metadata when available
+          const promptTokens = iContent.metadata?.usage?.promptTokens;
+          if (promptTokens !== undefined) {
+            const cacheReads =
+              iContent.metadata?.usage?.cache_read_input_tokens || 0;
+            const cacheWrites =
+              iContent.metadata?.usage?.cache_creation_input_tokens || 0;
+            const combinedPromptTokens =
+              promptTokens + cacheReads + cacheWrites;
+            this.logger.debug(
+              () =>
+                `[GeminiChat] Tracking promptTokens from IContent (non-streaming): ${combinedPromptTokens}`,
+            );
+            this.lastPromptTokenCount = combinedPromptTokens;
+          }
+
           lastResponse = iContent;
         }
 
@@ -993,6 +1018,41 @@ export class GeminiChat {
           }
         }
         // If no candidates at all, don't add anything (error case)
+
+        // Sync token counts AFTER recording history to replace estimated tokens with actual API counts
+        await this.historyService.waitForTokenUpdates();
+        const usageMetadata = response.usageMetadata as
+          | UsageMetadataWithCache
+          | undefined;
+        if (usageMetadata?.promptTokenCount !== undefined) {
+          const cacheReads = usageMetadata.cache_read_input_tokens || 0;
+          const cacheWrites = usageMetadata.cache_creation_input_tokens || 0;
+          this.historyService.syncTotalTokens(
+            usageMetadata.promptTokenCount + cacheReads + cacheWrites,
+          );
+          await this.historyService.waitForTokenUpdates();
+        } else {
+          const usage = (
+            response.data as { metadata?: { usage?: unknown } } | undefined
+          )?.metadata?.usage as
+            | {
+                cache_read_input_tokens?: number;
+                cache_creation_input_tokens?: number;
+              }
+            | undefined;
+          const cacheReads = usage?.cache_read_input_tokens || 0;
+          const cacheWrites = usage?.cache_creation_input_tokens || 0;
+          if (
+            this.lastPromptTokenCount !== null ||
+            cacheReads > 0 ||
+            cacheWrites > 0
+          ) {
+            this.historyService.syncTotalTokens(
+              (this.lastPromptTokenCount ?? 0) + cacheReads + cacheWrites,
+            );
+            await this.historyService.waitForTokenUpdates();
+          }
+        }
       })();
       await this.sendPromise.catch(() => {
         // Resets sendPromise to avoid subsequent calls failing
@@ -1066,6 +1126,10 @@ export class GeminiChat {
         `DEBUG: GeminiChat.sendMessageStream params.message: ${JSON.stringify(params.message, null, 2)}`,
     );
     await this.sendPromise;
+
+    // Reset lastPromptTokenCount at the start of each stream call to avoid leaking
+    // previous values across different API calls
+    this.lastPromptTokenCount = null;
 
     // Normalize tool interaction input - handles flattened arrays from UI
     const userContent: Content | Content[] = normalizeToolInteractionInput(
@@ -1488,8 +1552,26 @@ export class GeminiChat {
       } as GenerateChatOptions);
 
       // Convert the IContent stream to GenerateContentResponse stream
+      // Also track usage metadata from IContent format for token sync
       return (async function* (instance) {
         for await (const iContent of streamResponse) {
+          // Track token counts from IContent metadata (Anthropic/OpenAI format)
+          // before conversion to Gemini format
+          // Include cached prompt tokens to reflect full context size
+          const promptTokens = iContent.metadata?.usage?.promptTokens;
+          if (promptTokens !== undefined) {
+            const cacheReads =
+              iContent.metadata?.usage?.cache_read_input_tokens || 0;
+            const cacheWrites =
+              iContent.metadata?.usage?.cache_creation_input_tokens || 0;
+            const combinedPromptTokens =
+              promptTokens + cacheReads + cacheWrites;
+            instance.logger.debug(
+              () =>
+                `[GeminiChat] Tracking promptTokens from IContent: ${combinedPromptTokens}`,
+            );
+            instance.lastPromptTokenCount = combinedPromptTokens;
+          }
           yield instance.convertIContentToResponse(iContent);
         }
       })(this);
@@ -1692,14 +1774,21 @@ export class GeminiChat {
       });
     }
 
-    const currentTokens =
-      this.getEffectiveTokenCount() + Math.max(0, pendingTokens);
+    // Use lastPromptTokenCount (actual API data) when available, else fall back to estimate
+    const baseTokenCount =
+      this.lastPromptTokenCount !== null && this.lastPromptTokenCount > 0
+        ? this.lastPromptTokenCount
+        : this.getEffectiveTokenCount();
+
+    const currentTokens = baseTokenCount + Math.max(0, pendingTokens);
     const shouldCompress = currentTokens >= this.cachedCompressionThreshold;
 
     if (shouldCompress) {
       this.logger.debug('Compression needed:', {
         currentTokens,
         threshold: this.cachedCompressionThreshold,
+        usingActualApiCount:
+          this.lastPromptTokenCount !== null && this.lastPromptTokenCount > 0,
       });
     }
 
@@ -1961,9 +2050,16 @@ export class GeminiChat {
       this.logger.error('Compression failed:', error);
       throw error;
     } finally {
-      // Always unlock
+      // Always unlock - this flushes pendingOperations which includes
+      // all the add() calls from applyCompression()
       this.historyService.endCompression();
     }
+
+    // Wait for token estimates to complete AFTER endCompression() has
+    // flushed the pending operations. The add() calls during compression
+    // were queued to pendingOperations, not tokenizerLock, so we must
+    // wait after they're flushed.
+    await this.historyService.waitForTokenUpdates();
   }
 
   /**
@@ -2321,7 +2417,9 @@ export class GeminiChat {
       }
 
       // Record token usage if this chunk has usageMetadata
+      // Prefer promptTokenCount to align history counts with context size
       if (chunk.usageMetadata) {
+        // Use explicit check for undefined to allow 0 values
         if (chunk.usageMetadata.promptTokenCount !== undefined) {
           this.lastPromptTokenCount = chunk.usageMetadata.promptTokenCount;
           uiTelemetryService.setLastPromptTokenCount(
@@ -2393,6 +2491,7 @@ export class GeminiChat {
 
     // Capture usage metadata from the stream
     let streamingUsageMetadata: UsageStats | null = null;
+    let actualPromptTokens: number | null = null;
     // Find the last chunk that has usage metadata (similar to getLastChunkWithMetadata logic)
     const lastChunkWithMetadata = allChunks
       .slice()
@@ -2405,14 +2504,47 @@ export class GeminiChat {
           lastChunkWithMetadata.usageMetadata.candidatesTokenCount || 0,
         totalTokens: lastChunkWithMetadata.usageMetadata.totalTokenCount || 0,
       };
+      const usageMetadata =
+        lastChunkWithMetadata.usageMetadata as UsageMetadataWithCache;
+      const cacheReads = usageMetadata.cache_read_input_tokens || 0;
+      const cacheWrites = usageMetadata.cache_creation_input_tokens || 0;
+      actualPromptTokens =
+        streamingUsageMetadata.promptTokens + cacheReads + cacheWrites;
     }
 
+    // Record history first (adds estimated tokens)
     this.recordHistory(
       userInput,
       modelOutput,
       undefined,
       streamingUsageMetadata,
     );
+
+    // Ensure token estimation updates are complete before syncing to actual API prompt tokens.
+    await this.historyService.waitForTokenUpdates();
+
+    // Sync token counts AFTER recording history to replace estimated tokens with actual API prompt tokens
+    // Use explicit check for undefined to allow 0 values
+    if (actualPromptTokens !== null && actualPromptTokens !== undefined) {
+      this.logger.debug(
+        () =>
+          `[GeminiChat] Syncing prompt token count to HistoryService: ${actualPromptTokens}`,
+      );
+      this.historyService.syncTotalTokens(actualPromptTokens);
+      await this.historyService.waitForTokenUpdates();
+    } else if (this.lastPromptTokenCount !== null) {
+      this.logger.debug(
+        () =>
+          `[GeminiChat] Syncing prompt token count to HistoryService: ${this.lastPromptTokenCount}`,
+      );
+      this.historyService.syncTotalTokens(this.lastPromptTokenCount);
+      await this.historyService.waitForTokenUpdates();
+    } else {
+      this.logger.debug(
+        () =>
+          `[GeminiChat] No token count to sync (lastPromptTokenCount: ${this.lastPromptTokenCount})`,
+      );
+    }
   }
 
   /**
@@ -2778,11 +2910,16 @@ export class GeminiChat {
 
     // Add usage metadata if present
     if (input.metadata?.usage) {
-      response.usageMetadata = {
+      const usageMetadata: UsageMetadataWithCache = {
         promptTokenCount: input.metadata.usage.promptTokens || 0,
         candidatesTokenCount: input.metadata.usage.completionTokens || 0,
         totalTokenCount: input.metadata.usage.totalTokens || 0,
+        cache_read_input_tokens:
+          input.metadata.usage.cache_read_input_tokens || 0,
+        cache_creation_input_tokens:
+          input.metadata.usage.cache_creation_input_tokens || 0,
       };
+      response.usageMetadata = usageMetadata;
     }
 
     return response;
