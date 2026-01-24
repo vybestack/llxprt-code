@@ -4,11 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  CompressionStatus,
-  type ChatCompressionInfo,
-  GeminiClient,
-} from '@vybestack/llxprt-code-core';
+import { CompressionStatus, GeminiClient } from '@vybestack/llxprt-code-core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { compressCommand } from './compressCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -16,16 +12,21 @@ import { MessageType } from '../types.js';
 
 describe('compressCommand', () => {
   let context: ReturnType<typeof createMockCommandContext>;
-  let mockTryCompressChat: ReturnType<typeof vi.fn>;
+  let mockPerformCompression: ReturnType<typeof vi.fn>;
+  let mockGetHistoryService: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    mockTryCompressChat = vi.fn();
+    mockPerformCompression = vi.fn();
+    mockGetHistoryService = vi.fn();
     context = createMockCommandContext({
       services: {
         config: {
           getGeminiClient: () =>
             ({
-              tryCompressChat: mockTryCompressChat,
+              getChat: () => ({
+                performCompression: mockPerformCompression,
+                getHistoryService: mockGetHistoryService,
+              }),
             }) as unknown as GeminiClient,
         },
       },
@@ -51,16 +52,15 @@ describe('compressCommand', () => {
       expect.any(Number),
     );
     expect(context.ui.setPendingItem).not.toHaveBeenCalled();
-    expect(mockTryCompressChat).not.toHaveBeenCalled();
+    expect(mockPerformCompression).not.toHaveBeenCalled();
   });
 
-  it('should set pending item, call tryCompressChat, and add result on success', async () => {
-    const compressedResult: ChatCompressionInfo = {
-      originalTokenCount: 200,
-      compressionStatus: CompressionStatus.COMPRESSED,
-      newTokenCount: 100,
+  it('should set pending item, call performCompression, and add result on success', async () => {
+    const mockHistoryService = {
+      getTotalTokens: vi.fn().mockReturnValueOnce(200).mockReturnValueOnce(100),
     };
-    mockTryCompressChat.mockResolvedValue(compressedResult);
+    mockGetHistoryService.mockReturnValue(mockHistoryService);
+    mockPerformCompression.mockResolvedValue(undefined);
 
     await compressCommand.action!(context, '');
 
@@ -74,9 +74,8 @@ describe('compressCommand', () => {
       },
     });
 
-    expect(mockTryCompressChat).toHaveBeenCalledWith(
+    expect(mockPerformCompression).toHaveBeenCalledWith(
       expect.stringMatching(/^compress-\d+$/),
-      true,
     );
 
     expect(context.ui.addItem).toHaveBeenCalledWith(
@@ -95,24 +94,9 @@ describe('compressCommand', () => {
     expect(context.ui.setPendingItem).toHaveBeenNthCalledWith(2, null);
   });
 
-  it('should add an error message if tryCompressChat returns falsy', async () => {
-    mockTryCompressChat.mockResolvedValue(null);
-
-    await compressCommand.action!(context, '');
-
-    expect(context.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.ERROR,
-        text: 'Failed to compress chat history.',
-      }),
-      expect.any(Number),
-    );
-    expect(context.ui.setPendingItem).toHaveBeenCalledWith(null);
-  });
-
-  it('should add an error message if tryCompressChat throws', async () => {
+  it('should add an error message if performCompression throws', async () => {
     const error = new Error('Compression failed');
-    mockTryCompressChat.mockRejectedValue(error);
+    mockPerformCompression.mockRejectedValue(error);
 
     await compressCommand.action!(context, '');
 
@@ -127,7 +111,7 @@ describe('compressCommand', () => {
   });
 
   it('should clear the pending item in a finally block', async () => {
-    mockTryCompressChat.mockRejectedValue(new Error('some error'));
+    mockPerformCompression.mockRejectedValue(new Error('some error'));
     await compressCommand.action!(context, '');
     expect(context.ui.setPendingItem).toHaveBeenCalledWith(null);
   });

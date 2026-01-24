@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CompressionStatus } from '@vybestack/llxprt-code-core';
 import { HistoryItemCompression, MessageType } from '../types.js';
 import { CommandKind, SlashCommand } from './types.js';
 
@@ -38,31 +39,23 @@ export const compressCommand: SlashCommand = {
     try {
       ui.setPendingItem(pendingMessage);
       const promptId = `compress-${Date.now()}`;
-      const compressed = await context.services.config
-        ?.getGeminiClient()
-        ?.tryCompressChat(promptId, true);
-      if (compressed) {
-        ui.addItem(
-          {
-            type: MessageType.COMPRESSION,
-            compression: {
-              isPending: false,
-              originalTokenCount: compressed.originalTokenCount,
-              newTokenCount: compressed.newTokenCount,
-              compressionStatus: compressed.compressionStatus,
-            },
-          } as HistoryItemCompression,
-          Date.now(),
-        );
-      } else {
-        ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: 'Failed to compress chat history.',
+      const chat = context.services.config?.getGeminiClient()?.getChat();
+      const historyService = chat?.getHistoryService();
+      const originalTokenCount = historyService?.getTotalTokens() ?? 0;
+      await chat?.performCompression(promptId);
+      const newTokenCount = historyService?.getTotalTokens() ?? 0;
+      ui.addItem(
+        {
+          type: MessageType.COMPRESSION,
+          compression: {
+            isPending: false,
+            originalTokenCount,
+            newTokenCount,
+            compressionStatus: CompressionStatus.COMPRESSED,
           },
-          Date.now(),
-        );
-      }
+        } as HistoryItemCompression,
+        Date.now(),
+      );
     } catch (e) {
       ui.addItem(
         {

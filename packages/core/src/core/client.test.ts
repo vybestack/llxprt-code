@@ -233,6 +233,39 @@ describe('findCompressSplitPoint', () => {
     ];
     expect(findCompressSplitPoint(historyWithEmptyParts, 0.5)).toBe(2);
   });
+
+  it('should fall back to tool call split when no user splits exist', () => {
+    const history: Content[] = [
+      { role: 'model', parts: [{ functionCall: { name: 'toolA' } }] },
+      {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              name: 'toolA',
+              response: { ok: true },
+              id: 'toolA',
+            },
+          },
+        ],
+      },
+      { role: 'model', parts: [{ functionCall: { name: 'toolB' } }] },
+      {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              name: 'toolB',
+              response: { ok: true },
+              id: 'toolB',
+            },
+          },
+        ],
+      },
+    ];
+
+    expect(findCompressSplitPoint(history, 0.6)).toBe(2);
+  });
 });
 
 describe('Gemini Client (client.ts)', () => {
