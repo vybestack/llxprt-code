@@ -99,9 +99,6 @@ describe('SimpleExtensionLoader', () => {
           expectedStopCalls,
         );
 
-        const expectedStartCalls = reloadingEnabled ? 1 : 0;
-        const expectedStopCalls = reloadingEnabled ? 1 : 0;
-
         const actualStartCalls = mockMcpClientManager.startExtension.mock.calls;
         const actualStopCalls = mockMcpClientManager.stopExtension.mock.calls;
 
