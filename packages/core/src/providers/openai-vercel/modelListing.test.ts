@@ -4,10 +4,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 
 describe('OpenAIVercelProvider - Model Listing', () => {
+  const apiModels = [
+    { id: 'gpt-3.5-turbo', context_window: 16385, name: 'GPT-3.5 Turbo' },
+    { id: 'gpt-4', context_window: 8192, name: 'GPT-4' },
+    { id: 'gpt-4-turbo', context_window: 128000, name: 'GPT-4 Turbo' },
+    { id: 'gpt-4o', context_window: 128000, name: 'GPT-4o' },
+    { id: 'gpt-4o-mini', context_window: 128000, name: 'GPT-4o Mini' },
+    { id: 'o1-mini', context_window: 128000, name: 'o1-mini' },
+    { id: 'o1-preview', context_window: 128000, name: 'o1-preview' },
+  ];
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ data: apiModels }), { status: 200 }),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('returns the expected static model list with provider metadata', async () => {
     const provider = new OpenAIVercelProvider('test-api-key');
 
@@ -32,7 +56,6 @@ describe('OpenAIVercelProvider - Model Listing', () => {
       expect(found?.supportedToolFormats).toEqual(['openai']);
     }
 
-    // Ensure all required IDs are present
     expect(modelIds).toEqual(
       expect.arrayContaining(expectedModels.map((m) => m.id)),
     );
