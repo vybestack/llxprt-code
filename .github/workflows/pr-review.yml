@@ -409,7 +409,7 @@ jobs:
           initial_prompt="You are reviewing PR #${PR_NUMBER}. Start by reading review/instructions.md for your mission and review/context.md for PR details. Use file tools to explore the changes incrementally. Write your final verdict to review/verdict.md."
 
           set +e
-          # Agentic mode: pass instruction as positional argument, agent explores files with tools
+          # Agentic mode: use --prompt flag to pass initial instruction
           # Use --baseurl CLI flag instead of --set base-url to ensure proper timing
           llxprt \
             --provider "${LLXPRT_DEFAULT_PROVIDER}" \
@@ -421,7 +421,7 @@ jobs:
             --set modelparam.max_tokens=16000 \
             --set context-limit="${context_limit}" \
             --set shell-replacement=false \
-            "${initial_prompt}" 2>&1 | tee "${llxprt_log}"
+            --prompt "${initial_prompt}" 2>&1 | tee "${llxprt_log}"
           llxprt_status=${PIPESTATUS[0]}
           set -e
 
