@@ -28,35 +28,10 @@ import {
 } from '../../runtime/providerRuntimeContext.js';
 
 // Anthropic SDK types for thinking
-type AnthropicContentBlock =
-  | { type: 'text'; text: string }
-  | {
-      type: 'thinking';
-      thinking: string;
-      signature: string;
-    }
-  | {
-      type: 'tool_use';
-      id: string;
-      name: string;
-      input: unknown;
-    };
-
-interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: string | AnthropicContentBlock[];
-}
-
-interface AnthropicRequestBody {
-  model: string;
-  messages: AnthropicMessage[];
-  max_tokens: number;
-  stream?: boolean;
-  thinking?: {
-    type: 'enabled';
-    budget_tokens: number;
-  };
-}
+import type {
+  AnthropicContentBlock,
+  AnthropicRequestBody,
+} from './test-utils/anthropicTestUtils.js';
 
 // Mock the prompts module
 vi.mock('../../core/prompts.js', () => ({
@@ -881,6 +856,8 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
 
     it('should respect reasoning.includeInContext false', async () => {
       settingsService.set('reasoning.includeInContext', false);
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.stripFromContext', 'none');
 
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'response' }],
@@ -928,7 +905,8 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       ).some((block) => block.type === 'thinking');
       expect(hasThinking).toBe(false);
 
-      expect(request.thinking).toBeUndefined();
+      // Should still enable thinking in request since reasoning is enabled
+      expect(request.thinking).toBeDefined();
     });
 
     it('should handle thinking blocks round-trip in conversation history', async () => {
@@ -1093,8 +1071,9 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(hasThinking).toBe(true);
     });
 
-    it('should handle orphaned thinking blocks separated by tool results', async () => {
+    it('should not attach orphaned thinking across intervening messages', async () => {
       // Simulate streaming scenario where thinking and tool calls are in separate IContent items
+      // with a human message in between. These should NOT be merged into later tool calls.
       const messages: IContent[] = [
         {
           speaker: 'human',
@@ -1112,7 +1091,12 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
             } as ThinkingBlock,
           ],
         },
-        // Tool call arrives separately
+        // Interruption keeps thinking orphaned
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Please continue' }],
+        },
+        // Tool calls arrive separately
         {
           speaker: 'ai',
           blocks: [
@@ -1125,6 +1109,17 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
           ],
         },
         {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_003',
+              name: 'do_something_else',
+              parameters: {},
+            },
+          ],
+        },
+        {
           speaker: 'tool',
           blocks: [
             {
@@ -1132,6 +1127,17 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
               callId: 'hist_tool_002',
               toolName: 'do_something',
               result: 'Done',
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'hist_tool_003',
+              toolName: 'do_something_else',
+              result: 'Done again',
             },
           ],
         },
@@ -1161,9 +1167,30 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
 
-      // Thinking should still be enabled (orphaned block was found and merged)
-      expect(request.thinking).toBeDefined();
-      expect(request.thinking?.type).toBe('enabled');
+      const assistantMessages = request.messages.filter(
+        (m) =>
+          m.role === 'assistant' &&
+          Array.isArray(m.content) &&
+          m.content.some((block) => block.type === 'tool_use'),
+      );
+      expect(assistantMessages).toHaveLength(2);
+
+      const firstContent = assistantMessages[0]
+        .content as AnthropicContentBlock[];
+      const secondContent = assistantMessages[1]
+        .content as AnthropicContentBlock[];
+
+      const firstHasThinking = firstContent.some(
+        (block) =>
+          block.type === 'thinking' || block.type === 'redacted_thinking',
+      );
+      const secondHasThinking = secondContent.some(
+        (block) =>
+          block.type === 'thinking' || block.type === 'redacted_thinking',
+      );
+
+      expect(firstHasThinking).toBe(false);
+      expect(secondHasThinking).toBe(false);
     });
 
     it('should keep thinking enabled even when no thinking blocks exist for tool calls', async () => {
@@ -1227,14 +1254,14 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const messages: IContent[] = [
         {
           speaker: 'human',
-          blocks: [{ type: 'text', text: 'Question' }],
+          blocks: [{ type: 'text', text: 'First question' }],
         },
         {
           speaker: 'ai',
           blocks: [
             {
               type: 'thinking',
-              thought: 'Reasoning',
+              thought: 'Thinking about it',
               sourceField: 'thinking',
               signature: 'sig-merge',
             } as ThinkingBlock,
@@ -1264,6 +1291,13 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         type: 'thinking',
         signature: 'sig-merge',
       });
+
+      const thinkingBlocks = assistantMessages.flatMap((message) =>
+        (message.content as AnthropicContentBlock[]).filter(
+          (block) => block.type === 'thinking',
+        ),
+      );
+      expect(thinkingBlocks).toHaveLength(1);
     });
 
     it('should find orphaned thinking up to 3 messages back', async () => {
@@ -1343,9 +1377,16 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
 
-      // Thinking should still be enabled (found orphaned block within lookback window)
-      expect(request.thinking).toBeDefined();
-      expect(request.thinking?.type).toBe('enabled');
+      const assistantMsg = request.messages.find(
+        (m) => m.role === 'assistant' && Array.isArray(m.content),
+      );
+      expect(assistantMsg).toBeDefined();
+
+      const content = assistantMsg?.content as AnthropicContentBlock[];
+      expect(content?.[0]).toMatchObject({
+        type: 'thinking',
+        signature: 'sig1',
+      });
     });
   });
 });

@@ -19,40 +19,7 @@ import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../runtime/providerRuntimeContext.js';
-
-type AnthropicContentBlock =
-  | { type: 'text'; text: string }
-  | {
-      type: 'thinking';
-      thinking: string;
-      signature: string;
-    }
-  | {
-      type: 'redacted_thinking';
-      data: string;
-    }
-  | {
-      type: 'tool_use';
-      id: string;
-      name: string;
-      input: unknown;
-    };
-
-interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: string | AnthropicContentBlock[];
-}
-
-interface AnthropicRequestBody {
-  model: string;
-  messages: AnthropicMessage[];
-  max_tokens: number;
-  stream?: boolean;
-  thinking?: {
-    type: 'enabled';
-    budget_tokens: number;
-  };
-}
+import type { AnthropicRequestBody } from './test-utils/anthropicTestUtils.js';
 
 vi.mock('../../core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(

@@ -909,9 +909,9 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     } =>
       Boolean(
         part &&
-        typeof part === 'object' &&
-        'thought' in part &&
-        (part as { thought: unknown }).thought === true,
+          typeof part === 'object' &&
+          'thought' in part &&
+          (part as { thought: unknown }).thought === true,
       );
 
     // Extract thought parts like recordHistory does
@@ -1162,9 +1162,9 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     const isThoughtPart = (part: unknown): boolean =>
       Boolean(
         part &&
-        typeof part === 'object' &&
-        'thought' in part &&
-        (part as { thought: unknown }).thought === true,
+          typeof part === 'object' &&
+          'thought' in part &&
+          (part as { thought: unknown }).thought === true,
       );
 
     const thoughtParts = simulatedParts.filter(isThoughtPart);

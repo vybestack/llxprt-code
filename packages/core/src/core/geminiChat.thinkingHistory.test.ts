@@ -47,9 +47,9 @@ interface ThoughtPart extends Part {
 function isThoughtPart(part: Part | undefined): part is ThoughtPart {
   return Boolean(
     part &&
-    typeof part === 'object' &&
-    'thought' in part &&
-    part.thought === true,
+      typeof part === 'object' &&
+      'thought' in part &&
+      part.thought === true,
   );
 }
 

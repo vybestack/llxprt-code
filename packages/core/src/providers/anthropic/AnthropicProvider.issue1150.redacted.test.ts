@@ -34,32 +34,7 @@ import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../runtime/providerRuntimeContext.js';
-
-/**
- * Anthropic API content block types
- */
-type AnthropicContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'thinking'; thinking: string; signature: string }
-  | { type: 'redacted_thinking'; data: string }
-  | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; tool_use_id: string; content: unknown };
-
-interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: string | AnthropicContentBlock[];
-}
-
-interface AnthropicRequestBody {
-  model: string;
-  messages: AnthropicMessage[];
-  max_tokens: number;
-  stream?: boolean;
-  thinking?: {
-    type: 'enabled';
-    budget_tokens: number;
-  };
-}
+import type { AnthropicRequestBody } from './test-utils/anthropicTestUtils.js';
 
 // Mock dependencies
 vi.mock('../../core/prompts.js', () => ({
@@ -584,7 +559,7 @@ describe('AnthropicProvider Issue #1150: redacted_thinking Data Validation', () 
 
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
-        usage: { input_tokens: 100, output_outputs: 50 },
+        usage: { input_tokens: 100, output_tokens: 50 },
       });
 
       const messages: IContent[] = [

@@ -337,9 +337,9 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
       function isThoughtPart(part: Part | undefined): boolean {
         return Boolean(
           part &&
-          typeof part === 'object' &&
-          'thought' in part &&
-          (part as { thought?: unknown }).thought === true,
+            typeof part === 'object' &&
+            'thought' in part &&
+            (part as { thought?: unknown }).thought === true,
         );
       }
 
