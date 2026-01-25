@@ -288,14 +288,17 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
     });
 
     /**
-     * Test the bug scenario: what happens if thoughtBlocks is empty
-     * but thinking WAS in the stream (bug: it got lost)
+     * Test the corrected scenario: thoughtBlocks must prepend thinking in history.
      */
-    it('BUG REPRODUCTION: empty thoughtBlocks causes missing thinking in history', () => {
-      // This simulates the bug: thoughtBlocks is empty even though
-      // thinking was in the original stream
-
-      const thoughtBlocks: ThinkingBlock[] = []; // BUG: Should have thinking!
+    it('attaches thoughtBlocks when present to keep thinking first', () => {
+      const thoughtBlocks: ThinkingBlock[] = [
+        {
+          type: 'thinking',
+          thought: 'Recovered reasoning',
+          sourceField: 'thinking',
+          signature: 'sig_fix',
+        },
+      ];
 
       const outputIContent: IContent = {
         speaker: 'ai',
@@ -310,20 +313,22 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
         ],
       };
 
-      // With empty thoughtBlocks, nothing gets prepended
       let didAttachThoughtBlocks = false;
       if (thoughtBlocks.length > 0 && !didAttachThoughtBlocks) {
         outputIContent.blocks = [...thoughtBlocks, ...outputIContent.blocks];
         didAttachThoughtBlocks = true;
       }
 
-      // BUG ASSERTION: First block is text, not thinking
-      // This causes Anthropic API error:
-      // "messages.1.content.0.type: Expected `thinking` or `redacted_thinking`, but found `text`"
-
-      // This test documents the bug - when fixed, this assertion should be removed
-      // and the test above should pass instead
-      expect(outputIContent.blocks[0].type).toBe('text'); // BUG: Should be 'thinking'!
+      expect(didAttachThoughtBlocks).toBe(true);
+      expect(outputIContent.blocks[0].type).toBe('thinking');
+      expect((outputIContent.blocks[0] as ThinkingBlock).signature).toBe(
+        'sig_fix',
+      );
+      expect(outputIContent.blocks.map((b) => b.type)).toEqual([
+        'thinking',
+        'text',
+        'tool_call',
+      ]);
     });
   });
 

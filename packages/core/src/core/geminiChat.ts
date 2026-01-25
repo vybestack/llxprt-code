@@ -920,17 +920,22 @@ export class GeminiChat {
         if (outputContent) {
           const includeThoughtsInHistory =
             this.runtimeContext.ephemerals.reasoning.includeInContext();
-          // Check if this is pure thinking content that should be filtered
-          if (
-            !this.isThoughtContent(outputContent) ||
-            includeThoughtsInHistory
-          ) {
-            // Not pure thinking, add it
+
+          const contentForHistory = includeThoughtsInHistory
+            ? outputContent
+            : {
+                ...outputContent,
+                parts: (outputContent.parts ?? []).filter(
+                  (part) => !isThoughtPart(part),
+                ),
+              };
+
+          if ((contentForHistory.parts?.length ?? 0) > 0) {
             const turnKey = this.historyService.generateTurnKey();
             const idGen = this.historyService.getIdGeneratorCallback(turnKey);
             this.historyService.add(
               ContentConverters.toIContent(
-                outputContent,
+                contentForHistory,
                 idGen,
                 undefined,
                 turnKey,
@@ -2567,19 +2572,6 @@ export class GeminiChat {
       content.parts.length > 0 &&
       typeof content.parts[0].text === 'string' &&
       content.parts[0].text !== ''
-    );
-  }
-
-  private isThoughtContent(
-    content: Content | undefined,
-  ): content is Content & { parts: [{ thought: boolean }, ...Part[]] } {
-    return !!(
-      content &&
-      content.role === 'model' &&
-      content.parts &&
-      content.parts.length > 0 &&
-      typeof content.parts[0].thought === 'boolean' &&
-      content.parts[0].thought === true
     );
   }
 
