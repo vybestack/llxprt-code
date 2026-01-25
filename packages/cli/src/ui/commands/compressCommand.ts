@@ -41,21 +41,29 @@ export const compressCommand: SlashCommand = {
       const promptId = `compress-${Date.now()}`;
       const chat = context.services.config?.getGeminiClient()?.getChat();
       const historyService = chat?.getHistoryService();
-      const originalTokenCount = historyService?.getTotalTokens() ?? 0;
-      await chat?.performCompression(promptId);
-      const newTokenCount = historyService?.getTotalTokens() ?? 0;
-      ui.addItem(
-        {
-          type: MessageType.COMPRESSION,
-          compression: {
-            isPending: false,
-            originalTokenCount,
-            newTokenCount,
-            compressionStatus: CompressionStatus.COMPRESSED,
+      if (!chat || !historyService) {
+        ui.addItem(
+          {
+            type: MessageType.ERROR,
+            text: 'Chat instance not available for compression.',
           },
-        } as HistoryItemCompression,
-        Date.now(),
-      );
+          Date.now(),
+        );
+        return;
+      }
+      const originalTokenCount = historyService.getTotalTokens();
+      await chat.performCompression(promptId);
+      const newTokenCount = historyService.getTotalTokens();
+      const compressionResult: HistoryItemCompression = {
+        type: MessageType.COMPRESSION,
+        compression: {
+          isPending: false,
+          originalTokenCount,
+          newTokenCount,
+          compressionStatus: CompressionStatus.COMPRESSED,
+        },
+      };
+      ui.addItem(compressionResult, Date.now());
     } catch (e) {
       ui.addItem(
         {

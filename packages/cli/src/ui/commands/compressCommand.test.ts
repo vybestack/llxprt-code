@@ -110,6 +110,30 @@ describe('compressCommand', () => {
     expect(context.ui.setPendingItem).toHaveBeenCalledWith(null);
   });
 
+  it('should add an error message if chat instance is unavailable', async () => {
+    context = createMockCommandContext({
+      services: {
+        config: {
+          getGeminiClient: () =>
+            ({
+              getChat: () => undefined,
+            }) as unknown as GeminiClient,
+        },
+      },
+    });
+
+    await compressCommand.action!(context, '');
+
+    expect(context.ui.addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.ERROR,
+        text: 'Chat instance not available for compression.',
+      }),
+      expect.any(Number),
+    );
+    expect(context.ui.setPendingItem).toHaveBeenCalledWith(null);
+  });
+
   it('should clear the pending item in a finally block', async () => {
     mockPerformCompression.mockRejectedValue(new Error('some error'));
     await compressCommand.action!(context, '');
