@@ -187,6 +187,39 @@ export class HistoryService
   }
 
   /**
+   * Sync the total token count to match actual prompt tokens from a provider.
+   * This adjusts the baseTokenOffset so estimates align with the real count.
+   */
+  syncTotalTokens(actualTotal: number): void {
+    if (!Number.isFinite(actualTotal)) {
+      this.logger.debug('Skipping syncTotalTokens for non-finite value', {
+        actualTotal,
+      });
+      return;
+    }
+
+    const normalized = Math.max(0, Math.floor(actualTotal));
+
+    // Ensure sync happens after any pending token estimation updates.
+    this.tokenizerLock = this.tokenizerLock.then(() => {
+      const currentTotal = this.getTotalTokens();
+      const drift = normalized - currentTotal;
+
+      if (drift === 0) {
+        return;
+      }
+
+      this.baseTokenOffset += drift;
+
+      this.emit('tokensUpdated', {
+        totalTokens: this.getTotalTokens(),
+        addedTokens: drift,
+        contentId: null,
+      });
+    });
+  }
+
+  /**
    * Add content to the history
    * Note: We accept all content including empty responses for comprehensive history.
    * Filtering happens only when getting curated history.

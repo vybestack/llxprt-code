@@ -97,22 +97,53 @@ export function findCompressSplitPoint(
   const targetCharCount = totalCharCount * fraction;
 
   let lastSplitPoint = 0;
+  let lastToolCallSplitPoint = 0;
+  let toolCallSplitPointAfterTarget: number | null = null;
   let cumulativeCharCount = 0;
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
     const hasFunctionResponse = content.parts?.some(
       (part) => !!part.functionResponse,
     );
+    const hasFunctionCall = content.parts?.some((part) => !!part.functionCall);
     if (content.role === 'user' && !hasFunctionResponse) {
       if (cumulativeCharCount >= targetCharCount) {
         return i;
       }
       lastSplitPoint = i;
     }
+    if (content.role === 'model' && hasFunctionCall) {
+      if (
+        cumulativeCharCount >= targetCharCount &&
+        toolCallSplitPointAfterTarget === null
+      ) {
+        toolCallSplitPointAfterTarget = i;
+      }
+      lastToolCallSplitPoint = i;
+    }
     cumulativeCharCount += charCounts[i];
   }
 
   const lastContent = contents[contents.length - 1];
+  if (lastSplitPoint > 0) {
+    if (
+      lastContent?.role === 'model' &&
+      !lastContent?.parts?.some((part) => part.functionCall)
+    ) {
+      return contents.length;
+    }
+
+    return lastSplitPoint;
+  }
+
+  if (toolCallSplitPointAfterTarget !== null) {
+    return toolCallSplitPointAfterTarget;
+  }
+
+  if (lastToolCallSplitPoint > 0) {
+    return lastToolCallSplitPoint;
+  }
+
   if (
     lastContent?.role === 'model' &&
     !lastContent?.parts?.some((part) => part.functionCall)

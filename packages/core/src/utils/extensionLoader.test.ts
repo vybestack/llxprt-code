@@ -87,21 +87,30 @@ describe('SimpleExtensionLoader', () => {
         await loader.start(mockConfig);
         expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
         await loader.loadExtension(activeExtension);
-        if (reloadingEnabled) {
-          expect(
-            mockMcpClientManager.startExtension,
-          ).toHaveBeenCalledExactlyOnceWith(activeExtension);
-        } else {
-          expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
-        }
+        const expectedStartCalls = reloadingEnabled ? 1 : 0;
+        const expectedStopCalls = reloadingEnabled ? 1 : 0;
+
         await loader.unloadExtension(activeExtension);
-        if (reloadingEnabled) {
-          expect(
-            mockMcpClientManager.stopExtension,
-          ).toHaveBeenCalledExactlyOnceWith(activeExtension);
-        } else {
-          expect(mockMcpClientManager.stopExtension).not.toHaveBeenCalled();
-        }
+
+        expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(
+          expectedStartCalls,
+        );
+        expect(mockMcpClientManager.stopExtension).toHaveBeenCalledTimes(
+          expectedStopCalls,
+        );
+
+        const actualStartCalls = mockMcpClientManager.startExtension.mock.calls;
+        const actualStopCalls = mockMcpClientManager.stopExtension.mock.calls;
+
+        const expectedStartCallArguments = reloadingEnabled
+          ? [[activeExtension]]
+          : [];
+        const expectedStopCallArguments = reloadingEnabled
+          ? [[activeExtension]]
+          : [];
+
+        expect(actualStartCalls).toEqual(expectedStartCallArguments);
+        expect(actualStopCalls).toEqual(expectedStopCallArguments);
       },
     );
   });

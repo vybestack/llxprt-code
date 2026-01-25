@@ -687,24 +687,25 @@ describe('SettingsDialog', () => {
         });
 
         const calls = vi.mocked(saveModifiedSettings).mock.calls;
-        calls.forEach((call) => {
-          const [modifiedKeys, pendingSettings] = call;
+        const shellCalls = calls.filter(([modifiedKeys]) =>
+          modifiedKeys.has('tools.shell.showColor'),
+        );
 
-          if (modifiedKeys.has('tools.shell.showColor')) {
-            const toolsSettings = pendingSettings.tools as
-              | Record<string, unknown>
-              | undefined;
-            const shellSettings = toolsSettings?.shell as
-              | Record<string, unknown>
-              | undefined;
+        expect(shellCalls.length).toBeGreaterThan(0);
+        shellCalls.forEach(([modifiedKeys, pendingSettings]) => {
+          const toolsSettings = pendingSettings.tools as
+            | Record<string, unknown>
+            | undefined;
+          const shellSettings = toolsSettings?.shell as
+            | Record<string, unknown>
+            | undefined;
 
-            Object.entries(expectedSiblings).forEach(([key, value]) => {
-              expect(shellSettings?.[key]).toBe(value);
-              expect(modifiedKeys.has(`tools.shell.${key}`)).toBe(false);
-            });
+          Object.entries(expectedSiblings).forEach(([key, value]) => {
+            expect(shellSettings?.[key]).toBe(value);
+            expect(modifiedKeys.has(`tools.shell.${key}`)).toBe(false);
+          });
 
-            expect(modifiedKeys.size).toBe(1);
-          }
+          expect(modifiedKeys.size).toBe(1);
         });
 
         expect(calls.length).toBeGreaterThan(0);
