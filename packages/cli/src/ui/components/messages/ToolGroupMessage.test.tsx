@@ -106,7 +106,6 @@ describe('<ToolGroupMessage />', () => {
     id: 'todo-1',
     content: 'Implement role-based access control',
     status: 'in_progress',
-    priority: 'high',
     subtasks: [
       {
         id: 'sub-1',

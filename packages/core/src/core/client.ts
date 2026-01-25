@@ -484,7 +484,6 @@ export class GeminiClient {
           id: `${todo.id ?? ''}`,
           status: (todo.status ?? 'pending').toLowerCase(),
           content: todo.content ?? '',
-          priority: todo.priority ?? 'medium',
         }))
         .sort((left, right) => left.id.localeCompare(right.id));
     const normalizedA = normalize(a);
@@ -1447,7 +1446,6 @@ export class GeminiClient {
               id: `${(todo as Todo).id ?? ''}`,
               content: (todo as Todo).content ?? '',
               status: (todo as Todo).status ?? 'pending',
-              priority: (todo as Todo).priority ?? 'medium',
             }));
           }
         }

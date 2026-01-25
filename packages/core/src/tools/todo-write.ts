@@ -50,11 +50,6 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
                   enum: ['pending', 'in_progress', 'completed'],
                   description: 'Current status of the todo item',
                 },
-                priority: {
-                  type: Type.STRING,
-                  enum: ['high', 'medium', 'low'],
-                  description: 'Priority level of the todo item',
-                },
                 subtasks: {
                   type: Type.ARRAY,
                   items: {
@@ -98,7 +93,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
                   description: 'Subtasks associated with this todo',
                 },
               },
-              required: ['id', 'content', 'status', 'priority'],
+              required: ['id', 'content', 'status'],
             },
             description: 'The updated todo list',
           },
@@ -236,18 +231,12 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     inProgress: number;
     pending: number;
     completed: number;
-    highPriority: number;
-    mediumPriority: number;
-    lowPriority: number;
   } {
     return {
       total: todos.length,
       inProgress: todos.filter((t) => t.status === 'in_progress').length,
       pending: todos.filter((t) => t.status === 'pending').length,
       completed: todos.filter((t) => t.status === 'completed').length,
-      highPriority: todos.filter((t) => t.priority === 'high').length,
-      mediumPriority: todos.filter((t) => t.priority === 'medium').length,
-      lowPriority: todos.filter((t) => t.priority === 'low').length,
     };
   }
 
@@ -259,11 +248,10 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     // Check if any tasks are in progress
     const inProgressTasks = todos.filter((t) => t.status === 'in_progress');
     if (inProgressTasks.length > 0) {
-      // Continue with highest priority in-progress task
-      const task = inProgressTasks.sort((a, b) => {
-        const priorityOrder = { high: 0, medium: 1, low: 2 };
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
-      })[0];
+      // Continue with first in-progress task, sorted alphabetically
+      const task = inProgressTasks.sort((a, b) =>
+        a.content.localeCompare(b.content),
+      )[0];
       return {
         type: 'continue',
         taskId: task.id,
@@ -274,11 +262,10 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     // Check if any tasks are pending
     const pendingTasks = todos.filter((t) => t.status === 'pending');
     if (pendingTasks.length > 0) {
-      // Start with highest priority pending task
-      const task = pendingTasks.sort((a, b) => {
-        const priorityOrder = { high: 0, medium: 1, low: 2 };
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
-      })[0];
+      // Start with first pending task, sorted alphabetically
+      const task = pendingTasks.sort((a, b) =>
+        a.content.localeCompare(b.content),
+      )[0];
       return {
         type: 'start',
         taskId: task.id,

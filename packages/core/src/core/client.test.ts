@@ -1311,7 +1311,6 @@ describe('Gemini Client (client.ts)', () => {
           id: 'todo-1',
           content: 'Complete the task',
           status: 'pending',
-          priority: 'high',
         },
       ]);
 
@@ -1384,7 +1383,6 @@ describe('Gemini Client (client.ts)', () => {
           id: 'todo-1',
           content: 'Blocked task',
           status: 'pending',
-          priority: 'high',
         },
       ]);
 
