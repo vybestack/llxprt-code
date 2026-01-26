@@ -230,6 +230,7 @@ The PLAN.md must define how to use subagents for autonomous execution:
 2. **reviewer subagent** - MANDATORY verification after every batch
 
 Pattern:
+
 ```
 Execute (cherrypicker) -> Review (reviewer) -> PASS? continue : Remediate (cherrypicker) -> Review again
 Loop remediation up to 5 times, then escalate to human if still failing.
@@ -240,6 +241,7 @@ Loop remediation up to 5 times, then escalate to human if still failing.
 Every reviewer prompt MUST include BOTH:
 
 **Mechanical verification:**
+
 - lint, typecheck pass
 - tests pass (for full verify batches)
 - build passes (for full verify batches)
@@ -247,6 +249,7 @@ Every reviewer prompt MUST include BOTH:
 
 **Qualitative verification (CRITICAL):**
 For EACH commit in the batch, the reviewer must verify:
+
 - **Code actually landed** - not stubbed, not faked, not just imports
 - **Behavioral equivalence** - will it do what upstream intended?
 - **Integration correctness** - properly connected, would work at runtime
@@ -256,17 +259,20 @@ The reviewer output must include per-commit assessment with landed/functional fl
 ### Todo List Definition (Required in PLAN.md)
 
 The PLAN.md must include an EXACT `todo_write` call that the executing agent will use. This ensures:
+
 - Context-wiped agents can resume by reading the todo list
 - No ambiguity about what to do next
 - No "progress reports" or "what should I do" pauses
 
 The todo list must enumerate EVERY step:
+
 - `BN-exec` - Execute batch N
 - `BN-review` - Review batch N (mandatory)
 - `BN-commit` - Commit batch N changes
 - `FINAL-*` - Documentation updates
 
 Example structure:
+
 ```
 todo_write({
   todos: [
@@ -307,27 +313,34 @@ Every PLAN.md must begin with a "START HERE" section that tells a context-wiped 
 5. **If blocked** - call todo_pause() with reason
 
 Example:
-```markdown
+
+````markdown
 ## START HERE (If you were told to "DO this plan")
 
 If you're reading this because someone said "DO @project-plans/YYYYMMDDgmerge/PLAN.md", follow these steps:
 
 ### Step 1: Check current state
+
 ```bash
 git branch --show-current  # Should be YYYYMMDDgmerge
 git status                 # Check for uncommitted changes
 ```
+````
 
 ### Step 2: Check or create the todo list
+
 Call `todo_read()` first. If empty or doesn't exist, call `todo_write()` with the EXACT todo list from the "Todo List Management" section below.
 
 ### Step 3: Find where to resume
+
 - Look at the todo list for the first `pending` item
 - If an item is `in_progress`, restart that item
 - If all items are `completed`, you're done
 
 ### Step 4: Execute using subagents
+
 For each batch, you MUST use the `task` tool to invoke subagents:
+
 - **For execution tasks (BN-exec):** Call `task` with `subagent_name: "cherrypicker"`
 - **For review tasks (BN-review):** Call `task` with `subagent_name: "reviewer"`
 - **For remediation (if review fails):** Call `task` with `subagent_name: "cherrypicker"`
@@ -337,15 +350,17 @@ For each batch, you MUST use the `task` tool to invoke subagents:
 - Continue until todo list is empty or you hit a blocker
 
 ### Step 5: If blocked
+
 - Call `todo_pause()` with the specific reason
 - Wait for human intervention
-```
+
+````
 
 ### Context Recovery Section (Required at end of PLAN.md)
 
 Every PLAN.md must end with a "Context Recovery" section that explains:
 - How to check git state
-- How to read the todo list  
+- How to read the todo list
 - Where to resume based on todo state
 - Key files to read for context
 - Summary of what the sync is doing (branch, range, counts)
@@ -407,5 +422,6 @@ Open a PR against `main` that:
 - If `npm run typecheck` fails in a workspace due to stale `@vybestack/llxprt-code-core` types after core changes, run:
   ```bash
   npm run build --workspace @vybestack/llxprt-code-core
-  ```
-  Then rerun `npm run typecheck`.
+````
+
+Then rerun `npm run typecheck`.
