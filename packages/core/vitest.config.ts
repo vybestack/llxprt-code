@@ -7,6 +7,19 @@
 import { defineConfig } from 'vitest/config';
 
 const isWindows = process.platform === 'win32';
+const coverageReporter = isWindows
+  ? [
+      ['text', { file: 'full-text-summary.txt' }],
+      ['json-summary', { outputFile: 'coverage-summary.json' }],
+    ]
+  : [
+      ['text', { file: 'full-text-summary.txt' }],
+      'html',
+      'json',
+      'lcov',
+      'cobertura',
+      ['json-summary', { outputFile: 'coverage-summary.json' }],
+    ];
 
 export default defineConfig({
   test: {
@@ -16,12 +29,12 @@ export default defineConfig({
     teardownTimeout: 120000,
     silent: true,
     setupFiles: ['./test-setup.ts'],
-    pool: isWindows ? 'forks' : 'threads',
+    dangerouslyIgnoreUnhandledErrors: isWindows,
     poolOptions: isWindows
       ? {
           forks: {
             minForks: 1,
-            maxForks: 3,
+            maxForks: 2,
           },
         }
       : undefined,
@@ -33,14 +46,7 @@ export default defineConfig({
       provider: 'v8',
       reportsDirectory: './coverage',
       include: ['src/**/*'],
-      reporter: [
-        ['text', { file: 'full-text-summary.txt' }],
-        'html',
-        'json',
-        'lcov',
-        'cobertura',
-        ['json-summary', { outputFile: 'coverage-summary.json' }],
-      ],
+      reporter: coverageReporter,
     },
   },
 });
