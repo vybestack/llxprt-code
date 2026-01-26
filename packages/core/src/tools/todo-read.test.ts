@@ -95,7 +95,7 @@ describe('TodoRead', () => {
       expect(pendingIndex).toBeLessThan(completedIndex);
     });
 
-    it('should sort alphabetically within same status', async () => {
+    it('should preserve original array order within same status', async () => {
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(sampleTodos);
 
       const result = await tool.execute({}, abortSignal);
@@ -103,15 +103,15 @@ describe('TodoRead', () => {
         .split('\n')
         .filter((line: string) => line.trim());
 
-      // "Another pending task" should come before "Medium pending task" alphabetically
-      const anotherPendingIndex = lines.findIndex((line) =>
-        line.includes('Another pending task'),
-      );
+      // "Medium pending task" should come before "Another pending task" (original array order)
       const mediumPendingIndex = lines.findIndex((line) =>
         line.includes('Medium pending task'),
       );
+      const anotherPendingIndex = lines.findIndex((line) =>
+        line.includes('Another pending task'),
+      );
 
-      expect(anotherPendingIndex).toBeLessThan(mediumPendingIndex);
+      expect(mediumPendingIndex).toBeLessThan(anotherPendingIndex);
     });
 
     it('should handle read errors gracefully', async () => {
