@@ -1403,7 +1403,6 @@ class Session {
     const entries: acp.PlanEntry[] = todos.map((todo) => ({
       content: todo.content,
       status: todo.status,
-      priority: todo.priority,
     }));
 
     // Send plan update to Zed via ACP protocol

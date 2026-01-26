@@ -43,13 +43,8 @@ describe('ToolFormatter', () => {
                           enum: ['pending', 'in_progress', 'completed'],
                           description: 'Current status of the todo item',
                         },
-                        priority: {
-                          type: Type.STRING,
-                          enum: ['high', 'medium', 'low'],
-                          description: 'Priority level of the todo item',
-                        },
                       },
-                      required: ['id', 'content', 'status', 'priority'],
+                      required: ['id', 'content', 'status'],
                     },
                     description: 'List of todo items',
                   },
@@ -101,19 +96,12 @@ describe('ToolFormatter', () => {
       expect(
         tool.function.parameters.properties.todos.items.properties.status,
       ).toBeDefined();
-      expect(
-        tool.function.parameters.properties.todos.items.properties.priority,
-      ).toBeDefined();
       expect(tool.function.parameters.required).toEqual(['todos']);
 
       // Check that enums are preserved
       expect(
         tool.function.parameters.properties.todos.items.properties.status.enum,
       ).toEqual(['pending', 'in_progress', 'completed']);
-      expect(
-        tool.function.parameters.properties.todos.items.properties.priority
-          .enum,
-      ).toEqual(['high', 'medium', 'low']);
 
       // Check that minLength was converted from string to number
       expect(

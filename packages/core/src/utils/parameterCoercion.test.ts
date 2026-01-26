@@ -237,15 +237,13 @@ describe('coerceParametersToSchema', () => {
                 id: { type: 'string' },
                 content: { type: 'string' },
                 status: { type: 'string' },
-                priority: { type: 'string' },
               },
             },
           },
         },
       };
       const params = {
-        todos:
-          '[{"id": "1", "content": "Task one", "status": "pending", "priority": "high"}]',
+        todos: '[{"id": "1", "content": "Task one", "status": "pending"}]',
       };
 
       const result = coerceParametersToSchema(params, schema);
@@ -256,7 +254,6 @@ describe('coerceParametersToSchema', () => {
             id: '1',
             content: 'Task one',
             status: 'pending',
-            priority: 'high',
           },
         ],
       });

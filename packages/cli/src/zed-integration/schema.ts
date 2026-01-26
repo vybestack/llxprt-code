@@ -231,7 +231,6 @@ export const toolCallLocationSchema = z.object({
 
 export const planEntrySchema = z.object({
   content: z.string(),
-  priority: z.union([z.literal('high'), z.literal('medium'), z.literal('low')]),
   status: z.union([
     z.literal('pending'),
     z.literal('in_progress'),

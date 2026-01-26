@@ -49,19 +49,16 @@ const testTodos: Todo[] = [
     content:
       'This is a very long todo item that should be truncated at different widths',
     status: 'completed',
-    priority: 'medium',
   },
   {
     id: '2',
     content: 'Short task',
     status: 'in_progress',
-    priority: 'high',
   },
   {
     id: '3',
     content: 'Another pending task with moderate length content',
     status: 'pending',
-    priority: 'low',
   },
 ];
 
@@ -263,7 +260,6 @@ describe('TodoPanel Responsive Behavior', () => {
           content:
             'This is a very long todo item that should use more width for better readability instead of being truncated too early',
           status: 'pending',
-          priority: 'medium',
         },
       ];
 
@@ -306,7 +302,6 @@ describe('TodoPanel Responsive Behavior', () => {
           content:
             'This extremely long todo item content should demonstrate the improved truncation behavior by showing much more text',
           status: 'pending',
-          priority: 'medium',
         },
       ];
 
