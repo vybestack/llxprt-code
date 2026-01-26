@@ -6,6 +6,8 @@
 
 import { defineConfig } from 'vitest/config';
 
+const isWindows = process.platform === 'win32';
+
 export default defineConfig({
   test: {
     passWithNoTests: true,
@@ -14,6 +16,15 @@ export default defineConfig({
     teardownTimeout: 120000,
     silent: true,
     setupFiles: ['./test-setup.ts'],
+    pool: isWindows ? 'forks' : 'threads',
+    poolOptions: isWindows
+      ? {
+          forks: {
+            minForks: 1,
+            maxForks: 3,
+          },
+        }
+      : undefined,
     outputFile: {
       junit: 'junit.xml',
     },

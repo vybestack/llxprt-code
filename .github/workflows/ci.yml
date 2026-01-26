@@ -411,11 +411,11 @@ jobs:
           fi
         shell: 'bash'
 
-      - name: 'Limit Vitest threads on Windows'
+      - name: 'Limit Vitest forks on Windows'
         if: runner.os == 'Windows'
         run: |
-          echo "VITEST_MAX_THREADS=1" >> "$GITHUB_ENV"
-          echo "VITEST_MIN_THREADS=1" >> "$GITHUB_ENV"
+          echo "VITEST_MAX_FORKS=3" >> "$GITHUB_ENV"
+          echo "VITEST_MIN_FORKS=1" >> "$GITHUB_ENV"
           echo "VITEST_TEST_TIMEOUT=30000" >> "$GITHUB_ENV"
           echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
 
