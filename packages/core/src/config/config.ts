@@ -1437,6 +1437,19 @@ export class Config {
     return this._activeExtensions;
   }
 
+  /**
+   * Check if an extension is enabled (i.e., isActive in the extension loader).
+   * Returns true for unknown extensions to avoid filtering valid commands.
+   */
+  isExtensionEnabled(extensionName: string): boolean {
+    const extension = this._extensionLoader
+      .getExtensions()
+      .find((ext) => ext.name === extensionName);
+    // If extension not found, default to true to avoid filtering
+    return extension ? extension.isActive : true;
+  }
+
+
   getEnableExtensionReloading(): boolean {
     return this.enableExtensionReloading;
   }
