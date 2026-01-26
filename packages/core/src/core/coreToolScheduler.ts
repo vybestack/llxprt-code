@@ -1595,18 +1595,10 @@ export class CoreToolScheduler {
         result.metadata as Record<string, unknown> | undefined,
       );
 
-      const responseParts = [
-        // First, the tool call
-        {
-          functionCall: {
-            id: callId,
-            name: toolName,
-            args: scheduledCall.request.args,
-          },
-        },
-        // Then, spread the response(s)
-        ...response,
-      ] as Part[];
+      // Only include functionResponse parts - the functionCall is already in
+      // history from the original assistant message. Including it again would
+      // create duplicate tool_use blocks for Anthropic. (Issue #1150)
+      const responseParts = [...response] as Part[];
 
       const successResponse: ToolCallResponseInfo = {
         callId,

@@ -1,5 +1,10 @@
 import { ContentConverters } from './ContentConverters';
-import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent';
+import type {
+  IContent,
+  ToolCallBlock,
+  ToolResponseBlock,
+  ThinkingBlock,
+} from './IContent';
 import type { Content } from '@google/genai';
 import { describe, it, expect } from 'vitest';
 
@@ -178,6 +183,64 @@ describe('ContentConverters - Tool ID Normalization', () => {
 
       expectCanonical(toolCall.id);
     });
+
+    it('should preserve thinking signature when converting from Gemini content', () => {
+      const geminiContent: Content = {
+        role: 'model',
+        parts: [
+          {
+            text: 'Thought text',
+            thought: true,
+            thoughtSignature: 'thought-sig',
+          },
+        ],
+      };
+
+      const iContent = ContentConverters.toIContent(
+        geminiContent,
+        undefined,
+        undefined,
+        'turn-test',
+      );
+
+      const thinkingBlock = iContent.blocks.find(
+        (block) => block.type === 'thinking',
+      ) as ThinkingBlock | undefined;
+
+      expect(thinkingBlock).toBeDefined();
+      expect(thinkingBlock?.thought).toBe('Thought text');
+      expect(thinkingBlock?.signature).toBe('thought-sig');
+      expect(thinkingBlock?.sourceField).toBe('thought');
+    });
+
+    it('should preserve explicit Anthropic thinking sourceField metadata', () => {
+      const geminiContent: Content = {
+        role: 'model',
+        parts: [
+          {
+            text: 'Anthropic thought',
+            thought: true,
+            thoughtSignature: 'anthropic-sig',
+            llxprtSourceField: 'thinking',
+          } as Content['parts'][number] & { llxprtSourceField: string },
+        ],
+      };
+
+      const iContent = ContentConverters.toIContent(
+        geminiContent,
+        undefined,
+        undefined,
+        'turn-test',
+      );
+
+      const thinkingBlock = iContent.blocks.find(
+        (block) => block.type === 'thinking',
+      ) as ThinkingBlock | undefined;
+
+      expect(thinkingBlock).toBeDefined();
+      expect(thinkingBlock?.signature).toBe('anthropic-sig');
+      expect(thinkingBlock?.sourceField).toBe('thinking');
+    });
   });
 
   describe('Real-world Provider Switching Scenario', () => {
@@ -301,6 +364,31 @@ describe('ContentConverters - History ID Conversion for Gemini', () => {
 
       expect(geminiContent.role).toBe('model');
       expect(geminiContent.parts[0].functionCall?.id).toBe('hist_tool_123_1');
+    });
+
+    it('should preserve thinking signatures on Gemini parts', () => {
+      const iContent: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: 'Plan the next step',
+            sourceField: 'thinking',
+            signature: 'sig123',
+          } as ThinkingBlock,
+        ],
+      };
+
+      const geminiContent = ContentConverters.toGeminiContent(iContent);
+
+      expect(geminiContent.parts).toHaveLength(1);
+      expect(geminiContent.parts[0].thought).toBe(true);
+      expect(geminiContent.parts[0].text).toBe('Plan the next step');
+      expect(geminiContent.parts[0].thoughtSignature).toBe('sig123');
+      expect(
+        (geminiContent.parts[0] as { llxprtSourceField?: string })
+          .llxprtSourceField,
+      ).toBe('thinking');
     });
 
     it('should handle multiple tool calls preserving order', () => {

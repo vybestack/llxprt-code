@@ -940,6 +940,27 @@ export class GeminiClient {
           target: null,
         },
         tools: this.getToolGovernanceEphemerals(),
+        'reasoning.enabled': this.config.getEphemeralSetting(
+          'reasoning.enabled',
+        ) as boolean | undefined,
+        'reasoning.includeInContext': this.config.getEphemeralSetting(
+          'reasoning.includeInContext',
+        ) as boolean | undefined,
+        'reasoning.includeInResponse': this.config.getEphemeralSetting(
+          'reasoning.includeInResponse',
+        ) as boolean | undefined,
+        'reasoning.format': this.config.getEphemeralSetting(
+          'reasoning.format',
+        ) as 'native' | 'field' | undefined,
+        'reasoning.stripFromContext': this.config.getEphemeralSetting(
+          'reasoning.stripFromContext',
+        ) as 'all' | 'allButLast' | 'none' | undefined,
+        'reasoning.effort': this.config.getEphemeralSetting(
+          'reasoning.effort',
+        ) as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined,
+        'reasoning.maxTokens': this.config.getEphemeralSetting(
+          'reasoning.maxTokens',
+        ) as number | undefined,
       };
 
       const providerRuntime = createProviderRuntimeContext({

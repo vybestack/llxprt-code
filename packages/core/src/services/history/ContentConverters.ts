@@ -108,10 +108,21 @@ export class ContentConverters {
         }
         case 'thinking': {
           const thinkingBlock = block as ThinkingBlock;
-          parts.push({
+          const thinkingPart: Part = {
             thought: true,
             text: thinkingBlock.thought,
-          });
+          };
+          if (thinkingBlock.signature) {
+            thinkingPart.thoughtSignature = thinkingBlock.signature;
+          }
+          if (thinkingBlock.sourceField) {
+            (
+              thinkingPart as Part & {
+                llxprtSourceField?: ThinkingBlock['sourceField'];
+              }
+            ).llxprtSourceField = thinkingBlock.sourceField;
+          }
+          parts.push(thinkingPart);
           break;
         }
         case 'media': {
@@ -214,11 +225,20 @@ export class ContentConverters {
         if ('text' in part && part.text !== undefined) {
           // Check if this is a thinking block
           if ('thought' in part && part.thought) {
-            blocks.push({
+            const partWithMetadata = part as Part & {
+              llxprtSourceField?: ThinkingBlock['sourceField'];
+            };
+            const sourceField = partWithMetadata.llxprtSourceField ?? 'thought';
+            const thinkingBlock: ThinkingBlock = {
               type: 'thinking',
               thought: part.text,
               isHidden: true,
-            });
+              sourceField,
+            };
+            if (part.thoughtSignature) {
+              thinkingBlock.signature = part.thoughtSignature;
+            }
+            blocks.push(thinkingBlock);
           } else {
             blocks.push({
               type: 'text',
