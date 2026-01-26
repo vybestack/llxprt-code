@@ -84,8 +84,64 @@ For each phase in feature:
 | Subagent | Role | When to Use |
 |----------|------|-------------|
 | `typescriptexpert` | Implementation | Write tests, write code, fix issues |
-| `reviewer` | Verification | Verify tests pass, code quality, lint/typecheck |
+| `reviewer` | **Qualitative** Verification | Actually READ the code, verify behavior, not just run commands |
 | `codeanalayzer` | Research | Audit code, find patterns, understand architecture |
+
+### Qualitative Review (CRITICAL)
+
+The `reviewer` subagent does NOT just run commands and check exit codes. It MUST:
+
+1. **Actually read the test files** - Are tests meaningful? Do they test behavior?
+2. **Actually read the implementation** - Will this work at runtime? Is it correct?
+3. **Trace execution paths** - Follow the code for specific scenarios
+4. **Check integration** - Does this connect properly to the rest of the system?
+5. **Verify RULES.md compliance** - No `any`, immutable, types from schemas
+
+Example reviewer output structure:
+```json
+{
+  "result": "PASS" or "FAIL",
+  "mechanical": {
+    "lint": "PASS/FAIL",
+    "typecheck": "PASS/FAIL",
+    "tests": "PASS/FAIL"
+  },
+  "qualitative": {
+    "test_quality": {
+      "verdict": "PASS/FAIL",
+      "tests_verify_behavior": true/false,
+      "edge_cases_covered": ["list"],
+      "issues": []
+    },
+    "implementation_quality": {
+      "verdict": "PASS/FAIL",
+      "will_work_at_runtime": true/false,
+      "code_path_traced": "description of what happens",
+      "issues": []
+    },
+    "integration": {
+      "verdict": "PASS/FAIL",
+      "connects_correctly": true/false,
+      "issues": []
+    },
+    "rules_compliance": {
+      "verdict": "PASS/FAIL",
+      "any_types": false,
+      "mutations": false,
+      "types_from_schemas": true
+    }
+  },
+  "behavioral_trace": {
+    "scenario": "description",
+    "expected": "what should happen",
+    "actual": "what code actually does",
+    "verdict": "PASS/FAIL"
+  },
+  "issues_requiring_remediation": []
+}
+```
+
+**If reviewer just runs commands and says "all pass" without reading code: REJECT and re-run.**
 
 ---
 

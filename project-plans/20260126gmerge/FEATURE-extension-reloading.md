@@ -57,122 +57,49 @@ Call `todo_read()`. If empty or this feature not present, call `todo_write()` wi
 todo_write({
   todos: [
     // Phase 1: Session Scope (TDD)
-    {
-      id: "EXT-RELOAD-1-test",
-      content: "Write tests for SettingScope.Session - enable/disable extension without persisting, verify not written to disk",
-      status: "pending",
-      priority: "high"
-    },
-    {
-      id: "EXT-RELOAD-1-impl",
-      content: "Implement SettingScope.Session in ExtensionEnablementManager - in-memory only, no disk write",
-      status: "pending",
-      priority: "high"
-    },
-    {
-      id: "EXT-RELOAD-1-review",
-      content: "Review Phase 1: Session scope works, doesn't persist, lint/typecheck pass",
-      status: "pending",
-      priority: "high"
-    },
-    {
-      id: "EXT-RELOAD-1-commit",
-      content: "Commit: 'feat(extensions): add session scope for runtime-only enable/disable'",
-      status: "pending",
-      priority: "high"
-    },
+    { id: "EXT-RELOAD-1-test", content: "Write tests for SettingScope.Session", status: "pending", priority: "high" },
+    { id: "EXT-RELOAD-1-impl", content: "Implement SettingScope.Session", status: "pending", priority: "high" },
+    { id: "EXT-RELOAD-1-review", content: "Review Phase 1 (qualitative)", status: "pending", priority: "high" },
+    { id: "EXT-RELOAD-1-commit", content: "Commit Phase 1", status: "pending", priority: "high" },
 
     // Phase 2: Command Reloading (TDD)
-    {
-      id: "EXT-RELOAD-2-test",
-      content: "Write tests for command reloading - when extension enabled/disabled, verify custom commands updated",
-      status: "pending",
-      priority: "high"
-    },
-    {
-      id: "EXT-RELOAD-2-impl",
-      content: "Implement command reloading in BuiltinCommandLoader - listen for extension state changes, reload commands",
-      status: "pending",
-      priority: "high"
-    },
-    {
-      id: "EXT-RELOAD-2-review",
-      content: "Review Phase 2: Commands reload when extensions change, no stale commands, lint/typecheck/test pass",
-      status: "pending",
-      priority: "high"
-    },
-    {
-      id: "EXT-RELOAD-2-commit",
-      content: "Commit: 'feat(extensions): auto-reload commands when extensions enabled/disabled'",
-      status: "pending",
-      priority: "high"
-    },
+    { id: "EXT-RELOAD-2-test", content: "Write tests for command reloading", status: "pending", priority: "high" },
+    { id: "EXT-RELOAD-2-impl", content: "Implement command reloading", status: "pending", priority: "high" },
+    { id: "EXT-RELOAD-2-review", content: "Review Phase 2 (qualitative)", status: "pending", priority: "high" },
+    { id: "EXT-RELOAD-2-commit", content: "Commit Phase 2", status: "pending", priority: "high" },
 
     // Phase 3: Enhanced Tab Completion (TDD)
-    {
-      id: "EXT-RELOAD-3-test",
-      content: "Write tests for tab completion - /extensions enable should suggest extension names and --scope option",
-      status: "pending",
-      priority: "high"
-    },
-    {
-      id: "EXT-RELOAD-3-impl",
-      content: "Implement enhanced completion in extensionsCommand.ts - add scope options to enable/disable",
-      status: "pending",
-      priority: "high"
-    },
-    {
-      id: "EXT-RELOAD-3-review",
-      content: "Review Phase 3: Tab completion works with scopes, lint/typecheck/test pass",
-      status: "pending",
-      priority: "high"
-    },
-    {
-      id: "EXT-RELOAD-3-commit",
-      content: "Commit: 'feat(extensions): enhanced tab completion with scope options (upstream fa93b56243)'",
-      status: "pending",
-      priority: "high"
-    }
+    { id: "EXT-RELOAD-3-test", content: "Write tests for tab completion", status: "pending", priority: "high" },
+    { id: "EXT-RELOAD-3-impl", content: "Implement tab completion", status: "pending", priority: "high" },
+    { id: "EXT-RELOAD-3-review", content: "Review Phase 3 (qualitative)", status: "pending", priority: "high" },
+    { id: "EXT-RELOAD-3-commit", content: "Commit Phase 3", status: "pending", priority: "high" }
   ]
 })
 ```
 
 ---
 
-## Phase Details
+## Phase 1: Session Scope
 
-### Phase 1: Session Scope
-
-**Files to modify:**
+### Files to modify
 - `packages/cli/src/config/settings.ts` - add `SettingScope.Session`
 - `packages/cli/src/config/extensions/extensionEnablement.ts` - handle session scope
 - `packages/cli/src/config/extension.ts` - update enable/disable functions
 
-**Test cases (write FIRST):**
+### Test cases (write FIRST)
 ```typescript
 describe('SettingScope.Session', () => {
   it('should enable extension in session without persisting', () => {
     const manager = new ExtensionEnablementManager(tempDir);
     manager.enable('my-ext', true, SettingScope.Session);
-    
-    // Verify enabled
     expect(manager.isEnabled('my-ext')).toBe(true);
-    
-    // Verify NOT written to disk
     expect(fs.existsSync(path.join(tempDir, 'enablement.json'))).toBe(false);
   });
 
   it('should disable extension in session without persisting', () => {
-    // Pre-enable extension
     manager.enable('my-ext', true, SettingScope.User);
-    
-    // Disable in session only
     manager.enable('my-ext', false, SettingScope.Session);
-    
-    // Verify disabled in memory
     expect(manager.isEnabled('my-ext')).toBe(false);
-    
-    // Verify User scope still has it enabled on disk
     const onDisk = JSON.parse(fs.readFileSync(enablementPath));
     expect(onDisk['my-ext']).toBe(true);
   });
@@ -180,19 +107,39 @@ describe('SettingScope.Session', () => {
   it('should reset session state when requested', () => {
     manager.enable('my-ext', false, SettingScope.Session);
     manager.resetSessionState();
-    // Falls back to persisted state
     expect(manager.isEnabled('my-ext')).toBe(true);
   });
 });
 ```
 
-**Subagent prompt (typescriptexpert):**
+### Subagent prompt (typescriptexpert) - TEST
 ```
-Implement Phase 1 of Extension Reloading for LLxprt.
+Phase 1 TEST for Extension Reloading.
 
-TASK: Add SettingScope.Session for runtime-only extension enable/disable.
+TASK: Write FAILING tests for SettingScope.Session.
 
-TDD REQUIREMENT: Write tests FIRST, then implement.
+TDD: Tests must FAIL initially (no implementation exists).
+
+FILES TO CREATE/MODIFY:
+- packages/cli/src/config/extensions/extensionEnablement.test.ts
+
+TEST REQUIREMENTS:
+1. Enable in session doesn't write to disk
+2. Disable in session doesn't write to disk  
+3. Session state overrides persisted state
+4. resetSessionState() clears session overrides
+5. Multiple extensions can have independent session state
+
+VERIFY TESTS FAIL:
+npm run test -- extensionEnablement.test.ts
+(Should fail because SettingScope.Session doesn't exist yet)
+```
+
+### Subagent prompt (typescriptexpert) - IMPL
+```
+Phase 1 IMPL for Extension Reloading.
+
+TASK: Write MINIMAL code to make tests pass.
 
 FILES TO MODIFY:
 - packages/cli/src/config/settings.ts (add Session to SettingScope enum)
@@ -205,58 +152,139 @@ REQUIREMENTS:
 3. Provide resetSessionState() to clear session overrides
 4. Existing User/Workspace scopes continue to persist to disk
 
-TEST CASES (implement first):
-1. Enable in session doesn't persist to disk
-2. Disable in session doesn't persist to disk
-3. Session state overrides persisted state
-4. resetSessionState clears session overrides
-5. Multiple extensions can have session state
+VERIFY:
+npm run test -- extensionEnablement.test.ts
+(All tests should pass)
+```
 
-AFTER IMPLEMENTATION:
+### Subagent prompt (reviewer) - QUALITATIVE REVIEW
+```
+Phase 1 QUALITATIVE REVIEW for Extension Reloading - Session Scope.
+
+YOU MUST ACTUALLY READ THE CODE, not just run commands.
+
+PART 1: MECHANICAL CHECKS
 1. npm run lint
 2. npm run typecheck
-3. npm run test -- extensionEnablement.test.ts
+3. npm run test -- extensionEnablement
 
-Report: test results and any issues.
+PART 2: TEST QUALITY ANALYSIS
+Read packages/cli/src/config/extensions/extensionEnablement.test.ts:
+
+Questions to answer:
+- Do the tests actually verify SESSION-specific behavior?
+- Is there a test that PROVES nothing is written to disk? (Check for fs assertions)
+- Is there a test for the priority order: Session > Workspace > User?
+- What happens if enable(Session) then enable(User) - is this tested?
+- Are there tests for error cases (invalid extension name, etc.)?
+
+RED FLAGS to look for:
+- Tests that just check "it doesn't throw" without asserting behavior
+- Tests that mock so much the real code isn't exercised
+- Missing edge cases (empty string, null, undefined inputs)
+
+PART 3: IMPLEMENTATION ANALYSIS
+Read the actual implementation files:
+
+packages/cli/src/config/settings.ts:
+- Is SettingScope.Session actually in the enum?
+- Is it exported properly?
+
+packages/cli/src/config/extensions/extensionEnablement.ts:
+- HOW is session state stored? (Should be a Map or object, NOT in the file)
+- Is there clear separation between session state and persisted state?
+- What's the lookup order in isEnabled()? (Should check session first)
+- Is resetSessionState() actually clearing the right data structure?
+- Could there be a memory leak? (Session state growing unbounded?)
+
+packages/cli/src/config/extension.ts:
+- Does enableExtension() accept SettingScope.Session?
+- Is the scope parameter properly typed?
+
+PART 4: BEHAVIORAL TRACE
+Manually trace this scenario through the code:
+
+1. User has extension 'foo' enabled at User scope (persisted)
+2. Call: disableExtension('foo', SettingScope.Session)
+3. Call: isEnabled('foo') - should return false
+4. Restart app (session state lost)
+5. Call: isEnabled('foo') - should return true (User scope persisted)
+
+Does the code ACTUALLY implement this correctly? Follow the code paths.
+
+PART 5: RULES.md COMPLIANCE
+- Any use of 'any' type?
+- Any mutation of shared state?
+- Are types derived from schemas where possible?
+- Is the code self-documenting (no unnecessary comments)?
+
+OUTPUT FORMAT:
+{
+  "result": "PASS" or "FAIL",
+  "mechanical": {
+    "lint": "PASS/FAIL",
+    "typecheck": "PASS/FAIL",
+    "tests": "PASS/FAIL"
+  },
+  "qualitative": {
+    "test_quality": {
+      "verdict": "PASS/FAIL",
+      "tests_actually_verify_behavior": true/false,
+      "edge_cases_covered": ["list what's covered"],
+      "edge_cases_missing": ["list what's missing"],
+      "red_flags": ["any issues found"]
+    },
+    "implementation_quality": {
+      "verdict": "PASS/FAIL",
+      "session_storage_mechanism": "describe how it works",
+      "separation_from_persisted": true/false,
+      "lookup_order_correct": true/false,
+      "memory_leak_risk": "none/low/medium/high",
+      "issues": ["any problems found"]
+    },
+    "behavioral_trace": {
+      "verdict": "PASS/FAIL",
+      "scenario_works_correctly": true/false,
+      "explanation": "step by step what actually happens"
+    },
+    "rules_compliance": {
+      "verdict": "PASS/FAIL",
+      "any_types": false,
+      "mutations": false,
+      "issues": []
+    }
+  },
+  "overall_assessment": "Will this actually work correctly at runtime? Why/why not?",
+  "issues_requiring_remediation": ["specific actionable issues"]
+}
 ```
 
 ---
 
-### Phase 2: Command Reloading
+## Phase 2: Command Reloading
 
-**Files to modify:**
+### Files to modify
 - `packages/cli/src/services/BuiltinCommandLoader.ts`
 - `packages/cli/src/services/BuiltinCommandLoader.test.ts`
 
-**Test cases (write FIRST):**
+### Test cases (write FIRST)
 ```typescript
 describe('Command Reloading', () => {
   it('should reload commands when extension is enabled', async () => {
-    // Setup: extension with custom command, initially disabled
     const loader = new BuiltinCommandLoader(config);
     expect(loader.getCommand('/myext-cmd')).toBeUndefined();
-    
-    // Enable extension
     enableExtension('my-ext', SettingScope.Session);
-    
-    // Verify command now available
     expect(loader.getCommand('/myext-cmd')).toBeDefined();
   });
 
   it('should remove commands when extension is disabled', async () => {
-    // Setup: extension enabled with custom command
     const loader = new BuiltinCommandLoader(config);
     expect(loader.getCommand('/myext-cmd')).toBeDefined();
-    
-    // Disable extension
     disableExtension('my-ext', SettingScope.Session);
-    
-    // Verify command removed
     expect(loader.getCommand('/myext-cmd')).toBeUndefined();
   });
 
   it('should not affect built-in commands', async () => {
-    // Built-in commands like /help, /extensions should always work
     disableExtension('my-ext', SettingScope.Session);
     expect(loader.getCommand('/help')).toBeDefined();
     expect(loader.getCommand('/extensions')).toBeDefined();
@@ -264,58 +292,103 @@ describe('Command Reloading', () => {
 });
 ```
 
-**Subagent prompt (typescriptexpert):**
+### Subagent prompt (reviewer) - QUALITATIVE REVIEW
 ```
-Implement Phase 2 of Extension Reloading for LLxprt.
+Phase 2 QUALITATIVE REVIEW for Extension Reloading - Command Reloading.
 
-TASK: Auto-reload custom commands when extensions are enabled/disabled.
+YOU MUST ACTUALLY READ THE CODE, not just run commands.
 
-TDD REQUIREMENT: Write tests FIRST, then implement.
-
-FILES TO MODIFY:
-- packages/cli/src/services/BuiltinCommandLoader.ts
-- packages/cli/src/services/BuiltinCommandLoader.test.ts
-
-CURRENT ARCHITECTURE:
-- BuiltinCommandLoader loads commands from extensions at startup
-- Extensions can define custom slash commands
-- Commands are currently static after initial load
-
-REQUIREMENTS:
-1. When extension is enabled, reload its custom commands
-2. When extension is disabled, remove its custom commands
-3. Built-in commands (help, extensions, etc.) must never be removed
-4. Use event-based architecture if possible (extensionStateChanged event)
-5. Handle race conditions (rapid enable/disable)
-
-TEST CASES (implement first):
-1. Enable extension adds its commands
-2. Disable extension removes its commands
-3. Built-in commands unaffected by extension state
-4. Rapid enable/disable doesn't cause issues
-5. Multiple extensions can be enabled/disabled independently
-
-EXISTING PATTERNS:
-- Look at how extensionLoader.ts handles extension lifecycle
-- Check if there's an event system for extension state changes
-
-AFTER IMPLEMENTATION:
+PART 1: MECHANICAL CHECKS
 1. npm run lint
 2. npm run typecheck
-3. npm run test -- BuiltinCommandLoader.test.ts
+3. npm run test -- BuiltinCommandLoader
 
-Report: test results and any issues.
+PART 2: TEST QUALITY ANALYSIS
+Read BuiltinCommandLoader.test.ts:
+
+Questions:
+- How is extension enable/disable being triggered in tests?
+- Is there an actual extension with commands being used, or just mocks?
+- Do tests verify the commands ACTUALLY WORK, not just exist?
+- What about timing - is there a race condition test?
+- What if extension enable fails partway through?
+
+PART 3: IMPLEMENTATION ANALYSIS
+Read BuiltinCommandLoader.ts:
+
+Questions:
+- How does the loader KNOW when an extension state changes?
+  - Event listener? Polling? Direct call?
+- When commands are "reloaded", what actually happens?
+  - Are old commands cleaned up properly?
+  - Is there reference cleanup (no memory leaks)?
+- What's the reload mechanism?
+  - Full reload of all extension commands?
+  - Incremental (just the changed extension)?
+- Thread safety / race conditions:
+  - What if user types command DURING reload?
+  - What if two extensions enable/disable simultaneously?
+
+PART 4: INTEGRATION ANALYSIS
+- How does BuiltinCommandLoader connect to ExtensionEnablementManager?
+- Is there an event bus? Direct import? Dependency injection?
+- Could this create circular dependencies?
+
+PART 5: BEHAVIORAL TRACE
+Trace this scenario:
+1. App starts, extension 'foo' is disabled
+2. User types /foo-cmd - should fail (command not found)
+3. User runs /extensions enable foo --scope session
+4. User types /foo-cmd - should work now
+5. User runs /extensions disable foo --scope session
+6. User types /foo-cmd - should fail again
+
+Does the implementation handle all these transitions?
+
+OUTPUT FORMAT:
+{
+  "result": "PASS" or "FAIL",
+  "mechanical": { "lint": "...", "typecheck": "...", "tests": "..." },
+  "qualitative": {
+    "test_quality": {
+      "verdict": "PASS/FAIL",
+      "real_extension_tested": true/false,
+      "race_conditions_tested": true/false,
+      "issues": []
+    },
+    "implementation_quality": {
+      "verdict": "PASS/FAIL",
+      "state_change_mechanism": "describe how loader knows about changes",
+      "reload_strategy": "full/incremental",
+      "cleanup_on_disable": true/false,
+      "race_condition_handling": "describe",
+      "memory_leak_risk": "none/low/medium/high",
+      "issues": []
+    },
+    "integration": {
+      "verdict": "PASS/FAIL",
+      "connection_mechanism": "describe",
+      "circular_dependency_risk": true/false
+    },
+    "behavioral_trace": {
+      "verdict": "PASS/FAIL",
+      "all_transitions_work": true/false,
+      "explanation": "..."
+    }
+  },
+  "issues_requiring_remediation": []
+}
 ```
 
 ---
 
-### Phase 3: Enhanced Tab Completion
+## Phase 3: Enhanced Tab Completion
 
-**Files to modify:**
+### Files to modify
 - `packages/cli/src/ui/commands/extensionsCommand.ts`
 - `packages/cli/src/ui/commands/extensionsCommand.test.ts`
 
-**Test cases (write FIRST):**
+### Test cases (write FIRST)
 ```typescript
 describe('Extension Command Completion', () => {
   describe('/extensions enable', () => {
@@ -337,66 +410,91 @@ describe('Extension Command Completion', () => {
       expect(suggestions).toContain('session');
     });
   });
-
-  describe('/extensions disable', () => {
-    it('should suggest enabled extension names', async () => {
-      const suggestions = await getCompletions('/extensions disable ', context);
-      expect(suggestions).toContain('enabled-ext');
-      expect(suggestions).not.toContain('already-disabled-ext');
-    });
-
-    it('should suggest --scope option', async () => {
-      const suggestions = await getCompletions('/extensions disable my-ext --', context);
-      expect(suggestions).toContain('--scope');
-    });
-  });
 });
 ```
 
-**Subagent prompt (typescriptexpert):**
+### Subagent prompt (reviewer) - QUALITATIVE REVIEW
 ```
-Implement Phase 3 of Extension Reloading for LLxprt.
+Phase 3 QUALITATIVE REVIEW for Extension Reloading - Tab Completion.
 
-TASK: Enhance tab completion for /extensions enable and /extensions disable.
+YOU MUST ACTUALLY READ THE CODE, not just run commands.
 
-TDD REQUIREMENT: Write tests FIRST, then implement.
-
-FILES TO MODIFY:
-- packages/cli/src/ui/commands/extensionsCommand.ts
-- packages/cli/src/ui/commands/extensionsCommand.test.ts
-
-CURRENT STATE:
-- extensionsCommand.ts has subCommands for list and update
-- Need to add/enhance enable and disable subcommands with completion
-
-REQUIREMENTS:
-1. /extensions enable should suggest:
-   - Names of disabled extensions
-   - --scope option
-   - Scope values: user, workspace, session
-2. /extensions disable should suggest:
-   - Names of enabled extensions
-   - --scope option
-   - Scope values: user, workspace, session
-3. Follow existing completion patterns in updateExtensionsCommand
-
-COMMAND SYNTAX:
-/extensions enable <extension-name> [--scope user|workspace|session]
-/extensions disable <extension-name> [--scope user|workspace|session]
-
-TEST CASES (implement first):
-1. enable suggests disabled extension names
-2. enable suggests --scope option
-3. enable --scope suggests user, workspace, session
-4. disable suggests enabled extension names
-5. disable suggests --scope option
-
-AFTER IMPLEMENTATION:
+PART 1: MECHANICAL CHECKS
 1. npm run lint
 2. npm run typecheck
-3. npm run test -- extensionsCommand.test.ts
+3. npm run test -- extensionsCommand
 
-Report: test results and any issues.
+PART 2: TEST QUALITY ANALYSIS
+Read extensionsCommand.test.ts:
+
+Questions:
+- Are completions tested with REAL extension data, or just mocks?
+- Is there a test for partial input? ("/extensions enable my" -> suggests "my-ext")
+- What about invalid states? (no extensions installed)
+- Is the completion async? Are there timing tests?
+
+PART 3: IMPLEMENTATION ANALYSIS
+Read extensionsCommand.ts:
+
+Questions:
+- How does completion get the list of extensions?
+- How does it know which are enabled vs disabled?
+- Is filtering done correctly? (enable shows disabled, disable shows enabled)
+- How are scope suggestions implemented?
+- Is there proper error handling if extension list can't be loaded?
+
+PART 4: UX ANALYSIS
+- Does completion feel natural? (Follow existing patterns in codebase)
+- Is --scope optional? What's the default?
+- Are scope values case-sensitive?
+- What happens if user types invalid scope?
+
+PART 5: BEHAVIORAL TRACE
+Trace this scenario:
+1. User types "/extensions enable " and hits Tab
+   - Should see list of DISABLED extensions only
+2. User types "/extensions enable foo --" and hits Tab
+   - Should see "--scope"
+3. User types "/extensions enable foo --scope " and hits Tab
+   - Should see "user", "workspace", "session"
+4. User types "/extensions enable foo --scope ses" and hits Tab
+   - Should complete to "session"
+
+Does the implementation handle all these?
+
+OUTPUT FORMAT:
+{
+  "result": "PASS" or "FAIL",
+  "mechanical": { "lint": "...", "typecheck": "...", "tests": "..." },
+  "qualitative": {
+    "test_quality": {
+      "verdict": "PASS/FAIL",
+      "real_data_tested": true/false,
+      "partial_input_tested": true/false,
+      "edge_cases": [],
+      "issues": []
+    },
+    "implementation_quality": {
+      "verdict": "PASS/FAIL",
+      "extension_list_source": "describe",
+      "filtering_correct": true/false,
+      "error_handling": "describe",
+      "issues": []
+    },
+    "ux_quality": {
+      "verdict": "PASS/FAIL",
+      "follows_existing_patterns": true/false,
+      "scope_default": "describe",
+      "invalid_input_handling": "describe"
+    },
+    "behavioral_trace": {
+      "verdict": "PASS/FAIL",
+      "all_scenarios_work": true/false,
+      "explanation": "..."
+    }
+  },
+  "issues_requiring_remediation": []
+}
 ```
 
 ---
@@ -406,6 +504,7 @@ Report: test results and any issues.
 - [ ] All tests pass (`npm run test`)
 - [ ] Lint passes (`npm run lint`)
 - [ ] Typecheck passes (`npm run typecheck`)
+- [ ] Qualitative review PASS for all phases
 - [ ] `/extensions enable <name>` works with session scope
 - [ ] `/extensions disable <name>` works with session scope
 - [ ] Commands auto-reload when extensions enabled/disabled
@@ -419,6 +518,5 @@ Report: test results and any issues.
 Each phase has its own commit:
 ```bash
 git log --oneline -5
-# Revert specific phase if needed
-git revert <commit-hash>
+git revert <commit-hash>  # Revert specific phase if needed
 ```
