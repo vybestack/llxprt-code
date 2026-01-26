@@ -26,7 +26,12 @@ export interface LSToolParams {
   /**
    * The absolute path to the directory to list
    */
-  path: string;
+  dir_path?: string;
+
+  /**
+   * Alternative parameter name for dir_path (for backward compatibility)
+   */
+  path?: string;
 
   /**
    * Array of glob patterns to ignore (optional)
@@ -80,6 +85,10 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
     super(params);
   }
 
+  private getDirPath(): string {
+    return this.params.dir_path || this.params.path || '';
+  }
+
   /**
    * Checks if a filename matches any of the ignore patterns
    * @param filename Filename to check
@@ -109,8 +118,9 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
    * @returns A string describing the file being read
    */
   getDescription(): string {
+    const dirPath = this.getDirPath();
     const relativePath = makeRelative(
-      this.params.path,
+      dirPath,
       this.config.getTargetDir(),
     );
     return shortenPath(relativePath);
@@ -139,25 +149,26 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
    */
   async execute(_signal: AbortSignal): Promise<ToolResult> {
     try {
-      const stats = fs.statSync(this.params.path);
+      const dirPath = this.getDirPath();
+      const stats = fs.statSync(dirPath);
       if (!stats) {
         // fs.statSync throws on non-existence, so this check might be redundant
         // but keeping for clarity. Error message adjusted.
         return this.errorResult(
-          `Error: Directory not found or inaccessible: ${this.params.path}`,
+          `Error: Directory not found or inaccessible: ${dirPath}`,
           `Directory not found or inaccessible.`,
           ToolErrorType.FILE_NOT_FOUND,
         );
       }
       if (!stats.isDirectory()) {
         return this.errorResult(
-          `Error: Path is not a directory: ${this.params.path}`,
+          `Error: Path is not a directory: ${dirPath}`,
           `Path is not a directory.`,
           ToolErrorType.PATH_IS_NOT_A_DIRECTORY,
         );
       }
 
-      const files = fs.readdirSync(this.params.path);
+      const files = fs.readdirSync(dirPath);
 
       const defaultFileIgnores =
         this.config.getFileFilteringOptions() ?? DEFAULT_FILE_FILTERING_OPTIONS;
@@ -180,7 +191,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
       if (files.length === 0) {
         // Changed error message to be more neutral for LLM
         return {
-          llmContent: `Directory ${this.params.path} is empty.`,
+          llmContent: `Directory ${dirPath} is empty.`,
           returnDisplay: `Directory is empty.`,
         };
       }
@@ -190,7 +201,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
           continue;
         }
 
-        const fullPath = path.join(this.params.path, file);
+        const fullPath = path.join(dirPath, file);
         const relativePath = path.relative(
           this.config.getTargetDir(),
           fullPath,
@@ -239,7 +250,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
         .map((entry) => `${entry.isDirectory ? '[DIR] ' : ''}${entry.name}`)
         .join('\n');
 
-      let resultMessage = `Directory listing for ${this.params.path}:\n${directoryContent}`;
+      let resultMessage = `Directory listing for ${dirPath}:\n${directoryContent}`;
       if (ignoredCount > 0) {
         resultMessage += `\n\n(${ignoredCount} ignored)`;
       }
@@ -281,9 +292,14 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
       Kind.Search,
       {
         properties: {
-          path: {
+          dir_path: {
             description:
               'The absolute path to the directory to list (must be absolute, not relative)',
+            type: 'string',
+          },
+          path: {
+            description:
+              'Alternative parameter name for dir_path (for backward compatibility).',
             type: 'string',
           },
           ignore: {
@@ -311,7 +327,7 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
             },
           },
         },
-        required: ['path'],
+        required: [],
         type: 'object',
       },
     );
@@ -325,12 +341,17 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
   protected override validateToolParamValues(
     params: LSToolParams,
   ): string | null {
-    if (!path.isAbsolute(params.path)) {
-      return `Path must be absolute: ${params.path}`;
+    const dirPath = params.dir_path || params.path;
+    if (!dirPath || dirPath.trim() === '') {
+      return "Either 'dir_path' or 'path' parameter must be provided and non-empty.";
+    }
+
+    if (!path.isAbsolute(dirPath)) {
+      return `Path must be absolute: ${dirPath}`;
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(params.path)) {
+    if (!workspaceContext.isPathWithinWorkspace(dirPath)) {
       const directories = workspaceContext.getDirectories();
       return `Path must be within one of the workspace directories: ${directories.join(
         ', ',
@@ -343,6 +364,10 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
     params: LSToolParams,
     _messageBus?: MessageBus,
   ): ToolInvocation<LSToolParams, ToolResult> {
-    return new LSToolInvocation(this.config, params);
+    const normalizedParams = { ...params };
+    if (!normalizedParams.dir_path && normalizedParams.path) {
+      normalizedParams.dir_path = normalizedParams.path;
+    }
+    return new LSToolInvocation(this.config, normalizedParams);
   }
 }
