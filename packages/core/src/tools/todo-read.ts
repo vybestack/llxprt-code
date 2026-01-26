@@ -98,13 +98,10 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     taskId?: string;
     taskContent?: string;
   } {
-    // Check if any tasks are in progress
+    // Check if any tasks are in progress - return first one (preserves LLM order)
     const inProgressTasks = todos.filter((t) => t.status === 'in_progress');
     if (inProgressTasks.length > 0) {
-      // Continue with first in-progress task, sorted alphabetically
-      const task = inProgressTasks.sort((a, b) =>
-        a.content.localeCompare(b.content),
-      )[0];
+      const task = inProgressTasks[0];
       return {
         type: 'continue',
         taskId: task.id,
@@ -112,13 +109,10 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
       };
     }
 
-    // Check if any tasks are pending
+    // Check if any tasks are pending - return first one (preserves LLM order)
     const pendingTasks = todos.filter((t) => t.status === 'pending');
     if (pendingTasks.length > 0) {
-      // Start with first pending task, sorted alphabetically
-      const task = pendingTasks.sort((a, b) =>
-        a.content.localeCompare(b.content),
-      )[0];
+      const task = pendingTasks[0];
       return {
         type: 'start',
         taskId: task.id,

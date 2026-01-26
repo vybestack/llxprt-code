@@ -208,11 +208,5 @@ export const formatTodoListForDisplay = (
   return lines.join('\n').trimEnd();
 };
 const orderTodos = (todos: Todo[]): Todo[] =>
-  [...todos].sort((a, b) => {
-    const statusDiff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
-    if (statusDiff !== 0) {
-      return statusDiff;
-    }
-
-    return a.content.localeCompare(b.content);
-  });
+  // Sort by status only, preserving original array order within each status group
+  [...todos].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
