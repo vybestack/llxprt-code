@@ -17,10 +17,10 @@ import fs from 'fs/promises';
 
 /**
  * Phase 1 TEST for Consistent Params - write-file tool
- * 
+ *
  * REQUIREMENT: Verify that absolute_path is the PRIMARY parameter (not file_path).
  * REFERENCE: Read-file tool already migrated with this pattern.
- * 
+ *
  * These tests MUST FAIL initially because write-file currently uses file_path as primary.
  */
 
@@ -31,7 +31,9 @@ describe('write_file parameter consistency', () => {
 
   beforeEach(async () => {
     // Create temp directory for tests
-    testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'write-file-params-test-'));
+    testDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'write-file-params-test-'),
+    );
     testFilePath = path.join(testDir, 'test.txt');
 
     // Setup config with test directory as workspace
@@ -47,7 +49,7 @@ describe('write_file parameter consistency', () => {
     // Arrange
     const tool = new WriteFileTool(config);
     const params = {
-      absolute_path: testFilePath,  // Using PRIMARY parameter
+      absolute_path: testFilePath, // Using PRIMARY parameter
       // NOT providing file_path
       content: 'test content',
     };
@@ -67,7 +69,7 @@ describe('write_file parameter consistency', () => {
     // Arrange
     const tool = new WriteFileTool(config);
     const params = {
-      file_path: testFilePath,  // Using LEGACY parameter
+      file_path: testFilePath, // Using LEGACY parameter
       // NOT providing absolute_path
       content: 'test content',
     };
@@ -88,8 +90,8 @@ describe('write_file parameter consistency', () => {
     const tool = new WriteFileTool(config);
     const alternativePath = path.join(testDir, 'alternative.txt');
     const params = {
-      absolute_path: testFilePath,      // Primary parameter
-      file_path: alternativePath,       // Legacy parameter (different path)
+      absolute_path: testFilePath, // Primary parameter
+      file_path: alternativePath, // Legacy parameter (different path)
       content: 'test content',
     };
 
@@ -109,7 +111,7 @@ describe('write_file parameter consistency', () => {
     // Arrange
     const tool = new WriteFileTool(config);
     const params = {
-      file_path: testFilePath,  // Only providing legacy parameter
+      file_path: testFilePath, // Only providing legacy parameter
       content: 'test content',
     };
 
@@ -148,7 +150,7 @@ describe('write_file parameter consistency', () => {
     const tool = new WriteFileTool(config);
     const relativePath = 'relative/path.txt';
     const params = {
-      absolute_path: relativePath,  // Invalid: relative path
+      absolute_path: relativePath, // Invalid: relative path
       content: 'test content',
     };
 
@@ -191,7 +193,7 @@ describe('write_file parameter consistency', () => {
     expect(absolutePathDesc).toBeDefined();
     expect(absolutePathDesc?.toLowerCase()).not.toContain('alternative');
     expect(absolutePathDesc?.toLowerCase()).not.toContain('compatibility');
-    
+
     // file_path description SHOULD mention it's for backward compatibility
     expect(filePathDesc).toBeDefined();
     expect(filePathDesc?.toLowerCase()).toContain('alternative');

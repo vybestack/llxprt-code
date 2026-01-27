@@ -1449,7 +1449,6 @@ export class Config {
     return extension ? extension.isActive : true;
   }
 
-
   getEnableExtensionReloading(): boolean {
     return this.enableExtensionReloading;
   }

@@ -6,10 +6,10 @@
 
 /**
  * Phase 3 TDD Tests - Tab Completion Extension Filtering
- * 
+ *
  * These tests verify that tab completion shows/hides extension commands
  * based on runtime enable/disable state.
- * 
+ *
  * EXPECTED: All tests should FAIL initially because tab completion
  * doesn't yet filter based on extension enabled state.
  */
@@ -17,7 +17,11 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
-import { CommandContext, SlashCommand, CommandKind } from '../commands/types.js';
+import {
+  CommandContext,
+  SlashCommand,
+  CommandKind,
+} from '../commands/types.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -169,9 +173,9 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       // 2. UI calls reloadCommands() -> CommandService rebuilds with new BuiltinCommandLoader
       // 3. BuiltinCommandLoader.loadCommands() filters out disabled extensions
       // 4. useSlashCompletion gets the NEW (filtered) command list
-      // 
+      //
       // This test simulates that flow by providing different command lists
-      
+
       const extensionCommand: SlashCommand = {
         name: 'mycommand',
         kind: CommandKind.EXTENSION,
@@ -189,7 +193,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
 
       // Phase 1: Extension enabled - command list includes extension command
       const commandsWithExtension = [builtinCommand, extensionCommand];
-      
+
       // Phase 2: Extension disabled - command list excludes extension command
       // (This is what BuiltinCommandLoader.loadCommands() returns after filtering)
       const commandsWithoutExtension = [builtinCommand];
@@ -210,7 +214,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
             ),
           };
         },
-        { initialProps: { commands: commandsWithExtension } }
+        { initialProps: { commands: commandsWithExtension } },
       );
 
       // STEP 1: Command should show when in the command list
@@ -226,7 +230,9 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       // STEP 3: Command should no longer appear (it's not in the list)
       await waitFor(() => {
         const suggestions = result.current.completion.suggestions;
-        expect(suggestions.find((s) => s.value === 'mycommand')).toBeUndefined();
+        expect(
+          suggestions.find((s) => s.value === 'mycommand'),
+        ).toBeUndefined();
       });
     });
 
@@ -339,7 +345,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
             ),
           };
         },
-        { initialProps: { commands: commandsEnabled } }
+        { initialProps: { commands: commandsEnabled } },
       );
 
       // STEP 1: Both commands should appear when in list
@@ -355,7 +361,9 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       // STEP 3: Both commands should disappear
       await waitFor(() => {
         const suggestions = result.current.completion.suggestions;
-        expect(suggestions.find((s) => s.value === 'mycommand')).toBeUndefined();
+        expect(
+          suggestions.find((s) => s.value === 'mycommand'),
+        ).toBeUndefined();
         expect(suggestions.find((s) => s.value === 'myother')).toBeUndefined();
       });
     });

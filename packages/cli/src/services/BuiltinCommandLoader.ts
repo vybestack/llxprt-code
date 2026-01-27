@@ -66,7 +66,9 @@ export class BuiltinCommandLoader implements ICommandLoader {
     // Access extensionEnablementManager if available on config
     if (config && 'extensionEnablementManager' in config) {
       this.extensionEnablementManager = (
-        config as Config & { extensionEnablementManager?: ExtensionEnablementManager }
+        config as Config & {
+          extensionEnablementManager?: ExtensionEnablementManager;
+        }
       ).extensionEnablementManager;
     }
   }

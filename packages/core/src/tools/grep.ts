@@ -565,14 +565,8 @@ class GrepToolInvocation extends BaseToolInvocation<
     }
     const dirPath = this.getDirPath();
     if (dirPath) {
-      const resolvedPath = path.resolve(
-        this.config.getTargetDir(),
-        dirPath,
-      );
-      if (
-        resolvedPath === this.config.getTargetDir() ||
-        dirPath === '.'
-      ) {
+      const resolvedPath = path.resolve(this.config.getTargetDir(), dirPath);
+      if (resolvedPath === this.config.getTargetDir() || dirPath === '.') {
         description += ` within ./`;
       } else {
         const relativePath = makeRelative(

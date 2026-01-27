@@ -17,10 +17,10 @@ import fs from 'fs/promises';
 
 /**
  * Phase 2 TEST for Consistent Params - grep tool
- * 
+ *
  * REQUIREMENT: Verify that dir_path is the PRIMARY parameter (not path).
  * UPSTREAM PATTERN: For directory parameters: path → dir_path (from commit f05d937f39)
- * 
+ *
  * These tests MUST FAIL initially because grep currently uses path as primary.
  */
 
@@ -33,7 +33,10 @@ describe('grep parameter consistency', () => {
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'grep-params-test-'));
 
     // Create a test file to search
-    await fs.writeFile(path.join(testDir, 'test.txt'), 'searchable content\nmore text');
+    await fs.writeFile(
+      path.join(testDir, 'test.txt'),
+      'searchable content\nmore text',
+    );
 
     // Setup config with test directory as workspace
     const workspaceContext = new WorkspaceContext([testDir]);
@@ -49,7 +52,7 @@ describe('grep parameter consistency', () => {
     const tool = new GrepTool(config);
     const params = {
       pattern: 'searchable',
-      dir_path: testDir,  // Using PRIMARY parameter
+      dir_path: testDir, // Using PRIMARY parameter
       // NOT providing path
     };
 
@@ -69,7 +72,7 @@ describe('grep parameter consistency', () => {
     const tool = new GrepTool(config);
     const params = {
       pattern: 'searchable',
-      path: testDir,  // Using LEGACY parameter
+      path: testDir, // Using LEGACY parameter
       // NOT providing dir_path
     };
 
@@ -91,8 +94,8 @@ describe('grep parameter consistency', () => {
     await fs.mkdir(subDir);
     const params = {
       pattern: 'searchable',
-      dir_path: testDir,      // Primary parameter
-      path: subDir,           // Legacy parameter (different path)
+      dir_path: testDir, // Primary parameter
+      path: subDir, // Legacy parameter (different path)
     };
 
     // Act
@@ -111,7 +114,7 @@ describe('grep parameter consistency', () => {
     const tool = new GrepTool(config);
     const params = {
       pattern: 'searchable',
-      path: testDir,  // Only providing legacy parameter
+      path: testDir, // Only providing legacy parameter
     };
 
     // Act
@@ -179,7 +182,7 @@ describe('grep parameter consistency', () => {
     expect(dirPathDesc?.toLowerCase()).toContain('path to the directory');
     expect(dirPathDesc?.toLowerCase()).not.toContain('alternative');
     expect(dirPathDesc?.toLowerCase()).not.toContain('compatibility');
-    
+
     // path description SHOULD mention it's for backward compatibility
     expect(pathDesc).toBeDefined();
     expect(pathDesc?.toLowerCase()).toContain('alternative');

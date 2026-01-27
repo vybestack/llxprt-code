@@ -319,78 +319,78 @@ class EditToolInvocation extends BaseToolInvocation<
       finalOldString = filteredParams.old_string;
       finalNewString = filteredParams.new_string;
 
-        if (finalOldString === '') {
-          occurrences = 0;
-        } else {
-          // Try fuzzy matching first to count occurrences
-          const fuzzyResult = fuzzyReplace(
-            currentContent,
-            finalOldString,
-            finalNewString,
-            expectedReplacements > 1,
-          );
-
-          if (fuzzyResult) {
-            occurrences = fuzzyResult.occurrences;
-          } else {
-            // Fall back to strict counting
-            let count = 0;
-            let pos = currentContent.indexOf(finalOldString);
-            while (pos !== -1) {
-              count++;
-              pos = currentContent.indexOf(
-                finalOldString,
-                pos + finalOldString.length,
-              );
-            }
-            occurrences = count;
-          }
-        }
-
-        if (filteredParams.old_string === '' && expectedReplacements > 1) {
-          // Error: Invalid combination that would cause infinite loop
-          error = {
-            display: `Failed to edit. Cannot perform multiple replacements with empty old_string.`,
-            raw: `Invalid parameters: empty old_string with expected_replacements=${expectedReplacements} would cause infinite loop`,
-            type: ToolErrorType.INVALID_TOOL_PARAMS,
-          };
-        } else if (filteredParams.old_string === '') {
-          // Error: Trying to create a file that already exists
-          error = {
-            display: `Failed to edit. Attempted to create a file that already exists.`,
-            raw: `File already exists, cannot create: ${filePath}`,
-            type: ToolErrorType.ATTEMPT_TO_CREATE_EXISTING_FILE,
-          };
-        } else if (occurrences === 0) {
-          error = {
-            display: `Failed to edit, could not find the string to replace.`,
-            raw: `Failed to edit, 0 occurrences found for old_string in ${filePath}. No edits made. The exact text in old_string was not found. Ensure you're not escaping content incorrectly and check whitespace, indentation, and context. Use ${ReadFileTool.Name} tool to verify.`,
-            type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
-          };
-        } else if (occurrences !== expectedReplacements) {
-          const occurrenceTerm =
-            expectedReplacements === 1 ? 'occurrence' : 'occurrences';
-
-          error = {
-            display: `Failed to edit, expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences}.`,
-            raw: `Failed to edit, Expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences} for old_string in file: ${filePath}`,
-            type: ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
-          };
-        } else if (finalOldString === finalNewString) {
-          error = {
-            display: `No changes to apply. The old_string and new_string are identical.`,
-            raw: `No changes to apply. The old_string and new_string are identical in file: ${filePath}`,
-            type: ToolErrorType.EDIT_NO_CHANGE,
-          };
-        }
+      if (finalOldString === '') {
+        occurrences = 0;
       } else {
-        // Should not happen if fileExists and no exception was thrown, but defensively:
+        // Try fuzzy matching first to count occurrences
+        const fuzzyResult = fuzzyReplace(
+          currentContent,
+          finalOldString,
+          finalNewString,
+          expectedReplacements > 1,
+        );
+
+        if (fuzzyResult) {
+          occurrences = fuzzyResult.occurrences;
+        } else {
+          // Fall back to strict counting
+          let count = 0;
+          let pos = currentContent.indexOf(finalOldString);
+          while (pos !== -1) {
+            count++;
+            pos = currentContent.indexOf(
+              finalOldString,
+              pos + finalOldString.length,
+            );
+          }
+          occurrences = count;
+        }
+      }
+
+      if (filteredParams.old_string === '' && expectedReplacements > 1) {
+        // Error: Invalid combination that would cause infinite loop
         error = {
-          display: `Failed to read content of file.`,
-          raw: `Failed to read content of existing file: ${filePath}`,
-          type: ToolErrorType.READ_CONTENT_FAILURE,
+          display: `Failed to edit. Cannot perform multiple replacements with empty old_string.`,
+          raw: `Invalid parameters: empty old_string with expected_replacements=${expectedReplacements} would cause infinite loop`,
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        };
+      } else if (filteredParams.old_string === '') {
+        // Error: Trying to create a file that already exists
+        error = {
+          display: `Failed to edit. Attempted to create a file that already exists.`,
+          raw: `File already exists, cannot create: ${filePath}`,
+          type: ToolErrorType.ATTEMPT_TO_CREATE_EXISTING_FILE,
+        };
+      } else if (occurrences === 0) {
+        error = {
+          display: `Failed to edit, could not find the string to replace.`,
+          raw: `Failed to edit, 0 occurrences found for old_string in ${filePath}. No edits made. The exact text in old_string was not found. Ensure you're not escaping content incorrectly and check whitespace, indentation, and context. Use ${ReadFileTool.Name} tool to verify.`,
+          type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
+        };
+      } else if (occurrences !== expectedReplacements) {
+        const occurrenceTerm =
+          expectedReplacements === 1 ? 'occurrence' : 'occurrences';
+
+        error = {
+          display: `Failed to edit, expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences}.`,
+          raw: `Failed to edit, Expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences} for old_string in file: ${filePath}`,
+          type: ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
+        };
+      } else if (finalOldString === finalNewString) {
+        error = {
+          display: `No changes to apply. The old_string and new_string are identical.`,
+          raw: `No changes to apply. The old_string and new_string are identical in file: ${filePath}`,
+          type: ToolErrorType.EDIT_NO_CHANGE,
         };
       }
+    } else {
+      // Should not happen if fileExists and no exception was thrown, but defensively:
+      error = {
+        display: `Failed to read content of file.`,
+        raw: `Failed to read content of existing file: ${filePath}`,
+        type: ToolErrorType.READ_CONTENT_FAILURE,
+      };
+    }
 
     const newContent = !error
       ? applyReplacement(
@@ -825,8 +825,9 @@ Expectation for required parameters:
       getProposedContent: async (params: EditToolParams): Promise<string> => {
         const filePath = params.absolute_path || params.file_path || '';
         try {
-          const currentContent =
-            await this.config.getFileSystemService().readTextFile(filePath);
+          const currentContent = await this.config
+            .getFileSystemService()
+            .readTextFile(filePath);
           return applyReplacement(
             currentContent,
             params.old_string,

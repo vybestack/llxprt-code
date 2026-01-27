@@ -17,11 +17,11 @@ import fs from 'fs/promises';
 
 /**
  * Phase 3 TEST for Consistent Params - shell tool
- * 
+ *
  * REQUIREMENT: Verify that dir_path is the PRIMARY parameter (not directory).
  * UPSTREAM PATTERN: For directory parameters: directory → dir_path (from commit f05d937f39)
  * This aligns with glob/grep/ls which also use dir_path.
- * 
+ *
  * These tests MUST FAIL initially because shell currently uses directory as primary.
  */
 
@@ -47,7 +47,7 @@ describe('shell parameter consistency', () => {
     const tool = new ShellTool(config);
     const params = {
       command: 'echo hello',
-      dir_path: testDir,  // Using PRIMARY parameter
+      dir_path: testDir, // Using PRIMARY parameter
       // NOT providing directory
     };
 
@@ -67,7 +67,7 @@ describe('shell parameter consistency', () => {
     const tool = new ShellTool(config);
     const params = {
       command: 'echo hello',
-      directory: testDir,  // Using LEGACY parameter
+      directory: testDir, // Using LEGACY parameter
       // NOT providing dir_path
     };
 
@@ -89,8 +89,8 @@ describe('shell parameter consistency', () => {
     await fs.mkdir(subDir);
     const params = {
       command: 'echo hello',
-      dir_path: testDir,      // Primary parameter
-      directory: subDir,      // Legacy parameter (different path)
+      dir_path: testDir, // Primary parameter
+      directory: subDir, // Legacy parameter (different path)
     };
 
     // Act
@@ -109,7 +109,7 @@ describe('shell parameter consistency', () => {
     const tool = new ShellTool(config);
     const params = {
       command: 'echo hello',
-      directory: testDir,  // Only providing legacy parameter
+      directory: testDir, // Only providing legacy parameter
     };
 
     // Act
@@ -195,7 +195,9 @@ describe('shell parameter consistency', () => {
     // Assert
     // directory description should mention it's for backward compatibility
     if (directoryDesc) {
-      expect(directoryDesc.toLowerCase()).toMatch(/alternative|backward|legacy|compat/);
+      expect(directoryDesc.toLowerCase()).toMatch(
+        /alternative|backward|legacy|compat/,
+      );
     }
   });
 });

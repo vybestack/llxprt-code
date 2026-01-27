@@ -17,10 +17,10 @@ import fs from 'fs/promises';
 
 /**
  * Phase 1 TEST for Consistent Params - edit tool
- * 
+ *
  * REQUIREMENT: Verify that absolute_path is the PRIMARY parameter (not file_path).
  * REFERENCE: Read-file tool already migrated with this pattern.
- * 
+ *
  * These tests MUST FAIL initially because edit currently uses file_path as primary
  * and does NOT have an absolute_path alias.
  */
@@ -51,7 +51,7 @@ describe('edit parameter consistency', () => {
     // Arrange
     const tool = new EditTool(config);
     const params = {
-      absolute_path: testFilePath,  // Using PRIMARY parameter
+      absolute_path: testFilePath, // Using PRIMARY parameter
       // NOT providing file_path
       old_string: 'original content',
       new_string: 'modified content',
@@ -72,7 +72,7 @@ describe('edit parameter consistency', () => {
     // Arrange
     const tool = new EditTool(config);
     const params = {
-      file_path: testFilePath,  // Using LEGACY parameter
+      file_path: testFilePath, // Using LEGACY parameter
       // NOT providing absolute_path
       old_string: 'original content',
       new_string: 'modified content',
@@ -94,10 +94,10 @@ describe('edit parameter consistency', () => {
     const tool = new EditTool(config);
     const alternativePath = path.join(testDir, 'alternative.txt');
     await fs.writeFile(alternativePath, 'alternative content\nline 2');
-    
+
     const params = {
-      absolute_path: testFilePath,      // Primary parameter
-      file_path: alternativePath,       // Legacy parameter (different path)
+      absolute_path: testFilePath, // Primary parameter
+      file_path: alternativePath, // Legacy parameter (different path)
       old_string: 'original content',
       new_string: 'modified content',
     };
@@ -118,7 +118,7 @@ describe('edit parameter consistency', () => {
     // Arrange
     const tool = new EditTool(config);
     const params = {
-      file_path: testFilePath,  // Only providing legacy parameter
+      file_path: testFilePath, // Only providing legacy parameter
       old_string: 'original content',
       new_string: 'modified content',
     };
@@ -159,7 +159,7 @@ describe('edit parameter consistency', () => {
     const tool = new EditTool(config);
     const relativePath = 'relative/path.txt';
     const params = {
-      absolute_path: relativePath,  // Invalid: relative path
+      absolute_path: relativePath, // Invalid: relative path
       old_string: 'original content',
       new_string: 'modified content',
     };
@@ -203,7 +203,7 @@ describe('edit parameter consistency', () => {
     expect(absolutePathDesc).toBeDefined();
     expect(absolutePathDesc?.toLowerCase()).not.toContain('alternative');
     expect(absolutePathDesc?.toLowerCase()).not.toContain('compatibility');
-    
+
     // file_path description SHOULD mention it's for backward compatibility
     expect(filePathDesc).toBeDefined();
     expect(filePathDesc?.toLowerCase()).toContain('alternative');

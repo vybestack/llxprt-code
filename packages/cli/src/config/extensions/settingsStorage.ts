@@ -96,10 +96,10 @@ export function getSettingsEnvFilePath(extensionDir: string): string {
 export function getKeychainServiceName(extensionName: string): string {
   // Remove special characters, keeping only alphanumeric, dash, and underscore
   const sanitized = extensionName.replace(/[^a-zA-Z0-9-_]/g, '');
-  
+
   // Format: "LLxprt Code Extension {name}"
   const serviceName = `LLxprt Code Extension ${sanitized}`;
-  
+
   // Limit to 255 characters (common keychain limit)
   return serviceName.substring(0, 255);
 }
@@ -113,7 +113,7 @@ function parseEnvFile(content: string): Record<string, string> {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    
+
     // Skip empty lines and comments
     if (!trimmed || trimmed.startsWith('#')) {
       continue;
@@ -150,7 +150,9 @@ function formatEnvFile(values: Record<string, string>): string {
   for (const [key, value] of Object.entries(values)) {
     // Quote values that contain spaces or special characters
     const needsQuotes = /[\s"'\\]/.test(value);
-    const formattedValue = needsQuotes ? `"${value.replace(/"/g, '\\"')}"` : value;
+    const formattedValue = needsQuotes
+      ? `"${value.replace(/"/g, '\\"')}"`
+      : value;
     lines.push(`${key}=${formattedValue}`);
   }
 
@@ -206,11 +208,7 @@ export class ExtensionSettingsStorage {
         const value = values[setting.envVar];
         if (value !== undefined) {
           try {
-            await keytar.setPassword(
-              this.serviceName,
-              setting.envVar,
-              value,
-            );
+            await keytar.setPassword(this.serviceName, setting.envVar, value);
           } catch (error) {
             console.error(
               `Failed to save sensitive setting ${setting.envVar} to keychain:`,
@@ -234,7 +232,7 @@ export class ExtensionSettingsStorage {
     // Load non-sensitive settings from .env file
     const envPath = getSettingsEnvFilePath(this.extensionDir);
     let envValues: Record<string, string> = {};
-    
+
     try {
       if (fs.existsSync(envPath)) {
         const content = await fs.promises.readFile(envPath, 'utf-8');

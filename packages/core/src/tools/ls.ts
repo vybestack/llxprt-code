@@ -119,10 +119,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
    */
   getDescription(): string {
     const dirPath = this.getDirPath();
-    const relativePath = makeRelative(
-      dirPath,
-      this.config.getTargetDir(),
-    );
+    const relativePath = makeRelative(dirPath, this.config.getTargetDir());
     return shortenPath(relativePath);
   }
 

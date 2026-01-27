@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { ExtensionSettingSchema, ExtensionSettingsArraySchema, ExtensionSetting } from './extensionSettings.js';
+import {
+  ExtensionSettingSchema,
+  ExtensionSettingsArraySchema,
+  ExtensionSetting,
+} from './extensionSettings.js';
 
 describe('ExtensionSettingSchema', () => {
   describe('valid settings', () => {
@@ -15,7 +19,7 @@ describe('ExtensionSettingSchema', () => {
         name: 'apiKey',
         description: 'Your API key',
         envVar: 'MY_API_KEY',
-        sensitive: true
+        sensitive: true,
       };
       const result = ExtensionSettingSchema.parse(setting);
       expect(result.name).toBe('apiKey');
@@ -41,19 +45,31 @@ describe('ExtensionSettingSchema', () => {
     });
 
     it('should reject empty name', () => {
-      expect(() => ExtensionSettingSchema.parse({ name: '', envVar: 'X' })).toThrow();
+      expect(() =>
+        ExtensionSettingSchema.parse({ name: '', envVar: 'X' }),
+      ).toThrow();
     });
 
     it('should reject empty envVar', () => {
-      expect(() => ExtensionSettingSchema.parse({ name: 'x', envVar: '' })).toThrow();
+      expect(() =>
+        ExtensionSettingSchema.parse({ name: 'x', envVar: '' }),
+      ).toThrow();
     });
 
     it('should reject wrong type for name', () => {
-      expect(() => ExtensionSettingSchema.parse({ name: 123, envVar: 'X' })).toThrow();
+      expect(() =>
+        ExtensionSettingSchema.parse({ name: 123, envVar: 'X' }),
+      ).toThrow();
     });
 
     it('should reject wrong type for sensitive', () => {
-      expect(() => ExtensionSettingSchema.parse({ name: 'x', envVar: 'X', sensitive: 'yes' })).toThrow();
+      expect(() =>
+        ExtensionSettingSchema.parse({
+          name: 'x',
+          envVar: 'X',
+          sensitive: 'yes',
+        }),
+      ).toThrow();
     });
   });
 
@@ -75,7 +91,7 @@ describe('ExtensionSettingsArraySchema', () => {
   it('should validate array of settings', () => {
     const settings = [
       { name: 'apiKey', envVar: 'API_KEY', sensitive: true },
-      { name: 'apiUrl', envVar: 'API_URL' }
+      { name: 'apiUrl', envVar: 'API_URL' },
     ];
     const result = ExtensionSettingsArraySchema.parse(settings);
     expect(result).toHaveLength(2);
@@ -86,7 +102,7 @@ describe('ExtensionSettingsArraySchema', () => {
   it('should reject invalid setting in array', () => {
     const settings = [
       { name: 'valid', envVar: 'VALID' },
-      { name: 'invalid' } // missing envVar
+      { name: 'invalid' }, // missing envVar
     ];
     expect(() => ExtensionSettingsArraySchema.parse(settings)).toThrow();
   });
@@ -98,7 +114,7 @@ describe('Type inference', () => {
     const setting: ExtensionSetting = {
       name: 'test',
       envVar: 'TEST',
-      sensitive: false
+      sensitive: false,
     };
     expect(setting.name).toBe('test');
   });

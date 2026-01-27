@@ -17,10 +17,10 @@ import fs from 'fs/promises';
 
 /**
  * Phase 2 TEST for Consistent Params - ls (list_directory) tool
- * 
+ *
  * REQUIREMENT: Verify that dir_path is the PRIMARY parameter (not path).
  * UPSTREAM PATTERN: For directory parameters: path → dir_path (from commit f05d937f39)
- * 
+ *
  * These tests MUST FAIL initially because ls currently uses path as primary.
  */
 
@@ -48,7 +48,7 @@ describe('list_directory parameter consistency', () => {
     // Arrange
     const tool = new LSTool(config);
     const params = {
-      dir_path: testDir,  // Using PRIMARY parameter
+      dir_path: testDir, // Using PRIMARY parameter
       // NOT providing path
     };
 
@@ -67,7 +67,7 @@ describe('list_directory parameter consistency', () => {
     // Arrange
     const tool = new LSTool(config);
     const params = {
-      path: testDir,  // Using LEGACY parameter
+      path: testDir, // Using LEGACY parameter
       // NOT providing dir_path
     };
 
@@ -88,8 +88,8 @@ describe('list_directory parameter consistency', () => {
     const subDir = path.join(testDir, 'subdir');
     await fs.mkdir(subDir);
     const params = {
-      dir_path: testDir,      // Primary parameter
-      path: subDir,           // Legacy parameter (different path)
+      dir_path: testDir, // Primary parameter
+      path: subDir, // Legacy parameter (different path)
     };
 
     // Act
@@ -107,7 +107,7 @@ describe('list_directory parameter consistency', () => {
     // Arrange
     const tool = new LSTool(config);
     const params = {
-      path: testDir,  // Only providing legacy parameter
+      path: testDir, // Only providing legacy parameter
     };
 
     // Act
@@ -145,7 +145,7 @@ describe('list_directory parameter consistency', () => {
     const tool = new LSTool(config);
     const relativePath = 'relative/path';
     const params = {
-      dir_path: relativePath,  // Invalid: relative path
+      dir_path: relativePath, // Invalid: relative path
     };
 
     // Act
@@ -188,7 +188,7 @@ describe('list_directory parameter consistency', () => {
     expect(dirPathDesc?.toLowerCase()).toContain('path to the directory');
     expect(dirPathDesc?.toLowerCase()).not.toContain('alternative');
     expect(dirPathDesc?.toLowerCase()).not.toContain('compatibility');
-    
+
     // path description SHOULD mention it's for backward compatibility
     expect(pathDesc).toBeDefined();
     expect(pathDesc?.toLowerCase()).toContain('alternative');

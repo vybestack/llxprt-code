@@ -234,12 +234,16 @@ describe('Command Reloading on Extension State Change', () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const originalRegister = (loader as any).registerBuiltinCommands.bind(loader);
+    const originalRegister = (loader as any).registerBuiltinCommands.bind(
+      loader,
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(() => {
-      const builtins = originalRegister();
-      return [...builtins, extensionCommand];
-    });
+    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(
+      () => {
+        const builtins = originalRegister();
+        return [...builtins, extensionCommand];
+      },
+    );
 
     // Initial load - extension disabled, command should be filtered out
     let commands = await loader.loadCommands(new AbortController().signal);
@@ -271,12 +275,16 @@ describe('Command Reloading on Extension State Change', () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const originalRegister = (loader as any).registerBuiltinCommands.bind(loader);
+    const originalRegister = (loader as any).registerBuiltinCommands.bind(
+      loader,
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(() => {
-      const builtins = originalRegister();
-      return [...builtins, extensionCommand];
-    });
+    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(
+      () => {
+        const builtins = originalRegister();
+        return [...builtins, extensionCommand];
+      },
+    );
 
     // Initial load - extension enabled, command available
     let commands = await loader.loadCommands(new AbortController().signal);
@@ -307,12 +315,16 @@ describe('Command Reloading on Extension State Change', () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const originalRegister = (loader as any).registerBuiltinCommands.bind(loader);
+    const originalRegister = (loader as any).registerBuiltinCommands.bind(
+      loader,
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(() => {
-      const builtins = originalRegister();
-      return [...builtins, extensionCommand];
-    });
+    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(
+      () => {
+        const builtins = originalRegister();
+        return [...builtins, extensionCommand];
+      },
+    );
 
     // Load with extension enabled
     let commands = await loader.loadCommands(new AbortController().signal);
@@ -340,12 +352,16 @@ describe('Command Reloading on Extension State Change', () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const originalRegister = (loader as any).registerBuiltinCommands.bind(loader);
+    const originalRegister = (loader as any).registerBuiltinCommands.bind(
+      loader,
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(() => {
-      const builtins = originalRegister();
-      return [...builtins, extensionCommand];
-    });
+    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(
+      () => {
+        const builtins = originalRegister();
+        return [...builtins, extensionCommand];
+      },
+    );
 
     // Rapid state changes
     mockExtensionEnablementManager.isEnabled.mockReturnValue(true);
@@ -393,12 +409,16 @@ describe('Command Reloading on Extension State Change', () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const originalRegister = (loader as any).registerBuiltinCommands.bind(loader);
+    const originalRegister = (loader as any).registerBuiltinCommands.bind(
+      loader,
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(() => {
-      const builtins = originalRegister();
-      return [...builtins, extACommand, extBCommand];
-    });
+    vi.spyOn(loader as any, 'registerBuiltinCommands').mockImplementation(
+      () => {
+        const builtins = originalRegister();
+        return [...builtins, extACommand, extBCommand];
+      },
+    );
 
     // Enable ext-a, disable ext-b
     mockExtensionEnablementManager.isEnabled.mockImplementation(
