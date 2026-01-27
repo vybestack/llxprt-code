@@ -150,6 +150,9 @@ describe('OpenAIResponsesProvider stream retry behavior', () => {
             blocks: [{ type: 'text', text: 'hello' }],
           },
         ] as IContent[],
+        ephemerals: {
+          retrywait: 2000, // Override default delay
+        },
       }),
     );
 
@@ -166,9 +169,12 @@ describe('OpenAIResponsesProvider stream retry behavior', () => {
 
     expect(firstDelay).toBeGreaterThan(0);
     expect(secondDelay).toBeGreaterThan(firstDelay);
+    // Verify initial delay respects ephemeral setting (~2000ms with jitter)
+    expect(firstDelay).toBeGreaterThan(1400);
+    expect(firstDelay).toBeLessThan(2600);
   });
 
-  it('uses higher maxStreamingAttempts for Codex mode', async () => {
+  it('uses higher maxStreamingAttempts for Codex mode when ephemerals not set', async () => {
     parseResponsesStreamMock
       .mockImplementationOnce(async function* () {
         yield;
@@ -229,6 +235,7 @@ describe('OpenAIResponsesProvider stream retry behavior', () => {
       chunks.push(chunk);
     }
 
+    // Codex defaults to 5 attempts when no ephemeral retries setting
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
@@ -277,6 +284,97 @@ describe('OpenAIResponsesProvider stream retry behavior', () => {
       }
     }).rejects.toThrow('terminated');
 
+    // Regular mode defaults to 4 attempts
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('respects retries ephemeral setting', async () => {
+    parseResponsesStreamMock
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      });
+
+    fetchMock.mockResolvedValue({ ok: true, body: {} });
+
+    retryWithBackoffMock.mockImplementation(
+      async (fn: () => Promise<unknown>) => fn(),
+    );
+
+    const provider = new OpenAIResponsesProvider('test-key');
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello' }],
+          },
+        ] as IContent[],
+        ephemerals: {
+          retries: 2, // Override default
+        },
+      }),
+    );
+
+    await expect(async () => {
+      for await (const _chunk of generator) {
+        // Should throw after 2 attempts
+      }
+    }).rejects.toThrow('terminated');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('respects retrywait ephemeral setting', async () => {
+    parseResponsesStreamMock
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
+      .mockImplementationOnce(async function* () {
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
+      });
+
+    fetchMock.mockResolvedValue({ ok: true, body: {} });
+
+    retryWithBackoffMock.mockImplementation(
+      async (fn: () => Promise<unknown>) => fn(),
+    );
+
+    const provider = new OpenAIResponsesProvider('test-key');
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello' }],
+          },
+        ] as IContent[],
+        ephemerals: {
+          retrywait: 1000, // Override default 5000ms
+        },
+      }),
+    );
+
+    const chunks: IContent[] = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(delayMock).toHaveBeenCalledTimes(1);
+
+    const delay = delayMock.mock.calls[0]?.[0] as number;
+    // Should be ~1000ms with jitter (between 700-1300)
+    expect(delay).toBeGreaterThan(700);
+    expect(delay).toBeLessThan(1300);
   });
 });

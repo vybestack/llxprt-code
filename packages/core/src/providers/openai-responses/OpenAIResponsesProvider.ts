@@ -66,10 +66,6 @@ import {
 } from '../../utils/retry.js';
 import { delay } from '../../utils/delay.js';
 
-// Stream retry constants for exponential backoff
-const STREAM_RETRY_INITIAL_DELAY_MS = 5000; // 5 seconds
-const STREAM_RETRY_MAX_DELAY_MS = 30000; // 30 seconds
-
 export class OpenAIResponsesProvider extends BaseProvider {
   private logger: DebugLogger;
   private _isCodexMode: boolean;
@@ -710,9 +706,18 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Retry must encompass both the initial fetch and the subsequent stream
     // consumption, because transient network failures can occur mid-stream.
     // @issue #1187: Different maxStreamingAttempts for Codex vs regular mode
-    const maxStreamingAttempts = isCodex ? 5 : 4;
+    // Read retry configuration from ephemeral settings
+    const ephemeralRetries = options.invocation?.ephemerals?.['retries'] as
+      | number
+      | undefined;
+    const ephemeralRetryWait = options.invocation?.ephemerals?.['retrywait'] as
+      | number
+      | undefined;
+    const maxStreamingAttempts = ephemeralRetries ?? (isCodex ? 5 : 4);
+    const streamRetryInitialDelayMs = ephemeralRetryWait ?? 5000;
+    const streamRetryMaxDelayMs = 30000;
     let streamingAttempt = 0;
-    let currentDelay = STREAM_RETRY_INITIAL_DELAY_MS;
+    let currentDelay = streamRetryInitialDelayMs;
 
     while (streamingAttempt < maxStreamingAttempts) {
       streamingAttempt++;
@@ -726,6 +731,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
           }),
         {
           shouldRetryOnError: this.shouldRetryOnError.bind(this),
+          maxAttempts: maxStreamingAttempts,
+          initialDelayMs: streamRetryInitialDelayMs,
         },
       );
 
@@ -762,7 +769,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
         const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
         const delayWithJitter = Math.max(0, currentDelay + jitter);
         await delay(delayWithJitter);
-        currentDelay = Math.min(STREAM_RETRY_MAX_DELAY_MS, currentDelay * 2);
+        currentDelay = Math.min(streamRetryMaxDelayMs, currentDelay * 2);
 
         // Retry by restarting the request from the beginning.
         // NOTE: This can re-yield partial content from a previous attempt.

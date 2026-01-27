@@ -60,11 +60,6 @@ import {
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
-// Stream retry constants for exponential backoff
-const STREAM_RETRY_INITIAL_DELAY_MS = 5000; // 5 seconds
-const STREAM_RETRY_MAX_DELAY_MS = 30000; // 30 seconds
-const STREAM_RETRY_MAX_ATTEMPTS = 4; // For Anthropic, consistent retry count
-
 /**
  * Rate limit information from Anthropic API response headers
  */
@@ -1949,18 +1944,20 @@ ${block.code}
       // Handle streaming response with retry loop for transient network errors
       // Similar to OpenAIResponsesProvider, we wrap the entire stream consumption
       // in a retry loop to handle mid-stream disconnections (issue #1228)
+      // Use retry config from ephemeral settings
       let streamingAttempt = 0;
-      let currentDelay = STREAM_RETRY_INITIAL_DELAY_MS;
+      let currentDelay = initialDelayMs;
+      const streamRetryMaxDelayMs = 30000;
       const streamingLogger = this.getStreamingLogger();
 
-      while (streamingAttempt < STREAM_RETRY_MAX_ATTEMPTS) {
+      while (streamingAttempt < maxAttempts) {
         streamingAttempt++;
 
         // If this is a retry, make a fresh API call to get a new stream
         if (streamingAttempt > 1) {
           streamingLogger.debug(
             () =>
-              `Stream retry attempt ${streamingAttempt}/${STREAM_RETRY_MAX_ATTEMPTS}: Making fresh API call`,
+              `Stream retry attempt ${streamingAttempt}/${maxAttempts}: Making fresh API call`,
           );
           const retryResult = await retryWithBackoff(apiCallWithResponse, {
             maxAttempts,
@@ -2229,13 +2226,10 @@ ${block.code}
           const canRetryStream = isNetworkTransientError(error);
           streamingLogger.debug(
             () =>
-              `Stream attempt ${streamingAttempt}/${STREAM_RETRY_MAX_ATTEMPTS} error: ${error}`,
+              `Stream attempt ${streamingAttempt}/${maxAttempts} error: ${error}`,
           );
 
-          if (
-            !canRetryStream ||
-            streamingAttempt >= STREAM_RETRY_MAX_ATTEMPTS
-          ) {
+          if (!canRetryStream || streamingAttempt >= maxAttempts) {
             streamingLogger.debug(
               () =>
                 `Stream error not retryable or max attempts reached, throwing: ${error}`,
@@ -2248,10 +2242,10 @@ ${block.code}
           const delayWithJitter = Math.max(0, currentDelay + jitter);
           streamingLogger.debug(
             () =>
-              `Stream retry attempt ${streamingAttempt}/${STREAM_RETRY_MAX_ATTEMPTS}: Transient error detected, waiting ${Math.round(delayWithJitter)}ms before retry`,
+              `Stream retry attempt ${streamingAttempt}/${maxAttempts}: Transient error detected, waiting ${Math.round(delayWithJitter)}ms before retry`,
           );
           await delay(delayWithJitter);
-          currentDelay = Math.min(STREAM_RETRY_MAX_DELAY_MS, currentDelay * 2);
+          currentDelay = Math.min(streamRetryMaxDelayMs, currentDelay * 2);
 
           // Loop continues to retry
         }
