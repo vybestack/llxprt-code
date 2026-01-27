@@ -107,6 +107,7 @@ With a PTY enabled, `run_shell_command` supports fully interactive programs (for
 
 - **Security:** Be cautious when executing commands, especially those constructed from user input, to prevent security vulnerabilities.
 - **Interactive commands:** Avoid commands that require interactive user input, as this can cause the tool to hang. Use non-interactive flags if available (e.g., `npm init -y`).
+- **Output limiting:** In `truncate` mode, `run_shell_command` clips the output by removing the middle to preserve both head and tail. In `warn` and `sample`, it uses the default limiter behavior.
 - **Error handling:** Check the `Stderr`, `Error`, and `Exit Code` fields to determine if a command executed successfully.
 - **Background processes:** When a command is run in the background with `&`, the tool will return immediately and the process will continue to run in the background. The `Background PIDs` field will contain the process ID of the background process.
 

@@ -35,6 +35,9 @@ import { getErrorMessage } from '../utils/errors.js';
 import {
   limitOutputTokens,
   formatLimitedOutput,
+  getOutputLimits,
+  getEffectiveTokenLimit,
+  clipMiddle,
 } from '../utils/toolOutputLimiter.js';
 import { summarizeToolOutput } from '../utils/summarizer.js';
 import { stripShellMarkers } from '../utils/shell-markers.js';
@@ -525,7 +528,36 @@ class ShellToolInvocation extends BaseToolInvocation<
         }
       }
 
-      // ALWAYS apply token-based limiting at the end to protect the outer model
+      // For ShellTool, apply a "middle clip" strategy so we preserve both the
+      // beginning (setup/context) and the end (results/errors).
+      // We still respect the current maxTokens and truncateMode settings.
+      const limits = getOutputLimits(this.config);
+      const maxTokens = limits.maxTokens;
+      const effectiveLimit = maxTokens
+        ? getEffectiveTokenLimit(maxTokens)
+        : undefined;
+
+      if (
+        effectiveLimit &&
+        effectiveLimit > 0 &&
+        limits.truncateMode === 'truncate'
+      ) {
+        // Approximate a char budget from the token budget. Keep it conservative
+        // to avoid overshooting after serialization/escaping.
+        const approxMaxChars = effectiveLimit * 3;
+        const clipped = clipMiddle(llmPayload, approxMaxChars, 0.3, 0.7);
+        if (clipped.wasTruncated) {
+          llmPayload = clipped.content;
+        }
+
+        return {
+          llmContent: llmPayload,
+          returnDisplay: returnDisplayMessage,
+          ...executionError,
+        };
+      }
+
+      // In warn/sample, keep the existing limiter behavior.
       const limitedResult = limitOutputTokens(
         llmPayload,
         this.config,
