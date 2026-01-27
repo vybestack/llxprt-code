@@ -15,6 +15,12 @@ export interface ToolOutputSettingsProvider {
 export const DEFAULT_MAX_TOKENS = 50000;
 export const DEFAULT_TRUNCATE_MODE = 'warn';
 
+export interface MiddleClipResult {
+  content: string;
+  wasTruncated: boolean;
+  originalLength: number;
+}
+
 // Escape overhead buffer to account for JSON stringification inflation
 export const ESCAPE_BUFFER_PERCENTAGE = 0.8; // Use 80% of limit to leave 20% buffer
 
@@ -84,6 +90,61 @@ export interface TruncatedOutput {
   wasTruncated: boolean;
   originalTokens?: number;
   message?: string;
+}
+
+/**
+ * Clip text by removing the middle while preserving configurable head/tail.
+ * Useful for console-style output where both the start (setup/context)
+ * and end (results/errors) are important.
+ */
+export function clipMiddle(
+  content: string,
+  maxChars: number,
+  headRatio: number,
+  tailRatio: number,
+): MiddleClipResult {
+  const length = content.length;
+
+  if (maxChars <= 0 || length <= maxChars) {
+    return {
+      content,
+      wasTruncated: false,
+      originalLength: length,
+    };
+  }
+
+  const totalRatio = headRatio + tailRatio;
+  const safeTotalRatio = totalRatio > 0 ? totalRatio : 1;
+  const headPortion = Math.max(
+    0,
+    Math.floor((headRatio / safeTotalRatio) * maxChars),
+  );
+  const tailPortion = Math.max(
+    0,
+    Math.floor((tailRatio / safeTotalRatio) * maxChars),
+  );
+
+  const adjustedTailPortion = Math.min(tailPortion, maxChars - headPortion);
+  const adjustedHeadPortion = Math.min(
+    headPortion,
+    maxChars - adjustedTailPortion,
+  );
+
+  const head = content.slice(0, adjustedHeadPortion);
+  const tail = content.slice(length - adjustedTailPortion);
+  const omitted = length - (adjustedHeadPortion + adjustedTailPortion);
+
+  const marker = `
+... [middle ${omitted} chars omitted; showing ${
+    adjustedHeadPortion + adjustedTailPortion
+  } of ${length}] ...
+`;
+
+  return {
+    content: `${head}${marker}${tail}`,
+    wasTruncated: true,
+    originalLength: length,
+  };
 }
 
 /**
