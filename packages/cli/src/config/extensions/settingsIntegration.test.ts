@@ -15,6 +15,19 @@ import {
 } from './settingsIntegration.js';
 import type { ExtensionSetting } from './extensionSettings.js';
 
+// Mock keychain module with default implementation
+vi.mock('@napi-rs/keyring', () => ({
+  AsyncEntry: vi.fn().mockImplementation((_service, _account) => ({
+    getPassword: vi.fn().mockResolvedValue(null),
+    setPassword: vi.fn().mockResolvedValue(undefined),
+    deletePassword: vi.fn().mockResolvedValue(true),
+    setSecret: vi.fn().mockResolvedValue(undefined),
+    getSecret: vi.fn().mockResolvedValue(undefined),
+    deleteCredential: vi.fn().mockResolvedValue(true),
+  })),
+  findCredentialsAsync: vi.fn().mockResolvedValue([]),
+}));
+
 // Create temp directory for tests
 let tempDir: string;
 
@@ -255,14 +268,105 @@ describe('getExtensionEnvironment', () => {
   });
 
   it('should include sensitive settings from keychain', async () => {
-    // This would need mocking of keychain
-    // For now, test that the function exists and returns at least an object
-    const extDir = path.join(tempDir, 'test-ext');
+    // Setup: create extension with manifest defining sensitive setting
+    const extDir = path.join(tempDir, 'secure-ext');
     fs.mkdirSync(extDir, { recursive: true });
+    
+    // Create manifest with sensitive setting
+    fs.writeFileSync(
+      path.join(extDir, 'llxprt-extension.json'),
+      JSON.stringify({
+        name: 'secure-ext',
+        version: '1.0.0',
+        settings: [
+          { name: 'API Key', envVar: 'API_KEY', sensitive: true },
+          { name: 'API URL', envVar: 'API_URL', sensitive: false },
+        ],
+      }),
+    );
+    
+    // Create .env with non-sensitive value
+    fs.writeFileSync(path.join(extDir, '.env'), 'API_URL=https://api.example.com\n');
+    
+    // Mock keychain to return sensitive value
+    const keyringModule = await import('@napi-rs/keyring');
+    vi.mocked(keyringModule.AsyncEntry).mockImplementation((_service, account) => ({
+      getPassword: vi.fn().mockResolvedValue(account === 'API_KEY' ? 'secret-api-key' : null),
+      setPassword: vi.fn().mockResolvedValue(undefined),
+      deletePassword: vi.fn().mockResolvedValue(true),
+      setSecret: vi.fn().mockResolvedValue(undefined),
+      getSecret: vi.fn().mockResolvedValue(undefined),
+      deleteCredential: vi.fn().mockResolvedValue(true),
+    }));
     
     const env = await getExtensionEnvironment(extDir);
     
-    expect(typeof env).toBe('object');
+    // Should have both values
+    expect(env['API_URL']).toBe('https://api.example.com');
+    expect(env['API_KEY']).toBe('secret-api-key');
+  });
+
+  it('should handle extensions with only sensitive settings', async () => {
+    const extDir = path.join(tempDir, 'secret-only-ext');
+    fs.mkdirSync(extDir, { recursive: true });
+    
+    fs.writeFileSync(
+      path.join(extDir, 'llxprt-extension.json'),
+      JSON.stringify({
+        name: 'secret-only-ext',
+        version: '1.0.0',
+        settings: [
+          { name: 'Secret', envVar: 'SECRET', sensitive: true },
+        ],
+      }),
+    );
+    
+    // No .env file
+    
+    const keyringModule = await import('@napi-rs/keyring');
+    vi.mocked(keyringModule.AsyncEntry).mockImplementation(() => ({
+      getPassword: vi.fn().mockResolvedValue('my-secret'),
+      setPassword: vi.fn().mockResolvedValue(undefined),
+      deletePassword: vi.fn().mockResolvedValue(true),
+      setSecret: vi.fn().mockResolvedValue(undefined),
+      getSecret: vi.fn().mockResolvedValue(undefined),
+      deleteCredential: vi.fn().mockResolvedValue(true),
+    }));
+    
+    const env = await getExtensionEnvironment(extDir);
+    
+    expect(env['SECRET']).toBe('my-secret');
+  });
+
+  it('should gracefully handle missing keychain values', async () => {
+    const extDir = path.join(tempDir, 'missing-secret-ext');
+    fs.mkdirSync(extDir, { recursive: true });
+    
+    fs.writeFileSync(
+      path.join(extDir, 'llxprt-extension.json'),
+      JSON.stringify({
+        name: 'missing-secret-ext',
+        version: '1.0.0',
+        settings: [
+          { name: 'Secret', envVar: 'SECRET', sensitive: true },
+        ],
+      }),
+    );
+    
+    const keyringModule = await import('@napi-rs/keyring');
+    vi.mocked(keyringModule.AsyncEntry).mockImplementation(() => ({
+      getPassword: vi.fn().mockResolvedValue(null), // Not in keychain
+      setPassword: vi.fn().mockResolvedValue(undefined),
+      deletePassword: vi.fn().mockResolvedValue(true),
+      setSecret: vi.fn().mockResolvedValue(undefined),
+      getSecret: vi.fn().mockResolvedValue(undefined),
+      deleteCredential: vi.fn().mockResolvedValue(true),
+    }));
+    
+    const env = await getExtensionEnvironment(extDir);
+    
+    // Should return object without the missing value
+    expect(env['SECRET']).toBeUndefined();
   });
 
   it('should return empty object for extension without settings', async () => {

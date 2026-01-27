@@ -112,8 +112,7 @@ export async function maybePromptAndSaveSettings(
 /**
  * Loads saved extension settings as environment variables.
  * 
- * Currently reads from .env file in extension directory.
- * Future: Will also read sensitive settings from keychain (Phase 5).
+ * Reads from both .env file (non-sensitive) and keychain (sensitive).
  * 
  * @param extensionDir - The absolute path to the extension directory
  * @returns Promise resolving to record of environment variables
@@ -121,22 +120,60 @@ export async function maybePromptAndSaveSettings(
 export async function getExtensionEnvironment(
   extensionDir: string,
 ): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  
+  // Read .env file for non-sensitive settings
   const envFilePath = path.join(extensionDir, '.env');
   
-  // Check if .env file exists
-  if (!fs.existsSync(envFilePath)) {
-    return {};
+  if (fs.existsSync(envFilePath)) {
+    try {
+      const envContent = fs.readFileSync(envFilePath, 'utf-8');
+      const parsed = dotenv.parse(envContent);
+      Object.assign(result, parsed);
+    } catch (error) {
+      console.error(`Failed to read .env file at ${envFilePath}:`, error);
+    }
   }
-
-  try {
-    // Read and parse .env file
-    const envContent = fs.readFileSync(envFilePath, 'utf-8');
-    const parsed = dotenv.parse(envContent);
-    
-    // Return parsed env vars
-    return parsed;
-  } catch (error) {
-    console.error(`Failed to read .env file at ${envFilePath}:`, error);
-    return {};
+  
+  // Load settings definitions from manifest
+  const settings = loadExtensionSettingsFromManifest(extensionDir);
+  
+  if (settings.length === 0) {
+    return result;
   }
+  
+  // Parse manifest to get extension name
+  let extensionName: string | null = null;
+  let manifestPath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME);
+  
+  if (!fs.existsSync(manifestPath)) {
+    manifestPath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME_FALLBACK);
+  }
+  
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+      const manifest = JSON.parse(manifestContent) as { name?: string };
+      extensionName = manifest.name ?? null;
+    } catch (error) {
+      console.error(`Failed to read extension name from manifest:`, error);
+    }
+  }
+  
+  if (!extensionName) {
+    return result;
+  }
+  
+  // Load settings from storage (including keychain)
+  const storage = new ExtensionSettingsStorage(extensionName, extensionDir);
+  const settingsValues = await storage.loadSettings(settings);
+  
+  // Merge non-undefined values into result
+  for (const [key, value] of Object.entries(settingsValues)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  
+  return result;
 }
