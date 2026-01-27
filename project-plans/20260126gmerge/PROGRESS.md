@@ -2,7 +2,7 @@
 
 **Branch:** `20260126gmerge`  
 **Started:** 2026-01-26  
-**Completed:** 2026-01-26
+**Completed:** 2026-01-27
 
 ---
 
@@ -14,6 +14,24 @@
 | 2 | PICK x5 | 224a33d, 0f5dd22, 5f6453a, 9ba1cd0, c585470 | DONE | 18d8a445a, 0b5ef0274, 1f2c6a441, 6610f7915, d20155a4a, 173e16f71 | 0f5dd22 skipped (files already removed) |
 | 3 | PICK x4 | 77614ef, c13ec85, f05d937, c81a02f | DONE | bfafeec5f, cd8ad1e3f | c13ec85 skipped (files deleted), f05d937 skipped (too many conflicts) |
 | 4 | REIMPLEMENT x1 | b445db3 | DONE | 064ceff8e | Full verify passed |
+
+---
+
+## Feature Implementation Progress (TDD)
+
+| Feature | Phase | Status | LLxprt Commit | Notes |
+|---------|-------|--------|---------------|-------|
+| Extension Reloading (fa93b56243) | Phase 1 - Session Scope | DONE | 70a48a815 | SettingScope.Session for runtime-only |
+| Extension Reloading (fa93b56243) | Phase 2 - Command Reloading | DONE | aff32d409 | Filter commands by enabled state |
+| Extension Reloading (fa93b56243) | Phase 3 - Tab Completion | DONE | f15a1e2f1 | Filter tab completion |
+| Consistent Params (f05d937f39) | Phase 1 - write-file, edit | DONE | b3698d634 | absolute_path as primary |
+| Consistent Params (f05d937f39) | Phase 2 - glob, grep, ls | DONE | e95318659 | dir_path as primary |
+| Consistent Params (f05d937f39) | Phase 3 - shell | DONE | 18db6603b | dir_path as primary |
+| Extension Settings (c13ec85d7d) | Phase 1 - Schema | DONE | 965d4a804 | ExtensionSettingSchema |
+| Extension Settings (c13ec85d7d) | Phase 2 - Storage | DONE | 784dcf88f | ExtensionSettingsStorage |
+| Extension Settings (c13ec85d7d) | Phase 3 - Prompt UI | DONE | e67a27bea | maybePromptForSettings |
+| Extension Settings (c13ec85d7d) | Phase 4 - Integration | DONE | aa9866c14 | settingsIntegration layer |
+| Extension Settings (c13ec85d7d) | Phase 5 - Keychain | DONE | d0ecb81a5 | Keychain integration |
 
 ---
 
@@ -78,11 +96,23 @@
 **Batch 4:**
 - `064ceff8e` - reimplement: make list dir test less flaky (upstream b445db3d46)
 
-### Commits Skipped (7 total)
+### Commits Skipped (4 total - 3 others REIMPLEMENTED as features)
 
 1. `f51d74586c` - refactor: parse string for retryInfo - Already present in LLxprt
 2. `16113647de` - Fix/windows pty crash - Already present in LLxprt
-3. `fa93b56243` - [Extension Reloading] - Too many conflicts (24 files, many deleted in LLxprt)
-4. `0f5dd2229c` - chore: remove unused CLI policy TOML files - Files already removed
-5. `c13ec85d7d` - Update keychain storage name - Files deleted in LLxprt
-6. `f05d937f39` - Use consistent param names - Too many conflicts (20+ files)
+3. `0f5dd2229c` - chore: remove unused CLI policy TOML files - Files already removed
+4. `fa93b56243` - [Extension Reloading] - **REIMPLEMENTED** via TDD (commits 70a48a815, aff32d409, f15a1e2f1)
+5. `f05d937f39` - Use consistent param names - **REIMPLEMENTED** via TDD (commits b3698d634, e95318659, 18db6603b)
+6. `c13ec85d7d` - Update keychain storage name - **REIMPLEMENTED** via TDD (commits 965d4a804, 784dcf88f, e67a27bea, aa9866c14, d0ecb81a5)
+
+---
+
+## Final Verification
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| npm run lint | PASS | No lint errors |
+| npm run typecheck | PASS | No type errors |
+| npm run test | PASS | All tests passing |
+| npm run build | PASS | Build successful |
+| Smoke test | PASS | Generated haiku successfully |

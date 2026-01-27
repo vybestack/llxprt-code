@@ -110,31 +110,89 @@
 
 ---
 
-## Follow-ups Created
+## Feature Implementation Notes (TDD Approach)
 
-| Item | Description | Status |
-|------|-------------|--------|
-| Extension Reloading | fa93b56243 - Consider porting extension enable/disable if needed | TODO |
-| Consistent Param Names | f05d937f39 - Consider file_path -> absolute_path rename refactor | TODO |
+### Feature 1: Extension Reloading (upstream fa93b56243)
+
+**Implemented:** 2026-01-27
+
+Could not cherry-pick due to 24 files with conflicts (many deleted in LLxprt).
+Reimplemented equivalent functionality using TDD:
+
+- **Phase 1 (70a48a815):** Added SettingScope.Session for runtime-only enable/disable
+- **Phase 2 (aff32d409):** Filter extension commands based on enabled state
+- **Phase 3 (f15a1e2f1):** Tab completion filters based on extension enabled state
+
+Key differences from upstream:
+- LLxprt uses ExtensionEnablementManager instead of ExtensionManager
+- Session scope stored in memory only, not persisted to disk
+- Simpler architecture due to LLxprt's extension loading model
+
+### Feature 2: Consistent Tool Parameters (upstream f05d937f39)
+
+**Implemented:** 2026-01-27
+
+Could not cherry-pick due to 20+ files with conflicts.
+Reimplemented with TDD for LLxprt's tool architecture:
+
+- **Phase 1 (b3698d634):** write-file, edit → absolute_path as primary, file_path as alias
+- **Phase 2 (e95318659):** glob, grep, ls → dir_path as primary, path as alias  
+- **Phase 3 (18db6603b):** shell → dir_path as primary, directory as alias
+
+Pattern established:
+- Primary param listed first in interface and schema
+- Legacy param accepted as alias for backwards compatibility
+- validateToolParamValues handles normalization
+- Helper method (getFilePath/getDirPath) for internal access
+
+### Feature 3: Extension Settings (upstream c13ec85d7d + prerequisites)
+
+**Implemented:** 2026-01-27
+
+Could not cherry-pick due to deleted files (extensionSettings.ts, extension-manager.ts).
+Implemented from scratch with TDD:
+
+- **Phase 1 (965d4a804):** ExtensionSettingSchema with Zod validation
+- **Phase 2 (784dcf88f):** ExtensionSettingsStorage (non-sensitive → .env, sensitive → keychain)
+- **Phase 3 (e67a27bea):** maybePromptForSettings for prompting users
+- **Phase 4 (aa9866c14):** Integration layer for loading/saving from manifests
+- **Phase 5 (d0ecb81a5):** Keychain integration in getExtensionEnvironment
+
+Key features:
+- Settings defined in llxprt-extension.json or gemini-extension.json
+- Non-sensitive settings stored in extension's .env file
+- Sensitive settings stored in OS keychain
+- Keychain service name: "LLxprt Code Extension {sanitized_name}"
+- User-friendly prompts for missing settings
+
+---
+
+## Follow-ups Completed
+
+| Item | Description | Status | Commits |
+|------|-------------|--------|---------|
+| Extension Reloading | fa93b56243 - Runtime enable/disable | DONE | 70a48a815, aff32d409, f15a1e2f1 |
+| Consistent Param Names | f05d937f39 - Standardize param naming | DONE | b3698d634, e95318659, 18db6603b |
+| Extension Settings | c13ec85d7d - Settings with keychain | DONE | 965d4a804, 784dcf88f, e67a27bea, aa9866c14, d0ecb81a5 |
 
 ---
 
 ## Deviations from Plan
 
-| Batch | Deviation | Reason |
-|-------|-----------|--------|
-| 1 | 2 commits skipped (already present) | f51d74586c and 16113647de merged empty |
-| 1 | fa93b56243 skipped | Too many conflicts (24 files, many deleted) |
-| 2 | 0f5dd2229c skipped | Policy TOML files already removed |
-| 3 | c13ec85d7d skipped | Files deleted in LLxprt |
-| 3 | f05d937f39 skipped | Too many conflicts (20+ files) |
+| Batch | Deviation | Reason | Resolution |
+|-------|-----------|--------|------------|
+| 1 | 2 commits skipped (already present) | f51d74586c and 16113647de merged empty | None needed |
+| 1 | fa93b56243 skipped initially | Too many conflicts (24 files, many deleted) | **REIMPLEMENTED** via TDD |
+| 2 | 0f5dd2229c skipped | Policy TOML files already removed | None needed |
+| 3 | c13ec85d7d skipped initially | Files deleted in LLxprt | **REIMPLEMENTED** via TDD |
+| 3 | f05d937f39 skipped initially | Too many conflicts (20+ files) | **REIMPLEMENTED** via TDD |
 
 ---
 
-## Verification Summary
+## Final Verification Summary
 
-- **Lint:** All batches PASS
-- **Typecheck:** All batches PASS
-- **Tests:** 3062 tests passed, 52 skipped (all batches)
+- **Lint:** PASS
+- **Typecheck:** PASS
+- **Tests:** All passing (including 47 new param tests, 14 extension settings tests)
 - **Build:** PASS
 - **Smoke test:** PASS (synthetic profile haiku generation)

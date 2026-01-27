@@ -19,7 +19,7 @@
 | 7 | `f5bd474e51` | PICKED | `8dee84781` | DONE | Batch 1 - Policy server name spoofing |
 | 8 | `400da30a8d` | SKIPPED | - | DONE | Gemini workflow |
 | 9 | `ca6cfaaf4e` | SKIPPED | - | DONE | LLxprt message is better |
-| 10 | `fa93b56243` | SKIPPED | - | DONE | Batch 1 - Too many conflicts (24 files) |
+| 10 | `fa93b56243` | REIMPLEMENTED | `70a48a815`, `aff32d409`, `f15a1e2f1` | DONE | Extension Reloading - TDD impl |
 | 11 | `c951f9fdcd` | SKIPPED | - | DONE | Different quota handling |
 | 12 | `1d2f90c7e7` | SKIPPED | - | DONE | Different subagent arch |
 | 13 | `44b8c62db9` | SKIPPED | - | DONE | No readPathFromWorkspace |
@@ -34,11 +34,11 @@
 | 22 | `31b34b11ab` | SKIPPED | - | DONE | FlashFallback |
 | 23 | `77614eff5b` | PICKED | `bfafeec5f` | DONE | Batch 3 - Multi-replace test |
 | 24 | `36feb73bfd` | SKIPPED | - | DONE | WriteTodos - different impl |
-| 25 | `c13ec85d7d` | SKIPPED | - | DONE | Batch 3 - Files deleted |
+| 25 | `c13ec85d7d` | REIMPLEMENTED | `965d4a804`, `784dcf88f`, `e67a27bea`, `aa9866c14`, `d0ecb81a5` | DONE | Extension Settings - TDD impl |
 | 26 | `98055d0989` | SKIPPED | - | DONE | Gemini /model docs |
 | 27 | `1e42fdf6c2` | SKIPPED | - | DONE | FlashFallback |
 | 28 | `5f1208ad81` | SKIPPED | - | DONE | Flaky test disable |
-| 29 | `f05d937f39` | SKIPPED | - | DONE | Batch 3 - Too many conflicts (20+ files) |
+| 29 | `f05d937f39` | REIMPLEMENTED | `b3698d634`, `e95318659`, `18db6603b` | DONE | Consistent Params - TDD impl |
 | 30 | `445a5eac33` | SKIPPED | - | DONE | Gemini workflow |
 | 31 | `c81a02f8d2` | PICKED | `cd8ad1e3f` | DONE | Batch 3 - DiscoveredTool policy |
 | 32 | `83a17cbf42` | SKIPPED | - | DONE | Release commit |
@@ -51,8 +51,8 @@
 | Decision | Count | Status |
 |----------|-------|--------|
 | PICKED | 8 | 8 done |
-| SKIPPED | 24 | 24 done |
-| REIMPLEMENTED | 1 | 1 done |
+| SKIPPED | 21 | 21 done |
+| REIMPLEMENTED | 4 | 4 done |
 | **Total** | **33** | **33 done** |
 
 ---
@@ -72,6 +72,17 @@
 | `bfafeec5f` | `77614eff5b` | fix(#11707): should replace multiple instances of a string test |
 | `cd8ad1e3f` | `c81a02f8d2` | fix: integrate DiscoveredTool with Policy Engine |
 | `064ceff8e` | `b445db3d46` | reimplement: make list dir test less flaky |
+| `70a48a815` | `fa93b56243` | feat(extensions): add SettingScope.Session for runtime-only enable/disable |
+| `aff32d409` | `fa93b56243` | feat(extensions): filter extension commands based on enabled state |
+| `f15a1e2f1` | `fa93b56243` | feat(extensions): tab completion filters based on extension enabled state |
+| `b3698d634` | `f05d937f39` | feat(tools): use absolute_path as primary param in write-file and edit |
+| `e95318659` | `f05d937f39` | feat(tools): use dir_path as primary param in glob, grep, ls |
+| `18db6603b` | `f05d937f39` | feat(tools): use dir_path as primary param in shell |
+| `965d4a804` | `c13ec85d7d` | feat(extensions): add ExtensionSettingSchema for extension settings |
+| `784dcf88f` | `c13ec85d7d` | feat(extensions): add ExtensionSettingsStorage for secure storage |
+| `e67a27bea` | `c13ec85d7d` | feat(extensions): add maybePromptForSettings for extension settings prompts |
+| `aa9866c14` | `c13ec85d7d` | feat(extensions): add extension settings integration layer |
+| `d0ecb81a5` | `c13ec85d7d` | feat(extensions): add keychain integration for sensitive settings |
 
 ---
 
