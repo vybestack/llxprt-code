@@ -150,7 +150,7 @@ describe('file-system', () => {
 
   it('should replace multiple instances of a string', async () => {
     const rig = new TestRig();
-    rig.setup('should replace multiple instances of a string');
+    await rig.setup('should replace multiple instances of a string');
     const fileName = 'ambiguous.txt';
     const fileContent = 'Hey there, \ntest line\ntest line';
     const expectedContent = 'Hey there, \nnew line\nnew line';

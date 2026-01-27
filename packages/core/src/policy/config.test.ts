@@ -2,13 +2,13 @@
  * Tests for Policy Configuration
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   migrateLegacyApprovalMode,
   createPolicyEngineConfig,
   type PolicyConfigSource,
 } from './config.js';
-import { PolicyDecision } from './types.js';
+import { PolicyDecision, type PolicySettings } from './types.js';
 import { ApprovalMode } from '../config/config.js';
 import { PolicyEngine } from './policy-engine.js';
 

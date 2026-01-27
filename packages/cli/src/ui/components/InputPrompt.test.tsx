@@ -1655,7 +1655,7 @@ describe('InputPrompt', () => {
       unmount();
     });
 
-    it('should restore text and cursor position after reverse search"', async () => {
+    it('should restore text and cursor position after reverse search', async () => {
       const initialText = 'initial text';
       const initialCursor: [number, number] = [0, 3];
 

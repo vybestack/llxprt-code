@@ -331,7 +331,7 @@ describe('ExtensionEnablementManager', () => {
       // Create manager with temp directory
       const manager = new ExtensionEnablementManager(configDir);
 
-      // Call enable with Session scope - note this API doesn't exist yet!
+      // Call enable with Session scope
       manager.enable('my-ext', true, SettingScope.Session);
 
       // Assert: isEnabled('my-ext') returns true

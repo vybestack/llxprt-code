@@ -404,10 +404,12 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         filteredParams.content,
       );
 
+      const displayPath =
+        filteredParams.absolute_path || filteredParams.file_path || '';
       const llmSuccessMessageParts = [
         isNewFile
-          ? `Successfully created and wrote to new file: ${filteredParams.file_path}.`
-          : `Successfully overwrote file: ${filteredParams.file_path}.`,
+          ? `Successfully created and wrote to new file: ${displayPath}.`
+          : `Successfully overwrote file: ${displayPath}.`,
       ];
       if (filteredParams.modified_by_user) {
         llmSuccessMessageParts.push(
