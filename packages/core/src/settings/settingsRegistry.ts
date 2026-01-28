@@ -848,28 +848,8 @@ export function normalizeSetting(key: string, value: unknown): unknown {
     return spec.normalize(value);
   }
 
-  if (
-    resolvedKey === 'reasoning' &&
-    typeof value === 'object' &&
-    value !== null
-  ) {
-    const sanitized: Record<string, unknown> = {};
-    const INTERNAL_KEYS = new Set([
-      'enabled',
-      'includeInContext',
-      'includeInResponse',
-      'format',
-      'stripFromContext',
-    ]);
-
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (v !== undefined && v !== null && !INTERNAL_KEYS.has(k)) {
-        sanitized[k] = v;
-      }
-    }
-
-    return Object.keys(sanitized).length > 0 ? sanitized : undefined;
-  }
+  // Reasoning spec already has normalize, but keep fallback for safety
+  // until all reasoning normalization is verified through spec.normalize
 
   return value;
 }
@@ -1012,24 +992,30 @@ export function parseSetting(key: string, raw: string): unknown {
   const resolved = resolveAlias(key);
   const spec = getSettingSpec(resolved);
 
+  // If spec has a custom parser, use it
   if (spec?.parse) {
     return spec.parse(raw);
   }
 
-  if (/^-?\d+(\.\d+)?$/.test(raw)) {
+  // Only apply type coercion when spec explicitly indicates the type
+  // This prevents converting enum/string values like "true" to boolean true
+  if (spec?.type === 'number') {
     const num = Number(raw);
     if (!Number.isNaN(num)) {
       return num;
     }
   }
 
-  if (raw.toLowerCase() === 'true') {
-    return true;
-  }
-  if (raw.toLowerCase() === 'false') {
-    return false;
+  if (spec?.type === 'boolean') {
+    if (raw.toLowerCase() === 'true') {
+      return true;
+    }
+    if (raw.toLowerCase() === 'false') {
+      return false;
+    }
   }
 
+  // For unknown settings (no spec) or string/enum types, try JSON parse or return raw
   try {
     return JSON.parse(raw);
   } catch {
@@ -1066,7 +1052,8 @@ export function getAllSettingKeys(): string[] {
 }
 
 export function getValidationHelp(key: string): string | undefined {
-  const spec = getSettingSpec(key);
+  const resolved = resolveAlias(key);
+  const spec = getSettingSpec(resolved);
   if (!spec) {
     return undefined;
   }
@@ -1087,7 +1074,8 @@ export function getValidationHelp(key: string): string | undefined {
 export function getAutocompleteSuggestions(
   key: string,
 ): ReadonlyArray<{ value: string; description?: string }> | undefined {
-  const spec = getSettingSpec(key);
+  const resolved = resolveAlias(key);
+  const spec = getSettingSpec(resolved);
   if (!spec) {
     return undefined;
   }
