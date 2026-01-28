@@ -119,6 +119,7 @@ export async function maybePromptForSettings(
         };
         stdin.on('data', onData);
       });
+    } else {
       value = await new Promise<string>((resolve) => {
         rl.question(prompt, (answer) => {
           resolve(answer);
