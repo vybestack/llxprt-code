@@ -202,7 +202,8 @@ export function useSlashCompletion(
     const currentLine = memoizedInput.line;
 
     // Check if the input actually changed
-    const currentInputKey = `${currentLine}:${commandIndex}:${cursorCol}`;
+    // Include slashCommands.length in key to detect command list changes (e.g., extension enable/disable)
+    const currentInputKey = `${currentLine}:${commandIndex}:${cursorCol}:${slashCommands.length}`;
     if (previousInput.current === currentInputKey) {
       debugLogger.debug(() => 'Input unchanged, skipping re-computation');
       return;
@@ -420,12 +421,27 @@ export function useSlashCompletion(
       );
       debugLogger.debug(() => `slashCommands at root: ${slashCommands.length}`);
       if (commandsToSearch.length > 0) {
-        let potentialSuggestions = commandsToSearch.filter(
-          (cmd) =>
+        let potentialSuggestions = commandsToSearch.filter((cmd) => {
+          // Filter extension commands: must have extensionName AND be enabled
+          if (cmd.kind === 'extension') {
+            // Extension commands without extensionName are treated as invalid/disabled
+            if (!cmd.extensionName) {
+              return false;
+            }
+            const config = commandContext.services?.config;
+            if (config && typeof config.isExtensionEnabled === 'function') {
+              if (!config.isExtensionEnabled(cmd.extensionName)) {
+                return false;
+              }
+            }
+          }
+          // Match by name or altNames
+          return (
             cmd.description &&
             (cmd.name.startsWith(commandPartial) ||
-              cmd.altNames?.some((alt) => alt.startsWith(commandPartial))),
-        );
+              cmd.altNames?.some((alt) => alt.startsWith(commandPartial)))
+          );
+        });
         debugLogger.debug(
           () => `Found ${potentialSuggestions.length} potential suggestions`,
         );
@@ -806,6 +822,7 @@ export function useSlashCompletion(
     cwd,
     slashCommands,
     commandContext,
+    commandContext.services?.config, // Add explicit dependency on config to catch changes
     config,
     // These are the setters - they're stable references
     resetCompletionState,

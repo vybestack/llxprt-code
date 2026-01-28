@@ -103,6 +103,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         // registered; their schemas are passed directly to the model later.
       }
 
+      agentToolRegistry.sortTools();
       // Validate that all registered tools are safe for non-interactive
       // execution.
       await AgentExecutor.validateTools(agentToolRegistry, definition.name);

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -34,16 +34,18 @@ describe('list_directory', () => {
 
     const result = await rig.run(prompt);
 
-    const foundToolCall = await rig.waitForToolCall('list_directory');
+    try {
+      await rig.expectToolCallSuccess('list_directory');
 
-    // Add debugging information
-    if (
-      !foundToolCall ||
-      !result.includes('file1.txt') ||
-      !result.includes('subdir')
-    ) {
+      // Validate model output - will throw if no output, warn if missing expected content
+      validateModelOutput(
+        result,
+        ['file1.txt', 'subdir'],
+        'List directory test',
+      );
+    } catch (error) {
+      console.error('list_directory test failed');
       const allTools = printDebugInfo(rig, result, {
-        'Found tool call': foundToolCall,
         'Contains file1.txt': result.includes('file1.txt'),
         'Contains subdir': result.includes('subdir'),
       });
@@ -54,14 +56,7 @@ describe('list_directory', () => {
           .filter((t) => t.toolRequest.name === 'list_directory')
           .map((t) => t.toolRequest.args),
       );
+      throw error;
     }
-
-    expect(
-      foundToolCall,
-      'Expected to find a list_directory tool call',
-    ).toBeTruthy();
-
-    // Validate model output - will throw if no output, warn if missing expected content
-    validateModelOutput(result, ['file1.txt', 'subdir'], 'List directory test');
   });
 });

@@ -381,7 +381,7 @@ describe('EditTool', () => {
         new_string: 'new',
       };
       expect(() => tool.build(params)).toThrow(
-        /The 'file_path' parameter must be non-empty./,
+        /Either 'absolute_path' or 'file_path' parameter must be provided and non-empty./,
       );
     });
 
@@ -866,7 +866,7 @@ describe('EditTool', () => {
       const schema = tool.schema;
       expect(
         (schema.parametersJsonSchema as EditFileParameterSchema).properties
-          .file_path.description,
+          .absolute_path.description,
       ).toBe(
         "The absolute path to the file to modify (e.g., 'C:\\Users\\project\\file.txt'). Must be an absolute path.",
       );
@@ -879,7 +879,7 @@ describe('EditTool', () => {
       const schema = tool.schema;
       expect(
         (schema.parametersJsonSchema as EditFileParameterSchema).properties
-          .file_path.description,
+          .absolute_path.description,
       ).toBe(
         "The absolute path to the file to modify (e.g., '/home/user/project/file.txt'). Must start with '/'.",
       );

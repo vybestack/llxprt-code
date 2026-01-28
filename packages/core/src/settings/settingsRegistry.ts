@@ -273,6 +273,11 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
       { value: 'enabled', description: 'Enable streaming' },
       { value: 'disabled', description: 'Disable streaming' },
     ],
+    parse: (raw: string) => {
+      if (raw === 'true') return 'enabled';
+      if (raw === 'false') return 'disabled';
+      return raw;
+    },
     validate: (value: unknown): ValidationResult => {
       const validModes = ['enabled', 'disabled'];
       if (typeof value === 'string' && validModes.includes(value)) {
@@ -280,7 +285,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
       }
       return {
         success: false,
-        message: `streaming must be one of: ${validModes.join(', ')}`,
+        message: `Invalid streaming mode '${String(value)}'. Valid modes are: ${validModes.join(', ')}`,
       };
     },
   },
@@ -290,6 +295,15 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     description: 'Maximum number of tokens for the context window',
     type: 'number',
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'context-limit must be a positive integer (e.g., 100000)',
+      };
+    },
   },
   {
     key: 'compression-threshold',
@@ -298,6 +312,16 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
       'Fraction of context limit that triggers compression (0.0-1.0)',
     type: 'number',
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && value >= 0 && value <= 1) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'compression-threshold must be a decimal between 0 and 1 (e.g., 0.7 for 70%)',
+      };
+    },
   },
   {
     key: 'tool-output-max-items',
@@ -305,6 +329,15 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     description: 'Maximum number of items/files/matches returned by tools',
     type: 'number',
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'tool-output-max-items must be a positive integer',
+      };
+    },
   },
   {
     key: 'tool-output-max-tokens',
@@ -384,6 +417,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     type: 'enum',
     enumValues: ['allowed', 'auto', 'warn', 'error'],
     persistToProfile: true,
+    parse: (raw: string) => raw.toLowerCase(),
   },
   {
     key: 'dumponerror',
@@ -458,6 +492,16 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     description: 'Default timeout in seconds for task tool executions',
     type: 'number',
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && (value === -1 || value > 0)) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'task-default-timeout-seconds must be a positive number in seconds or -1 for unlimited',
+      };
+    },
   },
   {
     key: 'task-max-timeout-seconds',
@@ -465,6 +509,16 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     description: 'Maximum allowed timeout in seconds for task tool executions',
     type: 'number',
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && (value === -1 || value > 0)) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'task-max-timeout-seconds must be a positive number in seconds or -1 for unlimited',
+      };
+    },
   },
   {
     key: 'shell-default-timeout-seconds',
@@ -472,6 +526,16 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     description: 'Default timeout in seconds for shell command executions',
     type: 'number',
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && (value === -1 || value > 0)) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'shell-default-timeout-seconds must be a positive number in seconds or -1 for unlimited',
+      };
+    },
   },
   {
     key: 'shell-max-timeout-seconds',
@@ -480,6 +544,16 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
       'Maximum allowed timeout in seconds for shell command executions',
     type: 'number',
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && (value === -1 || value > 0)) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'shell-max-timeout-seconds must be a positive number in seconds or -1 for unlimited',
+      };
+    },
   },
   {
     key: 'temperature',
@@ -625,6 +699,110 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     description: 'Google Cloud location/region',
     type: 'string',
     persistToProfile: true,
+  },
+  // Load balancer settings (Issue #489)
+  {
+    key: 'tpm_threshold',
+    category: 'cli-behavior',
+    description:
+      'Minimum tokens per minute before triggering failover (positive integer, load balancer only)',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'tpm_threshold must be a positive integer',
+      };
+    },
+  },
+  {
+    key: 'timeout_ms',
+    category: 'cli-behavior',
+    description:
+      'Maximum request duration in milliseconds before timeout (positive integer, load balancer only)',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'timeout_ms must be a positive integer',
+      };
+    },
+  },
+  {
+    key: 'circuit_breaker_enabled',
+    category: 'cli-behavior',
+    description:
+      'Enable circuit breaker pattern for failing backends (true/false, load balancer only)',
+    type: 'boolean',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (value === true || value === false) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: `circuit_breaker_enabled must be either 'true' or 'false'`,
+      };
+    },
+  },
+  {
+    key: 'circuit_breaker_failure_threshold',
+    category: 'cli-behavior',
+    description:
+      'Number of failures before opening circuit (positive integer, default: 3, load balancer only)',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'circuit_breaker_failure_threshold must be a positive integer',
+      };
+    },
+  },
+  {
+    key: 'circuit_breaker_failure_window_ms',
+    category: 'cli-behavior',
+    description:
+      'Time window for counting failures in milliseconds (positive integer, default: 60000, load balancer only)',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'circuit_breaker_failure_window_ms must be a positive integer',
+      };
+    },
+  },
+  {
+    key: 'circuit_breaker_recovery_timeout_ms',
+    category: 'cli-behavior',
+    description:
+      'Cooldown period before retrying after circuit opens in milliseconds (positive integer, default: 30000, load balancer only)',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'circuit_breaker_recovery_timeout_ms must be a positive integer',
+      };
+    },
   },
 ];
 
