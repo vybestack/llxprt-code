@@ -4,6 +4,6 @@
 
 [[rule]]
 # Match all discovered tools (tools with discovered_tool_ prefix will be added by ToolRegistry)
-toolName = "discovered_tool_"
+toolName = "discovered_tool_*"
 decision = "ask_user"
 priority = 10

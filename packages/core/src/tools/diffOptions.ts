@@ -5,13 +5,13 @@
  */
 
 import * as Diff from 'diff';
-import { type DiffStat } from './tools.js';
 import type {
   StructuredPatch,
   StructuredPatchHunk,
   StructuredPatchOptionsNonabortable,
   CreatePatchOptionsNonabortable,
 } from 'diff';
+import { type DiffStat } from './tools.js';
 
 export const DEFAULT_DIFF_OPTIONS: StructuredPatchOptionsNonabortable = {
   context: 3,

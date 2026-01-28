@@ -84,6 +84,9 @@ export abstract class BaseToolInvocation<
   constructor(
     readonly params: TParams,
     protected readonly messageBus?: MessageBus,
+    readonly _toolName?: string,
+    readonly _toolDisplayName?: string,
+    readonly _serverName?: string,
   ) {}
 
   abstract getDescription(): string;
@@ -201,7 +204,7 @@ export abstract class BaseToolInvocation<
    * Subclasses can override to provide a specific tool name.
    */
   protected getToolName(): string {
-    return 'unknown';
+    return this._toolName ?? 'unknown';
   }
 
   /**
@@ -209,7 +212,7 @@ export abstract class BaseToolInvocation<
    * Regular tools should return undefined.
    */
   protected getServerName(): string | undefined {
-    return undefined;
+    return this._serverName;
   }
 
   /**

@@ -104,6 +104,8 @@ export default defineConfig({
       'src/ui/hooks/useToolScheduler.test.ts',
       // Include OAuthUrlMessage test (migrated from @testing-library/react)
       'src/ui/components/messages/OAuthUrlMessage.test.tsx',
+      // Include useSlashCompletion extension filtering tests for fa93b56243 reimplementation
+      'src/ui/hooks/useSlashCompletion.extensions.test.tsx',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',

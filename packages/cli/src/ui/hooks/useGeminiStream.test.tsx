@@ -618,6 +618,108 @@ describe('useGeminiStream', () => {
     );
   });
 
+  it('should filter out functionCall parts when submitting tool responses', async () => {
+    const toolCallResponseParts: Part[] = [
+      {
+        functionCall: {
+          id: 'call-filter',
+          name: 'toolFilter',
+          args: {},
+        },
+      },
+      {
+        functionResponse: {
+          id: 'call-filter',
+          name: 'toolFilter',
+          response: { ok: true },
+        },
+      },
+      { text: 'filtered response' },
+    ];
+    const completedToolCalls: TrackedToolCall[] = [
+      {
+        request: {
+          callId: 'call-filter',
+          name: 'toolFilter',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'prompt-id-filter',
+        },
+        status: 'success',
+        responseSubmittedToGemini: false,
+        response: {
+          callId: 'call-filter',
+          responseParts: toolCallResponseParts,
+          errorType: undefined,
+        },
+        tool: {
+          displayName: 'MockTool',
+        },
+        invocation: {
+          getDescription: () => `Mock description`,
+        } as unknown as AnyToolInvocation,
+      } as TrackedCompletedToolCall,
+    ];
+
+    let capturedOnComplete:
+      | ((completedTools: TrackedToolCall[]) => Promise<void>)
+      | null = null;
+
+    mockUseReactToolScheduler.mockImplementation((onComplete) => {
+      capturedOnComplete = onComplete;
+      return [[], mockScheduleToolCalls, mockMarkToolsAsSubmitted];
+    });
+
+    renderHook(() =>
+      useGeminiStream(
+        new MockedGeminiClientClass(mockConfig),
+        [],
+        mockAddItem,
+        mockConfig,
+        mockLoadedSettings,
+        mockOnDebugMessage,
+        mockHandleSlashCommand,
+        false,
+        () => 'vscode' as EditorType,
+        () => {},
+        () => Promise.resolve(),
+        () => {},
+        false,
+        () => {},
+        () => {},
+        () => {},
+      ),
+    );
+
+    await act(async () => {
+      if (capturedOnComplete) {
+        await capturedOnComplete(completedToolCalls);
+      }
+    });
+
+    await waitFor(() => {
+      expect(mockMarkToolsAsSubmitted).toHaveBeenCalledTimes(1);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+    });
+
+    // functionCall parts should be filtered out - they're already in history
+    // from the original assistant turn
+    expect(mockSendMessageStream).toHaveBeenCalledWith(
+      [
+        {
+          functionResponse: {
+            id: 'call-filter',
+            name: 'toolFilter',
+            response: { ok: true },
+          },
+        },
+        { text: 'filtered response' },
+      ],
+      expect.any(AbortSignal),
+      'prompt-id-filter',
+    );
+  });
+
   it('should handle all tool calls being cancelled', async () => {
     const cancelledToolCalls: TrackedToolCall[] = [
       {

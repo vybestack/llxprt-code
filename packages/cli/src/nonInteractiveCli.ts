@@ -306,12 +306,21 @@ export async function runNonInteractive({
             const thoughtEvent = event as ServerGeminiThoughtEvent;
             const thought = thoughtEvent.value;
             // Format thought with subject and description
-            const thoughtText =
+            let thoughtText =
               thought.subject && thought.description
                 ? `${thought.subject}: ${thought.description}`
                 : thought.subject || thought.description || '';
 
             if (thoughtText.trim()) {
+              if (emojiFilter) {
+                const filterResult = emojiFilter.filterText(thoughtText);
+                if (filterResult.blocked) {
+                  continue;
+                }
+                if (typeof filterResult.filtered === 'string') {
+                  thoughtText = filterResult.filtered;
+                }
+              }
               process.stdout.write(`<think>${thoughtText}</think>\n`);
             }
           }

@@ -68,7 +68,6 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     id,
     content,
     status,
-    priority: 'medium',
   });
 
   beforeEach(() => {
@@ -524,14 +523,11 @@ describe('useTodoContinuation - Behavioral Tests', () => {
           id: '1',
           content: '',
           status: 'in_progress',
-          priority: 'medium',
         } as Todo,
-        // @ts-expect-error Testing malformed data
         {
           id: '2',
           status: 'pending',
-          priority: 'high',
-        },
+        } as Todo,
       ];
       mockConfig.getEphemeralSettings.mockReturnValue({
         'todo-continuation': true,

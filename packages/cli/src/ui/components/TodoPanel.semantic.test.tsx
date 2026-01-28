@@ -71,7 +71,6 @@ describe('TodoPanel Semantic Colors', () => {
       id: '1',
       content: 'Completed task',
       status: 'completed',
-      priority: 'medium',
     };
 
     mockTodoContext.todos = [completedTodo];
@@ -98,7 +97,6 @@ describe('TodoPanel Semantic Colors', () => {
       id: '1',
       content: 'Current task',
       status: 'in_progress',
-      priority: 'high',
     };
 
     mockTodoContext.todos = [inProgressTodo];
@@ -120,7 +118,6 @@ describe('TodoPanel Semantic Colors', () => {
       id: '1',
       content: 'Pending task',
       status: 'pending',
-      priority: 'low',
     };
 
     mockTodoContext.todos = [pendingTodo];
@@ -142,7 +139,6 @@ describe('TodoPanel Semantic Colors', () => {
       id: '1',
       content: 'Test task',
       status: 'completed',
-      priority: 'medium',
     };
 
     mockTodoContext.todos = [testTodo];
@@ -197,7 +193,6 @@ describe('TodoPanel Semantic Colors', () => {
       id: '1',
       content: 'Main task',
       status: 'in_progress',
-      priority: 'medium',
       subtasks: [
         { id: '1-1', content: 'Subtask 1', toolCalls: [] },
         { id: '1-2', content: 'Subtask 2', toolCalls: [] },

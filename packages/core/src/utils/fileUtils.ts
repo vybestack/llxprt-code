@@ -5,6 +5,7 @@
  */
 
 import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { type PartUnion } from '@google/genai';
 import mime from 'mime-types';
@@ -467,4 +468,26 @@ export async function processSingleFileContent(
       errorType: ToolErrorType.READ_CONTENT_FAILURE,
     };
   }
+}
+
+/**
+ * Checks if a file or directory exists at the given path.
+ */
+export async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fsPromises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reads a WASM binary file from disk and returns it as a Uint8Array.
+ */
+export async function readWasmBinaryFromDisk(
+  filePath: string,
+): Promise<Uint8Array> {
+  const buffer = await fsPromises.readFile(filePath);
+  return new Uint8Array(buffer);
 }
