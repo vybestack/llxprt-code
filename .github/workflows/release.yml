@@ -326,7 +326,7 @@ jobs:
         continue-on-error: true
         run: node scripts/update-homebrew-formula.js ${{ steps.version.outputs.RELEASE_VERSION }}
         env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.GH_SECRET }}
 
       - name: Prepare sandbox package tarballs
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
