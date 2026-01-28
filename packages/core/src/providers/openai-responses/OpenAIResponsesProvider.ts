@@ -206,7 +206,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       return RESPONSES_API_MODELS.map((modelId) => ({
         id: modelId,
         name: modelId,
-        provider: 'openai-responses',
+        provider: this.name,
         supportedToolFormats: ['openai'],
       }));
     }
@@ -242,7 +242,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
             models.push({
               id: model.id,
               name: model.id,
-              provider: 'openai-responses',
+              provider: this.name,
               supportedToolFormats: ['openai'],
             });
           }
@@ -253,7 +253,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
           : RESPONSES_API_MODELS.map((modelId) => ({
               id: modelId,
               name: modelId,
-              provider: 'openai-responses',
+              provider: this.name,
               supportedToolFormats: ['openai'],
             }));
       }
@@ -265,7 +265,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     return RESPONSES_API_MODELS.map((modelId) => ({
       id: modelId,
       name: modelId,
-      provider: 'openai-responses',
+      provider: this.name,
       supportedToolFormats: ['openai'],
     }));
   }

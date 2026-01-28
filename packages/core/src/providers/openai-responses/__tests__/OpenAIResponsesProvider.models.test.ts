@@ -139,4 +139,24 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       expect(gpt51?.name).toBe('gpt-5.1');
     });
   });
+
+  it('should use this.name for provider field so aliases work correctly', async () => {
+    const provider = new OpenAIResponsesProvider(
+      undefined,
+      'https://api.openai.com/v1',
+    );
+
+    Object.defineProperty(provider, 'name', {
+      value: 'my-alias',
+      writable: false,
+      enumerable: true,
+      configurable: true,
+    });
+
+    const models = await provider.getModels();
+
+    for (const model of models) {
+      expect(model.provider).toBe('my-alias');
+    }
+  });
 });
