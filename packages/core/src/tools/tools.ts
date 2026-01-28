@@ -212,7 +212,7 @@ export abstract class BaseToolInvocation<
    * Regular tools should return undefined.
    */
   protected getServerName(): string | undefined {
-    return undefined;
+    return this._serverName;
   }
 
   /**

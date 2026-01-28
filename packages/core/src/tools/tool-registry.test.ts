@@ -305,8 +305,8 @@ describe('ToolRegistry', () => {
 
   describe('sortTools', () => {
     it('should sort tools by priority: built-in, discovered, then MCP (by server name)', () => {
-      const builtIn1 = new MockTool({ name: 'builtin-1' });
-      const builtIn2 = new MockTool({ name: 'builtin-2' });
+      const builtIn1 = new MockTool('builtin-1');
+      const builtIn2 = new MockTool('builtin-2');
       const discovered1 = new DiscoveredTool(
         config,
         'discovered-1',
@@ -342,8 +342,8 @@ describe('ToolRegistry', () => {
         'builtin-1',
         'builtin-2',
         'discovered-1',
-        'mcp-apple',
-        'mcp-zebra',
+        generateMcpToolName('apple-server', 'mcp-apple'),
+        generateMcpToolName('zebra-server', 'mcp-zebra'),
       ]);
     });
   });

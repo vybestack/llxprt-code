@@ -21,6 +21,13 @@ class TestBaseToolInvocation extends BaseToolInvocation<object, ToolResult> {
   async execute(): Promise<ToolResult> {
     return { llmContent: [], returnDisplay: '' };
   }
+
+  // Expose protected method for testing
+  async testGetMessageBusDecision(
+    abortSignal: AbortSignal,
+  ): Promise<'ALLOW' | 'DENY' | 'ASK_USER'> {
+    return this.getMessageBusDecision(abortSignal);
+  }
 }
 
 describe('BaseToolInvocation', () => {
@@ -66,7 +73,7 @@ describe('BaseToolInvocation', () => {
       },
     );
 
-    const confirmationPromise = tool.shouldConfirmExecute(
+    const decisionPromise = tool.testGetMessageBusDecision(
       abortController.signal,
     );
 
@@ -89,7 +96,7 @@ describe('BaseToolInvocation', () => {
       });
     }
 
-    await confirmationPromise;
+    await decisionPromise;
   });
 
   it('should NOT propagate serverName if not provided', async () => {
@@ -108,10 +115,15 @@ describe('BaseToolInvocation', () => {
       }
     });
 
-    // We need to mock subscribe to avoid hanging if we want to await the promise,
-    // but for this test we just need to check publish.
-    // We'll abort to clean up.
-    const confirmationPromise = tool.shouldConfirmExecute(
+    vi.mocked(messageBus.subscribe).mockImplementation(
+      (type: MessageBusType, _handler: (message: Message) => void) => {
+        if (type === MessageBusType.TOOL_CONFIRMATION_RESPONSE) {
+          // Store handler but don't call it - we'll abort instead
+        }
+      },
+    );
+
+    const decisionPromise = tool.testGetMessageBusDecision(
       abortController.signal,
     );
 
@@ -122,10 +134,7 @@ describe('BaseToolInvocation', () => {
     expect(capturedRequest?.serverName).toBeUndefined();
 
     abortController.abort();
-    try {
-      await confirmationPromise;
-    } catch {
-      // ignore abort error
-    }
+    const result = await decisionPromise;
+    expect(result).toBe('DENY');
   });
 });

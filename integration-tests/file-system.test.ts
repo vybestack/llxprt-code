@@ -160,7 +160,7 @@ describe('file-system', () => {
       `rewrite the file ${fileName} to replace all instances of "test line" with "new line"`,
     );
 
-    const validTools = ['write_file', 'edit'];
+    const validTools = ['write_file', 'edit', 'replace'];
     const foundToolCall = await rig.waitForAnyToolCall(validTools);
     if (!foundToolCall) {
       printDebugInfo(rig, result, {
