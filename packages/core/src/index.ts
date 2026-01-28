@@ -408,6 +408,7 @@ export {
   type SettingSpec,
   type ValidationResult,
   type SeparatedSettings,
+  type DirectSettingSpec,
   SETTINGS_REGISTRY,
   separateSettings,
   getSettingSpec,
@@ -421,4 +422,7 @@ export {
   getAllSettingKeys,
   getValidationHelp,
   getAutocompleteSuggestions,
+  getProtectedSettingKeys,
+  getProviderConfigKeys,
+  getDirectSettingSpecs,
 } from './settings/index.js';

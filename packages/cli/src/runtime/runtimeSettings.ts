@@ -16,6 +16,7 @@ import {
   setActiveProviderRuntimeContext,
   getProfilePersistableKeys,
   resolveAlias,
+  getProviderConfigKeys,
 } from '@vybestack/llxprt-code-core';
 import type {
   ProviderManager,
@@ -648,26 +649,7 @@ export function getCliOAuthManager(): OAuthManager | null {
   return runtimeRegistry.get(runtimeId)?.oauthManager ?? null;
 }
 
-const RESERVED_PROVIDER_SETTING_KEYS = new Set([
-  'model',
-  'enabled',
-  'apiKey',
-  'api-key',
-  'apiKeyfile',
-  'api-keyfile',
-  'auth-key',
-  'authKey',
-  'auth-keyfile',
-  'authKeyfile',
-  'baseUrl',
-  'baseURL',
-  'base-url',
-  'toolFormat',
-  'tool-format',
-  'toolFormatOverride',
-  'tool-format-override',
-  'defaultModel',
-]);
+const RESERVED_PROVIDER_SETTING_KEYS = new Set(getProviderConfigKeys());
 
 function resolveActiveProviderName(
   settingsService: SettingsService,

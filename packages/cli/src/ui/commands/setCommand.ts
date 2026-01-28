@@ -21,7 +21,10 @@ import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
 } from '../../settings/ephemeralSettings.js';
-import { resolveAlias } from '@vybestack/llxprt-code-core';
+import {
+  resolveAlias,
+  getDirectSettingSpecs,
+} from '@vybestack/llxprt-code-core';
 import {
   filterStrings,
   filterCompletions,
@@ -71,41 +74,13 @@ type SettingLiteralSpec = {
   completer?: SettingCompleter;
 };
 
+// Generic boolean options used for settings without explicit completionOptions
 const booleanOptions: ReadonlyArray<{ value: string; description: string }> = [
   { value: 'true', description: 'true' },
   { value: 'false', description: 'false' },
 ];
 
-const streamingOptions = [
-  { value: 'enabled', description: 'enabled' },
-  { value: 'disabled', description: 'disabled' },
-];
-
-const emojifilterOptions = [
-  { value: 'allowed', description: 'Allow all emojis' },
-  { value: 'auto', description: 'Automatically filter inappropriate emojis' },
-  { value: 'warn', description: 'Warn about filtered emojis' },
-  { value: 'error', description: 'Error on filtered emojis' },
-];
-
-const truncateModeOptions = [
-  { value: 'warn', description: 'warn' },
-  { value: 'truncate', description: 'truncate' },
-  { value: 'sample', description: 'sample' },
-];
-
-const shellReplacementOptions = [
-  {
-    value: 'allowlist',
-    description: 'Validate inner commands against coreTools (default)',
-  },
-  { value: 'all', description: 'Allow all command substitution' },
-  { value: 'none', description: 'Block all command substitution' },
-  { value: 'true', description: 'Legacy: same as "all"' },
-  { value: 'false', description: 'Legacy: same as "none"' },
-];
-
-// Common model parameters - used for deep path completion flattening
+// Common model parameters - used for deep path completion flattening in modelparam context
 const commonParamOptions = [
   { value: 'temperature', description: 'Sampling temperature (0-2)' },
   { value: 'max_tokens', description: 'Maximum tokens to generate' },
@@ -115,253 +90,24 @@ const commonParamOptions = [
   { value: 'presence_penalty', description: 'Presence penalty (-2 to 2)' },
 ];
 
-const directSettingSpecs: SettingLiteralSpec[] = [
-  {
-    value: 'emojifilter',
-    hint: 'filter mode',
-    description: 'filter mode',
-    options: emojifilterOptions,
-  },
-  {
-    value: 'context-limit',
-    hint: 'positive integer (e.g., 100000)',
-  },
-  {
-    value: 'compression-threshold',
-    hint: 'decimal between 0 and 1 (e.g., 0.7)',
-  },
-  {
-    value: 'base-url',
-    hint: 'URL string (e.g., https://api.example.com)',
-  },
-  {
-    value: 'api-version',
-    hint: 'API version (e.g., v1, 2024-05-01)',
-  },
-  {
-    value: 'stream-options',
-    hint: 'JSON object (e.g., {"include_usage":false})',
-    description:
-      'Stream options for OpenAI-compatible APIs (disable include_usage for Mistral)',
-    options: [
-      {
-        value: '{"include_usage":true}',
-        description: 'Include usage stats (default)',
-      },
-      {
-        value: '{"include_usage":false}',
-        description: 'No usage stats (for Mistral)',
-      },
-      { value: '{}', description: 'Omit stream_options entirely' },
-    ],
-  },
-  {
-    value: 'streaming',
-    hint: 'enabled or disabled',
-    description: 'boolean value',
-    options: booleanOptions,
-  },
-  {
-    value: 'streaming',
-    hint: 'enabled or disabled',
-    description: 'streaming mode',
-    options: streamingOptions,
-  },
-  {
-    value: 'socket-timeout',
-    hint: 'positive integer in milliseconds (e.g., 60000)',
-  },
-  {
-    value: 'socket-keepalive',
-    hint: 'true or false',
-    description: 'boolean value',
-    options: booleanOptions,
-  },
-  {
-    value: 'socket-nodelay',
-    hint: 'true or false',
-    description: 'boolean value',
-    options: booleanOptions,
-  },
-  {
-    value: 'shell-replacement',
-    hint: 'allowlist, all, or none',
-    description: 'shell substitution mode',
-    options: shellReplacementOptions,
-  },
-  {
-    value: 'tool-output-max-items',
-    hint: 'positive integer (e.g., 50)',
-  },
-  {
-    value: 'tool-output-max-tokens',
-    hint: 'positive integer (e.g., 50000)',
-  },
-  {
-    value: 'tool-output-item-size-limit',
-    hint: 'positive integer (e.g., 1048576)',
-  },
-  {
-    value: 'tool-output-truncate-mode',
-    hint: 'warn, truncate, or sample',
-    description: 'truncate mode',
-    options: truncateModeOptions,
-  },
-  {
-    value: 'max-prompt-tokens',
-    hint: 'positive integer (e.g., 200000)',
-  },
-  {
-    value: 'maxTurnsPerPrompt',
-    hint: 'positive integer or -1 (unlimited)',
-  },
-  {
-    value: 'prompt-caching',
-    hint: 'off, 5m, or 1h',
-    description: 'caching mode',
-    options: [
-      { value: 'off', description: 'disabled' },
-      { value: '5m', description: '5 minutes' },
-      { value: '1h', description: '1 hour' },
-    ],
-  },
-  {
-    value: 'authOnly',
-    hint: 'true or false',
-    description: 'boolean value',
-    options: booleanOptions,
-  },
-  {
-    value: 'include-folder-structure',
-    hint: 'true or false',
-    description: 'Include folder structure in system prompts',
-    options: booleanOptions,
-  },
-  {
-    value: 'dumponerror',
-    hint: 'enabled or disabled',
-    description: 'dump mode',
-    options: streamingOptions,
-  },
-  {
-    value: 'retries',
-    hint: 'positive integer (e.g., 3)',
-  },
-  {
-    value: 'retrywait',
-    hint: 'positive integer in milliseconds (e.g., 1000)',
-  },
-  // Reasoning/thinking settings
-  {
-    value: 'reasoning.enabled',
-    hint: 'true or false',
-    description: 'Show AI thinking process (Claude, Gemini 3, DeepSeek, etc)',
-    options: booleanOptions,
-  },
-  {
-    value: 'reasoning.includeInContext',
-    hint: 'true or false',
-    description:
-      'Send thinking to API on follow-up requests (uses more tokens)',
-    options: booleanOptions,
-  },
-  {
-    value: 'reasoning.includeInResponse',
-    hint: 'true or false',
-    description: 'Display thinking blocks in the UI',
-    options: booleanOptions,
-  },
-  {
-    value: 'reasoning.format',
-    hint: 'native or field',
-    description: 'API format: native=provider default, field=reasoning_content',
-    options: [
-      { value: 'native', description: 'Use provider default format' },
-      {
-        value: 'field',
-        description: 'Use reasoning_content field (OpenAI style)',
-      },
-    ],
-  },
-  {
-    value: 'reasoning.stripFromContext',
-    hint: 'all, allButLast, or none',
-    description: 'Control thinking in history sent to API',
-    options: [
-      {
-        value: 'all',
-        description: 'Remove all thinking from history (saves tokens)',
-      },
-      { value: 'allButLast', description: 'Keep only most recent thinking' },
-      { value: 'none', description: 'Keep all thinking in history' },
-    ],
-  },
-  {
-    value: 'reasoning.effort',
-    hint: 'minimal, low, medium, high, or xhigh',
-    description: 'How much the AI should think before responding',
-    options: [
-      { value: 'minimal', description: 'Quick responses, less deliberation' },
-      { value: 'low', description: 'Light thinking for simple tasks' },
-      { value: 'medium', description: 'Balanced thinking for most tasks' },
-      { value: 'high', description: 'Deep thinking for complex problems' },
-      { value: 'xhigh', description: 'Maximum thinking for hardest problems' },
-    ],
-  },
-  {
-    value: 'reasoning.maxTokens',
-    hint: 'positive integer (e.g., 8000)',
-    description: 'Cap on thinking tokens (limits thinking length)',
-  },
-  // Tool timeout settings (Issue #1049)
-  {
-    value: 'task-default-timeout-seconds',
-    hint: 'timeout in seconds (e.g., 900) or -1 (unlimited)',
-    description: 'Task tool default timeout',
-  },
-  {
-    value: 'task-max-timeout-seconds',
-    hint: 'timeout in seconds (e.g., 1800) or -1 (unlimited)',
-    description: 'Task tool max timeout',
-  },
-  {
-    value: 'shell-default-timeout-seconds',
-    hint: 'timeout in seconds (e.g., 300) or -1 (unlimited)',
-    description: 'Shell tool default timeout',
-  },
-  {
-    value: 'shell-max-timeout-seconds',
-    hint: 'timeout in seconds (e.g., 900) or -1 (unlimited)',
-    description: 'Shell tool max timeout',
-  },
-  // Load balancer settings (Phase 3, Issue #489)
-  {
-    value: 'tpm_threshold',
-    hint: 'positive integer (e.g., 1000)',
-  },
-  {
-    value: 'timeout_ms',
-    hint: 'positive integer in milliseconds (e.g., 30000)',
-  },
-  {
-    value: 'circuit_breaker_enabled',
-    hint: 'true or false',
-    description: 'boolean value',
-    options: booleanOptions,
-  },
-  {
-    value: 'circuit_breaker_failure_threshold',
-    hint: 'positive integer (e.g., 3)',
-  },
-  {
-    value: 'circuit_breaker_failure_window_ms',
-    hint: 'positive integer in milliseconds (e.g., 60000)',
-  },
-  {
-    value: 'circuit_breaker_recovery_timeout_ms',
-    hint: 'positive integer in milliseconds (e.g., 30000)',
-  },
-];
+const buildDirectSettingSpecs = (): SettingLiteralSpec[] => {
+  const registrySpecs = getDirectSettingSpecs();
+  return registrySpecs.map(
+    (spec: {
+      value: string;
+      hint: string;
+      description?: string;
+      options?: ReadonlyArray<{ value: string; description?: string }>;
+    }) => ({
+      value: spec.value,
+      hint: spec.hint,
+      description: spec.description,
+      options: spec.options,
+    }),
+  );
+};
+
+const directSettingSpecs: SettingLiteralSpec[] = buildDirectSettingSpecs();
 
 const createSettingLiteral = (spec: SettingLiteralSpec): LiteralArgument => ({
   kind: 'literal' as const,
@@ -527,7 +273,9 @@ const setSchema: CommandArgumentSchema = [
         name: 'mode',
         description: 'filter mode',
         hint: 'filter mode',
-        options: emojifilterOptions,
+        options:
+          getDirectSettingSpecs().find((s) => s.value === 'emojifilter')
+            ?.options ?? [],
       },
     ],
   },
@@ -579,30 +327,23 @@ const setSchema: CommandArgumentSchema = [
           const setting = tokens.tokens[0] || tokens.partialToken;
           const enableFuzzy = getFuzzyEnabled(ctx);
 
-          if (setting === 'emojifilter') {
-            return filterCompletions(emojifilterOptions, partial, {
-              enableFuzzy,
-            });
+          // Try to get autocomplete suggestions from the registry first
+          const registryOptions = resolveAlias(setting)
+            ? getDirectSettingSpecs().find(
+                (s) => s.value === resolveAlias(setting),
+              )?.options
+            : undefined;
+
+          if (registryOptions && registryOptions.length > 0) {
+            return filterCompletions(registryOptions, partial, { enableFuzzy });
           }
-          if (setting === 'streaming') {
-            return filterCompletions(streamingOptions, partial, {
-              enableFuzzy,
-            });
-          }
+
+          // Fallback for boolean settings without explicit completionOptions
           if (setting === 'socket-keepalive' || setting === 'socket-nodelay') {
             return filterCompletions(booleanOptions, partial, { enableFuzzy });
           }
-          if (setting === 'shell-replacement') {
-            return filterCompletions(shellReplacementOptions, partial, {
-              enableFuzzy,
-            });
-          }
-          if (setting === 'tool-output-truncate-mode') {
-            return filterCompletions(truncateModeOptions, partial, {
-              enableFuzzy,
-            });
-          }
 
+          // Special case: custom-headers needs runtime lookup
           if (setting === 'custom-headers') {
             const headers = getRuntimeApi().getEphemeralSettings()[
               'custom-headers'
