@@ -63,7 +63,6 @@ import { resolveUserMemory } from '../utils/userMemory.js';
 import { convertToVercelMessages } from './messageConversion.js';
 import { getToolIdStrategy } from '../../tools/ToolIdStrategy.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
-import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { AuthenticationError, wrapError } from './errors.js';
 import {
@@ -383,21 +382,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   private extractModelParamsFromOptions(
     options: NormalizedGenerateChatOptions,
   ): Record<string, unknown> | undefined {
-    const providerSettings =
-      options.settings?.getProviderSettings(this.name) ?? {};
-    const configEphemerals = options.invocation?.ephemerals ?? {};
+    const modelParams = options.invocation?.modelParams ?? {};
 
-    const filteredProviderParams = filterOpenAIRequestParams(providerSettings);
-    const filteredEphemeralParams = filterOpenAIRequestParams(configEphemerals);
-
-    if (!filteredProviderParams && !filteredEphemeralParams) {
-      return undefined;
-    }
-
-    return {
-      ...(filteredProviderParams ?? {}),
-      ...(filteredEphemeralParams ?? {}),
-    };
+    return Object.keys(modelParams).length > 0 ? modelParams : undefined;
   }
 
   private getAiJsonSchema(): ((schema: JSONSchema7) => unknown) | undefined {
@@ -1889,48 +1876,13 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
   /**
    * Gets model parameters from SettingsService per call (stateless).
-   * Mirrors OpenAIProvider.getModelParams for compatibility.
+   * @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+   * Now uses invocation.modelParams instead of filtering SettingsService
    */
   override getModelParams(): Record<string, unknown> | undefined {
-    try {
-      const settingsService = this.resolveSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
-
-      const reservedKeys = new Set([
-        'enabled',
-        'apiKey',
-        'api-key',
-        'apiKeyfile',
-        'api-keyfile',
-        'baseUrl',
-        'baseURL',
-        'base-url',
-        'model',
-        'toolFormat',
-        'tool-format',
-        'toolFormatOverride',
-        'tool-format-override',
-        'defaultModel',
-      ]);
-
-      const params: Record<string, unknown> = {};
-      if (providerSettings) {
-        for (const [key, value] of Object.entries(providerSettings)) {
-          if (reservedKeys.has(key) || value === undefined || value === null) {
-            continue;
-          }
-          params[key] = value;
-        }
-      }
-
-      return Object.keys(params).length > 0 ? params : undefined;
-    } catch (error) {
-      this.getLogger().debug(
-        () =>
-          `Failed to get OpenAIVercel provider settings from SettingsService: ${error}`,
-      );
-      return undefined;
-    }
+    // Model params should come from invocation context, not SettingsService
+    // This maintains compatibility with the provider interface
+    return undefined;
   }
 
   /**

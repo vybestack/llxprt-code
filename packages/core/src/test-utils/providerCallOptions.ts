@@ -70,9 +70,34 @@ function buildEphemeralsSnapshot(
   providerName: string,
   settings: SettingsService,
 ): Record<string, unknown> {
-  const snapshot: Record<string, unknown> = {
-    ...settings.getAllGlobalSettings(),
-  };
+  // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+  // Filter out provider-config settings from global level (same as ProviderManager)
+  const providerConfigKeys = new Set([
+    'apiKey',
+    'api-key',
+    'auth-key',
+    'apiKeyfile',
+    'api-keyfile',
+    'auth-keyfile',
+    'baseUrl',
+    'baseURL',
+    'base-url',
+    'model',
+    'defaultModel',
+    'enabled',
+    'toolFormat',
+    'tool-format',
+    'toolFormatOverride',
+    'tool-format-override',
+  ]);
+
+  const globalSettings = settings.getAllGlobalSettings();
+  const snapshot: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(globalSettings)) {
+    if (!providerConfigKeys.has(key)) {
+      snapshot[key] = value;
+    }
+  }
 
   snapshot[providerName] = {
     ...settings.getProviderSettings(providerName),

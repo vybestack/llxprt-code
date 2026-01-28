@@ -14,6 +14,7 @@ import {
   createProviderRuntimeContext,
   getActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
+  getProfilePersistableKeys,
 } from '@vybestack/llxprt-code-core';
 import type {
   ProviderManager,
@@ -892,52 +893,8 @@ export function clearActiveModelParam(name: string): void {
   settingsService.setProviderSetting(providerName, name, undefined);
 }
 
-export const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
-  'auth-key',
-  'auth-keyfile',
-  'context-limit',
-  'compression-threshold',
-  'base-url',
-  'GOOGLE_CLOUD_PROJECT',
-  'GOOGLE_CLOUD_LOCATION',
-  'tool-format',
-  'api-version',
-  'custom-headers',
-  'disabled-tools',
-  'tool-output-max-items',
-  'tool-output-max-tokens',
-  'tool-output-truncate-mode',
-  'tool-output-item-size-limit',
-  'max-prompt-tokens',
-  'shell-replacement',
-  'todo-continuation',
-  'socket-timeout',
-  'socket-keepalive',
-  'socket-nodelay',
-  'streaming',
-  'dumponerror',
-  'retries',
-  'retrywait',
-  'maxTurnsPerPrompt',
-  // @plan:PLAN-20251202-THINKING.P03b
-  // @requirement:REQ-THINK-006.6 - reasoning.* saveable via /profile save
-  'reasoning.enabled',
-  'reasoning.includeInContext',
-  'reasoning.includeInResponse',
-  'reasoning.format',
-  'reasoning.stripFromContext',
-  'reasoning.effort',
-  'reasoning.maxTokens',
-  // Prompt caching settings (Issue #680)
-  'prompt-caching',
-  'include-folder-structure',
-  'enable-tool-prompts',
-  // Tool timeout settings (Issue #1049)
-  'task-default-timeout-seconds',
-  'task-max-timeout-seconds',
-  'shell-default-timeout-seconds',
-  'shell-max-timeout-seconds',
-];
+export const PROFILE_EPHEMERAL_KEYS: readonly string[] =
+  getProfilePersistableKeys();
 
 const SENSITIVE_MODEL_PARAM_KEYS = new Set([
   'auth-key',
