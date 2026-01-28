@@ -42,7 +42,7 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
     process.env.HOME = tempDir;
     process.env.USERPROFILE = tempDir; // For Windows
 
-    tokenStore = new MultiProviderTokenStore();
+    tokenStore = new MultiProviderTokenStore(join(tempDir, '.llxprt', 'oauth'));
   });
 
   afterEach(async () => {

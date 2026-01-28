@@ -743,6 +743,21 @@ describe('HistoryService - Behavioral Tests', () => {
       // Implementation could choose to filter hidden thinking blocks
     });
 
+    it('should treat unsigned Anthropic thinking blocks as invalid content', () => {
+      service.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: 'Unsigned thinking',
+            sourceField: 'thinking',
+          },
+        ],
+      });
+
+      expect(service.getCurated()).toEqual([]);
+    });
+
     it('should handle media blocks', () => {
       service.add({
         speaker: 'human',

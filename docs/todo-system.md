@@ -6,8 +6,8 @@ The LLxprt Code features a sophisticated task management system to help AI agent
 
 This built-in tool allows the AI model to read the current state of the todo list for the active session.
 
-**Purpose**: To retrieve the list of tasks, their statuses, priorities, subtasks, and recent tool calls.
-**Returns**: A markdown block that mirrors the Todo panel, including status icons (✔/○/→), priority badges, subtasks, and the five most recent tool calls per todo.
+**Purpose**: To retrieve the list of tasks, their statuses, subtasks, and recent tool calls.
+**Returns**: A markdown block that mirrors the Todo panel, including status icons (/○/→), subtasks, and the five most recent tool calls per todo.
 **Parameters**: None.
 
 ## `todo_write` Tool
@@ -21,7 +21,6 @@ This built-in tool allows the AI model to create, update, or overwrite the entir
   - `id` (string, required): A unique identifier for the todo item.
   - `content` (string, required): A clear, descriptive task for the AI to perform.
   - `status` (string, enum: "pending", "in_progress", "completed", required): The current status of the task.
-  - `priority` (string, enum: "high", "medium", "low", required): The priority level of the task.
 
 **Behavior**:
 The tool completely replaces the current todo list with the one provided in the `todos` array. In non-interactive sessions it returns a simplified markdown view of the list to the AI. In interactive sessions the CLI renders the Todo panel by default, but if you disable the panel (see below) LLxprt synthesizes the same structured markdown that `todo_read` now emits so the entire list remains visible in scrollback.
@@ -44,7 +43,7 @@ This built-in tool allows the AI model to pause its automatic workflow continuat
 Some users prefer all todo updates to remain in the scrollback instead of a separate Ink panel. Open `/settings` (or edit `.llxprt/settings.json`) and toggle **UI → Show Todo Panel**. When this setting is off:
 
 - The Todo panel is hidden immediately—no restart required.
-- `todo_write` tool calls render the full structured todo list inline (status icons, priorities, subtasks, recent tool calls) instead of the `✦ Todo list updated` placeholder.
+- `todo_write` tool calls render the full structured todo list inline (status icons, subtasks, recent tool calls) instead of the ` Todo list updated` placeholder.
 - `todo_read` outputs the same formatter, so both tools always share one canonical textual representation.
 
 Re-enable the toggle to restore the rich Ink panel without losing any history.

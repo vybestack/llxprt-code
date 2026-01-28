@@ -10,6 +10,7 @@ import {
   getOutputLimits,
   limitOutputTokens,
   formatLimitedOutput,
+  clipMiddle,
   DEFAULT_MAX_TOKENS,
   DEFAULT_TRUNCATE_MODE,
 } from './toolOutputLimiter.js';
@@ -32,6 +33,40 @@ describe('toolOutputLimiter', () => {
       expect(estimateTokens('hello world')).toBe(2); // 'hello world' is 2 tokens in gpt-4o
       expect(estimateTokens('')).toBe(0);
       expect(estimateTokens('a'.repeat(100))).toBeLessThan(50); // Should be much less than char count due to tokenization
+    });
+  });
+
+  describe('clipMiddle', () => {
+    it('should not truncate when content is within maxChars', () => {
+      const content = 'hello world';
+      const result = clipMiddle(content, 100, 0.3, 0.7);
+      expect(result).toEqual({
+        content,
+        wasTruncated: false,
+        originalLength: content.length,
+      });
+    });
+
+    it('should remove middle and keep head and tail with marker', () => {
+      const content = `HEAD
+${'X'.repeat(200)}
+TAIL`;
+      const result = clipMiddle(content, 60, 0.3, 0.7);
+
+      expect(result.wasTruncated).toBe(true);
+      expect(result.originalLength).toBe(content.length);
+      expect(result.content).toContain('HEAD');
+      expect(result.content).toContain('TAIL');
+      expect(result.content).toContain('... [middle ');
+      expect(result.content.length).toBeGreaterThan(0);
+      expect(result.content.length).toBeLessThan(content.length);
+    });
+
+    it('should handle zero/negative ratios by still producing valid output', () => {
+      const content = 'A'.repeat(200);
+      const result = clipMiddle(content, 50, 0, 0);
+      expect(result.wasTruncated).toBe(true);
+      expect(result.content).toContain('... [middle ');
     });
   });
 

@@ -30,7 +30,7 @@ test('basic todo continuation flow', { skip: skipTodoTests }, async () => {
 
   // First, create a todo list with an active task
   const _createResult = await rig.run(
-    'Create a todo list with these tasks: 1. Implement auth system (in_progress, high), 2. Write tests (pending, medium)',
+    'Create a todo list with these tasks: 1. Implement auth system (in_progress), 2. Write tests (pending)',
   );
 
   // Wait for todo_write tool call
@@ -161,7 +161,7 @@ test(
     });
 
     const _createResult = await rig.run(
-      'Create a todo list with one item: Build login form (in_progress, high)',
+      'Create a todo list with one item: Build login form (in_progress)',
     );
     const writeToolCall = await rig.waitForToolCall('todo_write');
     assert.ok(writeToolCall, 'Expected to find a todo_write tool call');
@@ -393,25 +393,25 @@ test(
 
 /**
  * @requirement REQ-006
- * @scenario Multiple active todos continuation priority
+ * @scenario Multiple active todos continuation alphabetical sorting
  * @given Multiple in_progress todos
  * @when Continuation is triggered
- * @then Continuation focuses on highest priority active todo
+ * @then Continuation focuses on first alphabetically sorted active todo
  */
 test(
-  'multiple active todos continuation priority',
+  'multiple active todos continuation alphabetical sorting',
   { skip: skipTodoTests },
   async () => {
     const rig = new TestRig();
-    await rig.setup('multiple active todos priority', {
+    await rig.setup('multiple active todos alphabetical sorting', {
       settings: {
         'todo-continuation': true,
       },
     });
 
-    // Create multiple active todos with different priorities
+    // Create multiple active todos - alphabetically "Fix critical bug" comes before "Update docs"
     const _createResult = await rig.run(
-      'Create todos: 1. Fix critical bug (in_progress, high), 2. Update docs (in_progress, low), 3. Code review (pending, medium)',
+      'Create todos: 1. Fix critical bug (in_progress), 2. Update docs (in_progress), 3. Code review (pending)',
     );
 
     const writeToolCall = await rig.waitForToolCall('todo_write');
@@ -422,15 +422,16 @@ test(
       'I need to step back and think about priorities',
     );
 
-    // Should focus on the high priority task
-    const focusesOnHighPriority =
+    // Should focus on the first alphabetically sorted task
+    const focusesOnFirstAlphabetical =
       priorityResult.toLowerCase().includes('critical bug') ||
       priorityResult.toLowerCase().includes('bug') ||
-      priorityResult.toLowerCase().includes('critical');
+      priorityResult.toLowerCase().includes('critical') ||
+      priorityResult.toLowerCase().includes('fix');
 
-    if (!focusesOnHighPriority) {
+    if (!focusesOnFirstAlphabetical) {
       printDebugInfo(rig, priorityResult, {
-        'Expected high priority focus': true,
+        'Expected alphabetically first focus': true,
         'Mentions critical bug': priorityResult
           .toLowerCase()
           .includes('critical'),
@@ -441,11 +442,11 @@ test(
       });
     }
 
-    // The AI should reference the most important active task
+    // The AI should reference the alphabetically first active task
     validateModelOutput(
       priorityResult,
       ['bug', 'critical', 'fix'],
-      'Priority continuation test',
+      'Alphabetical sorting continuation test',
     );
 
     await rig.cleanup();

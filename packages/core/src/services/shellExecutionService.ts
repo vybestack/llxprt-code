@@ -292,6 +292,7 @@ export class ShellExecutionService {
         };
 
         let hasResolved = false;
+        let cleanedUp = false;
 
         const handleExit = (
           code: number | null,
@@ -374,6 +375,16 @@ export class ShellExecutionService {
         function cleanup() {
           exited = true;
           abortSignal.removeEventListener('abort', abortHandler);
+
+          if (!cleanedUp) {
+            cleanedUp = true;
+            child.stdout?.removeAllListeners('data');
+            child.stderr?.removeAllListeners('data');
+            child.removeAllListeners('error');
+            child.removeAllListeners('exit');
+            child.removeAllListeners('close');
+          }
+
           if (stdoutDecoder) {
             const remaining = stdoutDecoder.decode();
             if (remaining) {
@@ -453,6 +464,11 @@ export class ShellExecutionService {
           allowProposedApi: true,
           cols,
           rows,
+        });
+
+        ShellExecutionService.activePtys.set(ptyProcess.pid, {
+          ptyProcess,
+          headlessTerminal,
         });
         let processingChain = Promise.resolve();
         let decoder: TextDecoder | null = null;
@@ -547,6 +563,11 @@ export class ShellExecutionService {
             abortSignal.removeEventListener('abort', abortHandler);
 
             const finalize = () => {
+              ShellExecutionService.activePtys.delete(ptyProcess.pid);
+              if (typeof headlessTerminal.dispose === 'function') {
+                headlessTerminal.dispose();
+              }
+
               const finalBuffer = Buffer.concat(outputChunks);
 
               // Use our truncated output instead of the unbounded terminal buffer
@@ -610,6 +631,10 @@ export class ShellExecutionService {
             const pid = ptyProcess.pid;
             if (isWindows) {
               cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+              ShellExecutionService.activePtys.delete(pid);
+              if (typeof headlessTerminal.dispose === 'function') {
+                headlessTerminal.dispose();
+              }
               return;
             }
 

@@ -52,6 +52,7 @@ import {
   getErrorStatus,
   isNetworkTransientError,
 } from '../../utils/retry.js';
+import { delay } from '../../utils/delay.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import {
   shouldDumpSDKContext,
@@ -888,7 +889,12 @@ export class AnthropicProvider extends BaseProvider {
     // and the next has tool calls. This handles the case where thinking and tool calls
     // are streamed and stored separately during Anthropic Extended Thinking.
     const filteredContent: IContent[] = [];
+    const consumedOrphanedThinkingIndices = new Set<number>();
     for (let i = 0; i < filteredContentRaw.length; i++) {
+      if (consumedOrphanedThinkingIndices.has(i)) {
+        continue;
+      }
+
       const current = filteredContentRaw[i];
       const next =
         i + 1 < filteredContentRaw.length ? filteredContentRaw[i + 1] : null;
@@ -899,7 +905,7 @@ export class AnthropicProvider extends BaseProvider {
         next &&
         next.speaker === 'ai'
       ) {
-        // Check if current has ONLY thinking blocks and next has tool_call blocks
+        // Check if current has ONLY thinking blocks and next is any AI message.
         const currentThinking = current.blocks.filter(
           (b) =>
             b.type === 'thinking' &&
@@ -910,22 +916,18 @@ export class AnthropicProvider extends BaseProvider {
             b.type !== 'thinking' ||
             (b as ThinkingBlock).sourceField !== 'thinking',
         );
-        const nextToolCalls = next.blocks.filter((b) => b.type === 'tool_call');
 
-        if (
-          currentThinking.length > 0 &&
-          currentOther.length === 0 &&
-          nextToolCalls.length > 0
-        ) {
+        if (currentThinking.length > 0 && currentOther.length === 0) {
           // Merge: combine thinking from current with all blocks from next
           this.getLogger().debug(
             () =>
-              `[AnthropicProvider] Merging orphaned thinking block with subsequent tool_use message`,
+              `[AnthropicProvider] Merging orphaned thinking block with subsequent assistant message`,
           );
           filteredContent.push({
             ...next,
             blocks: [...currentThinking, ...next.blocks],
           });
+          consumedOrphanedThinkingIndices.add(i);
           i++; // Skip the next item since we merged it
           continue;
         }
@@ -934,39 +936,7 @@ export class AnthropicProvider extends BaseProvider {
       filteredContent.push(current);
     }
 
-    // CRITICAL FIX: Check if there are tool calls in history without thinking blocks.
-    // Anthropic's API requires ALL assistant messages to start with thinking/redacted_thinking
-    // when thinking is enabled. Since our history system doesn't preserve thinking alongside
-    // tool calls, we must DISABLE thinking for multi-turn conversations with tool calls
-    // to avoid the API error "messages.1.content.0.type: Expected `thinking` or `redacted_thinking`"
-    //
-    // This is a workaround until thinking block preservation is fixed at the geminiChat level.
-    let effectiveReasoningEnabled = reasoningEnabled;
-    if (reasoningEnabled) {
-      for (const c of filteredContent) {
-        if (c.speaker === 'ai') {
-          const hasToolCalls = c.blocks.some((b) => b.type === 'tool_call');
-          const hasThinking = c.blocks.some(
-            (b) =>
-              b.type === 'thinking' &&
-              (b as ThinkingBlock).sourceField === 'thinking',
-          );
-
-          // If this AI message has tool calls but NO thinking, we must disable thinking
-          // to avoid API error
-          if (hasToolCalls && !hasThinking) {
-            this.getLogger().warn(
-              () =>
-                `[AnthropicProvider] Disabling extended thinking for this request: ` +
-                `history contains tool calls without associated thinking blocks. ` +
-                `This is a known limitation - thinking blocks are not preserved alongside tool calls in history.`,
-            );
-            effectiveReasoningEnabled = false;
-            break;
-          }
-        }
-      }
-    }
+    const shouldIncludeThinking = reasoningEnabled === true;
 
     // Group consecutive tool responses together for Anthropic API
     let pendingToolResults: Array<{
@@ -1131,9 +1101,6 @@ export class AnthropicProvider extends BaseProvider {
       } else if (c.speaker === 'ai') {
         // Flush any pending tool results before adding an AI message
         flushToolResults();
-        const textBlocks = c.blocks.filter(
-          (b) => b.type === 'text',
-        ) as TextBlock[];
         const toolCallBlocks = c.blocks.filter(
           (b) => b.type === 'tool_call',
         ) as ToolCallBlock[];
@@ -1142,7 +1109,7 @@ export class AnthropicProvider extends BaseProvider {
         ) as ThinkingBlock[];
 
         if (toolCallBlocks.length > 0 || thinkingBlocks.length > 0) {
-          // Build content array with text, thinking/redacted_thinking, and tool_use blocks
+          // Build content array preserving the original block order
           const contentArray: Array<
             | { type: 'text'; text: string }
             | { type: 'tool_use'; id: string; name: string; input: unknown }
@@ -1150,113 +1117,99 @@ export class AnthropicProvider extends BaseProvider {
             | { type: 'redacted_thinking'; data: string }
           > = [];
 
-          // Check if this message's thinking should be redacted (stripped but preserved as placeholder)
-          const shouldRedactThinking =
+          const shouldRedactThinkingBase =
             redactedThinkingIndices.has(contentIndex);
 
-          // Add thinking blocks first
-          // Only include thinking blocks with sourceField 'thinking' (Anthropic format)
-          // When redacting, convert to redacted_thinking to satisfy Anthropic's API requirement
-          // that assistant messages must start with thinking when thinking is enabled
-          //
-          // IMPORTANT: When thinking is enabled but the history has no thinking block for this
-          // assistant message (e.g., thinking was stored separately due to streaming), we need to
-          // look back at previous content items to find an orphaned thinking block to associate
-          // with this tool_use message. Anthropic requires ALL assistant messages to start with
-          // thinking/redacted_thinking when thinking mode is enabled.
-          let anthropicThinkingBlocks = thinkingBlocks.filter(
-            (tb) => tb.sourceField === 'thinking',
-          );
+          const shouldRedactBlock = (block: ThinkingBlock): boolean => {
+            if (block.sourceField !== 'thinking' || !block.signature) {
+              return false;
+            }
+            if (!shouldRedactThinkingBase) {
+              return false;
+            }
+            return true;
+          };
 
-          // If no thinking blocks found but we have tool calls and thinking is enabled,
-          // look back at the previous content item for orphaned thinking blocks
-          if (
-            anthropicThinkingBlocks.length === 0 &&
-            effectiveReasoningEnabled &&
-            toolCallBlocks.length > 0 &&
-            contentIndex > 0
-          ) {
-            const prevContent = processedContent[contentIndex - 1];
-            if (prevContent.speaker === 'ai') {
-              const prevThinkingBlocks = prevContent.blocks.filter(
-                (b) =>
-                  b.type === 'thinking' &&
-                  (b as ThinkingBlock).sourceField === 'thinking',
-              ) as ThinkingBlock[];
-              // Check if prev content was ONLY thinking (no other content)
-              const prevNonThinkingBlocks = prevContent.blocks.filter(
-                (b) =>
-                  b.type !== 'thinking' ||
-                  (b as ThinkingBlock).sourceField !== 'thinking',
-              );
+          for (const block of c.blocks) {
+            if (block.type === 'thinking') {
+              const thinkingBlock = block as ThinkingBlock;
               if (
-                prevThinkingBlocks.length > 0 &&
-                prevNonThinkingBlocks.length === 0
+                thinkingBlock.sourceField !== 'thinking' ||
+                !thinkingBlock.signature
               ) {
                 this.getLogger().debug(
                   () =>
-                    `[AnthropicProvider] Found orphaned thinking block in previous content item, merging with tool_use message`,
+                    `[AnthropicProvider] Skipping thinking block without signature at index ${contentIndex}`,
                 );
-                anthropicThinkingBlocks = prevThinkingBlocks;
+                continue;
               }
-            }
-          }
-
-          if (anthropicThinkingBlocks.length > 0) {
-            // Process existing thinking blocks
-            for (const tb of anthropicThinkingBlocks) {
-              if (shouldRedactThinking) {
-                // Use redacted_thinking with the signature as data
-                // This satisfies Anthropic's requirement while saving tokens
+              if (shouldRedactBlock(thinkingBlock)) {
                 contentArray.push({
                   type: 'redacted_thinking',
-                  data: tb.signature || '',
+                  data: thinkingBlock.signature,
                 });
               } else {
                 contentArray.push({
                   type: 'thinking',
-                  thinking: tb.thought,
-                  signature: tb.signature,
+                  thinking: thinkingBlock.thought,
+                  signature: thinkingBlock.signature,
                 });
               }
+              continue;
             }
-          }
 
-          // Add text if present
-          const contentText = textBlocks.map((b) => b.text).join('');
-          if (contentText) {
-            contentArray.push({ type: 'text', text: contentText });
-          }
+            if (block.type === 'text') {
+              contentArray.push({ type: 'text', text: block.text });
+              continue;
+            }
 
-          // Add tool uses
-          for (const tc of toolCallBlocks) {
-            // Ensure parameters are an object, not a string
-            let parametersObj = tc.parameters;
-            if (typeof parametersObj === 'string') {
-              try {
-                parametersObj = JSON.parse(parametersObj);
-              } catch (e) {
-                this.getToolsLogger().debug(
-                  () => `Failed to parse tool parameters as JSON: ${e}`,
-                );
-                parametersObj = {};
+            if (block.type === 'code') {
+              const language = block.language ? block.language : '';
+              const codeText = `
+
+\u0060\u0060\u0060${language}
+${block.code}
+\u0060\u0060\u0060
+`;
+              contentArray.push({ type: 'text', text: codeText });
+              continue;
+            }
+
+            if (block.type === 'tool_call') {
+              let parametersObj = block.parameters;
+              if (typeof parametersObj === 'string') {
+                try {
+                  parametersObj = JSON.parse(parametersObj);
+                } catch (e) {
+                  this.getToolsLogger().debug(
+                    () => `Failed to parse tool parameters as JSON: ${e}`,
+                  );
+                  parametersObj = {};
+                }
               }
+              contentArray.push({
+                type: 'tool_use',
+                id: this.normalizeToAnthropicToolId(block.id),
+                name: this.unprefixToolName(block.name, isOAuth),
+                input: parametersObj,
+              });
+              continue;
             }
-            contentArray.push({
-              type: 'tool_use',
-              id: this.normalizeToAnthropicToolId(tc.id),
-              name: this.unprefixToolName(tc.name, isOAuth),
-              input: parametersObj,
+          }
+          if (contentArray.length === 0) {
+            anthropicMessages.push({
+              role: 'assistant',
+              content: '',
+            });
+          } else {
+            anthropicMessages.push({
+              role: 'assistant',
+              content: contentArray,
             });
           }
-
-          anthropicMessages.push({
-            role: 'assistant',
-            content: contentArray,
-          });
         } else {
           // Text-only message
-          const contentText = textBlocks.map((b) => b.text).join('');
+          const contentText = blocksToText(c.blocks);
           anthropicMessages.push({
             role: 'assistant',
             content: contentText,
@@ -1648,7 +1601,7 @@ export class AnthropicProvider extends BaseProvider {
       ...(anthropicTools && anthropicTools.length > 0
         ? { tools: anthropicTools }
         : {}),
-      ...(effectiveReasoningEnabled
+      ...(shouldIncludeThinking
         ? {
             thinking: {
               type: 'enabled' as const,
@@ -1988,236 +1941,314 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     if (streamingEnabled) {
-      // Handle streaming response - response is already a Stream when streaming is enabled
-      const stream =
-        response as unknown as AsyncIterable<Anthropic.MessageStreamEvent>;
-      let currentToolCall:
-        | { id: string; name: string; input: string }
-        | undefined;
-      let currentThinkingBlock:
-        | { thinking: string; signature?: string }
-        | undefined;
+      // Handle streaming response with retry loop for transient network errors
+      // Similar to OpenAIResponsesProvider, we wrap the entire stream consumption
+      // in a retry loop to handle mid-stream disconnections (issue #1228)
+      // Use retry config from ephemeral settings
+      let streamingAttempt = 0;
+      let currentDelay = initialDelayMs;
+      const streamRetryMaxDelayMs = 30000;
+      const streamingLogger = this.getStreamingLogger();
 
-      this.getStreamingLogger().debug(() => 'Processing streaming response');
+      while (streamingAttempt < maxAttempts) {
+        streamingAttempt++;
 
-      try {
-        for await (const chunk of stream) {
-          if (chunk.type === 'message_start') {
-            // Extract cache metrics from message_start event
-            const usage = (
-              chunk as unknown as {
-                message?: {
-                  usage?: {
-                    input_tokens?: number;
-                    output_tokens?: number;
-                    cache_read_input_tokens?: number;
-                    cache_creation_input_tokens?: number;
+        // If this is a retry, make a fresh API call to get a new stream
+        if (streamingAttempt > 1) {
+          streamingLogger.debug(
+            () =>
+              `Stream retry attempt ${streamingAttempt}/${maxAttempts}: Making fresh API call`,
+          );
+          const retryResult = await retryWithBackoff(apiCallWithResponse, {
+            maxAttempts,
+            initialDelayMs,
+            shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
+            trackThrottleWaitTime: this.throttleTracker,
+            onPersistent429: onPersistent429Callback,
+          });
+          response = retryResult.data;
+        }
+
+        const stream =
+          response as unknown as AsyncIterable<Anthropic.MessageStreamEvent>;
+        let currentToolCall:
+          | { id: string; name: string; input: string }
+          | undefined;
+        let currentThinkingBlock:
+          | { thinking: string; signature?: string }
+          | undefined;
+
+        streamingLogger.debug(() => 'Processing streaming response');
+
+        try {
+          for await (const chunk of stream) {
+            if (chunk.type === 'message_start') {
+              // Extract cache metrics from message_start event
+              const usage = (
+                chunk as unknown as {
+                  message?: {
+                    usage?: {
+                      input_tokens?: number;
+                      output_tokens?: number;
+                      cache_read_input_tokens?: number;
+                      cache_creation_input_tokens?: number;
+                    };
                   };
+                }
+              ).message?.usage;
+              if (usage) {
+                const cacheRead = usage.cache_read_input_tokens ?? 0;
+                const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+
+                cacheLogger.debug(
+                  () =>
+                    `[AnthropicProvider streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
+                );
+
+                if (cacheRead > 0 || cacheCreation > 0) {
+                  cacheLogger.debug(() => {
+                    const hitRate =
+                      cacheRead + (usage.input_tokens ?? 0) > 0
+                        ? (cacheRead /
+                            (cacheRead + (usage.input_tokens ?? 0))) *
+                          100
+                        : 0;
+                    return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
+                  });
+                }
+
+                yield {
+                  speaker: 'ai',
+                  blocks: [],
+                  metadata: {
+                    usage: {
+                      promptTokens: usage.input_tokens ?? 0,
+                      completionTokens: usage.output_tokens ?? 0,
+                      totalTokens:
+                        (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+                      cache_read_input_tokens: cacheRead,
+                      cache_creation_input_tokens: cacheCreation,
+                    },
+                  },
+                } as IContent;
+              }
+            } else if (chunk.type === 'content_block_start') {
+              if (chunk.content_block.type === 'tool_use') {
+                const toolBlock = chunk.content_block as ToolUseBlock;
+                this.getStreamingLogger().debug(
+                  () => `Starting tool use: ${toolBlock.name}`,
+                );
+                currentToolCall = {
+                  id: toolBlock.id,
+                  name: this.unprefixToolName(toolBlock.name, isOAuth),
+                  input: '',
+                };
+              } else if (chunk.content_block.type === 'thinking') {
+                this.getStreamingLogger().debug(
+                  () => 'Starting thinking block',
+                );
+                currentThinkingBlock = {
+                  thinking: '',
+                  signature: chunk.content_block.signature,
                 };
               }
-            ).message?.usage;
-            if (usage) {
+            } else if (chunk.type === 'content_block_delta') {
+              if (chunk.delta.type === 'text_delta') {
+                const textDelta = chunk.delta as TextDelta;
+                this.getStreamingLogger().debug(
+                  () => `Received text delta: ${textDelta.text.length} chars`,
+                );
+                // Emit text immediately as IContent
+                yield {
+                  speaker: 'ai',
+                  blocks: [{ type: 'text', text: textDelta.text }],
+                } as IContent;
+              } else if (
+                chunk.delta.type === 'input_json_delta' &&
+                currentToolCall
+              ) {
+                const jsonDelta = chunk.delta as InputJSONDelta;
+                currentToolCall.input += jsonDelta.partial_json;
+
+                // Check for double-escaping patterns
+                logDoubleEscapingInChunk(
+                  jsonDelta.partial_json,
+                  currentToolCall.name,
+                  'anthropic',
+                );
+              } else if (
+                chunk.delta.type === 'thinking_delta' &&
+                currentThinkingBlock
+              ) {
+                const thinkingDelta = chunk.delta as {
+                  type: 'thinking_delta';
+                  thinking: string;
+                };
+                currentThinkingBlock.thinking += thinkingDelta.thinking;
+                this.getStreamingLogger().debug(
+                  () =>
+                    `Thinking delta chunk (${thinkingDelta.thinking.length} chars): ${thinkingDelta.thinking}`,
+                );
+              } else if (
+                chunk.delta.type === 'signature_delta' &&
+                currentThinkingBlock
+              ) {
+                // Signature delta is sent just before content_block_stop for thinking blocks
+                // This contains the cryptographic signature for the thinking block
+                const signatureDelta = chunk.delta as {
+                  type: 'signature_delta';
+                  signature: string;
+                };
+                this.getStreamingLogger().debug(
+                  () =>
+                    `Received signature_delta: ${signatureDelta.signature.substring(0, 50)}...`,
+                );
+                currentThinkingBlock.signature = signatureDelta.signature;
+              }
+            } else if (chunk.type === 'content_block_stop') {
+              if (currentToolCall) {
+                const activeToolCall = currentToolCall;
+                this.getStreamingLogger().debug(
+                  () => `Completed tool use: ${activeToolCall.name}`,
+                );
+                // Process tool parameters with double-escape handling
+                let processedParameters = processToolParameters(
+                  activeToolCall.input,
+                  activeToolCall.name,
+                  'anthropic',
+                );
+
+                // Apply schema-aware type coercion to fix LLM type errors (issue #1146)
+                // Look up the tool schema from the tools passed to this request
+                const toolSchema = this.findToolSchema(
+                  tools,
+                  activeToolCall.name,
+                  isOAuth,
+                );
+                if (
+                  toolSchema &&
+                  processedParameters &&
+                  typeof processedParameters === 'object'
+                ) {
+                  processedParameters = coerceParametersToSchema(
+                    processedParameters,
+                    toolSchema,
+                  );
+                }
+
+                yield {
+                  speaker: 'ai',
+                  blocks: [
+                    {
+                      type: 'tool_call',
+                      id: this.normalizeToHistoryToolId(activeToolCall.id),
+                      name: activeToolCall.name,
+                      parameters: processedParameters,
+                    },
+                  ],
+                } as IContent;
+                currentToolCall = undefined;
+              } else if (currentThinkingBlock) {
+                const activeThinkingBlock = currentThinkingBlock;
+                this.getStreamingLogger().debug(
+                  () =>
+                    `Completed thinking block: ${activeThinkingBlock.thinking.length} chars`,
+                );
+                this.getStreamingLogger().debug(
+                  () =>
+                    `Thinking block content: ${activeThinkingBlock.thinking}`,
+                );
+
+                // Extract signature from content_block if present
+                const contentBlock = (
+                  chunk as unknown as {
+                    content_block?: {
+                      type: string;
+                      thinking?: string;
+                      signature?: string;
+                    };
+                  }
+                ).content_block;
+                if (contentBlock?.signature) {
+                  activeThinkingBlock.signature = contentBlock.signature;
+                }
+
+                yield {
+                  speaker: 'ai',
+                  blocks: [
+                    {
+                      type: 'thinking',
+                      thought: activeThinkingBlock.thinking,
+                      sourceField: 'thinking',
+                      signature: activeThinkingBlock.signature,
+                    } as ThinkingBlock,
+                  ],
+                } as IContent;
+                currentThinkingBlock = undefined;
+              }
+            } else if (chunk.type === 'message_delta' && chunk.usage) {
+              // Emit usage metadata including cache fields
+              const usage = chunk.usage as {
+                input_tokens: number;
+                output_tokens: number;
+                cache_read_input_tokens?: number;
+                cache_creation_input_tokens?: number;
+              };
+
               const cacheRead = usage.cache_read_input_tokens ?? 0;
               const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
-              cacheLogger.debug(
+              this.getStreamingLogger().debug(
                 () =>
-                  `[AnthropicProvider streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
+                  `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}`,
               );
-
-              if (cacheRead > 0 || cacheCreation > 0) {
-                cacheLogger.debug(() => {
-                  const hitRate =
-                    cacheRead + (usage.input_tokens ?? 0) > 0
-                      ? (cacheRead / (cacheRead + (usage.input_tokens ?? 0))) *
-                        100
-                      : 0;
-                  return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
-                });
-              }
 
               yield {
                 speaker: 'ai',
                 blocks: [],
                 metadata: {
                   usage: {
-                    promptTokens: usage.input_tokens ?? 0,
-                    completionTokens: usage.output_tokens ?? 0,
+                    promptTokens: usage.input_tokens || 0,
+                    completionTokens: usage.output_tokens || 0,
                     totalTokens:
-                      (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+                      (usage.input_tokens || 0) + (usage.output_tokens || 0),
                     cache_read_input_tokens: cacheRead,
                     cache_creation_input_tokens: cacheCreation,
                   },
                 },
               } as IContent;
             }
-          } else if (chunk.type === 'content_block_start') {
-            if (chunk.content_block.type === 'tool_use') {
-              const toolBlock = chunk.content_block as ToolUseBlock;
-              this.getStreamingLogger().debug(
-                () => `Starting tool use: ${toolBlock.name}`,
-              );
-              currentToolCall = {
-                id: toolBlock.id,
-                name: this.unprefixToolName(toolBlock.name, isOAuth),
-                input: '',
-              };
-            } else if (chunk.content_block.type === 'thinking') {
-              this.getStreamingLogger().debug(() => 'Starting thinking block');
-              currentThinkingBlock = {
-                thinking: '',
-              };
-            }
-          } else if (chunk.type === 'content_block_delta') {
-            if (chunk.delta.type === 'text_delta') {
-              const textDelta = chunk.delta as TextDelta;
-              this.getStreamingLogger().debug(
-                () => `Received text delta: ${textDelta.text.length} chars`,
-              );
-              // Emit text immediately as IContent
-              yield {
-                speaker: 'ai',
-                blocks: [{ type: 'text', text: textDelta.text }],
-              } as IContent;
-            } else if (
-              chunk.delta.type === 'input_json_delta' &&
-              currentToolCall
-            ) {
-              const jsonDelta = chunk.delta as InputJSONDelta;
-              currentToolCall.input += jsonDelta.partial_json;
-
-              // Check for double-escaping patterns
-              logDoubleEscapingInChunk(
-                jsonDelta.partial_json,
-                currentToolCall.name,
-                'anthropic',
-              );
-            } else if (
-              chunk.delta.type === 'thinking_delta' &&
-              currentThinkingBlock
-            ) {
-              const thinkingDelta = chunk.delta as {
-                type: 'thinking_delta';
-                thinking: string;
-              };
-              currentThinkingBlock.thinking += thinkingDelta.thinking;
-            }
-          } else if (chunk.type === 'content_block_stop') {
-            if (currentToolCall) {
-              const activeToolCall = currentToolCall;
-              this.getStreamingLogger().debug(
-                () => `Completed tool use: ${activeToolCall.name}`,
-              );
-              // Process tool parameters with double-escape handling
-              let processedParameters = processToolParameters(
-                activeToolCall.input,
-                activeToolCall.name,
-                'anthropic',
-              );
-
-              // Apply schema-aware type coercion to fix LLM type errors (issue #1146)
-              // Look up the tool schema from the tools passed to this request
-              const toolSchema = this.findToolSchema(
-                tools,
-                activeToolCall.name,
-                isOAuth,
-              );
-              if (
-                toolSchema &&
-                processedParameters &&
-                typeof processedParameters === 'object'
-              ) {
-                processedParameters = coerceParametersToSchema(
-                  processedParameters,
-                  toolSchema,
-                );
-              }
-
-              yield {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'tool_call',
-                    id: this.normalizeToHistoryToolId(activeToolCall.id),
-                    name: activeToolCall.name,
-                    parameters: processedParameters,
-                  },
-                ],
-              } as IContent;
-              currentToolCall = undefined;
-            } else if (currentThinkingBlock) {
-              const activeThinkingBlock = currentThinkingBlock;
-              this.getStreamingLogger().debug(
-                () =>
-                  `Completed thinking block: ${activeThinkingBlock.thinking.length} chars`,
-              );
-
-              // Extract signature from content_block if present
-              const contentBlock = (
-                chunk as unknown as {
-                  content_block?: {
-                    type: string;
-                    thinking?: string;
-                    signature?: string;
-                  };
-                }
-              ).content_block;
-              if (contentBlock?.signature) {
-                activeThinkingBlock.signature = contentBlock.signature;
-              }
-
-              yield {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'thinking',
-                    thought: activeThinkingBlock.thinking,
-                    sourceField: 'thinking',
-                    signature: activeThinkingBlock.signature,
-                  } as ThinkingBlock,
-                ],
-              } as IContent;
-              currentThinkingBlock = undefined;
-            }
-          } else if (chunk.type === 'message_delta' && chunk.usage) {
-            // Emit usage metadata including cache fields
-            const usage = chunk.usage as {
-              input_tokens: number;
-              output_tokens: number;
-              cache_read_input_tokens?: number;
-              cache_creation_input_tokens?: number;
-            };
-
-            const cacheRead = usage.cache_read_input_tokens ?? 0;
-            const cacheCreation = usage.cache_creation_input_tokens ?? 0;
-
-            this.getStreamingLogger().debug(
-              () =>
-                `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}`,
-            );
-
-            yield {
-              speaker: 'ai',
-              blocks: [],
-              metadata: {
-                usage: {
-                  promptTokens: usage.input_tokens || 0,
-                  completionTokens: usage.output_tokens || 0,
-                  totalTokens:
-                    (usage.input_tokens || 0) + (usage.output_tokens || 0),
-                  cache_read_input_tokens: cacheRead,
-                  cache_creation_input_tokens: cacheCreation,
-                },
-              },
-            } as IContent;
           }
+          // Stream completed successfully, return
+          return;
+        } catch (error) {
+          // Check if error is retryable and attempts remain
+          const canRetryStream = isNetworkTransientError(error);
+          streamingLogger.debug(
+            () =>
+              `Stream attempt ${streamingAttempt}/${maxAttempts} error: ${error}`,
+          );
+
+          if (!canRetryStream || streamingAttempt >= maxAttempts) {
+            streamingLogger.debug(
+              () =>
+                `Stream error not retryable or max attempts reached, throwing: ${error}`,
+            );
+            throw error;
+          }
+
+          // Wait with exponential backoff + jitter before retrying
+          const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
+          const delayWithJitter = Math.max(0, currentDelay + jitter);
+          streamingLogger.debug(
+            () =>
+              `Stream retry attempt ${streamingAttempt}/${maxAttempts}: Transient error detected, waiting ${Math.round(delayWithJitter)}ms before retry`,
+          );
+          await delay(delayWithJitter);
+          currentDelay = Math.min(streamRetryMaxDelayMs, currentDelay * 2);
+
+          // Loop continues to retry
         }
-      } catch (error) {
-        // Streaming errors should be propagated for retry logic
-        this.getStreamingLogger().debug(
-          () => `Streaming iteration error: ${error}`,
-        );
-        throw error;
       }
     } else {
       // Handle non-streaming response

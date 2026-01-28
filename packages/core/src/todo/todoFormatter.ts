@@ -21,25 +21,13 @@ export interface TodoFormatterOptions {
 const STATUS_ICONS: Record<Todo['status'], string> = {
   in_progress: '→',
   pending: '○',
-  completed: '✔',
-};
-
-const PRIORITY_LABELS: Record<Todo['priority'], string> = {
-  high: 'HIGH',
-  medium: 'MEDIUM',
-  low: 'LOW',
+  completed: '',
 };
 
 const STATUS_ORDER: Record<Todo['status'], number> = {
   in_progress: 0,
   pending: 1,
   completed: 2,
-};
-
-const PRIORITY_ORDER: Record<Todo['priority'], number> = {
-  high: 0,
-  medium: 1,
-  low: 2,
 };
 
 const DEFAULT_HEADER = '## Todo Progress';
@@ -150,9 +138,8 @@ const calculateStats = (todos: Todo[]) => ({
 
 const formatTodoEntry = (todo: Todo): string => {
   const marker = STATUS_ICONS[todo.status];
-  const priorityLabel = PRIORITY_LABELS[todo.priority];
   const currentSuffix = todo.status === 'in_progress' ? ' ← current' : '';
-  return `${marker} ${todo.content} [${priorityLabel}]${currentSuffix}`;
+  return `${marker} ${todo.content}${currentSuffix}`;
 };
 
 const mergeToolCalls = (
@@ -221,17 +208,5 @@ export const formatTodoListForDisplay = (
   return lines.join('\n').trimEnd();
 };
 const orderTodos = (todos: Todo[]): Todo[] =>
-  [...todos].sort((a, b) => {
-    const statusDiff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
-    if (statusDiff !== 0) {
-      return statusDiff;
-    }
-
-    const priorityDiff =
-      PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
-    if (priorityDiff !== 0) {
-      return priorityDiff;
-    }
-
-    return a.content.localeCompare(b.content);
-  });
+  // Sort by status only, preserving original array order within each status group
+  [...todos].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);

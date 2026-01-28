@@ -230,7 +230,13 @@ export const ContentValidation = {
         return !!block.data && !!block.mimeType;
       }
       if (block.type === 'thinking') {
-        return !!block.thought && block.thought.trim().length > 0;
+        if (!block.thought || block.thought.trim().length === 0) {
+          return false;
+        }
+        if (block.sourceField === 'thinking') {
+          return Boolean(block.signature);
+        }
+        return true;
       }
       if (block.type === 'code') {
         return !!block.code && block.code.trim().length > 0;

@@ -23,19 +23,16 @@ describe('TodoStore', () => {
       id: '1',
       content: 'First task',
       status: 'pending',
-      priority: 'high',
     },
     {
       id: '2',
       content: 'Second task',
       status: 'in_progress',
-      priority: 'medium',
     },
     {
       id: '3',
       content: 'Third task',
       status: 'completed',
-      priority: 'low',
     },
   ];
 
@@ -119,7 +116,6 @@ describe('TodoStore', () => {
           id: '99',
           content: 'New task',
           status: 'pending',
-          priority: 'high',
         },
       ];
       await store.writeTodos(newTodos);

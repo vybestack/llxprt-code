@@ -88,11 +88,13 @@ describe('ShellExecutionService', () => {
       kill: Mock;
       onData: Mock;
       onExit: Mock;
+      write: Mock;
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();
     mockPtyProcess.onData = vi.fn();
     mockPtyProcess.onExit = vi.fn();
+    mockPtyProcess.write = vi.fn();
 
     mockPtySpawn.mockReturnValue(mockPtyProcess);
   });
@@ -422,6 +424,56 @@ describe('ShellExecutionService', () => {
         ],
         expect.any(Object),
       );
+    });
+  });
+
+  describe('Resource cleanup', () => {
+    it('should track PTY in writeToPty after creation', async () => {
+      await simulateExecution('echo test', (pty) => {
+        ShellExecutionService.writeToPty(pty.pid, 'input');
+        expect(pty.write).toHaveBeenCalledWith('input');
+        pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      });
+    });
+
+    it('should not write to PTY after normal exit', async () => {
+      mockPtyProcess.write = vi.fn();
+      const pid = mockPtyProcess.pid;
+
+      await simulateExecution('echo test', (pty) => {
+        pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      });
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      ShellExecutionService.writeToPty(pid, 'input');
+      expect(mockPtyProcess.write).not.toHaveBeenCalled();
+    });
+
+    it('should not write to PTY after abort', async () => {
+      mockPtyProcess.write = vi.fn();
+      const pid = mockPtyProcess.pid;
+
+      const abortController = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'sleep 10',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      abortController.abort();
+      await new Promise((resolve) => setImmediate(resolve));
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 1, signal: null });
+      await handle.result;
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      ShellExecutionService.writeToPty(pid, 'input');
+      expect(mockPtyProcess.write).not.toHaveBeenCalled();
     });
   });
 });
@@ -816,6 +868,64 @@ describe('ShellExecutionService child_process fallback', () => {
           detached: true,
         }),
       );
+    });
+  });
+
+  describe('Resource cleanup', () => {
+    it('should remove all listeners from child process streams on exit', async () => {
+      const removeAllListenersSpy = vi.spyOn(
+        mockChildProcess.stdout as EventEmitter,
+        'removeAllListeners',
+      );
+      const stderrRemoveAllListenersSpy = vi.spyOn(
+        mockChildProcess.stderr as EventEmitter,
+        'removeAllListeners',
+      );
+
+      await simulateExecution('echo test', (cp) => {
+        cp.stdout?.emit('data', Buffer.from('test\n'));
+
+        cp.emit('exit', 0, null);
+      });
+
+      expect(removeAllListenersSpy).toHaveBeenCalledWith('data');
+      expect(stderrRemoveAllListenersSpy).toHaveBeenCalledWith('data');
+    });
+
+    it('should remove all listeners from child process on exit', async () => {
+      const removeAllListenersSpy = vi.spyOn(
+        mockChildProcess,
+        'removeAllListeners',
+      );
+
+      await simulateExecution('echo test', (cp) => {
+        cp.stdout?.emit('data', Buffer.from('test\n'));
+
+        cp.emit('exit', 0, null);
+      });
+
+      expect(removeAllListenersSpy).toHaveBeenCalledWith('error');
+      expect(removeAllListenersSpy).toHaveBeenCalledWith('exit');
+      expect(removeAllListenersSpy).toHaveBeenCalledWith('close');
+    });
+
+    it('should only run cleanup once even if both exit and close fire', async () => {
+      const removeAllListenersSpy = vi.spyOn(
+        mockChildProcess,
+        'removeAllListeners',
+      );
+
+      await simulateExecution('echo test', (cp) => {
+        cp.stdout?.emit('data', Buffer.from('test\n'));
+
+        cp.emit('exit', 0, null);
+        cp.emit('close', 0, null);
+      });
+
+      const errorCalls = removeAllListenersSpy.mock.calls.filter(
+        (call) => call[0] === 'error',
+      );
+      expect(errorCalls.length).toBe(1);
     });
   });
 });

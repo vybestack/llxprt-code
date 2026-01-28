@@ -64,6 +64,7 @@ import {
   getErrorStatus,
   isNetworkTransientError,
 } from '../../utils/retry.js';
+import { delay } from '../../utils/delay.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -704,8 +705,19 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan PLAN-20251215-issue868: Retry responses streaming end-to-end
     // Retry must encompass both the initial fetch and the subsequent stream
     // consumption, because transient network failures can occur mid-stream.
-    const maxStreamingAttempts = 2;
+    // @issue #1187: Different maxStreamingAttempts for Codex vs regular mode
+    // Read retry configuration from ephemeral settings
+    const ephemeralRetries = options.invocation?.ephemerals?.['retries'] as
+      | number
+      | undefined;
+    const ephemeralRetryWait = options.invocation?.ephemerals?.['retrywait'] as
+      | number
+      | undefined;
+    const maxStreamingAttempts = ephemeralRetries ?? (isCodex ? 5 : 4);
+    const streamRetryInitialDelayMs = ephemeralRetryWait ?? 5000;
+    const streamRetryMaxDelayMs = 30000;
     let streamingAttempt = 0;
+    let currentDelay = streamRetryInitialDelayMs;
 
     while (streamingAttempt < maxStreamingAttempts) {
       streamingAttempt++;
@@ -719,6 +731,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
           }),
         {
           shouldRetryOnError: this.shouldRetryOnError.bind(this),
+          maxAttempts: maxStreamingAttempts,
+          initialDelayMs: streamRetryInitialDelayMs,
         },
       );
 
@@ -744,12 +758,18 @@ export class OpenAIResponsesProvider extends BaseProvider {
         const canRetryStream = this.shouldRetryOnError(error);
         this.logger.debug(
           () =>
-            `Responses stream error on attempt ${streamingAttempt}/${maxStreamingAttempts}: ${String(error)}`,
+            `Stream retry attempt ${streamingAttempt}/${maxStreamingAttempts}: Transient error detected, delay ${currentDelay}ms before retry. Error: ${String(error)}`,
         );
 
         if (!canRetryStream || streamingAttempt >= maxStreamingAttempts) {
           throw error;
         }
+
+        // @issue #1187: Add exponential backoff with jitter between stream retries
+        const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
+        const delayWithJitter = Math.max(0, currentDelay + jitter);
+        await delay(delayWithJitter);
+        currentDelay = Math.min(streamRetryMaxDelayMs, currentDelay * 2);
 
         // Retry by restarting the request from the beginning.
         // NOTE: This can re-yield partial content from a previous attempt.

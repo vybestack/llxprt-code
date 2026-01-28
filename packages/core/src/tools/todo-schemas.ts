@@ -7,7 +7,6 @@
 import { z } from 'zod';
 
 export const TodoStatus = z.enum(['pending', 'in_progress', 'completed']);
-export const TodoPriority = z.enum(['high', 'medium', 'low']);
 
 // Create a coercion schema for IDs that accepts both strings and numbers
 // This handles providers like GLM that send numeric IDs
@@ -32,7 +31,6 @@ export const TodoSchema = z.object({
   id: IdSchema,
   content: z.string().min(1),
   status: TodoStatus,
-  priority: TodoPriority,
   subtasks: z.array(SubtaskSchema).optional(),
   toolCalls: z.array(TodoToolCallSchema).optional(),
 });
@@ -43,4 +41,3 @@ export type TodoToolCall = z.infer<typeof TodoToolCallSchema>;
 export type Subtask = z.infer<typeof SubtaskSchema>;
 export type Todo = z.infer<typeof TodoSchema>;
 export type TodoStatus = z.infer<typeof TodoStatus>;
-export type TodoPriority = z.infer<typeof TodoPriority>;

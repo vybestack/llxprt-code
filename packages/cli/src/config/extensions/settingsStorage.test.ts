@@ -29,9 +29,7 @@ describe('getSettingsEnvFilePath', () => {
   it('should return path to .env file in extension directory', () => {
     const extensionDir = '/path/to/extensions/my-extension';
     const envPath = getSettingsEnvFilePath(extensionDir);
-    expect(envPath).toBe(
-      path.join('/path/to/extensions/my-extension', '.env'),
-    );
+    expect(envPath).toBe(path.join('/path/to/extensions/my-extension', '.env'));
   });
 });
 

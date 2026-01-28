@@ -42,6 +42,7 @@ export interface ProviderCallOptionsInit {
   runtimeId?: string;
   runtimeMetadata?: Record<string, unknown>;
   invocation?: RuntimeInvocationContext;
+  ephemerals?: Record<string, unknown>;
 }
 
 function applySettingsOverrides(
@@ -69,9 +70,11 @@ function applySettingsOverrides(
 function buildEphemeralsSnapshot(
   providerName: string,
   settings: SettingsService,
+  overrides?: Record<string, unknown>,
 ): Record<string, unknown> {
   const snapshot: Record<string, unknown> = {
     ...settings.getAllGlobalSettings(),
+    ...(overrides ?? {}),
   };
 
   snapshot[providerName] = {
@@ -161,7 +164,11 @@ function ensureInvocation(
     return init.invocation;
   }
 
-  const ephemeralsSnapshot = buildEphemeralsSnapshot(providerName, settings);
+  const ephemeralsSnapshot = buildEphemeralsSnapshot(
+    providerName,
+    settings,
+    init.ephemerals,
+  );
 
   const userMemorySnapshot =
     typeof init.userMemory === 'string' ? init.userMemory : undefined;

@@ -1148,7 +1148,6 @@ describe('subagent.ts', () => {
               id: 'todo-1',
               content: 'Complete the technical report',
               status: 'in_progress',
-              priority: 'high',
             },
           ])
           .mockResolvedValueOnce([]) // agent-scoped store on second pass
@@ -1157,7 +1156,6 @@ describe('subagent.ts', () => {
               id: 'todo-1',
               content: 'Complete the technical report',
               status: 'completed',
-              priority: 'high',
             },
           ]);
 

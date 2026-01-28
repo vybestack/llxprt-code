@@ -534,7 +534,7 @@ export class TodoContinuationService {
    * @returns Best active todo or undefined
    */
   private findBestActiveTodo(todos: readonly Todo[]): Todo | undefined {
-    // Priority 1: Find in_progress todos (should be max 1)
+    // First: Find in_progress todos (should be max 1)
     const inProgressTodos = todos.filter(
       (todo) => todo.status === 'in_progress',
     );
@@ -542,20 +542,11 @@ export class TodoContinuationService {
       return inProgressTodos[0];
     }
 
-    // Priority 2: Find pending todos, prioritize by priority
+    // Second: Find pending todos, sort alphabetically by content
     const pendingTodos = todos.filter((todo) => todo.status === 'pending');
     if (pendingTodos.length > 0) {
-      // Sort by priority: high > medium > low
-      const priorityOrder: Record<string, number> = {
-        high: 3,
-        medium: 2,
-        low: 1,
-      };
-      pendingTodos.sort((a, b) => {
-        const aPriority = priorityOrder[a.priority || 'medium'] || 2;
-        const bPriority = priorityOrder[b.priority || 'medium'] || 2;
-        return bPriority - aPriority; // Descending order (high to low)
-      });
+      // Sort alphabetically by content
+      pendingTodos.sort((a, b) => a.content.localeCompare(b.content));
       return pendingTodos[0];
     }
 

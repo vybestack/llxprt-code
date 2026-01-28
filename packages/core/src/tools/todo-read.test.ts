@@ -19,33 +19,28 @@ describe('TodoRead', () => {
   const sampleTodos: Todo[] = [
     {
       id: '1',
-      content: 'High priority in progress task',
+      content: 'In progress task',
       status: 'in_progress',
-      priority: 'high',
     },
     {
       id: '2',
-      content: 'Medium priority pending task',
+      content: 'Medium pending task',
       status: 'pending',
-      priority: 'medium',
     },
     {
       id: '3',
-      content: 'Low priority completed task',
+      content: 'Completed task',
       status: 'completed',
-      priority: 'low',
     },
     {
       id: '4',
-      content: 'High priority pending task',
+      content: 'Another pending task',
       status: 'pending',
-      priority: 'high',
     },
     {
       id: '5',
-      content: 'High priority completed task',
+      content: 'Another completed task',
       status: 'completed',
-      priority: 'high',
     },
   ];
 
@@ -72,15 +67,9 @@ describe('TodoRead', () => {
       const result = await tool.execute({}, abortSignal);
 
       expect(result.llmContent).toContain('Todo Progress');
-      expect(result.llmContent).toContain(
-        '→ High priority in progress task [HIGH]',
-      );
-      expect(result.llmContent).toContain(
-        '○ Medium priority pending task [MEDIUM]',
-      );
-      expect(result.llmContent).toContain(
-        '✔ Low priority completed task [LOW]',
-      );
+      expect(result.llmContent).toContain('→ In progress task');
+      expect(result.llmContent).toContain('○ Medium pending task');
+      expect(result.llmContent).toContain(' Completed task');
     });
 
     it('should sort todos by status (in_progress > pending > completed)', async () => {
@@ -93,20 +82,20 @@ describe('TodoRead', () => {
 
       // Find indices of different status todos
       const inProgressIndex = lines.findIndex((line) =>
-        line.includes('→ High priority in progress task'),
+        line.includes('→ In progress task'),
       );
       const pendingIndex = lines.findIndex((line) =>
-        line.includes('○ Medium priority pending task'),
+        line.includes('○ Medium pending task'),
       );
       const completedIndex = lines.findIndex((line) =>
-        line.includes('✔ Low priority completed task'),
+        line.includes(' Completed task'),
       );
 
       expect(inProgressIndex).toBeLessThan(pendingIndex);
       expect(pendingIndex).toBeLessThan(completedIndex);
     });
 
-    it('should sort by priority within same status', async () => {
+    it('should preserve original array order within same status', async () => {
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(sampleTodos);
 
       const result = await tool.execute({}, abortSignal);
@@ -114,15 +103,15 @@ describe('TodoRead', () => {
         .split('\n')
         .filter((line: string) => line.trim());
 
-      // High priority pending should come before medium priority pending
-      const highPendingIndex = lines.findIndex((line) =>
-        line.includes('High priority pending task'),
-      );
+      // "Medium pending task" should come before "Another pending task" (original array order)
       const mediumPendingIndex = lines.findIndex((line) =>
-        line.includes('Medium priority pending task'),
+        line.includes('Medium pending task'),
+      );
+      const anotherPendingIndex = lines.findIndex((line) =>
+        line.includes('Another pending task'),
       );
 
-      expect(highPendingIndex).toBeLessThan(mediumPendingIndex);
+      expect(mediumPendingIndex).toBeLessThan(anotherPendingIndex);
     });
 
     it('should handle read errors gracefully', async () => {
@@ -167,19 +156,9 @@ describe('TodoRead', () => {
       const result = await tool.execute({}, abortSignal);
 
       // Check for status indicators
-      expect(result.llmContent).toMatch(/→/); // in_progress
-      expect(result.llmContent).toMatch(/○/); // pending
-      expect(result.llmContent).toMatch(/✔/); // completed
-    });
-
-    it('should include priority levels in output', async () => {
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(sampleTodos);
-
-      const result = await tool.execute({}, abortSignal);
-
-      expect(result.llmContent).toContain('[HIGH]');
-      expect(result.llmContent).toContain('[MEDIUM]');
-      expect(result.llmContent).toContain('[LOW]');
+      expect(result.llmContent).toContain('→'); // in_progress
+      expect(result.llmContent).toContain('○'); // pending
+      expect(result.llmContent).toContain(''); // completed
     });
   });
 
