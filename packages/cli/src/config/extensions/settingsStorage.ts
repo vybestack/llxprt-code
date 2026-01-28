@@ -151,7 +151,7 @@ function formatEnvFile(values: Record<string, string>): string {
     // Quote values that contain spaces or special characters
     const needsQuotes = /[\s"'\\]/.test(value);
     const formattedValue = needsQuotes
-      ? `"${value.replace(/"/g, '\\"')}"`
+      ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r')}"`
       : value;
     lines.push(`${key}=${formattedValue}`);
   }
