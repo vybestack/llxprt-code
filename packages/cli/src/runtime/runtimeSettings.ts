@@ -15,6 +15,7 @@ import {
   getActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   getProfilePersistableKeys,
+  resolveAlias,
 } from '@vybestack/llxprt-code-core';
 import type {
   ProviderManager,
@@ -983,7 +984,17 @@ export function buildRuntimeProfileSnapshot(): Profile {
       continue;
     }
     // Use getNestedValue to handle dot-notation keys like 'reasoning.enabled'
-    const value = getNestedValue(ephemeralRecord, key);
+    let value = getNestedValue(ephemeralRecord, key);
+    if (value === undefined) {
+      // Settings may be stored under alias keys (e.g., 'max-tokens' instead of 'max_tokens').
+      // Check all alias variants for this canonical key.
+      for (const [aliasKey, aliasValue] of Object.entries(ephemeralRecord)) {
+        if (aliasValue !== undefined && resolveAlias(aliasKey) === key) {
+          value = aliasValue;
+          break;
+        }
+      }
+    }
     if (value !== undefined) {
       snapshot[key] = value;
     }

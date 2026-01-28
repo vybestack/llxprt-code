@@ -1745,11 +1745,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         'reasoning.enabled'
       ] as boolean | undefined;
       if (reasoningEnabled === true) {
-        (requestBody as Record<string, unknown>)['thinking'] = {
+        (requestBody as unknown as Record<string, unknown>)['thinking'] = {
           type: 'enabled',
         };
       } else if (reasoningEnabled === false) {
-        (requestBody as Record<string, unknown>)['thinking'] = {
+        (requestBody as unknown as Record<string, unknown>)['thinking'] = {
           type: 'disabled',
         };
       }
@@ -3273,11 +3273,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         'reasoning.enabled'
       ] as boolean | undefined;
       if (reasoningEnabled === true) {
-        (requestBody as Record<string, unknown>)['thinking'] = {
+        (requestBody as unknown as Record<string, unknown>)['thinking'] = {
           type: 'enabled',
         };
       } else if (reasoningEnabled === false) {
-        (requestBody as Record<string, unknown>)['thinking'] = {
+        (requestBody as unknown as Record<string, unknown>)['thinking'] = {
           type: 'disabled',
         };
       }

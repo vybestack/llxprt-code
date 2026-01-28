@@ -42,6 +42,7 @@ import {
 } from './errors.js';
 import { createRuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
 
 const PROVIDER_CAPABILITY_HINTS: Record<
   string,
@@ -658,28 +659,9 @@ export class ProviderManager implements IProviderManager {
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
     // Filter out provider-config settings from global level
     // These should only appear in provider-scoped sections
-    const providerConfigKeys = new Set([
-      'apiKey',
-      'api-key',
-      'auth-key',
-      'apiKeyfile',
-      'api-keyfile',
-      'auth-keyfile',
-      'baseUrl',
-      'baseURL',
-      'base-url',
-      'model',
-      'defaultModel',
-      'enabled',
-      'toolFormat',
-      'tool-format',
-      'toolFormatOverride',
-      'tool-format-override',
-    ]);
-
     const snapshot: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(globalEphemerals)) {
-      if (!providerConfigKeys.has(key)) {
+      if (!PROVIDER_CONFIG_KEYS.has(key)) {
         snapshot[key] = value;
       }
     }

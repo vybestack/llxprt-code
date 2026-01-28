@@ -28,154 +28,66 @@ describe('ProviderManager Settings Separation', () => {
     providerManager = new ProviderManager({ settingsService, config });
   });
 
-  it('context created by ProviderManager has modelParams with temperature when set', () => {
-    settingsService.set('temperature', 0.7);
-
-    const snapshot = (
+  const getSnapshot = (provider: string) =>
+    (
       providerManager as unknown as {
         buildEphemeralsSnapshot: (
           settings: SettingsService,
           provider: string,
         ) => Record<string, unknown>;
       }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
+    ).buildEphemeralsSnapshot(settingsService, provider);
 
-    expect(snapshot).toHaveProperty('temperature', 0.7);
+  it('context created by ProviderManager has modelParams with temperature when set', () => {
+    settingsService.set('temperature', 0.7);
+    expect(getSnapshot('openai')).toHaveProperty('temperature', 0.7);
   });
 
   it('context created by ProviderManager has cliSettings with shell-replacement when set', () => {
     settingsService.set('shell-replacement', 'none');
-
-    const snapshot = (
-      providerManager as unknown as {
-        buildEphemeralsSnapshot: (
-          settings: SettingsService,
-          provider: string,
-        ) => Record<string, unknown>;
-      }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
-
-    expect(snapshot).toHaveProperty('shell-replacement', 'none');
+    expect(getSnapshot('openai')).toHaveProperty('shell-replacement', 'none');
   });
 
   it('context with custom-headers has them accessible', () => {
     settingsService.set('custom-headers', { 'X-Custom': 'test-value' });
-
-    const snapshot = (
-      providerManager as unknown as {
-        buildEphemeralsSnapshot: (
-          settings: SettingsService,
-          provider: string,
-        ) => Record<string, unknown>;
-      }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
-
-    expect(snapshot).toHaveProperty('custom-headers');
+    expect(getSnapshot('openai')).toHaveProperty('custom-headers');
   });
 
   it('context with max-tokens alias accessible via normalized key', () => {
     settingsService.set('max-tokens', 1000);
-
-    const snapshot = (
-      providerManager as unknown as {
-        buildEphemeralsSnapshot: (
-          settings: SettingsService,
-          provider: string,
-        ) => Record<string, unknown>;
-      }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
-
-    expect(snapshot).toHaveProperty('max-tokens', 1000);
+    expect(getSnapshot('openai')).toHaveProperty('max-tokens', 1000);
   });
 
   it('snapshot includes provider-scoped temperature override', () => {
     settingsService.set('temperature', 0.5);
     settingsService.setProviderSetting('openai', 'temperature', 0.9);
-
-    const snapshot = (
-      providerManager as unknown as {
-        buildEphemeralsSnapshot: (
-          settings: SettingsService,
-          provider: string,
-        ) => Record<string, unknown>;
-      }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
-
-    expect((snapshot.openai as Record<string, unknown>)?.temperature).toBe(0.9);
+    expect(
+      (getSnapshot('openai').openai as Record<string, unknown>)?.temperature,
+    ).toBe(0.9);
   });
 
   it('snapshot includes global temperature when no provider override', () => {
     settingsService.set('temperature', 0.5);
-
-    const snapshot = (
-      providerManager as unknown as {
-        buildEphemeralsSnapshot: (
-          settings: SettingsService,
-          provider: string,
-        ) => Record<string, unknown>;
-      }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
-
-    expect(snapshot.temperature).toBe(0.5);
+    expect(getSnapshot('openai').temperature).toBe(0.5);
   });
 
   it('snapshot does NOT include apiKey in root level', () => {
     settingsService.set('apiKey', 'sk-test-12345');
-
-    const snapshot = (
-      providerManager as unknown as {
-        buildEphemeralsSnapshot: (
-          settings: SettingsService,
-          provider: string,
-        ) => Record<string, unknown>;
-      }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
-
-    expect(snapshot.apiKey).toBeUndefined();
+    expect(getSnapshot('openai').apiKey).toBeUndefined();
   });
 
   it('snapshot does NOT include api-key alias in root level', () => {
     settingsService.set('api-key', 'sk-test-12345');
-
-    const snapshot = (
-      providerManager as unknown as {
-        buildEphemeralsSnapshot: (
-          settings: SettingsService,
-          provider: string,
-        ) => Record<string, unknown>;
-      }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
-
-    expect(snapshot['api-key']).toBeUndefined();
+    expect(getSnapshot('openai')['api-key']).toBeUndefined();
   });
 
   it('snapshot does NOT include baseUrl in root level', () => {
     settingsService.set('baseUrl', 'https://api.example.com');
-
-    const snapshot = (
-      providerManager as unknown as {
-        buildEphemeralsSnapshot: (
-          settings: SettingsService,
-          provider: string,
-        ) => Record<string, unknown>;
-      }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
-
-    expect(snapshot.baseUrl).toBeUndefined();
+    expect(getSnapshot('openai').baseUrl).toBeUndefined();
   });
 
   it('snapshot does NOT include model in root level', () => {
     settingsService.set('model', 'gpt-4');
-
-    const snapshot = (
-      providerManager as unknown as {
-        buildEphemeralsSnapshot: (
-          settings: SettingsService,
-          provider: string,
-        ) => Record<string, unknown>;
-      }
-    ).buildEphemeralsSnapshot(settingsService, 'openai');
-
-    expect(snapshot.model).toBeUndefined();
+    expect(getSnapshot('openai').model).toBeUndefined();
   });
 });

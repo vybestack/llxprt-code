@@ -36,14 +36,14 @@ export function parseEphemeralSettingValue(
   key: string,
   rawValue: string,
 ): EphemeralParseResult {
-  if (!validEphemeralKeys.includes(key)) {
+  const resolved = resolveAlias(key);
+  if (!validEphemeralKeys.includes(resolved)) {
     return {
       success: false,
       message: `Invalid setting key: ${key}. Valid keys are: ${validEphemeralKeys.join(', ')}`,
     };
   }
 
-  const resolved = resolveAlias(key);
   const parsed = parseSetting(resolved, rawValue);
   const validation = validateSetting(resolved, parsed);
 
