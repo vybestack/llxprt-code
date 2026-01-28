@@ -11,6 +11,7 @@ import {
   ideContext,
   IdeContextNotificationSchema,
   IdeDiffAcceptedNotificationSchema,
+  IdeDiffRejectedNotificationSchema,
   IdeDiffClosedNotificationSchema,
   CloseDiffResponseSchema,
   type DiffUpdateResult,

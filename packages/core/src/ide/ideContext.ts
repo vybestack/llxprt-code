@@ -51,6 +51,20 @@ export const IdeDiffAcceptedNotificationSchema = z.object({
   }),
 });
 
+export const IdeDiffRejectedNotificationSchema = z.object({
+  jsonrpc: z.literal('2.0'),
+  method: z.literal('ide/diffRejected'),
+  params: z.object({
+    filePath: z.string(),
+  }),
+});
+
+/**
+ * This is defined for backwards compatibility only. Newer extension versions
+ * will only send IdeDiffRejectedNotificationSchema.
+ *
+ * A notification that a diff has been closed in the IDE.
+ */
 export const IdeDiffClosedNotificationSchema = z.object({
   jsonrpc: z.literal('2.0'),
   method: z.literal('ide/diffClosed'),

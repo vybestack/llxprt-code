@@ -16,6 +16,9 @@ import {
   DeclarativeTool,
   type ToolResult,
 } from './tools.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const debugLogger = DebugLogger.getLogger('llxprt:tools:modifiable-tool');
 
 /**
  * A declarative tool that supports a modify operation.
@@ -156,7 +159,7 @@ function deleteTempFiles(
   try {
     fs.rmdirSync(dirPath);
   } catch {
-    debugLogger.error(`Error deleting temp diff directory: ${dirPath}`);
+    console.error(`Error deleting temp diff directory: ${dirPath}`);
   }
 }
 
