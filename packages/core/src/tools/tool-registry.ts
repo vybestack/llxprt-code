@@ -23,6 +23,9 @@ import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { DebugLogger } from '../debug/index.js';
 import { normalizeToolName } from './toolNameUtils.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+
+export const DISCOVERED_TOOL_PREFIX = 'discovered_tool_';
+
 type ToolParams = Record<string, unknown>;
 
 export class DiscoveredTool extends BaseTool<ToolParams, ToolResult> {
@@ -259,6 +262,43 @@ export class ToolRegistry {
    */
   registerTool(tool: AnyDeclarativeTool): void {
     this.registerToolIntoMap(tool, this.tools);
+  }
+
+  /**
+   * Sorts tools as:
+   * 1. Built in tools.
+   * 2. Discovered tools.
+   * 3. MCP tools ordered by server name.
+   *
+   * This is a stable sort in that ties preserve existing order.
+   */
+  sortTools(): void {
+    const getPriority = (tool: AnyDeclarativeTool): number => {
+      if (tool instanceof DiscoveredMCPTool) return 2;
+      if (tool instanceof DiscoveredTool) return 1;
+      return 0; // Built-in
+    };
+
+    this.tools = new Map(
+      Array.from(this.tools.entries()).sort((a, b) => {
+        const toolA = a[1];
+        const toolB = b[1];
+        const priorityA = getPriority(toolA);
+        const priorityB = getPriority(toolB);
+
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
+
+        if (priorityA === 2) {
+          const serverA = (toolA as DiscoveredMCPTool).serverName;
+          const serverB = (toolB as DiscoveredMCPTool).serverName;
+          return serverA.localeCompare(serverB);
+        }
+
+        return 0;
+      }),
+    );
   }
 
   /**

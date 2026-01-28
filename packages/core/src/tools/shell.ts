@@ -73,6 +73,12 @@ export interface ShellToolParams {
   /**
    * Optional directory to execute the command in, relative to the target directory
    */
+  dir_path?: string;
+
+  /**
+   * Optional directory to execute the command in, relative to the target directory
+   * @deprecated Use dir_path instead. Kept for backward compatibility.
+   */
   directory?: string;
 
   /**
@@ -118,12 +124,19 @@ class ShellToolInvocation extends BaseToolInvocation<
     return ShellTool.Name;
   }
 
+  private getDirPath(): string | undefined {
+    return this.params.dir_path || this.params.directory;
+  }
+
   override getDescription(): string {
     let description = `${this.params.command}`;
     // append optional [in directory]
     // note description is needed even if validation fails due to absolute path
-    if (this.params.directory) {
-      description += ` [in ${this.params.directory}]`;
+    const dirPath = this.getDirPath();
+    if (dirPath) {
+      description += ` [in ${dirPath}]`;
+    } else {
+      description += ` [current working directory ${process.cwd()}]`;
     }
     // append optional (description), replacing any line breaks with spaces
     if (this.params.description) {
@@ -286,7 +299,7 @@ class ShellToolInvocation extends BaseToolInvocation<
 
       const cwd = path.resolve(
         this.config.getTargetDir(),
-        this.params.directory || '',
+        this.getDirPath() || '',
       );
 
       let cumulativeOutput = '';
@@ -437,7 +450,7 @@ class ShellToolInvocation extends BaseToolInvocation<
 
         llmContent = [
           `Command: ${this.params.command}`,
-          `Directory: ${this.params.directory || '(root)'}`,
+          `Directory: ${this.getDirPath() || '(root)'}`,
           `Stdout: ${filteredOutput || '(empty)'}`,
           `Stderr: ${result.stderr || '(empty)'}`,
           `Error: ${finalError}`,
@@ -756,10 +769,15 @@ export class ShellTool extends BaseDeclarativeTool<
             description:
               'Brief description of the command for the user. Be specific and concise. Ideally a single sentence. Can be up to 3 sentences for clarity. No line breaks.',
           },
-          directory: {
+          dir_path: {
             type: 'string',
             description:
               '(OPTIONAL) Directory to run the command in. Provide a workspace directory name (e.g., "packages") or an absolute path within the workspace.',
+          },
+          directory: {
+            type: 'string',
+            description:
+              'Alternative parameter name for dir_path (for backward compatibility).',
           },
           timeout_seconds: {
             type: 'number',
@@ -794,10 +812,11 @@ export class ShellTool extends BaseDeclarativeTool<
     if (getCommandRoots(params.command).length === 0) {
       return 'Could not identify command root to obtain permission from user.';
     }
-    if (params.directory) {
+    const dirPath = params.dir_path || params.directory;
+    if (dirPath) {
       const workspaceContext = this.config.getWorkspaceContext();
-      if (path.isAbsolute(params.directory)) {
-        if (!workspaceContext.isPathWithinWorkspace(params.directory)) {
+      if (path.isAbsolute(dirPath)) {
+        if (!workspaceContext.isPathWithinWorkspace(dirPath)) {
           const directories = workspaceContext.getDirectories();
           return `Directory must be within one of the workspace directories: ${directories.join(', ')}`;
         }
@@ -805,15 +824,15 @@ export class ShellTool extends BaseDeclarativeTool<
       }
       const workspaceDirs = workspaceContext.getDirectories();
       const matchingDirs = workspaceDirs.filter(
-        (dir) => path.basename(dir) === params.directory,
+        (dir) => path.basename(dir) === dirPath,
       );
 
       if (matchingDirs.length === 0) {
-        return `Directory '${params.directory}' is not a registered workspace directory.`;
+        return `Directory '${dirPath}' is not a registered workspace directory.`;
       }
 
       if (matchingDirs.length > 1) {
-        return `Directory name '${params.directory}' is ambiguous as it matches multiple workspace directories.`;
+        return `Directory name '${dirPath}' is ambiguous as it matches multiple workspace directories.`;
       }
     }
     return null;
@@ -823,9 +842,13 @@ export class ShellTool extends BaseDeclarativeTool<
     params: ShellToolParams,
     messageBus?: MessageBus,
   ): ToolInvocation<ShellToolParams, ToolResult> {
+    const normalizedParams = { ...params };
+    if (!normalizedParams.dir_path && normalizedParams.directory) {
+      normalizedParams.dir_path = normalizedParams.directory;
+    }
     return new ShellToolInvocation(
       this.config,
-      params,
+      normalizedParams,
       this.allowlist,
       messageBus,
     );

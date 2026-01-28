@@ -67,6 +67,11 @@ export interface GrepToolParams {
   /**
    * The directory to search in (optional, defaults to current directory relative to root)
    */
+  dir_path?: string;
+
+  /**
+   * Alternative parameter name for dir_path (for backward compatibility)
+   */
   path?: string;
 
   /**
@@ -118,6 +123,10 @@ class GrepToolInvocation extends BaseToolInvocation<
   ) {
     super(params);
     this.fileExclusions = config.getFileExclusions();
+  }
+
+  private getDirPath(): string | undefined {
+    return this.params.dir_path || this.params.path;
   }
 
   /**
@@ -196,8 +205,9 @@ class GrepToolInvocation extends BaseToolInvocation<
 
     try {
       const workspaceContext = this.config.getWorkspaceContext();
-      const searchDirAbs = this.resolveAndValidatePath(this.params.path);
-      const searchDirDisplay = this.params.path || '.';
+      const dirPath = this.getDirPath();
+      const searchDirAbs = this.resolveAndValidatePath(dirPath);
+      const searchDirDisplay = dirPath || '.';
 
       // Get limits from parameters or ephemeral settings
       const ephemeralSettings = this.config.getEphemeralSettings();
@@ -553,15 +563,10 @@ class GrepToolInvocation extends BaseToolInvocation<
     if (this.params.include) {
       description += ` in ${this.params.include}`;
     }
-    if (this.params.path) {
-      const resolvedPath = path.resolve(
-        this.config.getTargetDir(),
-        this.params.path,
-      );
-      if (
-        resolvedPath === this.config.getTargetDir() ||
-        this.params.path === '.'
-      ) {
+    const dirPath = this.getDirPath();
+    if (dirPath) {
+      const resolvedPath = path.resolve(this.config.getTargetDir(), dirPath);
+      if (resolvedPath === this.config.getTargetDir() || dirPath === '.') {
         description += ` within ./`;
       } else {
         const relativePath = makeRelative(
@@ -910,9 +915,14 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
               "The regular expression (regex) pattern to search for within file contents (e.g., 'function\\s+myFunction', 'import\\s+\\{.*\\}\\s+from\\s+.*').",
             type: 'string',
           },
-          path: {
+          dir_path: {
             description:
               'Optional: The absolute path to the directory to search within. If omitted, searches the current working directory.',
+            type: 'string',
+          },
+          path: {
+            description:
+              'Alternative parameter name for dir_path (for backward compatibility).',
             type: 'string',
           },
           include: {
@@ -1003,9 +1013,10 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
     }
 
     // Only validate path if one is provided
-    if (params.path) {
+    const dirPath = params.dir_path || params.path;
+    if (dirPath) {
       try {
-        this.resolveAndValidatePath(params.path);
+        this.resolveAndValidatePath(dirPath);
       } catch (error) {
         return getErrorMessage(error);
       }
@@ -1018,6 +1029,10 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
     params: GrepToolParams,
     _messageBus?: MessageBus,
   ): ToolInvocation<GrepToolParams, ToolResult> {
-    return new GrepToolInvocation(this.config, params);
+    const normalizedParams = { ...params };
+    if (!normalizedParams.dir_path && normalizedParams.path) {
+      normalizedParams.dir_path = normalizedParams.path;
+    }
+    return new GrepToolInvocation(this.config, normalizedParams);
   }
 }

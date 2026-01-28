@@ -122,7 +122,7 @@ export class McpClientManager {
         // This is required to update the content generator configuration with the
         // new tool configuration.
         const geminiClient = this.cliConfig.getGeminiClient();
-        if (geminiClient.isInitialized()) {
+        if (geminiClient?.isInitialized()) {
           await geminiClient.setTools();
         }
       }
@@ -198,8 +198,10 @@ export class McpClientManager {
         } finally {
           // This is required to update the content generator configuration with the
           // new tool configuration.
+          // During initial startup, geminiClient may not exist yet since it is
+          // created after MCP discovery completes (Config.initialize order).
           const geminiClient = this.cliConfig.getGeminiClient();
-          if (geminiClient.isInitialized()) {
+          if (geminiClient?.isInitialized()) {
             await geminiClient.setTools();
           }
           resolve();

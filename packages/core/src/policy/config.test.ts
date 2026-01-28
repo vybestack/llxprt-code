@@ -2,13 +2,13 @@
  * Tests for Policy Configuration
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   migrateLegacyApprovalMode,
   createPolicyEngineConfig,
   type PolicyConfigSource,
 } from './config.js';
-import { PolicyDecision } from './types.js';
+import { PolicyDecision, type PolicySettings } from './types.js';
 import { ApprovalMode } from '../config/config.js';
 import { PolicyEngine } from './policy-engine.js';
 
@@ -427,5 +427,34 @@ describe('policy config', () => {
       );
       expect(replaceRules.length).toBeGreaterThanOrEqual(3);
     });
+  });
+
+  it('should have default ASK_USER rule for discovered tools', async () => {
+    vi.resetModules();
+    vi.doUnmock('node:fs/promises');
+    const { createPolicyEngineConfig: createConfig } = await import(
+      './config.js'
+    );
+    // Re-mock Storage after resetModules because it was reloaded
+    const { Storage: FreshStorage } = await import('../config/storage.js');
+    vi.spyOn(FreshStorage, 'getUserPoliciesDir').mockReturnValue(
+      '/non/existent/user/policies',
+    );
+    vi.spyOn(FreshStorage, 'getSystemPoliciesDir').mockReturnValue(
+      '/non/existent/system/policies',
+    );
+
+    const settings: PolicySettings = {};
+    // Use default policy dir to load real discovered.toml
+    const config = await createConfig(settings, ApprovalMode.DEFAULT);
+
+    const discoveredRule = config.rules?.find(
+      (r) =>
+        r.toolName === 'discovered_tool_*' &&
+        r.decision === PolicyDecision.ASK_USER,
+    );
+    expect(discoveredRule).toBeDefined();
+    // Priority 10 in default tier → 1.010
+    expect(discoveredRule?.priority).toBeCloseTo(1.01, 5);
   });
 });
