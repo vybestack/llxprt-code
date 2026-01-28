@@ -1,4 +1,4 @@
-export const PLAN_MARKER = '@plan:PLAN-20260126-SETTINGS-SEPARATION.P03';
+export { PLAN_MARKER } from './settingsRegistry.js';
 
 export {
   type SettingCategory,
