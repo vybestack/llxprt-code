@@ -194,27 +194,31 @@ export class ExtensionSettingsStorage {
       }
     }
 
-    // Write non-sensitive settings to .env file
+    // Write non-sensitive settings to .env file (or delete stale file)
+    const envPath = getSettingsEnvFilePath(this.extensionDir);
     if (Object.keys(nonSensitiveValues).length > 0) {
-      const envPath = getSettingsEnvFilePath(this.extensionDir);
       const content = formatEnvFile(nonSensitiveValues);
       await fs.promises.writeFile(envPath, content, 'utf-8');
+    } else if (fs.existsSync(envPath)) {
+      await fs.promises.unlink(envPath);
     }
 
-    // Write sensitive settings to keychain
+    // Write sensitive settings to keychain (delete removed ones)
     const keytar = await getKeytar();
     if (keytar && sensitiveSettings.length > 0) {
       for (const setting of sensitiveSettings) {
         const value = values[setting.envVar];
-        if (value !== undefined) {
-          try {
+        try {
+          if (value !== undefined) {
             await keytar.setPassword(this.serviceName, setting.envVar, value);
-          } catch (error) {
-            console.error(
-              `Failed to save sensitive setting ${setting.envVar} to keychain:`,
-              error,
-            );
+          } else {
+            await keytar.deletePassword(this.serviceName, setting.envVar);
           }
+        } catch (error) {
+          console.error(
+            `Failed to persist sensitive setting ${setting.envVar} in keychain:`,
+            error,
+          );
         }
       }
     }

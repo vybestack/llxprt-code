@@ -204,7 +204,7 @@ export abstract class BaseToolInvocation<
    * Subclasses can override to provide a specific tool name.
    */
   protected getToolName(): string {
-    return 'unknown';
+    return this._toolName ?? 'unknown';
   }
 
   /**

@@ -85,11 +85,46 @@ export async function maybePromptForSettings(
 
   for (const setting of missingSettings) {
     const prompt = formatSettingPrompt(setting);
-    const value = await new Promise<string>((resolve) => {
-      rl.question(prompt, (answer) => {
-        resolve(answer);
+
+    let value = '';
+    if (setting.sensitive && process.stdin.isTTY) {
+      // Hide input for sensitive settings by suppressing echo
+      value = await new Promise<string>((resolve) => {
+        process.stdout.write(prompt);
+        const stdin = process.stdin;
+        const wasRaw = stdin.isRaw;
+        stdin.setRawMode(true);
+        stdin.resume();
+
+        let input = '';
+        const onData = (data: Buffer): void => {
+          const char = data.toString('utf-8');
+          if (char === '\n' || char === '\r') {
+            stdin.setRawMode(wasRaw);
+            stdin.removeListener('data', onData);
+            process.stdout.write('\n');
+            resolve(input);
+          } else if (char === '\x7f' || char === '\b') {
+            // Backspace
+            input = input.slice(0, -1);
+          } else if (char === '\x03') {
+            // Ctrl+C
+            stdin.setRawMode(wasRaw);
+            stdin.removeListener('data', onData);
+            process.stdout.write('\n');
+            resolve('');
+          } else {
+            input += char;
+          }
+        };
+        stdin.on('data', onData);
       });
-    });
+      value = await new Promise<string>((resolve) => {
+        rl.question(prompt, (answer) => {
+          resolve(answer);
+        });
+      });
+    }
 
     // Empty input means cancel
     if (value === '') {

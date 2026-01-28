@@ -105,8 +105,11 @@ describe('ExtensionSettingsStorage', () => {
 
       await storage.saveSettings(settings, values);
 
-      // Verify keychain was called (check mock)
-      // Implementation will use KeychainTokenStorage or similar
+      const keyring = await import('@napi-rs/keyring');
+      const AsyncEntry = vi.mocked(keyring.AsyncEntry);
+      expect(AsyncEntry).toHaveBeenCalledWith(expect.any(String), 'API_KEY');
+      const entry = AsyncEntry.mock.results[0]?.value;
+      expect(entry.setPassword).toHaveBeenCalledWith('secret123');
     });
 
     it('should NOT save sensitive settings to env file', async () => {
