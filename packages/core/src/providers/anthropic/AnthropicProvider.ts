@@ -803,8 +803,8 @@ export class AnthropicProvider extends BaseProvider {
         : undefined) ??
       (options.settings.get('reasoning.budgetTokens') as number | undefined);
     const stripFromContext =
-      (typeof options.invocation?.getModelBehavior === 'function'
-        ? options.invocation.getModelBehavior('reasoning.stripFromContext')
+      (typeof options.invocation?.getCliSetting === 'function'
+        ? options.invocation.getCliSetting('reasoning.stripFromContext')
         : undefined) ??
       (options.settings.get('reasoning.stripFromContext') as
         | 'all'
@@ -812,8 +812,8 @@ export class AnthropicProvider extends BaseProvider {
         | 'none'
         | undefined);
     const includeInContext =
-      (typeof options.invocation?.getModelBehavior === 'function'
-        ? options.invocation.getModelBehavior('reasoning.includeInContext')
+      (typeof options.invocation?.getCliSetting === 'function'
+        ? options.invocation.getCliSetting('reasoning.includeInContext')
         : undefined) ??
       (options.settings.get('reasoning.includeInContext') as
         | boolean

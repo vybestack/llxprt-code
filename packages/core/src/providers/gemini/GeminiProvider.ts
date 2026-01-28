@@ -1208,7 +1208,7 @@ export class GeminiProvider extends BaseProvider {
         true ||
         reasoningObj?.enabled === true);
     const reasoningIncludeInResponse =
-      (options.invocation?.getModelBehavior('reasoning.includeInResponse') as
+      (options.invocation?.getCliSetting('reasoning.includeInResponse') as
         | boolean
         | undefined) ??
       ((earlyEphemerals as Record<string, unknown>)[
@@ -1216,7 +1216,7 @@ export class GeminiProvider extends BaseProvider {
       ] !== false &&
         reasoningObj?.includeInResponse !== false);
     const reasoningStripFromContext =
-      (options.invocation?.getModelBehavior('reasoning.stripFromContext') as
+      (options.invocation?.getCliSetting('reasoning.stripFromContext') as
         | 'all'
         | 'allButLast'
         | 'none'

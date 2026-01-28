@@ -1738,6 +1738,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       Object.assign(requestBody, requestOverrides);
     }
 
+    // Inject thinking parameter for OpenAI-compatible reasoning models (GLM-4.7, Kimi K2, etc.)
+    // when reasoning.enabled is set but no explicit thinking/reasoning param was provided via modelParams.
+    if (!('thinking' in requestBody) && !('reasoning_effort' in requestBody)) {
+      const reasoningEnabled = options.invocation?.modelBehavior?.[
+        'reasoning.enabled'
+      ] as boolean | undefined;
+      if (reasoningEnabled === true) {
+        (requestBody as Record<string, unknown>)['thinking'] = {
+          type: 'enabled',
+        };
+      } else if (reasoningEnabled === false) {
+        (requestBody as Record<string, unknown>)['thinking'] = {
+          type: 'disabled',
+        };
+      }
+    }
+
     if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
       requestBody.max_tokens = maxTokens;
     }
@@ -3248,6 +3265,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         });
       }
       Object.assign(requestBody, requestOverrides);
+    }
+
+    // Inject thinking parameter for OpenAI-compatible reasoning models (pipeline path)
+    if (!('thinking' in requestBody) && !('reasoning_effort' in requestBody)) {
+      const reasoningEnabled = options.invocation?.modelBehavior?.[
+        'reasoning.enabled'
+      ] as boolean | undefined;
+      if (reasoningEnabled === true) {
+        (requestBody as Record<string, unknown>)['thinking'] = {
+          type: 'enabled',
+        };
+      } else if (reasoningEnabled === false) {
+        (requestBody as Record<string, unknown>)['thinking'] = {
+          type: 'disabled',
+        };
+      }
     }
 
     if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {

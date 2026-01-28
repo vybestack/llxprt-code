@@ -697,6 +697,12 @@ export function normalizeSetting(key: string, value: unknown): unknown {
   return value;
 }
 
+const INTERNAL_SETTINGS_KEYS = new Set([
+  'activeProvider',
+  'currentProfile',
+  'tools',
+]);
+
 export function separateSettings(
   mixed: Record<string, unknown>,
   providerName?: string,
@@ -758,6 +764,11 @@ export function separateSettings(
       continue;
     }
 
+    if (INTERNAL_SETTINGS_KEYS.has(rawKey)) {
+      cliSettings[rawKey] = value;
+      continue;
+    }
+
     const resolvedKey = resolveAlias(rawKey);
     const normalizedValue = normalizeSetting(resolvedKey, value);
 
@@ -766,14 +777,10 @@ export function separateSettings(
     const spec = getSettingSpec(resolvedKey);
 
     if (!spec) {
-      if (process.env.NODE_ENV !== 'test') {
-        console.warn(
-          `[SETTINGS WARNING] Unknown setting '${resolvedKey}' encountered. ` +
-            `Defaulting to cli-behavior (will NOT be sent to API). ` +
-            `Add to settingsRegistry.ts if this is a valid setting.`,
-        );
-      }
-      cliSettings[resolvedKey] = normalizedValue;
+      // Unknown settings default to model-param (pass-through to API).
+      // This allows /set modelparam <anything> <value> to work for
+      // provider-specific parameters not yet in the registry.
+      modelParams[resolvedKey] = normalizedValue;
       continue;
     }
 
@@ -813,10 +820,8 @@ export function validateSetting(key: string, value: unknown): ValidationResult {
   const spec = getSettingSpec(resolved);
 
   if (!spec) {
-    return {
-      success: false,
-      message: `Unknown setting: ${key}`,
-    };
+    // Unknown settings are allowed — they pass through as model-params
+    return { success: true, value };
   }
 
   if (spec.validate) {

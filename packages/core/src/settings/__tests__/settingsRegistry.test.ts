@@ -86,10 +86,10 @@ describe('separateSettings', () => {
     expect(result.modelParams.apiKey).toBeUndefined();
   });
 
-  it('places unknown key in cliSettings (safe default)', () => {
+  it('places unknown key in modelParams (pass-through to API)', () => {
     const result = separateSettings({ unknownKey: 'val' });
 
-    expect(result.cliSettings.unknownKey).toBe('val');
+    expect(result.modelParams.unknownKey).toBe('val');
   });
 
   it('places max-tokens as max_tokens in modelParams after alias resolution', () => {
