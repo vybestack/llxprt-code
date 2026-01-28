@@ -18,6 +18,7 @@ import {
 import { type CallableTool, type FunctionCall, type Part } from '@google/genai';
 import { ToolErrorType } from './tool-error.js';
 import type { Config } from '../config/config.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 type ToolParams = Record<string, unknown>;
 
@@ -69,8 +70,18 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     readonly trust?: boolean,
     params: ToolParams = {},
     private readonly cliConfig?: Config,
+    messageBus?: MessageBus,
   ) {
-    super(params);
+    // Use composite format for policy checks: serverName__toolName
+    // This enables server wildcards (e.g., "google-workspace__*")
+    // while still allowing specific tool rules
+    super(
+      params,
+      messageBus,
+      `${serverName}__${serverToolName}`,
+      displayName,
+      serverName,
+    );
   }
 
   override async shouldConfirmExecute(

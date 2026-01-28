@@ -13,7 +13,7 @@
     "llxprt": "dist/index.js"
   },
   "scripts": {
-    "build": "node ../../scripts/build_package.js && chmod 755 dist/index.js",
+    "build": "node ../../scripts/build_package.js && node ../../scripts/chmod_executable.js dist/index.js",
     "start": "node dist/index.js",
     "debug": "node --inspect-brk dist/index.js",
     "lint": "eslint . --ext .ts,.tsx",

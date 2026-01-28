@@ -949,14 +949,20 @@ export const useGeminiStream = (
 
             // Accumulate as ThinkingBlock for history
             {
-              const thinkingBlock: ThinkingBlock = {
-                type: 'thinking',
-                thought: [event.value.subject, event.value.description]
-                  .filter(Boolean)
-                  .join(': '),
-                sourceField: 'thought',
-              };
-              thinkingBlocksRef.current.push(thinkingBlock);
+              let thoughtText = [event.value.subject, event.value.description]
+                .filter(Boolean)
+                .join(': ');
+              const sanitized = sanitizeContent(thoughtText);
+              thoughtText = sanitized.blocked ? '' : sanitized.text;
+
+              if (thoughtText) {
+                const thinkingBlock: ThinkingBlock = {
+                  type: 'thinking',
+                  thought: thoughtText,
+                  sourceField: 'thought',
+                };
+                thinkingBlocksRef.current.push(thinkingBlock);
+              }
             }
             break;
           case ServerGeminiEventType.Content:
@@ -1057,6 +1063,7 @@ export const useGeminiStream = (
       handleMaxSessionTurnsEvent,
       handleContextWindowWillOverflowEvent,
       handleCitationEvent,
+      sanitizeContent,
     ],
   );
 

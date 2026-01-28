@@ -123,6 +123,7 @@ describe('runNonInteractive', () => {
       isTrustedFolder: vi.fn().mockReturnValue(false),
       getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
       getSessionId: vi.fn().mockReturnValue('test-session'),
+      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
       storage: {
         getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
       },
@@ -775,5 +776,125 @@ describe('runNonInteractive', () => {
     const deprecateText =
       'The --prompt (-p) flag has been deprecated and will be removed in a future version. Please use a positional argument for your prompt. See gemini --help for more information.\n';
     expect(processStderrSpy).toHaveBeenCalledWith(deprecateText);
+  });
+
+  it('should filter emojis from thinking blocks in auto mode', async () => {
+    const mockGetEphemeralSetting = vi.fn((key: string) => {
+      if (key === 'emojifilter') return 'auto';
+      if (key === 'reasoning.includeInResponse') return true;
+      return undefined;
+    });
+    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation(
+      mockGetEphemeralSetting,
+    );
+
+    const events: ServerGeminiStreamEvent[] = [
+      {
+        type: GeminiEventType.Thought,
+        value: {
+          subject: 'Planning \u{1F914} the approach',
+          description: 'Let me think \u{1F4AD} carefully',
+        },
+      },
+      { type: GeminiEventType.Content, value: 'Here is my answer' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-emoji-think',
+    });
+
+    const thinkOutput = processStdoutSpy.mock.calls.find(([value]) =>
+      value.includes('<think>'),
+    );
+    expect(thinkOutput).toBeDefined();
+    const thinkText = thinkOutput?.[0] as string;
+    expect(thinkText).not.toContain('\u{1F914}');
+    expect(thinkText).not.toContain('\u{1F4AD}');
+    expect(thinkText).toMatch(
+      /Planning.*the approach.*Let me think.*carefully/,
+    );
+  });
+
+  it('should suppress thinking blocks with emojis in error mode', async () => {
+    const mockGetEphemeralSetting = vi.fn((key: string) => {
+      if (key === 'emojifilter') return 'error';
+      if (key === 'reasoning.includeInResponse') return true;
+      return undefined;
+    });
+    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation(
+      mockGetEphemeralSetting,
+    );
+
+    const events: ServerGeminiStreamEvent[] = [
+      {
+        type: GeminiEventType.Thought,
+        value: {
+          subject: 'Planning \u{1F914}',
+          description: 'Think carefully \u{1F4AD}',
+        },
+      },
+      { type: GeminiEventType.Content, value: 'Here is my answer' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-emoji-error',
+    });
+
+    const thinkOutput = processStdoutSpy.mock.calls.find(([value]) =>
+      value.includes('<think>'),
+    );
+    expect(thinkOutput).toBeUndefined();
+  });
+
+  it('should pass through thinking blocks when emojifilter is allowed', async () => {
+    const mockGetEphemeralSetting = vi.fn((key: string) => {
+      if (key === 'emojifilter') return 'allowed';
+      if (key === 'reasoning.includeInResponse') return true;
+      return undefined;
+    });
+    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation(
+      mockGetEphemeralSetting,
+    );
+
+    const events: ServerGeminiStreamEvent[] = [
+      {
+        type: GeminiEventType.Thought,
+        value: {
+          subject: 'Planning \u{1F914}',
+          description: 'Think carefully \u{1F4AD}',
+        },
+      },
+      { type: GeminiEventType.Content, value: 'Here is my answer' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-emoji-allowed',
+    });
+
+    const thinkOutput = processStdoutSpy.mock.calls.find(([value]) =>
+      value.includes('<think>'),
+    );
+    expect(thinkOutput).toBeDefined();
+    const thinkText = thinkOutput?.[0] as string;
+    expect(thinkText).toContain('\u{1F914}');
+    expect(thinkText).toContain('\u{1F4AD}');
   });
 });

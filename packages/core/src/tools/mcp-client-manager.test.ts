@@ -90,4 +90,42 @@ describe('McpClientManager', () => {
     expect(mockedMcpClient.connect).not.toHaveBeenCalled();
     expect(mockedMcpClient.discover).not.toHaveBeenCalled();
   });
+
+  it('should not hang when geminiClient is not yet initialized during discovery', async () => {
+    const mockedMcpClient = {
+      connect: vi.fn(),
+      discover: vi.fn(),
+      disconnect: vi.fn(),
+      getStatus: vi.fn(),
+      getServerConfig: vi.fn().mockReturnValue({}),
+    };
+    vi.mocked(McpClient).mockReturnValue(
+      mockedMcpClient as unknown as McpClient,
+    );
+    // Simulate the real initialization order: geminiClient is created AFTER
+    // Promise.all([startConfiguredMcpServers(), extensionLoader.start()]),
+    // so getGeminiClient() returns undefined during MCP discovery.
+    const mockConfig = {
+      isTrustedFolder: () => true,
+      getMcpServers: () => ({
+        'test-server': {},
+      }),
+      getMcpServerCommand: () => '',
+      getPromptRegistry: () => ({}) as PromptRegistry,
+      getDebugMode: () => false,
+      getWorkspaceContext: () => ({}) as WorkspaceContext,
+      getEnableExtensionReloading: () => false,
+      getExtensionEvents: () => undefined,
+      getAllowedMcpServers: () => undefined,
+      getBlockedMcpServers: () => undefined,
+      getGeminiClient: () => undefined,
+    } as unknown as Config;
+    const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+
+    // This must resolve, not hang forever
+    await manager.startConfiguredMcpServers();
+
+    expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
+    expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
+  });
 });
