@@ -56,7 +56,6 @@ import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
-import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
 import { CodexOAuthTokenSchema } from '../../auth/types.js';
 import type { OAuthManager } from '../../auth/precedence.js';
 import {
@@ -545,23 +544,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002/REQ-SP4-003
     // Source per-call request overrides from normalized options (ephemeral settings take precedence)
-    const runtimeConfigEphemeralSettings = options.invocation?.ephemerals;
-    const settingsServiceModelParams = options.settings?.getProviderSettings(
-      this.name,
-    );
-
-    const filteredSettingsParams = filterOpenAIRequestParams(
-      settingsServiceModelParams as Record<string, unknown> | undefined,
-    );
-    const filteredEphemeralParams = filterOpenAIRequestParams(
-      runtimeConfigEphemeralSettings as Record<string, unknown> | undefined,
-    );
-
-    // Include both ephemeral and persistent settings, with ephemeral settings taking precedence
-    const mergedParams: Record<string, unknown> = {
-      ...(filteredSettingsParams ?? {}),
-      ...(filteredEphemeralParams ?? {}),
-    };
+    const mergedParams: Record<string, unknown> =
+      options.invocation?.modelParams ?? {};
 
     // Translate max_tokens/max_completion_tokens to max_output_tokens for Responses API
     // The Responses API uses max_output_tokens, not max_tokens (GPT-5 models)

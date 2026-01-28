@@ -42,6 +42,7 @@ import {
 } from './errors.js';
 import { createRuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
 
 const PROVIDER_CAPABILITY_HINTS: Record<
   string,
@@ -654,9 +655,16 @@ export class ProviderManager implements IProviderManager {
     const globalEphemerals = settingsService.getAllGlobalSettings();
     const providerEphemerals =
       settingsService.getProviderSettings(providerName);
-    const snapshot: Record<string, unknown> = {
-      ...globalEphemerals,
-    };
+
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    // Filter out provider-config settings from global level
+    // These should only appear in provider-scoped sections
+    const snapshot: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(globalEphemerals)) {
+      if (!PROVIDER_CONFIG_KEYS.has(key)) {
+        snapshot[key] = value;
+      }
+    }
     snapshot[providerName] = { ...providerEphemerals };
     return snapshot;
   }

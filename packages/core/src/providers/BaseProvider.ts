@@ -1161,8 +1161,11 @@ export abstract class BaseProvider implements IProvider {
    * - Provider config `customHeaders`
    * - Ephemeral `custom-headers`
    * - Ephemeral `user-agent` (mapped into a `User-Agent` header)
+   * - Invocation `customHeaders` (from separated settings)
    */
-  protected getCustomHeaders(): Record<string, string> | undefined {
+  protected getCustomHeaders(
+    options?: NormalizedGenerateChatOptions,
+  ): Record<string, string> | undefined {
     const baseHeaders =
       this.providerConfig?.customHeaders &&
       typeof this.providerConfig.customHeaders === 'object'
@@ -1189,6 +1192,10 @@ export abstract class BaseProvider implements IProvider {
 
     if (typeof userAgent === 'string' && userAgent.trim()) {
       combined['User-Agent'] = userAgent.trim();
+    }
+
+    if (options?.invocation?.customHeaders) {
+      Object.assign(combined, options.invocation.customHeaders);
     }
 
     return Object.keys(combined).length > 0 ? combined : undefined;

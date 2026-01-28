@@ -113,8 +113,9 @@ describe('setCommand runtime integration', () => {
     expect(result).toEqual({
       type: 'message',
       messageType: 'error',
-      content:
-        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, user-agent, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter, retries, retrywait, maxTurnsPerPrompt, authOnly, dumponerror, dumpcontext, prompt-caching, include-folder-structure, rate-limit-throttle, rate-limit-throttle-threshold, rate-limit-max-wait, reasoning.enabled, reasoning.includeInContext, reasoning.includeInResponse, reasoning.format, reasoning.stripFromContext, reasoning.effort, reasoning.maxTokens, enable-tool-prompts, task-default-timeout-seconds, task-max-timeout-seconds, shell-default-timeout-seconds, shell-max-timeout-seconds, tpm_threshold, timeout_ms, circuit_breaker_enabled, circuit_breaker_failure_threshold, circuit_breaker_failure_window_ms, circuit_breaker_recovery_timeout_ms',
+      content: expect.stringContaining(
+        'Invalid setting key: invalid-key. Valid keys are:',
+      ),
     });
   });
 

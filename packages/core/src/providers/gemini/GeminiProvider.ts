@@ -1195,27 +1195,45 @@ export class GeminiProvider extends BaseProvider {
     const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
     const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
 
-    // Ephemerals can be stored as flat keys ('reasoning.enabled') or nested objects ('reasoning': {enabled: true})
-    // Handle both formats for compatibility
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    // Read reasoning settings from invocation.modelBehavior first, fallback to earlyEphemerals
     const reasoningObj = (earlyEphemerals as Record<string, unknown>)[
       'reasoning'
     ] as Record<string, unknown> | undefined;
     const reasoningEnabled =
-      (earlyEphemerals as Record<string, unknown>)['reasoning.enabled'] ===
-        true || reasoningObj?.enabled === true;
+      (options.invocation?.getModelBehavior('reasoning.enabled') as
+        | boolean
+        | undefined) ??
+      ((earlyEphemerals as Record<string, unknown>)['reasoning.enabled'] ===
+        true ||
+        reasoningObj?.enabled === true);
     const reasoningIncludeInResponse =
-      (earlyEphemerals as Record<string, unknown>)[
+      (options.invocation?.getCliSetting('reasoning.includeInResponse') as
+        | boolean
+        | undefined) ??
+      ((earlyEphemerals as Record<string, unknown>)[
         'reasoning.includeInResponse'
-      ] !== false && reasoningObj?.includeInResponse !== false;
+      ] !== false &&
+        reasoningObj?.includeInResponse !== false);
     const reasoningStripFromContext =
+      (options.invocation?.getCliSetting('reasoning.stripFromContext') as
+        | 'all'
+        | 'allButLast'
+        | 'none'
+        | undefined) ??
       ((earlyEphemerals as Record<string, unknown>)[
         'reasoning.stripFromContext'
       ] as 'all' | 'allButLast' | 'none') ??
       (reasoningObj?.stripFromContext as 'all' | 'allButLast' | 'none') ??
       'all';
-    // Extract reasoning.effort for future use (could map to thinkingLevel in Gemini 3)
-    // Currently unused but extracted for completeness
     const reasoningEffort =
+      (options.invocation?.getModelBehavior('reasoning.effort') as
+        | 'minimal'
+        | 'low'
+        | 'medium'
+        | 'high'
+        | 'xhigh'
+        | undefined) ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.effort'] as
         | 'minimal'
         | 'low'
@@ -1230,11 +1248,15 @@ export class GeminiProvider extends BaseProvider {
         | 'high'
         | 'xhigh'
         | undefined);
-    void reasoningEffort; // Mark as intentionally unused (reserved for future effort-to-thinkingLevel mapping)
+    void reasoningEffort;
     const reasoningMaxTokens =
+      (options.invocation?.getModelBehavior('reasoning.maxTokens') as
+        | number
+        | undefined) ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.maxTokens'] as
         | number
-        | undefined) ?? (reasoningObj?.maxTokens as number | undefined);
+        | undefined) ??
+      (reasoningObj?.maxTokens as number | undefined);
 
     // Strip thought content from history before sending to API
     // This prevents sending previous thinking back which can cause issues
@@ -1315,21 +1337,11 @@ export class GeminiProvider extends BaseProvider {
         ? directOverrides.toolConfig
         : undefined;
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
-    // Get model params per call from ephemeral settings, not cached instance state
-    const allEphemerals = options.invocation?.ephemerals ?? {};
-    const {
-      tools: _ignoredTools,
-      gemini: geminiSpecific,
-      ...generalEphemerals
-    } = allEphemerals as Record<string, unknown>;
-    const requestOverrides: Record<string, unknown> = {
-      ...generalEphemerals,
-      ...(geminiSpecific && typeof geminiSpecific === 'object'
-        ? (geminiSpecific as Record<string, unknown>)
-        : {}),
-    };
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    // Get pre-separated model params from invocation context
+    const modelParams = options.invocation?.modelParams ?? {};
     const requestConfig: Record<string, unknown> = {
-      ...requestOverrides,
+      ...modelParams,
     };
     requestConfig.serverTools = serverTools;
     if (geminiTools) {

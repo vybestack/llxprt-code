@@ -583,49 +583,13 @@ export class AnthropicProvider extends BaseProvider {
    * Get current model parameters from SettingsService per call
    * @returns Current parameters or undefined if not set
    * @plan PLAN-20251023-STATELESS-HARDENING.P08
+   * @plan PLAN-20260126-SETTINGS-SEPARATION.P09
    * @requirement REQ-SP4-003
    * Gets model parameters from SettingsService per call (stateless)
+   * Now uses pre-separated modelParams from invocation context
    */
   override getModelParams(): Record<string, unknown> | undefined {
-    try {
-      const settingsService = this.resolveSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
-
-      const reservedKeys = new Set([
-        'enabled',
-        'apiKey',
-        'api-key',
-        'apiKeyfile',
-        'api-keyfile',
-        'baseUrl',
-        'baseURL',
-        'base-url',
-        'model',
-        'toolFormat',
-        'tool-format',
-        'toolFormatOverride',
-        'tool-format-override',
-        'defaultModel',
-      ]);
-
-      const params: Record<string, unknown> = {};
-      if (providerSettings) {
-        for (const [key, value] of Object.entries(providerSettings)) {
-          if (reservedKeys.has(key) || value === undefined || value === null) {
-            continue;
-          }
-          params[key] = value;
-        }
-      }
-
-      return Object.keys(params).length > 0 ? params : undefined;
-    } catch (error) {
-      this.getLogger().debug(
-        () =>
-          `Failed to get Anthropic provider settings from SettingsService: ${error}`,
-      );
-      return undefined;
-    }
+    return undefined;
   }
 
   /**
@@ -826,25 +790,40 @@ export class AnthropicProvider extends BaseProvider {
     // Detect OAuth token for Claude Code compatibility
     const isOAuth = authToken.startsWith('sk-ant-oat');
 
-    // Read reasoning settings from options.settings (SettingsService) - same pattern as OpenAI
-    // This is the correct way to access ephemeral settings that are applied via profiles
-    const reasoningEnabled = options.settings.get('reasoning.enabled') as
-      | boolean
-      | undefined;
-    const reasoningBudgetTokens = options.settings.get(
-      'reasoning.budgetTokens',
-    ) as number | undefined;
-    const stripFromContext = options.settings.get(
-      'reasoning.stripFromContext',
-    ) as 'all' | 'allButLast' | 'none' | undefined;
-    const includeInContext = options.settings.get(
-      'reasoning.includeInContext',
-    ) as boolean | undefined;
+    // Read reasoning settings from invocation.modelBehavior first, fallback to options.settings
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    // Guard: check if getModelBehavior exists before calling
+    const reasoningEnabled =
+      (typeof options.invocation?.getModelBehavior === 'function'
+        ? options.invocation.getModelBehavior('reasoning.enabled')
+        : undefined) ??
+      (options.settings.get('reasoning.enabled') as boolean | undefined);
+    const reasoningBudgetTokens =
+      (typeof options.invocation?.getModelBehavior === 'function'
+        ? options.invocation.getModelBehavior('reasoning.budgetTokens')
+        : undefined) ??
+      (options.settings.get('reasoning.budgetTokens') as number | undefined);
+    const stripFromContext =
+      (typeof options.invocation?.getCliSetting === 'function'
+        ? options.invocation.getCliSetting('reasoning.stripFromContext')
+        : undefined) ??
+      (options.settings.get('reasoning.stripFromContext') as
+        | 'all'
+        | 'allButLast'
+        | 'none'
+        | undefined);
+    const includeInContext =
+      (typeof options.invocation?.getCliSetting === 'function'
+        ? options.invocation.getCliSetting('reasoning.includeInContext')
+        : undefined) ??
+      (options.settings.get('reasoning.includeInContext') as
+        | boolean
+        | undefined);
 
     // Debug log reasoning settings source
     this.getLogger().debug(
       () =>
-        `[AnthropicProvider] Reasoning settings from options.settings: enabled=${String(reasoningEnabled)}, budgetTokens=${String(reasoningBudgetTokens)}, stripFromContext=${String(stripFromContext)}, includeInContext=${String(includeInContext)}`,
+        `[AnthropicProvider] Reasoning settings from invocation.modelBehavior (fallback to options.settings): enabled=${String(reasoningEnabled)}, budgetTokens=${String(reasoningBudgetTokens)}, stripFromContext=${String(stripFromContext)}, includeInContext=${String(includeInContext)}`,
     );
 
     // Convert IContent directly to Anthropic API format (no IMessage!)
@@ -1357,43 +1336,12 @@ ${block.code}
       () => options.invocation?.userMemory,
     );
 
-    // Derive model parameters on demand from ephemeral settings
-    // Use invocation ephemerals for provider-specific request overrides (top_k, temperature, etc.)
-    // This maintains backward compatibility with the existing invocation context flow
-    const configEphemeralSettings = options.invocation?.ephemerals ?? {};
-    const rawOverrides =
-      (configEphemeralSettings['anthropic'] as
-        | Record<string, unknown>
-        | undefined) ?? {};
+    // Get pre-separated model parameters from invocation context
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    const requestOverrides: Record<string, unknown> =
+      options.invocation?.modelParams ?? {};
 
-    // Filter out reserved keys that should not be passed to the API
-    const reservedOverrideKeys = new Set([
-      'enabled',
-      'apiKey',
-      'api-key',
-      'apiKeyfile',
-      'api-keyfile',
-      'baseUrl',
-      'baseURL',
-      'base-url',
-      'model',
-      'toolFormat',
-      'tool-format',
-      'toolFormatOverride',
-      'tool-format-override',
-      'defaultModel',
-      'prompt-caching',
-    ]);
-    const requestOverrides: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(rawOverrides)) {
-      if (
-        !reservedOverrideKeys.has(key) &&
-        value !== undefined &&
-        value !== null
-      ) {
-        requestOverrides[key] = value;
-      }
-    }
+    const configEphemeralSettings = options.invocation?.ephemerals ?? {};
 
     // Get caching setting from options.settings or provider settings
     const providerSettings =

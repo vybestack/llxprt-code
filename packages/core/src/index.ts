@@ -402,3 +402,23 @@ export {
   type PersistedUIHistoryItem,
   type PersistedToolCall,
 } from './storage/SessionPersistenceService.js';
+
+export {
+  type SettingCategory,
+  type SettingSpec,
+  type ValidationResult,
+  type SeparatedSettings,
+  SETTINGS_REGISTRY,
+  separateSettings,
+  getSettingSpec,
+  resolveAlias,
+  validateSetting,
+  normalizeSetting,
+  parseSetting,
+  getProfilePersistableKeys,
+  getSettingHelp,
+  getCompletionOptions,
+  getAllSettingKeys,
+  getValidationHelp,
+  getAutocompleteSuggestions,
+} from './settings/index.js';

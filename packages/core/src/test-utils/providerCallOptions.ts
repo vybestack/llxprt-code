@@ -5,6 +5,7 @@
  */
 
 import { SettingsService } from '../settings/SettingsService.js';
+import { PROVIDER_CONFIG_KEYS } from '../providers/providerConfigKeys.js';
 import type { GenerateChatOptions } from '../providers/IProvider.js';
 import type { ProviderToolset } from '../providers/IProvider.js';
 import type { Config } from '../config/config.js';
@@ -72,10 +73,18 @@ function buildEphemeralsSnapshot(
   settings: SettingsService,
   overrides?: Record<string, unknown>,
 ): Record<string, unknown> {
-  const snapshot: Record<string, unknown> = {
-    ...settings.getAllGlobalSettings(),
-    ...(overrides ?? {}),
-  };
+  // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+  // Filter out provider-config settings from global level (same as ProviderManager)
+  const globalSettings = settings.getAllGlobalSettings();
+  const snapshot: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(globalSettings)) {
+    if (!PROVIDER_CONFIG_KEYS.has(key)) {
+      snapshot[key] = value;
+    }
+  }
+  if (overrides) {
+    Object.assign(snapshot, overrides);
+  }
 
   snapshot[providerName] = {
     ...settings.getProviderSettings(providerName),
