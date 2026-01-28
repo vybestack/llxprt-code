@@ -320,12 +320,14 @@ describe('Gemini provider stateless contract tests', () => {
     );
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
-    // In stateless implementation, parameters are resolved from options.resolved.params
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    // In stateless implementation, parameters are resolved from invocation.modelParams
+    // 'max-output-tokens' is normalized to 'max_output_tokens' by alias rules
     const firstRequest = googleGenAIState.streamCalls.at(-1)?.request as
       | { config?: Record<string, unknown> }
       | undefined;
     expect(firstRequest?.config?.temperature).toBe(0.21);
-    expect(firstRequest?.config?.['max-output-tokens']).toBe(1024);
+    expect(firstRequest?.config?.max_output_tokens).toBe(1024);
 
     queueGoogleStream([
       {
@@ -369,12 +371,14 @@ describe('Gemini provider stateless contract tests', () => {
     );
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
-    // In stateless implementation, parameters are resolved from options.resolved.params
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    // In stateless implementation, parameters are resolved from invocation.modelParams
+    // 'max-output-tokens' is normalized to 'max_output_tokens' by alias rules
     const secondRequest = googleGenAIState.streamCalls.at(-1)?.request as
       | { config?: Record<string, unknown> }
       | undefined;
     expect(secondRequest?.config?.temperature).toBe(0.78);
-    expect(secondRequest?.config?.['max-output-tokens']).toBe(256);
+    expect(secondRequest?.config?.max_output_tokens).toBe(256);
 
     authMock.restore();
   });

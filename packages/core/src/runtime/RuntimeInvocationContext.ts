@@ -9,6 +9,7 @@
  * need to construct stateless requests without reading from Config directly.
  *
  * @plan PLAN-20251029-STATELESS8.P01
+ * @plan PLAN-20260126-SETTINGS-SEPARATION.P06
  * @requirement REQ-STAT8-001
  */
 
@@ -16,6 +17,7 @@ import type { RedactionConfig } from '../config/config.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { ProviderTelemetryContext } from '../providers/types/providerRuntime.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
+import { separateSettings } from '../settings/settingsRegistry.js';
 
 export interface RuntimeInvocationContext {
   /** Stable identifier for the invocation/runtime */
@@ -26,6 +28,14 @@ export interface RuntimeInvocationContext {
   readonly settings: SettingsService;
   /** Snapshot of global ephemeral overrides for this invocation */
   readonly ephemerals: Readonly<Record<string, unknown>>;
+  /** CLI-only settings (never sent to API) */
+  readonly cliSettings: Readonly<Record<string, unknown>>;
+  /** Model behavior settings that require provider-specific translation */
+  readonly modelBehavior: Readonly<Record<string, unknown>>;
+  /** Model parameters that pass through unchanged to API */
+  readonly modelParams: Readonly<Record<string, unknown>>;
+  /** Custom HTTP headers for API requests */
+  readonly customHeaders: Readonly<Record<string, string>>;
   /** Optional telemetry context derived during normalization */
   readonly telemetry?: ProviderTelemetryContext;
   /** Optional user memory snapshot for providers that need it */
@@ -34,6 +44,12 @@ export interface RuntimeInvocationContext {
   readonly redaction?: Readonly<RedactionConfig>;
   /** Helper to read a strongly-typed ephemeral override */
   getEphemeral<T = unknown>(key: string): T | undefined;
+  /** Helper to read a CLI setting value */
+  getCliSetting<T = unknown>(key: string): T | undefined;
+  /** Helper to read a model behavior value */
+  getModelBehavior<T = unknown>(key: string): T | undefined;
+  /** Helper to read a model parameter value */
+  getModelParam<T = unknown>(key: string): T | undefined;
   /** Helper to read nested provider-specific overrides (e.g. "openai") */
   getProviderOverrides<T = Record<string, unknown>>(
     providerName: string,
@@ -91,6 +107,16 @@ export function createRuntimeInvocationContext(
 
   const ephemerals = Object.freeze({ ...init.ephemeralsSnapshot });
 
+  const separated = separateSettings(
+    init.ephemeralsSnapshot,
+    init.providerName,
+  );
+
+  const cliSettings = Object.freeze(separated.cliSettings);
+  const modelBehavior = Object.freeze(separated.modelBehavior);
+  const modelParams = Object.freeze(separated.modelParams);
+  const customHeaders = Object.freeze(separated.customHeaders);
+
   const redaction = cloneAndFreeze(init.redaction) ?? undefined;
 
   const userMemory = init.userMemory;
@@ -100,11 +126,24 @@ export function createRuntimeInvocationContext(
     metadata: mergedMetadata,
     settings: init.settings,
     ephemerals,
+    cliSettings,
+    modelBehavior,
+    modelParams,
+    customHeaders,
     telemetry: init.telemetry,
     userMemory,
     redaction,
     getEphemeral<T = unknown>(key: string): T | undefined {
       return ephemerals[key] as T | undefined;
+    },
+    getCliSetting<T = unknown>(key: string): T | undefined {
+      return cliSettings[key] as T | undefined;
+    },
+    getModelBehavior<T = unknown>(key: string): T | undefined {
+      return modelBehavior[key] as T | undefined;
+    },
+    getModelParam<T = unknown>(key: string): T | undefined {
+      return modelParams[key] as T | undefined;
     },
     getProviderOverrides<T = Record<string, unknown>>(
       providerName: string,
