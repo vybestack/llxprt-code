@@ -1166,6 +1166,15 @@ export class CoreToolScheduler {
           isModifying: true,
         } as ToolCallConfirmationDetails);
 
+        const contentOverrides =
+          waitingToolCall.confirmationDetails.type === 'edit'
+            ? {
+                currentContent:
+                  waitingToolCall.confirmationDetails.originalContent,
+                proposedContent: waitingToolCall.confirmationDetails.newContent,
+              }
+            : undefined;
+
         const { updatedParams, updatedDiff } = await modifyWithEditor<
           typeof waitingToolCall.request.args
         >(
@@ -1175,6 +1184,7 @@ export class CoreToolScheduler {
           signal,
           this.onEditorClose,
           this.onEditorOpen,
+          contentOverrides,
         );
         this.setArgsInternal(callId, updatedParams);
         const newCorrelationId = randomUUID();
