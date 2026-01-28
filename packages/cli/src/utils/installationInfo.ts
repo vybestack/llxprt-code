@@ -90,8 +90,8 @@ export function getInstallationInfo(
           isGlobal: true,
           updateCommand,
           updateMessage: isAutoUpdateDisabled
-            ? `Please run ${updateCommand} to update`
-            : 'Installed via Homebrew. Attempting to automatically update now...',
+            ? `Please run "${updateCommand}" to update`
+            : `Installed via Homebrew. Attempting to automatically update via "${updateCommand}"...`,
         };
       } catch (_error) {
         // Brew is not installed or llxprt-code is not installed via brew.
