@@ -199,17 +199,22 @@ async function main() {
 
   // Clone or update the tap repository
   const tapDir = join(tmpDir, 'homebrew-tap');
-  const tapRepoUrl = token
-    ? `https://${token}@github.com/vybestack/homebrew-tap.git`
-    : 'https://github.com/vybestack/homebrew-tap.git';
+  const tapRepoBase = 'https://github.com/vybestack/homebrew-tap.git';
 
   console.log('Setting up tap repository...');
   try {
     // Remove existing directory if present
     rmSync(tapDir, { recursive: true, force: true });
 
-    // Clone the repository
-    runCommand(`git clone ${tapRepoUrl} ${tapDir}`, { stdio: 'ignore' });
+    // Clone without token, then set authenticated remote (avoids leaking token in logs)
+    runCommand(`git clone ${tapRepoBase} ${tapDir}`, { stdio: 'ignore' });
+    if (token) {
+      const tapRepoAuth = `https://${token}@github.com/vybestack/homebrew-tap.git`;
+      execSync(`git remote set-url origin ${tapRepoAuth}`, {
+        cwd: tapDir,
+        stdio: 'ignore',
+      });
+    }
     console.log('Cloned tap repository');
   } catch (error) {
     throw new Error(`Failed to clone tap repository: ${error.message}`);
