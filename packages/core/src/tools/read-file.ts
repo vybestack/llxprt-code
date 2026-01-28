@@ -20,6 +20,7 @@ import { type PartUnion } from '@google/genai';
 import {
   processSingleFileContent,
   getSpecificMimeType,
+  DEFAULT_MAX_LINES_TEXT_FILE,
 } from '../utils/fileUtils.js';
 import { Config } from '../config/config.js';
 import {
@@ -155,12 +156,18 @@ class ReadFileToolInvocation extends BaseToolInvocation<
   }
 
   async execute(): Promise<ToolResult> {
+    const ephemeralSettings = this.config.getEphemeralSettings();
+    const effectiveLimit =
+      this.params.limit ??
+      (ephemeralSettings['file-read-max-lines'] as number | undefined) ??
+      DEFAULT_MAX_LINES_TEXT_FILE;
+
     const result = await processSingleFileContent(
       this.getFilePath(),
       this.config.getTargetDir(),
       this.config.getFileSystemService(),
       this.params.offset,
-      this.params.limit,
+      effectiveLimit,
     );
 
     if (result.error) {
