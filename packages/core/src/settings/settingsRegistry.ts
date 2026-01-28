@@ -259,7 +259,8 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     key: 'shell-replacement',
     category: 'cli-behavior',
     description: 'Command substitution mode for shell tool',
-    type: 'boolean',
+    type: 'string',
+    enumValues: ['allowlist', 'all', 'none', 'true', 'false'],
     persistToProfile: true,
   },
   {
