@@ -67,7 +67,38 @@ All three features already implemented in LLxprt:
 
 ## Follow-ups Created
 
-1. **StickyHeader Integration**: Need to integrate StickyHeader.tsx into ToolMessage and ToolGroupMessage components when doing tool message refactoring
+1. **StickyHeader Integration**: Need to integrate StickyHeader.tsx into ToolMessage and ToolGroupMessage components. See `STICKYHEADER-INTEGRATION-PLAN.md` for detailed plan.
+
+2. **Interactive Shell Feature**: Major feature from upstream commit `181898cb` that enables vim, less, htop, git rebase -i, etc. to run interactively. LLxprt has PTY infrastructure but missing UI rendering layer. See `INTERACTIVE-SHELL-PLAN.md` for detailed plan.
+
+---
+
+## Discovery: Interactive Shell Feature
+
+During StickyHeader integration research, discovered that upstream has a significant feature LLxprt is missing:
+
+**Commit:** `181898cb` - feat(shell): enable interactive commands with virtual terminal (#6694)
+**Date:** 2025-09-11
+
+This feature was added early in gemini-cli's history and enables:
+- Running interactive commands (vim, less, htop, git rebase -i)
+- ANSI-styled output rendering via xterm.js
+- Shell focus/input handling (ctrl+f to focus)
+
+**What LLxprt already has:**
+- `@lydell/node-pty` and `@xterm/headless` dependencies
+- PTY spawn in ShellExecutionService
+- `shouldUseNodePtyShell` setting
+- `headlessTerminal` instance in ShellExecutionService
+
+**What LLxprt is missing:**
+- `terminalSerializer.ts` - Serializes xterm buffer to AnsiOutput
+- `AnsiOutput.tsx` - Renders ANSI-styled output in Ink
+- `ShellInputPrompt.tsx` - Input prompt for focused shell
+- `keyToAnsi.ts` - Converts keypresses to ANSI sequences
+- UI integration for shell focus state
+
+This is a high-priority feature request from the user.
 
 ---
 
