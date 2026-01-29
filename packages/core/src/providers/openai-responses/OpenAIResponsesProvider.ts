@@ -46,6 +46,7 @@ import { CODEX_SYSTEM_PROMPT } from './CODEX_PROMPT.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
+  type ParseResponsesStreamOptions,
 } from '../openai/parseResponsesStream.js';
 import {
   BaseProvider,
@@ -803,12 +804,16 @@ export class OpenAIResponsesProvider extends BaseProvider {
     const reasoningSummary =
       (mergedParams.reasoning as { summary?: unknown } | undefined)?.summary ??
       options.settings?.get('reasoning.summary');
+    // Check if thinking blocks should be shown in the response (defaults to true)
+    // This respects the reasoning.includeInResponse setting (fixes #922)
+    const includeThinkingInResponse =
+      options.settings?.get('reasoning.includeInResponse') !== false;
     const shouldRequestReasoning =
       reasoningEnabled || reasoningEffort !== undefined;
 
     this.logger.debug(
       () =>
-        `Reasoning check: enabled=${reasoningEnabled}, effort=${String(reasoningEffort)}, summary=${String(reasoningSummary)}, shouldRequest=${shouldRequestReasoning}`,
+        `Reasoning check: enabled=${reasoningEnabled}, effort=${String(reasoningEffort)}, summary=${String(reasoningSummary)}, shouldRequest=${shouldRequestReasoning}, includeInResponse=${includeThinkingInResponse}`,
     );
 
     if (shouldRequestReasoning) {
@@ -836,7 +841,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     // Debug: Log full request body for analysis
     this.logger.debug(
-      () => `Full request reasoning config: ${JSON.stringify(request.reasoning)}`,
+      () =>
+        `Full request reasoning config: ${JSON.stringify(request.reasoning)}`,
     );
 
     // @issue #922: Add text.verbosity to request for OpenAI Responses API
@@ -910,9 +916,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     const requestBody = JSON.stringify(request);
 
     // Debug: Dump FULL request body for analysis
-    this.logger.debug(
-      () => `Request body FULL: ${requestBody}`,
-    );
+    this.logger.debug(() => `Request body FULL: ${requestBody}`);
 
     // @plan PLAN-20251214-ISSUE160.P05
     // Codex API requires Content-Type without charset suffix
@@ -991,7 +995,15 @@ export class OpenAIResponsesProvider extends BaseProvider {
       }
 
       try {
-        for await (const message of parseResponsesStream(response.body)) {
+        // Pass options to parseResponsesStream to respect reasoning.includeInResponse setting
+        // This fixes #922: thinking blocks should be suppressed when includeInResponse=false
+        const streamOptions: ParseResponsesStreamOptions = {
+          includeThinkingInResponse,
+        };
+        for await (const message of parseResponsesStream(
+          response.body,
+          streamOptions,
+        )) {
           yield message;
         }
         return;

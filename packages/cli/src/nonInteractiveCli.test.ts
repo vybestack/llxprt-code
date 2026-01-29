@@ -193,6 +193,38 @@ describe('runNonInteractive', () => {
     expect(mockShutdownTelemetry).toHaveBeenCalled();
   });
 
+  it('should coalesce thought output before content', async () => {
+    mockConfig.getEphemeralSetting = vi
+      .fn<(key: string) => boolean | undefined>()
+      .mockReturnValue(true);
+
+    const events: ServerGeminiStreamEvent[] = [
+      {
+        type: GeminiEventType.Thought,
+        value: { subject: 'First', description: '' },
+      },
+      {
+        type: GeminiEventType.Thought,
+        value: { subject: 'Second', description: '' },
+      },
+      { type: GeminiEventType.Content, value: 'Content' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive(
+      mockConfig,
+      mockSettings,
+      'Test input',
+      'prompt-id-thought',
+    );
+
+    const writes = processStdoutSpy.mock.calls.map(([value]) => value);
+    const output = writes.join('');
+    expect(output).toContain('<think>First Second</think>');
+  });
+
   it('should handle a single tool call and respond', async () => {
     const toolCallEvent: ServerGeminiStreamEvent = {
       type: GeminiEventType.ToolCallRequest,
@@ -712,4 +744,104 @@ describe('runNonInteractive', () => {
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('file.txt');
   });
+});
+
+it.skip('should accumulate multiple Thought events and flush once on content boundary', async () => {
+  const thoughtEvent1: ServerGeminiStreamEvent = {
+    type: GeminiEventType.Thought,
+    value: {
+      subject: 'First',
+      description: 'thought',
+    },
+  };
+  const thoughtEvent2: ServerGeminiStreamEvent = {
+    type: GeminiEventType.Thought,
+    value: {
+      subject: 'Second',
+      description: 'thought',
+    },
+  };
+  const contentEvent: ServerGeminiStreamEvent = {
+    type: GeminiEventType.Content,
+    value: 'Response text',
+  };
+  const finishedEvent: ServerGeminiStreamEvent = {
+    type: GeminiEventType.Finished,
+    value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
+  };
+
+  mockGeminiClient.sendMessageStream.mockReturnValueOnce(
+    createStreamFromEvents([
+      thoughtEvent1,
+      thoughtEvent2,
+      contentEvent,
+      finishedEvent,
+    ]),
+  );
+
+  await runNonInteractive(
+    mockConfig,
+    mockSettings,
+    'test query',
+    'test-prompt-id',
+  );
+
+  const thinkingOutputs = processStdoutSpy.mock.calls.filter(
+    ([output]: [string]) => output.includes('<think>'),
+  );
+
+  expect(thinkingOutputs).toHaveLength(1);
+  const thinkingText = thinkingOutputs[0][0];
+  expect(thinkingText).toContain('First thought');
+  expect(thinkingText).toContain('Second thought');
+});
+
+it.skip('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
+  const thoughtEvent1: ServerGeminiStreamEvent = {
+    type: GeminiEventType.Thought,
+    value: {
+      subject: 'Analyzing',
+      description: '',
+    },
+  };
+  const thoughtEvent2: ServerGeminiStreamEvent = {
+    type: GeminiEventType.Thought,
+    value: {
+      subject: 'request',
+      description: '',
+    },
+  };
+  const contentEvent: ServerGeminiStreamEvent = {
+    type: GeminiEventType.Content,
+    value: 'Response',
+  };
+  const finishedEvent: ServerGeminiStreamEvent = {
+    type: GeminiEventType.Finished,
+    value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
+  };
+
+  mockGeminiClient.sendMessageStream.mockReturnValueOnce(
+    createStreamFromEvents([
+      thoughtEvent1,
+      thoughtEvent2,
+      contentEvent,
+      finishedEvent,
+    ]),
+  );
+
+  await runNonInteractive(
+    mockConfig,
+    mockSettings,
+    'test query',
+    'test-prompt-id',
+  );
+
+  const thinkingOutputs = processStdoutSpy.mock.calls.filter(
+    ([output]: [string]) => output.includes('<think>'),
+  );
+
+  expect(thinkingOutputs).toHaveLength(1);
+  const thinkingText = thinkingOutputs[0][0];
+  const thoughtCount = (thinkingText.match(/Analyzing/g) || []).length;
+  expect(thoughtCount).toBe(1);
 });

@@ -44,6 +44,11 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
   const prefix = ' ';
   const prefixWidth = prefix.length;
 
+  // Don't show thinkingBlocks in pending items - LoadingIndicator shows the
+  // thought subject/description as spinner text during streaming. Only show
+  // thinkingBlocks in committed history items to avoid duplication (fixes #922).
+  const shouldShowThinkingBlocks = showThinking && !isPending;
+
   return (
     <Box flexDirection="column">
       {model && (
@@ -51,7 +56,7 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
           <Text color={Colors.DimComment}>{model}</Text>
         </Box>
       )}
-      {showThinking &&
+      {shouldShowThinkingBlocks &&
         thinkingBlocks?.map((block, index) => (
           <ThinkingBlockDisplay
             key={`thinking-${index}`}

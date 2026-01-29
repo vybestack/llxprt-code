@@ -15,41 +15,34 @@ describe('text.verbosity ephemeral setting', () => {
     it('should accept "low" as valid verbosity', () => {
       const result = parseEphemeralSettingValue('text.verbosity', 'low');
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.value).toBe('low');
-      }
+      expect(result).toMatchObject({ success: true, value: 'low' });
     });
 
     it('should accept "medium" as valid verbosity', () => {
       const result = parseEphemeralSettingValue('text.verbosity', 'medium');
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.value).toBe('medium');
-      }
+      expect(result).toMatchObject({ success: true, value: 'medium' });
     });
 
     it('should accept "high" as valid verbosity', () => {
       const result = parseEphemeralSettingValue('text.verbosity', 'high');
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.value).toBe('high');
-      }
+      expect(result).toMatchObject({ success: true, value: 'high' });
     });
 
     it('should normalize case to lowercase', () => {
       const result = parseEphemeralSettingValue('text.verbosity', 'HIGH');
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.value).toBe('high');
-      }
+      expect(result).toMatchObject({ success: true, value: 'high' });
     });
 
     it('should reject invalid verbosity values', () => {
       const result = parseEphemeralSettingValue('text.verbosity', 'invalid');
       expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.message).toContain('must be one of: low, medium, high');
-      }
+      expect(result).toMatchObject({ success: false });
+      expect((result as { success: false; message: string }).message).toContain(
+        'must be one of: low, medium, high',
+      );
     });
   });
 

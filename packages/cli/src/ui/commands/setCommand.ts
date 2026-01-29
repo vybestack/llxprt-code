@@ -326,11 +326,15 @@ const directSettingSpecs: SettingLiteralSpec[] = [
   {
     value: 'text.verbosity',
     hint: 'low, medium, or high',
-    description: 'Response verbosity for OpenAI Responses API (affects thinking)',
+    description:
+      'Response verbosity for OpenAI Responses API (affects thinking)',
     options: [
       { value: 'low', description: 'Concise responses, minimal elaboration' },
       { value: 'medium', description: 'Balanced responses (default)' },
-      { value: 'high', description: 'Detailed responses with full explanations' },
+      {
+        value: 'high',
+        description: 'Detailed responses with full explanations',
+      },
     ],
   },
   // Tool timeout settings (Issue #1049)

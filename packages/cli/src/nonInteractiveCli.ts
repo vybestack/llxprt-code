@@ -23,7 +23,6 @@ import {
   CoreEvent,
   type UserFeedbackPayload,
   type EmojiFilterMode,
-  type ServerGeminiThoughtEvent,
 } from '@vybestack/llxprt-code-core';
 import { Content, Part } from '@google/genai';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
@@ -169,6 +168,25 @@ export async function runNonInteractive(
         );
       }
       const functionCalls: ToolCallRequestInfo[] = [];
+      let thoughtBuffer = '';
+      const includeThinking =
+        !jsonOutput &&
+        (typeof config.getEphemeralSetting === 'function'
+          ? config.getEphemeralSetting('reasoning.includeInResponse') !== false
+          : true);
+
+      const flushThoughtBuffer = () => {
+        if (!includeThinking) {
+          thoughtBuffer = '';
+          return;
+        }
+        if (!thoughtBuffer.trim()) {
+          thoughtBuffer = '';
+          return;
+        }
+        process.stdout.write(`<think>${thoughtBuffer.trim()}</think>\n`);
+        thoughtBuffer = '';
+      };
 
       const responseStream = geminiClient.sendMessageStream(
         currentMessages[0]?.parts || [],
@@ -183,40 +201,27 @@ export async function runNonInteractive(
         }
 
         if (event.type === GeminiEventType.Thought) {
-          // Output thinking/reasoning content with <think> tags
-          // Check if reasoning.includeInResponse is enabled
-          if (jsonOutput) {
-            continue;
-          }
-          const includeThinking =
-            typeof config.getEphemeralSetting === 'function'
-              ? (config.getEphemeralSetting('reasoning.includeInResponse') ??
-                true)
-              : true;
-
           if (includeThinking) {
-            const thoughtEvent = event as ServerGeminiThoughtEvent;
-            const thought = thoughtEvent.value;
-            // Format thought with subject and description
+            const thought = event.value;
             const thoughtText =
               thought.subject && thought.description
                 ? `${thought.subject}: ${thought.description}`
                 : thought.subject || thought.description || '';
 
             if (thoughtText.trim()) {
-              process.stdout.write(`<think>${thoughtText}</think>\n`);
+              thoughtBuffer = thoughtBuffer
+                ? `${thoughtBuffer} ${thoughtText}`
+                : thoughtText;
             }
           }
         } else if (event.type === GeminiEventType.Content) {
-          // Apply emoji filtering to content output
-          // Note: <think> tags are preserved in output to show thinking vs non-thinking content
+          flushThoughtBuffer();
           let outputValue = event.value;
 
           if (emojiFilter) {
             const filterResult = emojiFilter.filterStreamChunk(outputValue);
 
             if (filterResult.blocked) {
-              // In error mode: output error message and continue
               if (!jsonOutput) {
                 process.stderr.write(
                   '[Error: Response blocked due to emoji detection]\n',
@@ -230,7 +235,6 @@ export async function runNonInteractive(
                 ? (filterResult.filtered as string)
                 : '';
 
-            // Output system feedback if needed
             if (filterResult.systemFeedback) {
               if (!jsonOutput) {
                 process.stderr.write(
@@ -254,6 +258,7 @@ export async function runNonInteractive(
             process.stdout.write(outputValue);
           }
         } else if (event.type === GeminiEventType.ToolCallRequest) {
+          flushThoughtBuffer();
           const toolCallRequest = event.value;
           if (streamFormatter) {
             streamFormatter.emitEvent({
@@ -293,6 +298,8 @@ export async function runNonInteractive(
           throw event.value.error;
         }
       }
+
+      flushThoughtBuffer();
 
       const remainingBuffered = emojiFilter?.flushBuffer?.();
       if (remainingBuffered) {

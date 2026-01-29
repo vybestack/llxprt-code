@@ -457,18 +457,15 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
         results.push(content as { speaker: string; blocks: unknown[] });
       }
 
-      // Should have received a thinking block from the accumulated summary
-      const thinkingContent = results.find((r) =>
-        r.blocks.some((b) => (b as { type?: string }).type === 'thinking'),
+      const thinkingBlocks = results.flatMap((result) =>
+        result.blocks.filter(
+          (block): block is { type: 'thinking'; thought: string } =>
+            (block as { type?: string }).type === 'thinking',
+        ),
       );
-      expect(thinkingContent).toBeDefined();
-
-      const thinkingBlock = thinkingContent!.blocks.find(
-        (b) => (b as { type?: string }).type === 'thinking',
-      ) as { type: string; thought: string };
-
-      expect(thinkingBlock.thought).toContain('First part of thinking');
-      expect(thinkingBlock.thought).toContain('Second part');
+      const lastThinkingBlock = thinkingBlocks[thinkingBlocks.length - 1];
+      expect(lastThinkingBlock?.thought).toContain('First part of thinking');
+      expect(lastThinkingBlock?.thought).toContain('Second part');
     });
   });
 

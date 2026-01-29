@@ -5,7 +5,10 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
-import { type IContent } from '../../services/history/IContent.js';
+import {
+  type ContentBlock,
+  type IContent,
+} from '../../services/history/IContent.js';
 import { createStreamInterruptionError } from '../../utils/retry.js';
 import { DebugLogger } from '../../debug/index.js';
 
@@ -57,15 +60,51 @@ interface FunctionCallState {
   arguments: string;
 }
 
+function appendReasoningDelta(current: string, delta: string): string {
+  if (!delta) {
+    return current;
+  }
+  if (!current) {
+    return delta;
+  }
+  const lastChar = current[current.length - 1] ?? '';
+  const nextChar = delta[0] ?? '';
+  const needsSpace =
+    /[\w)]/.test(lastChar) && /[\w(]/.test(nextChar) && !/\s/.test(nextChar);
+  return needsSpace ? `${current} ${delta}` : `${current}${delta}`;
+}
+
+/**
+ * Options for parseResponsesStream.
+ */
+export interface ParseResponsesStreamOptions {
+  /**
+   * Whether to emit ThinkingBlock content in the output stream.
+   * When false, reasoning content is still accumulated but not yielded.
+   * Defaults to true.
+   */
+  includeThinkingInResponse?: boolean;
+}
+
 export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
+  options: ParseResponsesStreamOptions = {},
 ): AsyncIterableIterator<IContent> {
+  const { includeThinkingInResponse = true } = options;
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   const functionCalls = new Map<string, FunctionCallState>();
   let reasoningText = '';
   let reasoningSummaryText = '';
+
+  // Track emitted thinking content to prevent duplicates (fixes #922).
+  // The API can send the same reasoning via multiple event types:
+  // - response.reasoning_text.done / response.reasoning_summary_text.done
+  // - response.output_item.done with item.type === 'reasoning'
+  // - response.completed / response.done (fallback)
+  // We deduplicate by tracking what we've already emitted.
+  const emittedThoughts = new Set<string>();
 
   let lastLoggedType: string | undefined;
 
@@ -100,15 +139,26 @@ export async function* parseResponsesStream(
             }
 
             // Debug: Log ALL events with full details
-            logger.debug(() => `SSE event: type=${event.type}, delta="${event.delta?.slice(0,50) ?? ''}", text="${event.text?.slice(0,50) ?? ''}", item_type=${event.item?.type ?? 'none'}, summary_index=${event.summary_index ?? 'none'}, content_index=${event.content_index ?? 'none'}`);
+            logger.debug(
+              () =>
+                `SSE event: type=${event.type}, delta="${event.delta?.slice(0, 50) ?? ''}", text="${event.text?.slice(0, 50) ?? ''}", item_type=${event.item?.type ?? 'none'}, summary_index=${event.summary_index ?? 'none'}, content_index=${event.content_index ?? 'none'}`,
+            );
             // Extra debug for any reasoning-related events
-            if (event.type.includes('reasoning') || event.item?.type === 'reasoning') {
-              logger.debug(() => `REASONING SSE: ${JSON.stringify(event).slice(0, 500)}`);
+            if (
+              event.type.includes('reasoning') ||
+              event.item?.type === 'reasoning'
+            ) {
+              logger.debug(
+                () => `REASONING SSE: ${JSON.stringify(event).slice(0, 500)}`,
+              );
             }
 
             // Debug: Log raw reasoning items
             if (event.item?.type === 'reasoning') {
-              logger.debug(() => `Reasoning item received: summary=${JSON.stringify(event.item?.summary)}, content=${JSON.stringify(event.item?.content)}, encrypted_content_length=${event.item?.encrypted_content?.length ?? 0}`);
+              logger.debug(
+                () =>
+                  `Reasoning item received: summary=${JSON.stringify(event.item?.summary)}, content=${JSON.stringify(event.item?.content)}, encrypted_content_length=${event.item?.encrypted_content?.length ?? 0}`,
+              );
             }
 
             // Handle different event types
@@ -123,29 +173,42 @@ export async function* parseResponsesStream(
                 }
                 break;
 
-              case 'response.reasoning_text.delta':
-                // Reasoning content chunk
+              case 'response.reasoning_text.delta': {
                 if (event.delta) {
-                  reasoningText += event.delta;
+                  reasoningText = appendReasoningDelta(
+                    reasoningText,
+                    event.delta,
+                  );
                 }
                 break;
+              }
 
-              case 'response.reasoning_summary_text.delta':
-                // Reasoning summary content chunk (streamed from Codex API)
+              case 'response.reasoning_summary_text.delta': {
                 if (event.delta) {
-                  reasoningSummaryText += event.delta;
+                  reasoningSummaryText = appendReasoningDelta(
+                    reasoningSummaryText,
+                    event.delta,
+                  );
                 }
                 break;
+              }
 
-              case 'response.reasoning_text.done':
-                // Reasoning completed - yield accumulated reasoning
-                if (reasoningText.trim()) {
+              case 'response.reasoning_text.done': {
+                // Yield accumulated reasoning as a single block (if not already emitted)
+                // Only emit if includeThinkingInResponse is true (respects reasoning.includeInResponse)
+                const thoughtContent = (event.text || reasoningText).trim();
+                if (
+                  includeThinkingInResponse &&
+                  thoughtContent &&
+                  !emittedThoughts.has(thoughtContent)
+                ) {
+                  emittedThoughts.add(thoughtContent);
                   yield {
                     speaker: 'ai',
                     blocks: [
                       {
                         type: 'thinking',
-                        thought: event.text || reasoningText,
+                        thought: thoughtContent,
                         sourceField: 'reasoning_content',
                       },
                     ],
@@ -153,16 +216,26 @@ export async function* parseResponsesStream(
                 }
                 reasoningText = '';
                 break;
+              }
 
-              case 'response.reasoning_summary_text.done':
-                // Reasoning summary completed - yield accumulated summary
-                if (reasoningSummaryText.trim()) {
+              case 'response.reasoning_summary_text.done': {
+                // Yield accumulated summary as a single block (if not already emitted)
+                // Only emit if includeThinkingInResponse is true (respects reasoning.includeInResponse)
+                const summaryContent = (
+                  event.text || reasoningSummaryText
+                ).trim();
+                if (
+                  includeThinkingInResponse &&
+                  summaryContent &&
+                  !emittedThoughts.has(summaryContent)
+                ) {
+                  emittedThoughts.add(summaryContent);
                   yield {
                     speaker: 'ai',
                     blocks: [
                       {
                         type: 'thinking',
-                        thought: event.text || reasoningSummaryText,
+                        thought: summaryContent,
                         sourceField: 'reasoning_content',
                       },
                     ],
@@ -170,6 +243,7 @@ export async function* parseResponsesStream(
                 }
                 reasoningSummaryText = '';
                 break;
+              }
 
               case 'response.output_item.added':
                 // New function call started
@@ -199,14 +273,12 @@ export async function* parseResponsesStream(
                 // Per codex-rs: thinking text comes from summary array and content array
                 // The encrypted_content is NOT decoded client-side - it's stored and sent back to API
                 if (event.item?.type === 'reasoning') {
-                  // First try summary text (from response.reasoning_summary_text.delta events)
                   let thoughtText =
                     event.item.summary
                       ?.map((s: { text?: string }) => s.text)
                       .filter(Boolean)
                       .join(' ') || '';
 
-                  // If no summary, try content array (from response.reasoning_text.delta events)
                   if (!thoughtText && event.item.content) {
                     thoughtText = event.item.content
                       .map((c: { text?: string }) => c.text)
@@ -214,14 +286,14 @@ export async function* parseResponsesStream(
                       .join(' ');
                   }
 
-                  // If still no text from item, use accumulated deltas
-                  if (!thoughtText && reasoningSummaryText.trim()) {
-                    thoughtText = reasoningSummaryText.trim();
-                    reasoningSummaryText = '';
-                  }
-                  if (!thoughtText && reasoningText.trim()) {
-                    thoughtText = reasoningText.trim();
-                    reasoningText = '';
+                  const itemText = thoughtText.trim();
+
+                  if (!itemText) {
+                    if (reasoningSummaryText.trim()) {
+                      thoughtText = reasoningSummaryText.trim();
+                    } else if (reasoningText.trim()) {
+                      thoughtText = reasoningText.trim();
+                    }
                   }
 
                   logger.debug(
@@ -229,19 +301,40 @@ export async function* parseResponsesStream(
                       `Reasoning item: thoughtText=${thoughtText.length} chars, summary=${event.item?.summary?.length ?? 0}, content=${event.item?.content?.length ?? 0}, encrypted=${event.item?.encrypted_content?.length ?? 0}`,
                   );
 
-                  // Only yield if we have text to show
-                  if (thoughtText) {
+                  const finalThought = thoughtText.trim();
+                  // Only emit if not already emitted (dedupe against reasoning_text.done etc.)
+                  // Only emit if includeThinkingInResponse is true (respects reasoning.includeInResponse)
+                  if (
+                    includeThinkingInResponse &&
+                    finalThought &&
+                    !emittedThoughts.has(finalThought)
+                  ) {
+                    emittedThoughts.add(finalThought);
+                    const baseReasoningBlock: ContentBlock = {
+                      type: 'thinking',
+                      thought: finalThought,
+                      sourceField: 'reasoning_content',
+                    };
+                    const hasEncryptedContent = Boolean(
+                      event.item?.encrypted_content,
+                    );
+                    const reasoningBlock: ContentBlock = hasEncryptedContent
+                      ? {
+                          ...baseReasoningBlock,
+                          encryptedContent: event.item?.encrypted_content,
+                        }
+                      : baseReasoningBlock;
+
                     yield {
                       speaker: 'ai',
-                      blocks: [
-                        {
-                          type: 'thinking',
-                          thought: thoughtText,
-                          sourceField: 'reasoning_content',
-                        },
-                      ],
+                      blocks: [reasoningBlock],
                     };
                   }
+
+                  // Clear buffers regardless of whether we emitted
+                  reasoningText = '';
+                  reasoningSummaryText = '';
+
                   break;
                 }
 
@@ -290,34 +383,47 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.completed':
-              case 'response.done':
-                // Yield any remaining reasoning before usage data
-                if (reasoningText.trim()) {
-                  yield {
-                    speaker: 'ai',
-                    blocks: [
-                      {
-                        type: 'thinking',
-                        thought: reasoningText,
-                        sourceField: 'reasoning_content',
-                      },
-                    ],
-                  };
-                  reasoningText = '';
+              case 'response.done': {
+                // Fallback: emit any remaining reasoning that wasn't emitted via other events
+                // Only emit if not already emitted (dedupe) and includeThinkingInResponse is true
+                if (includeThinkingInResponse) {
+                  const remainingReasoning = reasoningText.trim();
+                  if (
+                    remainingReasoning &&
+                    !emittedThoughts.has(remainingReasoning)
+                  ) {
+                    emittedThoughts.add(remainingReasoning);
+                    yield {
+                      speaker: 'ai',
+                      blocks: [
+                        {
+                          type: 'thinking',
+                          thought: remainingReasoning,
+                          sourceField: 'reasoning_content',
+                        },
+                      ],
+                    };
+                  }
+                  const remainingSummary = reasoningSummaryText.trim();
+                  if (
+                    remainingSummary &&
+                    !emittedThoughts.has(remainingSummary)
+                  ) {
+                    emittedThoughts.add(remainingSummary);
+                    yield {
+                      speaker: 'ai',
+                      blocks: [
+                        {
+                          type: 'thinking',
+                          thought: remainingSummary,
+                          sourceField: 'reasoning_content',
+                        },
+                      ],
+                    };
+                  }
                 }
-                if (reasoningSummaryText.trim()) {
-                  yield {
-                    speaker: 'ai',
-                    blocks: [
-                      {
-                        type: 'thinking',
-                        thought: reasoningSummaryText,
-                        sourceField: 'reasoning_content',
-                      },
-                    ],
-                  };
-                  reasoningSummaryText = '';
-                }
+                reasoningText = '';
+                reasoningSummaryText = '';
 
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
                 if (event.response?.usage) {
@@ -337,6 +443,7 @@ export async function* parseResponsesStream(
                   };
                 }
                 break;
+              }
 
               default:
                 // Ignore unknown event types

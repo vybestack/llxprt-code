@@ -662,13 +662,27 @@ export const useGeminiStream = (
       if (splitPoint === sanitizedCombined.length) {
         // @plan:PLAN-20251202-THINKING-UI.P08
         // Preserve thinkingBlocks during streaming updates
-        setPendingHistoryItem((item) => ({
-          type: item?.type as 'gemini' | 'gemini_content',
-          text: sanitizedCombined,
-          ...(thinkingBlocksRef.current.length > 0
-            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
-            : {}),
-        }));
+        setPendingHistoryItem((item) => {
+          if (
+            item &&
+            (item.type === 'gemini' || item.type === 'gemini_content')
+          ) {
+            return {
+              ...item,
+              text: sanitizedCombined,
+              ...(thinkingBlocksRef.current.length > 0
+                ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+                : {}),
+            };
+          }
+          return {
+            type: 'gemini',
+            text: sanitizedCombined,
+            ...(thinkingBlocksRef.current.length > 0
+              ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+              : {}),
+          };
+        });
         return sanitizedCombined;
       }
 
@@ -934,6 +948,11 @@ export const useGeminiStream = (
     ): Promise<StreamProcessingStatus> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
+      // Reset thinking blocks AND thought state at the start of each stream processing.
+      // This prevents accumulation across tool call continuations (fixes #922).
+      // Each model response (initial or continuation) should have fresh thinking.
+      thinkingBlocksRef.current = [];
+      setThought(null);
       for await (const event of stream) {
         if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT) {
           // SystemNotice events are internal model reminders, not for user display
@@ -941,23 +960,56 @@ export const useGeminiStream = (
           continue;
         }
         switch (event.type) {
-          case ServerGeminiEventType.Thought:
+          case ServerGeminiEventType.Thought: {
             // @plan:PLAN-20251202-THINKING-UI.P08
             // @requirement:REQ-THINK-UI-001
             setThought(event.value);
 
-            // Accumulate as ThinkingBlock for history
-            {
-              const thinkingBlock: ThinkingBlock = {
-                type: 'thinking',
-                thought: [event.value.subject, event.value.description]
-                  .filter(Boolean)
-                  .join(': '),
-                sourceField: 'thought',
-              };
-              thinkingBlocksRef.current.push(thinkingBlock);
+            const thoughtContent = [
+              event.value.subject,
+              event.value.description,
+            ]
+              .filter(Boolean)
+              .join(': ');
+
+            // Deduplicate: don't add if we already have this exact thought (fixes #922)
+            const alreadyHasThought = thinkingBlocksRef.current.some(
+              (tb) => tb.thought === thoughtContent,
+            );
+            if (alreadyHasThought) {
+              break;
             }
+
+            const thinkingBlock: ThinkingBlock = {
+              type: 'thinking',
+              thought: thoughtContent,
+              sourceField: 'thought',
+            };
+            const nextThinkingBlocks = [
+              ...thinkingBlocksRef.current,
+              thinkingBlock,
+            ];
+            thinkingBlocksRef.current = nextThinkingBlocks;
+
+            setPendingHistoryItem((item) => {
+              if (
+                item &&
+                (item.type === 'gemini' || item.type === 'gemini_content')
+              ) {
+                return {
+                  ...item,
+                  text: item.text ?? '',
+                  thinkingBlocks: [...nextThinkingBlocks],
+                };
+              }
+              return {
+                type: 'gemini',
+                text: '',
+                thinkingBlocks: [...nextThinkingBlocks],
+              };
+            });
             break;
+          }
           case ServerGeminiEventType.Content:
             geminiMessageBuffer = handleContentEvent(
               event.value,
@@ -1052,6 +1104,7 @@ export const useGeminiStream = (
       handleMaxSessionTurnsEvent,
       handleContextWindowWillOverflowEvent,
       handleCitationEvent,
+      setPendingHistoryItem,
     ],
   );
 
