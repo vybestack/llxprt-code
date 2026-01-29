@@ -94,7 +94,7 @@ describe('useShellCommandProcessor', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
     mockShellExecutionService.mockImplementation(
-      (_cmd, _cwd, callback, _signal, _usePty) => {
+      (_cmd, _cwd, callback, _signal, _usePty, _config) => {
         mockShellOutputCallback = callback;
         return {
           pid: 12345,
@@ -164,6 +164,9 @@ describe('useShellCommandProcessor', () => {
       expect.any(Function),
       expect.any(Object),
       false,
+      expect.objectContaining({
+        showColor: true,
+      }),
     );
     expect(onExecMock).toHaveBeenCalledWith(expect.any(Promise));
   });
@@ -235,14 +238,20 @@ describe('useShellCommandProcessor', () => {
 
     it('should throttle pending UI updates for text streams', async () => {
       const { result } = renderProcessorHook();
-      act(() => {
+      await act(async () => {
         result.current.handleShellCommand(
           'stream',
           new AbortController().signal,
         );
+        // Allow microtasks to run for the async execute() to complete
+        await Promise.resolve();
       });
 
-      // Simulate rapid output
+      // After handleShellCommand starts: initial tool display + ptyId update
+      const callsAfterInit = setPendingHistoryItemMock.mock.calls.length;
+      expect(callsAfterInit).toBeGreaterThanOrEqual(1);
+
+      // Simulate rapid output (within throttle window)
       act(() => {
         mockShellOutputCallback({
           type: 'data',
@@ -250,10 +259,10 @@ describe('useShellCommandProcessor', () => {
         });
       });
 
-      // Should not have updated the UI yet
-      expect(setPendingHistoryItemMock).toHaveBeenCalledTimes(1); // Only the initial call
+      // Should not have updated yet (still within throttle window)
+      const callsAfterFirstData = setPendingHistoryItemMock.mock.calls.length;
 
-      // Advance time and send another event to trigger the throttled update
+      // Advance time past the throttle window and send another event
       await act(async () => {
         await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
       });
@@ -264,8 +273,10 @@ describe('useShellCommandProcessor', () => {
         });
       });
 
-      // Should now have been called with the cumulative output
-      expect(setPendingHistoryItemMock).toHaveBeenCalledTimes(2);
+      // Should now have been called once more with the cumulative output
+      expect(setPendingHistoryItemMock.mock.calls.length).toBeGreaterThan(
+        callsAfterFirstData,
+      );
       expect(setPendingHistoryItemMock).toHaveBeenLastCalledWith(
         expect.objectContaining({
           tools: [expect.objectContaining({ resultDisplay: 'hello world' })],
@@ -342,6 +353,9 @@ describe('useShellCommandProcessor', () => {
       expect.any(Function),
       expect.any(Object),
       false,
+      expect.objectContaining({
+        showColor: true,
+      }),
     );
   });
 

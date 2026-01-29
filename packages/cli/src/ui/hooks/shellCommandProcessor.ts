@@ -206,10 +206,7 @@ export const useShellCommandProcessor = (
                   tools: [
                     {
                       ...initialToolDisplay,
-                      resultDisplay:
-                        typeof currentDisplayOutput === 'string'
-                          ? currentDisplayOutput
-                          : JSON.stringify(currentDisplayOutput),
+                      resultDisplay: currentDisplayOutput,
                     },
                   ],
                 });
