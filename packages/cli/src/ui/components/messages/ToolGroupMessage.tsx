@@ -10,6 +10,7 @@ import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { ToolMessage } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
+import { theme } from '../../semantic-colors.js';
 import {
   Config,
   DEFAULT_AGENT_ID,
@@ -164,10 +165,11 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
     (t) => t.name === SHELL_COMMAND_NAME || t.name === SHELL_NAME,
   );
   const borderColor = isShellCommand
-    ? Colors.Foreground
+    ? theme.ui.symbol
     : hasPending
-      ? Colors.AccentYellow
-      : Colors.Gray;
+      ? theme.status.warning
+      : theme.border.default;
+  const borderDimColor = hasPending && !isShellCommand;
 
   const staticHeight = /* border */ 2 + /* marginBottom */ 1;
   // This is a bit of a magic number, but it accounts for the border and
@@ -204,7 +206,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
       */
       width="100%"
       marginLeft={1}
-      borderDimColor={hasPending}
+      borderDimColor={borderDimColor}
       borderColor={borderColor}
       gap={1}
     >
@@ -242,7 +244,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
                 config={config}
                 isFirst={isFirst}
                 borderColor={borderColor}
-                borderDimColor={hasPending}
+                borderDimColor={borderDimColor}
               />
             </Box>
             {tool.status === ToolCallStatus.Confirming &&
