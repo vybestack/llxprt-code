@@ -15,6 +15,8 @@ import {
 import type { HookDefinition } from '../hooks/types.js';
 import { HookType, HookEventName } from '../hooks/types.js';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
 import {
   DEFAULT_TELEMETRY_TARGET,
@@ -698,20 +700,33 @@ describe('Server Config (config.ts)', () => {
   });
 
   it('should initialize WorkspaceContext with includeDirectories', () => {
-    const resolved = path.resolve(baseParams.targetDir);
-    const includeDirectories = ['dir1', 'dir2'];
-    const paramsWithIncludeDirs: ConfigParameters = {
-      ...baseParams,
-      includeDirectories,
-    };
-    const config = new Config(paramsWithIncludeDirs);
-    const workspaceContext = config.getWorkspaceContext();
-    const directories = workspaceContext.getDirectories();
-    // Should include the target directory plus the included directories
-    expect(directories).toHaveLength(3);
-    expect(directories).toContain(resolved);
-    expect(directories).toContain(path.join(resolved, 'dir1'));
-    expect(directories).toContain(path.join(resolved, 'dir2'));
+    // Use real directories that exist for this test
+    const tempDir = os.tmpdir();
+    const resolved = fs.realpathSync(tempDir);
+    // Create test subdirectories
+    const dir1 = path.join(tempDir, `test-include-dir1-${Date.now()}`);
+    const dir2 = path.join(tempDir, `test-include-dir2-${Date.now()}`);
+    fs.mkdirSync(dir1, { recursive: true });
+    fs.mkdirSync(dir2, { recursive: true });
+    try {
+      const paramsWithIncludeDirs: ConfigParameters = {
+        ...baseParams,
+        targetDir: tempDir,
+        includeDirectories: [dir1, dir2],
+      };
+      const config = new Config(paramsWithIncludeDirs);
+      const workspaceContext = config.getWorkspaceContext();
+      const directories = workspaceContext.getDirectories();
+      // Should include the target directory plus the included directories
+      expect(directories).toHaveLength(3);
+      expect(directories).toContain(resolved);
+      expect(directories).toContain(fs.realpathSync(dir1));
+      expect(directories).toContain(fs.realpathSync(dir2));
+    } finally {
+      // Cleanup
+      fs.rmSync(dir1, { recursive: true, force: true });
+      fs.rmSync(dir2, { recursive: true, force: true });
+    }
   });
 
   it('Config constructor should set telemetry to true when provided as true', () => {

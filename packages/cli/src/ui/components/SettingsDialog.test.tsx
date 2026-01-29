@@ -110,7 +110,7 @@ const renderDialog = (
   },
 ) =>
   render(
-    <KeypressProvider >
+    <KeypressProvider>
       <SettingsDialog
         settings={settings}
         onSelect={onSelect}
@@ -522,7 +522,7 @@ describe('SettingsDialog', () => {
 
       const { stdin, unmount } = render(
         <VimModeProvider settings={settings}>
-          <KeypressProvider >
+          <KeypressProvider>
             <SettingsDialog settings={settings} onSelect={onSelect} />
           </KeypressProvider>
         </VimModeProvider>,
@@ -909,7 +909,7 @@ describe('SettingsDialog', () => {
       const onSelect = vi.fn();
 
       const { stdin, unmount, rerender } = render(
-        <KeypressProvider >
+        <KeypressProvider>
           <SettingsDialog settings={settings} onSelect={onSelect} />
         </KeypressProvider>,
       );
@@ -934,7 +934,7 @@ describe('SettingsDialog', () => {
         {},
       );
       rerender(
-        <KeypressProvider >
+        <KeypressProvider>
           <SettingsDialog settings={settings} onSelect={onSelect} />
         </KeypressProvider>,
       );

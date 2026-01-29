@@ -58,9 +58,7 @@ class MockStdin extends EventEmitter {
 const setupKeypressTest = () => {
   const keyHandler = vi.fn();
   const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <KeypressProvider>
-      {children}
-    </KeypressProvider>
+    <KeypressProvider>{children}</KeypressProvider>
   );
 
   const { result } = renderHook(() => useKeypressContext(), { wrapper });
@@ -73,14 +71,8 @@ describe('KeypressContext - Kitty Protocol', () => {
   let stdin: MockStdin;
   const mockSetRawMode = vi.fn();
 
-  const wrapper = ({
-    children,
-  }: {
-    children: React.ReactNode;
-  }) => (
-    <KeypressProvider>
-      {children}
-    </KeypressProvider>
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <KeypressProvider>{children}</KeypressProvider>
   );
 
   beforeEach(() => {
@@ -307,10 +299,7 @@ describe('KeypressContext - Kitty Protocol', () => {
       const keyHandler = vi.fn();
 
       const wrapper = ({ children }: { children: React.ReactNode }) => (
-        <KeypressProvider
-          
-          debugKeystrokeLogging={false}
-        >
+        <KeypressProvider debugKeystrokeLogging={false}>
           {children}
         </KeypressProvider>
       );
@@ -334,10 +323,7 @@ describe('KeypressContext - Kitty Protocol', () => {
       const keyHandler = vi.fn();
 
       const wrapper = ({ children }: { children: React.ReactNode }) => (
-        <KeypressProvider
-          
-          debugKeystrokeLogging={true}
-        >
+        <KeypressProvider debugKeystrokeLogging={true}>
           {children}
         </KeypressProvider>
       );
@@ -366,10 +352,7 @@ describe('KeypressContext - Kitty Protocol', () => {
       const keyHandler = vi.fn();
 
       const wrapper = ({ children }: { children: React.ReactNode }) => (
-        <KeypressProvider
-          
-          debugKeystrokeLogging={true}
-        >
+        <KeypressProvider debugKeystrokeLogging={true}>
           {children}
         </KeypressProvider>
       );
@@ -392,10 +375,7 @@ describe('KeypressContext - Kitty Protocol', () => {
       const keyHandler = vi.fn();
 
       const wrapper = ({ children }: { children: React.ReactNode }) => (
-        <KeypressProvider
-          
-          debugKeystrokeLogging={true}
-        >
+        <KeypressProvider debugKeystrokeLogging={true}>
           {children}
         </KeypressProvider>
       );
@@ -427,10 +407,7 @@ describe('KeypressContext - Kitty Protocol', () => {
       const keyHandler = vi.fn();
 
       const wrapper = ({ children }: { children: React.ReactNode }) => (
-        <KeypressProvider
-          
-          debugKeystrokeLogging={true}
-        >
+        <KeypressProvider debugKeystrokeLogging={true}>
           {children}
         </KeypressProvider>
       );
@@ -557,19 +534,19 @@ describe('KeypressContext - Kitty Protocol', () => {
         // Provide an incomplete ESC sequence chunk with a real ESC character
         stdin.write('\x1b[1;');
       });
-      
+
       // Wait for the ESC timeout to flush the incomplete sequence
       act(() => vi.advanceTimersByTime(ESC_TIMEOUT + 10));
-      
+
       keyHandler.mockClear();
-      
+
       act(() => stdin.write(`\x1b[3~`));
 
       // The complete delete sequence should be recognized
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'delete' }),
       );
-      
+
       vi.useRealTimers();
     });
   });
@@ -579,14 +556,8 @@ describe('Drag and Drop Handling', () => {
   let stdin: MockStdin;
   const mockSetRawMode = vi.fn();
 
-  const wrapper = ({
-    children,
-  }: {
-    children: React.ReactNode;
-  }) => (
-    <KeypressProvider>
-      {children}
-    </KeypressProvider>
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <KeypressProvider>{children}</KeypressProvider>
   );
 
   beforeEach(() => {
@@ -669,14 +640,8 @@ describe('Kitty Sequence Parsing', () => {
   let stdin: MockStdin;
   const mockSetRawMode = vi.fn();
 
-  const wrapper = ({
-    children,
-  }: {
-    children: React.ReactNode;
-  }) => (
-    <KeypressProvider>
-      {children}
-    </KeypressProvider>
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <KeypressProvider>{children}</KeypressProvider>
   );
 
   beforeEach(() => {
@@ -776,18 +741,10 @@ describe('Kitty Sequence Parsing', () => {
       ),
     )(
       'should handle Alt+$key in $terminal',
-      ({
-        chunk,
-        expected,
-      }: {
-        chunk: string;
-        expected: Partial<Key>;
-      }) => {
+      ({ chunk, expected }: { chunk: string; expected: Partial<Key> }) => {
         const keyHandler = vi.fn();
         const testWrapper = ({ children }: { children: React.ReactNode }) => (
-          <KeypressProvider>
-            {children}
-          </KeypressProvider>
+          <KeypressProvider>{children}</KeypressProvider>
         );
         const { result } = renderHook(() => useKeypressContext(), {
           wrapper: testWrapper,

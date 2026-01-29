@@ -128,9 +128,7 @@ export abstract class ExtensionLoader {
    */
   private async maybeRefreshMemory(): Promise<void> {
     if (!this.config) {
-      throw new Error(
-        'Cannot refresh memory prior to calling `start`.',
-      );
+      throw new Error('Cannot refresh memory prior to calling `start`.');
     }
     if (
       !this.isStarting && // Don't refresh memories on the first call to `start`.

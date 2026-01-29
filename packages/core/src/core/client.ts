@@ -775,14 +775,13 @@ export class GeminiClient {
     this._previousHistory = [];
   }
 
-
   /**
    * Restore history from a session by ensuring chat and content generator are fully initialized,
    * then adding history items to the HistoryService.
-   * 
+   *
    * P0 Fix: Synchronously initializes chat/content generator if needed before attempting history restore.
    * This ensures the history service is available immediately after the call completes.
-   * 
+   *
    * @param historyItems Array of IContent items from persisted session
    * @returns Promise that resolves when history is fully restored and chat is ready
    * @throws Error if initialization fails (e.g., auth not ready, config missing)
@@ -836,10 +835,10 @@ export class GeminiClient {
     try {
       // Validate and fix any issues in the history service before adding items
       historyService.validateAndFix();
-      
+
       // Add all history items
       historyService.addAll(historyItems);
-      
+
       this.logger.debug('History restored successfully', {
         itemCount: historyItems.length,
         totalTokens: historyService.getTotalTokens(),
@@ -849,7 +848,6 @@ export class GeminiClient {
       throw new Error(`Failed to add history items to service: ${message}`);
     }
   }
-
 
   getCurrentSequenceModel(): string | null {
     return this.currentSequenceModel;

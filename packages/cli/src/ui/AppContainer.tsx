@@ -720,8 +720,7 @@ export const AppContainer = (props: AppContainerProps) => {
       })
       .catch((err: unknown) => {
         debug.error('Failed to restore core history:', err);
-        const errorMessage =
-          err instanceof Error ? err.message : String(err);
+        const errorMessage = err instanceof Error ? err.message : String(err);
 
         // Surface specific error details to help diagnose the issue
         let userMessage =

@@ -242,7 +242,6 @@ async function restartAction(
       },
       Date.now(),
     );
-
   } else {
     context.ui.addItem(
       {
