@@ -60,6 +60,7 @@ import * as fs from 'fs';
 // import * as path from 'path';
 import * as crypto from 'crypto';
 import { ToolCallStatus } from '../types.js';
+import type { HistoryItemWithoutId } from '../types.js';
 
 describe('useShellCommandProcessor', () => {
   let addItemToHistoryMock: Mock;
@@ -72,11 +73,21 @@ describe('useShellCommandProcessor', () => {
   let mockShellOutputCallback: (event: ShellOutputEvent) => void;
   let resolveExecutionPromise: (result: ShellExecutionResult) => void;
 
+  let pendingHistoryItemState: HistoryItemWithoutId | null = null;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    pendingHistoryItemState = null;
 
     addItemToHistoryMock = vi.fn();
-    setPendingHistoryItemMock = vi.fn();
+    // Mock that tracks state and handles both direct values and updater functions
+    setPendingHistoryItemMock = vi.fn((updaterOrValue) => {
+      if (typeof updaterOrValue === 'function') {
+        pendingHistoryItemState = updaterOrValue(pendingHistoryItemState);
+      } else {
+        pendingHistoryItemState = updaterOrValue;
+      }
+    });
     onExecMock = vi.fn();
     onDebugMessageMock = vi.fn();
     mockConfig = {
@@ -277,7 +288,8 @@ describe('useShellCommandProcessor', () => {
       expect(setPendingHistoryItemMock.mock.calls.length).toBeGreaterThan(
         callsAfterFirstData,
       );
-      expect(setPendingHistoryItemMock).toHaveBeenLastCalledWith(
+      // The implementation now uses an updater function, so check the resulting state
+      expect(pendingHistoryItemState).toEqual(
         expect.objectContaining({
           tools: [expect.objectContaining({ resultDisplay: 'hello world' })],
         }),
@@ -305,7 +317,8 @@ describe('useShellCommandProcessor', () => {
         mockShellOutputCallback({ type: 'binary_progress', bytesReceived: 0 });
       });
 
-      expect(setPendingHistoryItemMock).toHaveBeenLastCalledWith(
+      // The implementation now uses an updater function, so check the resulting state
+      expect(pendingHistoryItemState).toEqual(
         expect.objectContaining({
           tools: [
             expect.objectContaining({
@@ -326,7 +339,8 @@ describe('useShellCommandProcessor', () => {
         });
       });
 
-      expect(setPendingHistoryItemMock).toHaveBeenLastCalledWith(
+      // The implementation now uses an updater function, so check the resulting state
+      expect(pendingHistoryItemState).toEqual(
         expect.objectContaining({
           tools: [
             expect.objectContaining({

@@ -200,15 +200,18 @@ export const useShellCommandProcessor = (
                 shouldUpdate &&
                 Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS
               ) {
-                setPendingHistoryItem({
-                  type: 'tool_group',
-                  agentId: DEFAULT_AGENT_ID,
-                  tools: [
-                    {
-                      ...initialToolDisplay,
-                      resultDisplay: currentDisplayOutput,
-                    },
-                  ],
+                setPendingHistoryItem((prevItem) => {
+                  if (prevItem?.type === 'tool_group') {
+                    return {
+                      ...prevItem,
+                      tools: prevItem.tools.map((tool) =>
+                        tool.callId === callId
+                          ? { ...tool, resultDisplay: currentDisplayOutput }
+                          : tool,
+                      ),
+                    };
+                  }
+                  return prevItem;
                 });
                 lastUpdateTime = Date.now();
               }
