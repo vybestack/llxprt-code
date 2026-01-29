@@ -100,9 +100,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       runtime,
     });
 
-    await expect(async () => {
-      await iterator.next();
-    }).rejects.toMatchObject({
+    await expect(iterator.next()).rejects.toMatchObject({
       requirement: 'REQ-SP4-004',
       name: 'MissingProviderRuntimeError',
     });
@@ -126,9 +124,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       runtime,
     });
 
-    await expect(async () => {
-      await iterator.next();
-    }).rejects.toMatchObject({
+    await expect(iterator.next()).rejects.toMatchObject({
       requirement: 'REQ-SP4-004',
       name: 'MissingProviderRuntimeError',
     });
