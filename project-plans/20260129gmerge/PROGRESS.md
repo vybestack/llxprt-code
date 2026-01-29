@@ -26,6 +26,8 @@
 | StickyHeader Integration | e77e438e3 | Complete integration in ToolGroupMessage |
 | Settings Scope Fix | c0202daea | Exclude Session scope from forScope() iteration |
 | AnsiOutput Rendering | 18cb40ceb | Port serializeTerminalToObject() for PTY mode ANSI colors |
+| AnsiOutput Fix | 8fdfcd3e0 | Pass AnsiOutput directly instead of JSON.stringify |
+| AnsiOutput dimColor | 8b4ba4cbc | Sync dimColor and color handling with upstream |
 
 ---
 
@@ -35,7 +37,7 @@
 - **Completed:** 4 (1 skipped - features already present)
 - **In progress:** 0
 - **Remaining:** 0
-- **Additional features:** 4 (Interactive Shell, StickyHeader integration, Settings fix, AnsiOutput)
+- **Additional features:** 6 (Interactive Shell, StickyHeader integration, Settings fix, AnsiOutput rendering + fixes)
 
 ---
 
@@ -75,3 +77,5 @@
 7. **e77e438e3** - StickyHeader integration in ToolGroupMessage
 8. **c0202daea** - Settings Session scope fix
 9. **18cb40ceb** - AnsiOutput rendering for PTY mode
+10. **8fdfcd3e0** - Pass AnsiOutput directly to resultDisplay
+11. **8b4ba4cbc** - Sync AnsiOutput dimColor and color handling

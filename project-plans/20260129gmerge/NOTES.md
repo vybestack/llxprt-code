@@ -81,6 +81,8 @@ During StickyHeader integration research, discovered that upstream has a signifi
 - `6df7e5f99` - feat(shell): Add interactive shell UI support (181898cb) - Phases 1-3
 - `612101d0c` - feat(shell): Complete Interactive Shell Phase 4 wiring
 - `18cb40ceb` - feat(shell): Port AnsiOutput rendering from upstream for PTY mode
+- `8fdfcd3e0` - fix(shell): Pass AnsiOutput directly to resultDisplay instead of stringifying
+- `8b4ba4cbc` - fix(shell): Sync AnsiOutput component with upstream to fix dimColor and color handling
 
 **What was implemented:**
 - `terminalSerializer.ts` - Serializes xterm buffer to AnsiOutput
@@ -93,11 +95,20 @@ During StickyHeader integration research, discovered that upstream has a signifi
 - `SCROLLBACK_LIMIT` constant (300k lines) for large outputs
 - AnsiOutput emission from ShellExecutionService when PTY mode active
 
-**Issue discovered and fixed:**
-The original implementation was emitting plain strings instead of AnsiOutput. The fix (commit `18cb40ceb`) adds:
-- `serializeTerminalToObject()` integration in ShellExecutionService
-- Proper `render()` and `renderFn()` pattern from upstream
-- Terminal dimensions passed through useGeminiStream
+**Issues discovered and fixed:**
+1. Original implementation was emitting plain strings instead of AnsiOutput. Fixed in commit `18cb40ceb`:
+   - `serializeTerminalToObject()` integration in ShellExecutionService
+   - Proper `render()` and `renderFn()` pattern from upstream
+   - Terminal dimensions passed through useGeminiStream
+
+2. resultDisplay was being JSON.stringify'd instead of passed as AnsiOutput. Fixed in commit `8fdfcd3e0`:
+   - Removed conditional JSON.stringify wrapper
+   - AnsiOutput now passed directly to ToolMessage component
+   
+3. AnsiOutput component was missing dimColor prop and had incorrect color handling. Fixed in commit `8b4ba4cbc`:
+   - Added `dimColor={token.dim}` prop
+   - Removed `color=""` from outer Text (was overriding token colors)
+   - Removed `|| ''` fallback on color prop (was causing issues)
 
 ---
 

@@ -84,6 +84,8 @@
 7. `e77e438e3` - StickyHeader integration in ToolGroupMessage
 8. `c0202daea` - Settings Session scope fix
 9. `18cb40ceb` - AnsiOutput rendering for PTY mode
+10. `8fdfcd3e0` - Pass AnsiOutput directly to resultDisplay
+11. `8b4ba4cbc` - Sync AnsiOutput dimColor and color handling
 
 ---
 
@@ -128,3 +130,7 @@ Implemented the Interactive Shell feature from upstream commit `181898cb`:
 **Behavior:**
 - When PTY mode is active, emits AnsiOutput (array of token arrays) instead of plain strings
 - Enables proper ANSI color/style rendering for interactive shell commands
+
+**Bug Fixes:**
+- `8fdfcd3e0` - Fixed JSON.stringify wrapper that was converting AnsiOutput to string
+- `8b4ba4cbc` - Fixed missing dimColor prop and incorrect color handling in AnsiOutputText component
