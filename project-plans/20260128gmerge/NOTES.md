@@ -1,43 +1,141 @@
-# Notes: v0.14.0 → v0.15.4 Sync
+# Notes: v0.14.0 -> v0.15.4 Sync
 
 **Branch:** `20260128gmerge`
+**Date:** 2026-01-28
 
 ---
 
-## Research Findings (Pre-Execution)
-
-### 1. Session Resuming (`--continue` Bug)
-User reported error: "Could not restore AI context - history service unavailable"
-
-Root cause: Core history restore waits for `geminiClient.getHistoryService()`, which stays null because GeminiChat never initializes when content generator/auth aren't ready.
-
-Fix plan in CHERRIES.md Research Findings section.
-
-### 2. Kitty Protocol Clarification
-Initially thought upstream removed Kitty support - WRONG.
-
-They refactored to a unified ANSI parser while KEEPING Kitty CSI-u handling. The fix addresses ESC+mouse garbage input (issue #12613).
-
-We're adopting this improvement. See `9e4ae214a-c0b766ad7-plan.md`.
-
-### 3. Scrollbar Drag - Already Done
-Investigated adding scrollbar drag and found it's already fully implemented in `ScrollProvider.tsx`. No work needed!
-
-### 4. Ink Fork Status
-- Fork: `@jrichman/ink` by Jacob Richman (Google/gemini-cli dev)
-- Hosted at: github.com/jacob314/ink
-- Recent commits focus on IME fixes and cursor positioning
-- No evidence of upstream merge plans
-- Action: Bump to 6.4.8, continue monitoring
-
----
-
-## Batch Notes
+## Conflicts Resolved
 
 ### Batch 1
-(To be filled during execution)
+
+| Commit | File | Resolution |
+|--------|------|------------|
+| ef4030331 | types.ts | DELETED - file moved to ideContext.ts in LLxprt |
+| ef4030331 | ide-client.ts | Merged typo fixes into LLxprt's version |
+| 331dbd563 | textUtils.test.ts | Branding: @google/gemini-cli-core -> @vybestack/llxprt-code-core |
+| 2136598e8 | modifiable-tool.ts | console.error alignment for test compatibility |
 
 ### Batch 2
-(To be filled during execution)
 
-...
+| Commit | File | Resolution |
+|--------|------|------------|
+| 5ba6bc713 | prompts.ts | Minor merge conflict in Angular support section |
+| 2abc288c5 | settings.ts | Adjusted useFullWidth default handling |
+
+### Batch 3
+
+| Commit | File | Resolution |
+|--------|------|------------|
+| a0a682826 | github.test.ts | Property name alignment (browser_download_url vs url) |
+| 69339f08a | Multiple a2a-server files | Branding: @google/gemini-cli-core -> @vybestack/llxprt-code-core |
+
+### Batch 4
+
+| Commit | File | Resolution |
+|--------|------|------------|
+| 4ef4bd6f0 | hookRunner.ts | Fixed debugLogger import to DebugLogger.getLogger() pattern |
+| 4ef4bd6f0 | hookRunner.ts | Added LLXPRT_PROJECT_DIR as primary env var |
+
+---
+
+## Skipped Commits
+
+### Batch 1: 3c9052a75 (F1/F2 keys)
+**Reason:** Complex keyboard handling conflicts with LLxprt's existing architecture
+**Impact:** Low - F1/F2 keys may still print garbage in some terminals
+**Follow-up:** Part of deferred Batch 5 KeypressContext work
+
+### Batch 2: 51f952e70 (ripgrep --json)
+**Reason:** Already implemented in LLxprt differently
+**Impact:** None
+
+### Batch 2: fd59d9dd9 (shift+return VSCode)
+**Reason:** LLxprt already has backslash+enter handling via backslashTimeout
+**Impact:** None
+
+### Batch 2: 9116cf2ba (icon->prefix rename)
+**Reason:** Requires extension manager refactoring not present in LLxprt
+**Impact:** Low - cosmetic naming difference
+**Follow-up:** Consider in future extension system cleanup
+
+### Batch 2: c1076512d (read_many_files deprecation)
+**Reason:** Extensive documentation and test updates across 7 files
+**Impact:** None - tool still works, just not deprecated
+**Follow-up:** Consider deprecation in future release
+
+---
+
+## Deviations from Upstream
+
+### LLxprt-specific Branding
+
+All references to:
+- `@google/gemini-cli` -> `@vybestack/llxprt-code`
+- `@google/gemini-cli-core` -> `@vybestack/llxprt-code-core`
+- `GEMINI_` env vars -> `LLXPRT_` (with GEMINI/CLAUDE kept for compatibility)
+- `gemini` logger names -> `llxprt`
+
+### Functional vs Class-based Architecture
+
+LLxprt uses functional approach for extensions vs upstream's ExtensionManager class.
+Batches 7 and 8 reimplemented extension features to match LLxprt's patterns.
+
+### A2A Server Privacy
+
+A2A server packages remain PRIVATE in LLxprt (not published to npm).
+
+---
+
+## Research Findings
+
+### Kitty Keyboard Protocol (Batch 5)
+
+Upstream did NOT remove Kitty protocol support. They:
+1. Replaced readline/PassThrough with unified ANSI parser
+2. Fixed ESC+mouse garbage input (issue #12613)
+3. Kept Kitty CSI-u sequence handling in the parser
+
+**Recommendation for LLxprt:** Keep Kitty support, adopt unified parser pattern.
+
+### Ink Fork Status
+
+| Package | Version |
+|---------|---------|
+| LLxprt | @jrichman/ink@6.4.7 -> 6.4.8 |
+| Upstream gemini-cli | @jrichman/ink@6.4.8 |
+| Mainline ink | 6.6.0 |
+
+No evidence of jrichman's changes being merged to mainline ink.
+Timeline to switch back: Unknown - need to diff fork against 6.6.0.
+
+### Scrollbar Drag
+
+Already fully implemented in LLxprt's ScrollProvider.tsx.
+No work needed.
+
+---
+
+## Known Issues Post-Sync
+
+### --continue Session Restore
+
+**Fixed in Batch 10.** Root cause was history service null during restore.
+New GeminiClient.restoreHistory() API ensures chat initialization first.
+
+### F1/F2 Keys
+
+May still print garbage in some terminals. Part of deferred Batch 5 work.
+
+---
+
+## Files Created
+
+| File | Purpose |
+|------|---------|
+| ThemedGradient.tsx | Safe gradient for tmux (Batch 6) |
+| hookRunner.ts | Hook execution engine (Batch 4) |
+| hookRunner.test.ts | Hook runner tests (Batch 4) |
+| extensions.ts (a2a) | Extension commands (Batch 3) |
+| extensions.test.ts (a2a) | Extension command tests (Batch 3) |
+| types.ts (a2a) | Command type definitions (Batch 3) |
