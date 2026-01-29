@@ -26,4 +26,9 @@ describe('reasoning.summary profile save/load @issue:922', () => {
     expect(PROFILE_EPHEMERAL_KEYS).toContain('reasoning.maxTokens');
     expect(PROFILE_EPHEMERAL_KEYS).toContain('reasoning.summary');
   });
+
+  it('should include text.verbosity in PROFILE_EPHEMERAL_KEYS', () => {
+    // text.verbosity is for OpenAI Responses API response verbosity control
+    expect(PROFILE_EPHEMERAL_KEYS).toContain('text.verbosity');
+  });
 });

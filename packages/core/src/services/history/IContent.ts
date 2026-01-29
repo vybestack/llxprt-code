@@ -233,7 +233,12 @@ export const ContentValidation = {
         return !!block.data && !!block.mimeType;
       }
       if (block.type === 'thinking') {
-        return !!block.thought && block.thought.trim().length > 0;
+        // A thinking block is valid if it has thought content OR encrypted content
+        // (encrypted-only blocks must be preserved for round-trip reasoning)
+        return (
+          (!!block.thought && block.thought.trim().length > 0) ||
+          (!!block.encryptedContent && block.encryptedContent.trim().length > 0)
+        );
       }
       if (block.type === 'code') {
         return !!block.code && block.code.trim().length > 0;

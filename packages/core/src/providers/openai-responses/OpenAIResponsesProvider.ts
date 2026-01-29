@@ -569,6 +569,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
     const includeReasoningInContext =
       options.settings?.get('reasoning.includeInContext') !== false;
 
+    // Counter for generating unique reasoning IDs within a single request
+    let reasoningIdCounter = 0;
+
     for (const c of patchedContent) {
       if (c.speaker === 'human') {
         const textBlocks = c.blocks.filter(
@@ -597,7 +600,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
             if (thinkingBlock.encryptedContent) {
               input.push({
                 type: 'reasoning',
-                id: `reasoning_${Date.now()}`,
+                id: `reasoning_${Date.now()}_${reasoningIdCounter++}`,
                 summary: [
                   { type: 'summary_text', text: thinkingBlock.thought },
                 ],
@@ -790,8 +793,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     if (responsesTools && responsesTools.length > 0) {
       request.tools = responsesTools;
-      // Per codex-rs: always set tool_choice and parallel_tool_calls when tools are present
-      request.tool_choice = 'auto';
+      // Per codex-rs: set tool_choice when tools are present, respecting user-specified values
+      // Only default to 'auto' if not already set (e.g., 'required' or a specific function name)
+      if (!request.tool_choice) {
+        request.tool_choice = 'auto';
+      }
       request.parallel_tool_calls = true;
     }
 
@@ -915,8 +921,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
     const responsesURL = `${baseURL}/responses`;
     const requestBody = JSON.stringify(request);
 
-    // Debug: Dump FULL request body for analysis
-    this.logger.debug(() => `Request body FULL: ${requestBody}`);
+    // Debug: Log request summary (keys only to avoid PII/secret exposure)
+    this.logger.debug(
+      () => `Request body keys: ${JSON.stringify(Object.keys(request))}`,
+    );
 
     // @plan PLAN-20251214-ISSUE160.P05
     // Codex API requires Content-Type without charset suffix

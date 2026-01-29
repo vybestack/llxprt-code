@@ -195,13 +195,10 @@ export async function* parseResponsesStream(
 
               case 'response.reasoning_text.done': {
                 // Yield accumulated reasoning as a single block (if not already emitted)
-                // Only emit if includeThinkingInResponse is true (respects reasoning.includeInResponse)
+                // When includeThinkingInResponse is false, still emit but with isHidden: true
+                // This preserves encrypted content for round-trip while hiding UI display
                 const thoughtContent = (event.text || reasoningText).trim();
-                if (
-                  includeThinkingInResponse &&
-                  thoughtContent &&
-                  !emittedThoughts.has(thoughtContent)
-                ) {
+                if (thoughtContent && !emittedThoughts.has(thoughtContent)) {
                   emittedThoughts.add(thoughtContent);
                   yield {
                     speaker: 'ai',
@@ -210,6 +207,7 @@ export async function* parseResponsesStream(
                         type: 'thinking',
                         thought: thoughtContent,
                         sourceField: 'reasoning_content',
+                        isHidden: !includeThinkingInResponse,
                       },
                     ],
                   };
@@ -220,15 +218,12 @@ export async function* parseResponsesStream(
 
               case 'response.reasoning_summary_text.done': {
                 // Yield accumulated summary as a single block (if not already emitted)
-                // Only emit if includeThinkingInResponse is true (respects reasoning.includeInResponse)
+                // When includeThinkingInResponse is false, still emit but with isHidden: true
+                // This preserves encrypted content for round-trip while hiding UI display
                 const summaryContent = (
                   event.text || reasoningSummaryText
                 ).trim();
-                if (
-                  includeThinkingInResponse &&
-                  summaryContent &&
-                  !emittedThoughts.has(summaryContent)
-                ) {
+                if (summaryContent && !emittedThoughts.has(summaryContent)) {
                   emittedThoughts.add(summaryContent);
                   yield {
                     speaker: 'ai',
@@ -237,6 +232,7 @@ export async function* parseResponsesStream(
                         type: 'thinking',
                         thought: summaryContent,
                         sourceField: 'reasoning_content',
+                        isHidden: !includeThinkingInResponse,
                       },
                     ],
                   };
@@ -303,17 +299,15 @@ export async function* parseResponsesStream(
 
                   const finalThought = thoughtText.trim();
                   // Only emit if not already emitted (dedupe against reasoning_text.done etc.)
-                  // Only emit if includeThinkingInResponse is true (respects reasoning.includeInResponse)
-                  if (
-                    includeThinkingInResponse &&
-                    finalThought &&
-                    !emittedThoughts.has(finalThought)
-                  ) {
+                  // When includeThinkingInResponse is false, still emit but with isHidden: true
+                  // This preserves encrypted content for round-trip while hiding UI display
+                  if (finalThought && !emittedThoughts.has(finalThought)) {
                     emittedThoughts.add(finalThought);
                     const baseReasoningBlock: ContentBlock = {
                       type: 'thinking',
                       thought: finalThought,
                       sourceField: 'reasoning_content',
+                      isHidden: !includeThinkingInResponse,
                     };
                     const hasEncryptedContent = Boolean(
                       event.item?.encrypted_content,
@@ -385,42 +379,43 @@ export async function* parseResponsesStream(
               case 'response.completed':
               case 'response.done': {
                 // Fallback: emit any remaining reasoning that wasn't emitted via other events
-                // Only emit if not already emitted (dedupe) and includeThinkingInResponse is true
-                if (includeThinkingInResponse) {
-                  const remainingReasoning = reasoningText.trim();
-                  if (
-                    remainingReasoning &&
-                    !emittedThoughts.has(remainingReasoning)
-                  ) {
-                    emittedThoughts.add(remainingReasoning);
-                    yield {
-                      speaker: 'ai',
-                      blocks: [
-                        {
-                          type: 'thinking',
-                          thought: remainingReasoning,
-                          sourceField: 'reasoning_content',
-                        },
-                      ],
-                    };
-                  }
-                  const remainingSummary = reasoningSummaryText.trim();
-                  if (
-                    remainingSummary &&
-                    !emittedThoughts.has(remainingSummary)
-                  ) {
-                    emittedThoughts.add(remainingSummary);
-                    yield {
-                      speaker: 'ai',
-                      blocks: [
-                        {
-                          type: 'thinking',
-                          thought: remainingSummary,
-                          sourceField: 'reasoning_content',
-                        },
-                      ],
-                    };
-                  }
+                // When includeThinkingInResponse is false, still emit but with isHidden: true
+                // This preserves encrypted content for round-trip while hiding UI display
+                const remainingReasoning = reasoningText.trim();
+                if (
+                  remainingReasoning &&
+                  !emittedThoughts.has(remainingReasoning)
+                ) {
+                  emittedThoughts.add(remainingReasoning);
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'thinking',
+                        thought: remainingReasoning,
+                        sourceField: 'reasoning_content',
+                        isHidden: !includeThinkingInResponse,
+                      },
+                    ],
+                  };
+                }
+                const remainingSummary = reasoningSummaryText.trim();
+                if (
+                  remainingSummary &&
+                  !emittedThoughts.has(remainingSummary)
+                ) {
+                  emittedThoughts.add(remainingSummary);
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'thinking',
+                        thought: remainingSummary,
+                        sourceField: 'reasoning_content',
+                        isHidden: !includeThinkingInResponse,
+                      },
+                    ],
+                  };
                 }
                 reasoningText = '';
                 reasoningSummaryText = '';

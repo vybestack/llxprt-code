@@ -744,104 +744,104 @@ describe('runNonInteractive', () => {
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('file.txt');
   });
-});
 
-it.skip('should accumulate multiple Thought events and flush once on content boundary', async () => {
-  const thoughtEvent1: ServerGeminiStreamEvent = {
-    type: GeminiEventType.Thought,
-    value: {
-      subject: 'First',
-      description: 'thought',
-    },
-  };
-  const thoughtEvent2: ServerGeminiStreamEvent = {
-    type: GeminiEventType.Thought,
-    value: {
-      subject: 'Second',
-      description: 'thought',
-    },
-  };
-  const contentEvent: ServerGeminiStreamEvent = {
-    type: GeminiEventType.Content,
-    value: 'Response text',
-  };
-  const finishedEvent: ServerGeminiStreamEvent = {
-    type: GeminiEventType.Finished,
-    value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
-  };
+  it.skip('should accumulate multiple Thought events and flush once on content boundary', async () => {
+    const thoughtEvent1: ServerGeminiStreamEvent = {
+      type: GeminiEventType.Thought,
+      value: {
+        subject: 'First',
+        description: 'thought',
+      },
+    };
+    const thoughtEvent2: ServerGeminiStreamEvent = {
+      type: GeminiEventType.Thought,
+      value: {
+        subject: 'Second',
+        description: 'thought',
+      },
+    };
+    const contentEvent: ServerGeminiStreamEvent = {
+      type: GeminiEventType.Content,
+      value: 'Response text',
+    };
+    const finishedEvent: ServerGeminiStreamEvent = {
+      type: GeminiEventType.Finished,
+      value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
+    };
 
-  mockGeminiClient.sendMessageStream.mockReturnValueOnce(
-    createStreamFromEvents([
-      thoughtEvent1,
-      thoughtEvent2,
-      contentEvent,
-      finishedEvent,
-    ]),
-  );
+    mockGeminiClient.sendMessageStream.mockReturnValueOnce(
+      createStreamFromEvents([
+        thoughtEvent1,
+        thoughtEvent2,
+        contentEvent,
+        finishedEvent,
+      ]),
+    );
 
-  await runNonInteractive(
-    mockConfig,
-    mockSettings,
-    'test query',
-    'test-prompt-id',
-  );
+    await runNonInteractive(
+      mockConfig,
+      mockSettings,
+      'test query',
+      'test-prompt-id',
+    );
 
-  const thinkingOutputs = processStdoutSpy.mock.calls.filter(
-    ([output]: [string]) => output.includes('<think>'),
-  );
+    const thinkingOutputs = processStdoutSpy.mock.calls.filter(
+      ([output]: [string]) => output.includes('<think>'),
+    );
 
-  expect(thinkingOutputs).toHaveLength(1);
-  const thinkingText = thinkingOutputs[0][0];
-  expect(thinkingText).toContain('First thought');
-  expect(thinkingText).toContain('Second thought');
-});
+    expect(thinkingOutputs).toHaveLength(1);
+    const thinkingText = thinkingOutputs[0][0];
+    expect(thinkingText).toContain('First thought');
+    expect(thinkingText).toContain('Second thought');
+  });
 
-it.skip('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
-  const thoughtEvent1: ServerGeminiStreamEvent = {
-    type: GeminiEventType.Thought,
-    value: {
-      subject: 'Analyzing',
-      description: '',
-    },
-  };
-  const thoughtEvent2: ServerGeminiStreamEvent = {
-    type: GeminiEventType.Thought,
-    value: {
-      subject: 'request',
-      description: '',
-    },
-  };
-  const contentEvent: ServerGeminiStreamEvent = {
-    type: GeminiEventType.Content,
-    value: 'Response',
-  };
-  const finishedEvent: ServerGeminiStreamEvent = {
-    type: GeminiEventType.Finished,
-    value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
-  };
+  it.skip('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
+    const thoughtEvent1: ServerGeminiStreamEvent = {
+      type: GeminiEventType.Thought,
+      value: {
+        subject: 'Analyzing',
+        description: '',
+      },
+    };
+    const thoughtEvent2: ServerGeminiStreamEvent = {
+      type: GeminiEventType.Thought,
+      value: {
+        subject: 'request',
+        description: '',
+      },
+    };
+    const contentEvent: ServerGeminiStreamEvent = {
+      type: GeminiEventType.Content,
+      value: 'Response',
+    };
+    const finishedEvent: ServerGeminiStreamEvent = {
+      type: GeminiEventType.Finished,
+      value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
+    };
 
-  mockGeminiClient.sendMessageStream.mockReturnValueOnce(
-    createStreamFromEvents([
-      thoughtEvent1,
-      thoughtEvent2,
-      contentEvent,
-      finishedEvent,
-    ]),
-  );
+    mockGeminiClient.sendMessageStream.mockReturnValueOnce(
+      createStreamFromEvents([
+        thoughtEvent1,
+        thoughtEvent2,
+        contentEvent,
+        finishedEvent,
+      ]),
+    );
 
-  await runNonInteractive(
-    mockConfig,
-    mockSettings,
-    'test query',
-    'test-prompt-id',
-  );
+    await runNonInteractive(
+      mockConfig,
+      mockSettings,
+      'test query',
+      'test-prompt-id',
+    );
 
-  const thinkingOutputs = processStdoutSpy.mock.calls.filter(
-    ([output]: [string]) => output.includes('<think>'),
-  );
+    const thinkingOutputs = processStdoutSpy.mock.calls.filter(
+      ([output]: [string]) => output.includes('<think>'),
+    );
 
-  expect(thinkingOutputs).toHaveLength(1);
-  const thinkingText = thinkingOutputs[0][0];
-  const thoughtCount = (thinkingText.match(/Analyzing/g) || []).length;
-  expect(thoughtCount).toBe(1);
+    expect(thinkingOutputs).toHaveLength(1);
+    const thinkingText = thinkingOutputs[0][0];
+    const thoughtCount = (thinkingText.match(/Analyzing/g) || []).length;
+    expect(thoughtCount).toBe(1);
+  });
 });
