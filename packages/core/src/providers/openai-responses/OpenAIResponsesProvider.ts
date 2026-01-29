@@ -598,12 +598,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
         if (includeReasoningInContext) {
           for (const thinkingBlock of thinkingBlocks) {
             if (thinkingBlock.encryptedContent) {
+              // Guard against undefined/empty thought - use empty string as fallback
+              // to avoid creating invalid { type: 'summary_text', text: undefined }
+              const summaryText = thinkingBlock.thought ?? '';
               input.push({
                 type: 'reasoning',
                 id: `reasoning_${Date.now()}_${reasoningIdCounter++}`,
-                summary: [
-                  { type: 'summary_text', text: thinkingBlock.thought },
-                ],
+                summary: [{ type: 'summary_text', text: summaryText }],
                 encrypted_content: thinkingBlock.encryptedContent,
               });
             }
