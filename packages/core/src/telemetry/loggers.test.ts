@@ -74,8 +74,6 @@ import { GenerateContentResponseUsageMetadata } from '@google/genai';
 import * as uiTelemetry from './uiTelemetry.js';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import { CallableTool } from '../tools/tool.js';
-import { AnyToolInvocation } from '../tools/invocation.js';
-import { CompletedToolCall } from '../tools/completed-tool-call.js';
 
 // Mock ClearcutLogger to avoid import errors
 const mockClearcutLogger = {

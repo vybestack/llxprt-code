@@ -26,6 +26,7 @@ const greenScreenColors: ColorsTheme = {
   Comment: '#6a9955',
   DimComment: '#4a7035',
   Gray: '#6a9955',
+  DarkGray: '#3a5945',
   GradientColors: ['#00ff00', '#6a9955'],
 };
 

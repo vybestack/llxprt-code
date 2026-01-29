@@ -42,7 +42,6 @@ describe('Todo Continuation Integration Tests', () => {
     id,
     content,
     status,
-    priority: 'medium',
   });
 
   beforeEach(async () => {
@@ -619,20 +618,17 @@ describe('Todo Continuation Integration Tests', () => {
           id: '1',
           content: 'Valid todo',
           status: 'pending',
-          priority: 'medium',
         } as Todo,
         {
           id: '2',
           content: 'Todo with special chars: !@#$%^&*()',
           status: 'in_progress',
-          priority: 'high',
         } as Todo,
         {
           id: '3',
           content:
             'Very long todo content that spans multiple lines and contains various characters',
           status: 'completed',
-          priority: 'low',
         } as Todo,
       ];
 
@@ -644,7 +640,7 @@ describe('Todo Continuation Integration Tests', () => {
 
       // Test that TodoStore validates malformed todos (expected to throw)
       const malformedTodos = [
-        { id: '1', status: 'pending', priority: 'low' } as unknown as Todo, // Missing content
+        { id: '1', status: 'pending' } as unknown as Todo, // Missing content
       ];
 
       // TodoStore should validate and throw for invalid data

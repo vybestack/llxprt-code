@@ -21,6 +21,7 @@ import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
 } from '../../settings/ephemeralSettings.js';
+import { resolveAlias } from '@vybestack/llxprt-code-core';
 import {
   filterStrings,
   filterCompletions,
@@ -755,8 +756,9 @@ export const setCommand: SlashCommand = {
         };
       }
 
+      const resolvedTargetKey = resolveAlias(targetKey);
       const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
-      if (!validEphemeralKeys.includes(targetKey)) {
+      if (!validEphemeralKeys.includes(resolvedTargetKey)) {
         return {
           type: 'message',
           messageType: 'error',
@@ -764,7 +766,7 @@ export const setCommand: SlashCommand = {
         };
       }
 
-      if (targetKey === 'custom-headers' && subKey) {
+      if (resolvedTargetKey === 'custom-headers' && subKey) {
         const currentHeaders = runtime.getEphemeralSettings()[
           'custom-headers'
         ] as Record<string, unknown> | undefined;

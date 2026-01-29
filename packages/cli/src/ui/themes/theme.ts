@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { isValidColor, resolveColor } from './color-utils.js';
-import { SemanticColors } from './semantic-tokens.js';
+import { isValidColor, resolveColor, interpolateColor } from './color-utils.js';
 
 // Type for syntax highlighter theme styles
 // These come from react-syntax-highlighter and include additional properties
@@ -49,18 +48,98 @@ export interface ColorsTheme {
   Comment: string;
   DimComment: string;
   Gray: string;
+  DarkGray: string;
   GradientColors?: string[];
 }
 
-export interface CustomTheme extends ColorsTheme {
+export interface SemanticColors {
+  text: {
+    primary: string;
+    secondary: string;
+    link: string;
+    accent: string;
+    response: string;
+  };
+  background: {
+    primary: string;
+    diff: {
+      added: string;
+      removed: string;
+    };
+  };
+  border: {
+    default: string;
+    focused: string;
+  };
+  ui: {
+    comment: string;
+    symbol: string;
+    dark: string;
+    gradient: string[] | undefined;
+  };
+  status: {
+    error: string;
+    success: string;
+    warning: string;
+  };
+}
+
+export interface CustomTheme {
   type: 'custom';
   name: string;
+
+  text?: {
+    primary?: string;
+    secondary?: string;
+    link?: string;
+    accent?: string;
+    response?: string;
+  };
+  background?: {
+    primary?: string;
+    diff?: {
+      added?: string;
+      removed?: string;
+    };
+  };
+  border?: {
+    default?: string;
+    focused?: string;
+  };
+  ui?: {
+    comment?: string;
+    symbol?: string;
+    gradient?: string[];
+  };
+  status?: {
+    error?: string;
+    success?: string;
+    warning?: string;
+  };
+
+  // Legacy properties (all optional)
+  Background?: string;
+  Foreground?: string;
+  LightBlue?: string;
+  AccentBlue?: string;
+  AccentPurple?: string;
+  AccentCyan?: string;
+  AccentGreen?: string;
+  AccentYellow?: string;
+  AccentRed?: string;
+  DiffAdded?: string;
+  DiffRemoved?: string;
+  Comment?: string;
+  DimComment?: string;
+  Gray?: string;
+  DarkGray?: string;
+  GradientColors?: string[];
 }
 
 export const lightTheme: ColorsTheme = {
   type: 'light',
   Background: '#FAFAFA',
-  Foreground: '',
+  Foreground: '#383A42',
   LightBlue: '#89BDCD',
   AccentBlue: '#3B82F6',
   AccentPurple: '#8B5CF6',
@@ -73,13 +152,14 @@ export const lightTheme: ColorsTheme = {
   Comment: '#008000',
   DimComment: '#006000',
   Gray: '#97a0b0',
+  DarkGray: interpolateColor('#97a0b0', '#FAFAFA', 0.5),
   GradientColors: ['#4796E4', '#847ACE', '#C3677F'],
 };
 
 export const darkTheme: ColorsTheme = {
   type: 'dark',
   Background: '#1E1E2E',
-  Foreground: '',
+  Foreground: '#CDD6F4',
   LightBlue: '#ADD8E6',
   AccentBlue: '#89B4FA',
   AccentPurple: '#CBA6F7',
@@ -92,6 +172,7 @@ export const darkTheme: ColorsTheme = {
   Comment: '#6C7086',
   DimComment: '#4A4D5E',
   Gray: '#6C7086',
+  DarkGray: interpolateColor('#6C7086', '#1E1E2E', 0.5),
   GradientColors: ['#4796E4', '#847ACE', '#C3677F'],
 };
 
@@ -111,6 +192,7 @@ export const ansiTheme: ColorsTheme = {
   Comment: 'gray',
   DimComment: '#5a5a5a',
   Gray: 'gray',
+  DarkGray: 'gray',
 };
 
 export class Theme {
@@ -144,6 +226,7 @@ export class Theme {
         secondary: this.colors.Gray,
         link: this.colors.AccentBlue,
         accent: this.colors.AccentPurple,
+        response: this.colors.Foreground,
       },
       background: {
         primary: this.colors.Background,
@@ -159,6 +242,7 @@ export class Theme {
       ui: {
         comment: this.colors.Comment,
         symbol: this.colors.Gray,
+        dark: this.colors.DarkGray,
         gradient: this.colors.GradientColors,
       },
       status: {
@@ -233,6 +317,34 @@ export class Theme {
  * @returns A new Theme instance.
  */
 export function createCustomTheme(customTheme: CustomTheme): Theme {
+  const colors: ColorsTheme = {
+    type: 'custom',
+    Background: customTheme.background?.primary ?? customTheme.Background ?? '',
+    Foreground: customTheme.text?.primary ?? customTheme.Foreground ?? '',
+    LightBlue: customTheme.text?.link ?? customTheme.LightBlue ?? '',
+    AccentBlue: customTheme.text?.link ?? customTheme.AccentBlue ?? '',
+    AccentPurple: customTheme.text?.accent ?? customTheme.AccentPurple ?? '',
+    AccentCyan: customTheme.text?.link ?? customTheme.AccentCyan ?? '',
+    AccentGreen: customTheme.status?.success ?? customTheme.AccentGreen ?? '',
+    AccentYellow: customTheme.status?.warning ?? customTheme.AccentYellow ?? '',
+    AccentRed: customTheme.status?.error ?? customTheme.AccentRed ?? '',
+    DiffAdded:
+      customTheme.background?.diff?.added ?? customTheme.DiffAdded ?? '',
+    DiffRemoved:
+      customTheme.background?.diff?.removed ?? customTheme.DiffRemoved ?? '',
+    Comment: customTheme.ui?.comment ?? customTheme.Comment ?? '',
+    DimComment: customTheme.ui?.comment ?? customTheme.DimComment ?? '',
+    Gray: customTheme.text?.secondary ?? customTheme.Gray ?? '',
+    DarkGray:
+      customTheme.DarkGray ??
+      interpolateColor(
+        customTheme.text?.secondary ?? customTheme.Gray ?? '',
+        customTheme.background?.primary ?? customTheme.Background ?? '',
+        0.5,
+      ),
+    GradientColors: customTheme.ui?.gradient ?? customTheme.GradientColors,
+  };
+
   // Generate CSS properties mappings based on the custom theme colors
   const rawMappings: Record<string, HighlightJSStyle> = {
     hljs: {
@@ -371,7 +483,48 @@ export function createCustomTheme(customTheme: CustomTheme): Theme {
     },
   };
 
-  return new Theme(customTheme.name, 'custom', rawMappings, customTheme);
+  const semanticColors: SemanticColors = {
+    text: {
+      primary: customTheme.text?.primary ?? colors.Foreground,
+      secondary: customTheme.text?.secondary ?? colors.Gray,
+      link: customTheme.text?.link ?? colors.AccentBlue,
+      accent: customTheme.text?.accent ?? colors.AccentPurple,
+      response:
+        customTheme.text?.response ??
+        customTheme.text?.primary ??
+        colors.Foreground,
+    },
+    background: {
+      primary: customTheme.background?.primary ?? colors.Background,
+      diff: {
+        added: customTheme.background?.diff?.added ?? colors.DiffAdded,
+        removed: customTheme.background?.diff?.removed ?? colors.DiffRemoved,
+      },
+    },
+    border: {
+      default: customTheme.border?.default ?? colors.Gray,
+      focused: customTheme.border?.focused ?? colors.AccentBlue,
+    },
+    ui: {
+      comment: customTheme.ui?.comment ?? colors.Comment,
+      symbol: customTheme.ui?.symbol ?? colors.Gray,
+      dark: colors.DarkGray,
+      gradient: customTheme.ui?.gradient ?? colors.GradientColors,
+    },
+    status: {
+      error: customTheme.status?.error ?? colors.AccentRed,
+      success: customTheme.status?.success ?? colors.AccentGreen,
+      warning: customTheme.status?.warning ?? colors.AccentYellow,
+    },
+  };
+
+  return new Theme(
+    customTheme.name,
+    'custom',
+    rawMappings,
+    colors,
+    semanticColors,
+  );
 }
 
 /**

@@ -82,6 +82,8 @@ describe('OAuthManager bucket failover integration (CLI)', () => {
       listProviders: vi.fn(async () => []),
       listBuckets: vi.fn(async () => profileBucketsRef.current),
       getBucketStats: vi.fn(async () => null),
+      acquireRefreshLock: vi.fn(async () => true),
+      releaseRefreshLock: vi.fn(async () => undefined),
     };
 
     oauthManager = new OAuthManager(tokenStore);

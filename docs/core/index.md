@@ -8,6 +8,7 @@ LLxprt Code's core package (`packages/core`) is the backend portion of LLxprt Co
 - **[Provider interface](./provider-interface.md):** API reference for implementing providers against the stateless runtime.
 - **[Core tools API](./tools-api.md):** Information on how tools are defined, registered, and used by the core.
 - **[Memory Import Processor](./memport.md):** Documentation for the modular LLXPRT.md import feature using @file.md syntax.
+- **[Policy Engine](./policy-engine.md):** Use the Policy Engine for fine-grained control over tool execution.
 
 ## Role of the core
 

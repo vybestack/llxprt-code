@@ -8,6 +8,7 @@ import { isDevelopment } from '../utils/installationInfo.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { ICommandLoader } from './types.js';
+import type { ExtensionEnablementManager } from '../config/extensions/extensionEnablement.js';
 import { aboutCommand } from '../ui/commands/aboutCommand.js';
 import { authCommand } from '../ui/commands/authCommand.js';
 import { bugCommand } from '../ui/commands/bugCommand.js';
@@ -59,10 +60,22 @@ import { dumpcontextCommand } from '../ui/commands/dumpcontextCommand.js';
  * of the Gemini CLI application.
  */
 export class BuiltinCommandLoader implements ICommandLoader {
-  constructor(private config: Config | null) {}
+  private extensionEnablementManager?: ExtensionEnablementManager;
+
+  constructor(private config: Config | null) {
+    // Access extensionEnablementManager if available on config
+    if (config && 'extensionEnablementManager' in config) {
+      this.extensionEnablementManager = (
+        config as Config & {
+          extensionEnablementManager?: ExtensionEnablementManager;
+        }
+      ).extensionEnablementManager;
+    }
+  }
 
   /**
    * Discovers and returns all built-in slash commands.
+   * Filters out commands from disabled extensions.
    * @param signal An AbortSignal to allow cancellation.
    * @returns A promise that resolves to an array of SlashCommand objects.
    *
@@ -70,7 +83,27 @@ export class BuiltinCommandLoader implements ICommandLoader {
    * @requirement:REQ-010
    */
   async loadCommands(_signal: AbortSignal): Promise<SlashCommand[]> {
-    return this.registerBuiltinCommands();
+    const allCommands = this.registerBuiltinCommands();
+
+    // Filter out commands from disabled extensions
+    if (this.extensionEnablementManager) {
+      return allCommands.filter((cmd) => {
+        // Built-in commands (no extensionName) are always included
+        if (!cmd.extensionName) {
+          return true;
+        }
+
+        // Extension commands are filtered by enabled state
+        // Note: isEnabled requires a path, but for session-based enablement
+        // we use an empty string as the path since session state doesn't depend on path
+        return this.extensionEnablementManager!.isEnabled(
+          cmd.extensionName,
+          '',
+        );
+      });
+    }
+
+    return allCommands;
   }
 
   /**

@@ -57,7 +57,6 @@ describe('TodoWrite tool', () => {
         id: '1',
         content: 'Copy README.md to ./tmp/README.jp.md using shell command',
         status: 'pending',
-        priority: 'high',
       },
     ]);
     writeTodosMock.mockResolvedValue(undefined);
@@ -85,14 +84,12 @@ describe('TodoWrite tool', () => {
           id: '1',
           content: 'Copy README.md to ./tmp/README.jp.md using shell command',
           status: 'in_progress',
-          priority: 'high',
         },
         {
           id: '2',
           content:
             'Edit ./tmp/README.jp.md to translate text to Japanese (keeping code blocks in English)',
           status: 'pending',
-          priority: 'high',
         },
       ],
     };
@@ -128,7 +125,6 @@ describe('TodoWrite tool', () => {
         id: undefined,
         content: 'Create initial translation plan',
         status: 'pending',
-        priority: 'high',
         subtasks: [
           {
             id: undefined,
@@ -140,7 +136,6 @@ describe('TodoWrite tool', () => {
         id: 'existing-id',
         content: 'Verify translated document formatting',
         status: 'pending',
-        priority: 'medium',
         subtasks: [],
       },
     ] as unknown as Todo[];

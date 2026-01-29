@@ -22,15 +22,20 @@ const mockGetPty = vi.hoisted(() => vi.fn());
 vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
-vi.mock('child_process', () => ({
-  spawn: mockCpSpawn,
-}));
+vi.mock('child_process', async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import('child_process');
+  return {
+    ...actual,
+    spawn: mockCpSpawn,
+  };
+});
 vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
 vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
+    homedir: () => '/tmp/test-home',
     constants: {
       signals: {
         SIGTERM: 15,
@@ -39,6 +44,7 @@ vi.mock('os', () => ({
     },
   },
   platform: mockPlatform,
+  homedir: () => '/tmp/test-home',
   constants: {
     signals: {
       SIGTERM: 15,

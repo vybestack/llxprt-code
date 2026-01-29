@@ -54,7 +54,10 @@ function getToolResultOutput(info: ToolCallResponseInfo): string {
   }
   // FileDiff object - format as diff
   const diff = info.resultDisplay;
-  return `File: ${diff.fileName}\n${diff.fileDiff}`;
+  if ('fileDiff' in diff) {
+    return `File: ${diff.fileName}\n${diff.fileDiff}`;
+  }
+  return `File: ${diff.fileName}`;
 }
 
 /**

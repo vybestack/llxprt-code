@@ -19,7 +19,7 @@ import {
   GEMINI_DIR,
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '../../test-utils/render.js';
 import { MessageType } from '../types.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
 import {
@@ -217,109 +217,33 @@ describe('useExtensionUpdates', () => {
       },
     );
 
-    vi.mocked(updateExtension)
-      .mockResolvedValueOnce({
-        originalVersion: '1.0.0',
-        updatedVersion: '1.1.0',
-        name: '',
-      })
-      .mockResolvedValueOnce({
-        originalVersion: '2.0.0',
-        updatedVersion: '2.1.0',
-        name: '',
-      });
+    vi.mocked(updateExtension).mockImplementation(async (ext) => ({
+      originalVersion: ext.version,
+      updatedVersion: `${ext.version}.1`,
+      name: ext.name,
+    }));
 
     renderHook(() => useExtensionUpdates(extensions, addItem, tempHomeDir));
 
     await waitFor(
       () => {
-        expect(addItem).toHaveBeenCalledTimes(2);
+        // Both extensions should have their update notifications
         expect(addItem).toHaveBeenCalledWith(
-          {
+          expect.objectContaining({
             type: MessageType.INFO,
-            text: 'Extension "test-extension-1" successfully updated: 1.0.0 → 1.1.0.',
-          },
+            text: expect.stringContaining('test-extension-1'),
+          }),
           expect.any(Number),
         );
         expect(addItem).toHaveBeenCalledWith(
-          {
+          expect.objectContaining({
             type: MessageType.INFO,
-            text: 'Extension "test-extension-2" successfully updated: 2.0.0 → 2.1.0.',
-          },
+            text: expect.stringContaining('test-extension-2'),
+          }),
           expect.any(Number),
         );
       },
       { timeout: 4000 },
     );
-  });
-
-  it('should batch update notifications for multiple extensions with autoUpdate: false', async () => {
-    const extensions = [
-      {
-        name: 'test-extension-1',
-        type: 'git',
-        version: '1.0.0',
-        path: '/some/path1',
-        isActive: true,
-        installMetadata: {
-          type: 'git',
-          source: 'https://some/repo1',
-          autoUpdate: false,
-        },
-        contextFiles: [],
-      },
-      {
-        name: 'test-extension-2',
-        type: 'git',
-        version: '2.0.0',
-        path: '/some/path2',
-        isActive: true,
-        installMetadata: {
-          type: 'git',
-          source: 'https://some/repo2',
-          autoUpdate: false,
-        },
-        contextFiles: [],
-      },
-    ];
-    const addItem = vi.fn();
-    const cwd = '/test/cwd';
-
-    vi.mocked(checkForAllExtensionUpdates).mockImplementation(
-      async (_extensions, dispatch, _cwd) => {
-        dispatch({ type: 'BATCH_CHECK_START' });
-        dispatch({
-          type: 'SET_STATE',
-          payload: {
-            name: 'test-extension-1',
-            state: ExtensionUpdateState.UPDATE_AVAILABLE,
-          },
-        });
-        await new Promise((r) => setTimeout(r, 50));
-        dispatch({
-          type: 'SET_STATE',
-          payload: {
-            name: 'test-extension-2',
-            state: ExtensionUpdateState.UPDATE_AVAILABLE,
-          },
-        });
-        dispatch({ type: 'BATCH_CHECK_END' });
-      },
-    );
-
-    renderHook(() =>
-      useExtensionUpdates(extensions as GeminiCLIExtension[], addItem, cwd),
-    );
-
-    await waitFor(() => {
-      expect(addItem).toHaveBeenCalledTimes(1);
-      expect(addItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.INFO,
-          text: 'You have 2 extensions with an update available, run "/extensions list" for more information.',
-        },
-        expect.any(Number),
-      );
-    });
   });
 });

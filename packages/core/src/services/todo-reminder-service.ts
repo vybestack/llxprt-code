@@ -40,7 +40,6 @@ export class TodoReminderService {
       stateChange.currentTodos.map((todo) => ({
         content: todo.content,
         status: todo.status,
-        priority: todo.priority,
         id: todo.id,
       })),
     );

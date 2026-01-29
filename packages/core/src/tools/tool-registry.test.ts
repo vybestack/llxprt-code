@@ -303,6 +303,51 @@ describe('ToolRegistry', () => {
     });
   });
 
+  describe('sortTools', () => {
+    it('should sort tools by priority: built-in, discovered, then MCP (by server name)', () => {
+      const builtIn1 = new MockTool('builtin-1');
+      const builtIn2 = new MockTool('builtin-2');
+      const discovered1 = new DiscoveredTool(
+        config,
+        'discovered-1',
+        'desc',
+        {},
+      );
+      const mockCallable = {} as CallableTool;
+      const mcpZebra = new DiscoveredMCPTool(
+        mockCallable,
+        'zebra-server',
+        'mcp-zebra',
+        'desc',
+        {},
+      );
+      const mcpApple = new DiscoveredMCPTool(
+        mockCallable,
+        'apple-server',
+        'mcp-apple',
+        'desc',
+        {},
+      );
+
+      // Register in mixed order
+      toolRegistry.registerTool(mcpZebra);
+      toolRegistry.registerTool(discovered1);
+      toolRegistry.registerTool(builtIn1);
+      toolRegistry.registerTool(mcpApple);
+      toolRegistry.registerTool(builtIn2);
+
+      toolRegistry.sortTools();
+
+      expect(toolRegistry.getAllToolNames()).toEqual([
+        'builtin-1',
+        'builtin-2',
+        'discovered-1',
+        generateMcpToolName('apple-server', 'mcp-apple'),
+        generateMcpToolName('zebra-server', 'mcp-zebra'),
+      ]);
+    });
+  });
+
   describe('discoverTools', () => {
     it('should will preserve tool parametersJsonSchema during discovery from command', async () => {
       const discoveryCommand = 'my-discovery-command';
@@ -449,10 +494,14 @@ describe('ToolRegistry', () => {
       expect(result.llmContent).toContain('Exit Code: 1');
     });
 
-    it('should discover tools using MCP servers defined in getMcpServers', async () => {
+    // NOTE: MCP discovery was decoupled from ToolRegistry in the Extensions MCP Refactor.
+    // MCP servers are now discovered via McpClientManager.startConfiguredMcpServers()
+    // which is called separately by the extension loading system, not by ToolRegistry.
+    // This test is skipped because discoverAllTools no longer invokes MCP discovery.
+    it.skip('should discover tools using MCP servers defined in getMcpServers', async () => {
       const discoverSpy = vi.spyOn(
         McpClientManager.prototype,
-        'discoverAllMcpTools',
+        'startConfiguredMcpServers',
       );
       mockConfigGetToolDiscoveryCommand.mockReturnValue(undefined);
       vi.spyOn(config, 'getMcpServerCommand').mockReturnValue(undefined);

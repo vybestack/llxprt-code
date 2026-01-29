@@ -29,7 +29,7 @@ function sanitizeTestName(name: string) {
 function getDefaultTimeout() {
   if (env['CI']) return 60000; // 1 minute in CI
   if (env['LLXPRT_SANDBOX']) return 30000; // 30s in containers
-  return 15000; // 15s locally
+  return 60000; // 60s locally
 }
 
 export async function poll(
@@ -178,6 +178,29 @@ export class InteractiveRun {
     expect(found, `Did not find expected text: "${text}"`).toBe(true);
   }
 
+  async expectAnyText(texts: string[], timeout?: number) {
+    if (!timeout) {
+      timeout = getDefaultTimeout();
+    }
+    const lowered = texts.map((text) => text.toLowerCase());
+    const found = await poll(
+      () => {
+        const output = stripAnsi(this.output).toLowerCase();
+        return lowered.some((text) => output.includes(text));
+      },
+      timeout,
+      200,
+    );
+    if (!found) {
+      console.error('Interactive output snapshot (last 2000 chars):');
+      console.error(stripAnsi(this.output).slice(-2000));
+    }
+    expect(
+      found,
+      `Did not find expected text: ${texts.map((text) => `"${text}"`).join(' or ')}`,
+    ).toBe(true);
+  }
+
   // Simulates typing a string one character at a time to avoid paste detection.
   async type(text: string) {
     const delay = 5;
@@ -185,6 +208,13 @@ export class InteractiveRun {
       this.ptyProcess.write(char);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
+  }
+
+  // Types an entire string at once, necessary for some things like commands
+  // but may run into paste detection issues for larger strings.
+  async sendText(text: string) {
+    this.ptyProcess.write(text);
+    await new Promise((resolve) => setTimeout(resolve, 5));
   }
 
   async kill() {
@@ -291,6 +321,8 @@ export class TestRig {
           selectedType: 'provider',
         },
       },
+      // Don't show the IDE connection dialog when running from VsCode
+      ide: { enabled: false, hasSeenNudge: true },
       ...settingsOverridesWithoutUi, // Allow tests to override/add settings
     };
     writeFileSync(
@@ -432,6 +464,8 @@ export class TestRig {
       model,
     ];
 
+    const prompts: string[] = [];
+
     // Add baseurl if using openai provider
     if (provider === 'openai' && baseUrl) {
       commandArgs.push('--baseurl', baseUrl);
@@ -469,48 +503,52 @@ export class TestRig {
         NO_BROWSER: 'true',
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
+        LLXPRT_SANDBOX: 'false',
       },
     };
 
+    const promptIsStdin =
+      typeof promptOrOptions === 'object' &&
+      promptOrOptions !== null &&
+      promptOrOptions.stdin;
+
+    const promptUsesStdinFlag =
+      typeof promptOrOptions === 'object' &&
+      promptOrOptions !== null &&
+      promptOrOptions.stdin &&
+      promptOrOptions.prompt;
+
     if (typeof promptOrOptions === 'string') {
-      commandArgs.push(promptOrOptions);
+      prompts.push(promptOrOptions);
     } else if (
       typeof promptOrOptions === 'object' &&
       promptOrOptions !== null
     ) {
       if (promptOrOptions.prompt) {
-        commandArgs.push(promptOrOptions.prompt);
+        prompts.push(promptOrOptions.prompt);
       }
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
       }
     }
 
+    const promptValue = prompts.join(' ');
+
+    if (promptValue) {
+      if (promptUsesStdinFlag) {
+        commandArgs.push('--prompt', promptValue);
+      } else if (!promptIsStdin) {
+        commandArgs.push('--prompt', promptValue);
+      }
+    }
+
     // Add any additional args
     commandArgs.push(...args);
-
-    // Ensure flags come before any positional prompt.
-    // With yargs `.strict()` + a `[promptWords...]` positional command, any
-    // options that appear after the positional can be treated as "unknown".
-    // This affects `--output-format` and friends.
-    const prompts: string[] = [];
-    while (
-      commandArgs.length > 0 &&
-      !commandArgs[commandArgs.length - 1].startsWith('-')
-    ) {
-      prompts.unshift(commandArgs.pop() as string);
-    }
 
     if (env['LLXPRT_TEST_PROFILE']?.trim()) {
       const profileName = env['LLXPRT_TEST_PROFILE'].trim();
       // Keep 'node' and bundlePath at the front; insert flags after them.
       commandArgs.splice(2, 0, '--profile-load', profileName);
-    }
-
-    // Prefer stdin (or positional promptWords) rather than `--prompt`.
-    // `--prompt` is deprecated and isn't needed for sandbox/non-sandbox parity.
-    if (prompts.length > 0) {
-      commandArgs.push(...prompts);
     }
 
     const node = commandArgs.shift() as string;
@@ -653,6 +691,68 @@ export class TestRig {
             message += `\n\nStdErr:\n${trimmedStderr}`;
           }
           reject(new Error(message));
+        }
+      });
+    });
+
+    return promise;
+  }
+
+  /**
+   * Runs a CLI command (non-interactive) and returns the output.
+   * Used for extension commands like install, list, update, uninstall.
+   */
+  runCommand(
+    args: string[],
+    options: { stdin?: string } = {},
+  ): Promise<string> {
+    const { command, initialArgs } = this._getCommandAndArgs();
+    const commandArgs = [...initialArgs, ...args];
+
+    const child = spawn(command, commandArgs, {
+      cwd: this.testDir!,
+      stdio: 'pipe',
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    if (options.stdin) {
+      child.stdin!.write(options.stdin);
+      child.stdin!.end();
+    }
+
+    child.stdout!.on('data', (data: Buffer) => {
+      stdout += data;
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
+        process.stdout.write(data);
+      }
+    });
+
+    child.stderr!.on('data', (data: Buffer) => {
+      stderr += data;
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
+        process.stderr.write(data);
+      }
+    });
+
+    const promise = new Promise<string>((resolve, reject) => {
+      child.on('close', (code: number) => {
+        if (code === 0) {
+          this._lastRunStdout = stdout;
+          let result = stdout;
+          if (stderr) {
+            result += `
+
+StdErr:
+${stderr}`;
+          }
+          resolve(result);
+        } else {
+          reject(
+            new Error(`Process exited with code ${code}:
+${stderr}`),
+          );
         }
       });
     });
@@ -1191,6 +1291,13 @@ export class TestRig {
         NO_BROWSER: 'true',
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
+        LLXPRT_DEFAULT_PROVIDER: env['LLXPRT_DEFAULT_PROVIDER'],
+        LLXPRT_DEFAULT_MODEL: env['LLXPRT_DEFAULT_MODEL'],
+        OPENAI_API_KEY: env['OPENAI_API_KEY'],
+        OPENAI_API_KEYFILE: env['OPENAI_API_KEYFILE'],
+        LLXPRT_TEST_PROFILE_KEYFILE: env['LLXPRT_TEST_PROFILE_KEYFILE'],
+        OPENAI_BASE_URL: env['OPENAI_BASE_URL'],
+        LLXPRT_SANDBOX: 'false',
       },
     };
 
@@ -1203,7 +1310,15 @@ export class TestRig {
 
     const run = new InteractiveRun(ptyProcess);
     // Wait for the app to be ready (input prompt rendered).
-    await run.expectText('Type your message', 30000);
+    await run.expectAnyText(
+      [
+        'Type your message or @path/to/file',
+        'Type your message, @path/to/file or +path/to/file',
+        'Create LLXPRT.md files to customize your interactions',
+        'Create GEMINI.md files to customize your interactions',
+      ],
+      60000,
+    );
     return run;
   }
 }

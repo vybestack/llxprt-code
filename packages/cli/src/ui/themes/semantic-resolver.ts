@@ -18,6 +18,7 @@ export function resolveSemanticColors(theme: ColorsTheme): SemanticColors {
       secondary: theme.Gray,
       link: theme.AccentBlue,
       accent: theme.AccentPurple,
+      response: theme.Foreground,
     },
     background: {
       primary: theme.Background,
@@ -33,6 +34,7 @@ export function resolveSemanticColors(theme: ColorsTheme): SemanticColors {
     ui: {
       comment: theme.Comment,
       symbol: theme.Gray,
+      dark: theme.DarkGray,
       gradient: theme.GradientColors,
     },
     status: {

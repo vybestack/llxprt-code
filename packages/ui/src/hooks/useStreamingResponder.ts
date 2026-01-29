@@ -361,8 +361,9 @@ export async function continueStreamingAfterTools(
         break;
       }
       // Transform and handle the event
-      const { transformEvent } =
-        await import('../features/config/llxprtAdapter');
+      const { transformEvent } = await import(
+        '../features/config/llxprtAdapter'
+      );
       const event = transformEvent(coreEvent);
 
       // Track if any tools were scheduled during continuation

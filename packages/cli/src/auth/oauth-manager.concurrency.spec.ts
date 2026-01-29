@@ -36,6 +36,8 @@ describe('OAuthManager concurrency', () => {
       listProviders: vi.fn(async () => []),
       listBuckets: vi.fn(async () => ['bucket-a', 'bucket-b']),
       getBucketStats: vi.fn(async () => null),
+      acquireRefreshLock: vi.fn(async () => true),
+      releaseRefreshLock: vi.fn(async () => undefined),
     };
 
     const oauthManager = new OAuthManager(tokenStore);

@@ -19,7 +19,11 @@ import {
   type JsonObject,
 } from './extensions/variables.js';
 import { SettingScope, loadSettings } from './settings.js';
-import { isWorkspaceTrusted } from './trustedFolders.js';
+import {
+  isWorkspaceTrusted,
+  loadTrustedFolders,
+  TrustLevel,
+} from './trustedFolders.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import { downloadFromGitHubRelease } from './extensions/github.js';
 import type { LoadExtensionContext } from './extensions/variableSchema.js';
@@ -465,9 +469,18 @@ export async function installOrUpdateExtension(
   const isUpdate = !!previousExtensionConfig;
   const settings = loadSettings(cwd).merged;
   if (isWorkspaceTrusted(settings) === false) {
-    throw new Error(
-      `Could not install extension from untrusted folder at ${installMetadata.source}`,
-    );
+    if (
+      await requestConsent(
+        `The current workspace at "${cwd}" is not trusted. Do you want to trust this workspace to install extensions?`,
+      )
+    ) {
+      const trustedFolders = loadTrustedFolders();
+      trustedFolders.setValue(cwd, TrustLevel.TRUST_FOLDER);
+    } else {
+      throw new Error(
+        `Could not install extension because the current workspace at ${cwd} is not trusted.`,
+      );
+    }
   }
 
   const extensionsDir = ExtensionStorage.getUserExtensionsDir();

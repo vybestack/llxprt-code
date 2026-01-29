@@ -29,8 +29,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
-import React, { Dispatch, SetStateAction } from 'react';
+import React, { act, Dispatch, SetStateAction } from 'react';
+import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useGeminiStream } from './useGeminiStream.js';
 import {
   useReactToolScheduler,
@@ -310,13 +310,11 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       id: 'todo-1',
       content: 'Implement user auth',
       status: 'in_progress' as const,
-      priority: 'high' as const,
     },
     {
       id: 'todo-2',
       content: 'Add validation',
       status: 'pending' as const,
-      priority: 'medium' as const,
     },
   ];
 
@@ -692,13 +690,11 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
         id: 'todo-1',
         content: 'Completed task',
         status: 'completed' as const,
-        priority: 'high' as const,
       },
       {
         id: 'todo-2',
         content: 'Active pending task',
         status: 'pending' as const,
-        priority: 'medium' as const,
       },
     ];
 
@@ -744,13 +740,11 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
         id: 'todo-1',
         content: 'Pending task',
         status: 'pending' as const,
-        priority: 'high' as const,
       },
       {
         id: 'todo-2',
         content: 'In progress task',
         status: 'in_progress' as const,
-        priority: 'low' as const, // Lower priority but in_progress should win
       },
     ];
 
@@ -796,7 +790,6 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
         id: 'todo-1',
         content: 'Done task',
         status: 'completed' as const,
-        priority: 'high' as const,
       },
     ];
 

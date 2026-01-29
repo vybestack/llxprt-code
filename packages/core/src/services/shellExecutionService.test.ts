@@ -24,15 +24,20 @@ const mockGetPty = vi.hoisted(() => vi.fn());
 vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
-vi.mock('child_process', () => ({
-  spawn: mockCpSpawn,
-}));
+vi.mock('child_process', async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import('child_process');
+  return {
+    ...actual,
+    spawn: mockCpSpawn,
+  };
+});
 vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
 vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
+    homedir: () => '/tmp/test-home',
     constants: {
       signals: {
         SIGTERM: 15,
@@ -41,6 +46,7 @@ vi.mock('os', () => ({
     },
   },
   platform: mockPlatform,
+  homedir: () => '/tmp/test-home',
   constants: {
     signals: {
       SIGTERM: 15,
@@ -82,11 +88,13 @@ describe('ShellExecutionService', () => {
       kill: Mock;
       onData: Mock;
       onExit: Mock;
+      write: Mock;
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();
     mockPtyProcess.onData = vi.fn();
     mockPtyProcess.onExit = vi.fn();
+    mockPtyProcess.write = vi.fn();
 
     mockPtySpawn.mockReturnValue(mockPtyProcess);
   });
@@ -123,7 +131,10 @@ describe('ShellExecutionService', () => {
 
       expect(mockPtySpawn).toHaveBeenCalledWith(
         'bash',
-        ['-c', 'ls -l'],
+        [
+          '-c',
+          'shopt -u promptvars nullglob extglob nocaseglob dotglob; ls -l',
+        ],
         expect.any(Object),
       );
       expect(result.exitCode).toBe(0);
@@ -386,15 +397,15 @@ describe('ShellExecutionService', () => {
   });
 
   describe('Platform-Specific Behavior', () => {
-    it('should use cmd.exe on Windows', async () => {
+    it('should use powershell.exe on Windows', async () => {
       mockPlatform.mockReturnValue('win32');
       await simulateExecution('dir "foo bar"', (pty) =>
         pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null }),
       );
 
       expect(mockPtySpawn).toHaveBeenCalledWith(
-        'cmd.exe',
-        '/c dir "foo bar"',
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'dir "foo bar"'],
         expect.any(Object),
       );
     });
@@ -407,9 +418,62 @@ describe('ShellExecutionService', () => {
 
       expect(mockPtySpawn).toHaveBeenCalledWith(
         'bash',
-        ['-c', 'ls "foo bar"'],
+        [
+          '-c',
+          'shopt -u promptvars nullglob extglob nocaseglob dotglob; ls "foo bar"',
+        ],
         expect.any(Object),
       );
+    });
+  });
+
+  describe('Resource cleanup', () => {
+    it('should track PTY in writeToPty after creation', async () => {
+      await simulateExecution('echo test', (pty) => {
+        ShellExecutionService.writeToPty(pty.pid, 'input');
+        expect(pty.write).toHaveBeenCalledWith('input');
+        pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      });
+    });
+
+    it('should not write to PTY after normal exit', async () => {
+      mockPtyProcess.write = vi.fn();
+      const pid = mockPtyProcess.pid;
+
+      await simulateExecution('echo test', (pty) => {
+        pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      });
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      ShellExecutionService.writeToPty(pid, 'input');
+      expect(mockPtyProcess.write).not.toHaveBeenCalled();
+    });
+
+    it('should not write to PTY after abort', async () => {
+      mockPtyProcess.write = vi.fn();
+      const pid = mockPtyProcess.pid;
+
+      const abortController = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'sleep 10',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      abortController.abort();
+      await new Promise((resolve) => setImmediate(resolve));
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 1, signal: null });
+      await handle.result;
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      ShellExecutionService.writeToPty(pid, 'input');
+      expect(mockPtyProcess.write).not.toHaveBeenCalled();
     });
   });
 });
@@ -472,9 +536,12 @@ describe('ShellExecutionService child_process fallback', () => {
       });
 
       expect(mockCpSpawn).toHaveBeenCalledWith(
-        'ls -l',
-        [],
-        expect.objectContaining({ shell: 'bash' }),
+        'bash',
+        [
+          '-c',
+          'shopt -u promptvars nullglob extglob nocaseglob dotglob; ls -l',
+        ],
+        expect.objectContaining({ shell: false }),
       );
       expect(result.exitCode).toBe(0);
       expect(result.signal).toBeNull();
@@ -770,17 +837,17 @@ describe('ShellExecutionService child_process fallback', () => {
   });
 
   describe('Platform-Specific Behavior', () => {
-    it('should use cmd.exe on Windows', async () => {
+    it('should use powershell.exe on Windows', async () => {
       mockPlatform.mockReturnValue('win32');
       await simulateExecution('dir "foo bar"', (cp) =>
         cp.emit('exit', 0, null),
       );
 
       expect(mockCpSpawn).toHaveBeenCalledWith(
-        'dir "foo bar"',
-        [],
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'dir "foo bar"'],
         expect.objectContaining({
-          shell: true,
+          shell: false,
           detached: false,
         }),
       );
@@ -791,13 +858,74 @@ describe('ShellExecutionService child_process fallback', () => {
       await simulateExecution('ls "foo bar"', (cp) => cp.emit('exit', 0, null));
 
       expect(mockCpSpawn).toHaveBeenCalledWith(
-        'ls "foo bar"',
-        [],
+        'bash',
+        [
+          '-c',
+          'shopt -u promptvars nullglob extglob nocaseglob dotglob; ls "foo bar"',
+        ],
         expect.objectContaining({
-          shell: 'bash',
+          shell: false,
           detached: true,
         }),
       );
+    });
+  });
+
+  describe('Resource cleanup', () => {
+    it('should remove all listeners from child process streams on exit', async () => {
+      const removeAllListenersSpy = vi.spyOn(
+        mockChildProcess.stdout as EventEmitter,
+        'removeAllListeners',
+      );
+      const stderrRemoveAllListenersSpy = vi.spyOn(
+        mockChildProcess.stderr as EventEmitter,
+        'removeAllListeners',
+      );
+
+      await simulateExecution('echo test', (cp) => {
+        cp.stdout?.emit('data', Buffer.from('test\n'));
+
+        cp.emit('exit', 0, null);
+      });
+
+      expect(removeAllListenersSpy).toHaveBeenCalledWith('data');
+      expect(stderrRemoveAllListenersSpy).toHaveBeenCalledWith('data');
+    });
+
+    it('should remove all listeners from child process on exit', async () => {
+      const removeAllListenersSpy = vi.spyOn(
+        mockChildProcess,
+        'removeAllListeners',
+      );
+
+      await simulateExecution('echo test', (cp) => {
+        cp.stdout?.emit('data', Buffer.from('test\n'));
+
+        cp.emit('exit', 0, null);
+      });
+
+      expect(removeAllListenersSpy).toHaveBeenCalledWith('error');
+      expect(removeAllListenersSpy).toHaveBeenCalledWith('exit');
+      expect(removeAllListenersSpy).toHaveBeenCalledWith('close');
+    });
+
+    it('should only run cleanup once even if both exit and close fire', async () => {
+      const removeAllListenersSpy = vi.spyOn(
+        mockChildProcess,
+        'removeAllListeners',
+      );
+
+      await simulateExecution('echo test', (cp) => {
+        cp.stdout?.emit('data', Buffer.from('test\n'));
+
+        cp.emit('exit', 0, null);
+        cp.emit('close', 0, null);
+      });
+
+      const errorCalls = removeAllListenersSpy.mock.calls.filter(
+        (call) => call[0] === 'error',
+      );
+      expect(errorCalls.length).toBe(1);
     });
   });
 });

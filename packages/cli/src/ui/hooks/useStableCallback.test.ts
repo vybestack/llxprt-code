@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderHook } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
 import { useStableCallback, useStableGetter } from './useStableCallback.js';
 
 describe('useStableCallback', () => {

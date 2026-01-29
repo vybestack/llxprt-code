@@ -9,6 +9,7 @@
  * @author Ahmad Awais <https://twitter.com/mrahmadawais/>
  */
 import { type ColorsTheme, Theme } from './theme.js';
+import { interpolateColor } from './color-utils.js';
 
 const shadesOfPurpleColors: ColorsTheme = {
   type: 'dark',
@@ -27,6 +28,7 @@ const shadesOfPurpleColors: ColorsTheme = {
   Comment: '#B362FF', // Comment color (same as AccentPurple)
   DimComment: '#8447bf',
   Gray: '#726c86', // Gray color
+  DarkGray: interpolateColor('#726c86', '#2d2b57', 0.5),
   GradientColors: ['#4d21fc', '#847ace', '#ff628c'],
 };
 

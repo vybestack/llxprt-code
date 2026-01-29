@@ -12,6 +12,8 @@ import {
   ApprovalMode,
   DEFAULT_FILE_FILTERING_OPTIONS,
 } from './config.js';
+import type { HookDefinition } from '../hooks/types.js';
+import { HookType, HookEventName } from '../hooks/types.js';
 import * as path from 'node:path';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
 import {
@@ -48,6 +50,7 @@ vi.mock('../tools/tool-registry', () => {
   const ToolRegistryMock = vi.fn();
   ToolRegistryMock.prototype.registerTool = vi.fn();
   ToolRegistryMock.prototype.discoverAllTools = vi.fn();
+  ToolRegistryMock.prototype.sortTools = vi.fn();
   ToolRegistryMock.prototype.getAllTools = vi.fn(() => []); // Mock methods if needed
   ToolRegistryMock.prototype.getTool = vi.fn();
   ToolRegistryMock.prototype.getFunctionDeclarations = vi.fn(() => []);
@@ -160,6 +163,19 @@ vi.mock('../ide/ide-client.js', () => ({
   },
 }));
 
+const mockCoreEvents = vi.hoisted(() => ({
+  emitFeedback: vi.fn(),
+}));
+
+const mockSetGlobalProxy = vi.hoisted(() => vi.fn());
+
+vi.mock('../utils/events.js', () => ({
+  coreEvents: mockCoreEvents,
+}));
+
+vi.mock('../utils/fetch.js', () => ({
+  setGlobalProxy: mockSetGlobalProxy,
+}));
 describe('Server Config (config.ts)', () => {
   const MODEL = 'gemini-pro';
   const SANDBOX: SandboxConfig = {
@@ -1142,6 +1158,63 @@ describe('Server Config (config.ts)', () => {
       expect(wasReadFileToolRegistered).toBe(false);
     });
   });
+
+  describe('Proxy Configuration Error Handling', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('should call setGlobalProxy when proxy is configured', () => {
+      const paramsWithProxy: ConfigParameters = {
+        ...baseParams,
+        proxy: 'http://proxy.example.com:8080',
+      };
+      new Config(paramsWithProxy);
+
+      expect(mockSetGlobalProxy).toHaveBeenCalledWith(
+        'http://proxy.example.com:8080',
+      );
+    });
+
+    it('should not call setGlobalProxy when proxy is not configured', () => {
+      new Config(baseParams);
+
+      expect(mockSetGlobalProxy).not.toHaveBeenCalled();
+    });
+
+    it('should emit error feedback when setGlobalProxy throws an error', () => {
+      const proxyError = new Error('Invalid proxy URL');
+      mockSetGlobalProxy.mockImplementation(() => {
+        throw proxyError;
+      });
+
+      const paramsWithProxy: ConfigParameters = {
+        ...baseParams,
+        proxy: 'invalid-proxy',
+      };
+      new Config(paramsWithProxy);
+
+      expect(mockCoreEvents.emitFeedback).toHaveBeenCalledWith(
+        'error',
+        'Invalid proxy configuration detected. Check debug drawer for more details (F12)',
+        proxyError,
+      );
+    });
+
+    it('should not emit error feedback when setGlobalProxy succeeds', () => {
+      mockSetGlobalProxy.mockImplementation(() => {
+        // Success - no error thrown
+      });
+
+      const paramsWithProxy: ConfigParameters = {
+        ...baseParams,
+        proxy: 'http://proxy.example.com:8080',
+      };
+      new Config(paramsWithProxy);
+
+      expect(mockCoreEvents.emitFeedback).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('setApprovalMode with folder trust', () => {
@@ -1189,5 +1262,113 @@ describe('setApprovalMode with folder trust', () => {
     expect(() => config.setApprovalMode(ApprovalMode.YOLO)).not.toThrow();
     expect(() => config.setApprovalMode(ApprovalMode.AUTO_EDIT)).not.toThrow();
     expect(() => config.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
+  });
+});
+
+describe('Config getHooks', () => {
+  const baseParams: ConfigParameters = {
+    cwd: '/tmp',
+    targetDir: '/path/to/target',
+    debugMode: false,
+    sessionId: 'test-session-id',
+    model: 'gemini-pro',
+    usageStatisticsEnabled: false,
+  };
+
+  it('should return undefined when no hooks are provided', () => {
+    const config = new Config(baseParams);
+    expect(config.getHooks()).toBeUndefined();
+  });
+
+  it('should return empty object when empty hooks are provided', () => {
+    const configWithEmptyHooks = new Config({
+      ...baseParams,
+      hooks: {},
+    });
+    expect(configWithEmptyHooks.getHooks()).toEqual({});
+  });
+
+  it('should return the hooks configuration when provided', () => {
+    const mockHooks: { [K in HookEventName]?: HookDefinition[] } = {
+      [HookEventName.BeforeTool]: [
+        {
+          matcher: 'write_file',
+          hooks: [
+            {
+              type: HookType.Command,
+              command: 'echo "test hook"',
+              timeout: 5000,
+            },
+          ],
+        },
+      ],
+      [HookEventName.AfterTool]: [
+        {
+          hooks: [
+            {
+              type: HookType.Command,
+              command: './hooks/after-tool.sh',
+              timeout: 10000,
+            },
+          ],
+        },
+      ],
+    };
+
+    const config = new Config({
+      ...baseParams,
+      hooks: mockHooks,
+    });
+
+    const retrievedHooks = config.getHooks();
+    expect(retrievedHooks).toEqual(mockHooks);
+    expect(retrievedHooks).toBe(mockHooks); // Should return the same reference
+  });
+
+  it('should return hooks with all supported event types', () => {
+    const allEventHooks: { [K in HookEventName]?: HookDefinition[] } = {
+      [HookEventName.BeforeAgent]: [
+        { hooks: [{ type: HookType.Command, command: 'test1' }] },
+      ],
+      [HookEventName.AfterAgent]: [
+        { hooks: [{ type: HookType.Command, command: 'test2' }] },
+      ],
+      [HookEventName.BeforeTool]: [
+        { hooks: [{ type: HookType.Command, command: 'test3' }] },
+      ],
+      [HookEventName.AfterTool]: [
+        { hooks: [{ type: HookType.Command, command: 'test4' }] },
+      ],
+      [HookEventName.BeforeModel]: [
+        { hooks: [{ type: HookType.Command, command: 'test5' }] },
+      ],
+      [HookEventName.AfterModel]: [
+        { hooks: [{ type: HookType.Command, command: 'test6' }] },
+      ],
+      [HookEventName.BeforeToolSelection]: [
+        { hooks: [{ type: HookType.Command, command: 'test7' }] },
+      ],
+      [HookEventName.Notification]: [
+        { hooks: [{ type: HookType.Command, command: 'test8' }] },
+      ],
+      [HookEventName.SessionStart]: [
+        { hooks: [{ type: HookType.Command, command: 'test9' }] },
+      ],
+      [HookEventName.SessionEnd]: [
+        { hooks: [{ type: HookType.Command, command: 'test10' }] },
+      ],
+      [HookEventName.PreCompress]: [
+        { hooks: [{ type: HookType.Command, command: 'test11' }] },
+      ],
+    };
+
+    const config = new Config({
+      ...baseParams,
+      hooks: allEventHooks,
+    });
+
+    const retrievedHooks = config.getHooks();
+    expect(retrievedHooks).toEqual(allEventHooks);
+    expect(Object.keys(retrievedHooks!)).toHaveLength(11); // All hook event types
   });
 });

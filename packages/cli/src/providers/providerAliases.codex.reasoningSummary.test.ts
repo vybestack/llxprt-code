@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { loadProviderAliasEntries } from './providerAliases.js';
+import stripJsonComments from 'strip-json-comments';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,24 +23,23 @@ describe('codex.config reasoning.summary default @issue:922', () => {
   });
 
   it('should set reasoning.summary=auto in ephemerals', () => {
-    const aliases = loadProviderAliasEntries();
-    const codexAlias = aliases.find((a) => a.alias === 'codex');
+    // Read the config file directly to avoid vitest module resolution issues
+    const codexConfigPath = path.join(__dirname, 'aliases', 'codex.config');
+    const raw = fs.readFileSync(codexConfigPath, 'utf-8');
+    const config = JSON.parse(stripJsonComments(raw));
 
-    expect(codexAlias).toBeDefined();
-    expect(codexAlias?.config.ephemeralSettings).toBeDefined();
-    expect(codexAlias?.config.ephemeralSettings?.['reasoning.summary']).toBe(
-      'auto',
-    );
+    expect(config.ephemeralSettings).toBeDefined();
+    expect(config.ephemeralSettings['reasoning.summary']).toBe('auto');
   });
 
   it('should set reasoning.effort in ephemerals (existing behavior)', () => {
-    const aliases = loadProviderAliasEntries();
-    const codexAlias = aliases.find((a) => a.alias === 'codex');
+    // Read the config file directly to avoid vitest module resolution issues
+    const codexConfigPath = path.join(__dirname, 'aliases', 'codex.config');
+    const raw = fs.readFileSync(codexConfigPath, 'utf-8');
+    const config = JSON.parse(stripJsonComments(raw));
 
-    expect(codexAlias).toBeDefined();
+    expect(config.ephemeralSettings).toBeDefined();
     // Codex should have some default effort level
-    expect(
-      codexAlias?.config.ephemeralSettings?.['reasoning.effort'],
-    ).toBeDefined();
+    expect(config.ephemeralSettings['reasoning.effort']).toBeDefined();
   });
 });

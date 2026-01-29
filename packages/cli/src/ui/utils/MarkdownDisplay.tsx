@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import React from 'react';
 import { Text, Box } from 'ink';
-import { Colors, theme } from '../colors.js';
+import { theme } from '../semantic-colors.js';
 import { colorizeCode } from './CodeColorizer.js';
 import { TableRenderer } from './TableRenderer.js';
 import { RenderInline } from './InlineMarkdownRenderer.js';
@@ -35,6 +35,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
   renderMarkdown = true,
 }) => {
   const settings = useSettings();
+  const responseColor = theme.text.response ?? theme.text.primary;
 
   if (!text) return <></>;
 
@@ -138,8 +139,8 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
         // Not a table, treat as regular text
         addContentBlock(
           <Box key={key}>
-            <Text color={Colors.Foreground} wrap="wrap">
-              <RenderInline text={line} />
+            <Text wrap="wrap" color={responseColor}>
+              <RenderInline text={line} defaultColor={responseColor} />
             </Text>
           </Box>,
         );
@@ -177,8 +178,8 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       if (line.trim().length > 0) {
         addContentBlock(
           <Box key={key}>
-            <Text color={Colors.Foreground} wrap="wrap">
-              <RenderInline text={line} />
+            <Text wrap="wrap" color={responseColor}>
+              <RenderInline text={line} defaultColor={responseColor} />
             </Text>
           </Box>,
         );
@@ -186,48 +187,49 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
     } else if (hrMatch) {
       addContentBlock(
         <Box key={key}>
-          <Text color={Colors.DimComment}>---</Text>
+          <Text color={theme.ui.comment}>---</Text>
         </Box>,
       );
     } else if (headerMatch) {
       const level = headerMatch[1].length;
       const headerText = headerMatch[2];
       let headerNode: React.ReactNode = null;
-
-      // Use semantic theme colors for headers
       switch (level) {
         case 1:
           headerNode = (
-            <Text bold color={theme.text.accent}>
-              <RenderInline text={headerText} />
+            <Text bold color={theme.text.link}>
+              <RenderInline text={headerText} defaultColor={theme.text.link} />
             </Text>
           );
           break;
         case 2:
           headerNode = (
             <Text bold color={theme.text.link}>
-              <RenderInline text={headerText} />
+              <RenderInline text={headerText} defaultColor={theme.text.link} />
             </Text>
           );
           break;
         case 3:
           headerNode = (
-            <Text bold color={theme.status.success}>
-              <RenderInline text={headerText} />
+            <Text bold color={responseColor}>
+              <RenderInline text={headerText} defaultColor={responseColor} />
             </Text>
           );
           break;
         case 4:
           headerNode = (
             <Text italic color={theme.text.secondary}>
-              <RenderInline text={headerText} />
+              <RenderInline
+                text={headerText}
+                defaultColor={theme.text.secondary}
+              />
             </Text>
           );
           break;
         default:
           headerNode = (
-            <Text color={Colors.Foreground}>
-              <RenderInline text={headerText} />
+            <Text color={responseColor}>
+              <RenderInline text={headerText} defaultColor={responseColor} />
             </Text>
           );
           break;
@@ -270,8 +272,8 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       } else {
         addContentBlock(
           <Box key={key}>
-            <Text color={Colors.Foreground} wrap="wrap">
-              <RenderInline text={line} />
+            <Text wrap="wrap" color={responseColor}>
+              <RenderInline text={line} defaultColor={responseColor} />
             </Text>
           </Box>,
         );
@@ -339,7 +341,9 @@ const RenderCodeBlockInternal: React.FC<RenderCodeBlockProps> = ({
         // Not enough space to even show the message meaningfully
         return (
           <Box paddingLeft={CODE_BLOCK_PREFIX_PADDING}>
-            <Text color={Colors.Gray}>... code is being written ...</Text>
+            <Text color={theme.text.secondary}>
+              ... code is being written ...
+            </Text>
           </Box>
         );
       }
@@ -355,7 +359,7 @@ const RenderCodeBlockInternal: React.FC<RenderCodeBlockProps> = ({
       return (
         <Box paddingLeft={CODE_BLOCK_PREFIX_PADDING} flexDirection="column">
           {colorizedTruncatedCode}
-          <Text color={Colors.Gray}>... generating more ...</Text>
+          <Text color={theme.text.secondary}>... generating more ...</Text>
         </Box>
       );
     }
@@ -401,6 +405,7 @@ const RenderListItemInternal: React.FC<RenderListItemProps> = ({
   const prefix = type === 'ol' ? `${marker}. ` : `${marker} `;
   const prefixWidth = prefix.length;
   const indentation = leadingWhitespace.length;
+  const listResponseColor = theme.text.response ?? theme.text.primary;
 
   return (
     <Box
@@ -408,11 +413,11 @@ const RenderListItemInternal: React.FC<RenderListItemProps> = ({
       flexDirection="row"
     >
       <Box width={prefixWidth}>
-        <Text color={Colors.Foreground}>{prefix}</Text>
+        <Text color={listResponseColor}>{prefix}</Text>
       </Box>
       <Box flexGrow={LIST_ITEM_TEXT_FLEX_GROW}>
-        <Text color={Colors.Foreground} wrap="wrap">
-          <RenderInline text={itemText} />
+        <Text wrap="wrap" color={listResponseColor}>
+          <RenderInline text={itemText} defaultColor={listResponseColor} />
         </Text>
       </Box>
     </Box>

@@ -22,7 +22,7 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     super(
       TodoRead.Name,
       'TodoRead',
-      'Read the current todo list for the session. Returns all todos with their status, priority, and content.',
+      'Read the current todo list for the session. Returns all todos with their status and content.',
       Kind.Think,
       {
         type: Type.OBJECT,
@@ -83,9 +83,6 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     inProgress: number;
     pending: number;
     completed: number;
-    highPriority: number;
-    mediumPriority: number;
-    lowPriority: number;
     total: number;
   } {
     return {
@@ -93,9 +90,6 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
       inProgress: todos.filter((t) => t.status === 'in_progress').length,
       pending: todos.filter((t) => t.status === 'pending').length,
       completed: todos.filter((t) => t.status === 'completed').length,
-      highPriority: todos.filter((t) => t.priority === 'high').length,
-      mediumPriority: todos.filter((t) => t.priority === 'medium').length,
-      lowPriority: todos.filter((t) => t.priority === 'low').length,
     };
   }
 
@@ -104,14 +98,10 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     taskId?: string;
     taskContent?: string;
   } {
-    // Check if any tasks are in progress
+    // Check if any tasks are in progress - return first one (preserves LLM order)
     const inProgressTasks = todos.filter((t) => t.status === 'in_progress');
     if (inProgressTasks.length > 0) {
-      // Continue with highest priority in-progress task
-      const task = inProgressTasks.sort((a, b) => {
-        const priorityOrder = { high: 0, medium: 1, low: 2 };
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
-      })[0];
+      const task = inProgressTasks[0];
       return {
         type: 'continue',
         taskId: task.id,
@@ -119,14 +109,10 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
       };
     }
 
-    // Check if any tasks are pending
+    // Check if any tasks are pending - return first one (preserves LLM order)
     const pendingTasks = todos.filter((t) => t.status === 'pending');
     if (pendingTasks.length > 0) {
-      // Start with highest priority pending task
-      const task = pendingTasks.sort((a, b) => {
-        const priorityOrder = { high: 0, medium: 1, low: 2 };
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
-      })[0];
+      const task = pendingTasks[0];
       return {
         type: 'start',
         taskId: task.id,

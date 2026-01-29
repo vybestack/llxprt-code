@@ -5,7 +5,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { SETTINGS_SCHEMA, Settings } from './settingsSchema.js';
+import {
+  getSettingsSchema,
+  SETTINGS_SCHEMA_DEFINITIONS,
+  type SettingCollectionDefinition,
+  type SettingDefinition,
+  SETTINGS_SCHEMA,
+  Settings,
+} from './settingsSchema.js';
 
 describe('SettingsSchema', () => {
   describe('SETTINGS_SCHEMA', () => {
@@ -266,6 +273,57 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.debugKeystrokeLogging.description).toBe(
         'Enable debug logging of keystrokes to the console.',
       );
+    });
+
+    it('has JSON schema definitions for every referenced ref', () => {
+      const schema = getSettingsSchema();
+      const referenced = new Set<string>();
+      const missing: string[] = [];
+
+      const visitDefinition = (definition: SettingDefinition) => {
+        if (definition.ref) {
+          referenced.add(definition.ref);
+          if (!SETTINGS_SCHEMA_DEFINITIONS[definition.ref]) {
+            missing.push(definition.ref);
+          }
+        }
+        if (definition.properties) {
+          Object.values(definition.properties).forEach(visitDefinition);
+        }
+        if (definition.items) {
+          visitCollection(definition.items);
+        }
+        if (definition.additionalProperties) {
+          visitCollection(definition.additionalProperties);
+        }
+      };
+
+      const visitCollection = (collection: SettingCollectionDefinition) => {
+        if (collection.ref) {
+          referenced.add(collection.ref);
+          if (!SETTINGS_SCHEMA_DEFINITIONS[collection.ref]) {
+            missing.push(collection.ref);
+          }
+          return;
+        }
+        if (collection.properties) {
+          Object.values(collection.properties).forEach(visitDefinition);
+        }
+        if (collection.type === 'array' && collection.properties) {
+          Object.values(collection.properties).forEach(visitDefinition);
+        }
+      };
+
+      Object.values(schema).forEach(visitDefinition);
+
+      // Check all referenced definitions exist
+      expect(missing).toEqual([]);
+
+      // Ensure definitions map doesn't accumulate stale entries.
+      const unreferenced = Object.keys(SETTINGS_SCHEMA_DEFINITIONS).filter(
+        (key) => !referenced.has(key),
+      );
+      expect(unreferenced).toEqual([]);
     });
   });
 });

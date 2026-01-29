@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProviders } from '../../test-utils/render.js';
-import { act } from '@testing-library/react';
+import { act } from 'react';
 import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
 
 describe('MultiProviderPrivacyNotice', () => {

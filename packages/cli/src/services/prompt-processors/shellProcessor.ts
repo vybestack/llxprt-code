@@ -105,7 +105,7 @@ export class ShellProcessor implements IPromptProcessor {
       if (!allAllowed) {
         if (isHardDenial) {
           throw new Error(
-            `${this.commandName} cannot be run. Blocked command: "${command}". Reason: ${blockReason || 'Blocked by configuration.'}`,
+            `Blocked command: "${command}". Reason: ${blockReason || 'Blocked by configuration.'}`,
           );
         }
 

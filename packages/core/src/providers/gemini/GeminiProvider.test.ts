@@ -133,12 +133,17 @@ describe('GeminiProvider', () => {
         },
       ] as IContent[],
     });
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    // Provider-scoped settings now go through invocation.modelParams after separation
     options.invocation = {
       ...options.invocation,
       ephemerals: {
         ...options.invocation.ephemerals,
         tools: { allowed: ['read_file'], disabled: ['web_search'] },
         gemini: { maxOutputTokens: 42 },
+      },
+      modelParams: {
+        maxOutputTokens: 42,
       },
     };
 
@@ -380,6 +385,31 @@ describe('GeminiProvider', () => {
       'X-Provider-Header': 'provider-value',
       'User-Agent': expect.any(String),
     });
+  });
+
+  it('should include gemini-3-flash-preview in OAuth model list', async () => {
+    const provider = new GeminiProvider();
+
+    vi.spyOn(
+      provider as unknown as {
+        determineBestAuth: () => Promise<{ authMode: string; token: string }>;
+      },
+      'determineBestAuth',
+    ).mockResolvedValue({
+      authMode: 'oauth',
+      token: 'test-oauth-token',
+    });
+
+    const models = await provider.getModels();
+    const modelIds = models.map((m) => m.id);
+
+    expect(modelIds).toContain('gemini-3-flash-preview');
+
+    const flashPreview = models.find((m) => m.id === 'gemini-3-flash-preview');
+    expect(flashPreview).toBeDefined();
+    expect(flashPreview?.name).toBe('Gemini 3 Flash Preview');
+    expect(flashPreview?.provider).toBe('gemini');
+    expect(flashPreview?.supportedToolFormats).toEqual([]);
   });
 
   describe('GeminiProvider Authentication', () => {

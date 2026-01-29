@@ -233,12 +233,20 @@ export const ContentValidation = {
         return !!block.data && !!block.mimeType;
       }
       if (block.type === 'thinking') {
-        // A thinking block is valid if it has thought content OR encrypted content
-        // (encrypted-only blocks must be preserved for round-trip reasoning)
-        return (
-          (!!block.thought && block.thought.trim().length > 0) ||
-          (!!block.encryptedContent && block.encryptedContent.trim().length > 0)
-        );
+        // A thinking block is valid if it has:
+        // 1. Thought content (text), OR
+        // 2. Encrypted content (for OpenAI Codex round-trip reasoning)
+        const hasThought = !!block.thought && block.thought.trim().length > 0;
+        const hasEncrypted =
+          !!block.encryptedContent && block.encryptedContent.trim().length > 0;
+
+        // For Anthropic extended thinking, require signature
+        if (block.sourceField === 'thinking') {
+          return hasThought && Boolean(block.signature);
+        }
+
+        // For OpenAI/Codex, either thought OR encrypted content is valid
+        return hasThought || hasEncrypted;
       }
       if (block.type === 'code') {
         return !!block.code && block.code.trim().length > 0;

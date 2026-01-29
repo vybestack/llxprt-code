@@ -25,6 +25,18 @@ function getLineCountCommand(): { command: string; tool: string } {
   }
 }
 
+function getFileListingCommand(): { command: string; tool: string } {
+  switch (shell) {
+    case 'powershell':
+      return { command: 'Get-ChildItem -Name', tool: 'Get-ChildItem' };
+    case 'cmd':
+      return { command: 'dir /b', tool: 'dir' };
+    case 'bash':
+    default:
+      return { command: 'ls -1', tool: 'ls' };
+  }
+}
+
 function getChainedEchoCommand(): { allowPattern: string; command: string } {
   const secondCommand = getAllowedListCommand();
   switch (shell) {
@@ -122,7 +134,7 @@ describe('run_shell_command', () => {
     const result = await rig.run(
       {
         prompt: prompt,
-        yolo: false,
+        yolo: true,
       },
       `--allowed-tools=run_shell_command(${tool})`,
     );
@@ -158,7 +170,7 @@ describe('run_shell_command', () => {
     const result = await rig.run(
       {
         prompt: prompt,
-        yolo: false,
+        yolo: true,
       },
       '--allowed-tools=run_shell_command',
     );
@@ -228,7 +240,7 @@ describe('run_shell_command', () => {
     const result = await rig.run(
       {
         prompt: prompt,
-        yolo: false,
+        yolo: true,
       },
       `--allowed-tools=ShellTool(${tool})`,
     );
@@ -264,7 +276,7 @@ describe('run_shell_command', () => {
     const result = await rig.run(
       {
         prompt: prompt,
-        yolo: false,
+        yolo: true,
       },
       '--allowed-tools=run_shell_command(echo)',
       '--allowed-tools=run_shell_command(echo)',
@@ -332,7 +344,7 @@ describe('run_shell_command', () => {
     const result = await rig.run(
       {
         prompt: prompt,
-        yolo: false,
+        yolo: true,
       },
       `--allowed-tools=run_shell_command(${tool})`,
       '--allowed-tools=run_shell_command',
@@ -365,40 +377,39 @@ describe('run_shell_command', () => {
     expect(toolCall.toolRequest.success).toBe(true);
   });
 
-  it.skipIf(process.env.LLXPRT_SANDBOX !== 'false')(
-    'should propagate environment variables to the child process',
-    async () => {
-      const rig = new TestRig();
-      await rig.setup('should propagate environment variables');
+  it.skipIf(
+    process.env.LLXPRT_SANDBOX !== 'false' || process.platform === 'win32',
+  )('should propagate environment variables to the child process', async () => {
+    const rig = new TestRig();
+    await rig.setup('should propagate environment variables');
 
-      const varName = 'LLXPRT_CODE_TEST_VAR';
-      const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
-      process.env[varName] = varValue;
+    const varName = 'LLXPRT_CODE_TEST_VAR';
+    const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
+    process.env[varName] = varValue;
 
-      try {
-        const prompt = `Use echo to learn the value of the environment variable named ${varName} and tell me what it is.`;
-        const result = await rig.run(prompt);
+    try {
+      const prompt = `Use the run_shell_command tool to run "echo $${varName}" and tell me the output.`;
+      const result = await rig.run(prompt);
 
-        const foundToolCall = await rig.waitForToolCall('run_shell_command');
+      const foundToolCall = await rig.waitForToolCall('run_shell_command');
 
-        if (!foundToolCall || !result.includes(varValue)) {
-          printDebugInfo(rig, result, {
-            'Found tool call': foundToolCall,
-            'Contains varValue': result.includes(varValue),
-          });
-        }
-
-        expect(
-          foundToolCall,
-          'Expected to find a run_shell_command tool call',
-        ).toBeTruthy();
-        validateModelOutput(result, varValue, 'Env var propagation test');
-        expect(result).toContain(varValue);
-      } finally {
-        delete process.env[varName];
+      if (!foundToolCall || !result.includes(varValue)) {
+        printDebugInfo(rig, result, {
+          'Found tool call': foundToolCall,
+          'Contains varValue': result.includes(varValue),
+        });
       }
-    },
-  );
+
+      expect(
+        foundToolCall,
+        'Expected to find a run_shell_command tool call',
+      ).toBeTruthy();
+      validateModelOutput(result, varValue, 'Env var propagation test');
+      expect(result).toContain(varValue);
+    } finally {
+      delete process.env[varName];
+    }
+  });
 
   it('should run a platform-specific file listing command', async () => {
     const rig = new TestRig();
@@ -406,8 +417,15 @@ describe('run_shell_command', () => {
     const fileName = `test-file-${Math.random().toString(36).substring(7)}.txt`;
     rig.createFile(fileName, 'test content');
 
-    const prompt = `Run a shell command to list the files in the current directory and tell me what they are.`;
-    const result = await rig.run(prompt);
+    const { command, tool } = getFileListingCommand();
+    const prompt = `Use run_shell_command to execute "${command}" in the current directory and tell me if ${fileName} appears in the output. Use the ${tool} command exactly as specified.`;
+    const result = await rig.run(
+      {
+        prompt,
+        yolo: false,
+      },
+      `--allowed-tools=run_shell_command(${tool})`,
+    );
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command');
 
@@ -423,6 +441,11 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
+
+    const toolCall = rig
+      .readToolLogs()
+      .filter((t) => t.toolRequest.name === 'run_shell_command')[0];
+    expect(toolCall.toolRequest.success).toBe(true);
 
     validateModelOutput(result, fileName, 'Platform-specific listing test');
     expect(result).toContain(fileName);

@@ -1,459 +1,510 @@
 /**
- * Tests for TOML Policy Loader
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { writeFile, mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import {
-  loadPolicyFromToml,
-  loadDefaultPolicies,
-  PolicyLoadError,
-} from './toml-loader.js';
-import { PolicyDecision } from './types.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ApprovalMode, PolicyDecision } from './types.js';
+import type { Dirent } from 'node:fs';
+import nodePath from 'node:path';
+import type { PolicyLoadResult } from './toml-loader.js';
 
-describe('toml-loader', () => {
-  let testDir: string;
+async function runLoadPoliciesFromToml(
+  tomlContent: string,
+  fileName = 'test.toml',
+): Promise<PolicyLoadResult> {
+  const actualFs =
+    await vi.importActual<typeof import('node:fs/promises')>(
+      'node:fs/promises',
+    );
 
-  beforeEach(async () => {
-    // Create a temporary directory for test files
-    testDir = join(tmpdir(), `policy-test-${Date.now()}`);
-    await mkdir(testDir, { recursive: true });
+  const mockReaddir = vi.fn(
+    async (
+      path: string,
+      _options?: { withFileTypes: boolean },
+    ): Promise<Dirent[]> => {
+      if (nodePath.normalize(path) === nodePath.normalize('/policies')) {
+        return [
+          {
+            name: fileName,
+            isFile: () => true,
+            isDirectory: () => false,
+          } as Dirent,
+        ];
+      }
+      return [];
+    },
+  );
+
+  const mockReadFile = vi.fn(async (path: string): Promise<string> => {
+    if (
+      nodePath.normalize(path) ===
+      nodePath.normalize(nodePath.join('/policies', fileName))
+    ) {
+      return tomlContent;
+    }
+    throw new Error('File not found');
   });
 
-  afterEach(async () => {
-    // Clean up test directory
-    await rm(testDir, { recursive: true, force: true });
+  vi.doMock('node:fs/promises', () => ({
+    ...actualFs,
+    default: { ...actualFs, readFile: mockReadFile, readdir: mockReaddir },
+    readFile: mockReadFile,
+    readdir: mockReaddir,
+  }));
+
+  const { loadPoliciesFromToml: load } = await import('./toml-loader.js');
+
+  const getPolicyTier = (_dir: string) => 1;
+  return load(ApprovalMode.DEFAULT, ['/policies'], getPolicyTier);
+}
+
+describe('policy-toml-loader', () => {
+  beforeEach(() => {
+    vi.resetModules();
   });
 
-  describe('loadPolicyFromToml', () => {
-    describe('successful parsing', () => {
-      it('parses a simple allow rule', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "edit"
-decision = "allow"
-priority = 1.01
-`;
-        await writeFile(path, content);
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('node:fs/promises');
+  });
 
-        const rules = await loadPolicyFromToml(path);
-
-        expect(rules).toHaveLength(1);
-        expect(rules[0]).toEqual({
-          toolName: 'edit',
-          decision: PolicyDecision.ALLOW,
-          priority: 1.01,
-        });
-      });
-
-      it('parses a wildcard rule without toolName', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-decision = "allow"
-priority = 1.999
-`;
-        await writeFile(path, content);
-
-        const rules = await loadPolicyFromToml(path);
-
-        expect(rules).toHaveLength(1);
-        expect(rules[0]).toEqual({
-          decision: PolicyDecision.ALLOW,
-          priority: 1.999,
-          // toolName should be undefined (wildcard)
-        });
-        expect(rules[0].toolName).toBeUndefined();
-      });
-
-      it('parses a rule with argsPattern', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "shell"
-argsPattern = "rm\\\\s+-rf"
-decision = "deny"
-priority = 2.0
-`;
-        await writeFile(path, content);
-
-        const rules = await loadPolicyFromToml(path);
-
-        expect(rules).toHaveLength(1);
-        expect(rules[0].toolName).toBe('shell');
-        expect(rules[0].decision).toBe(PolicyDecision.DENY);
-        expect(rules[0].priority).toBe(2.0);
-        expect(rules[0].argsPattern).toBeInstanceOf(RegExp);
-        expect(rules[0].argsPattern?.source).toBe('rm\\s+-rf');
-      });
-
-      it('parses multiple rules', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "edit"
-decision = "allow"
-priority = 1.01
-
-[[rule]]
-toolName = "shell"
-decision = "ask_user"
-priority = 1.01
-
+  describe('loadPoliciesFromToml', () => {
+    it('should load and parse a simple policy file', async () => {
+      const result = await runLoadPoliciesFromToml(`
 [[rule]]
 toolName = "glob"
 decision = "allow"
-priority = 1.05
-`;
-        await writeFile(path, content);
+priority = 100
+`);
 
-        const rules = await loadPolicyFromToml(path);
-
-        expect(rules).toHaveLength(3);
-        expect(rules[0].toolName).toBe('edit');
-        expect(rules[1].toolName).toBe('shell');
-        expect(rules[2].toolName).toBe('glob');
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]).toEqual({
+        toolName: 'glob',
+        decision: PolicyDecision.ALLOW,
+        priority: 1.1, // tier 1 + 100/1000
       });
-
-      it('uses default priority of 0 when not specified', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "edit"
-decision = "allow"
-`;
-        await writeFile(path, content);
-
-        const rules = await loadPolicyFromToml(path);
-
-        expect(rules).toHaveLength(1);
-        expect(rules[0].priority).toBe(0);
-      });
-
-      it('parses all three decision types', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "tool1"
-decision = "allow"
-
-[[rule]]
-toolName = "tool2"
-decision = "deny"
-
-[[rule]]
-toolName = "tool3"
-decision = "ask_user"
-`;
-        await writeFile(path, content);
-
-        const rules = await loadPolicyFromToml(path);
-
-        expect(rules).toHaveLength(3);
-        expect(rules[0].decision).toBe(PolicyDecision.ALLOW);
-        expect(rules[1].decision).toBe(PolicyDecision.DENY);
-        expect(rules[2].decision).toBe(PolicyDecision.ASK_USER);
-      });
+      expect(result.errors).toHaveLength(0);
     });
 
-    describe('error handling', () => {
-      it('throws PolicyLoadError when file does not exist', async () => {
-        const path = join(testDir, 'nonexistent.toml');
-
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(PolicyLoadError);
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(
-          'Failed to read policy file',
-        );
-      });
-
-      it('throws PolicyLoadError on invalid TOML syntax', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
+    it('should expand commandPrefix array to multiple rules', async () => {
+      const result = await runLoadPoliciesFromToml(`
 [[rule]]
-toolName = "edit
+toolName = "run_shell_command"
+commandPrefix = ["git status", "git log"]
 decision = "allow"
-`;
-        await writeFile(path, content);
+priority = 100
+`);
 
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(PolicyLoadError);
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(
-          'Invalid TOML syntax',
-        );
-      });
-
-      it('throws PolicyLoadError on invalid decision value', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "edit"
-decision = "maybe"
-`;
-        await writeFile(path, content);
-
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(PolicyLoadError);
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(
-          'Invalid policy schema',
-        );
-      });
-
-      it('throws PolicyLoadError on missing decision field', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "edit"
-`;
-        await writeFile(path, content);
-
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(PolicyLoadError);
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(
-          'Invalid policy schema',
-        );
-      });
-
-      it('throws PolicyLoadError on invalid argsPattern regex', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "shell"
-argsPattern = "[[["
-decision = "deny"
-`;
-        await writeFile(path, content);
-
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(PolicyLoadError);
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(
-          'Invalid regular expression',
-        );
-      });
-
-      it('throws PolicyLoadError on priority below 1.0', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "edit"
-decision = "allow"
-priority = 0.5
-`;
-        await writeFile(path, content);
-
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(PolicyLoadError);
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(
-          'Invalid priority 0.5',
-        );
-      });
-
-      it('throws PolicyLoadError on priority >= 4.0', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "edit"
-decision = "allow"
-priority = 4.0
-`;
-        await writeFile(path, content);
-
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(PolicyLoadError);
-        await expect(loadPolicyFromToml(path)).rejects.toThrow(
-          'Invalid priority 4',
-        );
-      });
-
-      it('includes path in error message', async () => {
-        const path = join(testDir, 'custom-policy.toml');
-        const content = `invalid toml`;
-        await writeFile(path, content);
-
-        await expect(loadPolicyFromToml(path)).rejects.toMatchObject({
-          name: 'PolicyLoadError',
-          path,
-          message: expect.stringContaining('custom-policy.toml'),
-        });
-      });
+      expect(result.rules).toHaveLength(2);
+      expect(result.rules[0].toolName).toBe('run_shell_command');
+      expect(result.rules[1].toolName).toBe('run_shell_command');
+      expect(
+        result.rules[0].argsPattern?.test('{"command":"git status"}'),
+      ).toBe(true);
+      expect(result.rules[1].argsPattern?.test('{"command":"git log"}')).toBe(
+        true,
+      );
+      expect(result.errors).toHaveLength(0);
     });
 
-    describe('priority band validation', () => {
-      it('accepts Tier 1 priorities (1.0 - 1.999)', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
+    it('should transform commandRegex to argsPattern', async () => {
+      const result = await runLoadPoliciesFromToml(`
 [[rule]]
-toolName = "tool1"
+toolName = "run_shell_command"
+commandRegex = "git (status|log).*"
 decision = "allow"
-priority = 1.0
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(1);
+      expect(
+        result.rules[0].argsPattern?.test('{"command":"git status"}'),
+      ).toBe(true);
+      expect(
+        result.rules[0].argsPattern?.test('{"command":"git log --all"}'),
+      ).toBe(true);
+      expect(
+        result.rules[0].argsPattern?.test('{"command":"git branch"}'),
+      ).toBe(false);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should expand toolName array', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = ["glob", "grep", "read"]
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(3);
+      expect(result.rules.map((r) => r.toolName)).toEqual([
+        'glob',
+        'grep',
+        'read',
+      ]);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should transform mcpName to composite toolName', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+mcpName = "google-workspace"
+toolName = ["calendar.list", "calendar.get"]
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(2);
+      expect(result.rules[0].toolName).toBe('google-workspace__calendar.list');
+      expect(result.rules[1].toolName).toBe('google-workspace__calendar.get');
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should filter rules by mode', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "glob"
+decision = "allow"
+priority = 100
+modes = ["default", "yolo"]
 
 [[rule]]
-toolName = "tool2"
+toolName = "grep"
+decision = "allow"
+priority = 100
+modes = ["yolo"]
+`);
+
+      // Only the first rule should be included (modes includes "default")
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0].toolName).toBe('glob');
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should handle TOML parse errors', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]
+toolName = "glob"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].errorType).toBe('toml_parse');
+      expect(result.errors[0].fileName).toBe('test.toml');
+    });
+
+    it('should handle schema validation errors', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "glob"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].errorType).toBe('schema_validation');
+      expect(result.errors[0].details).toContain('decision');
+    });
+
+    it('should reject commandPrefix without run_shell_command', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "glob"
+commandPrefix = "git status"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].errorType).toBe('rule_validation');
+      expect(result.errors[0].details).toContain('run_shell_command');
+    });
+
+    it('should reject commandPrefix + argsPattern combination', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git status"
+argsPattern = "test"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].errorType).toBe('rule_validation');
+      expect(result.errors[0].details).toContain('mutually exclusive');
+    });
+
+    it('should handle invalid regex patterns', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "git (status|branch"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].errorType).toBe('regex_compilation');
+      expect(result.errors[0].details).toContain('git (status|branch');
+    });
+
+    it('should escape regex special characters in commandPrefix', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git log *.txt"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(1);
+      // The regex should have escaped the * and .
+      expect(
+        result.rules[0].argsPattern?.test('{"command":"git log file.txt"}'),
+      ).toBe(false);
+      expect(
+        result.rules[0].argsPattern?.test('{"command":"git log *.txt"}'),
+      ).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should handle a mix of valid and invalid policy files', async () => {
+      const actualFs =
+        await vi.importActual<typeof import('node:fs/promises')>(
+          'node:fs/promises',
+        );
+
+      const mockReaddir = vi.fn(
+        async (
+          path: string,
+          _options?: { withFileTypes: boolean },
+        ): Promise<Dirent[]> => {
+          if (nodePath.normalize(path) === nodePath.normalize('/policies')) {
+            return [
+              {
+                name: 'valid.toml',
+                isFile: () => true,
+                isDirectory: () => false,
+              } as Dirent,
+              {
+                name: 'invalid.toml',
+                isFile: () => true,
+                isDirectory: () => false,
+              } as Dirent,
+            ];
+          }
+          return [];
+        },
+      );
+
+      const mockReadFile = vi.fn(async (path: string): Promise<string> => {
+        if (
+          nodePath.normalize(path) ===
+          nodePath.normalize(nodePath.join('/policies', 'valid.toml'))
+        ) {
+          return `
+[[rule]]
+toolName = "glob"
+decision = "allow"
+priority = 100
+`;
+        }
+        if (
+          nodePath.normalize(path) ===
+          nodePath.normalize(nodePath.join('/policies', 'invalid.toml'))
+        ) {
+          return `
+[[rule]]
+toolName = "grep"
+decision = "allow"
+priority = -1
+`;
+        }
+        throw new Error('File not found');
+      });
+
+      vi.doMock('node:fs/promises', () => ({
+        ...actualFs,
+        default: { ...actualFs, readFile: mockReadFile, readdir: mockReaddir },
+        readFile: mockReadFile,
+        readdir: mockReaddir,
+      }));
+
+      const { loadPoliciesFromToml: load } = await import('./toml-loader.js');
+
+      const getPolicyTier = (_dir: string) => 1;
+      const result = await load(
+        ApprovalMode.DEFAULT,
+        ['/policies'],
+        getPolicyTier,
+      );
+
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0].toolName).toBe('glob');
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].fileName).toBe('invalid.toml');
+      expect(result.errors[0].errorType).toBe('schema_validation');
+    });
+  });
+  describe('Negative Tests', () => {
+    it('should return a schema_validation error if priority is missing', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "test"
+decision = "allow"
+`);
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('schema_validation');
+      expect(error.details).toContain('priority');
+    });
+
+    it('should return a schema_validation error if priority is a float', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "test"
 decision = "allow"
 priority = 1.5
-
-[[rule]]
-toolName = "tool3"
-decision = "allow"
-priority = 1.999
-`;
-        await writeFile(path, content);
-
-        const rules = await loadPolicyFromToml(path);
-        expect(rules).toHaveLength(3);
-      });
-
-      it('accepts Tier 2 priorities (2.0 - 2.999)', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "tool1"
-decision = "allow"
-priority = 2.0
-
-[[rule]]
-toolName = "tool2"
-decision = "allow"
-priority = 2.5
-
-[[rule]]
-toolName = "tool3"
-decision = "allow"
-priority = 2.999
-`;
-        await writeFile(path, content);
-
-        const rules = await loadPolicyFromToml(path);
-        expect(rules).toHaveLength(3);
-      });
-
-      it('accepts Tier 3 priorities (3.0 - 3.999)', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
-[[rule]]
-toolName = "tool1"
-decision = "allow"
-priority = 3.0
-
-[[rule]]
-toolName = "tool2"
-decision = "allow"
-priority = 3.5
-
-[[rule]]
-toolName = "tool3"
-decision = "allow"
-priority = 3.999
-`;
-        await writeFile(path, content);
-
-        const rules = await loadPolicyFromToml(path);
-        expect(rules).toHaveLength(3);
-      });
+`);
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('schema_validation');
+      expect(error.details).toContain('priority');
+      expect(error.details).toContain('integer');
     });
 
-    describe('complex argsPattern scenarios', () => {
-      it('handles escaped special regex characters', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
+    it('should return a schema_validation error if priority is negative', async () => {
+      const result = await runLoadPoliciesFromToml(`
 [[rule]]
-toolName = "shell"
-argsPattern = "\\\\$\\\\(.*\\\\)"
-decision = "deny"
-`;
-        await writeFile(path, content);
+toolName = "test"
+decision = "allow"
+priority = -1
+`);
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('schema_validation');
+      expect(error.details).toContain('priority');
+      expect(error.details).toContain('>= 0');
+    });
 
-        const rules = await loadPolicyFromToml(path);
-        expect(rules[0].argsPattern).toBeInstanceOf(RegExp);
-      });
-
-      it('handles complex regex patterns', async () => {
-        const path = join(testDir, 'test.toml');
-        const content = `
+    it('should return a schema_validation error if priority is >= 1000', async () => {
+      const result = await runLoadPoliciesFromToml(`
 [[rule]]
-toolName = "shell"
-argsPattern = "^(rm|rmdir|del)\\\\s+.*(\\\\/|\\\\\\\\\\\\\\\\)$"
-decision = "deny"
-`;
-        await writeFile(path, content);
+toolName = "test"
+decision = "allow"
+priority = 1000
+`);
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('schema_validation');
+      expect(error.details).toContain('priority');
+      expect(error.details).toContain('<= 999');
+    });
 
-        const rules = await loadPolicyFromToml(path);
-        expect(rules[0].argsPattern).toBeInstanceOf(RegExp);
+    it('should return a schema_validation error if decision is invalid', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "test"
+decision = "maybe"
+priority = 100
+`);
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('schema_validation');
+      expect(error.details).toContain('decision');
+    });
+
+    it('should return a schema_validation error if toolName is not a string or array', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = 123
+decision = "allow"
+priority = 100
+`);
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('schema_validation');
+      expect(error.details).toContain('toolName');
+    });
+
+    it('should return a rule_validation error if commandRegex is used with wrong toolName', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "not_shell"
+commandRegex = ".*"
+decision = "allow"
+priority = 100
+`);
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('rule_validation');
+      expect(error.details).toContain('run_shell_command');
+    });
+
+    it('should return a rule_validation error if commandPrefix and commandRegex are combined', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "git"
+commandRegex = ".*"
+decision = "allow"
+priority = 100
+`);
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('rule_validation');
+      expect(error.details).toContain('mutually exclusive');
+    });
+
+    it('should return a regex_compilation error for invalid argsPattern', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "test"
+argsPattern = "([a-z)"
+decision = "allow"
+priority = 100
+`);
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('regex_compilation');
+      expect(error.message).toBe('Invalid regex pattern');
+    });
+
+    it('should return a file_read error if readdir fails', async () => {
+      const actualFs =
+        await vi.importActual<typeof import('node:fs/promises')>(
+          'node:fs/promises',
+        );
+
+      const mockReaddir = vi.fn(async () => {
+        throw new Error('Permission denied');
       });
-    });
-  });
 
-  describe('loadDefaultPolicies', () => {
-    it('loads default policies successfully', async () => {
-      const rules = await loadDefaultPolicies();
+      vi.doMock('node:fs/promises', () => ({
+        ...actualFs,
+        default: { ...actualFs, readdir: mockReaddir },
+        readdir: mockReaddir,
+      }));
 
-      // Should have rules from read-only.toml and write.toml
-      expect(rules.length).toBeGreaterThan(0);
+      const { loadPoliciesFromToml: load } = await import('./toml-loader.js');
+      const getPolicyTier = (_dir: string) => 1;
+      const result = await load(
+        ApprovalMode.DEFAULT,
+        ['/policies'],
+        getPolicyTier,
+      );
 
-      // Check for some expected read-only tools
-      const readOnlyTools = rules.filter((r) => r.priority === 1.05);
-      expect(readOnlyTools.length).toBeGreaterThan(0);
-      expect(readOnlyTools.some((r) => r.toolName === 'glob')).toBe(true);
-      expect(
-        readOnlyTools.some((r) => r.toolName === 'search_file_content'),
-      ).toBe(true);
-
-      // Check for some expected write tools
-      const writeTools = rules.filter((r) => r.priority === 1.01);
-      expect(writeTools.length).toBeGreaterThan(0);
-      expect(writeTools.some((r) => r.toolName === 'replace')).toBe(true);
-      expect(writeTools.some((r) => r.toolName === 'shell')).toBe(true);
-    });
-
-    it('all default rules have valid priorities', async () => {
-      const rules = await loadDefaultPolicies();
-
-      // Verify each rule's priority falls within valid range
-      rules.forEach((rule) => {
-        const priority = rule.priority ?? 0;
-        expect(priority).toBeGreaterThanOrEqual(0);
-        const isValidPriority =
-          priority === 0 || (priority >= 1.0 && priority < 4.0);
-        expect(isValidPriority).toBe(true);
-      });
-    });
-
-    it('all default rules have valid decisions', async () => {
-      const rules = await loadDefaultPolicies();
-
-      for (const rule of rules) {
-        expect([
-          PolicyDecision.ALLOW,
-          PolicyDecision.DENY,
-          PolicyDecision.ASK_USER,
-        ]).toContain(rule.decision);
-      }
-    });
-
-    it('throws PolicyLoadError if default policy file is corrupt', async () => {
-      // This test would require mocking the file system or modifying default files
-      // For now, we trust that default files are valid, but we document the behavior
-      // In a real scenario, we could use mock-fs or similar to simulate corruption
-      expect(loadDefaultPolicies).toBeDefined();
-    });
-  });
-
-  describe('PolicyLoadError', () => {
-    it('includes path and cause in error', () => {
-      const cause = new Error('Original error');
-      const error = new PolicyLoadError('Test error', '/path/to/file.toml', {
-        cause,
-      });
-
-      expect(error.name).toBe('PolicyLoadError');
-      expect(error.message).toBe('Test error');
-      expect(error.path).toBe('/path/to/file.toml');
-      expect(error.cause).toBe(cause);
-    });
-
-    it('works without path or cause', () => {
-      const error = new PolicyLoadError('Test error');
-
-      expect(error.name).toBe('PolicyLoadError');
-      expect(error.message).toBe('Test error');
-      expect(error.path).toBeUndefined();
-      expect(error.cause).toBeUndefined();
+      expect(result.errors).toHaveLength(1);
+      const error = result.errors[0];
+      expect(error.errorType).toBe('file_read');
+      expect(error.message).toContain('Failed to read policy directory');
     });
   });
 });

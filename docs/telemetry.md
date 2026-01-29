@@ -16,33 +16,40 @@ The telemetry infrastructure is based on the **[OpenTelemetry] (OTEL)** standard
 
 ## Enabling telemetry
 
-You can enable telemetry in multiple ways. Configuration is primarily managed via the [`.gemini/settings.json` file](./cli/configuration.md) and environment variables, but CLI flags can override these settings for a specific session.
+Telemetry configuration is managed via settings files and environment variables. The recommended approach is to configure telemetry in your [settings files](./cli/configuration.md).
+
+### Configuration methods
+
+Configure telemetry using one of the following methods:
+
+1.  **Settings files (recommended):**
+    - **User settings file (`~/.llxprt/settings.json`):** Global configuration for all projects.
+    - **Workspace settings file (`.llxprt/settings.json`):** Project-specific configuration.
+
+    Add a `telemetry` object to your settings file (see [Example settings](#example-settings) below).
+
+2.  **Environment variables:**
+    - `OTEL_EXPORTER_OTLP_ENDPOINT`: Sets the OTLP endpoint URL.
+
+3.  **CLI flags:** Available for temporary overrides during specific sessions, but settings files are the preferred method for persistent configuration.
 
 ### Order of precedence
 
-The following lists the precedence for applying telemetry settings, with items listed higher having greater precedence:
+When multiple configuration methods are used, settings are applied in the following order (highest precedence first):
 
-1.  **CLI flags (for `llxprt` command):**
-    - `--telemetry` / `--no-telemetry`: Overrides `telemetry.enabled`.
-    - `--telemetry-target <local|gcp>`: Overrides `telemetry.target`.
-    - `--telemetry-otlp-endpoint <URL>`: Overrides `telemetry.otlpEndpoint`.
-    - `--telemetry-log-prompts` / `--no-telemetry-log-prompts`: Overrides `telemetry.logPrompts`.
-    - `--telemetry-outfile <path>`: Redirects telemetry output to a file. See [Exporting to a file](#exporting-to-a-file).
-
-1.  **Environment variables:**
-    - `OTEL_EXPORTER_OTLP_ENDPOINT`: Overrides `telemetry.otlpEndpoint`.
-
-1.  **Workspace settings file (`.llxprt/settings.json`):** Values from the `telemetry` object in this project-specific file.
-
-1.  **User settings file (`~/.llxprt/settings.json`):** Values from the `telemetry` object in this global user file.
-
-1.  **Defaults:** applied if not set by any of the above.
+1.  **CLI flags** (temporary session overrides)
+2.  **Environment variables**
+3.  **Workspace settings file (`.llxprt/settings.json`)**
+4.  **User settings file (`~/.llxprt/settings.json`)**
+5.  **Defaults:**
     - `telemetry.enabled`: `false`
     - `telemetry.target`: `local`
     - `telemetry.otlpEndpoint`: `http://localhost:4317`
     - `telemetry.logPrompts`: `true`
 
 **Note:** The telemetry scripts (`npm run telemetry`) are provided for development purposes but will not collect any data unless you manually re-enable telemetry in the source code. Even then, the `local` target ensures data stays on your machine, while the `gcp` target would require your own Google Cloud project - LLxprt Code never sends data to Google's telemetry systems.
+
+**CLI flags reference:** For temporary session overrides, CLI flags are available (e.g., `--telemetry`, `--telemetry-target`, `--telemetry-otlp-endpoint`, `--telemetry-log-prompts`, `--telemetry-outfile`). However, for persistent configuration, use settings files as described above.
 
 ### Example settings
 
@@ -61,9 +68,9 @@ The following code can be added to your workspace (`.llxprt/settings.json`) or u
 
 ### Exporting to a file
 
-You can export all telemetry data to a file for local inspection.
+You can export all telemetry data to a file for local inspection using the `--telemetry-outfile` CLI flag as a temporary override. This must be used with `--telemetry-target=local`.
 
-To enable file export, use the `--telemetry-outfile` flag with a path to your desired output file. This must be run using `--telemetry-target=local`.
+Example:
 
 ```bash
 llxprt --telemetry --telemetry-target=local --telemetry-outfile=/path/to/telemetry.log "your prompt"

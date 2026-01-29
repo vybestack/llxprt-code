@@ -12,6 +12,7 @@ import {
   shutdownTelemetry,
   GeminiEventType,
   ServerGeminiStreamEvent,
+  OutputFormat,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
@@ -79,6 +80,7 @@ describe('runNonInteractive', () => {
   let mockGeminiClient: {
     sendMessageStream: vi.Mock;
   };
+  let processStderrSpy: vi.SpyInstance;
 
   beforeEach(async () => {
     mockCoreExecuteToolCall = vi.mocked(executeToolCall);
@@ -92,6 +94,9 @@ describe('runNonInteractive', () => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+    processStderrSpy = vi
+      .spyOn(process.stderr, 'write')
       .mockImplementation(() => true);
 
     mockToolRegistry = {
@@ -118,6 +123,7 @@ describe('runNonInteractive', () => {
       isTrustedFolder: vi.fn().mockReturnValue(false),
       getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
       getSessionId: vi.fn().mockReturnValue('test-session'),
+      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
       storage: {
         getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
       },
@@ -143,8 +149,9 @@ describe('runNonInteractive', () => {
       computeMergedSettings: vi.fn(),
     } as unknown as LoadedSettings;
 
-    const { handleAtCommand } =
-      await import('./ui/hooks/atCommandProcessor.js');
+    const { handleAtCommand } = await import(
+      './ui/hooks/atCommandProcessor.js'
+    );
     vi.mocked(handleAtCommand).mockImplementation(async ({ query }) => ({
       processedQuery: [{ text: query }],
       shouldProceed: true,
@@ -172,12 +179,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Test input',
-      'prompt-id-1',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-1',
+    });
 
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
       [{ text: 'Test input' }],
@@ -213,12 +220,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Test input',
-      'prompt-id-thought',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-thought',
+    });
 
     const writes = processStdoutSpy.mock.calls.map(([value]) => value);
     const output = writes.join('');
@@ -253,12 +260,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
       .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Use a tool',
-      'prompt-id-2',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Use a tool',
+      prompt_id: 'prompt-id-2',
+    });
 
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
@@ -321,12 +328,12 @@ describe('runNonInteractive', () => {
       },
     });
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Use the non-gemini provider',
-      'prompt-provider',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Use the non-gemini provider',
+      prompt_id: 'prompt-provider',
+    });
 
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
     expect(mockGeminiClient.sendMessageStream).toHaveBeenNthCalledWith(
@@ -388,12 +395,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
       .mockReturnValueOnce(createStreamFromEvents(finalResponse));
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Trigger tool error',
-      'prompt-id-3',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Trigger tool error',
+      prompt_id: 'prompt-id-3',
+    });
 
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
@@ -429,12 +436,12 @@ describe('runNonInteractive', () => {
     });
 
     await expect(
-      runNonInteractive(
-        mockConfig,
-        mockSettings,
-        'Initial fail',
-        'prompt-id-4',
-      ),
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: 'Initial fail',
+        prompt_id: 'prompt-id-4',
+      }),
     ).rejects.toThrow(apiError);
   });
 
@@ -470,12 +477,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
       .mockReturnValueOnce(createStreamFromEvents(finalResponse));
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Trigger tool not found',
-      'prompt-id-5',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Trigger tool not found',
+      prompt_id: 'prompt-id-5',
+    });
 
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
@@ -494,12 +501,12 @@ describe('runNonInteractive', () => {
   it('should exit when max session turns are exceeded', async () => {
     vi.mocked(mockConfig.getMaxSessionTurns).mockReturnValue(0);
     await expect(
-      runNonInteractive(
-        mockConfig,
-        mockSettings,
-        'Trigger loop',
-        'prompt-id-6',
-      ),
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: 'Trigger loop',
+        prompt_id: 'prompt-id-6',
+      }),
     ).rejects.toThrow(
       'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
     );
@@ -507,8 +514,9 @@ describe('runNonInteractive', () => {
 
   it('should preprocess @include commands before sending to the model', async () => {
     // 1. Mock the imported atCommandProcessor
-    const { handleAtCommand } =
-      await import('./ui/hooks/atCommandProcessor.js');
+    const { handleAtCommand } = await import(
+      './ui/hooks/atCommandProcessor.js'
+    );
     const mockHandleAtCommand = vi.mocked(handleAtCommand);
 
     // 2. Define the raw input and the expected processed output
@@ -535,7 +543,12 @@ describe('runNonInteractive', () => {
     );
 
     // 4. Run the non-interactive mode with the raw input
-    await runNonInteractive(mockConfig, mockSettings, rawInput, 'prompt-id-7');
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: rawInput,
+      prompt_id: 'prompt-id-7',
+    });
 
     // 5. Assert that sendMessageStream was called with the PROCESSED parts, not the raw input
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
@@ -566,12 +579,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      '/testcommand',
-      'prompt-id-slash',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: '/testcommand',
+      prompt_id: 'prompt-id-slash',
+    });
 
     // Ensure the prompt sent to the model is from the command, not the raw input
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
@@ -595,12 +608,12 @@ describe('runNonInteractive', () => {
     mockGetCommands.mockReturnValue([mockCommand]);
 
     await expect(
-      runNonInteractive(
-        mockConfig,
-        mockSettings,
-        '/confirm',
-        'prompt-id-confirm',
-      ),
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: '/confirm',
+        prompt_id: 'prompt-id-confirm',
+      }),
     ).rejects.toThrow(
       'Exiting due to a confirmation prompt requested by the command.',
     );
@@ -617,12 +630,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      '/unknowncommand',
-      'prompt-id-unknown',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: '/unknowncommand',
+      prompt_id: 'prompt-id-unknown',
+    });
 
     // Ensure the raw input is sent to the model
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
@@ -645,12 +658,12 @@ describe('runNonInteractive', () => {
     mockGetCommands.mockReturnValue([mockCommand]);
 
     await expect(
-      runNonInteractive(
-        mockConfig,
-        mockSettings,
-        '/noaction',
-        'prompt-id-unhandled',
-      ),
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: '/noaction',
+        prompt_id: 'prompt-id-unhandled',
+      }),
     ).rejects.toThrow(
       'Exiting due to command result that is not supported in non-interactive mode.',
     );
@@ -675,12 +688,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      '/testargs arg1 arg2',
-      'prompt-id-args',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: '/testargs arg1 arg2',
+      prompt_id: 'prompt-id-args',
+    });
 
     expect(mockAction).toHaveBeenCalledWith(expect.any(Object), 'arg1 arg2');
 
@@ -730,12 +743,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
       .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'List the files',
-      'prompt-id-allowed',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'List the files',
+      prompt_id: 'prompt-id-allowed',
+    });
 
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
@@ -745,6 +758,7 @@ describe('runNonInteractive', () => {
     expect(processStdoutSpy).toHaveBeenCalledWith('file.txt');
   });
 
+  // Skipped tests from issue922 branch - thought buffering tests for deduplication
   it.skip('should accumulate multiple Thought events and flush once on content boundary', async () => {
     const thoughtEvent1: ServerGeminiStreamEvent = {
       type: GeminiEventType.Thought,
@@ -778,12 +792,12 @@ describe('runNonInteractive', () => {
       ]),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'test query',
-      'test-prompt-id',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'test query',
+      prompt_id: 'test-prompt-id',
+    });
 
     const thinkingOutputs = processStdoutSpy.mock.calls.filter(
       ([output]: [string]) => output.includes('<think>'),
@@ -828,12 +842,12 @@ describe('runNonInteractive', () => {
       ]),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'test query',
-      'test-prompt-id',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'test query',
+      prompt_id: 'test-prompt-id',
+    });
 
     const thinkingOutputs = processStdoutSpy.mock.calls.filter(
       ([output]: [string]) => output.includes('<think>'),
@@ -843,5 +857,178 @@ describe('runNonInteractive', () => {
     const thinkingText = thinkingOutputs[0][0];
     const thoughtCount = (thinkingText.match(/Analyzing/g) || []).length;
     expect(thoughtCount).toBe(1);
+  });
+
+  // Tests from main branch
+  it('should display a deprecation warning if hasDeprecatedPromptArg is true', async () => {
+    const events: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'Final Answer' },
+      {
+        type: GeminiEventType.Finished,
+        value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
+      },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-deprecated',
+      hasDeprecatedPromptArg: true,
+    });
+
+    expect(processStderrSpy).toHaveBeenCalledWith(
+      'The --prompt (-p) flag has been deprecated and will be removed in a future version. Please use a positional argument for your prompt. See gemini --help for more information.\n',
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('Final Answer');
+  });
+
+  it('should display a deprecation warning for JSON format', async () => {
+    const events: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'Final Answer' },
+      {
+        type: GeminiEventType.Finished,
+        value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
+      },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+    vi.mocked(mockConfig.getOutputFormat).mockReturnValue(OutputFormat.JSON);
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-deprecated-json',
+      hasDeprecatedPromptArg: true,
+    });
+
+    const deprecateText =
+      'The --prompt (-p) flag has been deprecated and will be removed in a future version. Please use a positional argument for your prompt. See gemini --help for more information.\n';
+    expect(processStderrSpy).toHaveBeenCalledWith(deprecateText);
+  });
+
+  it('should filter emojis from thinking blocks in auto mode', async () => {
+    const mockGetEphemeralSetting = vi.fn((key: string) => {
+      if (key === 'emojifilter') return 'auto';
+      if (key === 'reasoning.includeInResponse') return true;
+      return undefined;
+    });
+    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation(
+      mockGetEphemeralSetting,
+    );
+
+    const events: ServerGeminiStreamEvent[] = [
+      {
+        type: GeminiEventType.Thought,
+        value: {
+          subject: 'Planning \u{1F914} the approach',
+          description: 'Let me think \u{1F4AD} carefully',
+        },
+      },
+      { type: GeminiEventType.Content, value: 'Here is my answer' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-emoji-think',
+    });
+
+    const thinkOutput = processStdoutSpy.mock.calls.find(([value]) =>
+      value.includes('<think>'),
+    );
+    expect(thinkOutput).toBeDefined();
+    const thinkText = thinkOutput?.[0] as string;
+    expect(thinkText).not.toContain('\u{1F914}');
+    expect(thinkText).not.toContain('\u{1F4AD}');
+    expect(thinkText).toMatch(
+      /Planning.*the approach.*Let me think.*carefully/,
+    );
+  });
+
+  it('should suppress thinking blocks with emojis in error mode', async () => {
+    const mockGetEphemeralSetting = vi.fn((key: string) => {
+      if (key === 'emojifilter') return 'error';
+      if (key === 'reasoning.includeInResponse') return true;
+      return undefined;
+    });
+    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation(
+      mockGetEphemeralSetting,
+    );
+
+    const events: ServerGeminiStreamEvent[] = [
+      {
+        type: GeminiEventType.Thought,
+        value: {
+          subject: 'Planning \u{1F914}',
+          description: 'Think carefully \u{1F4AD}',
+        },
+      },
+      { type: GeminiEventType.Content, value: 'Here is my answer' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-emoji-error',
+    });
+
+    const thinkOutput = processStdoutSpy.mock.calls.find(([value]) =>
+      value.includes('<think>'),
+    );
+    expect(thinkOutput).toBeUndefined();
+  });
+
+  it('should pass through thinking blocks when emojifilter is allowed', async () => {
+    const mockGetEphemeralSetting = vi.fn((key: string) => {
+      if (key === 'emojifilter') return 'allowed';
+      if (key === 'reasoning.includeInResponse') return true;
+      return undefined;
+    });
+    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation(
+      mockGetEphemeralSetting,
+    );
+
+    const events: ServerGeminiStreamEvent[] = [
+      {
+        type: GeminiEventType.Thought,
+        value: {
+          subject: 'Planning \u{1F914}',
+          description: 'Think carefully \u{1F4AD}',
+        },
+      },
+      { type: GeminiEventType.Content, value: 'Here is my answer' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-emoji-allowed',
+    });
+
+    const thinkOutput = processStdoutSpy.mock.calls.find(([value]) =>
+      value.includes('<think>'),
+    );
+    expect(thinkOutput).toBeDefined();
+    const thinkText = thinkOutput?.[0] as string;
+    expect(thinkText).toContain('\u{1F914}');
+    expect(thinkText).toContain('\u{1F4AD}');
   });
 });

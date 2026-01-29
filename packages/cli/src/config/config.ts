@@ -31,7 +31,6 @@ import {
   MCPServerConfig,
   SettingsService,
   DebugLogger,
-  createPolicyEngineConfig,
   SHELL_TOOL_NAMES,
   isRipgrepAvailable,
   normalizeShellReplacement,
@@ -40,6 +39,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import { Settings } from './settings.js';
+import { createPolicyEngineConfig } from './policy.js';
 
 import { annotateActiveExtensions } from './extension.js';
 import { getCliVersion } from '../utils/version.js';
@@ -1254,19 +1254,23 @@ export async function loadCliConfig(
       ? argv.screenReader
       : (effectiveSettings.accessibility?.screenReader ?? false);
 
-  const policyPathSetting = effectiveSettings.tools?.policyPath;
-  const resolvedPolicyPath = policyPathSetting
-    ? resolvePath(policyPathSetting)
-    : undefined;
+  // Merge CLI allowed tools into effectiveSettings for policy engine
+  // The allowedTools computed from CLI args needs to be available to the policy engine
+  if (allowedTools.length > 0) {
+    effectiveSettings = {
+      ...effectiveSettings,
+      tools: {
+        ...effectiveSettings.tools,
+        allowed: allowedTools,
+      },
+    };
+  }
 
-  // Create policy engine config from legacy approval mode and allowed tools
-  const policyEngineConfig = await createPolicyEngineConfig({
-    getApprovalMode: () => approvalMode,
-    getAllowedTools: () =>
-      argv.allowedTools || settings.allowedTools || undefined,
-    getNonInteractive: () => !interactive,
-    getUserPolicyPath: () => resolvedPolicyPath,
-  });
+  // Create policy engine config from settings and approval mode
+  const policyEngineConfig = await createPolicyEngineConfig(
+    effectiveSettings,
+    approvalMode,
+  );
 
   const outputFormat =
     argv.outputFormat === OutputFormat.JSON
@@ -1362,6 +1366,8 @@ export async function loadCliConfig(
     })),
     provider: finalProvider,
     extensions: allExtensions,
+    enableExtensionReloading:
+      effectiveSettings.experimental?.extensionReloading,
     blockedMcpServers,
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
@@ -1383,6 +1389,9 @@ export async function loadCliConfig(
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
     continueSession: argv.continue ?? false,
+    // TODO: loading of hooks based on workspace trust
+    enableHooks: effectiveSettings.tools?.enableHooks ?? false,
+    hooks: effectiveSettings.hooks || {},
   });
 
   const enhancedConfig = config;
@@ -1403,8 +1412,9 @@ export async function loadCliConfig(
 
   // Register provider infrastructure AFTER runtime context but BEFORE any profile application
   // This is critical for applyProfileSnapshot to access the provider manager
-  const { registerCliProviderInfrastructure } =
-    await import('../runtime/runtimeSettings.js');
+  const { registerCliProviderInfrastructure } = await import(
+    '../runtime/runtimeSettings.js'
+  );
   if (runtimeState.oauthManager) {
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
@@ -1585,8 +1595,9 @@ export async function loadCliConfig(
       bootstrapArgs.baseurlOverride ||
       (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
   ) {
-    const { applyCliArgumentOverrides } =
-      await import('../runtime/runtimeSettings.js');
+    const { applyCliArgumentOverrides } = await import(
+      '../runtime/runtimeSettings.js'
+    );
     await applyCliArgumentOverrides(
       {
         key: argv.key,

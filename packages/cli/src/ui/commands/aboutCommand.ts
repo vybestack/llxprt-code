@@ -126,8 +126,9 @@ export const aboutCommand: SlashCommand = {
     let keyfilePath = '';
     const keyStatus = '';
     try {
-      const { getProviderManager } =
-        await import('../../providers/providerManagerInstance.js');
+      const { getProviderManager } = await import(
+        '../../providers/providerManagerInstance.js'
+      );
       const providerManager = getProviderManager();
       const providerName = providerManager.getActiveProviderName();
       if (providerName) {

@@ -216,8 +216,9 @@ describe('SessionController', () => {
   });
 
   it('should handle payment mode changes properly', async () => {
-    const providerModule =
-      await import('../../providers/providerManagerInstance.js');
+    const providerModule = await import(
+      '../../providers/providerManagerInstance.js'
+    );
     const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
 
     // Mock useHistory to return a non-empty history
@@ -441,8 +442,9 @@ describe('SessionController', () => {
   });
 
   it('should handle model changes via polling', async () => {
-    const providerModule =
-      await import('../../providers/providerManagerInstance.js');
+    const providerModule = await import(
+      '../../providers/providerManagerInstance.js'
+    );
     const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
 
     let contextValue: SessionContextType | undefined;

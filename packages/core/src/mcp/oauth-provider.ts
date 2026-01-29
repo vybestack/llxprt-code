@@ -1,11 +1,12 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import * as http from 'node:http';
 import * as crypto from 'node:crypto';
+import type * as net from 'node:net';
 import { URL } from 'node:url';
 import type { EventEmitter } from 'node:events';
 import { openBrowserSecurely } from '../utils/secure-browser-launcher.js';
@@ -15,6 +16,9 @@ import {
 } from './oauth-token-storage.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { OAuthUtils } from './oauth-utils.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 
 export const OAUTH_DISPLAY_MESSAGE_EVENT = 'oauth-display-message' as const;
 
@@ -54,7 +58,7 @@ export interface OAuthTokenResponse {
 }
 
 /**
- * Dynamic client registration request.
+ * Dynamic client registration request (RFC 7591).
  */
 export interface OAuthClientRegistrationRequest {
   client_name: string;
@@ -62,12 +66,11 @@ export interface OAuthClientRegistrationRequest {
   grant_types: string[];
   response_types: string[];
   token_endpoint_auth_method: string;
-  code_challenge_method?: string[];
   scope?: string;
 }
 
 /**
- * Dynamic client registration response.
+ * Dynamic client registration response (RFC 7591).
  */
 export interface OAuthClientRegistrationResponse {
   client_id: string;
@@ -78,7 +81,6 @@ export interface OAuthClientRegistrationResponse {
   grant_types: string[];
   response_types: string[];
   token_endpoint_auth_method: string;
-  code_challenge_method?: string[];
   scope?: string;
 }
 
@@ -91,36 +93,35 @@ interface PKCEParams {
   state: string;
 }
 
+const REDIRECT_PATH = '/oauth/callback';
+const HTTP_OK = 200;
+
 /**
  * Provider for handling OAuth authentication for MCP servers.
  */
 export class MCPOAuthProvider {
-  private static readonly REDIRECT_PORT = 7777;
-  private static readonly REDIRECT_PATH = '/oauth/callback';
-  private static readonly HTTP_OK = 200;
-
   /**
    * Register a client dynamically with the OAuth server.
    *
    * @param registrationUrl The client registration endpoint URL
    * @param config OAuth configuration
+   * @param redirectPort The port to use for the redirect URI
    * @returns The registered client information
    */
   private static async registerClient(
     registrationUrl: string,
     config: MCPOAuthConfig,
+    redirectPort: number,
   ): Promise<OAuthClientRegistrationResponse> {
     const redirectUri =
-      config.redirectUri ||
-      `http://localhost:${this.REDIRECT_PORT}${this.REDIRECT_PATH}`;
+      config.redirectUri || `http://localhost:${redirectPort}${REDIRECT_PATH}`;
 
     const registrationRequest: OAuthClientRegistrationRequest = {
-      client_name: 'Gemini CLI MCP Client',
+      client_name: 'LLxprt Code MCP Client',
       redirect_uris: [redirectUri],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none', // Public client
-      code_challenge_method: ['S256'],
       scope: config.scopes?.join(' ') || '',
     };
 
@@ -155,6 +156,85 @@ export class MCPOAuthProvider {
     return OAuthUtils.discoverOAuthConfig(mcpServerUrl);
   }
 
+  private static async discoverAuthServerMetadataForRegistration(
+    authorizationUrl: string,
+  ): Promise<{
+    issuerUrl: string;
+    metadata: NonNullable<
+      Awaited<ReturnType<typeof OAuthUtils.discoverAuthorizationServerMetadata>>
+    >;
+  }> {
+    const authUrl = new URL(authorizationUrl);
+
+    // Preserve path components for issuers with path-based discovery (e.g., Keycloak)
+    // Extract issuer by removing the OIDC protocol-specific path suffix
+    // For example: http://localhost:8888/realms/my-realm/protocol/openid-connect/auth
+    //           -> http://localhost:8888/realms/my-realm
+    const oidcPatterns = [
+      '/protocol/openid-connect/auth',
+      '/protocol/openid-connect/authorize',
+      '/oauth2/authorize',
+      '/oauth/authorize',
+      '/authorize',
+    ];
+
+    let pathname = authUrl.pathname.replace(/\/$/, ''); // Trim trailing slash
+    for (const pattern of oidcPatterns) {
+      if (pathname.endsWith(pattern)) {
+        pathname = pathname.slice(0, -pattern.length);
+        break;
+      }
+    }
+
+    const issuerCandidates = new Set<string>();
+    issuerCandidates.add(authUrl.origin);
+
+    if (pathname) {
+      issuerCandidates.add(`${authUrl.origin}${pathname}`);
+
+      const versionSegmentPattern = /^v\d+(\.\d+)?$/i;
+      const segments = pathname.split('/').filter(Boolean);
+      const lastSegment = segments[segments.length - 1];
+      if (lastSegment && versionSegmentPattern.test(lastSegment)) {
+        const withoutVersionPath = segments.slice(0, -1);
+        if (withoutVersionPath.length) {
+          issuerCandidates.add(
+            `${authUrl.origin}/${withoutVersionPath.join('/')}`,
+          );
+        }
+      }
+    }
+
+    const attemptedIssuers = Array.from(issuerCandidates);
+    let selectedIssuer = attemptedIssuers[0];
+    let discoveredMetadata: NonNullable<
+      Awaited<ReturnType<typeof OAuthUtils.discoverAuthorizationServerMetadata>>
+    > | null = null;
+
+    for (const issuer of attemptedIssuers) {
+      debugLogger.debug(`   Trying issuer URL: ${issuer}`);
+      const metadata =
+        await OAuthUtils.discoverAuthorizationServerMetadata(issuer);
+      if (metadata) {
+        selectedIssuer = issuer;
+        discoveredMetadata = metadata;
+        break;
+      }
+    }
+
+    if (!discoveredMetadata) {
+      throw new Error(
+        `Failed to fetch authorization server metadata for client registration (attempted issuers: ${attemptedIssuers.join(', ')})`,
+      );
+    }
+
+    debugLogger.debug(`   Selected issuer URL: ${selectedIssuer}`);
+    return {
+      issuerUrl: selectedIssuer,
+      metadata: discoveredMetadata,
+    };
+  }
+
   /**
    * Generate PKCE parameters for OAuth flow.
    *
@@ -178,35 +258,44 @@ export class MCPOAuthProvider {
 
   /**
    * Start a local HTTP server to handle OAuth callback.
+   * The server will listen on the specified port (or port 0 for OS assignment).
    *
    * @param expectedState The state parameter to validate
-   * @returns Promise that resolves with the authorization code
+   * @returns Object containing the port (available immediately) and a promise for the auth response
    */
-  private static async startCallbackServer(
-    expectedState: string,
-  ): Promise<OAuthAuthorizationResponse> {
-    return new Promise((resolve, reject) => {
-      const server = http.createServer(
-        async (req: http.IncomingMessage, res: http.ServerResponse) => {
-          try {
-            const url = new URL(
-              req.url!,
-              `http://localhost:${this.REDIRECT_PORT}`,
-            );
+  private static startCallbackServer(expectedState: string): {
+    port: Promise<number>;
+    response: Promise<OAuthAuthorizationResponse>;
+  } {
+    let portResolve: (port: number) => void;
+    let portReject: (error: Error) => void;
+    const portPromise = new Promise<number>((resolve, reject) => {
+      portResolve = resolve;
+      portReject = reject;
+    });
 
-            if (url.pathname !== this.REDIRECT_PATH) {
-              res.writeHead(404);
-              res.end('Not found');
-              return;
-            }
+    const responsePromise = new Promise<OAuthAuthorizationResponse>(
+      (resolve, reject) => {
+        let serverPort: number;
 
-            const code = url.searchParams.get('code');
-            const state = url.searchParams.get('state');
-            const error = url.searchParams.get('error');
+        const server = http.createServer(
+          async (req: http.IncomingMessage, res: http.ServerResponse) => {
+            try {
+              const url = new URL(req.url!, `http://localhost:${serverPort}`);
 
-            if (error) {
-              res.writeHead(this.HTTP_OK, { 'Content-Type': 'text/html' });
-              res.end(`
+              if (url.pathname !== REDIRECT_PATH) {
+                res.writeHead(404);
+                res.end('Not found');
+                return;
+              }
+
+              const code = url.searchParams.get('code');
+              const state = url.searchParams.get('state');
+              const error = url.searchParams.get('error');
+
+              if (error) {
+                res.writeHead(HTTP_OK, { 'Content-Type': 'text/html' });
+                res.end(`
               <html>
                 <body>
                   <h1>Authentication Failed</h1>
@@ -216,62 +305,88 @@ export class MCPOAuthProvider {
                 </body>
               </html>
             `);
-              server.close();
-              reject(new Error(`OAuth error: ${error}`));
-              return;
-            }
+                server.close();
+                reject(new Error(`OAuth error: ${error}`));
+                return;
+              }
 
-            if (!code || !state) {
-              res.writeHead(400);
-              res.end('Missing code or state parameter');
-              return;
-            }
+              if (!code || !state) {
+                res.writeHead(400);
+                res.end('Missing code or state parameter');
+                return;
+              }
 
-            if (state !== expectedState) {
-              res.writeHead(400);
-              res.end('Invalid state parameter');
-              server.close();
-              reject(new Error('State mismatch - possible CSRF attack'));
-              return;
-            }
+              if (state !== expectedState) {
+                res.writeHead(400);
+                res.end('Invalid state parameter');
+                server.close();
+                reject(new Error('State mismatch - possible CSRF attack'));
+                return;
+              }
 
-            // Send success response to browser
-            res.writeHead(this.HTTP_OK, { 'Content-Type': 'text/html' });
-            res.end(`
+              // Send success response to browser
+              res.writeHead(HTTP_OK, { 'Content-Type': 'text/html' });
+              res.end(`
             <html>
               <body>
                 <h1>Authentication Successful!</h1>
-                <p>You can close this window and return to Gemini CLI.</p>
+                <p>You can close this window and return to LLxprt Code.</p>
                 <script>window.close();</script>
               </body>
             </html>
           `);
 
-            server.close();
-            resolve({ code, state });
-          } catch (error) {
-            server.close();
-            reject(error);
-          }
-        },
-      );
-
-      server.on('error', reject);
-      server.listen(this.REDIRECT_PORT, () => {
-        console.log(
-          `OAuth callback server listening on port ${this.REDIRECT_PORT}`,
+              server.close();
+              resolve({ code, state });
+            } catch (error) {
+              server.close();
+              reject(error);
+            }
+          },
         );
-      });
 
-      // Timeout after 5 minutes
-      setTimeout(
-        () => {
-          server.close();
-          reject(new Error('OAuth callback timeout'));
-        },
-        5 * 60 * 1000,
-      );
-    });
+        server.on('error', (error) => {
+          portReject(error);
+          reject(error);
+        });
+
+        // Determine which port to use (env var or OS-assigned)
+        const portStr = process.env['OAUTH_CALLBACK_PORT'];
+        let listenPort = 0; // Default to OS-assigned port
+        if (portStr) {
+          const envPort = parseInt(portStr, 10);
+          if (isNaN(envPort) || envPort <= 0 || envPort > 65535) {
+            const error = new Error(
+              `Invalid value for OAUTH_CALLBACK_PORT: "${portStr}"`,
+            );
+            portReject(error);
+            reject(error);
+            return;
+          }
+          listenPort = envPort;
+        }
+
+        server.listen(listenPort, () => {
+          const address = server.address() as net.AddressInfo;
+          serverPort = address.port;
+          debugLogger.log(
+            `OAuth callback server listening on port ${serverPort}`,
+          );
+          portResolve(serverPort); // Resolve port promise immediately
+        });
+
+        // Timeout after 5 minutes
+        setTimeout(
+          () => {
+            server.close();
+            reject(new Error('OAuth callback timeout'));
+          },
+          5 * 60 * 1000,
+        );
+      },
+    );
+
+    return { port: portPromise, response: responsePromise };
   }
 
   /**
@@ -279,17 +394,18 @@ export class MCPOAuthProvider {
    *
    * @param config OAuth configuration
    * @param pkceParams PKCE parameters
+   * @param redirectPort The port to use for the redirect URI
    * @param mcpServerUrl The MCP server URL to use as the resource parameter
    * @returns The authorization URL
    */
   private static buildAuthorizationUrl(
     config: MCPOAuthConfig,
     pkceParams: PKCEParams,
+    redirectPort: number,
     mcpServerUrl?: string,
   ): string {
     const redirectUri =
-      config.redirectUri ||
-      `http://localhost:${this.REDIRECT_PORT}${this.REDIRECT_PATH}`;
+      config.redirectUri || `http://localhost:${redirectPort}${REDIRECT_PATH}`;
 
     const params = new URLSearchParams({
       client_id: config.clientId!,
@@ -336,6 +452,7 @@ export class MCPOAuthProvider {
    * @param config OAuth configuration
    * @param code Authorization code
    * @param codeVerifier PKCE code verifier
+   * @param redirectPort The port to use for the redirect URI
    * @param mcpServerUrl The MCP server URL to use as the resource parameter
    * @returns The token response
    */
@@ -343,11 +460,11 @@ export class MCPOAuthProvider {
     config: MCPOAuthConfig,
     code: string,
     codeVerifier: string,
+    redirectPort: number,
     mcpServerUrl?: string,
   ): Promise<OAuthTokenResponse> {
     const redirectUri =
-      config.redirectUri ||
-      `http://localhost:${this.REDIRECT_PORT}${this.REDIRECT_PATH}`;
+      config.redirectUri || `http://localhost:${redirectPort}${REDIRECT_PATH}`;
 
     const params = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -667,6 +784,18 @@ export class MCPOAuthProvider {
       }
     }
 
+    // Generate PKCE parameters
+    const pkceParams = this.generatePKCEParams();
+
+    // Start callback server first to allocate port
+    // This ensures we only create one server and eliminates race conditions
+    const callbackServer = this.startCallbackServer(pkceParams.state);
+
+    // Wait for server to start and get the allocated port
+    // We need this port for client registration and auth URL building
+    const redirectPort = await callbackServer.port;
+    debugLogger.debug(`Callback server listening on port ${redirectPort}`);
+
     // If no client ID is provided, try dynamic client registration
     if (!config.clientId) {
       let registrationUrl = config.registrationUrl;
@@ -680,20 +809,11 @@ export class MCPOAuthProvider {
           );
         }
 
-        const authUrl = new URL(config.authorizationUrl);
-        const serverUrl = `${authUrl.protocol}//${authUrl.host}`;
-
         console.debug('→ Attempting dynamic client registration...');
-
-        // Get the authorization server metadata for registration
-        const authServerMetadata =
-          await OAuthUtils.discoverAuthorizationServerMetadata(serverUrl);
-
-        if (!authServerMetadata) {
-          throw new Error(
-            'Failed to fetch authorization server metadata for client registration',
+        const { metadata: authServerMetadata } =
+          await MCPOAuthProvider.discoverAuthServerMetadataForRegistration(
+            config.authorizationUrl,
           );
-        }
         registrationUrl = authServerMetadata.registration_endpoint;
       }
 
@@ -702,6 +822,7 @@ export class MCPOAuthProvider {
         const clientRegistration = await this.registerClient(
           registrationUrl,
           config,
+          redirectPort,
         );
 
         config.clientId = clientRegistration.client_id;
@@ -724,13 +845,11 @@ export class MCPOAuthProvider {
       );
     }
 
-    // Generate PKCE parameters
-    const pkceParams = this.generatePKCEParams();
-
     // Build authorization URL
     const authUrl = this.buildAuthorizationUrl(
       config,
       pkceParams,
+      redirectPort,
       mcpServerUrl,
     );
 
@@ -742,10 +861,7 @@ ${authUrl}
 TIP: Triple-click to select the entire URL, then copy and paste it into your browser.
 WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.`);
 
-    // Start callback server
-    const callbackPromise = this.startCallbackServer(pkceParams.state);
-
-    // Open browser securely
+    // Open browser securely (callback server is already running)
     try {
       await openBrowserSecurely(authUrl);
     } catch (error) {
@@ -756,7 +872,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     }
 
     // Wait for callback
-    const { code } = await callbackPromise;
+    const { code } = await callbackServer.response;
 
     console.debug('✓ Authorization code received, exchanging for tokens...');
 
@@ -765,6 +881,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       config,
       code,
       pkceParams.codeVerifier,
+      redirectPort,
       mcpServerUrl,
     );
 

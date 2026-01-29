@@ -18,8 +18,8 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
   text,
   url,
 }) => {
-  const prefix = '[OAUTH] ';
-  const prefixWidth = prefix.length;
+  const prefixText = '[OAUTH] ';
+  const prefixWidth = prefixText.length;
 
   // Extract provider name from text if available
   const providerMatch = text.match(/authorize with ([^\n:]+)/i);
@@ -34,7 +34,7 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
     <Box flexDirection="column" marginBottom={1}>
       <Box flexDirection="row" marginBottom={1}>
         <Box width={prefixWidth}>
-          <Text color={Colors.AccentBlue}>{prefix}</Text>
+          <Text color={Colors.AccentBlue}>{prefixText}</Text>
         </Box>
         <Box flexGrow={1}>
           <Text bold color={Colors.AccentBlue}>

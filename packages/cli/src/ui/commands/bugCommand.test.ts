@@ -21,6 +21,7 @@ vi.mock('node:process', () => ({
     version: 'v20.0.0',
     env: process.env,
     memoryUsage: () => ({ rss: 0 }),
+    cwd: () => process.cwd(),
   },
 }));
 

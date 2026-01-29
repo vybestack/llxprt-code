@@ -13,7 +13,8 @@ import {
   type MockedFunction,
   type Mock,
 } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '../../test-utils/render.js';
+import { act } from 'react';
 import { useTodoContinuation } from './useTodoContinuation.js';
 import { useTodoContext } from '../contexts/TodoContext.js';
 import {
@@ -67,7 +68,6 @@ describe('useTodoContinuation - Behavioral Tests', () => {
     id,
     content,
     status,
-    priority: 'medium',
   });
 
   beforeEach(() => {
@@ -523,14 +523,11 @@ describe('useTodoContinuation - Behavioral Tests', () => {
           id: '1',
           content: '',
           status: 'in_progress',
-          priority: 'medium',
         } as Todo,
-        // @ts-expect-error Testing malformed data
         {
           id: '2',
           status: 'pending',
-          priority: 'high',
-        },
+        } as Todo,
       ];
       mockConfig.getEphemeralSettings.mockReturnValue({
         'todo-continuation': true,

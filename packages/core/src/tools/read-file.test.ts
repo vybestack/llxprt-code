@@ -41,6 +41,7 @@ describe('ReadFileTool', () => {
       getTargetDir: () => tempRootDir,
       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
       getConversationLoggingEnabled: () => false,
+      getEphemeralSettings: () => ({}),
     } as unknown as Config;
     tool = new ReadFileTool(mockConfigInstance);
   });

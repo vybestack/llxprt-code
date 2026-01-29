@@ -28,15 +28,31 @@ const BUILTIN_ALIAS_DIR = fs.existsSync(BUNDLE_ALIAS_DIR)
 
 export type ProviderAliasSource = 'user' | 'builtin';
 
+export interface StaticModelEntry {
+  id: string;
+  name: string;
+}
+
 export interface ProviderAliasConfig {
   name?: string;
   baseProvider: string;
+  /** @deprecated Use 'base-url' for consistency with profiles */
   baseUrl?: string;
+  /** Base URL for the provider API (consistent with profile ephemeral settings) */
+  'base-url'?: string;
   defaultModel?: string;
   ephemeralSettings?: Record<string, unknown>;
   description?: string;
   providerConfig?: Record<string, unknown>;
   apiKeyEnv?: string;
+  /** Provider ID from models.dev for filtering in ModelsDialog */
+  modelsDevProviderId?: string | null;
+  /**
+   * Static list of models to return from getModels() instead of fetching from API.
+   * Use this for providers that don't have a /models endpoint or when you want
+   * to restrict the available models to a specific set.
+   */
+  staticModels?: StaticModelEntry[];
 }
 
 export interface ProviderAliasEntry {

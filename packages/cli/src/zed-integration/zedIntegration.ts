@@ -1403,7 +1403,6 @@ class Session {
     const entries: acp.PlanEntry[] = todos.map((todo) => ({
       content: todo.content,
       status: todo.status,
-      priority: todo.priority,
     }));
 
     // Send plan update to Zed via ACP protocol
@@ -1425,12 +1424,23 @@ function toToolCallContent(toolResult: ToolResult): acp.ToolCallContent | null {
         type: 'content',
         content: { type: 'text', text: toolResult.returnDisplay },
       };
-    } else {
+    } else if ('fileDiff' in toolResult.returnDisplay) {
       return {
         type: 'diff',
         path: toolResult.returnDisplay.fileName,
         oldText: toolResult.returnDisplay.originalContent,
         newText: toolResult.returnDisplay.newContent,
+      };
+    } else {
+      const content =
+        typeof toolResult.returnDisplay === 'object' &&
+        'content' in toolResult.returnDisplay &&
+        typeof toolResult.returnDisplay.content === 'string'
+          ? toolResult.returnDisplay.content
+          : '';
+      return {
+        type: 'content',
+        content: { type: 'text', text: content },
       };
     }
   } else {

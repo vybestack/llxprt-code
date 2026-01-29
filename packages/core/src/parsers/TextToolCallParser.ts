@@ -672,7 +672,6 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     }
 
     normalized.status = this.normalizeTodoStatus(normalized.status);
-    normalized.priority = this.normalizeTodoPriority(normalized.priority);
 
     return normalized;
   }
@@ -690,40 +689,6 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       }
     }
     return 'pending';
-  }
-
-  private normalizeTodoPriority(value: unknown): 'high' | 'medium' | 'low' {
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (
-        normalized === 'high' ||
-        normalized === 'medium' ||
-        normalized === 'low'
-      ) {
-        return normalized;
-      }
-      if (normalized === '1') {
-        return 'high';
-      }
-      if (normalized === '2') {
-        return 'medium';
-      }
-      if (normalized === '3') {
-        return 'low';
-      }
-    }
-
-    if (typeof value === 'number') {
-      if (value <= 1) {
-        return 'high';
-      }
-      if (value >= 3) {
-        return 'low';
-      }
-      return 'medium';
-    }
-
-    return 'high';
   }
 
   private extractBalancedSegment(

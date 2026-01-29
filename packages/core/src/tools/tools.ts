@@ -79,10 +79,14 @@ export interface ToolInvocation<
 export abstract class BaseToolInvocation<
   TParams extends object,
   TResult extends ToolResult,
-> implements ToolInvocation<TParams, TResult> {
+> implements ToolInvocation<TParams, TResult>
+{
   constructor(
     readonly params: TParams,
     protected readonly messageBus?: MessageBus,
+    readonly _toolName?: string,
+    readonly _toolDisplayName?: string,
+    readonly _serverName?: string,
   ) {}
 
   abstract getDescription(): string;
@@ -200,7 +204,7 @@ export abstract class BaseToolInvocation<
    * Subclasses can override to provide a specific tool name.
    */
   protected getToolName(): string {
-    return 'unknown';
+    return this._toolName ?? 'unknown';
   }
 
   /**
@@ -208,7 +212,7 @@ export abstract class BaseToolInvocation<
    * Regular tools should return undefined.
    */
   protected getServerName(): string | undefined {
-    return undefined;
+    return this._serverName;
   }
 
   /**
@@ -300,7 +304,8 @@ export interface ToolBuilder<
 export abstract class DeclarativeTool<
   TParams extends object,
   TResult extends ToolResult,
-> implements ToolBuilder<TParams, TResult> {
+> implements ToolBuilder<TParams, TResult>
+{
   protected messageBus?: MessageBus;
 
   constructor(
@@ -617,7 +622,14 @@ export function hasCycleInSchema(schema: object): boolean {
   return traverse(schema, new Set<string>(), new Set<string>());
 }
 
-export type ToolResultDisplay = string | FileDiff;
+export interface FileRead {
+  content: string;
+  fileName: string;
+  filePath: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type ToolResultDisplay = string | FileDiff | FileRead;
 
 export interface FileDiff {
   fileDiff: string;
@@ -625,6 +637,8 @@ export interface FileDiff {
   originalContent: string | null;
   newContent: string;
   diffStat?: DiffStat;
+  metadata?: Record<string, unknown>;
+  applied?: boolean;
 }
 
 export interface DiffStat {
@@ -649,6 +663,7 @@ export interface ToolEditConfirmationDetails {
   isModifying?: boolean;
   ideConfirmation?: Promise<DiffUpdateResult>;
   correlationId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ToolExecuteConfirmationDetails {
@@ -710,9 +725,9 @@ export interface ToolLocation {
  * @deprecated Use BaseDeclarativeTool for new tools
  */
 export abstract class BaseTool<
-  TParams extends object,
-  TResult extends ToolResult,
->
+    TParams extends object,
+    TResult extends ToolResult,
+  >
   extends DeclarativeTool<TParams, TResult>
   implements ContextAwareTool
 {

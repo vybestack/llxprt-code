@@ -40,6 +40,7 @@ jobs:
       OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
       LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
       LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+      LLXPRT_CONTEXT_LIMIT: "${{ vars.LLXPRT_CONTEXT_LIMIT || '200000' }}"
       LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
       DEBUG_OUTPUT: 'stderr'
     steps:
@@ -127,7 +128,7 @@ jobs:
           if [[ ! -s "${issues_file}" ]]; then
             {
               echo "<!-- llxprt-pr-review -->"
-              echo "## ⚠️ LLxprt PR Review blocked"
+              echo "## LLxprt PR Review blocked"
               echo
               echo "- No linked issues were detected in this PR's description."
               echo "- Please reference an existing issue with text such as \`Fixes #123\` so the automated review knows what problem to evaluate."
@@ -237,11 +238,25 @@ jobs:
           git diff --stat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diffstat.txt
           git diff --name-status "${BASE_SHA}" "${PR_HEAD_SHA}" > review/changed-files.txt
           git diff --numstat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/numstat.txt
+          # Keep full diff for agent exploration - agent can selectively read what it needs
           git diff -U3 "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diff.patch
-          head -n 4000 review/diff.patch > review/diff-truncated.patch
           grep -Ei '(/tests?/|__tests__|\\.spec\\.|\\.test\\.)' review/changed-files.txt > review/test-files.txt || true
 
-      - name: 'Build LLxprt prompt'
+          # Generate per-file diffs for selective exploration
+          mkdir -p review/diffs
+          while IFS=$'\t' read -r status filename; do
+            [[ -z "$filename" ]] && continue
+            # Sanitize filename for filesystem (replace / with __)
+            safe_name="${filename//\//__}"
+            if [[ "$status" == "D" ]]; then
+              # Deleted file - show the removal
+              git diff "${BASE_SHA}" "${PR_HEAD_SHA}" -- "$filename" > "review/diffs/${safe_name}.diff" 2>/dev/null || true
+            else
+              git diff "${BASE_SHA}" "${PR_HEAD_SHA}" -- "$filename" > "review/diffs/${safe_name}.diff" 2>/dev/null || true
+            fi
+          done < review/changed-files.txt
+
+      - name: 'Build review context'
         if: steps.issue_gate.outputs.should_review == 'true'
         run: |
           set -euo pipefail
@@ -278,136 +293,155 @@ jobs:
             "review/coverage-latest.txt",
             "No coverage summary comment was found on this PR yet.",
           );
-          const diffstat = readIfExists("review/diffstat.txt", "");
-          const filesList = readIfExists("review/changed-files.txt", "");
-          const testFiles = readIfExists(
-            "review/test-files.txt",
-            "No explicit test files were touched.",
-          );
-          const diffPatch = readIfExists("review/diff-truncated.patch", "");
 
           const issueSection = issues.length
             ? issues
                 .map((issue) => {
-                  const summary = clean(issue.body || "", 800);
-                  return `- #${issue.number} ${issue.title}
-            - URL: ${issue.url}
-            - State: ${issue.state}
-            - Summary: ${summary}`;
+                  const summary = clean(issue.body || "", 500);
+                  return `### Issue #${issue.number}: ${issue.title}\n**State**: ${issue.state}\n**Summary**: ${summary}`;
                 })
-                .join("\n")
+                .join("\n\n")
             : "No issues were expanded (this should not happen).";
 
           const prBody =
-            clean(pr.body || "", 2000) || "No PR description provided.";
+            clean(pr.body || "", 1000) || "No PR description provided.";
 
-          const prompt = `You are LLxprt, an autonomous code reviewer for the LLxprt Code repository.
-          Focus strictly on code introduced in this pull request. Ignore pre-existing code unless it directly interacts with the changes shown.
+          // Create context.md - PR metadata and issue information for agent orientation
+          const context = [
+            "# PR Review Context",
+            "",
+            "## Pull Request Metadata",
+            "- **Repository**: " + process.env.REPO,
+            "- **PR Number**: #" + pr.number,
+            "- **Title**: " + pr.title,
+            "- **Author**: " + ((pr.author && pr.author.login) || "unknown"),
+            "- **Branch**: " + pr.baseRefName + " ← " + pr.headRefName,
+            "- **Changes**: +" + pr.additions + " -" + pr.deletions + " across " + pr.changedFiles + " files (" + pr.commits + " commits)",
+            "- **CI Status**: " + (process.env.CI_STATUS || "unknown") + " / " + (process.env.CI_CONCLUSION || "unknown"),
+            "- **CI Run**: " + (process.env.CI_RUN_URL || "N/A"),
+            "- **Documentation-only**: " + (process.env.DOCS_ONLY || "unknown"),
+            "",
+            "## PR Description",
+            prBody,
+            "",
+            "## Linked Issues",
+            issueSection,
+            "",
+            "## Coverage Information",
+            coverageSection,
+            "",
+            "## Available Artifacts",
+            "The following files are available in the `review/` directory for your exploration:",
+            "- `review/diffstat.txt` - High-level summary of changes per file",
+            "- `review/changed-files.txt` - List of changed files with status (A/M/D)",
+            "- `review/numstat.txt` - Lines added/removed per file",
+            "- `review/test-files.txt` - Test files that were modified",
+            "- `review/diff.patch` - Full unified diff of all changes",
+            "- `review/diffs/` - Per-file diffs (filename with / replaced by __)",
+            "- `review/issues/` - Full JSON data for each linked issue",
+            "- `review/pr.json` - Full PR metadata",
+            "",
+            "You can also use `read_file` to examine any source file in the repository when you need more context.",
+          ].join("\\n");
 
-          Repository: ${process.env.REPO}
-          PR #${pr.number}: ${pr.title}
-          Author: ${(pr.author && pr.author.login) || "unknown"}
-          Base -> Head: ${pr.baseRefName} -> ${pr.headRefName}
-          Additions: ${pr.additions}  Deletions: ${pr.deletions}  Files changed: ${
-            pr.changedFiles
-          }  Commits: ${pr.commits}
-          CI “LLxprt Code CI”: status=${process.env.CI_STATUS || "unknown"} conclusion=${
-            process.env.CI_CONCLUSION || "unknown"
-          } (${process.env.CI_RUN_URL || "N/A"})
-
-          ## Linked issues
-          ${issueSection}
-
-          ## PR description
-          ${prBody}
-
-          ## Existing coverage comment
-          ${coverageSection}
-
-          ## Changed files (git diff --stat)
-          ${diffstat}
-
-          ## File change list (name + status)
-          ${filesList}
-
-          ## Test-focused files touched
-          ${testFiles}
-
-          ## Patch (first 4000 lines)
-          ${diffPatch}
-
-          ## Doc-only change
-          ${process.env.DOCS_ONLY || 'unknown'}
-
-          ### Review requirements
-          1. Verify the implementation actually resolves the linked issue(s). Explicitly tie file-level evidence back to the issue requirements.
-          2. Identify likely side effects introduced by the diff (config changes, shared modules, performance impacts, etc.) and call them out.
-          3. Evaluate code quality: correctness, error handling, data validation, race conditions, accessibility, and maintainability.
-          4. Evaluate automated tests:
-             - Determine whether tests were added/updated for the new behavior.
-             - Flag “mock theater” tests (mocks that only assert implementation details without executing new logic).
-             - State whether coverage likely increased, decreased, or stayed flat. Use the diff + test changes + coverage summary to justify the direction even if approximate.
-          5. Stay within the diff—do not reference untouched files except when describing dependencies directly affected.
-          6. If this is not a documentation-only change and you cannot cite meaningful automated tests (integration or otherwise) that cover the new behavior, treat the PR as unsafe and plan to return it for remediation.
-
-          ### Output format
-          Produce a single markdown comment exactly in this structure and nothing else:
-
-          <!-- llxprt-pr-review -->
-          ## LLxprt PR Review – PR #${pr.number}
-
-          **Issue Alignment**
-          - …
-
-          **Side Effects**
-          - …
-
-          **Code Quality**
-          - …
-
-          **Tests & Coverage**
-          - Coverage impact: (increase|decrease|unchanged|unknown) – short justification referencing changed files/tests.
-          - Additional bullets on test gaps or strengths (mention if tests feel like “mock theater”).
-
-          **Verdict**
-          - Default to \`⚠️ Needs Work\` unless you can cite specific evidence (code + tests) that risk is low; only start with \`✅ Ready\` when requirements are fully satisfied, the change is truly documentation-only, or adequate automated coverage exists.
-
-          If information is missing, state assumptions explicitly. Keep the overall length under 350 words.
-          `;
-
-          fs.writeFileSync("review/prompt.md", prompt);
+          fs.writeFileSync("review/context.md", context);
           '
+
+      - name: 'Build review instructions'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: |
+          set -euo pipefail
+          cat > review/instructions.md <<INSTRUCTIONS_EOF
+          # PR Review Instructions
+
+          You are an autonomous code reviewer for the LLxprt Code repository. Your task is to review a pull request by incrementally exploring the available artifacts and source code.
+
+          ## Exploration Strategy
+
+          1. Start with orientation: Read review/context.md to understand the PR metadata, linked issues, and what artifacts are available.
+
+          2. Understand the scope: Read review/changed-files.txt to see which files changed and their status (Added/Modified/Deleted).
+
+          3. Get the high-level view: Read review/diffstat.txt to understand the distribution of changes across files.
+
+          4. Selective deep-dive: For files that seem critical to the change, read individual diffs from review/diffs/<filename>.diff (with / replaced by __). Use read_file to examine full source files when you need more context. Focus on files most relevant to the linked issues.
+
+          5. Assess test coverage: Check review/test-files.txt and examine test file diffs to evaluate coverage.
+
+          ## Review Criteria
+
+          Evaluate the PR against these criteria:
+
+          1. Issue Alignment: Does the implementation actually resolve the linked issue(s)? Tie file-level evidence to issue requirements.
+
+          2. Side Effects: Identify potential side effects (config changes, shared modules, performance impacts).
+
+          3. Code Quality: Assess correctness, error handling, data validation, race conditions, maintainability.
+
+          4. Test Coverage: Were tests added/updated for new behavior? Flag mock theater tests (mocks that only assert implementation details). Estimate coverage impact: increase/decrease/unchanged.
+
+          5. Scope Discipline: Stay within the diff. Do not critique untouched code except for direct dependencies.
+
+          6. Safety Gate: If this is not documentation-only AND you cannot cite meaningful automated tests, the PR should be returned for remediation.
+
+          ## Output Requirements
+
+          When you have completed your review, write your verdict to review/verdict.md using the write_file tool. The file MUST contain a markdown comment starting with <!-- llxprt-pr-review --> followed by a header ## LLxprt PR Review – PR #${PR_NUMBER}, then sections for Issue Alignment, Side Effects, Code Quality, Tests and Coverage (with coverage impact: increase/decrease/unchanged/unknown and justification), and Verdict (Ready or Needs Work with brief rationale).
+
+          Keep the review under 500 words. Be specific and actionable. If information is missing, state assumptions explicitly.
+
+          ## Important Notes
+
+          You have full access to the repository via read_file and search_file_content tools. Do not try to read everything at once; be selective based on what is relevant. Focus on the actual changes, not pre-existing code. Your final verdict MUST be written to review/verdict.md.
+          INSTRUCTIONS_EOF
 
       - name: 'Run LLxprt review'
         if: steps.issue_gate.outputs.should_review == 'true'
         id: 'llxprt'
         run: |
           set -euo pipefail
-          prompt_file="review/prompt.md"
           llxprt_log="review/llxprt.log"
+          context_limit="${LLXPRT_CONTEXT_LIMIT:-200000}"
+          echo "LLXPRT_CONTEXT_LIMIT raw: '${LLXPRT_CONTEXT_LIMIT-<unset>}'" >&2
+          echo "LLXPRT_CONTEXT_LIMIT evaluated: '${context_limit}'" >&2
+
+          # Initial instruction for agentic review - agent will explore artifacts using tools
+          initial_prompt="You are reviewing PR #${PR_NUMBER}. Start by reading review/instructions.md for your mission and review/context.md for PR details. Use file tools to explore the changes incrementally. Write your final verdict to review/verdict.md."
+
           set +e
-          cat "${prompt_file}" | llxprt \
+          # Agentic mode: use --prompt flag to pass initial instruction
+          # Use --baseurl CLI flag instead of --set base-url to ensure proper timing
+          llxprt \
             --provider "${LLXPRT_DEFAULT_PROVIDER}" \
             --model "${LLXPRT_DEFAULT_MODEL}" \
             --yolo \
             --key "${OPENAI_API_KEY}" \
-            --set modelparam.temperature=1 \
-            --set modelparam.max_tokens=10000 \
-            --set context-limit=121000 \
-            --set base-url="${OPENAI_BASE_URL}" \
-            --set shell-replacement=true | tee "${llxprt_log}"
-          llxprt_status=${PIPESTATUS[1]}
+            --baseurl "${OPENAI_BASE_URL}" \
+            --set modelparam.temperature=0.7 \
+            --set modelparam.max_tokens=16000 \
+            --set context-limit="${context_limit}" \
+            --set shell-replacement=false \
+            --prompt "${initial_prompt}" 2>&1 | tee "${llxprt_log}"
+          llxprt_status=${PIPESTATUS[0]}
           set -e
+
           if [[ ${llxprt_status} -ne 0 ]]; then
             {
               echo "<!-- llxprt-pr-review -->"
-              echo "## ⚠️ LLxprt PR Review infrastructure failure"
+              echo "## WARNING: LLxprt PR Review infrastructure failure"
               echo
               echo "The automated reviewer failed with exit code ${llxprt_status}. Please inspect the workflow logs (LLxprt section) and re-run once resolved."
             } > review/comment.md
             exit "${llxprt_status}"
           fi
-          cp "${llxprt_log}" review/comment.md
+
+          # Use verdict.md if agent wrote it, otherwise fall back to log output
+          if [[ -f review/verdict.md && -s review/verdict.md ]]; then
+            cp review/verdict.md review/comment.md
+          else
+            # Extract review content from log (fallback for compatibility)
+            cp "${llxprt_log}" review/comment.md
+          fi
 
       - name: 'Evaluate LLxprt verdict'
         if: steps.issue_gate.outputs.should_review == 'true'
@@ -415,10 +449,16 @@ jobs:
         run: |
           set -euo pipefail
           verdict="unknown"
-          if [[ -f review/comment.md ]]; then
-            if grep -qi 'Needs Work' review/comment.md; then
+          # Check verdict.md first (agentic mode), then comment.md (fallback)
+          verdict_file="review/comment.md"
+          if [[ -f review/verdict.md && -s review/verdict.md ]]; then
+            verdict_file="review/verdict.md"
+          fi
+
+          if [[ -f "${verdict_file}" ]]; then
+            if grep -qi 'Needs Work' "${verdict_file}"; then
               verdict="needs_work"
-            elif grep -qi 'Ready' review/comment.md; then
+            elif grep -qi 'Ready' "${verdict_file}"; then
               verdict="ready"
             fi
           fi

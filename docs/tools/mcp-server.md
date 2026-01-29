@@ -788,13 +788,13 @@ This is the default transport for running local servers.
 
 ```bash
 # Basic syntax
-llxprt mcp add <name> <command> [args...]
+llxprt mcp add [options] <name> <command> [args...]
 
-# Example: Adding a local server
-llxprt mcp add my-stdio-server -e API_KEY=123 /path/to/server arg1 arg2 arg3
+# Example: Adding a local server with environment variables
+llxprt mcp add -e API_KEY=123 -e DEBUG=true my-stdio-server /path/to/server arg1 arg2 arg3
 
-# Example: Adding a local python server
-llxprt mcp add python-server python server.py --port 8080
+# Example: Adding a local python server with server arguments
+llxprt mcp add python-server python server.py -- --server-arg my-value
 ```
 
 #### Adding an HTTP server
@@ -829,7 +829,7 @@ llxprt mcp add --transport sse secure-sse https://api.example.com/sse/ --header 
 
 ### Listing Servers (`llxprt mcp list`)
 
-To view all MCP servers currently configured, use the `list` command. It displays each server's name, configuration details, and connection status.
+To view all MCP servers currently configured, use the `list` command. It displays each server's name, configuration details, and connection status. This command has no flags.
 
 **Command:**
 
@@ -854,6 +854,10 @@ To delete a server from your configuration, use the `remove` command with the se
 ```bash
 llxprt mcp remove <name>
 ```
+
+**Options (Flags):**
+
+- `-s, --scope`: Configuration scope (user or project). [default: "project"]
 
 **Example:**
 

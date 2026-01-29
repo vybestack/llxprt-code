@@ -5,6 +5,7 @@
  */
 
 import { type ColorsTheme, Theme } from './theme.js';
+import { interpolateColor } from './color-utils.js';
 
 const ayuLightColors: ColorsTheme = {
   type: 'light',
@@ -22,6 +23,7 @@ const ayuLightColors: ColorsTheme = {
   Comment: '#ABADB1',
   DimComment: '#8a8c90',
   Gray: '#a6aaaf',
+  DarkGray: interpolateColor('#a6aaaf', '#f8f9fa', 0.5),
   GradientColors: ['#399ee6', '#86b300'],
 };
 

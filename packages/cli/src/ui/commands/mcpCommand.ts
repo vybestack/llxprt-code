@@ -172,8 +172,9 @@ const getMcpStatus = async (
     if (server?.oauth?.enabled) {
       needsAuthHint = true;
       try {
-        const { MCPOAuthTokenStorage } =
-          await import('@vybestack/llxprt-code-core');
+        const { MCPOAuthTokenStorage } = await import(
+          '@vybestack/llxprt-code-core'
+        );
         const tokenStorage = new MCPOAuthTokenStorage();
         const hasToken = await tokenStorage.getCredentials(serverName);
         if (hasToken) {
@@ -445,8 +446,8 @@ const authCommand: SlashCommand = {
       );
 
       // Trigger tool re-discovery to pick up authenticated server
-      const toolRegistry = config.getToolRegistry();
-      if (toolRegistry) {
+      const mcpClientManager = config.getMcpClientManager();
+      if (mcpClientManager) {
         context.ui.addItem(
           {
             type: 'info',
@@ -454,7 +455,7 @@ const authCommand: SlashCommand = {
           },
           Date.now(),
         );
-        await toolRegistry.discoverToolsForServer(serverName);
+        await mcpClientManager.restartServer(serverName);
       }
       // Update the client with the new tools
       const geminiClient = config.getGeminiClient();

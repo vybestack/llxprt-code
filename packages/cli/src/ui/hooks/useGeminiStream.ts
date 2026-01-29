@@ -36,6 +36,7 @@ import {
   type ThinkingBlock,
   tokenLimit,
   DebugLogger,
+  uiTelemetryService,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -662,27 +663,13 @@ export const useGeminiStream = (
       if (splitPoint === sanitizedCombined.length) {
         // @plan:PLAN-20251202-THINKING-UI.P08
         // Preserve thinkingBlocks during streaming updates
-        setPendingHistoryItem((item) => {
-          if (
-            item &&
-            (item.type === 'gemini' || item.type === 'gemini_content')
-          ) {
-            return {
-              ...item,
-              text: sanitizedCombined,
-              ...(thinkingBlocksRef.current.length > 0
-                ? { thinkingBlocks: [...thinkingBlocksRef.current] }
-                : {}),
-            };
-          }
-          return {
-            type: 'gemini',
-            text: sanitizedCombined,
-            ...(thinkingBlocksRef.current.length > 0
-              ? { thinkingBlocks: [...thinkingBlocksRef.current] }
-              : {}),
-          };
-        });
+        setPendingHistoryItem((item) => ({
+          type: item?.type as 'gemini' | 'gemini_content',
+          text: sanitizedCombined,
+          ...(thinkingBlocksRef.current.length > 0
+            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+            : {}),
+        }));
         return sanitizedCombined;
       }
 
@@ -948,11 +935,6 @@ export const useGeminiStream = (
     ): Promise<StreamProcessingStatus> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
-      // Reset thinking blocks AND thought state at the start of each stream processing.
-      // This prevents accumulation across tool call continuations (fixes #922).
-      // Each model response (initial or continuation) should have fresh thinking.
-      thinkingBlocksRef.current = [];
-      setThought(null);
       for await (const event of stream) {
         if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT) {
           // SystemNotice events are internal model reminders, not for user display
@@ -960,68 +942,37 @@ export const useGeminiStream = (
           continue;
         }
         switch (event.type) {
-          case ServerGeminiEventType.Thought: {
+          case ServerGeminiEventType.Thought:
             // @plan:PLAN-20251202-THINKING-UI.P08
             // @requirement:REQ-THINK-UI-001
             setThought(event.value);
 
-            // Trim both subject and description to normalize whitespace
-            const subject = event.value.subject?.trim() ?? '';
-            const description = event.value.description?.trim() ?? '';
+            // Accumulate as ThinkingBlock for history
+            {
+              let thoughtText = [event.value.subject, event.value.description]
+                .filter(Boolean)
+                .join(': ');
+              const sanitized = sanitizeContent(thoughtText);
+              thoughtText = sanitized.blocked ? '' : sanitized.text;
 
-            // Build thoughtContent, avoiding "subject: description" when they're identical
-            // This prevents "Preparing: Preparing" style duplication
-            let thoughtContent: string;
-            if (subject && description && subject !== description) {
-              thoughtContent = `${subject}: ${description}`;
-            } else {
-              // Use whichever one has content, or empty string
-              thoughtContent = subject || description || '';
-            }
-
-            // Skip empty/whitespace-only thoughts entirely (fixes #922)
-            if (!thoughtContent) {
-              break;
-            }
-
-            // Deduplicate: don't add if we already have this exact thought (fixes #922)
-            const alreadyHasThought = thinkingBlocksRef.current.some(
-              (tb) => tb.thought === thoughtContent,
-            );
-            if (alreadyHasThought) {
-              break;
-            }
-
-            const thinkingBlock: ThinkingBlock = {
-              type: 'thinking',
-              thought: thoughtContent,
-              sourceField: 'thought',
-            };
-            const nextThinkingBlocks = [
-              ...thinkingBlocksRef.current,
-              thinkingBlock,
-            ];
-            thinkingBlocksRef.current = nextThinkingBlocks;
-
-            setPendingHistoryItem((item) => {
-              if (
-                item &&
-                (item.type === 'gemini' || item.type === 'gemini_content')
-              ) {
-                return {
-                  ...item,
-                  text: item.text ?? '',
-                  thinkingBlocks: [...nextThinkingBlocks],
+              if (thoughtText) {
+                const thinkingBlock: ThinkingBlock = {
+                  type: 'thinking',
+                  thought: thoughtText,
+                  sourceField: 'thought',
                 };
+                thinkingBlocksRef.current.push(thinkingBlock);
+
+                // Update pending history item with thinking blocks so they
+                // are visible in pendingHistoryItems during streaming
+                setPendingHistoryItem((item) => ({
+                  type: (item?.type as 'gemini' | 'gemini_content') || 'gemini',
+                  text: item?.text || '',
+                  thinkingBlocks: [...thinkingBlocksRef.current],
+                }));
               }
-              return {
-                type: 'gemini',
-                text: '',
-                thinkingBlocks: [...nextThinkingBlocks],
-              };
-            });
+            }
             break;
-          }
           case ServerGeminiEventType.Content:
             geminiMessageBuffer = handleContentEvent(
               event.value,
@@ -1071,7 +1022,11 @@ export const useGeminiStream = (
             loopDetectedRef.current = true;
             break;
           case ServerGeminiEventType.UsageMetadata:
-            // Handle usage metadata - for now just ignore
+            if (event.value.promptTokenCount !== undefined) {
+              uiTelemetryService.setLastPromptTokenCount(
+                event.value.promptTokenCount,
+              );
+            }
             break;
           case ServerGeminiEventType.Citation:
             handleCitationEvent(
@@ -1116,6 +1071,7 @@ export const useGeminiStream = (
       handleMaxSessionTurnsEvent,
       handleContextWindowWillOverflowEvent,
       handleCitationEvent,
+      sanitizeContent,
       setPendingHistoryItem,
     ],
   );
@@ -1485,8 +1441,14 @@ export const useGeminiStream = (
         return;
       }
 
-      const responsesToSend: Part[] = geminiTools.flatMap(
-        (toolCall) => toolCall.response.responseParts,
+      // Only send functionResponse parts - functionCall parts are already in
+      // history from the original assistant turn. Sending them again would
+      // create duplicate tool_use blocks without matching tool_result.
+      const responsesToSend: Part[] = geminiTools.flatMap((toolCall) =>
+        toolCall.response.responseParts.filter(
+          (part) =>
+            !(part && typeof part === 'object' && 'functionCall' in part),
+        ),
       );
       const callIdsToMarkAsSubmitted = geminiTools.map(
         (toolCall) => toolCall.request.callId,

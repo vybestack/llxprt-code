@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "engines": {
     "node": ">=20"
   },
@@ -18,11 +18,11 @@
     "url": "git+https://github.com/vybestack/llxprt-code.git"
   },
   "config": {
-    "sandboxImageUri": "ghcr.io/vybestack/llxprt-code/sandbox:0.8.0"
+    "sandboxImageUri": "ghcr.io/vybestack/llxprt-code/sandbox:0.9.0"
   },
   "scripts": {
     "start": "cross-env NODE_ENV=development node scripts/start.js",
-    "start:a2a-server": "CODER_AGENT_PORT=41242 npm run start --workspace @google/gemini-cli-a2a-server",
+    "start:a2a-server": "CODER_AGENT_PORT=41242 npm run start --workspace @vybestack/llxprt-code-a2a-server",
     "debug": "cross-env DEBUG=1 node --inspect-brk scripts/start.js",
     "deflake": "node scripts/deflake.js",
     "deflake:test:integration:sandbox:none": "npm run deflake -- --command='npm run test:integration:sandbox:none'",
@@ -31,7 +31,11 @@
     "auth:docker": "echo 'For ghcr.io, use: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin'",
     "auth": "npm run auth:npm && npm run auth:docker",
     "generate": "node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js",
+    "predocs:settings": "npm run build --workspace @vybestack/llxprt-code-core",
+    "schema:settings": "tsx ./scripts/generate-settings-schema.ts",
+    "docs:settings": "tsx ./scripts/generate-settings-doc.ts",
     "build": "node scripts/build.js",
+    "preinstall": "node scripts/preinstall.cjs",
     "postinstall": "node scripts/postinstall.cjs",
     "build-and-start": "npm run build && npm run start",
     "build:vscode": "node scripts/build_vscode_companion.js",
@@ -75,13 +79,14 @@
   },
   "files": [
     "bundle/",
+    "scripts/preinstall.cjs",
     "scripts/postinstall.cjs",
     "README.md",
     "LICENSE"
   ],
   "devDependencies": {
     "@fast-check/vitest": "^0.2.2",
-    "@modelcontextprotocol/sdk": "^1.18.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "@types/debug": "^4.1.12",
     "@types/marked": "^5.0.2",
     "@types/mime-types": "^3.0.1",
@@ -105,7 +110,7 @@
     "fast-check": "^4.3.0",
     "glob": "^12.0.0",
     "globals": "^16.0.0",
-    "ink": "npm:@jrichman/ink@6.4.6",
+    "ink": "npm:@jrichman/ink@6.4.7",
     "json": "^11.0.0",
     "lodash": "^4.17.21",
     "memfs": "^4.17.2",
@@ -120,6 +125,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.74",
+    "@hono/node-server": "^1.19.7",
     "@lvce-editor/ripgrep": "^1.6.0",
     "@testing-library/dom": "^10.4.1",
     "@vybestack/llxprt-code": "^0.8.0",
@@ -145,7 +151,10 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
       "prettier --write",
-      "eslint --fix --max-warnings 0"
+      "eslint --fix --max-warnings 0 --no-warn-ignored"
+    ],
+    "eslint.config.js": [
+      "prettier --write"
     ],
     "*.{json,md}": [
       "prettier --write"

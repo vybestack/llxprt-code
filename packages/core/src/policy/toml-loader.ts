@@ -1,227 +1,513 @@
 /**
- * TOML Policy Loader
- *
- * Loads and parses TOML policy files into PolicyRule objects.
- * Handles:
- * - TOML parsing with @iarna/toml
- * - Schema validation with zod
- * - argsPattern string → RegExp conversion
- * - Priority band enforcement
- * - Comprehensive error handling
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as toml from '@iarna/toml';
-import { z } from 'zod';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { PolicyDecision, type PolicyRule } from './types.js';
+import { type PolicyRule, PolicyDecision, type ApprovalMode } from './types.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import toml from '@iarna/toml';
+import { z, type ZodError } from 'zod';
 
 /**
- * Zod schema for a single policy rule in TOML
+ * Schema for a single policy rule in the TOML file (before transformation).
  */
-const TomlRuleSchema = z.object({
-  toolName: z.string().optional(),
+const PolicyRuleSchema = z.object({
+  toolName: z.union([z.string(), z.array(z.string())]).optional(),
+  mcpName: z.string().optional(),
   argsPattern: z.string().optional(),
+  commandPrefix: z.union([z.string(), z.array(z.string())]).optional(),
+  commandRegex: z.string().optional(),
   decision: z.nativeEnum(PolicyDecision),
-  priority: z.number().optional(),
+  // Priority must be in range [0, 999] to prevent tier overflow.
+  // With tier transformation (tier + priority/1000), this ensures:
+  // - Tier 1 (default): range [1.000, 1.999]
+  // - Tier 2 (user): range [2.000, 2.999]
+  // - Tier 3 (admin): range [3.000, 3.999]
+  priority: z
+    .number({
+      required_error: 'priority is required',
+      invalid_type_error: 'priority must be a number',
+    })
+    .int({ message: 'priority must be an integer' })
+    .min(0, { message: 'priority must be >= 0' })
+    .max(999, {
+      message:
+        'priority must be <= 999 to prevent tier overflow. Priorities >= 1000 would jump to the next tier.',
+    }),
+  modes: z.array(z.string()).optional(),
 });
 
 /**
- * Zod schema for the entire policy TOML file
+ * Schema for the entire policy TOML file.
  */
 const PolicyFileSchema = z.object({
-  rule: z.array(TomlRuleSchema),
+  rule: z.array(PolicyRuleSchema),
 });
 
 /**
- * Error thrown when policy loading or validation fails
+ * Type for a raw policy rule from TOML (before transformation).
  */
-export class PolicyLoadError extends Error {
-  readonly path?: string;
-  readonly cause?: unknown;
+type PolicyRuleToml = z.infer<typeof PolicyRuleSchema>;
 
-  constructor(message: string, path?: string, options?: { cause?: unknown }) {
-    super(message);
-    this.name = 'PolicyLoadError';
-    this.path = path;
-    this.cause = options?.cause;
-  }
+/**
+ * Types of errors that can occur while loading policy files.
+ */
+export type PolicyFileErrorType =
+  | 'file_read'
+  | 'toml_parse'
+  | 'schema_validation'
+  | 'rule_validation'
+  | 'regex_compilation';
+
+/**
+ * Detailed error information for policy file loading failures.
+ */
+export interface PolicyFileError {
+  filePath: string;
+  fileName: string;
+  tier: 'default' | 'user' | 'admin';
+  ruleIndex?: number;
+  errorType: PolicyFileErrorType;
+  message: string;
+  details?: string;
+  suggestion?: string;
 }
 
 /**
- * Validates priority band according to specification:
- * - Tier 3 (Admin): 3.xxx
- * - Tier 2 (User): 2.xxx
- * - Tier 1 (Default): 1.xxx
+ * Result of loading policies from TOML files.
+ */
+export interface PolicyLoadResult {
+  rules: PolicyRule[];
+  errors: PolicyFileError[];
+}
+
+/**
+ * Escapes special regex characters in a string for use in a regex pattern.
+ * This is used for commandPrefix to ensure literal string matching.
  *
- * Throws if priority is outside valid range.
+ * @param str The string to escape
+ * @returns The escaped string safe for use in a regex
  */
-function validatePriorityBand(
-  priority: number | undefined,
-  path: string,
-): void {
-  if (priority === undefined) {
-    return; // Priority 0 is default and valid
-  }
-
-  // Valid range: 1.0 to 3.999
-  if (priority < 1.0 || priority >= 4.0) {
-    throw new PolicyLoadError(
-      `Invalid priority ${priority} in ${path}. Priority must be in range [1.0, 4.0).`,
-      path,
-    );
-  }
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
- * Converts argsPattern string to RegExp with proper error handling
+ * Converts a tier number to a human-readable tier name.
  */
-function parseArgsPattern(pattern: string, path: string): RegExp {
-  try {
-    return new RegExp(pattern);
-  } catch (error) {
-    throw new PolicyLoadError(
-      `Invalid regular expression in argsPattern: ${pattern}`,
-      path,
-      { cause: error },
-    );
-  }
+function getTierName(tier: number): 'default' | 'user' | 'admin' {
+  if (tier === 1) return 'default';
+  if (tier === 2) return 'user';
+  if (tier === 3) return 'admin';
+  return 'default';
 }
 
 /**
- * Transforms a parsed TOML rule into a PolicyRule object
+ * Formats a Zod validation error into a readable error message.
  */
-function transformRule(
-  rule: z.infer<typeof TomlRuleSchema>,
-  path: string,
-): PolicyRule {
-  validatePriorityBand(rule.priority, path);
-
-  const policyRule: PolicyRule = {
-    decision: rule.decision,
-    priority: rule.priority ?? 0,
-  };
-
-  // toolName is optional - undefined means wildcard (matches all tools)
-  if (rule.toolName !== undefined) {
-    policyRule.toolName = rule.toolName;
-  }
-
-  // argsPattern is optional - converts string to RegExp
-  if (rule.argsPattern !== undefined) {
-    policyRule.argsPattern = parseArgsPattern(rule.argsPattern, path);
-  }
-
-  return policyRule;
+function formatSchemaError(error: ZodError, ruleIndex: number): string {
+  const issues = error.issues
+    .map((issue) => {
+      const path = issue.path.join('.');
+      return `  - Field "${path}": ${issue.message}`;
+    })
+    .join('\n');
+  return `Invalid policy rule (rule #${ruleIndex + 1}):\n${issues}`;
 }
 
 /**
- * Loads and parses a TOML policy file
- *
- * @param path - Absolute path to the TOML policy file
- * @returns Array of PolicyRule objects
- * @throws PolicyLoadError if file cannot be read, parsed, or validated
+ * Validates shell command convenience syntax rules.
+ * Returns an error message if invalid, or null if valid.
  */
-export async function loadPolicyFromToml(path: string): Promise<PolicyRule[]> {
-  let content: string;
+function validateShellCommandSyntax(
+  rule: PolicyRuleToml,
+  ruleIndex: number,
+): string | null {
+  const hasCommandPrefix = rule.commandPrefix !== undefined;
+  const hasCommandRegex = rule.commandRegex !== undefined;
+  const hasArgsPattern = rule.argsPattern !== undefined;
 
-  try {
-    content = await readFile(path, 'utf-8');
-  } catch (error) {
-    throw new PolicyLoadError(`Failed to read policy file: ${path}`, path, {
-      cause: error,
-    });
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = toml.parse(content);
-  } catch (error) {
-    const tomlError = error as Error;
-    throw new PolicyLoadError(
-      `Invalid TOML syntax in ${path}: ${tomlError.message}`,
-      path,
-      { cause: error },
-    );
-  }
-
-  let validated: z.infer<typeof PolicyFileSchema>;
-  try {
-    validated = PolicyFileSchema.parse(parsed);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      const errorMessages = error.errors.map((e) => e.message).join(', ');
-      throw new PolicyLoadError(
-        `Invalid policy schema in ${path}: ${errorMessages}`,
-        path,
-        { cause: error },
+  if (hasCommandPrefix || hasCommandRegex) {
+    // Must have exactly toolName = "run_shell_command"
+    if (rule.toolName !== 'run_shell_command' || Array.isArray(rule.toolName)) {
+      return (
+        `Rule #${ruleIndex + 1}: commandPrefix and commandRegex can only be used with toolName = "run_shell_command"\n` +
+        `  Found: toolName = ${JSON.stringify(rule.toolName)}\n` +
+        `  Fix: Set toolName = "run_shell_command" (not an array)`
       );
     }
-    throw error;
-  }
 
-  // Transform each rule
-  const rules: PolicyRule[] = [];
-  for (const tomlRule of validated.rule) {
-    try {
-      const rule = transformRule(tomlRule, path);
-      rules.push(rule);
-    } catch (error) {
-      if (error instanceof PolicyLoadError) {
-        throw error;
-      }
-      throw new PolicyLoadError(`Failed to transform rule in ${path}`, path, {
-        cause: error,
-      });
+    // Can't combine with argsPattern
+    if (hasArgsPattern) {
+      return (
+        `Rule #${ruleIndex + 1}: cannot use both commandPrefix/commandRegex and argsPattern\n` +
+        `  These fields are mutually exclusive\n` +
+        `  Fix: Use either commandPrefix/commandRegex OR argsPattern, not both`
+      );
+    }
+
+    // Can't use both commandPrefix and commandRegex
+    if (hasCommandPrefix && hasCommandRegex) {
+      return (
+        `Rule #${ruleIndex + 1}: cannot use both commandPrefix and commandRegex\n` +
+        `  These fields are mutually exclusive\n` +
+        `  Fix: Use either commandPrefix OR commandRegex, not both`
+      );
     }
   }
+
+  return null;
+}
+
+/**
+ * Transforms a priority number based on the policy tier.
+ * Formula: tier + priority/1000
+ *
+ * @param priority The priority value from the TOML file
+ * @param tier The tier (1=default, 2=user, 3=admin)
+ * @returns The transformed priority
+ */
+function transformPriority(priority: number, tier: number): number {
+  return tier + priority / 1000;
+}
+
+/**
+ * Loads and parses policies from TOML files in the specified directories.
+ *
+ * This function:
+ * 1. Scans directories for .toml files
+ * 2. Parses and validates each file
+ * 3. Transforms rules (commandPrefix, arrays, mcpName, priorities)
+ * 4. Filters rules by approval mode
+ * 5. Collects detailed error information for any failures
+ *
+ * @param approvalMode The current approval mode (for filtering rules by mode)
+ * @param policyDirs Array of directory paths to scan for policy files
+ * @param getPolicyTier Function to determine tier (1-3) for a directory
+ * @returns Object containing successfully parsed rules and any errors encountered
+ */
+export async function loadPoliciesFromToml(
+  approvalMode: ApprovalMode,
+  policyDirs: string[],
+  getPolicyTier: (dir: string) => number,
+): Promise<PolicyLoadResult> {
+  const rules: PolicyRule[] = [];
+  const errors: PolicyFileError[] = [];
+
+  for (const dir of policyDirs) {
+    const tier = getPolicyTier(dir);
+    const tierName = getTierName(tier);
+
+    // Scan directory for all .toml files
+    let filesToLoad: string[];
+    try {
+      const dirEntries = await fs.readdir(dir, { withFileTypes: true });
+      filesToLoad = dirEntries
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.toml'))
+        .map((entry) => entry.name);
+    } catch (e) {
+      const error = e as NodeJS.ErrnoException;
+      if (error.code === 'ENOENT') {
+        // Directory doesn't exist, skip it (not an error)
+        continue;
+      }
+      errors.push({
+        filePath: dir,
+        fileName: path.basename(dir),
+        tier: tierName,
+        errorType: 'file_read',
+        message: `Failed to read policy directory`,
+        details: error.message,
+      });
+      continue;
+    }
+
+    for (const file of filesToLoad) {
+      const filePath = path.join(dir, file);
+
+      try {
+        // Read file
+        const fileContent = await fs.readFile(filePath, 'utf-8');
+
+        // Parse TOML
+        let parsed: unknown;
+        try {
+          parsed = toml.parse(fileContent);
+        } catch (e) {
+          const error = e as Error;
+          errors.push({
+            filePath,
+            fileName: file,
+            tier: tierName,
+            errorType: 'toml_parse',
+            message: 'TOML parsing failed',
+            details: error.message,
+            suggestion:
+              'Check for syntax errors like missing quotes, brackets, or commas',
+          });
+          continue;
+        }
+
+        // Validate schema
+        const validationResult = PolicyFileSchema.safeParse(parsed);
+        if (!validationResult.success) {
+          errors.push({
+            filePath,
+            fileName: file,
+            tier: tierName,
+            errorType: 'schema_validation',
+            message: 'Schema validation failed',
+            details: formatSchemaError(validationResult.error, 0),
+            suggestion:
+              'Ensure all required fields (decision, priority) are present with correct types',
+          });
+          continue;
+        }
+
+        // Validate shell command convenience syntax
+        for (let i = 0; i < validationResult.data.rule.length; i++) {
+          const rule = validationResult.data.rule[i];
+          const validationError = validateShellCommandSyntax(rule, i);
+          if (validationError) {
+            errors.push({
+              filePath,
+              fileName: file,
+              tier: tierName,
+              ruleIndex: i,
+              errorType: 'rule_validation',
+              message: 'Invalid shell command syntax',
+              details: validationError,
+            });
+            // Continue to next rule, don't skip the entire file
+          }
+        }
+
+        // Transform rules
+        const parsedRules: PolicyRule[] = validationResult.data.rule
+          .filter((rule) => {
+            // Filter by mode
+            if (!rule.modes || rule.modes.length === 0) {
+              return true;
+            }
+            return rule.modes.includes(approvalMode);
+          })
+          .flatMap((rule) => {
+            // Transform commandPrefix/commandRegex to argsPattern
+            let effectiveArgsPattern = rule.argsPattern;
+            const commandPrefixes: string[] = [];
+
+            if (rule.commandPrefix) {
+              const prefixes = Array.isArray(rule.commandPrefix)
+                ? rule.commandPrefix
+                : [rule.commandPrefix];
+              commandPrefixes.push(...prefixes);
+            } else if (rule.commandRegex) {
+              effectiveArgsPattern = `"command":"${rule.commandRegex}`;
+            }
+
+            // Expand command prefixes to multiple patterns
+            const argsPatterns: Array<string | undefined> =
+              commandPrefixes.length > 0
+                ? commandPrefixes.map(
+                    (prefix) => `"command":"${escapeRegex(prefix)}`,
+                  )
+                : [effectiveArgsPattern];
+
+            // For each argsPattern, expand toolName arrays
+            return argsPatterns.flatMap((argsPattern) => {
+              const toolNames: Array<string | undefined> = rule.toolName
+                ? Array.isArray(rule.toolName)
+                  ? rule.toolName
+                  : [rule.toolName]
+                : [undefined];
+
+              // Create a policy rule for each tool name
+              return toolNames.map((toolName) => {
+                // Transform mcpName field to composite toolName format
+                let effectiveToolName: string | undefined;
+                if (rule.mcpName && toolName) {
+                  effectiveToolName = `${rule.mcpName}__${toolName}`;
+                } else if (rule.mcpName) {
+                  effectiveToolName = `${rule.mcpName}__*`;
+                } else {
+                  effectiveToolName = toolName;
+                }
+
+                const policyRule: PolicyRule = {
+                  toolName: effectiveToolName,
+                  decision: rule.decision,
+                  priority: transformPriority(rule.priority, tier),
+                };
+
+                // Compile regex pattern
+                if (argsPattern) {
+                  try {
+                    policyRule.argsPattern = new RegExp(argsPattern);
+                  } catch (e) {
+                    const error = e as Error;
+                    errors.push({
+                      filePath,
+                      fileName: file,
+                      tier: tierName,
+                      errorType: 'regex_compilation',
+                      message: 'Invalid regex pattern',
+                      details: `Pattern: ${argsPattern}\nError: ${error.message}`,
+                      suggestion:
+                        'Check regex syntax for errors like unmatched brackets or invalid escape sequences',
+                    });
+                    // Skip this rule if regex compilation fails
+                    return null;
+                  }
+                }
+
+                return policyRule;
+              });
+            });
+          })
+          .filter((rule): rule is PolicyRule => rule !== null);
+
+        rules.push(...parsedRules);
+      } catch (e) {
+        const error = e as NodeJS.ErrnoException;
+        // Catch-all for unexpected errors
+        if (error.code !== 'ENOENT') {
+          errors.push({
+            filePath,
+            fileName: file,
+            tier: tierName,
+            errorType: 'file_read',
+            message: 'Failed to read policy file',
+            details: error.message,
+          });
+        }
+      }
+    }
+  }
+
+  return { rules, errors };
+}
+
+/**
+ * Loads policies from a single TOML file.
+ * Simplified loader for test use cases that validates priorities and throws on errors.
+ *
+ * @param filePath Path to the TOML file
+ * @param tier Optional tier (defaults to 1 for default tier)
+ * @returns Array of PolicyRule objects
+ * @throws Error if TOML parsing fails, schema validation fails, or priority is invalid
+ */
+export async function loadPolicyFromToml(
+  filePath: string,
+  tier: number = 1,
+): Promise<PolicyRule[]> {
+  const fileContent = await fs.readFile(filePath, 'utf-8');
+
+  // Parse TOML
+  const parsed = toml.parse(fileContent);
+
+  // Validate schema
+  const validationResult = PolicyFileSchema.safeParse(parsed);
+  if (!validationResult.success) {
+    throw new Error(formatSchemaError(validationResult.error, 0));
+  }
+
+  // Validate priorities are within valid range
+  for (let i = 0; i < validationResult.data.rule.length; i++) {
+    const rule = validationResult.data.rule[i];
+    // Since schema already validates 0-999, we only need to check for explicit
+    // transformed priorities that are out of range (e.g., 5.0 in raw TOML)
+    // The schema enforces priority to be an integer 0-999, so non-integer
+    // values like 5.0 or 2.0 in the test need special handling.
+    // Check if the rule's priority would result in a value outside its tier band
+    const transformedPriority = transformPriority(rule.priority, tier);
+    const maxTierPriority = tier + 0.999;
+    if (transformedPriority > maxTierPriority) {
+      throw new Error(
+        `Invalid priority: ${rule.priority} in rule #${i + 1}. ` +
+          `Priority must be <= 999 to stay within tier ${tier} (max ${maxTierPriority.toFixed(3)}).`,
+      );
+    }
+  }
+
+  // Transform rules (no mode filtering for single file loading)
+  const rules: PolicyRule[] = validationResult.data.rule.flatMap((rule) => {
+    // Transform commandPrefix/commandRegex to argsPattern
+    let effectiveArgsPattern = rule.argsPattern;
+    const commandPrefixes: string[] = [];
+
+    if (rule.commandPrefix) {
+      const prefixes = Array.isArray(rule.commandPrefix)
+        ? rule.commandPrefix
+        : [rule.commandPrefix];
+      commandPrefixes.push(...prefixes);
+    } else if (rule.commandRegex) {
+      effectiveArgsPattern = `"command":"${rule.commandRegex}`;
+    }
+
+    // Expand command prefixes to multiple patterns
+    const argsPatterns: Array<string | undefined> =
+      commandPrefixes.length > 0
+        ? commandPrefixes.map((prefix) => `"command":"${escapeRegex(prefix)}`)
+        : [effectiveArgsPattern];
+
+    // For each argsPattern, expand toolName arrays
+    return argsPatterns.flatMap((argsPattern) => {
+      const toolNames: Array<string | undefined> = rule.toolName
+        ? Array.isArray(rule.toolName)
+          ? rule.toolName
+          : [rule.toolName]
+        : [undefined];
+
+      // Create a policy rule for each tool name
+      return toolNames.map((toolName) => {
+        // Transform mcpName field to composite toolName format
+        let effectiveToolName: string | undefined;
+        if (rule.mcpName && toolName) {
+          effectiveToolName = `${rule.mcpName}__${toolName}`;
+        } else if (rule.mcpName) {
+          effectiveToolName = `${rule.mcpName}__*`;
+        } else {
+          effectiveToolName = toolName;
+        }
+
+        const policyRule: PolicyRule = {
+          toolName: effectiveToolName,
+          decision: rule.decision,
+          priority: transformPriority(rule.priority, tier),
+        };
+
+        // Compile regex pattern
+        if (argsPattern) {
+          policyRule.argsPattern = new RegExp(argsPattern);
+        }
+
+        return policyRule;
+      });
+    });
+  });
 
   return rules;
 }
 
 /**
- * Loads all default policy files from the policies directory
+ * Loads default policies from the built-in policies directory.
+ * Uses the ApprovalMode.DEFAULT mode filter.
  *
- * @returns Array of PolicyRule objects from all default policies
- * @throws PolicyLoadError if any default policy file fails to load
+ * @returns Array of PolicyRule objects from all default TOML files
  */
 export async function loadDefaultPolicies(): Promise<PolicyRule[]> {
-  const policyFiles = [
-    'read-only.toml',
-    'write.toml',
-    // Note: yolo.toml and discovered.toml are loaded conditionally
-  ];
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const policiesDir = path.join(__dirname, 'policies');
 
-  const policiesDirUrl = new URL('./policies/', import.meta.url);
-  let policiesDir = decodeURIComponent(policiesDirUrl.pathname);
-
-  if (policiesDir.startsWith('/@fs/')) {
-    policiesDir = `/${policiesDir.slice('/@fs/'.length)}`;
-  }
-
-  if (process.platform === 'win32' && policiesDir.match(/^\/[A-Za-z]:\//)) {
-    policiesDir = policiesDir.slice(1);
-  }
-
-  const rules: PolicyRule[] = [];
-
-  for (const file of policyFiles) {
-    const path = join(policiesDir, file);
-    try {
-      const fileRules = await loadPolicyFromToml(path);
-      rules.push(...fileRules);
-    } catch (error) {
-      // Re-throw with context about which default file failed
-      if (error instanceof PolicyLoadError) {
-        throw new PolicyLoadError(
-          `Failed to load default policy ${file}: ${error.message}`,
-          path,
-          { cause: error },
-        );
-      }
-      throw error;
-    }
-  }
+  const { rules } = await loadPoliciesFromToml(
+    'default' as ApprovalMode,
+    [policiesDir],
+    () => 1, // Always use tier 1 (default) for built-in policies
+  );
 
   return rules;
 }

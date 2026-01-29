@@ -24,7 +24,7 @@ import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { isNodeError } from '../utils/errors.js';
 import { Config, ApprovalMode } from '../config/config.js';
-import { DEFAULT_DIFF_OPTIONS, getDiffStat } from './diffOptions.js';
+import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
 import { ReadFileTool } from './read-file.js';
 import {
   type ModifiableDeclarativeTool,
@@ -170,7 +170,13 @@ export interface EditToolParams {
   /**
    * The absolute path to the file to modify
    */
-  file_path: string;
+  absolute_path?: string;
+
+  /**
+   * Alternative parameter name for absolute_path (for compatibility)
+   * Not shown in schema - internal use only
+   */
+  file_path?: string;
 
   /**
    * The text to replace
@@ -224,8 +230,13 @@ class EditToolInvocation extends BaseToolInvocation<
     return EditTool.Name;
   }
 
+  private getFilePath(): string {
+    // Use absolute_path if provided, otherwise fall back to file_path
+    return this.params.absolute_path || this.params.file_path || '';
+  }
+
   override toolLocations(): ToolLocation[] {
-    return [{ path: this.params.file_path }];
+    return [{ path: this.getFilePath() }];
   }
 
   /**
@@ -276,10 +287,12 @@ class EditToolInvocation extends BaseToolInvocation<
       | { display: string; raw: string; type: ToolErrorType }
       | undefined = undefined;
 
+    const filePath = params.absolute_path || params.file_path || '';
+
     try {
       currentContent = await this.config
         .getFileSystemService()
-        .readTextFile(params.file_path);
+        .readTextFile(filePath);
       // Normalize line endings to LF for consistent processing.
       currentContent = currentContent.replace(/\r\n/g, '\n');
       fileExists = true;
@@ -298,7 +311,7 @@ class EditToolInvocation extends BaseToolInvocation<
       // Trying to edit a nonexistent file (and old_string is not empty)
       error = {
         display: `File not found. Cannot apply edit. Use an empty old_string to create a new file.`,
-        raw: `File not found: ${filteredParams.file_path}`,
+        raw: `File not found: ${filePath}`,
         type: ToolErrorType.FILE_NOT_FOUND,
       };
     } else if (currentContent !== null) {
@@ -345,13 +358,13 @@ class EditToolInvocation extends BaseToolInvocation<
         // Error: Trying to create a file that already exists
         error = {
           display: `Failed to edit. Attempted to create a file that already exists.`,
-          raw: `File already exists, cannot create: ${filteredParams.file_path}`,
+          raw: `File already exists, cannot create: ${filePath}`,
           type: ToolErrorType.ATTEMPT_TO_CREATE_EXISTING_FILE,
         };
       } else if (occurrences === 0) {
         error = {
           display: `Failed to edit, could not find the string to replace.`,
-          raw: `Failed to edit, 0 occurrences found for old_string in ${filteredParams.file_path}. No edits made. The exact text in old_string was not found. Ensure you're not escaping content incorrectly and check whitespace, indentation, and context. Use ${ReadFileTool.Name} tool to verify.`,
+          raw: `Failed to edit, 0 occurrences found for old_string in ${filePath}. No edits made. The exact text in old_string was not found. Ensure you're not escaping content incorrectly and check whitespace, indentation, and context. Use ${ReadFileTool.Name} tool to verify.`,
           type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
         };
       } else if (occurrences !== expectedReplacements) {
@@ -360,13 +373,13 @@ class EditToolInvocation extends BaseToolInvocation<
 
         error = {
           display: `Failed to edit, expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences}.`,
-          raw: `Failed to edit, Expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences} for old_string in file: ${filteredParams.file_path}`,
+          raw: `Failed to edit, Expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences} for old_string in file: ${filePath}`,
           type: ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
         };
       } else if (finalOldString === finalNewString) {
         error = {
           display: `No changes to apply. The old_string and new_string are identical.`,
-          raw: `No changes to apply. The old_string and new_string are identical in file: ${filteredParams.file_path}`,
+          raw: `No changes to apply. The old_string and new_string are identical in file: ${filePath}`,
           type: ToolErrorType.EDIT_NO_CHANGE,
         };
       }
@@ -374,7 +387,7 @@ class EditToolInvocation extends BaseToolInvocation<
       // Should not happen if fileExists and no exception was thrown, but defensively:
       error = {
         display: `Failed to read content of file.`,
-        raw: `Failed to read content of existing file: ${filteredParams.file_path}`,
+        raw: `Failed to read content of existing file: ${filePath}`,
         type: ToolErrorType.READ_CONTENT_FAILURE,
       };
     }
@@ -390,10 +403,11 @@ class EditToolInvocation extends BaseToolInvocation<
       : (currentContent ?? '');
 
     if (!error && fileExists && currentContent === newContent) {
+      const filePath = params.absolute_path || params.file_path || '';
       error = {
         display:
           'No changes to apply. The new content is identical to the current content.',
-        raw: `No changes to apply. The new content is identical to the current content in file: ${filteredParams.file_path}`,
+        raw: `No changes to apply. The new content is identical to the current content in file: ${filePath}`,
         type: ToolErrorType.EDIT_NO_CHANGE,
       };
     }
@@ -465,27 +479,28 @@ class EditToolInvocation extends BaseToolInvocation<
         ? filteredNewStringParam.filtered
         : this.params.new_string;
 
-    const fileName = path.basename(this.params.file_path);
+    const filePath = this.getFilePath();
+    const fileName = path.basename(filePath);
     const fileDiff = Diff.createPatch(
       fileName,
       editData.currentContent ?? '',
       filteredNewContent,
       'Current',
       'Proposed',
-      DEFAULT_DIFF_OPTIONS,
-    );
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    ) as string;
     const ideClient = this.config.getIdeClient();
     const ideConfirmation =
       this.config.getIdeMode() &&
       ideClient?.getConnectionStatus().status === IDEConnectionStatus.Connected
-        ? ideClient.openDiff(this.params.file_path, filteredNewContent)
+        ? ideClient.openDiff(filePath, filteredNewContent)
         : undefined;
 
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
-      title: `Confirm Edit: ${shortenPath(makeRelative(this.params.file_path, this.config.getTargetDir()))}`,
+      title: `Confirm Edit: ${shortenPath(makeRelative(filePath, this.config.getTargetDir()))}`,
       fileName,
-      filePath: this.params.file_path,
+      filePath,
       fileDiff,
       originalContent: editData.currentContent,
       newContent: filteredNewContent,
@@ -517,10 +532,8 @@ class EditToolInvocation extends BaseToolInvocation<
   }
 
   override getDescription(): string {
-    const relativePath = makeRelative(
-      this.params.file_path,
-      this.config.getTargetDir(),
-    );
+    const filePath = this.getFilePath();
+    const relativePath = makeRelative(filePath, this.config.getTargetDir());
     if (this.params.old_string === '') {
       return `Create ${shortenPath(relativePath)}`;
     }
@@ -573,11 +586,12 @@ class EditToolInvocation extends BaseToolInvocation<
       };
     }
 
+    const filePath = this.getFilePath();
     try {
-      await this.ensureParentDirectoriesExist(this.params.file_path);
+      await this.ensureParentDirectoriesExist(filePath);
       await this.config
         .getFileSystemService()
-        .writeTextFile(this.params.file_path, editData.newContent);
+        .writeTextFile(filePath, editData.newContent);
 
       // Track git stats if logging is enabled and service is available
       let gitStats = null;
@@ -586,7 +600,7 @@ class EditToolInvocation extends BaseToolInvocation<
         if (gitStatsService) {
           try {
             gitStats = await gitStatsService.trackFileEdit(
-              this.params.file_path,
+              filePath,
               editData.currentContent || '',
               editData.newContent,
             );
@@ -598,7 +612,7 @@ class EditToolInvocation extends BaseToolInvocation<
       }
 
       // Always return diff stats as per upstream
-      const fileName = path.basename(this.params.file_path);
+      const fileName = path.basename(filePath);
       const originallyProposedContent =
         this.params.ai_proposed_content || editData.newContent;
       const diffStat = getDiffStat(
@@ -614,8 +628,8 @@ class EditToolInvocation extends BaseToolInvocation<
         editData.newContent,
         'Current',
         'Proposed',
-        DEFAULT_DIFF_OPTIONS,
-      );
+        DEFAULT_CREATE_PATCH_OPTIONS,
+      ) as string;
       const displayResult = {
         fileDiff,
         fileName,
@@ -626,8 +640,8 @@ class EditToolInvocation extends BaseToolInvocation<
 
       const llmSuccessMessageParts = [
         editData.isNewFile
-          ? `Created new file: ${this.params.file_path} with provided content.`
-          : `Successfully modified file: ${this.params.file_path} (${editData.occurrences} replacements).`,
+          ? `Created new file: ${filePath} with provided content.`
+          : `Successfully modified file: ${filePath} (${editData.occurrences} replacements).`,
       ];
       if (this.params.modified_by_user) {
         llmSuccessMessageParts.push(
@@ -711,11 +725,16 @@ Expectation for required parameters:
       Kind.Edit,
       {
         properties: {
-          file_path: {
+          absolute_path: {
             description:
               process.platform === 'win32'
                 ? "The absolute path to the file to modify (e.g., 'C:\\Users\\project\\file.txt'). Must be an absolute path."
                 : "The absolute path to the file to modify (e.g., '/home/user/project/file.txt'). Must start with '/'.",
+            type: 'string',
+          },
+          file_path: {
+            description:
+              'Alternative parameter name for absolute_path (for backward compatibility). The absolute path to the file to modify.',
             type: 'string',
           },
           old_string: {
@@ -735,7 +754,7 @@ Expectation for required parameters:
             minimum: 1,
           },
         },
-        required: ['file_path', 'old_string', 'new_string'],
+        required: ['old_string', 'new_string'],
         type: 'object',
       },
       true,
@@ -752,16 +771,19 @@ Expectation for required parameters:
   protected override validateToolParamValues(
     params: EditToolParams,
   ): string | null {
-    if (!params.file_path) {
-      return "The 'file_path' parameter must be non-empty.";
+    // Accept either absolute_path or file_path
+    const filePath = params.absolute_path || params.file_path || '';
+
+    if (filePath.trim() === '') {
+      return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
     }
 
-    if (!path.isAbsolute(params.file_path)) {
-      return `File path must be absolute: ${params.file_path}`;
+    if (!path.isAbsolute(filePath)) {
+      return `File path must be absolute: ${filePath}`;
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(params.file_path)) {
+    if (!workspaceContext.isPathWithinWorkspace(filePath)) {
       const directories = workspaceContext.getDirectories();
       return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
     }
@@ -779,27 +801,33 @@ Expectation for required parameters:
     params: EditToolParams,
     messageBus?: MessageBus,
   ): ToolInvocation<EditToolParams, ToolResult> {
-    return new EditToolInvocation(this.config, params, messageBus);
+    // Normalize parameters: if file_path is provided but not absolute_path, copy it over
+    const normalizedParams = { ...params };
+    if (!normalizedParams.absolute_path && normalizedParams.file_path) {
+      normalizedParams.absolute_path = normalizedParams.file_path;
+    }
+    return new EditToolInvocation(this.config, normalizedParams, messageBus);
   }
 
   getModifyContext(_: AbortSignal): ModifyContext<EditToolParams> {
     return {
-      getFilePath: (params: EditToolParams) => params.file_path,
+      getFilePath: (params: EditToolParams) =>
+        params.absolute_path || params.file_path || '',
       getCurrentContent: async (params: EditToolParams): Promise<string> => {
+        const filePath = params.absolute_path || params.file_path || '';
         try {
-          return this.config
-            .getFileSystemService()
-            .readTextFile(params.file_path);
+          return this.config.getFileSystemService().readTextFile(filePath);
         } catch (err) {
           if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
           return '';
         }
       },
       getProposedContent: async (params: EditToolParams): Promise<string> => {
+        const filePath = params.absolute_path || params.file_path || '';
         try {
           const currentContent = await this.config
             .getFileSystemService()
-            .readTextFile(params.file_path);
+            .readTextFile(filePath);
           return applyReplacement(
             currentContent,
             params.old_string,

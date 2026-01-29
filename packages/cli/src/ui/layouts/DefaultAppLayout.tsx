@@ -160,7 +160,6 @@ export const DefaultAppLayout = ({
     uiState.isOAuthCodeDialogOpen ||
     uiState.isEditorDialogOpen ||
     uiState.isProviderDialogOpen ||
-    uiState.isProviderModelDialogOpen ||
     uiState.isLoadProfileDialogOpen ||
     uiState.isCreateProfileDialogOpen ||
     uiState.isProfileListDialogOpen ||
@@ -169,6 +168,7 @@ export const DefaultAppLayout = ({
     uiState.isToolsDialogOpen ||
     uiState.isLoggingDialogOpen ||
     uiState.isSubagentDialogOpen ||
+    uiState.isModelsDialogOpen ||
     uiState.showPrivacyNotice;
 
   if (quittingMessages) {

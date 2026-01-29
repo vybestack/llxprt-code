@@ -15,10 +15,13 @@ import {
 } from 'vitest';
 
 import * as actualNodeFs from 'node:fs'; // For setup/teardown
+import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import mime from 'mime-types';
+import { fileURLToPath } from 'node:url';
+// eslint-disable-next-line import/no-internal-modules
+import mime from 'mime/lite';
 
 import {
   isWithinRoot,
@@ -27,15 +30,17 @@ import {
   processSingleFileContent,
   detectBOM,
   readFileWithEncoding,
+  fileExists,
+  readWasmBinaryFromDisk,
 } from './fileUtils.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 
-vi.mock('mime-types', () => ({
-  default: { lookup: vi.fn() },
-  lookup: vi.fn(),
+vi.mock('mime/lite', () => ({
+  default: { getType: vi.fn() },
+  getType: vi.fn(),
 }));
 
-const mockMimeLookup = mime.lookup as Mock;
+const mockMimeGetType = mime.getType as Mock;
 
 describe('fileUtils', () => {
   let tempRootDir: string;
@@ -49,7 +54,7 @@ describe('fileUtils', () => {
   let directoryPath: string;
 
   beforeEach(() => {
-    vi.resetAllMocks(); // Reset all mocks, including mime.lookup
+    vi.resetAllMocks(); // Reset all mocks, including mime.getType
 
     tempRootDir = actualNodeFs.mkdtempSync(
       path.join(os.tmpdir(), 'fileUtils-test-'),
@@ -74,61 +79,111 @@ describe('fileUtils', () => {
     vi.restoreAllMocks(); // Restore any spies
   });
 
+  describe('readWasmBinaryFromDisk', () => {
+    it('loads a WASM binary from disk as a Uint8Array', async () => {
+      const wasmFixtureUrl = new URL(
+        './__fixtures__/dummy.wasm',
+        import.meta.url,
+      );
+      const wasmFixturePath = fileURLToPath(wasmFixtureUrl);
+      const result = await readWasmBinaryFromDisk(wasmFixturePath);
+      const expectedBytes = new Uint8Array(
+        await fsPromises.readFile(wasmFixturePath),
+      );
+
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(result).toStrictEqual(expectedBytes);
+    });
+  });
+
   describe('isWithinRoot', () => {
-    const root = path.resolve('/project/root');
+    const defaultRoot = path.resolve('/project/root');
 
-    it('should return true for paths directly within the root', () => {
-      expect(isWithinRoot(path.join(root, 'file.txt'), root)).toBe(true);
-      expect(isWithinRoot(path.join(root, 'subdir', 'file.txt'), root)).toBe(
-        true,
-      );
+    it.each([
+      {
+        name: 'a path directly within the root',
+        path: path.join(defaultRoot, 'file.txt'),
+        expected: true,
+      },
+      {
+        name: 'a path in a subdirectory within the root',
+        path: path.join(defaultRoot, 'subdir', 'file.txt'),
+        expected: true,
+      },
+      { name: 'the root path itself', path: defaultRoot, expected: true },
+      {
+        name: 'a path with a trailing slash',
+        path: path.join(defaultRoot, 'file.txt') + path.sep,
+        expected: true,
+      },
+      {
+        name: 'the root path with a trailing slash',
+        path: defaultRoot + path.sep,
+        expected: true,
+      },
+      {
+        name: 'a sub-path of the path to check',
+        path: path.resolve('/project/root/sub'),
+        root: path.resolve('/project/root'),
+        expected: true,
+      },
+      {
+        name: 'a path outside the root',
+        path: path.resolve('/project/other', 'file.txt'),
+        expected: false,
+      },
+      {
+        name: 'an unrelated path',
+        path: path.resolve('/unrelated', 'file.txt'),
+        expected: false,
+      },
+      {
+        name: 'a path that only partially matches the root prefix',
+        path: path.resolve('/project/root-but-actually-different'),
+        expected: false,
+      },
+      {
+        name: 'a root path that is a sub-path of the path to check',
+        path: path.resolve('/project/root'),
+        root: path.resolve('/project/root/sub'),
+        expected: false,
+      },
+      {
+        name: 'a POSIX path inside',
+        path: '/project/root/file.txt',
+        root: '/project/root',
+        expected: true,
+      },
+      {
+        name: 'a POSIX path outside',
+        path: '/project/other/file.txt',
+        root: '/project/root',
+        expected: false,
+      },
+    ])(
+      'should return $expected for $name',
+      ({ path: testPath, root, expected }) => {
+        expect(isWithinRoot(testPath, root || defaultRoot)).toBe(expected);
+      },
+    );
+  });
+
+  describe('fileExists', () => {
+    it('should return true if the file exists', async () => {
+      const testFile = path.join(tempRootDir, 'exists.txt');
+      actualNodeFs.writeFileSync(testFile, 'content');
+      await expect(fileExists(testFile)).resolves.toBe(true);
     });
 
-    it('should return true for the root path itself', () => {
-      expect(isWithinRoot(root, root)).toBe(true);
+    it('should return false if the file does not exist', async () => {
+      const testFile = path.join(tempRootDir, 'does-not-exist.txt');
+      await expect(fileExists(testFile)).resolves.toBe(false);
     });
 
-    it('should return false for paths outside the root', () => {
-      expect(
-        isWithinRoot(path.resolve('/project/other', 'file.txt'), root),
-      ).toBe(false);
-      expect(isWithinRoot(path.resolve('/unrelated', 'file.txt'), root)).toBe(
-        false,
-      );
-    });
-
-    it('should return false for paths that only partially match the root prefix', () => {
-      expect(
-        isWithinRoot(
-          path.resolve('/project/root-but-actually-different'),
-          root,
-        ),
-      ).toBe(false);
-    });
-
-    it('should handle paths with trailing slashes correctly', () => {
-      expect(isWithinRoot(path.join(root, 'file.txt') + path.sep, root)).toBe(
-        true,
-      );
-      expect(isWithinRoot(root + path.sep, root)).toBe(true);
-    });
-
-    it('should handle different path separators (POSIX vs Windows)', () => {
-      const posixRoot = '/project/root';
-      const posixPathInside = '/project/root/file.txt';
-      const posixPathOutside = '/project/other/file.txt';
-      expect(isWithinRoot(posixPathInside, posixRoot)).toBe(true);
-      expect(isWithinRoot(posixPathOutside, posixRoot)).toBe(false);
-    });
-
-    it('should return false for a root path that is a sub-path of the path to check', () => {
-      const pathToCheck = path.resolve('/project/root/sub');
-      const rootSub = path.resolve('/project/root');
-      expect(isWithinRoot(pathToCheck, rootSub)).toBe(true);
-
-      const pathToCheckSuper = path.resolve('/project/root');
-      const rootSuper = path.resolve('/project/root/sub');
-      expect(isWithinRoot(pathToCheckSuper, rootSuper)).toBe(false);
+    it('should return true for a directory that exists', async () => {
+      const testDir = path.join(tempRootDir, 'exists-dir');
+      actualNodeFs.mkdirSync(testDir);
+      await expect(fileExists(testDir)).resolves.toBe(true);
     });
   });
 
@@ -569,47 +624,29 @@ describe('fileUtils', () => {
       expect(await detectFileType('component.tsx')).toBe('text');
     });
 
-    it('should detect image type by extension (png)', async () => {
-      mockMimeLookup.mockReturnValueOnce('image/png');
-      expect(await detectFileType('file.png')).toBe('image');
-    });
-
-    it('should detect image type by extension (jpeg)', async () => {
-      mockMimeLookup.mockReturnValueOnce('image/jpeg');
-      expect(await detectFileType('file.jpg')).toBe('image');
-    });
+    it.each([
+      { type: 'image', file: 'file.png', mime: 'image/png' },
+      { type: 'image', file: 'file.jpg', mime: 'image/jpeg' },
+      { type: 'pdf', file: 'file.pdf', mime: 'application/pdf' },
+      { type: 'audio', file: 'song.mp3', mime: 'audio/mpeg' },
+      { type: 'video', file: 'movie.mp4', mime: 'video/mp4' },
+      { type: 'binary', file: 'archive.zip', mime: 'application/zip' },
+      { type: 'binary', file: 'app.exe', mime: 'application/octet-stream' },
+    ])(
+      'should detect $type type for $file by extension',
+      async ({ file, mime, type }) => {
+        mockMimeGetType.mockReturnValueOnce(mime);
+        expect(await detectFileType(file)).toBe(type);
+      },
+    );
 
     it('should detect svg type by extension', async () => {
       expect(await detectFileType('image.svg')).toBe('svg');
       expect(await detectFileType('image.icon.svg')).toBe('svg');
     });
 
-    it('should detect pdf type by extension', async () => {
-      mockMimeLookup.mockReturnValueOnce('application/pdf');
-      expect(await detectFileType('file.pdf')).toBe('pdf');
-    });
-
-    it('should detect audio type by extension', async () => {
-      mockMimeLookup.mockReturnValueOnce('audio/mpeg');
-      expect(await detectFileType('song.mp3')).toBe('audio');
-    });
-
-    it('should detect video type by extension', async () => {
-      mockMimeLookup.mockReturnValueOnce('video/mp4');
-      expect(await detectFileType('movie.mp4')).toBe('video');
-    });
-
-    it('should detect known binary extensions as binary (e.g. .zip)', async () => {
-      mockMimeLookup.mockReturnValueOnce('application/zip');
-      expect(await detectFileType('archive.zip')).toBe('binary');
-    });
-    it('should detect known binary extensions as binary (e.g. .exe)', async () => {
-      mockMimeLookup.mockReturnValueOnce('application/octet-stream'); // Common for .exe
-      expect(await detectFileType('app.exe')).toBe('binary');
-    });
-
     it('should use isBinaryFile for unknown extensions and detect as binary', async () => {
-      mockMimeLookup.mockReturnValueOnce(false); // Unknown mime type
+      mockMimeGetType.mockReturnValueOnce(false); // Unknown mime type
       // Create a file that isBinaryFile will identify as binary
       const binaryContent = Buffer.from([
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
@@ -619,7 +656,7 @@ describe('fileUtils', () => {
     });
 
     it('should default to text if mime type is unknown and content is not binary', async () => {
-      mockMimeLookup.mockReturnValueOnce(false); // Unknown mime type
+      mockMimeGetType.mockReturnValueOnce(false); // Unknown mime type
       // filePathForDetectTest is already a text file by default from beforeEach
       expect(await detectFileType(filePathForDetectTest)).toBe('text');
     });
@@ -677,7 +714,7 @@ describe('fileUtils', () => {
 
     it('should handle read errors for image/pdf files', async () => {
       actualNodeFs.writeFileSync(testImageFilePath, 'content'); // File must exist
-      mockMimeLookup.mockReturnValue('image/png');
+      mockMimeGetType.mockReturnValue('image/png');
       const readError = new Error('Simulated image read error');
       vi.spyOn(fsPromises, 'readFile').mockRejectedValueOnce(readError);
 
@@ -693,7 +730,7 @@ describe('fileUtils', () => {
     it('should process an image file', async () => {
       const fakePngData = Buffer.from('fake png data');
       actualNodeFs.writeFileSync(testImageFilePath, fakePngData);
-      mockMimeLookup.mockReturnValue('image/png');
+      mockMimeGetType.mockReturnValue('image/png');
       const result = await processSingleFileContent(
         testImageFilePath,
         tempRootDir,
@@ -715,7 +752,7 @@ describe('fileUtils', () => {
     it('should process a PDF file', async () => {
       const fakePdfData = Buffer.from('fake pdf data');
       actualNodeFs.writeFileSync(testPdfFilePath, fakePdfData);
-      mockMimeLookup.mockReturnValue('application/pdf');
+      mockMimeGetType.mockReturnValue('application/pdf');
       const result = await processSingleFileContent(
         testPdfFilePath,
         tempRootDir,
@@ -743,7 +780,7 @@ describe('fileUtils', () => {
       const testSvgFilePath = path.join(tempRootDir, 'test.svg');
       actualNodeFs.writeFileSync(testSvgFilePath, svgContent, 'utf-8');
 
-      mockMimeLookup.mockReturnValue('image/svg+xml');
+      mockMimeGetType.mockReturnValue('image/svg+xml');
 
       const result = await processSingleFileContent(
         testSvgFilePath,
@@ -760,7 +797,7 @@ describe('fileUtils', () => {
         testBinaryFilePath,
         Buffer.from([0x00, 0x01, 0x02]),
       );
-      mockMimeLookup.mockReturnValueOnce('application/octet-stream');
+      mockMimeGetType.mockReturnValueOnce('application/octet-stream');
       // isBinaryFile will operate on the real file.
 
       const result = await processSingleFileContent(
@@ -932,15 +969,17 @@ describe('fileUtils', () => {
       );
     });
 
-    it(
-      'should return an error if the file size exceeds 20MB',
-      { timeout: 15000 },
-      async () => {
-        // Create a file just over 20MB
-        const twentyOneMB = 21 * 1024 * 1024;
-        const buffer = Buffer.alloc(twentyOneMB, 0x61); // Fill with 'a'
-        actualNodeFs.writeFileSync(testTextFilePath, buffer);
+    it('should return an error if the file size exceeds 20MB', async () => {
+      // Create a small test file
+      actualNodeFs.writeFileSync(testTextFilePath, 'test content');
 
+      // Spy on fs.promises.stat to return a large file size
+      const statSpy = vi.spyOn(fs.promises, 'stat').mockResolvedValueOnce({
+        size: 21 * 1024 * 1024,
+        isDirectory: () => false,
+      } as fs.Stats);
+
+      try {
         const result = await processSingleFileContent(
           testTextFilePath,
           tempRootDir,
@@ -952,7 +991,9 @@ describe('fileUtils', () => {
           'File size exceeds the 20MB limit',
         );
         expect(result.llmContent).toContain('File size exceeds the 20MB limit');
-      },
-    );
+      } finally {
+        statSpy.mockRestore();
+      }
+    });
   });
 });

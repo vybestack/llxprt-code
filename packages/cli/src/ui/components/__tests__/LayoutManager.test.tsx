@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render, act } from '@testing-library/react';
+import { render } from '../../../test-utils/render.js';
+import { act } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LayoutManager, useLayout } from '../LayoutManager.js';
 
@@ -17,15 +18,13 @@ vi.mock('../../hooks/useTerminalSize.js', () => ({
 const TestComponent = () => {
   const layout = useLayout();
   return (
-    <div>
-      <div data-testid="terminal-height">{layout.terminalHeight}</div>
-      <div data-testid="terminal-width">{layout.terminalWidth}</div>
-      <div data-testid="footer-height">{layout.footerHeight}</div>
-      <div data-testid="constrain-height">{String(layout.constrainHeight)}</div>
-      <div data-testid="available-terminal-height">
-        {layout.availableTerminalHeight}
-      </div>
-    </div>
+    <>
+      <div>terminalHeight: {layout.terminalHeight}</div>
+      <div>terminalWidth: {layout.terminalWidth}</div>
+      <div>footerHeight: {layout.footerHeight}</div>
+      <div>constrainHeight: {String(layout.constrainHeight)}</div>
+      <div>availableTerminalHeight: {layout.availableTerminalHeight}</div>
+    </>
   );
 };
 
@@ -39,18 +38,19 @@ describe('LayoutManager', () => {
   });
 
   it('provides initial layout values', () => {
-    const { getByTestId } = render(
+    const { lastFrame } = render(
       <LayoutManager>
         <TestComponent />
       </LayoutManager>,
     );
 
-    expect(getByTestId('terminal-height').textContent).toBe('24');
-    expect(getByTestId('terminal-width').textContent).toBe('80');
-    expect(getByTestId('footer-height').textContent).toBe('0');
-    expect(getByTestId('constrain-height').textContent).toBe('true');
+    const output = lastFrame();
+    expect(output).toContain('terminalHeight: 24');
+    expect(output).toContain('terminalWidth: 80');
+    expect(output).toContain('footerHeight: 0');
+    expect(output).toContain('constrainHeight: true');
     // availableTerminalHeight = terminalHeight (24) - footerHeight (0) - staticExtraHeight (3) = 21
-    expect(getByTestId('available-terminal-height').textContent).toBe('21');
+    expect(output).toContain('availableTerminalHeight: 21');
   });
 
   it('updates available terminal height when footer height changes', () => {
@@ -62,23 +62,23 @@ describe('LayoutManager', () => {
       return <TestComponent />;
     };
 
-    const { getByTestId } = render(
+    const { lastFrame } = render(
       <LayoutManager>
         <TestWithSetter />
       </LayoutManager>,
     );
 
     // Initial state
-    expect(getByTestId('available-terminal-height').textContent).toBe('21');
+    expect(lastFrame()).toContain('availableTerminalHeight: 21');
 
     // Update footer height
     act(() => {
       setFooterHeight?.(5);
     });
 
-    expect(getByTestId('footer-height').textContent).toBe('5');
+    expect(lastFrame()).toContain('footerHeight: 5');
     // availableTerminalHeight = terminalHeight (24) - footerHeight (5) - staticExtraHeight (3) = 16
-    expect(getByTestId('available-terminal-height').textContent).toBe('16');
+    expect(lastFrame()).toContain('availableTerminalHeight: 16');
   });
 
   it('updates constrain height when setter is called', () => {
@@ -90,21 +90,21 @@ describe('LayoutManager', () => {
       return <TestComponent />;
     };
 
-    const { getByTestId } = render(
+    const { lastFrame } = render(
       <LayoutManager>
         <TestWithSetter />
       </LayoutManager>,
     );
 
     // Initial state
-    expect(getByTestId('constrain-height').textContent).toBe('true');
+    expect(lastFrame()).toContain('constrainHeight: true');
 
     // Update constrain height
     act(() => {
       setConstrainHeight?.(false);
     });
 
-    expect(getByTestId('constrain-height').textContent).toBe('false');
+    expect(lastFrame()).toContain('constrainHeight: false');
   });
 
   it('responds to terminal size changes', async () => {
@@ -116,14 +116,14 @@ describe('LayoutManager', () => {
     // Start with initial size
     mockUseTerminalSize.mockReturnValue({ rows: 24, columns: 80 });
 
-    const { getByTestId, rerender } = render(
+    const { lastFrame, rerender } = render(
       <LayoutManager>
         <TestComponent />
       </LayoutManager>,
     );
 
-    expect(getByTestId('terminal-height').textContent).toBe('24');
-    expect(getByTestId('terminal-width').textContent).toBe('80');
+    expect(lastFrame()).toContain('terminalHeight: 24');
+    expect(lastFrame()).toContain('terminalWidth: 80');
 
     // Simulate terminal resize
     mockUseTerminalSize.mockReturnValue({ rows: 30, columns: 100 });
@@ -134,10 +134,10 @@ describe('LayoutManager', () => {
       </LayoutManager>,
     );
 
-    expect(getByTestId('terminal-height').textContent).toBe('30');
-    expect(getByTestId('terminal-width').textContent).toBe('100');
+    expect(lastFrame()).toContain('terminalHeight: 30');
+    expect(lastFrame()).toContain('terminalWidth: 100');
     // availableTerminalHeight should update: 30 - 0 - 3 = 27
-    expect(getByTestId('available-terminal-height').textContent).toBe('27');
+    expect(lastFrame()).toContain('availableTerminalHeight: 27');
   });
 
   it('throws error when useLayout is called outside of LayoutManager', () => {

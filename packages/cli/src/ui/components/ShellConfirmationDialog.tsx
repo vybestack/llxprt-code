@@ -1,21 +1,18 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import { Box, Text } from 'ink';
-import React, { useCallback } from 'react';
-import { Colors } from '../colors.js';
+import type React from 'react';
+import { useCallback } from 'react';
+import { theme } from '../semantic-colors.js';
 import { RenderInline } from '../utils/InlineMarkdownRenderer.js';
-import {
-  RadioButtonSelect,
-  RadioSelectItem,
-} from './shared/RadioButtonSelect.js';
+import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
+import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { useKeypress } from '../hooks/useKeypress.js';
-import { useTerminalSize } from '../hooks/useTerminalSize.js';
-import { truncateEnd } from '../utils/responsive.js';
 
 export interface ShellConfirmationRequest {
   commands: string[];
@@ -33,11 +30,6 @@ export const ShellConfirmationDialog: React.FC<
   ShellConfirmationDialogProps
 > = ({ request }) => {
   const { commands, onConfirm } = request;
-  const { rows } = useTerminalSize();
-
-  // Calculate max number of commands to show based on terminal height
-  // Reserve space for header text, radio buttons, and padding
-  const maxCommandsToShow = Math.max(1, rows - 8);
 
   useKeypress(
     (key) => {
@@ -80,46 +72,43 @@ export const ShellConfirmationDialog: React.FC<
   ];
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor={Colors.AccentYellow}
-      padding={1}
-      width="100%"
-      marginLeft={1}
-    >
-      <Box flexDirection="column" marginBottom={1}>
-        <Text bold color={Colors.Foreground}>
-          Shell Command Execution
-        </Text>
-        <Text color={Colors.Foreground}>
-          A custom command wants to run the following shell commands:
-        </Text>
-        <Box
-          flexDirection="column"
-          borderStyle="round"
-          borderColor={Colors.Gray}
-          paddingX={1}
-          marginTop={1}
-        >
-          {commands.slice(0, maxCommandsToShow).map((cmd) => (
-            <Text key={cmd} color={Colors.AccentCyan}>
-              <RenderInline text={truncateEnd(cmd, 80)} />
-            </Text>
-          ))}
-          {commands.length > maxCommandsToShow && (
-            <Text color={Colors.Gray}>
-              ...{commands.length - maxCommandsToShow} more commands...
-            </Text>
-          )}
+    <Box flexDirection="row" width="100%">
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={theme.status.warning}
+        padding={1}
+        flexGrow={1}
+        marginLeft={1}
+      >
+        <Box flexDirection="column" marginBottom={1}>
+          <Text bold color={theme.text.primary}>
+            Shell Command Execution
+          </Text>
+          <Text color={theme.text.primary}>
+            A custom command wants to run the following shell commands:
+          </Text>
+          <Box
+            flexDirection="column"
+            borderStyle="round"
+            borderColor={theme.border.default}
+            paddingX={1}
+            marginTop={1}
+          >
+            {commands.map((cmd) => (
+              <Text key={cmd} color={theme.text.link}>
+                <RenderInline text={cmd} defaultColor={theme.text.link} />
+              </Text>
+            ))}
+          </Box>
         </Box>
-      </Box>
 
-      <Box marginBottom={1}>
-        <Text color={Colors.Foreground}>Do you want to proceed?</Text>
-      </Box>
+        <Box marginBottom={1}>
+          <Text color={theme.text.primary}>Do you want to proceed?</Text>
+        </Box>
 
-      <RadioButtonSelect items={options} onSelect={handleSelect} isFocused />
+        <RadioButtonSelect items={options} onSelect={handleSelect} isFocused />
+      </Box>
     </Box>
   );
 };

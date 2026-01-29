@@ -285,8 +285,9 @@ export class GeminiProvider extends BaseProvider {
     config: Config,
     baseURL?: string,
   ): Promise<CodeAssistContentGenerator> {
-    const { createCodeAssistContentGenerator } =
-      await import('../../code_assist/codeAssist.js');
+    const { createCodeAssistContentGenerator } = await import(
+      '../../code_assist/codeAssist.js'
+    );
     return createCodeAssistContentGenerator(
       httpOptions,
       AuthType.LOGIN_WITH_GOOGLE,
@@ -464,37 +465,55 @@ export class GeminiProvider extends BaseProvider {
    * Determine auth mode per call instead of using cached state
    */
   async getModels(): Promise<IModel[]> {
-    // Determine auth mode for this call
-    const { authMode } = await this.determineBestAuth();
+    // Full model list including OAuth-only models (gemini-3-*-preview)
+    // Used as fallback when no auth yet, and for OAuth mode
+    const oauthModels: IModel[] = [
+      {
+        id: 'gemini-2.5-pro',
+        name: 'Gemini 2.5 Pro',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+      {
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+      {
+        id: 'gemini-2.5-flash-lite',
+        name: 'Gemini 2.5 Flash Lite',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+      {
+        id: 'gemini-3-pro-preview',
+        name: 'Gemini 3 Pro Preview',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+      {
+        id: 'gemini-3-flash-preview',
+        name: 'Gemini 3 Flash Preview',
+        provider: this.name,
+        supportedToolFormats: [],
+      },
+    ];
 
-    // For OAuth mode, return fixed list of models
+    // Determine auth mode for this call (graceful when no auth yet)
+    let authMode: GeminiAuthMode;
+    try {
+      const result = await this.determineBestAuth();
+      authMode = result.authMode;
+    } catch (_e) {
+      // No auth configured yet (pre-onboarding) - return full model list
+      // including OAuth models so user can see all options when selecting
+      return oauthModels;
+    }
+
+    // For OAuth mode, return fixed list of models (including 3-*-preview)
     if (authMode === 'oauth') {
-      return [
-        {
-          id: 'gemini-2.5-pro',
-          name: 'Gemini 2.5 Pro',
-          provider: this.name,
-          supportedToolFormats: [],
-        },
-        {
-          id: 'gemini-2.5-flash',
-          name: 'Gemini 2.5 Flash',
-          provider: this.name,
-          supportedToolFormats: [],
-        },
-        {
-          id: 'gemini-2.5-flash-lite',
-          name: 'Gemini 2.5 Flash Lite',
-          provider: this.name,
-          supportedToolFormats: [],
-        },
-        {
-          id: 'gemini-3-pro-preview',
-          name: 'Gemini 3 Pro Preview',
-          provider: this.name,
-          supportedToolFormats: [],
-        },
-      ];
+      return oauthModels;
     }
 
     // For API key modes (gemini-api-key or vertex-ai), try to fetch real models
@@ -539,27 +558,8 @@ export class GeminiProvider extends BaseProvider {
       }
     }
 
-    // Return default models as fallback
-    return [
-      {
-        id: 'gemini-2.5-pro',
-        name: 'Gemini 2.5 Pro',
-        provider: this.name,
-        supportedToolFormats: [],
-      },
-      {
-        id: 'gemini-2.5-flash',
-        name: 'Gemini 2.5 Flash',
-        provider: this.name,
-        supportedToolFormats: [],
-      },
-      {
-        id: 'gemini-2.5-flash-exp',
-        name: 'Gemini 2.5 Flash Experimental',
-        provider: this.name,
-        supportedToolFormats: [],
-      },
-    ];
+    // Return default models as fallback (use same list as OAuth for consistency)
+    return oauthModels;
   }
 
   /**
@@ -646,6 +646,7 @@ export class GeminiProvider extends BaseProvider {
         'apiKeyfile',
         'api-keyfile',
         'baseUrl',
+        'baseURL',
         'base-url',
         'model',
         'toolFormat',
@@ -1194,27 +1195,45 @@ export class GeminiProvider extends BaseProvider {
     const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
     const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
 
-    // Ephemerals can be stored as flat keys ('reasoning.enabled') or nested objects ('reasoning': {enabled: true})
-    // Handle both formats for compatibility
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    // Read reasoning settings from invocation.modelBehavior first, fallback to earlyEphemerals
     const reasoningObj = (earlyEphemerals as Record<string, unknown>)[
       'reasoning'
     ] as Record<string, unknown> | undefined;
     const reasoningEnabled =
-      (earlyEphemerals as Record<string, unknown>)['reasoning.enabled'] ===
-        true || reasoningObj?.enabled === true;
+      (options.invocation?.getModelBehavior('reasoning.enabled') as
+        | boolean
+        | undefined) ??
+      ((earlyEphemerals as Record<string, unknown>)['reasoning.enabled'] ===
+        true ||
+        reasoningObj?.enabled === true);
     const reasoningIncludeInResponse =
-      (earlyEphemerals as Record<string, unknown>)[
+      (options.invocation?.getCliSetting('reasoning.includeInResponse') as
+        | boolean
+        | undefined) ??
+      ((earlyEphemerals as Record<string, unknown>)[
         'reasoning.includeInResponse'
-      ] !== false && reasoningObj?.includeInResponse !== false;
+      ] !== false &&
+        reasoningObj?.includeInResponse !== false);
     const reasoningStripFromContext =
+      (options.invocation?.getCliSetting('reasoning.stripFromContext') as
+        | 'all'
+        | 'allButLast'
+        | 'none'
+        | undefined) ??
       ((earlyEphemerals as Record<string, unknown>)[
         'reasoning.stripFromContext'
       ] as 'all' | 'allButLast' | 'none') ??
       (reasoningObj?.stripFromContext as 'all' | 'allButLast' | 'none') ??
       'all';
-    // Extract reasoning.effort for future use (could map to thinkingLevel in Gemini 3)
-    // Currently unused but extracted for completeness
     const reasoningEffort =
+      (options.invocation?.getModelBehavior('reasoning.effort') as
+        | 'minimal'
+        | 'low'
+        | 'medium'
+        | 'high'
+        | 'xhigh'
+        | undefined) ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.effort'] as
         | 'minimal'
         | 'low'
@@ -1229,11 +1248,15 @@ export class GeminiProvider extends BaseProvider {
         | 'high'
         | 'xhigh'
         | undefined);
-    void reasoningEffort; // Mark as intentionally unused (reserved for future effort-to-thinkingLevel mapping)
+    void reasoningEffort;
     const reasoningMaxTokens =
+      (options.invocation?.getModelBehavior('reasoning.maxTokens') as
+        | number
+        | undefined) ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.maxTokens'] as
         | number
-        | undefined) ?? (reasoningObj?.maxTokens as number | undefined);
+        | undefined) ??
+      (reasoningObj?.maxTokens as number | undefined);
 
     // Strip thought content from history before sending to API
     // This prevents sending previous thinking back which can cause issues
@@ -1314,21 +1337,11 @@ export class GeminiProvider extends BaseProvider {
         ? directOverrides.toolConfig
         : undefined;
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
-    // Get model params per call from ephemeral settings, not cached instance state
-    const allEphemerals = options.invocation?.ephemerals ?? {};
-    const {
-      tools: _ignoredTools,
-      gemini: geminiSpecific,
-      ...generalEphemerals
-    } = allEphemerals as Record<string, unknown>;
-    const requestOverrides: Record<string, unknown> = {
-      ...generalEphemerals,
-      ...(geminiSpecific && typeof geminiSpecific === 'object'
-        ? (geminiSpecific as Record<string, unknown>)
-        : {}),
-    };
+    // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
+    // Get pre-separated model params from invocation context
+    const modelParams = options.invocation?.modelParams ?? {};
     const requestConfig: Record<string, unknown> = {
-      ...requestOverrides,
+      ...modelParams,
     };
     requestConfig.serverTools = serverTools;
     if (geminiTools) {

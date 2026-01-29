@@ -243,7 +243,11 @@ export function buildResponsesRequest(
             if (block.type === 'tool_response') {
               const toolResponseBlock = block as ToolResponseBlock;
 
-              const payload = buildToolResponsePayload(toolResponseBlock);
+              const payload = buildToolResponsePayload(
+                toolResponseBlock,
+                undefined,
+                true,
+              );
               let sanitizedContent = formatToolResponseText({
                 status: payload.status,
                 toolName: payload.toolName ?? toolResponseBlock.toolName,

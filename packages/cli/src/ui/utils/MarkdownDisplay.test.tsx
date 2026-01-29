@@ -193,7 +193,7 @@ Another paragraph.
         { path: '', settings: {} },
         {
           path: '',
-          settings: { showLineNumbers: false },
+          settings: { ui: { showLineNumbers: false } },
         },
         { path: '', settings: {} },
         true,

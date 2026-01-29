@@ -24,7 +24,7 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
-import { DEFAULT_DIFF_OPTIONS, getDiffStat } from './diffOptions.js';
+import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
 import {
   type ModifiableDeclarativeTool,
   type ModifyContext,
@@ -70,13 +70,13 @@ export interface WriteFileToolParams {
   /**
    * The absolute path to the file to write to
    */
-  file_path?: string;
+  absolute_path?: string;
 
   /**
-   * Alternative parameter name for file_path (for compatibility)
+   * Alternative parameter name for absolute_path (for compatibility)
    * Not shown in schema - internal use only
    */
-  absolute_path?: string;
+  file_path?: string;
 
   /**
    * The content to write to the file
@@ -173,8 +173,8 @@ class WriteFileToolInvocation extends BaseToolInvocation<
   }
 
   private getFilePath(): string {
-    // Use file_path if provided, otherwise fall back to absolute_path
-    return this.params.file_path || this.params.absolute_path || '';
+    // Use absolute_path if provided, otherwise fall back to file_path
+    return this.params.absolute_path || this.params.file_path || '';
   }
 
   override toolLocations(): ToolLocation[] {
@@ -246,8 +246,8 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       correctedContent, // Content after correction and emoji filtering
       'Current',
       'Proposed',
-      DEFAULT_DIFF_OPTIONS,
-    );
+      DEFAULT_CREATE_PATCH_OPTIONS,
+    ) as string;
 
     const ideClient = this.config.getIdeClient();
     const ideConfirmation =
@@ -392,8 +392,8 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         fileContent,
         'Original',
         'Written',
-        DEFAULT_DIFF_OPTIONS,
-      );
+        DEFAULT_CREATE_PATCH_OPTIONS,
+      ) as string;
 
       const originallyProposedContent =
         filteredParams.ai_proposed_content || filteredParams.content;
@@ -404,10 +404,12 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         filteredParams.content,
       );
 
+      const displayPath =
+        filteredParams.absolute_path || filteredParams.file_path || '';
       const llmSuccessMessageParts = [
         isNewFile
-          ? `Successfully created and wrote to new file: ${filteredParams.file_path}.`
-          : `Successfully overwrote file: ${filteredParams.file_path}.`,
+          ? `Successfully created and wrote to new file: ${displayPath}.`
+          : `Successfully overwrote file: ${displayPath}.`,
       ];
       if (filteredParams.modified_by_user) {
         llmSuccessMessageParts.push(
@@ -532,14 +534,14 @@ export class WriteFileTool
       Kind.Edit,
       {
         properties: {
-          file_path: {
+          absolute_path: {
             description:
               "The absolute path to the file to write to (e.g., '/home/user/project/file.txt'). Relative paths are not supported.",
             type: 'string',
           },
-          absolute_path: {
+          file_path: {
             description:
-              'Alternative parameter name for file_path (for compatibility). The absolute path to the file to write.',
+              'Alternative parameter name for absolute_path (for compatibility). The absolute path to the file to write.',
             type: 'string',
           },
           content: {
@@ -559,11 +561,11 @@ export class WriteFileTool
   protected override validateToolParamValues(
     params: WriteFileToolParams,
   ): string | null {
-    // Accept either file_path or absolute_path
-    const filePath = params.file_path || params.absolute_path || '';
+    // Accept either absolute_path or file_path
+    const filePath = params.absolute_path || params.file_path || '';
 
     if (filePath.trim() === '') {
-      return "The 'file_path' parameter must be non-empty.";
+      return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
     }
 
     if (!path.isAbsolute(filePath)) {
@@ -598,10 +600,10 @@ export class WriteFileTool
     params: WriteFileToolParams,
     messageBus?: MessageBus,
   ): ToolInvocation<WriteFileToolParams, ToolResult> {
-    // Normalize parameters: if absolute_path is provided but not file_path, copy it over
+    // Normalize parameters: if file_path is provided but not absolute_path, copy it over
     const normalizedParams = { ...params };
-    if (!normalizedParams.file_path && normalizedParams.absolute_path) {
-      normalizedParams.file_path = normalizedParams.absolute_path;
+    if (!normalizedParams.absolute_path && normalizedParams.file_path) {
+      normalizedParams.absolute_path = normalizedParams.file_path;
     }
     return new WriteFileToolInvocation(
       this.config,
@@ -615,9 +617,9 @@ export class WriteFileTool
   ): ModifyContext<WriteFileToolParams> {
     return {
       getFilePath: (params: WriteFileToolParams) =>
-        params.file_path || params.absolute_path || '',
+        params.absolute_path || params.file_path || '',
       getCurrentContent: async (params: WriteFileToolParams) => {
-        const filePath = params.file_path || params.absolute_path || '';
+        const filePath = params.absolute_path || params.file_path || '';
         const correctedContentResult = await getCorrectedFileContent(
           filePath,
           params.content,
@@ -627,7 +629,7 @@ export class WriteFileTool
         return correctedContentResult.originalContent;
       },
       getProposedContent: async (params: WriteFileToolParams) => {
-        const filePath = params.file_path || params.absolute_path || '';
+        const filePath = params.absolute_path || params.file_path || '';
         const correctedContentResult = await getCorrectedFileContent(
           filePath,
           params.content,

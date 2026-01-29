@@ -33,12 +33,10 @@ describe('TodoContinuationService', () => {
     id: string,
     content: string,
     status: 'pending' | 'in_progress' | 'completed' = 'pending',
-    priority: 'high' | 'medium' | 'low' = 'medium',
   ): Todo => ({
     id,
     content,
     status,
-    priority,
   });
 
   const createConfig = (
@@ -366,22 +364,16 @@ describe('TodoContinuationService', () => {
           '1',
           'Implement user authentication',
           'pending',
-          'high',
         );
-        const pendingTodo2 = createTodo(
-          '2',
-          'Update documentation',
-          'pending',
-          'low',
-        );
+        const pendingTodo2 = createTodo('2', 'Update documentation', 'pending');
 
-        const todos = [pendingTodo2, pendingTodo1]; // Lower priority first
+        const todos = [pendingTodo2, pendingTodo1]; // Second alphabetically
         const context = createContext({ todos, hadToolCalls: false });
 
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(true);
-        expect(result.activeTodo).toEqual(pendingTodo1); // Should pick higher priority
+        expect(result.activeTodo).toEqual(pendingTodo1); // Should pick first alphabetically
       });
 
       it('formats todo content into readable task description', () => {
@@ -408,26 +400,16 @@ describe('TodoContinuationService', () => {
         expect(result.length).toBeGreaterThan(0); // Should provide fallback
       });
 
-      it('prioritizes high-priority pending todos over low-priority ones', () => {
-        const lowPriorityTodo = createTodo(
-          '1',
-          'Update README',
-          'pending',
-          'low',
-        );
-        const highPriorityTodo = createTodo(
-          '2',
-          'Fix security vulnerability',
-          'pending',
-          'high',
-        );
+      it('sorts pending todos alphabetically', () => {
+        const todoZ = createTodo('1', 'Update README', 'pending');
+        const todoF = createTodo('2', 'Fix security vulnerability', 'pending');
 
-        const todos = [lowPriorityTodo, highPriorityTodo];
+        const todos = [todoZ, todoF];
         const context = createContext({ todos, hadToolCalls: false });
 
         const result = service.checkContinuationConditions(context);
 
-        expect(result.activeTodo).toEqual(highPriorityTodo);
+        expect(result.activeTodo).toEqual(todoF); // 'Fix' comes before 'Update' alphabetically
       });
     });
   });
@@ -489,7 +471,6 @@ describe('TodoContinuationService', () => {
         id: '1',
         content: 'Minimal todo item',
         status: 'in_progress',
-        priority: 'medium',
         // subtasks and toolCalls are undefined
       };
 

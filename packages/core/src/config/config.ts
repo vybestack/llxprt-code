@@ -22,6 +22,8 @@ import { GlobTool } from '../tools/glob.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { EditTool } from '../tools/edit.js';
 import { ShellTool } from '../tools/shell.js';
+import { ASTEditTool } from '../tools/ast-edit.js';
+import { ASTReadFileTool } from '../tools/ast-edit.js';
 import { WriteFileTool } from '../tools/write-file.js';
 import { GoogleWebFetchTool } from '../tools/google-web-fetch.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
@@ -47,6 +49,7 @@ import { ListSubagentsTool } from '../tools/list-subagents.js';
 import { GeminiClient } from '../core/client.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
+import type { HookDefinition, HookEventName } from '../hooks/types.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -98,6 +101,13 @@ import type { EventEmitter } from 'node:events';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import type { PolicyEngineConfig } from '../policy/types.js';
+import { setGlobalProxy } from '../utils/fetch.js';
+import { coreEvents } from '../utils/events.js';
+import {
+  type ExtensionLoader,
+  SimpleExtensionLoader,
+} from '../utils/extensionLoader.js';
+import { McpClientManager } from '../tools/mcp-client-manager.js';
 
 // Import privacy-related types
 export interface RedactionConfig {
@@ -190,6 +200,7 @@ export interface GeminiCLIExtension {
   mcpServers?: Record<string, MCPServerConfig>;
   contextFiles: string[];
   excludeTools?: string[];
+  hooks?: { [K in HookEventName]?: HookDefinition[] };
 }
 
 export interface ExtensionInstallMetadata {
@@ -262,6 +273,7 @@ export class MCPServerConfig {
     readonly includeTools?: string[],
     readonly excludeTools?: string[],
     readonly extensionName?: string,
+    readonly extension?: GeminiCLIExtension,
     // OAuth configuration
     readonly oauth?: MCPOAuthConfig,
     readonly authProviderType?: AuthProviderType,
@@ -365,6 +377,10 @@ export interface ConfigParameters {
   providerManager?: ProviderManager;
   provider?: string;
   extensions?: GeminiCLIExtension[];
+  extensionLoader?: ExtensionLoader;
+  enabledExtensions?: string[];
+  enableExtensionReloading?: boolean;
+  allowedMcpServers?: string[];
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
   noBrowser?: boolean;
   summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
@@ -392,10 +408,18 @@ export interface ConfigParameters {
   enableShellOutputEfficiency?: boolean;
   continueSession?: boolean;
   disableYoloMode?: boolean;
+  enableMessageBusIntegration?: boolean;
+  enableHooks?: boolean;
+  hooks?: {
+    [K in HookEventName]?: HookDefinition[];
+  };
 }
 
 export class Config {
   private toolRegistry!: ToolRegistry;
+  private mcpClientManager?: McpClientManager;
+  private allowedMcpServers: string[];
+  private blockedMcpServers: Array<{ name: string; extensionName: string }>;
   private promptRegistry!: PromptRegistry;
   private readonly sessionId: string;
   private readonly settingsService: SettingsService;
@@ -415,7 +439,7 @@ export class Config {
   private readonly toolDiscoveryCommand: string | undefined;
   private readonly toolCallCommand: string | undefined;
   private readonly mcpServerCommand: string | undefined;
-  private readonly mcpServers: Record<string, MCPServerConfig> | undefined;
+  private mcpServers: Record<string, MCPServerConfig> | undefined;
   private userMemory: string;
   private llxprtMdFileCount: number;
   private llxprtMdFilePaths: string[];
@@ -452,11 +476,8 @@ export class Config {
   private readonly maxSessionTurns: number;
   private readonly _activeExtensions: ActiveExtension[];
   private readonly listExtensions: boolean;
-  private readonly _extensions: GeminiCLIExtension[];
-  private readonly _blockedMcpServers: Array<{
-    name: string;
-    extensionName: string;
-  }>;
+  private readonly _extensionLoader: ExtensionLoader;
+  private readonly enableExtensionReloading: boolean;
   private providerManager?: ProviderManager;
   private profileManager?: ProfileManager;
   private subagentManager?: SubagentManager;
@@ -554,6 +575,10 @@ export class Config {
   private readonly enableShellOutputEfficiency: boolean;
   private readonly continueSession: boolean;
   private readonly disableYoloMode: boolean;
+  private readonly enableHooks: boolean;
+  private readonly hooks:
+    | { [K in HookEventName]?: HookDefinition[] }
+    | undefined;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -613,6 +638,8 @@ export class Config {
     this.toolCallCommand = params.toolCallCommand;
     this.mcpServerCommand = params.mcpServerCommand;
     this.mcpServers = params.mcpServers;
+    this.allowedMcpServers = params.allowedMcpServers ?? [];
+    this.blockedMcpServers = params.blockedMcpServers ?? [];
     this.userMemory = params.userMemory ?? '';
     this.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
     this.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
@@ -662,8 +689,9 @@ export class Config {
     this._activeExtensions = params.activeExtensions ?? [];
     this.providerManager = params.providerManager;
     this.provider = params.provider;
-    this._extensions = params.extensions ?? [];
-    this._blockedMcpServers = params.blockedMcpServers ?? [];
+    this._extensionLoader =
+      params.extensionLoader ??
+      new SimpleExtensionLoader(params.extensions ?? []);
     this.noBrowser = params.noBrowser ?? false;
     this.summarizeToolOutput = params.summarizeToolOutput;
     this.folderTrust = params.folderTrust ?? false;
@@ -693,6 +721,7 @@ export class Config {
       params.enableShellOutputEfficiency ?? true;
     this.continueSession = params.continueSession ?? false;
     this.extensionManagement = params.extensionManagement ?? false;
+    this.enableExtensionReloading = params.enableExtensionReloading ?? false;
     this.storage = new Storage(this.targetDir);
     this.enablePromptCompletion = params.enablePromptCompletion ?? false;
     this.fileExclusions = new FileExclusions(this);
@@ -704,6 +733,26 @@ export class Config {
 
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
     this.disableYoloMode = params.disableYoloMode ?? false;
+    this.enableHooks = params.enableHooks ?? false;
+
+    // Enable MessageBus integration if:
+    // 1. Explicitly enabled via setting, OR
+    // 2. Hooks are enabled and hooks are configured
+    const hasHooks = params.hooks && Object.keys(params.hooks).length > 0;
+    const hooksNeedMessageBus = this.enableHooks && hasHooks;
+    const messageBusEnabled =
+      params.enableMessageBusIntegration ??
+      (hooksNeedMessageBus ? true : false);
+    // Update messageBus initialization to consider hooks
+    if (messageBusEnabled && !this.messageBus) {
+      // MessageBus is already initialized in constructor, just log that hooks may use it
+      const debugLogger = new DebugLogger('llxprt:config');
+      debugLogger.debug(
+        () =>
+          `MessageBus enabled for hooks (enableHooks=${this.enableHooks}, hasHooks=${hasHooks})`,
+      );
+    }
+    this.hooks = params.hooks;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -727,6 +776,20 @@ export class Config {
       console.log(`[CONFIG] Telemetry disabled`);
     }
 
+    // Set up proxy with error handling
+    const proxy = this.getProxy();
+    if (proxy) {
+      try {
+        setGlobalProxy(proxy);
+      } catch (error) {
+        coreEvents.emitFeedback(
+          'error',
+          'Invalid proxy configuration detected. Check debug drawer for more details (F12)',
+          error,
+        );
+      }
+    }
+
     logCliConfiguration(this, new StartSessionEvent(this));
   }
 
@@ -746,6 +809,15 @@ export class Config {
     }
     this.promptRegistry = new PromptRegistry();
     this.toolRegistry = await this.createToolRegistry();
+    this.mcpClientManager = new McpClientManager(
+      this.toolRegistry,
+      this,
+      this.eventEmitter,
+    );
+    await Promise.all([
+      this.mcpClientManager.startConfiguredMcpServers(),
+      this.getExtensionLoader().start(this),
+    ]);
 
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
@@ -1017,8 +1089,23 @@ export class Config {
     return this.allowedTools;
   }
 
+  /**
+   * All the excluded tools from static configuration, loaded extensions, or
+   * other sources.
+   *
+   * May change over time.
+   */
   getExcludeTools(): string[] | undefined {
-    return this.excludeTools;
+    const excludeToolsSet = new Set([...(this.excludeTools ?? [])]);
+    for (const extension of this.getExtensionLoader().getExtensions()) {
+      if (!extension.isActive) {
+        continue;
+      }
+      for (const tool of extension.excludeTools || []) {
+        excludeToolsSet.add(tool);
+      }
+    }
+    return [...excludeToolsSet];
   }
 
   getToolDiscoveryCommand(): string | undefined {
@@ -1033,8 +1120,31 @@ export class Config {
     return this.mcpServerCommand;
   }
 
+  /**
+   * The user configured MCP servers (via gemini settings files).
+   *
+   * Does NOT include mcp servers configured by extensions.
+   */
   getMcpServers(): Record<string, MCPServerConfig> | undefined {
     return this.mcpServers;
+  }
+
+  getMcpClientManager(): McpClientManager | undefined {
+    return this.mcpClientManager;
+  }
+
+  getAllowedMcpServers(): string[] | undefined {
+    return this.allowedMcpServers;
+  }
+
+  getBlockedMcpServers():
+    | Array<{ name: string; extensionName: string }>
+    | undefined {
+    return this.blockedMcpServers;
+  }
+
+  setMcpServers(mcpServers: Record<string, MCPServerConfig>): void {
+    this.mcpServers = mcpServers;
   }
 
   getUserMemory(): string {
@@ -1315,16 +1425,36 @@ export class Config {
     return this.extensionManagement;
   }
 
+  getExtensionLoader(): ExtensionLoader {
+    return this._extensionLoader;
+  }
+
   getExtensions(): GeminiCLIExtension[] {
-    return this._extensions;
+    return this._extensionLoader.getExtensions();
   }
 
   getActiveExtensions(): ActiveExtension[] {
     return this._activeExtensions;
   }
 
-  getBlockedMcpServers(): Array<{ name: string; extensionName: string }> {
-    return this._blockedMcpServers;
+  /**
+   * Check if an extension is enabled (i.e., isActive in the extension loader).
+   * Returns true for unknown extensions to avoid filtering valid commands.
+   */
+  isExtensionEnabled(extensionName: string): boolean {
+    const extension = this._extensionLoader
+      .getExtensions()
+      .find((ext) => ext.name === extensionName);
+    // If extension not found, default to true to avoid filtering
+    return extension ? extension.isActive : true;
+  }
+
+  getEnableExtensionReloading(): boolean {
+    return this.enableExtensionReloading;
+  }
+
+  getExtensionEvents(): EventEmitter | undefined {
+    return this.eventEmitter;
   }
 
   getProvider(): string | undefined {
@@ -1678,7 +1808,7 @@ export class Config {
   }
 
   async createToolRegistry(): Promise<ToolRegistry> {
-    const registry = new ToolRegistry(this, this.eventEmitter);
+    const registry = new ToolRegistry(this);
 
     const baseCoreTools = this.getCoreTools();
     const effectiveCoreTools =
@@ -1770,10 +1900,12 @@ export class Config {
 
     registerCoreTool(GlobTool, this);
     registerCoreTool(EditTool, this);
+    registerCoreTool(ASTEditTool, this);
     registerCoreTool(WriteFileTool, this);
     registerCoreTool(GoogleWebFetchTool, this);
     registerCoreTool(ReadManyFilesTool, this);
     registerCoreTool(ReadLineRangeTool, this);
+    registerCoreTool(ASTReadFileTool, this);
     registerCoreTool(DeleteLineRangeTool, this);
     registerCoreTool(InsertAtLineTool, this);
     registerCoreTool(ShellTool, this);
@@ -1849,6 +1981,7 @@ export class Config {
     }
 
     await registry.discoverAllTools();
+    registry.sortTools();
     return registry;
   }
 
@@ -1878,6 +2011,17 @@ export class Config {
 
   disposeScheduler(sessionId: string): void {
     _disposeScheduler(sessionId);
+  }
+
+  getEnableHooks(): boolean {
+    return this.enableHooks;
+  }
+
+  /**
+   * Get hooks configuration
+   */
+  getHooks(): { [K in HookEventName]?: HookDefinition[] } | undefined {
+    return this.hooks;
   }
 }
 
