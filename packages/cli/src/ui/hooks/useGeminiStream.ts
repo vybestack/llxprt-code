@@ -965,12 +965,24 @@ export const useGeminiStream = (
             // @requirement:REQ-THINK-UI-001
             setThought(event.value);
 
-            const thoughtContent = [
-              event.value.subject,
-              event.value.description,
-            ]
-              .filter(Boolean)
-              .join(': ');
+            // Trim both subject and description to normalize whitespace
+            const subject = event.value.subject?.trim() ?? '';
+            const description = event.value.description?.trim() ?? '';
+
+            // Build thoughtContent, avoiding "subject: description" when they're identical
+            // This prevents "Preparing: Preparing" style duplication
+            let thoughtContent: string;
+            if (subject && description && subject !== description) {
+              thoughtContent = `${subject}: ${description}`;
+            } else {
+              // Use whichever one has content, or empty string
+              thoughtContent = subject || description || '';
+            }
+
+            // Skip empty/whitespace-only thoughts entirely (fixes #922)
+            if (!thoughtContent) {
+              break;
+            }
 
             // Deduplicate: don't add if we already have this exact thought (fixes #922)
             const alreadyHasThought = thinkingBlocksRef.current.some(

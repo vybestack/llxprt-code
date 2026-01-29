@@ -169,8 +169,11 @@ export async function runNonInteractive(
       }
       const functionCalls: ToolCallRequestInfo[] = [];
       let thoughtBuffer = '';
+      // Only emit thinking in plain text mode (not JSON or STREAM_JSON)
+      // In STREAM_JSON mode, thinking would corrupt the JSON event stream
       const includeThinking =
         !jsonOutput &&
+        !streamJsonOutput &&
         (typeof config.getEphemeralSetting === 'function'
           ? config.getEphemeralSetting('reasoning.includeInResponse') !== false
           : true);
