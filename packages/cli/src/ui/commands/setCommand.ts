@@ -74,12 +74,6 @@ type SettingLiteralSpec = {
   completer?: SettingCompleter;
 };
 
-// Generic boolean options used for settings without explicit completionOptions
-const booleanOptions: ReadonlyArray<{ value: string; description: string }> = [
-  { value: 'true', description: 'true' },
-  { value: 'false', description: 'false' },
-];
-
 // Common model parameters - used for deep path completion flattening in modelparam context
 const commonParamOptions = [
   { value: 'temperature', description: 'Sampling temperature (0-2)' },
@@ -108,6 +102,9 @@ const buildDirectSettingSpecs = (): SettingLiteralSpec[] => {
 };
 
 const directSettingSpecs: SettingLiteralSpec[] = buildDirectSettingSpecs();
+const directSettingSpecByValue = new Map(
+  directSettingSpecs.map((spec) => [spec.value, spec]),
+);
 
 const createSettingLiteral = (spec: SettingLiteralSpec): LiteralArgument => ({
   kind: 'literal' as const,
@@ -273,9 +270,7 @@ const setSchema: CommandArgumentSchema = [
         name: 'mode',
         description: 'filter mode',
         hint: 'filter mode',
-        options:
-          getDirectSettingSpecs().find((s) => s.value === 'emojifilter')
-            ?.options ?? [],
+        options: directSettingSpecByValue.get('emojifilter')?.options ?? [],
       },
     ],
   },
@@ -329,17 +324,11 @@ const setSchema: CommandArgumentSchema = [
 
           // Try to get autocomplete suggestions from the registry first
           const resolvedSetting = resolveAlias(setting);
-          const registryOptions = getDirectSettingSpecs().find(
-            (s) => s.value === resolvedSetting,
-          )?.options;
+          const registryOptions =
+            directSettingSpecByValue.get(resolvedSetting)?.options;
 
           if (registryOptions && registryOptions.length > 0) {
             return filterCompletions(registryOptions, partial, { enableFuzzy });
-          }
-
-          // Fallback for boolean settings without explicit completionOptions
-          if (setting === 'socket-keepalive' || setting === 'socket-nodelay') {
-            return filterCompletions(booleanOptions, partial, { enableFuzzy });
           }
 
           // Special case: custom-headers needs runtime lookup

@@ -1134,7 +1134,7 @@ function deriveHintFromSpec(spec: SettingSpec): string {
   }
 
   if (spec.type === 'number') {
-    return 'positive integer';
+    return 'number';
   }
 
   if (spec.type === 'enum' && spec.enumValues) {
@@ -1166,7 +1166,11 @@ export function getDirectSettingSpecs(): DirectSettingSpec[] {
 
     const hint = deriveHintFromSpec(spec);
     const options =
-      spec.completionOptions ?? spec.enumValues?.map((v) => ({ value: v }));
+      spec.completionOptions ??
+      spec.enumValues?.map((v) => ({ value: v })) ??
+      (spec.type === 'boolean'
+        ? [{ value: 'true' }, { value: 'false' }]
+        : undefined);
 
     specs.push({
       value: spec.key,
