@@ -75,6 +75,12 @@ export enum Command {
   // Debugging/Terminal fixes
   REFRESH_KEYPRESS = 'refreshKeypress',
   TOGGLE_MOUSE_EVENTS = 'toggleMouseEvents',
+
+  // Additional commands from keyboard shortcuts autogen
+  SHOW_FULL_TODOS = 'showFullTodos',
+  TOGGLE_SHELL_INPUT_FOCUS = 'toggleShellInputFocus',
+  EXPAND_SUGGESTION = 'expandSuggestion',
+  COLLAPSE_SUGGESTION = 'collapseSuggestion',
 }
 
 /**
@@ -218,6 +224,12 @@ export const defaultKeyBindings: KeyBindingConfig = {
     { key: '\\', ctrl: true },
     { sequence: '\x1c' },
   ],
+
+  // Additional commands from keyboard shortcuts autogen
+  [Command.SHOW_FULL_TODOS]: [{ key: 't', ctrl: true }],
+  [Command.TOGGLE_SHELL_INPUT_FOCUS]: [{ key: 'f', ctrl: true }],
+  [Command.EXPAND_SUGGESTION]: [{ key: 'right' }],
+  [Command.COLLAPSE_SUGGESTION]: [{ key: 'left' }],
 };
 
 interface CommandCategory {
@@ -318,6 +330,12 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.CLEAR_INPUT]: 'Clear all text in the input field.',
   [Command.DELETE_WORD_BACKWARD]: 'Delete the previous word.',
   [Command.CLEAR_SCREEN]: 'Clear the terminal screen and redraw the UI.',
+  [Command.SCROLL_UP]: 'Scroll up one line.',
+  [Command.SCROLL_DOWN]: 'Scroll down one line.',
+  [Command.SCROLL_HOME]: 'Scroll to the beginning.',
+  [Command.SCROLL_END]: 'Scroll to the end.',
+  [Command.PAGE_UP]: 'Scroll up one page.',
+  [Command.PAGE_DOWN]: 'Scroll down one page.',
   [Command.HISTORY_UP]: 'Show the previous entry in history.',
   [Command.HISTORY_DOWN]: 'Show the next entry in history.',
   [Command.NAVIGATION_UP]: 'Move selection up in lists.',
@@ -333,6 +351,8 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
     'Open the current prompt in an external editor.',
   [Command.PASTE_CLIPBOARD_IMAGE]: 'Paste an image from the clipboard.',
   [Command.SHOW_ERROR_DETAILS]: 'Toggle detailed error information.',
+  [Command.TOGGLE_TOOL_DESCRIPTIONS]: 'Toggle tool descriptions display.',
+  [Command.TOGGLE_TODO_DIALOG]: 'Toggle the TODO dialog visibility.',
   [Command.SHOW_FULL_TODOS]: 'Toggle the full TODO list.',
   [Command.TOGGLE_IDE_CONTEXT_DETAIL]: 'Toggle IDE context details.',
   [Command.TOGGLE_MARKDOWN]: 'Toggle Markdown rendering.',
@@ -346,8 +366,10 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.SUBMIT_REVERSE_SEARCH]: 'Insert the selected reverse-search match.',
   [Command.ACCEPT_SUGGESTION_REVERSE_SEARCH]:
     'Accept a suggestion while reverse searching.',
+  [Command.REFRESH_KEYPRESS]: 'Refresh keypress handling.',
+  [Command.TOGGLE_MOUSE_EVENTS]: 'Toggle mouse event tracking.',
   [Command.TOGGLE_SHELL_INPUT_FOCUS]:
-    'Toggle focus between the shell and Gemini input.',
+    'Toggle focus between the shell and LLxprt input.',
   [Command.EXPAND_SUGGESTION]: 'Expand an inline suggestion.',
   [Command.COLLAPSE_SUGGESTION]: 'Collapse an inline suggestion.',
 };

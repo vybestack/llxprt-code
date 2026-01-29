@@ -45,6 +45,7 @@ export interface MemoryChangedPayload {
 export enum CoreEvent {
   UserFeedback = 'user-feedback',
   MemoryChanged = 'memory-changed',
+  ModelChanged = 'model-changed',
 }
 
 export class CoreEventEmitter extends EventEmitter {
@@ -128,9 +129,17 @@ export class CoreEventEmitter extends EventEmitter {
     event: CoreEvent.MemoryChanged,
     payload: MemoryChangedPayload,
   ): boolean;
+  override emit(event: CoreEvent.ModelChanged, model: string): boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   override emit(event: string | symbol, ...args: any[]): boolean {
     return super.emit(event, ...args);
+  }
+
+  /**
+   * Emits a model-changed event when the model is updated.
+   */
+  emitModelChanged(model: string): void {
+    this.emit(CoreEvent.ModelChanged, model);
   }
 }
 
