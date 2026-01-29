@@ -124,6 +124,22 @@ export interface EphemeralSettings {
   /** Load tool-specific prompts from ~/.llxprt/prompts/tools/** (default: false) */
   'enable-tool-prompts'?: boolean;
 
+  /** Proactive rate limit throttling (on/off) */
+  'rate-limit-throttle'?: 'on' | 'off';
+  /** Percentage threshold for rate limit throttling (1-100) */
+  'rate-limit-throttle-threshold'?: number;
+  /** Maximum wait time in milliseconds for rate limit throttling */
+  'rate-limit-max-wait'?: number;
+
+  /** Default timeout in seconds for task tool executions */
+  'task-default-timeout-seconds'?: number;
+  /** Maximum allowed timeout in seconds for task tool executions */
+  'task-max-timeout-seconds'?: number;
+  /** Default timeout in seconds for shell command executions */
+  'shell-default-timeout-seconds'?: number;
+  /** Maximum allowed timeout in seconds for shell command executions */
+  'shell-max-timeout-seconds'?: number;
+
   // Load balancer advanced failover settings (Phase 3, Issue #489)
   /** Minimum tokens per minute before triggering failover */
   tpm_threshold?: number;
@@ -137,6 +153,36 @@ export interface EphemeralSettings {
   circuit_breaker_failure_window_ms?: number;
   /** Cooldown period before retrying after circuit opens in milliseconds */
   circuit_breaker_recovery_timeout_ms?: number;
+
+  // Additional settings from registry
+  /** OpenAI stream options */
+  'stream-options'?: Record<string, unknown>;
+  /** Maximum number of turns allowed per prompt before stopping */
+  maxTurnsPerPrompt?: number;
+  /** Control context dumping (now/status/on/error/off) */
+  dumpcontext?: 'now' | 'status' | 'on' | 'error' | 'off';
+  /** Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled) */
+  dumponerror?: 'enabled' | 'disabled';
+  /** Emoji filter mode (allowed/auto/warn/error) */
+  emojifilter?: 'allowed' | 'auto' | 'warn' | 'error';
+
+  // Reasoning settings (nested under reasoning.* in registry)
+  /** Enable thinking/reasoning for models that support it */
+  'reasoning.enabled'?: boolean;
+  /** How much the model should think before responding */
+  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  /** Maximum token budget for reasoning */
+  'reasoning.maxTokens'?: number;
+  /** Token budget for reasoning (Anthropic-specific) */
+  'reasoning.budgetTokens'?: number;
+  /** Show thinking blocks in UI output */
+  'reasoning.includeInResponse'?: boolean;
+  /** Keep thinking in conversation history */
+  'reasoning.includeInContext'?: boolean;
+  /** Remove thinking blocks from context (all/allButLast/none) */
+  'reasoning.stripFromContext'?: 'all' | 'allButLast' | 'none';
+  /** API format for reasoning (native/field) */
+  'reasoning.format'?: 'native' | 'field';
 }
 
 /**

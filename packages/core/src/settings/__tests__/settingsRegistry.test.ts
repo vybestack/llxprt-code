@@ -15,6 +15,9 @@ import {
   getProfilePersistableKeys,
   getSettingHelp,
   validateSetting,
+  getProtectedSettingKeys,
+  getProviderConfigKeys,
+  getDirectSettingSpecs,
 } from '../settingsRegistry.js';
 
 describe('resolveAlias', () => {
@@ -202,5 +205,170 @@ describe('validateSetting', () => {
     const result = validateSetting('streaming', 'invalid');
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('getProtectedSettingKeys', () => {
+  it('includes apiKey in protected settings', () => {
+    const keys = getProtectedSettingKeys();
+
+    expect(keys).toContain('apiKey');
+  });
+
+  it('includes auth-key in protected settings', () => {
+    const keys = getProtectedSettingKeys();
+
+    expect(keys).toContain('auth-key');
+  });
+
+  it('includes baseUrl in protected settings', () => {
+    const keys = getProtectedSettingKeys();
+
+    expect(keys).toContain('baseUrl');
+  });
+
+  it('includes model in protected settings', () => {
+    const keys = getProtectedSettingKeys();
+
+    expect(keys).toContain('model');
+  });
+
+  it('does not include temperature (not provider-config)', () => {
+    const keys = getProtectedSettingKeys();
+
+    expect(keys).not.toContain('temperature');
+  });
+
+  it('does not include shell-replacement (not provider-config)', () => {
+    const keys = getProtectedSettingKeys();
+
+    expect(keys).not.toContain('shell-replacement');
+  });
+});
+
+describe('getProviderConfigKeys', () => {
+  it('includes apiKey in provider config keys', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).toContain('apiKey');
+  });
+
+  it('includes api-key alias in provider config keys', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).toContain('api-key');
+  });
+
+  it('includes baseUrl in provider config keys', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).toContain('baseUrl');
+  });
+
+  it('includes base-url alias in provider config keys', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).toContain('base-url');
+  });
+
+  it('includes model in provider config keys', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).toContain('model');
+  });
+
+  it('includes toolFormat in provider config keys', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).toContain('toolFormat');
+  });
+
+  it('includes tool-format alias in provider config keys', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).toContain('tool-format');
+  });
+
+  it('does not include temperature (not provider-config)', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).not.toContain('temperature');
+  });
+
+  it('does not include shell-replacement (not provider-config)', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).not.toContain('shell-replacement');
+  });
+});
+
+describe('getDirectSettingSpecs', () => {
+  it('returns array of setting specs', () => {
+    const specs = getDirectSettingSpecs();
+
+    expect(Array.isArray(specs)).toBe(true);
+  });
+
+  it('includes context-limit in specs', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'context-limit');
+
+    expect(found).toBeDefined();
+  });
+
+  it('includes streaming in specs', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'streaming');
+
+    expect(found).toBeDefined();
+  });
+
+  it('includes reasoning.enabled in specs', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'reasoning.enabled');
+
+    expect(found).toBeDefined();
+  });
+
+  it('excludes temperature (model-param)', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'temperature');
+
+    expect(found).toBeUndefined();
+  });
+
+  it('excludes custom-headers (custom-header)', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'custom-headers');
+
+    expect(found).toBeUndefined();
+  });
+
+  it('excludes apiKey (provider-config)', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'apiKey');
+
+    expect(found).toBeUndefined();
+  });
+
+  it('provides hint for context-limit', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'context-limit');
+
+    expect(found?.hint).toBeDefined();
+  });
+
+  it('provides options for streaming', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'streaming');
+
+    expect(found?.options).toBeDefined();
+  });
+
+  it('provides description for reasoning.enabled', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'reasoning.enabled');
+
+    expect(found?.description).toBeDefined();
   });
 });

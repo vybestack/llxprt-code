@@ -49,12 +49,12 @@ describe('profileCommand - load balancer save with protected settings', () => {
         apiKey: 'api-key-67890',
         apiKeyfile: '/path/to/api-keyfile',
         model: 'gpt-4',
+        'tool-format': 'openai',
         GOOGLE_CLOUD_PROJECT: 'my-project',
         GOOGLE_CLOUD_LOCATION: 'us-central1',
         // Non-protected settings (should be preserved)
         'context-limit': 190000,
         streaming: true,
-        'tool-format': 'openai',
         'compression-threshold': 1000,
         retries: 3,
       });
@@ -77,6 +77,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       expect(savedProfile.ephemeralSettings).not.toHaveProperty('apiKey');
       expect(savedProfile.ephemeralSettings).not.toHaveProperty('apiKeyfile');
       expect(savedProfile.ephemeralSettings).not.toHaveProperty('model');
+      expect(savedProfile.ephemeralSettings).not.toHaveProperty('tool-format');
       expect(savedProfile.ephemeralSettings).not.toHaveProperty(
         'GOOGLE_CLOUD_PROJECT',
       );
@@ -90,10 +91,6 @@ describe('profileCommand - load balancer save with protected settings', () => {
         190000,
       );
       expect(savedProfile.ephemeralSettings).toHaveProperty('streaming', true);
-      expect(savedProfile.ephemeralSettings).toHaveProperty(
-        'tool-format',
-        'openai',
-      );
       expect(savedProfile.ephemeralSettings).toHaveProperty(
         'compression-threshold',
         1000,
