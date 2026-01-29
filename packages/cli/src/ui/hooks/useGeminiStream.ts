@@ -959,7 +959,12 @@ export const useGeminiStream = (
               const sanitized = sanitizeContent(thoughtText);
               thoughtText = sanitized.blocked ? '' : sanitized.text;
 
-              if (thoughtText) {
+              // Only add if this exact thought hasn't been added yet (fixes #922 duplicate thoughts)
+              const alreadyHasThought = thinkingBlocksRef.current.some(
+                (tb) => tb.thought === thoughtText,
+              );
+
+              if (thoughtText && !alreadyHasThought) {
                 const thinkingBlock: ThinkingBlock = {
                   type: 'thinking',
                   thought: thoughtText,
