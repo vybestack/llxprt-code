@@ -757,15 +757,37 @@ export class OpenAIResponsesProvider extends BaseProvider {
       // This prevents the model from wasting tool calls re-reading files already injected.
       // Note: We no longer inject a steering prompt - the system prompt is properly
       // conveyed via the `instructions` field (see below).
-      const requestInputWithoutReasoning = requestInput.filter(
+      //
+      // Per OpenAI docs: "we highly recommend you pass back any reasoning items returned
+      // with the last function call... This allows the model to continue its reasoning
+      // process to produce better results in the most token-efficient manner."
+      // So we only filter reasoning for the injection helper (to find insertion point),
+      // but keep reasoning items in the final requestInput.
+      const itemsForInjection = requestInput.filter(
         (item) => !('type' in item && item.type === 'reasoning'),
       );
       this.injectSyntheticConfigFileRead(
-        requestInputWithoutReasoning,
+        itemsForInjection,
         options,
         userMemory,
       );
-      requestInput = requestInputWithoutReasoning;
+      // Merge injected items back with reasoning items preserved
+      // The injection adds items at the start, so prepend those to reasoning + rest
+      const injectedItems = itemsForInjection.filter(
+        (item) => !requestInput.includes(item),
+      );
+      const reasoningItems = requestInput.filter(
+        (item) => 'type' in item && item.type === 'reasoning',
+      );
+      const nonReasoningItems = requestInput.filter(
+        (item) => !('type' in item && item.type === 'reasoning'),
+      );
+      // Rebuild: injected items first, then reasoning, then rest of non-reasoning
+      requestInput = [
+        ...injectedItems,
+        ...reasoningItems,
+        ...nonReasoningItems,
+      ];
     }
 
     const request: {
