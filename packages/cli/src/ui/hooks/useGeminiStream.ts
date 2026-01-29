@@ -271,6 +271,10 @@ export const useGeminiStream = (
 
         addItem(itemWithThinking, timestamp);
 
+        // Clear thinking blocks after committing to history to prevent
+        // accumulation across multiple tool calls in the same turn (fixes #922)
+        thinkingBlocksRef.current = [];
+
         if (feedback) {
           addItem({ type: MessageType.INFO, text: feedback }, timestamp);
         }
