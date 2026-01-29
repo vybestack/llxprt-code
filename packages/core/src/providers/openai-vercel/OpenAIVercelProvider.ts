@@ -1940,7 +1940,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     });
 
     const shouldRetry = Boolean(
-      status === 429 || status === 503 || status === 504,
+      status === 429 || (status !== undefined && status >= 500 && status < 600),
     );
 
     if (shouldRetry) {

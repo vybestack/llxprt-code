@@ -4783,7 +4783,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Retry on 429 rate limit errors or 5xx server errors
     const shouldRetry = Boolean(
-      status === 429 || status === 503 || status === 504,
+      status === 429 || (status !== undefined && status >= 500 && status < 600),
     );
 
     if (!shouldRetry && isNetworkTransientError(error)) {
