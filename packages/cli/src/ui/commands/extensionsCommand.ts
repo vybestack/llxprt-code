@@ -224,17 +224,16 @@ async function restartAction(
     }),
   );
 
-  const failures = results.filter(
-    (result): result is PromiseRejectedResult => result.status === 'rejected',
-  );
+  const failureMessages = results
+    .map((result, index) =>
+      result.status === 'rejected'
+        ? `${extensionsToRestart[index].name}: ${getErrorMessage(result.reason)}`
+        : null,
+    )
+    .filter((message): message is string => message !== null);
 
-  if (failures.length > 0) {
-    const errorMessages = failures
-      .map((failure, index) => {
-        const extensionName = extensionsToRestart[index].name;
-        return `${extensionName}: ${getErrorMessage(failure.reason)}`;
-      })
-      .join('\n  ');
+  if (failureMessages.length > 0) {
+    const errorMessages = failureMessages.join('\n  ');
     context.ui.addItem(
       {
         type: MessageType.ERROR,

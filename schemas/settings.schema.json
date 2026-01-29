@@ -730,6 +730,13 @@
             }
           },
           "additionalProperties": false
+        },
+        "blockGitExtensions": {
+          "title": "Block Git Extensions",
+          "description": "Blocks installing and loading extensions from Git sources.",
+          "markdownDescription": "Blocks installing and loading extensions from Git sources.\n\n- Category: `Security`\n- Requires restart: `yes`\n- Default: `false`",
+          "default": false,
+          "type": "boolean"
         }
       },
       "additionalProperties": false

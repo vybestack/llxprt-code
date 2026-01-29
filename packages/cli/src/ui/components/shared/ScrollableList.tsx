@@ -16,7 +16,6 @@ import type React from 'react';
 import {
   VirtualizedList,
   type VirtualizedListRef,
-  SCROLL_TO_ITEM_END,
 } from './VirtualizedList.js';
 import { useScrollable } from '../../contexts/ScrollProvider.js';
 import { Box, type DOMElement } from 'ink';
@@ -177,7 +176,13 @@ function ScrollableList<T>(
         smoothScrollTo(0);
         flashScrollbar();
       } else if (keyMatchers[Command.SCROLL_END](key)) {
-        smoothScrollTo(SCROLL_TO_ITEM_END);
+        // Resolve SCROLL_TO_ITEM_END to actual max scrollTop for animation
+        const scrollState = getScrollState();
+        const maxScrollTop = Math.max(
+          scrollState.scrollHeight - scrollState.innerHeight,
+          0,
+        );
+        smoothScrollTo(maxScrollTop);
         flashScrollbar();
       }
     },

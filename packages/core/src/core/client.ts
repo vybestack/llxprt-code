@@ -815,7 +815,7 @@ export class GeminiClient {
     // We create the chat first, then populate it with restored history
     if (!this.hasChatInitialized()) {
       try {
-        await this.startChat([]);
+        this.chat = await this.startChat([]);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         throw new Error(
