@@ -226,6 +226,24 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'reasoning.summary',
+    category: 'model-behavior',
+    description:
+      'OpenAI Responses API reasoning summary mode (auto/concise/detailed/none)',
+    type: 'enum',
+    enumValues: ['auto', 'concise', 'detailed', 'none'],
+    persistToProfile: true,
+  },
+  {
+    key: 'text.verbosity',
+    category: 'model-behavior',
+    description:
+      'OpenAI Responses API text verbosity for thinking output (low/medium/high)',
+    type: 'enum',
+    enumValues: ['low', 'medium', 'high'],
+    persistToProfile: true,
+  },
+  {
     key: 'prompt-caching',
     category: 'model-behavior',
     description: 'Enable prompt caching (off/5m/1h/24h)',
@@ -1000,6 +1018,43 @@ export function validateSetting(key: string, value: unknown): ValidationResult {
 
   if (spec.validate) {
     return spec.validate(value);
+  }
+
+  // Auto-validate enum types if no custom validator
+  if (spec.type === 'enum' && spec.enumValues) {
+    const strValue = typeof value === 'string' ? value.toLowerCase() : value;
+    if (
+      typeof strValue !== 'string' ||
+      !spec.enumValues.includes(strValue as string)
+    ) {
+      return {
+        success: false,
+        message: `${spec.key} must be one of: ${spec.enumValues.join(', ')}`,
+      };
+    }
+    return { success: true, value: strValue };
+  }
+
+  // Auto-validate boolean types
+  if (spec.type === 'boolean') {
+    if (typeof value !== 'boolean') {
+      return {
+        success: false,
+        message: `${spec.key} must be either 'true' or 'false'`,
+      };
+    }
+    return { success: true, value };
+  }
+
+  // Auto-validate number types
+  if (spec.type === 'number') {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return {
+        success: false,
+        message: `${spec.key} must be a number`,
+      };
+    }
+    return { success: true, value };
   }
 
   return { success: true, value };

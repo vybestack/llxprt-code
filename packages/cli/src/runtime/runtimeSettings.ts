@@ -894,6 +894,7 @@ export function clearActiveModelParam(name: string): void {
   settingsService.setProviderSetting(providerName, name, undefined);
 }
 
+// Use centralized settings registry for profile-persistable keys
 export const PROFILE_EPHEMERAL_KEYS: readonly string[] =
   getProfilePersistableKeys();
 

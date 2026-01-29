@@ -313,6 +313,31 @@ const directSettingSpecs: SettingLiteralSpec[] = [
     hint: 'positive integer (e.g., 8000)',
     description: 'Cap on thinking tokens (limits thinking length)',
   },
+  {
+    value: 'reasoning.summary',
+    hint: 'auto, concise, detailed, or none',
+    description: 'Summary format for reasoning - OpenAI only',
+    options: [
+      { value: 'auto', description: 'Automatic summary format selection' },
+      { value: 'concise', description: 'Brief summary of reasoning' },
+      { value: 'detailed', description: 'Comprehensive reasoning summary' },
+      { value: 'none', description: 'No summary (default)' },
+    ],
+  },
+  {
+    value: 'text.verbosity',
+    hint: 'low, medium, or high',
+    description:
+      'Response verbosity for OpenAI Responses API (affects thinking)',
+    options: [
+      { value: 'low', description: 'Concise responses, minimal elaboration' },
+      { value: 'medium', description: 'Balanced responses (default)' },
+      {
+        value: 'high',
+        description: 'Detailed responses with full explanations',
+      },
+    ],
+  },
   // Tool timeout settings (Issue #1049)
   {
     value: 'task-default-timeout-seconds',

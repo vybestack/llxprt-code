@@ -29,6 +29,7 @@ import { type IModel } from '../IModel.js';
 import {
   type IContent,
   type TextBlock,
+  type ThinkingBlock,
   type ToolCallBlock,
   type ToolResponseBlock,
 } from '../../services/history/IContent.js';
@@ -44,6 +45,7 @@ import { CODEX_MODELS } from './CODEX_MODELS.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
+  type ParseResponsesStreamOptions,
 } from '../openai/parseResponsesStream.js';
 import {
   BaseProvider,
@@ -326,6 +328,119 @@ export class OpenAIResponsesProvider extends BaseProvider {
   /**
    * Generate a unique synthetic call ID to avoid collisions.
    * @issue #966
+   */
+  private generateSyntheticCallId(): string {
+    const randomSuffix = Math.random().toString(36).substring(2, 10);
+    return `call_synthetic_${randomSuffix}`;
+  }
+
+  /**
+   * Inject a synthetic tool call/result pair that makes GPT think it already read AGENTS.md.
+   *
+   * The CODEX_SYSTEM_PROMPT instructs GPT to read AGENTS.md for project instructions.
+   * However, the user may have configured LLXPRT.md instead (or both), and sometimes
+   * AGENTS.md is deliberately reserved for a different agent (like Codex itself).
+   *
+   * This method:
+   * 1. Always claims to have read "AGENTS.md" in the synthetic function call
+   * 2. Returns the actual userMemory content (from LLXPRT.md, AGENTS.md, or both)
+   * 3. Prevents GPT from wasting a tool call trying to read AGENTS.md
+   *
+   * @issue #966
+   */
+  private injectSyntheticConfigFileRead(
+    requestInput: Array<
+      | { role: 'user' | 'assistant' | 'system'; content?: string }
+      | {
+          type: 'function_call';
+          call_id: string;
+          name: string;
+          arguments: string;
+        }
+      | { type: 'function_call_output'; call_id: string; output: string }
+      | {
+          type: 'reasoning';
+          id: string;
+          summary?: Array<{ type: string; text: string }>;
+          encrypted_content?: string;
+        }
+    >,
+    options: NormalizedGenerateChatOptions,
+    userMemory: string | undefined,
+  ): void {
+    const syntheticCallId = this.generateSyntheticCallId();
+
+    // Note: We intentionally don't use configRef/filePaths here anymore.
+    // The goal is to NOT reveal which files were actually loaded.
+    // We just need to know if userMemory has content.
+
+    let output: string;
+
+    // Always pretend we read AGENTS.md - this is what CODEX_SYSTEM_PROMPT tells GPT to do
+    const targetFile = 'AGENTS.md';
+
+    if (userMemory && userMemory.trim().length > 0) {
+      // Return the ACTUAL userMemory content so GPT sees what was loaded,
+      // while making it think this came from reading AGENTS.md.
+      // Do NOT reveal actual source files - the goal is to convince GPT it read AGENTS.md.
+      output = JSON.stringify({
+        content: userMemory,
+      });
+    } else {
+      output = JSON.stringify({
+        error: 'File not found: AGENTS.md',
+      });
+    }
+
+    requestInput.unshift(
+      {
+        type: 'function_call',
+        call_id: syntheticCallId,
+        name: 'read_file',
+        arguments: JSON.stringify({ absolute_path: targetFile }),
+      },
+      {
+        type: 'function_call_output',
+        call_id: syntheticCallId,
+        output,
+      },
+    );
+  }
+
+  /**
+   * Get the list of server tools supported by this provider
+   */
+  override getServerTools(): string[] {
+    return [];
+  }
+
+  /**
+   * Invoke a server tool (native provider tool)
+   */
+  override async invokeServerTool(
+    _toolName: string,
+    _params: unknown,
+    _config?: unknown,
+    _signal?: AbortSignal,
+  ): Promise<unknown> {
+    throw new Error('Server tools not supported by OpenAI Responses provider');
+  }
+
+  /**
+   * Get current model parameters
+   */
+
+  override getModelParams(): Record<string, unknown> | undefined {
+    try {
+      const providerSettings =
+        this.resolveSettingsService().getProviderSettings(this.name) as Record<
+          string,
+          unknown
+        >;
+
+      const {
+        temperature,
+        maxTokens,
         max_tokens: maxTokensSnake,
         enabled: _enabled,
         apiKey: _apiKey,
@@ -423,7 +538,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       includeSubagentDelegation,
     });
 
-    // Responses API input types: messages, function_call, function_call_output
+    // Responses API input types: messages, function_call, function_call_output, reasoning
     type ResponsesInputItem =
       | { role: 'user' | 'assistant'; content?: string }
       | {
@@ -432,9 +547,29 @@ export class OpenAIResponsesProvider extends BaseProvider {
           name: string;
           arguments: string;
         }
-      | { type: 'function_call_output'; call_id: string; output: string };
+      | { type: 'function_call_output'; call_id: string; output: string }
+      | {
+          type: 'reasoning';
+          id: string;
+          summary?: Array<{ type: string; text: string }>;
+          encrypted_content?: string;
+        };
 
     const input: ResponsesInputItem[] = [];
+
+    // Check if reasoning should be included in context
+    // Precedence: invocation ephemerals > invocation modelBehavior > settings
+    const includeReasoningInContextSetting =
+      options.invocation?.ephemerals?.['reasoning.includeInContext'] ??
+      options.invocation?.getModelBehavior<boolean>(
+        'reasoning.includeInContext',
+      ) ??
+      options.settings?.get('reasoning.includeInContext');
+    const includeReasoningInContext =
+      includeReasoningInContextSetting !== false;
+
+    // Counter for generating unique reasoning IDs within a single request
+    let reasoningIdCounter = 0;
 
     for (const c of patchedContent) {
       if (c.speaker === 'human') {
@@ -452,8 +587,28 @@ export class OpenAIResponsesProvider extends BaseProvider {
         const toolCallBlocks = c.blocks.filter(
           (b) => b.type === 'tool_call',
         ) as ToolCallBlock[];
+        const thinkingBlocks = c.blocks.filter(
+          (b) => b.type === 'thinking',
+        ) as ThinkingBlock[];
 
         const contentText = textBlocks.map((b) => b.text).join('');
+
+        // Add reasoning items if they have encrypted_content and reasoning should be included
+        if (includeReasoningInContext) {
+          for (const thinkingBlock of thinkingBlocks) {
+            if (thinkingBlock.encryptedContent) {
+              // Guard against undefined/empty thought - use empty string as fallback
+              // to avoid creating invalid { type: 'summary_text', text: undefined }
+              const summaryText = thinkingBlock.thought ?? '';
+              input.push({
+                type: 'reasoning',
+                id: `reasoning_${Date.now()}_${reasoningIdCounter++}`,
+                summary: [{ type: 'summary_text', text: summaryText }],
+                encrypted_content: thinkingBlock.encryptedContent,
+              });
+            }
+          }
+        }
 
         // Add assistant text content if present
         if (contentText) {
@@ -549,6 +704,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     // Translate max_tokens/max_completion_tokens to max_output_tokens for Responses API
     // The Responses API uses max_output_tokens, not max_tokens (GPT-5 models)
+    // Also filter out nested 'reasoning' object to avoid it being spread into request
+    // (reasoning settings are handled explicitly below via model-behavior settings)
     const requestOverrides: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(mergedParams)) {
       if (key === 'max_tokens' || key === 'max_completion_tokens') {
@@ -557,6 +714,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
         this.logger.debug(
           () =>
             `Translated ${key}=${value} to max_output_tokens for Responses API`,
+        );
+      } else if (key === 'reasoning') {
+        // Skip 'reasoning' object - it gets handled explicitly below
+        // via model-behavior settings (reasoning.effort, reasoning.summary, etc.)
+        this.logger.debug(
+          () =>
+            `Skipping reasoning object in modelParams - handled via model-behavior settings`,
         );
       } else {
         requestOverrides[key] = value;
@@ -578,16 +742,67 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     const isCodex = this.isCodexMode(baseURL);
 
+    // Build request input - filter out system messages for Codex (uses instructions field instead)
+    let requestInput = input;
+    if (isCodex) {
+      // In Codex mode, system prompt goes in instructions field, not input array
+      // Only filter items that have a 'role' property (function_call/function_call_output don't)
+      // Cast role to string to avoid TS2367 error - ResponsesInputItem union includes both role-bearing
+      // and non-role-bearing items, and we need to filter only those with role='system'
+      requestInput = requestInput.filter(
+        (msg) => !('role' in msg) || (msg.role as string) !== 'system',
+      );
+
+      // @issue #966: Pre-inject synthetic tool call/result for config files (LLXPRT.md/AGENTS.md)
+      // This prevents the model from wasting tool calls re-reading files already injected.
+      // Note: We no longer inject a steering prompt - the system prompt is properly
+      // conveyed via the `instructions` field (see below).
+      //
+      // Per OpenAI docs: "we highly recommend you pass back any reasoning items returned
+      // with the last function call... This allows the model to continue its reasoning
+      // process to produce better results in the most token-efficient manner."
+      // So we only filter reasoning for the injection helper (to find insertion point),
+      // but keep reasoning items in the final requestInput.
+      const itemsForInjection = requestInput.filter(
+        (item) => !('type' in item && item.type === 'reasoning'),
+      );
+      this.injectSyntheticConfigFileRead(
+        itemsForInjection,
+        options,
+        userMemory,
+      );
+      // Merge injected items back with reasoning items preserved
+      // The injection adds items at the start, so prepend those to reasoning + rest
+      const injectedItems = itemsForInjection.filter(
+        (item) => !requestInput.includes(item),
+      );
+      const reasoningItems = requestInput.filter(
+        (item) => 'type' in item && item.type === 'reasoning',
+      );
+      const nonReasoningItems = requestInput.filter(
+        (item) => !('type' in item && item.type === 'reasoning'),
+      );
+      // Rebuild: injected items first, then reasoning, then rest of non-reasoning
+      requestInput = [
+        ...injectedItems,
+        ...reasoningItems,
+        ...nonReasoningItems,
+      ];
+    }
+
     const request: {
       model: string;
       input: typeof input;
       instructions?: string;
       tools?: typeof responsesTools;
+      tool_choice?: string;
+      parallel_tool_calls?: boolean;
       stream: boolean;
+      include?: string[];
       [key: string]: unknown;
     } = {
       model: resolvedModel,
-      input,
+      input: requestInput,
       stream: true,
       ...(requestOverrides || {}),
     };
@@ -599,6 +814,107 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     if (responsesTools && responsesTools.length > 0) {
       request.tools = responsesTools;
+      // Per codex-rs: set tool_choice when tools are present, respecting user-specified values
+      // Only default to 'auto' if not already set (e.g., 'required' or a specific function name)
+      if (!request.tool_choice) {
+        request.tool_choice = 'auto';
+      }
+      request.parallel_tool_calls = true;
+    }
+
+    // Add include parameter for reasoning when reasoning is enabled
+    // Precedence: invocation ephemerals > invocation modelBehavior > settings
+    const reasoningEnabled =
+      (options.invocation?.ephemerals?.['reasoning.enabled'] ??
+        options.invocation?.getModelBehavior<boolean>('reasoning.enabled') ??
+        options.settings?.get('reasoning.enabled')) === true;
+    // Reasoning settings come from model-behavior (via invocation.getModelBehavior or settings)
+    // not from modelParams (which is for pass-through API params like temperature)
+    const reasoningEffort =
+      options.invocation?.ephemerals?.['reasoning.effort'] ??
+      options.invocation?.getModelBehavior<string>('reasoning.effort') ??
+      options.settings?.get('reasoning.effort');
+    const reasoningSummary =
+      options.invocation?.ephemerals?.['reasoning.summary'] ??
+      options.invocation?.getModelBehavior<string>('reasoning.summary') ??
+      options.settings?.get('reasoning.summary');
+    // Check if thinking blocks should be shown in the response (defaults to true)
+    // This respects the reasoning.includeInResponse setting (fixes #922)
+    // Precedence: invocation ephemerals > invocation modelBehavior > settings
+    const includeThinkingInResponseSetting =
+      options.invocation?.ephemerals?.['reasoning.includeInResponse'] ??
+      options.invocation?.getModelBehavior<boolean>(
+        'reasoning.includeInResponse',
+      ) ??
+      options.settings?.get('reasoning.includeInResponse');
+    const includeThinkingInResponse =
+      includeThinkingInResponseSetting !== false;
+    const shouldRequestReasoning =
+      reasoningEnabled || reasoningEffort !== undefined;
+
+    this.logger.debug(
+      () =>
+        `Reasoning check: enabled=${reasoningEnabled}, effort=${String(reasoningEffort)}, summary=${String(reasoningSummary)}, shouldRequest=${shouldRequestReasoning}, includeInResponse=${includeThinkingInResponse}`,
+    );
+
+    if (shouldRequestReasoning) {
+      request.include = ['reasoning.encrypted_content'];
+      this.logger.debug(
+        () => `Added include parameter: ${JSON.stringify(request.include)}`,
+      );
+
+      // Add reasoning.effort to request if set
+      // Per Responses API, reasoning goes inside the 'reasoning' field
+      if (reasoningEffort && typeof reasoningEffort === 'string') {
+        if (!request.reasoning) {
+          request.reasoning = {};
+        }
+        (request.reasoning as { effort?: string }).effort = reasoningEffort;
+        this.logger.debug(
+          () => `Added reasoning.effort to request: ${reasoningEffort}`,
+        );
+      }
+    }
+
+    // Add reasoning.summary to request if set and not 'none'
+    // Per codex-rs implementation, the summary goes inside reasoning.summary
+    if (
+      reasoningSummary &&
+      typeof reasoningSummary === 'string' &&
+      reasoningSummary !== 'none'
+    ) {
+      if (!request.reasoning) {
+        request.reasoning = {};
+      }
+      (request.reasoning as { summary?: string }).summary = reasoningSummary;
+      this.logger.debug(
+        () => `Added reasoning.summary to request: ${reasoningSummary}`,
+      );
+    }
+
+    // Debug: Log full request body for analysis
+    this.logger.debug(
+      () =>
+        `Full request reasoning config: ${JSON.stringify(request.reasoning)}`,
+    );
+
+    // @issue #922: Add text.verbosity to request for OpenAI Responses API
+    // This field controls response verbosity and enables thinking/reasoning summaries.
+    // codex-rs sends this via the 'text' field: { verbosity: "low" | "medium" | "high" }
+    const textVerbosity =
+      options.invocation?.ephemerals?.['text.verbosity'] ??
+      options.settings?.get('text.verbosity');
+    if (
+      textVerbosity &&
+      typeof textVerbosity === 'string' &&
+      ['low', 'medium', 'high'].includes(textVerbosity.toLowerCase())
+    ) {
+      request.text = {
+        verbosity: textVerbosity.toLowerCase(),
+      };
+      this.logger.debug(
+        () => `Added text.verbosity to request: ${textVerbosity}`,
+      );
     }
 
     // Codex-specific request parameters
@@ -643,6 +959,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     const responsesURL = `${baseURL}/responses`;
     const requestBody = JSON.stringify(request);
+
+    // Debug: Log request summary (keys only to avoid PII/secret exposure)
+    this.logger.debug(
+      () => `Request body keys: ${JSON.stringify(Object.keys(request))}`,
+    );
 
     // @plan PLAN-20251214-ISSUE160.P05
     // Codex API requires Content-Type without charset suffix
@@ -734,7 +1055,15 @@ export class OpenAIResponsesProvider extends BaseProvider {
       }
 
       try {
-        for await (const message of parseResponsesStream(response.body)) {
+        // Pass options to parseResponsesStream to respect reasoning.includeInResponse setting
+        // This fixes #922: thinking blocks should be suppressed when includeInResponse=false
+        const streamOptions: ParseResponsesStreamOptions = {
+          includeThinkingInResponse,
+        };
+        for await (const message of parseResponsesStream(
+          response.body,
+          streamOptions,
+        )) {
           yield message;
         }
         return;

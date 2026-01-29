@@ -271,6 +271,10 @@ export const useGeminiStream = (
 
         addItem(itemWithThinking, timestamp);
 
+        // Clear thinking blocks after committing to history to prevent
+        // accumulation across multiple tool calls in the same turn (fixes #922)
+        thinkingBlocksRef.current = [];
+
         if (feedback) {
           addItem({ type: MessageType.INFO, text: feedback }, timestamp);
         }
@@ -955,13 +959,26 @@ export const useGeminiStream = (
               const sanitized = sanitizeContent(thoughtText);
               thoughtText = sanitized.blocked ? '' : sanitized.text;
 
-              if (thoughtText) {
+              // Only add if this exact thought hasn't been added yet (fixes #922 duplicate thoughts)
+              const alreadyHasThought = thinkingBlocksRef.current.some(
+                (tb) => tb.thought === thoughtText,
+              );
+
+              if (thoughtText && !alreadyHasThought) {
                 const thinkingBlock: ThinkingBlock = {
                   type: 'thinking',
                   thought: thoughtText,
                   sourceField: 'thought',
                 };
                 thinkingBlocksRef.current.push(thinkingBlock);
+
+                // Update pending history item with thinking blocks so they
+                // are visible in pendingHistoryItems during streaming
+                setPendingHistoryItem((item) => ({
+                  type: (item?.type as 'gemini' | 'gemini_content') || 'gemini',
+                  text: item?.text || '',
+                  thinkingBlocks: [...thinkingBlocksRef.current],
+                }));
               }
             }
             break;
@@ -1064,6 +1081,7 @@ export const useGeminiStream = (
       handleContextWindowWillOverflowEvent,
       handleCitationEvent,
       sanitizeContent,
+      setPendingHistoryItem,
     ],
   );
 

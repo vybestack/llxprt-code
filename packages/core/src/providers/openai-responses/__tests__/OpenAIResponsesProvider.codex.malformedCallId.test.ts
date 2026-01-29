@@ -42,6 +42,7 @@ function buildCodexOptions(overrides?: Partial<NormalizedGenerateChatOptions>) {
       metadata: {},
       ephemerals: undefined,
       userMemory: undefined,
+      getModelBehavior: () => undefined,
     },
     settings: undefined,
     userMemory: undefined,
