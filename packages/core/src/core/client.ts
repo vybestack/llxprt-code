@@ -71,6 +71,7 @@ import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { BaseLLMClient } from './baseLlmClient.js';
+import type { IContent } from '../services/history/IContent.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
@@ -772,6 +773,80 @@ export class GeminiClient {
     this.updateTelemetryTokenCount();
     // Clear the stored history as well
     this._previousHistory = [];
+  }
+
+  /**
+   * Restore history from a session by ensuring chat and content generator are fully initialized,
+   * then adding history items to the HistoryService.
+   *
+   * P0 Fix: Synchronously initializes chat/content generator if needed before attempting history restore.
+   * This ensures the history service is available immediately after the call completes.
+   *
+   * @param historyItems Array of IContent items from persisted session
+   * @returns Promise that resolves when history is fully restored and chat is ready
+   * @throws Error if initialization fails (e.g., auth not ready, config missing)
+   */
+  async restoreHistory(historyItems: IContent[]): Promise<void> {
+    this.logger.debug('restoreHistory called', {
+      itemCount: historyItems.length,
+      hasContentGenerator: !!this.contentGenerator,
+      hasChatInitialized: this.hasChatInitialized(),
+    });
+
+    if (historyItems.length === 0) {
+      this.logger.warn('restoreHistory called with empty history array');
+      return;
+    }
+
+    // P0 Fix Part 1: Ensure content generator is initialized
+    // This will fail fast if auth/config isn't ready
+    if (!this.contentGenerator) {
+      try {
+        await this.lazyInitialize();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Cannot restore history: Content generator initialization failed. ${message}`,
+        );
+      }
+    }
+
+    // P0 Fix Part 2: Ensure chat is initialized with empty history
+    // We create the chat first, then populate it with restored history
+    if (!this.hasChatInitialized()) {
+      try {
+        this.chat = await this.startChat([]);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Cannot restore history: Chat initialization failed. ${message}`,
+        );
+      }
+    }
+
+    // P0 Fix Part 3: Get history service and restore items
+    const historyService = this.getHistoryService();
+    if (!historyService) {
+      throw new Error(
+        'Cannot restore history: History service unavailable after chat initialization',
+      );
+    }
+
+    try {
+      // Validate and fix any issues in the history service before adding items
+      historyService.validateAndFix();
+
+      // Add all history items
+      historyService.addAll(historyItems);
+
+      this.logger.debug('History restored successfully', {
+        itemCount: historyItems.length,
+        totalTokens: historyService.getTotalTokens(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to add history items to service: ${message}`);
+    }
   }
 
   getCurrentSequenceModel(): string | null {

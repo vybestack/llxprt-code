@@ -98,6 +98,7 @@ export * from './utils/ide-trust.js';
 export * from './utils/thoughtUtils.js';
 export * from './utils/events.js';
 export * from './utils/package.js';
+export * from './utils/extensionLoader.js';
 
 // Export auth system
 export {

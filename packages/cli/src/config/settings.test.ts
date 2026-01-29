@@ -183,6 +183,7 @@ describe('Settings Loading and Merging', () => {
         disableYoloMode: false,
         folderTrust: { enabled: false },
         auth: {},
+        blockGitExtensions: false,
       });
       expect(settings.merged.tools).toMatchObject({
         autoAccept: false,

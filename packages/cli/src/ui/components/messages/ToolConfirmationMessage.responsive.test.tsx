@@ -299,7 +299,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
 
       // Re-render with same props - need to wrap in provider again
       rerender(
-        <KeypressProvider kittyProtocolEnabled={true}>
+        <KeypressProvider>
           <ToolConfirmationMessage
             confirmationDetails={mockExecuteDetails}
             config={mockConfig}

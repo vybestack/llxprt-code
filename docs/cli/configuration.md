@@ -330,7 +330,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`ui.useFullWidth`** (boolean):
   - **Description:** Use the entire width of the terminal for output.
-  - **Default:** `false`
+  - **Default:** `true`
 
 - **`ui.disableLoadingPhrases`** (boolean):
   - **Description:** Disable loading phrases for accessibility.
@@ -491,6 +491,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`security.disableYoloMode`** (boolean):
   - **Description:** Disable YOLO mode, even if enabled by a flag.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`security.blockGitExtensions`** (boolean):
+  - **Description:** Blocks installing and loading extensions from Git.
   - **Default:** `false`
   - **Requires restart:** Yes
 

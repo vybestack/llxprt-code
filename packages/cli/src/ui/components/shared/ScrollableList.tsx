@@ -10,18 +10,17 @@ import {
   useImperativeHandle,
   useCallback,
   useMemo,
+  useEffect,
 } from 'react';
 import type React from 'react';
-import {
-  VirtualizedList,
-  type VirtualizedListRef,
-  SCROLL_TO_ITEM_END,
-} from './VirtualizedList.js';
+import { VirtualizedList, type VirtualizedListRef } from './VirtualizedList.js';
 import { useScrollable } from '../../contexts/ScrollProvider.js';
 import { Box, type DOMElement } from 'ink';
-import { Colors } from '../../colors.js';
 import { useKeypress, type Key } from '../../hooks/useKeypress.js';
 import { keyMatchers, Command } from '../../keyMatchers.js';
+import { useAnimatedScrollbar } from '../../hooks/useAnimatedScrollbar.js';
+
+const ANIMATION_FRAME_DURATION_MS = 33;
 
 type VirtualizedListProps<T> = {
   data: T[];
@@ -49,6 +48,14 @@ function ScrollableList<T>(
   const { hasFocus } = props;
   const virtualizedListRef = useRef<VirtualizedListRef<T>>(null);
   const containerRef = useRef<DOMElement>(null);
+
+  const smoothScrollState = useRef<{
+    intervalId: NodeJS.Timeout | null;
+    targetScrollTop: number;
+  }>({
+    intervalId: null,
+    targetScrollTop: 0,
+  });
 
   useImperativeHandle(
     ref,
@@ -85,31 +92,94 @@ function ScrollableList<T>(
     virtualizedListRef.current?.scrollBy(delta);
   }, []);
 
-  const flashScrollbar = useCallback(() => {}, []);
+  const stopSmoothScroll = useCallback(() => {
+    if (smoothScrollState.current.intervalId !== null) {
+      clearInterval(smoothScrollState.current.intervalId);
+      smoothScrollState.current.intervalId = null;
+    }
+  }, []);
+
+  const smoothScrollTo = useCallback(
+    (targetScrollTop: number) => {
+      stopSmoothScroll();
+
+      const scrollState = getScrollState();
+      const startScrollTop = scrollState.scrollTop;
+      const distance = targetScrollTop - startScrollTop;
+
+      if (distance === 0) {
+        return;
+      }
+
+      const duration = 200;
+      const startTime = Date.now();
+
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Ease-in-out
+        const easeProgress =
+          progress < 0.5
+            ? 2 * progress * progress
+            : -1 + (4 - 2 * progress) * progress;
+
+        const newScrollTop = startScrollTop + distance * easeProgress;
+        virtualizedListRef.current?.scrollTo(newScrollTop);
+
+        if (progress < 1) {
+          smoothScrollState.current.intervalId = setTimeout(
+            animate,
+            ANIMATION_FRAME_DURATION_MS,
+          );
+        } else {
+          smoothScrollState.current.intervalId = null;
+        }
+      };
+
+      animate();
+      smoothScrollState.current.targetScrollTop = targetScrollTop;
+    },
+    [getScrollState, stopSmoothScroll],
+  );
+
+  useEffect(() => () => stopSmoothScroll(), [stopSmoothScroll]);
+
+  const { scrollbarColor, flashScrollbar, scrollByWithAnimation } =
+    useAnimatedScrollbar(hasFocus, scrollBy);
 
   useKeypress(
     (key: Key) => {
       if (keyMatchers[Command.SCROLL_UP](key)) {
-        scrollBy(-1);
-        flashScrollbar();
+        stopSmoothScroll();
+        scrollByWithAnimation(-1);
       } else if (keyMatchers[Command.SCROLL_DOWN](key)) {
-        scrollBy(1);
-        flashScrollbar();
+        stopSmoothScroll();
+        scrollByWithAnimation(1);
       } else if (
         keyMatchers[Command.PAGE_UP](key) ||
         keyMatchers[Command.PAGE_DOWN](key)
       ) {
         const direction = keyMatchers[Command.PAGE_UP](key) ? -1 : 1;
         const scrollState = getScrollState();
-        const current = scrollState.scrollTop;
+        const current =
+          smoothScrollState.current.intervalId !== null
+            ? smoothScrollState.current.targetScrollTop
+            : scrollState.scrollTop;
         const innerHeight = scrollState.innerHeight;
-        virtualizedListRef.current?.scrollTo(current + direction * innerHeight);
+        smoothScrollTo(current + direction * innerHeight);
         flashScrollbar();
       } else if (keyMatchers[Command.SCROLL_HOME](key)) {
-        virtualizedListRef.current?.scrollTo(0);
+        smoothScrollTo(0);
         flashScrollbar();
       } else if (keyMatchers[Command.SCROLL_END](key)) {
-        virtualizedListRef.current?.scrollTo(SCROLL_TO_ITEM_END);
+        // Resolve SCROLL_TO_ITEM_END to actual max scrollTop for animation
+        const scrollState = getScrollState();
+        const maxScrollTop = Math.max(
+          scrollState.scrollHeight - scrollState.innerHeight,
+          0,
+        );
+        smoothScrollTo(maxScrollTop);
         flashScrollbar();
       }
     },
@@ -132,8 +202,6 @@ function ScrollableList<T>(
   );
 
   useScrollable(scrollableEntry, hasFocus);
-
-  const scrollbarColor = hasFocus ? Colors.Foreground : Colors.Gray;
 
   return (
     <Box

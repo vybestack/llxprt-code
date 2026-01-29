@@ -33,8 +33,18 @@ export interface UserFeedbackPayload {
   error?: unknown;
 }
 
+/**
+ * Payload for the 'memory-changed' event.
+ */
+export interface MemoryChangedPayload {
+  memoryContent: string;
+  fileCount: number;
+  filePaths: string[];
+}
+
 export enum CoreEvent {
   UserFeedback = 'user-feedback',
+  MemoryChanged = 'memory-changed',
 }
 
 export class CoreEventEmitter extends EventEmitter {
@@ -83,6 +93,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (payload: UserFeedbackPayload) => void,
   ): this;
   override on(
+    event: CoreEvent.MemoryChanged,
+    listener: (payload: MemoryChangedPayload) => void,
+  ): this;
+  override on(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     listener: (...args: any[]) => void,
@@ -95,6 +109,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (payload: UserFeedbackPayload) => void,
   ): this;
   override off(
+    event: CoreEvent.MemoryChanged,
+    listener: (payload: MemoryChangedPayload) => void,
+  ): this;
+  override off(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     listener: (...args: any[]) => void,
@@ -105,6 +123,10 @@ export class CoreEventEmitter extends EventEmitter {
   override emit(
     event: CoreEvent.UserFeedback,
     payload: UserFeedbackPayload,
+  ): boolean;
+  override emit(
+    event: CoreEvent.MemoryChanged,
+    payload: MemoryChangedPayload,
   ): boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   override emit(event: string | symbol, ...args: any[]): boolean {

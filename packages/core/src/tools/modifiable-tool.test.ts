@@ -86,11 +86,19 @@ describe('modifyWithEditor', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await fsp.rm(testProjectDir, { recursive: true, force: true });
-    const diffDir = path.join(os.tmpdir(), 'gemini-cli-tool-modify-diffs');
-    await fsp.rm(diffDir, { recursive: true, force: true });
   });
 
   describe('successful modification', () => {
+    const assertMode = (mode: number, expected: number): void => {
+      if (process.platform === 'win32') {
+        // Windows reports POSIX modes as 0o666 regardless of requested bits.
+        // At minimum confirm the owner read/write bits are present.
+        expect(mode & 0o600).toBe(0o600);
+        return;
+      }
+      expect(mode & 0o777).toBe(expected);
+    };
+
     it('should successfully modify content with VSCode editor', async () => {
       const result = await modifyWithEditor(
         mockParams,
@@ -143,9 +151,21 @@ describe('modifyWithEditor', () => {
       });
     });
 
-    it('should create temp directory if it does not exist', async () => {
-      const diffDir = path.join(os.tmpdir(), 'gemini-cli-tool-modify-diffs');
-      await fsp.rm(diffDir, { recursive: true, force: true }).catch(() => {});
+    it('should create temp directory and files with restrictive permissions', async () => {
+      mockOpenDiff.mockImplementation(async (oldPath, newPath) => {
+        const diffDir = path.dirname(oldPath);
+        expect(diffDir).toBe(path.dirname(newPath));
+
+        const dirStats = await fsp.stat(diffDir);
+        const oldStats = await fsp.stat(oldPath);
+        const newStats = await fsp.stat(newPath);
+
+        assertMode(dirStats.mode, 0o700);
+        assertMode(oldStats.mode, 0o600);
+        assertMode(newStats.mode, 0o600);
+
+        await fsp.writeFile(newPath, modifiedContent, 'utf8');
+      });
 
       await modifyWithEditor(
         mockParams,
@@ -154,27 +174,6 @@ describe('modifyWithEditor', () => {
         abortSignal,
         vi.fn(),
       );
-
-      const stats = await fsp.stat(diffDir);
-      expect(stats.isDirectory()).toBe(true);
-    });
-
-    it('should not create temp directory if it already exists', async () => {
-      const diffDir = path.join(os.tmpdir(), 'gemini-cli-tool-modify-diffs');
-      await fsp.mkdir(diffDir, { recursive: true });
-
-      const mkdirSpy = vi.spyOn(fs, 'mkdirSync');
-
-      await modifyWithEditor(
-        mockParams,
-        mockModifyContext,
-        'vscode' as EditorType,
-        abortSignal,
-        vi.fn(),
-      );
-
-      expect(mkdirSpy).not.toHaveBeenCalled();
-      mkdirSpy.mockRestore();
     });
 
     it('should invoke onEditorOpen before calling openDiff', async () => {
@@ -291,6 +290,9 @@ describe('modifyWithEditor', () => {
     vi.spyOn(fs, 'unlinkSync').mockImplementation(() => {
       throw new Error('Failed to delete file');
     });
+    vi.spyOn(fs, 'rmdirSync').mockImplementation(() => {
+      throw new Error('Failed to delete directory');
+    });
 
     await modifyWithEditor(
       mockParams,
@@ -300,9 +302,12 @@ describe('modifyWithEditor', () => {
       vi.fn(),
     );
 
-    expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(3);
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Error deleting temp diff file:'),
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Error deleting temp diff directory:'),
     );
 
     consoleErrorSpy.mockRestore();
@@ -329,9 +334,9 @@ describe('modifyWithEditor', () => {
     expect(oldFilePath).toMatch(/gemini-cli-modify-test-file-old-\d+\.txt$/);
     expect(newFilePath).toMatch(/gemini-cli-modify-test-file-new-\d+\.txt$/);
 
-    const diffDir = path.join(os.tmpdir(), 'gemini-cli-tool-modify-diffs');
-    expect(path.dirname(oldFilePath)).toBe(diffDir);
-    expect(path.dirname(newFilePath)).toBe(diffDir);
+    const diffDirPrefix = path.join(os.tmpdir(), 'gemini-cli-tool-modify-');
+    expect(path.dirname(oldFilePath).startsWith(diffDirPrefix)).toBe(true);
+    expect(path.dirname(newFilePath).startsWith(diffDirPrefix)).toBe(true);
   });
 
   it('should create temp files with correct naming without extension', async () => {
@@ -351,9 +356,9 @@ describe('modifyWithEditor', () => {
     expect(oldFilePath).toMatch(/gemini-cli-modify-test-file-old-\d+$/);
     expect(newFilePath).toMatch(/gemini-cli-modify-test-file-new-\d+$/);
 
-    const diffDir = path.join(os.tmpdir(), 'gemini-cli-tool-modify-diffs');
-    expect(path.dirname(oldFilePath)).toBe(diffDir);
-    expect(path.dirname(newFilePath)).toBe(diffDir);
+    const diffDirPrefix = path.join(os.tmpdir(), 'gemini-cli-tool-modify-');
+    expect(path.dirname(oldFilePath).startsWith(diffDirPrefix)).toBe(true);
+    expect(path.dirname(newFilePath).startsWith(diffDirPrefix)).toBe(true);
   });
 });
 

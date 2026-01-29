@@ -95,6 +95,8 @@ export type HistoryItemOAuthURL = HistoryItemBase & {
 export type HistoryItemInfo = HistoryItemBase & {
   type: 'info';
   text: string;
+  icon?: string; // Custom prefix (default: 'ℹ ')
+  color?: string; // Custom color (default: theme.status.warning)
 };
 
 export type HistoryItemError = HistoryItemBase & {
@@ -246,6 +248,9 @@ export type HistoryItemWithoutId =
   | HistoryItemChatList;
 
 export type HistoryItem = HistoryItemWithoutId & { id: number };
+
+// Constant for "no icon, just indent"
+export const emptyIcon = '  ';
 
 // Message types used by internal command feedback (subset of HistoryItem types)
 export enum MessageType {

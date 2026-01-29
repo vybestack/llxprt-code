@@ -211,6 +211,15 @@ export function loadExtension(
   }
 
   const installMetadata = loadInstallMetadata(extensionDir);
+  const settings = loadSettings(workspaceDir).merged;
+  if (
+    (installMetadata?.type === 'git' ||
+      installMetadata?.type === 'github-release') &&
+    settings.security?.blockGitExtensions
+  ) {
+    return null;
+  }
+
   let effectiveExtensionPath = extensionDir;
 
   if (installMetadata?.type === 'link') {
@@ -468,6 +477,15 @@ export async function installOrUpdateExtension(
 ): Promise<string> {
   const isUpdate = !!previousExtensionConfig;
   const settings = loadSettings(cwd).merged;
+  if (
+    (installMetadata.type === 'git' ||
+      installMetadata.type === 'github-release') &&
+    settings.security?.blockGitExtensions
+  ) {
+    throw new Error(
+      'Installing extensions from remote sources is disallowed by your current settings.',
+    );
+  }
   if (isWorkspaceTrusted(settings) === false) {
     if (
       await requestConsent(
@@ -720,13 +738,13 @@ export async function uninstallExtension(
   _cwd: string = process.cwd(),
 ): Promise<void> {
   const installedExtensions = loadUserExtensions();
-  const extensionName = installedExtensions.find(
+  const extension = installedExtensions.find(
     (installed) =>
       installed.name.toLowerCase() === extensionIdentifier.toLowerCase() ||
       installed.installMetadata?.source.toLowerCase() ===
         extensionIdentifier.toLowerCase(),
-  )?.name;
-  if (!extensionName) {
+  );
+  if (!extension) {
     throw new Error(
       `Extension "${extensionIdentifier}" not found. Run llxprt extensions list to see available extensions.`,
     );
@@ -735,12 +753,16 @@ export async function uninstallExtension(
   if (!isUpdate) {
     const manager = new ExtensionEnablementManager(
       ExtensionStorage.getUserExtensionsDir(),
-      [extensionName],
+      [extension.name],
     );
-    manager.remove(extensionName);
+    manager.remove(extension.name);
   }
 
-  const storage = new ExtensionStorage(extensionName);
+  const storage = new ExtensionStorage(
+    extension.installMetadata?.type === 'link'
+      ? extension.name
+      : path.basename(extension.path),
+  );
   return await fs.promises.rm(storage.getExtensionDir(), {
     recursive: true,
     force: true,
