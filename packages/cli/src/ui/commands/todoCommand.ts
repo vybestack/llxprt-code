@@ -104,6 +104,37 @@ function formatAge(date: Date): string {
 }
 
 /**
+ * Helper: Get sorted TODO session files
+ * @plan PLAN-20260129-TODOPERSIST-EXT.P19
+ * @returns Array of TODO session files sorted by modification time (newest first)
+ */
+function getTodoSessionFiles(): Array<{
+  name: string;
+  path: string;
+  mtime: Date;
+}> {
+  const todoDir = path.join(os.homedir(), '.llxprt', 'todos');
+
+  if (!fs.existsSync(todoDir)) {
+    return [];
+  }
+
+  const files = fs
+    .readdirSync(todoDir)
+    .filter((f) => f.startsWith('todo-') && f.endsWith('.json'))
+    .map((f) => {
+      const filePath = path.join(todoDir, f);
+      const stats = fs.statSync(filePath);
+      return { name: f, path: filePath, mtime: stats.mtime };
+    });
+
+  // Sort by modification time (newest first)
+  files.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+
+  return files;
+}
+
+/**
  * Main /todo command with subcommands
  * @plan PLAN-20260129-TODOPERSIST.P06
  */
@@ -210,6 +241,103 @@ export const todoCommand: SlashCommand = {
       },
     },
     {
+      name: 'set',
+      description:
+        'Set a TODO status to in_progress. Usage: /todo set <position>',
+      kind: CommandKind.BUILT_IN,
+      /**
+       * /todo set <pos> - Set TODO to in_progress
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P17
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P20
+       * @requirement REQ-008
+       */
+      action: (context, args) => {
+        if (!context.todoContext) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: 'TODO context not available',
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        if (!args || args.trim() === '') {
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Usage: /todo set <position>
+
+Sets the TODO at the specified position to 'in_progress' status.
+
+Position formats:
+  1, 2, 3    - Position number (1-based)
+
+Examples:
+  /todo set 1
+  /todo set 3`,
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        const posStr = args.trim().split(/\s+/)[0];
+        const { todos } = context.todoContext;
+
+        try {
+          const parsed = parsePosition(posStr, todos);
+
+          // Validate position exists (parsePosition allows insertion beyond current length)
+          if (parsed.parentIndex >= todos.length) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Position ${posStr} does not exist`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Subtasks don't have status field - only parent TODOs do
+          if (parsed.subtaskIndex !== undefined) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Subtasks don't have status. Use parent TODO position instead.`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Update the TODO status
+          const newTodos = [...todos];
+          const todo = newTodos[parsed.parentIndex];
+          todo.status = 'in_progress';
+
+          context.todoContext.updateTodos(newTodos);
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Set TODO ${posStr} to in_progress: "${todo.content}"`,
+            },
+            Date.now(),
+          );
+        } catch (error) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+            Date.now(),
+          );
+        }
+      },
+    },
+    {
       name: 'add',
       description:
         'Add a TODO at the specified position. Usage: /todo add <position> <description>',
@@ -217,6 +345,7 @@ export const todoCommand: SlashCommand = {
       /**
        * /todo add <pos> <desc> - Add TODO at position
        * @plan PLAN-20260129-TODOPERSIST.P09
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P20
        * @requirement REQ-005
        * @pseudocode lines 42-74
        */
@@ -235,8 +364,19 @@ export const todoCommand: SlashCommand = {
         if (!args || args.trim() === '') {
           context.ui.addItem(
             {
-              type: MessageType.ERROR,
-              text: 'Usage: /todo add <position> <description>',
+              type: MessageType.INFO,
+              text: `Usage: /todo add <position> <description>
+
+Position formats:
+  1, 2, 3    - Insert at specific position (1-based)
+  last       - Append to end of list
+  1.1, 1.2   - Insert subtask under parent TODO 1
+  1.last     - Append subtask to parent TODO 1
+
+Examples:
+  /todo add 1 Fix login bug
+  /todo add last Write documentation
+  /todo add 2.1 Add unit tests`,
             },
             Date.now(),
           );
@@ -324,13 +464,14 @@ export const todoCommand: SlashCommand = {
     {
       name: 'delete',
       description:
-        'Delete a TODO at the specified position. Usage: /todo delete <position>',
+        'Delete a TODO at the specified position. Usage: /todo delete <position|range|all>',
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo delete <pos> - Remove TODO at position
-       * @plan PLAN-20260129-TODOPERSIST.P09
+       * /todo delete <pos|range|all> - Remove TODO(s)
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P18
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P20
        * @requirement REQ-006
-       * @pseudocode position parsing (same as add)
+       * @pseudocode Extended with range and "all" support
        */
       action: (context, args) => {
         if (!context.todoContext) {
@@ -347,8 +488,18 @@ export const todoCommand: SlashCommand = {
         if (!args || args.trim() === '') {
           context.ui.addItem(
             {
-              type: MessageType.ERROR,
-              text: 'Usage: /todo delete <position>',
+              type: MessageType.INFO,
+              text: `Usage: /todo delete <position>
+
+Position formats:
+  2          - Delete TODO at position 2
+  1-5        - Delete TODOs 1 through 5 (inclusive)
+  all        - Delete all TODOs
+
+Examples:
+  /todo delete 3
+  /todo delete 1-5
+  /todo delete all`,
             },
             Date.now(),
           );
@@ -359,6 +510,69 @@ export const todoCommand: SlashCommand = {
         const { todos } = context.todoContext;
 
         try {
+          // Check for "all" keyword
+          if (posStr === 'all') {
+            const count = todos.length;
+            context.todoContext.updateTodos([]);
+            context.ui.addItem(
+              {
+                type: MessageType.INFO,
+                text: `Deleted ${count} TODO(s)`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Check for range pattern (e.g., "2-4")
+          const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
+          if (rangeMatch) {
+            const start = parseInt(rangeMatch[1], 10);
+            const end = parseInt(rangeMatch[2], 10);
+
+            // Validate range
+            if (start > end) {
+              context.ui.addItem(
+                {
+                  type: MessageType.ERROR,
+                  text: `Invalid range: start (${start}) must be <= end (${end})`,
+                },
+                Date.now(),
+              );
+              return;
+            }
+
+            if (start < 1 || end > todos.length) {
+              context.ui.addItem(
+                {
+                  type: MessageType.ERROR,
+                  text: `Range out of bounds: valid range is 1-${todos.length}`,
+                },
+                Date.now(),
+              );
+              return;
+            }
+
+            // Delete in reverse order (highest index first)
+            const newTodos = [...todos];
+            let deleteCount = 0;
+            for (let i = end - 1; i >= start - 1; i--) {
+              newTodos.splice(i, 1);
+              deleteCount++;
+            }
+
+            context.todoContext.updateTodos(newTodos);
+            context.ui.addItem(
+              {
+                type: MessageType.INFO,
+                text: `Deleted ${deleteCount} TODO(s)`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Fall back to single position parsing
           const parsed = parsePosition(posStr, todos);
 
           if (parsed.subtaskIndex !== undefined) {
@@ -386,7 +600,7 @@ export const todoCommand: SlashCommand = {
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Deleted subtask at ${posStr}`,
+                text: `Deleted 1 TODO(s)`,
               },
               Date.now(),
             );
@@ -410,7 +624,7 @@ export const todoCommand: SlashCommand = {
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Deleted TODO at ${posStr}`,
+                text: `Deleted 1 TODO(s)`,
               },
               Date.now(),
             );
@@ -438,29 +652,7 @@ export const todoCommand: SlashCommand = {
        */
       action: async (context) => {
         try {
-          // Line 80: SCAN directory ~/.llxprt/todos/
-          const todoDir = path.join(os.homedir(), '.llxprt', 'todos');
-
-          if (!fs.existsSync(todoDir)) {
-            context.ui.addItem(
-              {
-                type: MessageType.INFO,
-                text: 'No saved TODO lists found',
-              },
-              Date.now(),
-            );
-            return;
-          }
-
-          // Line 81: READ file stats for all todo-*.json files
-          const files = fs
-            .readdirSync(todoDir)
-            .filter((f) => f.startsWith('todo-') && f.endsWith('.json'))
-            .map((f) => {
-              const filePath = path.join(todoDir, f);
-              const stats = fs.statSync(filePath);
-              return { name: f, path: filePath, mtime: stats.mtime };
-            });
+          const files = getTodoSessionFiles();
 
           if (files.length === 0) {
             context.ui.addItem(
@@ -472,10 +664,6 @@ export const todoCommand: SlashCommand = {
             );
             return;
           }
-
-          // Line 83-85: SORT files (current first, then by mtime descending)
-          // Note: We don't have sessionId in context yet, so skip current detection
-          files.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
           // Line 86-90: Format display
           const lines = [
@@ -539,6 +727,112 @@ export const todoCommand: SlashCommand = {
             {
               type: MessageType.ERROR,
               text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+            Date.now(),
+          );
+        }
+      },
+    },
+    {
+      name: 'load',
+      description: 'Load a saved TODO session. Usage: /todo load <number>',
+      kind: CommandKind.BUILT_IN,
+      /**
+       * /todo load <num> - Load TODO session by number
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P19
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P20
+       * @requirement REQ-009
+       */
+      action: async (context, args) => {
+        if (!context.todoContext) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: 'TODO context not available',
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        if (!args || args.trim() === '') {
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Usage: /todo load <number>
+
+Loads a saved TODO session. Use /todo list to see available sessions.
+
+Examples:
+  /todo list       - Show saved sessions with numbers
+  /todo load 1     - Load the most recent session
+  /todo load 3     - Load the third session`,
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        const sessionNum = parseInt(args.trim(), 10);
+        if (isNaN(sessionNum) || sessionNum < 1) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: 'Invalid number format. Usage: /todo load <number>',
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        try {
+          const files = getTodoSessionFiles();
+
+          if (files.length === 0) {
+            context.ui.addItem(
+              {
+                type: MessageType.INFO,
+                text: 'No saved TODO lists found',
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Validate session number is in range
+          if (sessionNum > files.length) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Session ${sessionNum} does not exist. Valid range: 1-${files.length}`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Load the selected session file (1-based indexing)
+          const selectedFile = files[sessionNum - 1];
+          const content = fs.readFileSync(selectedFile.path, 'utf8');
+          const todos: Todo[] = JSON.parse(content);
+
+          // Update the TODO context with loaded TODOs
+          context.todoContext.updateTodos(todos);
+
+          // Display success message
+          const firstTitle = todos[0]?.content || '(empty)';
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Loaded ${todos.length} TODO(s) from session: "${firstTitle}"`,
+            },
+            Date.now(),
+          );
+        } catch (error) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: `Error loading session: ${error instanceof Error ? error.message : String(error)}`,
             },
             Date.now(),
           );
