@@ -28,6 +28,8 @@ interface ToolGroupMessageProps {
   config: Config;
   isFocused?: boolean;
   showTodoPanel?: boolean;
+  activeShellPtyId?: number | null;
+  embeddedShellFocused?: boolean;
 }
 
 const extractCountFromText = (text?: string): number | undefined => {
@@ -88,6 +90,8 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   config,
   isFocused = true,
   showTodoPanel = true,
+  activeShellPtyId,
+  embeddedShellFocused,
 }) => {
   const { todos } = useTodoContext();
   const { getExecutingToolCalls } = useToolCallContext();
@@ -209,8 +213,9 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
           <Text color={Colors.AccentCyan}>{`Agent: ${agentId}`}</Text>
         </Box>
       )}
-      {filteredToolCalls.map((tool) => {
+      {filteredToolCalls.map((tool, index) => {
         const isConfirming = toolAwaitingApproval?.callId === tool.callId;
+        const isFirst = index === 0;
         return (
           <Box key={tool.callId} flexDirection="column" minHeight={1}>
             <Box flexDirection="row" alignItems="center">
@@ -231,6 +236,13 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
                       : 'medium'
                 }
                 renderOutputAsMarkdown={tool.renderOutputAsMarkdown}
+                activeShellPtyId={activeShellPtyId}
+                embeddedShellFocused={embeddedShellFocused}
+                ptyId={tool.ptyId}
+                config={config}
+                isFirst={isFirst}
+                borderColor={borderColor}
+                borderDimColor={hasPending}
               />
             </Box>
             {tool.status === ToolCallStatus.Confirming &&

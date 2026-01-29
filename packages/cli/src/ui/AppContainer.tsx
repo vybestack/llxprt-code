@@ -2252,6 +2252,10 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Markdown rendering toggle
     renderMarkdown,
+
+    // Interactive shell focus state
+    activeShellPtyId: null, // TODO: implement in Phase 4
+    embeddedShellFocused: false, // TODO: implement in Phase 4
   };
 
   // Build UIActions object - memoized to avoid unnecessary re-renders (upstream optimization)
