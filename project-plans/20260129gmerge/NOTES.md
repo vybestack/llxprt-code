@@ -1,6 +1,7 @@
 # Notes: v0.15.4 → v0.16.0 Cherry-Pick
 
 **Branch:** `20260129gmerge`
+**Completed:** 2026-01-29
 
 ---
 
@@ -31,34 +32,53 @@ Commit `6f34e2589` adds button field to MouseEvent. Skipped because it's primari
 ## Batch Execution Notes
 
 ### Batch 1
-*To be filled during execution*
+- Skipped e8038c727 (test file deleted in LLxprt)
+- Skipped 1c87e7cd2 (LLxprt uses @lvce-editor/ripgrep via getRipgrepPath)
+- Skipped 540f60696 (LLxprt keeps read-many-files tool)
+- Applied: d3cf28eb4, cab9b1f37, 1c8fe92d0, 1ffb9c418
 
 ### Batch 2
-*To be filled during execution*
+- Skipped 4d85ce40b (console.clear buffer fix already in LLxprt)
+- Skipped 0075b4f11 (ToolsList.tsx deleted in LLxprt)
+- Added CoreEvent.ModelChanged and emitModelChanged() to events.ts
+- Added Command enum values: SHOW_FULL_TODOS, TOGGLE_SHELL_INPUT_FOCUS, EXPAND_SUGGESTION, COLLAPSE_SUGGESTION
+- Added missing commandDescriptions entries
+- Applied: aa9922bc9, ad1f0d995, a810ca80b, 43916b98a, 13d8d9477
 
 ### Batch 3 (Sticky Headers)
-*To be filled during execution*
+- Created StickyHeader.tsx component
+- Full integration with ToolMessage/ToolGroupMessage deferred - requires significant architecture changes
+- Component ready for use when tool message refactoring happens
 
-### Batch 4 (UI Improvements)
-*To be filled during execution*
+### Batch 4 (UI Improvements) - SKIPPED
+All three features already implemented in LLxprt:
+- **ThemedGradient (3cbb170aa)**: Already in packages/cli/src/ui/components/ThemedGradient.tsx with tmux-safe gradient handling
+- **Animated Scroll (60fe5acd6)**: Already in ScrollableList.tsx with smoothScrollTo, smoothScrollState, ease-in-out animation
+- **Drag Scrollbar (2b8adf8cf)**: Already in ScrollProvider.tsx with full drag state management (dragStateRef, handleLeftPress, handleMove)
 
 ### Batch 5 (MALFORMED_FUNCTION_CALL)
-*To be filled during execution*
+- Added MALFORMED_FUNCTION_CALL to InvalidStreamError type union
+- Imported FinishReason from @google/genai
+- Changed hasFinishReason boolean to finishReason: FinishReason | undefined
+- Added explicit check for MALFORMED_FUNCTION_CALL to trigger retry
+- Did NOT update telemetry (recordContentRetry, recordContentRetryFailure) - LLxprt has different telemetry structure
 
 ---
 
 ## Follow-ups Created
 
-*None yet*
+1. **StickyHeader Integration**: Need to integrate StickyHeader.tsx into ToolMessage and ToolGroupMessage components when doing tool message refactoring
 
 ---
 
 ## Conflicts Encountered
 
-*None yet*
+None - all changes applied cleanly or were skipped appropriately.
 
 ---
 
 ## Deviations from Plan
 
-*None yet*
+1. **Batch 4 entirely skipped**: Research found all three features (ThemedGradient, animated scroll, drag scrollbar) were already implemented in LLxprt from previous sync or independent development.
+
+2. **Telemetry updates skipped in Batch 5**: The upstream commit also updates recordContentRetry and recordContentRetryFailure to pass error_type, but LLxprt has a different telemetry structure. The core functionality (MALFORMED_FUNCTION_CALL detection and retry) is implemented.

@@ -2,6 +2,7 @@
 
 **Branch:** `20260129gmerge`
 **Upstream range:** `v0.15.4..v0.16.0`
+**Completed:** 2026-01-29
 
 ---
 
@@ -9,20 +10,20 @@
 
 | Upstream SHA | Decision | LLxprt Commit(s) | Notes |
 |--------------|----------|------------------|-------|
-| e8038c727 | PICK | | fix test to use faketimer |
-| d3cf28eb4 | PICK | | Use PascalCase for tool display names |
-| cab9b1f37 | PICK | | Fix extensions await handler |
-| 1c8fe92d0 | PICK | | Hook Result Aggregation |
-| 1c87e7cd2 | PICK | | RipGrep enhancements |
-| 1ffb9c418 | PICK | | FileCommandLoader abort fix |
-| 540f60696 | PICK | | Docs fix |
-| 4d85ce40b | PICK | | console.clear() buffer fix |
-| 0075b4f11 | PICK | | Tool internal name display |
-| aa9922bc9 | PICK | | Keyboard shortcuts docs autogen |
-| ad1f0d995 | PICK | | toml-loader test refactor |
-| a810ca80b | PICK | | Reset to auto in fallback mode |
-| 43916b98a | PICK | | Buffer cleanup fix |
-| 13d8d9477 | PICK | | Editor setting immediate update |
+| e8038c727 | SKIP | N/A | Test file deleted in LLxprt |
+| d3cf28eb4 | PICK | 1587bf8f0 | Use PascalCase for tool display names |
+| cab9b1f37 | PICK | 1587bf8f0 | Fix extensions await handler |
+| 1c8fe92d0 | PICK | 1587bf8f0 | Hook Result Aggregation |
+| 1c87e7cd2 | SKIP | N/A | RipGrep - LLxprt uses @lvce-editor/ripgrep |
+| 1ffb9c418 | PICK | 1587bf8f0 | FileCommandLoader abort fix |
+| 540f60696 | SKIP | N/A | LLxprt keeps read-many-files tool |
+| 4d85ce40b | SKIP | N/A | console.clear() buffer fix already in LLxprt |
+| 0075b4f11 | SKIP | N/A | ToolsList.tsx deleted in LLxprt |
+| aa9922bc9 | PICK | 29ac8b252 | Keyboard shortcuts docs autogen |
+| ad1f0d995 | PICK | 29ac8b252 | toml-loader test refactor |
+| a810ca80b | PICK | 29ac8b252 | Reset to auto in fallback mode |
+| 43916b98a | PICK | 29ac8b252 | Buffer cleanup fix |
+| 13d8d9477 | PICK | 29ac8b252 | Editor setting immediate update |
 | 11a0a9b91 | SKIP | N/A | clearcut-logger telemetry |
 | 408b88568 | SKIP | N/A | clearcut telemetry |
 | c961f2740 | SKIP | N/A | Version bump |
@@ -52,13 +53,13 @@
 | 670f13cff | SKIP | N/A | Preview release |
 | 56f9e597c | SKIP | N/A | Gemini 3 launch branding |
 | aefbe6279 | SKIP | N/A | Final release |
-| ee7065f66 | REIMPLEMENT | | Sticky headers |
-| fb99b9537 | REIMPLEMENT | | Header truncation |
-| d30421630 | REIMPLEMENT | | Polish sticky headers |
-| 3cbb170aa | REIMPLEMENT | | ThemedGradient usage sites |
-| 60fe5acd6 | REIMPLEMENT | | Animated scroll keyboard |
-| 2b8adf8cf | REIMPLEMENT | | Drag scrollbar |
-| fb0324295 | REIMPLEMENT | | MALFORMED_FUNCTION_CALL handling |
+| ee7065f66 | REIMPLEMENT | e0d9a129a | Sticky headers - StickyHeader.tsx created |
+| fb99b9537 | REIMPLEMENT | e0d9a129a | Header truncation (part of StickyHeader) |
+| d30421630 | REIMPLEMENT | e0d9a129a | Polish sticky headers (part of StickyHeader) |
+| 3cbb170aa | NO_OP | N/A | ThemedGradient already in LLxprt |
+| 60fe5acd6 | NO_OP | N/A | Animated scroll already in LLxprt |
+| 2b8adf8cf | NO_OP | N/A | Drag scrollbar already in LLxprt |
+| fb0324295 | REIMPLEMENT | 6bf8dbabf | MALFORMED_FUNCTION_CALL handling |
 
 ---
 
@@ -66,10 +67,16 @@
 
 | Decision | Count |
 |----------|-------|
-| PICKED | 0 (of 14 planned) |
-| REIMPLEMENTED | 0 (of 7 planned) |
-| SKIPPED | 29 |
-| NO_OP | 0 |
+| PICKED | 9 |
+| REIMPLEMENTED | 4 (in 2 commits) |
+| SKIPPED | 34 |
+| NO_OP | 3 (already implemented) |
+
+**LLxprt Commits Created:**
+1. `1587bf8f0` - Batch 1: 4 commits applied
+2. `29ac8b252` - Batch 2: 5 commits applied  
+3. `e0d9a129a` - Batch 3: StickyHeader component
+4. `6bf8dbabf` - Batch 5: MALFORMED_FUNCTION_CALL handling
 
 ---
 
@@ -77,4 +84,15 @@
 
 1. **Safety Checker Framework**: Permanently skipped. Focus on sandbox for real security.
 2. **Selection Warning**: Skipped. LLxprt has `/mouse off` as alternative UX.
-3. **Sticky Headers**: Reimplementing. User-requested feature.
+3. **Sticky Headers**: Reimplemented. Created StickyHeader.tsx component.
+4. **UI Improvements (Batch 4)**: Already implemented in LLxprt - no work needed.
+
+---
+
+## Features Already in LLxprt (NO_OP)
+
+The following features were found to already exist in LLxprt, either from previous syncs or independent development:
+
+1. **ThemedGradient (3cbb170aa)**: `packages/cli/src/ui/components/ThemedGradient.tsx` with tmux-safe gradient handling
+2. **Animated Scroll (60fe5acd6)**: `packages/cli/src/ui/components/shared/ScrollableList.tsx` with smoothScrollTo, smoothScrollState, ANIMATION_FRAME_DURATION_MS
+3. **Drag Scrollbar (2b8adf8cf)**: `packages/cli/src/ui/contexts/ScrollProvider.tsx` with dragStateRef, handleLeftPress, handleMove
