@@ -18,6 +18,7 @@ import {
 import { Config } from '../../config/config.js';
 import { AuthType } from '../../core/contentGenerator.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import {
   Type,
   type Part,
@@ -1584,10 +1585,17 @@ export class GeminiProvider extends BaseProvider {
         options.userMemory,
         () => options.invocation?.userMemory,
       );
+      const subagentConfig =
+        options.config ?? options.runtime?.config ?? this.globalConfig;
+      const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+        toolNamesForPrompt ?? [],
+        () => subagentConfig?.getSubagentManager?.(),
+      );
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
         model: currentModel,
         tools: toolNamesForPrompt,
+        includeSubagentDelegation,
       });
 
       const contentsWithSystemPrompt = [
@@ -1756,10 +1764,17 @@ export class GeminiProvider extends BaseProvider {
         options.userMemory,
         () => options.invocation?.userMemory,
       );
+      const subagentConfig =
+        options.config ?? options.runtime?.config ?? this.globalConfig;
+      const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+        toolNamesForPrompt ?? [],
+        () => subagentConfig?.getSubagentManager?.(),
+      );
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
         model: currentModel,
         tools: toolNamesForPrompt,
+        includeSubagentDelegation,
       });
 
       const apiRequest = {
