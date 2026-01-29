@@ -14,7 +14,7 @@
 | 2 | PICK | 5ba6bc713 51f952e70 fd59d9dd9 9116cf2ba c1076512d 2abc288c5 | [OK] DONE | 702623f43 | 2/6 applied; others already implemented or deferred |
 | 3 | PICK | a0a682826 69339f08a | [OK] DONE | 19d8fed05 | GitHub private repo + listCommands endpoint |
 | 4 | PICK+MANUAL | 4ef4bd6f0 + ink bump | [OK] DONE | c2f6fcefb | Hook runner + @jrichman/ink@6.4.8 |
-| 5 | REIMPLEMENT | 9e4ae214a + c0b766ad7 |  DEFERRED | - | KeypressContext unified parser - 1000+ line change, separate PR |
+| 5 | REIMPLEMENT | 9e4ae214a + c0b766ad7 | [OK] DONE | e2c41612d | KeypressContext unified ANSI parser - all tests passing |
 | 6 | REIMPLEMENT | 37ca643a6 + 22b055052 | [OK] DONE | 474046c9a | Editor diff drift + tmux gradient crash fix |
 | 7 | REIMPLEMENT | cc2c48d59 + b248ec6df | [OK] DONE | 63d161097 | Extension uninstall fix + blockGitExtensions |
 | 8 | REIMPLEMENT | 47603ef8e + c88340314 + bafbcbbe8 | [OK] DONE | 089221942 | Memory refresh + toolset refresh + /extensions restart |
@@ -26,6 +26,8 @@
 ## All LLxprt Commits (in order)
 
 ```
+e2c41612d cherry-pick: batch 5 - KeypressContext unified ANSI parser (9e4ae214a + c0b766ad7)
+69b88d75f docs: update sync documentation
 e0a541514 cherry-pick: upstream v0.14.0..v0.15.4 batch 10 (session restore fix)
 cc6e644ec cherry-pick: upstream v0.14.0..v0.15.4 batch 9 (animated scroll)
 089221942 cherry-pick: upstream v0.14.0..v0.15.4 batch 8 (extension lifecycle)
@@ -60,7 +62,7 @@ c2f6fcefb cherry-pick: upstream v0.14.0..v0.15.4 batch 4 (hook runner + ink bump
 | 2 | [OK] | [OK] | [OK] | [OK] | Full verify |
 | 3 | [OK] | [OK] | - | - | Quick verify only |
 | 4 | [OK] | [OK] | [OK] | [OK] | Full verify |
-| 5 | - | - | - | - | DEFERRED |
+| 5 | [OK] | [OK] | [OK] | [OK] | Full verify - unified ANSI parser |
 | 6 | [OK] | [OK] | - | - | Quick verify only |
 | 7 | [OK] | [OK] | - | - | Quick verify only |
 | 8 | [OK] | [OK] | [OK] | [OK] | Full verify |
@@ -69,16 +71,22 @@ c2f6fcefb cherry-pick: upstream v0.14.0..v0.15.4 batch 4 (hook runner + ink bump
 
 ---
 
-## Deferred Items
+## All Batches Complete
 
-### Batch 5: KeypressContext Unified ANSI Parser (9e4ae214a + c0b766ad7)
+All 10 batches have been implemented:
+- Batches 1-4: Direct cherry-picks with conflict resolution
+- Batches 5-10: Reimplementations adapted to LLxprt architecture
 
-**Reason:** 1000+ line complex change affecting keyboard input handling. Requires dedicated PR with thorough testing.
+### Batch 5 Implementation Notes (KeypressContext)
 
-**Plan file:** `9e4ae214a-c0b766ad7-plan.md`
+The unified ANSI parser was fully implemented:
+- Character-by-character generator-based emitKeys() parser
+- Table-driven KEY_INFO_MAP dispatch
+- Removed kittyProtocolEnabled prop from all components (48 occurrences)
+- Fixed ESC+mouse garbage input (upstream issue #12613)
+- All 3193 tests passing (52 skipped)
 
-**Recommendation:** 
-- Keep Kitty protocol support (upstream didn't remove it, just simplified parsing)
-- Adopt table-driven KEY_INFO_MAP dispatch pattern
-- Add unified ANSI parser as improvement, not replacement
-- Test thoroughly: ESC, arrow keys, paste, Kitty CSI-u, various terminals
+Files modified:
+- KeypressContext.tsx (complete rewrite, -940 +612 lines)
+- App.tsx, render.tsx (removed prop)
+- 5 test files updated

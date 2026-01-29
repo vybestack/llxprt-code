@@ -42,9 +42,9 @@
 ## Skipped Commits
 
 ### Batch 1: 3c9052a75 (F1/F2 keys)
-**Reason:** Complex keyboard handling conflicts with LLxprt's existing architecture
-**Impact:** Low - F1/F2 keys may still print garbage in some terminals
-**Follow-up:** Part of deferred Batch 5 KeypressContext work
+**Reason:** Complex keyboard handling conflicts at time of cherry-pick
+**Impact:** None - fixed by Batch 5 unified ANSI parser implementation
+**Status:** Resolved in commit e2c41612d
 
 ### Batch 2: 51f952e70 (ripgrep --json)
 **Reason:** Already implemented in LLxprt differently
@@ -89,14 +89,19 @@ A2A server packages remain PRIVATE in LLxprt (not published to npm).
 
 ## Research Findings
 
-### Kitty Keyboard Protocol (Batch 5)
+### Kitty Keyboard Protocol (Batch 5) - IMPLEMENTED
 
 Upstream did NOT remove Kitty protocol support. They:
 1. Replaced readline/PassThrough with unified ANSI parser
 2. Fixed ESC+mouse garbage input (issue #12613)
 3. Kept Kitty CSI-u sequence handling in the parser
 
-**Recommendation for LLxprt:** Keep Kitty support, adopt unified parser pattern.
+**LLxprt Implementation (e2c41612d):**
+- Adopted unified ANSI parser with character-by-character generator
+- Added table-driven KEY_INFO_MAP dispatch
+- Removed kittyProtocolEnabled prop (no longer needed)
+- Fixed F1/F2/ESC+mouse garbage input
+- All tests passing
 
 ### Ink Fork Status
 
@@ -123,9 +128,10 @@ No work needed.
 **Fixed in Batch 10.** Root cause was history service null during restore.
 New GeminiClient.restoreHistory() API ensures chat initialization first.
 
-### F1/F2 Keys
+### F1/F2 Keys - FIXED
 
-May still print garbage in some terminals. Part of deferred Batch 5 work.
+Fixed by Batch 5 unified ANSI parser (commit e2c41612d).
+The new parser correctly handles function key escape sequences.
 
 ---
 
