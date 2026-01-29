@@ -940,6 +940,91 @@ describe('todoCommand', () => {
     });
   });
 
+  describe('/todo unset', () => {
+    /**
+     * @requirement REQ-008
+     * @scenario Unset TODO to pending
+     * @given User has TODO at position 1 with in_progress status
+     * @when User executes /todo unset 1
+     * @then TODO status changes to pending
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P22
+     */
+    it('sets TODO at position 1 to pending', async () => {
+      const ctx = createMockContext([
+        { id: '1', content: 'Task 1', status: 'in_progress' },
+        { id: '2', content: 'Task 2', status: 'pending' },
+      ]);
+
+      const unsetSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'unset',
+      );
+      expect(unsetSubcommand).toBeDefined();
+
+      await unsetSubcommand!.action!(ctx, '1');
+
+      expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
+      const updatedTodos = (
+        ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>
+      ).mock.calls[0][0];
+      expect(updatedTodos[0].status).toBe('pending');
+      expect(updatedTodos[0].content).toBe('Task 1');
+    });
+
+    /**
+     * @requirement REQ-008
+     * @scenario Unset non-existent TODO position
+     * @given User has 2 TODOs
+     * @when User executes /todo unset 99
+     * @then Error message is displayed
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P22
+     */
+    it('shows error when unsetting non-existent position', async () => {
+      const ctx = createMockContext([
+        { id: '1', content: 'Task 1', status: 'in_progress' },
+        { id: '2', content: 'Task 2', status: 'pending' },
+      ]);
+
+      const unsetSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'unset',
+      );
+
+      await unsetSubcommand!.action!(ctx, '99');
+
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(call.type).toBe('error');
+      expect(call.text).toContain('Position');
+    });
+
+    /**
+     * @requirement REQ-008
+     * @scenario Unset TODO without position argument
+     * @given User has TODOs
+     * @when User executes /todo unset
+     * @then Usage help message is displayed
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P22
+     */
+    it('shows usage help when no position is provided', async () => {
+      const ctx = createMockContext([
+        { id: '1', content: 'Task 1', status: 'in_progress' },
+      ]);
+
+      const unsetSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'unset',
+      );
+
+      await unsetSubcommand!.action!(ctx, '');
+
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(call.type).toBe('info');
+      expect(call.text).toContain('Usage');
+      expect(call.text).toContain('pending');
+    });
+  });
+
   describe('/todo set', () => {
     /**
      * @requirement REQ-008

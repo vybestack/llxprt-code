@@ -339,6 +339,103 @@ Examples:
       },
     },
     {
+      name: 'unset',
+      description:
+        'Set a TODO status back to pending. Usage: /todo unset <position>',
+      kind: CommandKind.BUILT_IN,
+      /**
+       * /todo unset <pos> - Set TODO to pending
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P22
+       * @requirement REQ-008
+       */
+      action: (context, args) => {
+        if (!context.todoContext) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: 'TODO context not available',
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        if (!args || args.trim() === '') {
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Usage: /todo unset <position>
+
+Sets the TODO at the specified position to 'pending' status.
+This is the opposite of /todo set (which sets to 'in_progress').
+
+Position formats:
+  1, 2, 3    - Position number (1-based)
+
+Examples:
+  /todo unset 1
+  /todo unset 3`,
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        const posStr = args.trim().split(/\s+/)[0];
+        const { todos } = context.todoContext;
+
+        try {
+          const parsed = parsePosition(posStr, todos);
+
+          // Validate position exists (parsePosition allows insertion beyond current length)
+          if (parsed.parentIndex >= todos.length) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Position ${posStr} does not exist`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Subtasks don't have status field - only parent TODOs do
+          if (parsed.subtaskIndex !== undefined) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Subtasks don't have status. Use parent TODO position instead.`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Update the TODO status
+          const newTodos = [...todos];
+          const todo = newTodos[parsed.parentIndex];
+          todo.status = 'pending';
+
+          context.todoContext.updateTodos(newTodos);
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Set TODO ${posStr} to pending: "${todo.content}"`,
+            },
+            Date.now(),
+          );
+        } catch (error) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+            Date.now(),
+          );
+        }
+      },
+    },
+    {
       name: 'add',
       description:
         'Add a TODO at the specified position. Usage: /todo add <position> <description>',
