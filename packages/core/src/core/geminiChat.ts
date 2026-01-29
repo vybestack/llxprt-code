@@ -18,6 +18,7 @@ import {
   type Tool,
   type PartListUnion,
   ApiError,
+  FinishReason,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
 import { flushRuntimeAuthScope } from '../auth/precedence.js';
@@ -344,11 +345,16 @@ export class InvalidStreamError extends Error {
   readonly type:
     | 'NO_FINISH_REASON'
     | 'NO_RESPONSE_TEXT'
-    | 'NO_FINISH_REASON_NO_TEXT';
+    | 'NO_FINISH_REASON_NO_TEXT'
+    | 'MALFORMED_FUNCTION_CALL';
 
   constructor(
     message: string,
-    type: 'NO_FINISH_REASON' | 'NO_RESPONSE_TEXT' | 'NO_FINISH_REASON_NO_TEXT',
+    type:
+      | 'NO_FINISH_REASON'
+      | 'NO_RESPONSE_TEXT'
+      | 'NO_FINISH_REASON_NO_TEXT'
+      | 'MALFORMED_FUNCTION_CALL',
   ) {
     super(message);
     this.name = 'InvalidStreamError';
@@ -2347,17 +2353,19 @@ export class GeminiChat {
   ): AsyncGenerator<GenerateContentResponse> {
     const modelResponseParts: Part[] = [];
     let hasToolCall = false;
-    let hasFinishReason = false;
+    let finishReason: FinishReason | undefined;
     let hasTextResponse = false;
     const allChunks: GenerateContentResponse[] = [];
 
     for await (const chunk of streamResponse) {
-      // Accumulate hasFinishReason - once we see a finishReason, it stays true
-      // Bug fix: Previously this was overwritten on each iteration, causing
-      // the final thinking block (with no finishReason) to reset it to false
+      // Capture the finishReason if present - we track the actual reason for MALFORMED_FUNCTION_CALL handling
+      // Once we see a finishReason, it stays set
       // @plan PLAN-20251202-THINKING.P16
-      if (chunk?.candidates?.some((candidate) => candidate.finishReason)) {
-        hasFinishReason = true;
+      const candidateWithReason = chunk?.candidates?.find(
+        (candidate) => candidate.finishReason,
+      );
+      if (candidateWithReason) {
+        finishReason = candidateWithReason.finishReason as FinishReason;
       }
       if (isValidResponse(chunk)) {
         const content = chunk.candidates?.[0]?.content;
@@ -2438,12 +2446,13 @@ export class GeminiChat {
     // tool-result continuation AND:
     // - No finish reason AND no text response during streaming, OR
     // - Empty response text after consolidation (e.g., only thoughts with no actual content)
+    // - MALFORMED_FUNCTION_CALL finish reason (should trigger retry)
     if (
       !hasToolCall &&
       !isToolContinuationInput &&
-      ((!hasFinishReason && !hasTextResponse) || !responseText)
+      ((!finishReason && !hasTextResponse) || !responseText)
     ) {
-      if (!hasFinishReason && !hasTextResponse) {
+      if (!finishReason && !hasTextResponse) {
         throw new InvalidStreamError(
           'Model stream ended without a finish reason and no text response.',
           'NO_FINISH_REASON_NO_TEXT',
@@ -2454,6 +2463,14 @@ export class GeminiChat {
           'NO_RESPONSE_TEXT',
         );
       }
+    }
+
+    // Handle MALFORMED_FUNCTION_CALL finish reason - should trigger retry
+    if (finishReason === FinishReason.MALFORMED_FUNCTION_CALL) {
+      throw new InvalidStreamError(
+        'Model stream ended with malformed function call.',
+        'MALFORMED_FUNCTION_CALL',
+      );
     }
 
     // Use recordHistory to correctly save the conversation turn.
