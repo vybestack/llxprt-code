@@ -73,32 +73,39 @@ All three features already implemented in LLxprt:
 
 ---
 
-## Discovery: Interactive Shell Feature
+## Interactive Shell Feature - COMPLETED
 
-During StickyHeader integration research, discovered that upstream has a significant feature LLxprt is missing:
+During StickyHeader integration research, discovered that upstream has a significant feature. This has now been implemented:
 
-**Commit:** `181898cb` - feat(shell): enable interactive commands with virtual terminal (#6694)
-**Date:** 2025-09-11
+**Commits Applied:**
+- `6df7e5f99` - feat(shell): Add interactive shell UI support (181898cb) - Phases 1-3
+- `612101d0c` - feat(shell): Complete Interactive Shell Phase 4 wiring
+- `18cb40ceb` - feat(shell): Port AnsiOutput rendering from upstream for PTY mode
 
-This feature was added early in gemini-cli's history and enables:
-- Running interactive commands (vim, less, htop, git rebase -i)
-- ANSI-styled output rendering via xterm.js
-- Shell focus/input handling (ctrl+f to focus)
-
-**What LLxprt already has:**
-- `@lydell/node-pty` and `@xterm/headless` dependencies
-- PTY spawn in ShellExecutionService
-- `shouldUseNodePtyShell` setting
-- `headlessTerminal` instance in ShellExecutionService
-
-**What LLxprt is missing:**
+**What was implemented:**
 - `terminalSerializer.ts` - Serializes xterm buffer to AnsiOutput
 - `AnsiOutput.tsx` - Renders ANSI-styled output in Ink
 - `ShellInputPrompt.tsx` - Input prompt for focused shell
 - `keyToAnsi.ts` - Converts keypresses to ANSI sequences
-- UI integration for shell focus state
+- UI integration for shell focus state (embeddedShellFocused)
+- Config.getEnableInteractiveShell() returning shouldUseNodePtyShell setting
+- `ShellExecutionConfig` interface for terminal dimensions and options
+- `SCROLLBACK_LIMIT` constant (300k lines) for large outputs
+- AnsiOutput emission from ShellExecutionService when PTY mode active
 
-This is a high-priority feature request from the user.
+**Issue discovered and fixed:**
+The original implementation was emitting plain strings instead of AnsiOutput. The fix (commit `18cb40ceb`) adds:
+- `serializeTerminalToObject()` integration in ShellExecutionService
+- Proper `render()` and `renderFn()` pattern from upstream
+- Terminal dimensions passed through useGeminiStream
+
+---
+
+## Settings Scope Fix - COMPLETED
+
+**Commit:** `c0202daea` - fix(settings): Exclude Session scope from forScope() iteration
+
+Fixed `/settings` command crash where iterating over all scopes would try to call `forScope(Session)` which is not supported. Now excludes Session scope from the iteration.
 
 ---
 
@@ -113,3 +120,5 @@ None - all changes applied cleanly or were skipped appropriately.
 1. **Batch 4 entirely skipped**: Research found all three features (ThemedGradient, animated scroll, drag scrollbar) were already implemented in LLxprt from previous sync or independent development.
 
 2. **Telemetry updates skipped in Batch 5**: The upstream commit also updates recordContentRetry and recordContentRetryFailure to pass error_type, but LLxprt has a different telemetry structure. The core functionality (MALFORMED_FUNCTION_CALL detection and retry) is implemented.
+
+3. **ShellExecutionResult interface change**: Removed `stdout` and `stderr` fields since PTY mode combines output streams. Updated test files accordingly.

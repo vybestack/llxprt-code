@@ -18,12 +18,24 @@
 
 ---
 
+## Additional Work
+
+| Feature | LLxprt Commit | Notes |
+|---------|---------------|-------|
+| Interactive Shell UI (181898cb) | 6df7e5f99, 612101d0c | Phases 1-4: terminalSerializer, AnsiOutput, ShellInputPrompt, keyToAnsi, Config wiring |
+| StickyHeader Integration | e77e438e3 | Complete integration in ToolGroupMessage |
+| Settings Scope Fix | c0202daea | Exclude Session scope from forScope() iteration |
+| AnsiOutput Rendering | 18cb40ceb | Port serializeTerminalToObject() for PTY mode ANSI colors |
+
+---
+
 ## Summary
 
 - **Total batches:** 5
 - **Completed:** 4 (1 skipped - features already present)
 - **In progress:** 0
 - **Remaining:** 0
+- **Additional features:** 4 (Interactive Shell, StickyHeader integration, Settings fix, AnsiOutput)
 
 ---
 
@@ -36,6 +48,7 @@
 | 3 | [OK] lint, typecheck | N/A | None |
 | 4 | SKIPPED | N/A | All features already in LLxprt |
 | 5 | [OK] lint, typecheck | N/A | None |
+| Shell Fix | [OK] lint, typecheck | N/A | None |
 
 ---
 
@@ -46,9 +59,19 @@
 - **60fe5acd6 (Animated Scroll)**: LLxprt already has smoothScrollTo, smoothScrollState, ANIMATION_FRAME_DURATION_MS in ScrollableList.tsx
 - **2b8adf8cf (Drag Scrollbar)**: LLxprt already has dragStateRef, handleLeftPress, handleMove in ScrollProvider.tsx with full drag support
 
+### Interactive Shell Fix
+- ShellExecutionService now emits `AnsiOutput` (array of token arrays) instead of plain strings when PTY mode is active
+- Added `ShellExecutionConfig` interface for terminal dimensions, pager, color settings
+- `shellCommandProcessor` now handles both string and AnsiOutput types
+- Terminal dimensions passed from `useGeminiStream` through AppContainer
+
 ### Commits Applied
 1. **1587bf8f0** - Batch 1: Tool display names (PascalCase), extensions await handler, hook result aggregation, abort fix
 2. **29ac8b252** - Batch 2: Keyboard shortcuts docs, toml-loader tests, auto reset fallback, buffer cleanup, editor settings
 3. **e0d9a129a** - Batch 3: StickyHeader component for Ink UI
 4. **6bf8dbabf** - Batch 5: MALFORMED_FUNCTION_CALL handling with retry support
 5. **6df7e5f99** - Interactive Shell UI support (181898cb) - Phases 1-3 complete
+6. **612101d0c** - Interactive Shell Phase 4 wiring
+7. **e77e438e3** - StickyHeader integration in ToolGroupMessage
+8. **c0202daea** - Settings Session scope fix
+9. **18cb40ceb** - AnsiOutput rendering for PTY mode

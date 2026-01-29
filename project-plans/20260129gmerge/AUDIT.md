@@ -78,6 +78,13 @@
 3. `e0d9a129a` - Batch 3: StickyHeader component
 4. `6bf8dbabf` - Batch 5: MALFORMED_FUNCTION_CALL handling
 
+**Additional Work Beyond Plan:**
+5. `6df7e5f99` - Interactive Shell UI support (from 181898cb)
+6. `612101d0c` - Interactive Shell Phase 4 wiring
+7. `e77e438e3` - StickyHeader integration in ToolGroupMessage
+8. `c0202daea` - Settings Session scope fix
+9. `18cb40ceb` - AnsiOutput rendering for PTY mode
+
 ---
 
 ## Key Architectural Decisions
@@ -86,6 +93,7 @@
 2. **Selection Warning**: Skipped. LLxprt has `/mouse off` as alternative UX.
 3. **Sticky Headers**: Reimplemented. Created StickyHeader.tsx component.
 4. **UI Improvements (Batch 4)**: Already implemented in LLxprt - no work needed.
+5. **Interactive Shell**: Implemented from older upstream commit (181898cb) to enable vim, htop, less, etc.
 
 ---
 
@@ -96,3 +104,27 @@ The following features were found to already exist in LLxprt, either from previo
 1. **ThemedGradient (3cbb170aa)**: `packages/cli/src/ui/components/ThemedGradient.tsx` with tmux-safe gradient handling
 2. **Animated Scroll (60fe5acd6)**: `packages/cli/src/ui/components/shared/ScrollableList.tsx` with smoothScrollTo, smoothScrollState, ANIMATION_FRAME_DURATION_MS
 3. **Drag Scrollbar (2b8adf8cf)**: `packages/cli/src/ui/contexts/ScrollProvider.tsx` with dragStateRef, handleLeftPress, handleMove
+
+---
+
+## Interactive Shell Implementation
+
+Implemented the Interactive Shell feature from upstream commit `181898cb`:
+
+**Components Added:**
+- `terminalSerializer.ts` - Serializes xterm buffer to AnsiOutput tokens
+- `AnsiOutput.tsx` - Renders ANSI-styled output in Ink
+- `ShellInputPrompt.tsx` - Input prompt for focused shell
+- `keyToAnsi.ts` - Converts keypresses to ANSI sequences
+
+**Core Changes:**
+- `ShellExecutionService.ts` - Added serializeTerminalToObject() integration
+- Added `ShellExecutionConfig` interface for terminal dimensions and options
+- Added `SCROLLBACK_LIMIT` constant (300k lines)
+- `shellCommandProcessor.ts` - Handles both string and AnsiOutput types
+- `useGeminiStream.ts` - Added setShellInputFocused and terminal dimension parameters
+- `AppContainer.tsx` - Passes terminal dimensions to useGeminiStream
+
+**Behavior:**
+- When PTY mode is active, emits AnsiOutput (array of token arrays) instead of plain strings
+- Enables proper ANSI color/style rendering for interactive shell commands
