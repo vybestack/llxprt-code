@@ -328,11 +328,10 @@ const setSchema: CommandArgumentSchema = [
           const enableFuzzy = getFuzzyEnabled(ctx);
 
           // Try to get autocomplete suggestions from the registry first
-          const registryOptions = resolveAlias(setting)
-            ? getDirectSettingSpecs().find(
-                (s) => s.value === resolveAlias(setting),
-              )?.options
-            : undefined;
+          const resolvedSetting = resolveAlias(setting);
+          const registryOptions = getDirectSettingSpecs().find(
+            (s) => s.value === resolvedSetting,
+          )?.options;
 
           if (registryOptions && registryOptions.length > 0) {
             return filterCompletions(registryOptions, partial, { enableFuzzy });

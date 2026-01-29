@@ -1094,7 +1094,7 @@ export function getAutocompleteSuggestions(
   return undefined;
 }
 
-export function getProtectedSettingKeys(): string[] {
+function collectProviderConfigKeys(): string[] {
   const keys: string[] = [];
   for (const spec of SETTINGS_REGISTRY) {
     if (spec.category === 'provider-config') {
@@ -1104,21 +1104,17 @@ export function getProtectedSettingKeys(): string[] {
       }
     }
   }
+  return keys;
+}
+
+export function getProtectedSettingKeys(): string[] {
+  const keys = collectProviderConfigKeys();
   keys.push('provider', 'currentProfile');
   return keys;
 }
 
 export function getProviderConfigKeys(): string[] {
-  const keys: string[] = [];
-  for (const spec of SETTINGS_REGISTRY) {
-    if (spec.category === 'provider-config') {
-      keys.push(spec.key);
-      if (spec.aliases) {
-        keys.push(...spec.aliases);
-      }
-    }
-  }
-  return keys;
+  return collectProviderConfigKeys();
 }
 
 export interface DirectSettingSpec {
