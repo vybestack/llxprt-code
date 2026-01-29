@@ -51,3 +51,4 @@
 2. **29ac8b252** - Batch 2: Keyboard shortcuts docs, toml-loader tests, auto reset fallback, buffer cleanup, editor settings
 3. **e0d9a129a** - Batch 3: StickyHeader component for Ink UI
 4. **6bf8dbabf** - Batch 5: MALFORMED_FUNCTION_CALL handling with retry support
+5. **6df7e5f99** - Interactive Shell UI support (181898cb) - Phases 1-3 complete

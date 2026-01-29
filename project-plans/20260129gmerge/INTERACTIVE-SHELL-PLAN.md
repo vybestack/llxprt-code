@@ -96,31 +96,31 @@ Converts Ink keypress events to ANSI escape sequences for sending to PTY.
 
 ## Implementation Steps
 
-### Phase 1: Core Terminal Serialization
-1. Copy `terminalSerializer.ts` from upstream (adapt imports)
-2. Add `terminalSerializer.test.ts`
-3. Export from `packages/core/src/index.ts`
-4. Verify existing ShellExecutionService can use it
+### Phase 1: Core Terminal Serialization - DONE (commit 6df7e5f99)
+1. [x] Copy `terminalSerializer.ts` from upstream (adapt imports)
+2. [x] Add `terminalSerializer.test.ts` - 17 tests passing
+3. [x] Export from `packages/core/src/index.ts`
+4. [x] Verify existing ShellExecutionService can use it
 
-### Phase 2: UI Components
-1. Add `AnsiOutput.tsx` component
-2. Add `AnsiOutput.test.tsx`
-3. Add `keyToAnsi.ts` hook
-4. Add `ShellInputPrompt.tsx` component
+### Phase 2: UI Components - DONE (commit 6df7e5f99)
+1. [x] Add `AnsiOutput.tsx` component
+2. [x] Add `AnsiOutput.test.tsx`
+3. [x] Add `keyToAnsi.ts` hook
+4. [x] Add `ShellInputPrompt.tsx` component
 
-### Phase 3: Integration
-1. Update `ToolMessage.tsx` to render ANSI output
-2. Update `ToolGroupMessage.tsx` to pass props
-3. Update `AppContainer.tsx` with shell focus state
-4. Update `UIStateContext.tsx`
-5. Update `useGeminiStream.ts` for PTY tracking
-6. Add `ptyId` to types
+### Phase 3: Integration - DONE (commit 6df7e5f99)
+1. [x] Update `ToolMessage.tsx` to render ANSI output
+2. [x] Update `ToolGroupMessage.tsx` to pass props
+3. [x] Update `AppContainer.tsx` with shell focus state (placeholders)
+4. [x] Update `UIStateContext.tsx`
+5. [x] Add `ptyId` to types
 
-### Phase 4: Polish
-1. Add ctrl+f focus keybinding
-2. Add focus hints in UI
-3. Test with vim, less, htop, git rebase -i
-4. Update documentation
+### Phase 4: Polish - TODO
+1. [ ] Add ctrl+f focus keybinding
+2. [ ] Wire up activeShellPtyId and embeddedShellFocused in AppContainer
+3. [ ] Add Config.getEnableInteractiveShell() method
+4. [ ] Test with vim, less, htop, git rebase -i
+5. [ ] Update documentation
 
 ---
 
