@@ -13,10 +13,7 @@ import {
   useEffect,
 } from 'react';
 import type React from 'react';
-import {
-  VirtualizedList,
-  type VirtualizedListRef,
-} from './VirtualizedList.js';
+import { VirtualizedList, type VirtualizedListRef } from './VirtualizedList.js';
 import { useScrollable } from '../../contexts/ScrollProvider.js';
 import { Box, type DOMElement } from 'ink';
 import { useKeypress, type Key } from '../../hooks/useKeypress.js';
