@@ -79,11 +79,10 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     ptyId === activeShellPtyId &&
     embeddedShellFocused;
 
-  // TODO: Add getEnableInteractiveShell to Config when implementing Phase 4
   const isThisShellFocusable =
     isShellTool &&
     status === ToolCallStatus.Executing &&
-    false; // config?.getEnableInteractiveShell?.() - to be implemented
+    config?.getEnableInteractiveShell();
   const availableHeight = availableTerminalHeight
     ? Math.max(
         availableTerminalHeight - STATIC_HEIGHT - RESERVED_LINE_COUNT,

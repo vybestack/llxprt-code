@@ -2033,6 +2033,14 @@ export class Config {
   getHooks(): { [K in HookEventName]?: HookDefinition[] } | undefined {
     return this.hooks;
   }
+
+  /**
+   * Check if interactive shell is enabled.
+   * Returns true if the shouldUseNodePtyShell setting is enabled.
+   */
+  getEnableInteractiveShell(): boolean {
+    return this.shouldUseNodePtyShell;
+  }
 }
 
 // Re-export SchedulerCallbacks for external use

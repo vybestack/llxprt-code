@@ -885,6 +885,10 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
+  const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
+  // TODO: Wire up activeShellPtyId from tool execution events in future phases
+  const [_activeShellPtyId, _setActiveShellPtyId] = useState<number | null>(null);
+  const activeShellPtyId = _activeShellPtyId; // Expose for conditional logic
 
   const openPermissionsDialog = useCallback(() => {
     setIsPermissionsDialogOpen(true);
@@ -1779,6 +1783,18 @@ export const AppContainer = (props: AppContainerProps) => {
         !enteringConstrainHeightMode
       ) {
         setConstrainHeight(false);
+      } else if (
+        keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS](key) &&
+        config.getEnableInteractiveShell()
+      ) {
+        // Toggle focus between shell and LLxprt input
+        if (activeShellPtyId && embeddedShellFocused) {
+          // Unfocus shell
+          setEmbeddedShellFocused(false);
+        } else if (activeShellPtyId) {
+          // Focus shell
+          setEmbeddedShellFocused(true);
+        }
       }
     },
     [
@@ -1806,6 +1822,8 @@ export const AppContainer = (props: AppContainerProps) => {
       setCopyModeEnabled,
       copyModeEnabled,
       settings.merged.ui?.useAlternateBuffer,
+      activeShellPtyId,
+      embeddedShellFocused,
     ],
   );
 
@@ -2254,8 +2272,8 @@ export const AppContainer = (props: AppContainerProps) => {
     renderMarkdown,
 
     // Interactive shell focus state
-    activeShellPtyId: null, // TODO: implement in Phase 4
-    embeddedShellFocused: false, // TODO: implement in Phase 4
+    activeShellPtyId,
+    embeddedShellFocused,
   };
 
   // Build UIActions object - memoized to avoid unnecessary re-renders (upstream optimization)
