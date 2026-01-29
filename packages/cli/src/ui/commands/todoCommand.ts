@@ -18,8 +18,9 @@ import * as path from 'path';
 import * as os from 'os';
 
 /**
- * Parsed position result for /todo add and /todo delete
+ * Parsed position result for /todo add and /todo remove
  * @plan PLAN-20260129-TODOPERSIST.P06
+ * @plan PLAN-20260129-TODOPERSIST-EXT.P21
  */
 export interface ParsedPosition {
   parentIndex: number;
@@ -462,14 +463,15 @@ Examples:
       },
     },
     {
-      name: 'delete',
+      name: 'remove',
       description:
-        'Delete a TODO at the specified position. Usage: /todo delete <position|range|all>',
+        'Remove a TODO from the current list. Usage: /todo remove <position|range|all>',
       kind: CommandKind.BUILT_IN,
       /**
-       * /todo delete <pos|range|all> - Remove TODO(s)
+       * /todo remove <pos|range|all> - Remove TODO(s) from active session
        * @plan PLAN-20260129-TODOPERSIST-EXT.P18
        * @plan PLAN-20260129-TODOPERSIST-EXT.P20
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P21
        * @requirement REQ-006
        * @pseudocode Extended with range and "all" support
        */
@@ -489,17 +491,17 @@ Examples:
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: `Usage: /todo delete <position>
+              text: `Usage: /todo remove <position>
 
 Position formats:
-  2          - Delete TODO at position 2
-  1-5        - Delete TODOs 1 through 5 (inclusive)
-  all        - Delete all TODOs
+  2          - Remove TODO at position 2
+  1-5        - Remove TODOs 1 through 5 (inclusive)
+  all        - Remove all TODOs
 
 Examples:
-  /todo delete 3
-  /todo delete 1-5
-  /todo delete all`,
+  /todo remove 3
+  /todo remove 1-5
+  /todo remove all`,
             },
             Date.now(),
           );
@@ -517,7 +519,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Deleted ${count} TODO(s)`,
+                text: `Removed ${count} TODO(s)`,
               },
               Date.now(),
             );
@@ -553,19 +555,19 @@ Examples:
               return;
             }
 
-            // Delete in reverse order (highest index first)
+            // Remove in reverse order (highest index first)
             const newTodos = [...todos];
-            let deleteCount = 0;
+            let removeCount = 0;
             for (let i = end - 1; i >= start - 1; i--) {
               newTodos.splice(i, 1);
-              deleteCount++;
+              removeCount++;
             }
 
             context.todoContext.updateTodos(newTodos);
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Deleted ${deleteCount} TODO(s)`,
+                text: `Removed ${removeCount} TODO(s)`,
               },
               Date.now(),
             );
@@ -576,7 +578,7 @@ Examples:
           const parsed = parsePosition(posStr, todos);
 
           if (parsed.subtaskIndex !== undefined) {
-            // Delete subtask
+            // Remove subtask
             const newTodos = [...todos];
             const parent = newTodos[parsed.parentIndex];
 
@@ -600,12 +602,12 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Deleted 1 TODO(s)`,
+                text: `Removed 1 TODO(s)`,
               },
               Date.now(),
             );
           } else {
-            // Delete task
+            // Remove task
             if (parsed.parentIndex >= todos.length) {
               context.ui.addItem(
                 {
@@ -624,7 +626,7 @@ Examples:
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: `Deleted 1 TODO(s)`,
+                text: `Removed 1 TODO(s)`,
               },
               Date.now(),
             );
@@ -640,6 +642,331 @@ Examples:
         }
       },
     },
+    {
+      name: 'delete',
+      description:
+        'Delete saved TODO session(s) from disk. Usage: /todo delete <number|range|all>',
+      kind: CommandKind.BUILT_IN,
+      /**
+       * /todo delete <num|range|all> - Delete saved TODO files from disk
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+       * @requirement REQ-010
+       */
+      action: async (context, args) => {
+        if (!args || args.trim() === '') {
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Usage: /todo delete <number|range|all>
+
+Deletes saved TODO sessions from disk. Use /todo list to see sessions.
+
+Formats:
+  3          - Delete session #3
+  1-5        - Delete sessions 1 through 5
+  all        - Delete all saved sessions
+
+Examples:
+  /todo delete 2
+  /todo delete 1-3
+  /todo delete all`,
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        const posStr = args.trim().split(/\s+/)[0];
+
+        try {
+          const files = getTodoSessionFiles();
+
+          if (files.length === 0) {
+            context.ui.addItem(
+              {
+                type: MessageType.INFO,
+                text: 'No saved TODO sessions found',
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Check for "all" keyword
+          if (posStr === 'all') {
+            const count = files.length;
+            files.forEach((file) => fs.unlinkSync(file.path));
+            context.ui.addItem(
+              {
+                type: MessageType.INFO,
+                text: `Deleted ${count} saved TODO session(s)`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Check for range pattern (e.g., "1-3")
+          const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
+          if (rangeMatch) {
+            const start = parseInt(rangeMatch[1], 10);
+            const end = parseInt(rangeMatch[2], 10);
+
+            // Validate range
+            if (start > end) {
+              context.ui.addItem(
+                {
+                  type: MessageType.ERROR,
+                  text: `Invalid range: start (${start}) must be <= end (${end})`,
+                },
+                Date.now(),
+              );
+              return;
+            }
+
+            if (start < 1 || end > files.length) {
+              context.ui.addItem(
+                {
+                  type: MessageType.ERROR,
+                  text: `Range out of bounds: valid range is 1-${files.length}`,
+                },
+                Date.now(),
+              );
+              return;
+            }
+
+            // Delete files in range
+            let deleteCount = 0;
+            for (let i = start - 1; i < end; i++) {
+              fs.unlinkSync(files[i].path);
+              deleteCount++;
+            }
+
+            context.ui.addItem(
+              {
+                type: MessageType.INFO,
+                text: `Deleted ${deleteCount} saved TODO session(s)`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Single session number
+          const sessionNum = parseInt(posStr, 10);
+          if (isNaN(sessionNum) || sessionNum < 1) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: 'Invalid number format. Usage: /todo delete <number|range|all>',
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          if (sessionNum > files.length) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Session ${sessionNum} does not exist. Valid range: 1-${files.length}`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Delete the selected session file (1-based indexing)
+          const selectedFile = files[sessionNum - 1];
+          fs.unlinkSync(selectedFile.path);
+
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Deleted 1 saved TODO session(s)`,
+            },
+            Date.now(),
+          );
+        } catch (error) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: `Error deleting session: ${error instanceof Error ? error.message : String(error)}`,
+            },
+            Date.now(),
+          );
+        }
+      },
+    },
+    {
+      name: 'undo',
+      description:
+        'Reset TODO status to pending. Usage: /todo undo <position|range|all>',
+      kind: CommandKind.BUILT_IN,
+      /**
+       * /todo undo <pos|range|all> - Reset TODO status to pending
+       * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+       * @requirement REQ-011
+       */
+      action: (context, args) => {
+        if (!context.todoContext) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: 'TODO context not available',
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        if (!args || args.trim() === '') {
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Usage: /todo undo <position|range|all>
+
+Resets TODO status back to 'pending'.
+
+Formats:
+  2          - Reset TODO at position 2
+  1-5        - Reset TODOs 1 through 5
+  all        - Reset all TODOs
+
+Examples:
+  /todo undo 3
+  /todo undo 1-5
+  /todo undo all`,
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        const posStr = args.trim().split(/\s+/)[0];
+        const { todos } = context.todoContext;
+
+        try {
+          // Check for "all" keyword
+          if (posStr === 'all') {
+            const newTodos = todos.map((todo) => ({
+              ...todo,
+              status: 'pending' as const,
+            }));
+            const count = todos.length;
+            context.todoContext.updateTodos(newTodos);
+            context.ui.addItem(
+              {
+                type: MessageType.INFO,
+                text: `Reset ${count} TODO(s) to pending`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Check for range pattern (e.g., "1-3")
+          const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
+          if (rangeMatch) {
+            const start = parseInt(rangeMatch[1], 10);
+            const end = parseInt(rangeMatch[2], 10);
+
+            // Validate range
+            if (start > end) {
+              context.ui.addItem(
+                {
+                  type: MessageType.ERROR,
+                  text: `Invalid range: start (${start}) must be <= end (${end})`,
+                },
+                Date.now(),
+              );
+              return;
+            }
+
+            if (start < 1 || end > todos.length) {
+              context.ui.addItem(
+                {
+                  type: MessageType.ERROR,
+                  text: `Range out of bounds: valid range is 1-${todos.length}`,
+                },
+                Date.now(),
+              );
+              return;
+            }
+
+            // Reset status in range
+            const newTodos = [...todos];
+            let resetCount = 0;
+            for (let i = start - 1; i < end; i++) {
+              newTodos[i] = { ...newTodos[i], status: 'pending' };
+              resetCount++;
+            }
+
+            context.todoContext.updateTodos(newTodos);
+            context.ui.addItem(
+              {
+                type: MessageType.INFO,
+                text: `Reset ${resetCount} TODO(s) to pending`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Fall back to single position parsing
+          const parsed = parsePosition(posStr, todos);
+
+          // Validate position exists
+          if (parsed.parentIndex >= todos.length) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Position ${posStr} does not exist`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Subtasks don't have status field - only parent TODOs do
+          if (parsed.subtaskIndex !== undefined) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Subtasks don't have status. Use parent TODO position instead.`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+
+          // Reset the TODO status
+          const newTodos = [...todos];
+          newTodos[parsed.parentIndex] = {
+            ...newTodos[parsed.parentIndex],
+            status: 'pending',
+          };
+
+          context.todoContext.updateTodos(newTodos);
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Reset 1 TODO(s) to pending`,
+            },
+            Date.now(),
+          );
+        } catch (error) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+            Date.now(),
+          );
+        }
+      },
+    },
+
     {
       name: 'list',
       description: 'List all saved TODO sessions',
