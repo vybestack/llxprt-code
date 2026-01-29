@@ -23,6 +23,7 @@ import {
   type ToolConfirmationPayload,
 } from './tool-confirmation-types.js';
 import { randomUUID } from 'node:crypto';
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
 
 export { ToolConfirmationOutcome } from './tool-confirmation-types.js';
 export type { ToolConfirmationPayload } from './tool-confirmation-types.js';
@@ -629,7 +630,7 @@ export interface FileRead {
   metadata?: Record<string, unknown>;
 }
 
-export type ToolResultDisplay = string | FileDiff | FileRead;
+export type ToolResultDisplay = string | FileDiff | FileRead | AnsiOutput;
 
 export interface FileDiff {
   fileDiff: string;

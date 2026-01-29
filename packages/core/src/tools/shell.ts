@@ -319,9 +319,13 @@ class ShellToolInvocation extends BaseToolInvocation<
           let shouldUpdate = false;
 
           switch (event.type) {
-            case 'data':
+            case 'data': {
               if (isBinaryStream) break;
-              outputChunks.push(event.chunk);
+              const chunk =
+                typeof event.chunk === 'string'
+                  ? event.chunk
+                  : JSON.stringify(event.chunk);
+              outputChunks.push(chunk);
               if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
                 cumulativeOutput = outputChunks.join('');
                 outputChunks = [cumulativeOutput];
@@ -329,6 +333,7 @@ class ShellToolInvocation extends BaseToolInvocation<
                 shouldUpdate = true;
               }
               break;
+            }
             case 'binary_detected':
               isBinaryStream = true;
               currentDisplayOutput =
@@ -356,8 +361,10 @@ class ShellToolInvocation extends BaseToolInvocation<
         },
         combinedSignal,
         this.config.getShouldUseNodePtyShell(),
-        terminalColumns,
-        terminalRows,
+        {
+          terminalWidth: terminalColumns,
+          terminalHeight: terminalRows,
+        },
       );
 
       const result = await executionResult.result;
@@ -452,7 +459,7 @@ class ShellToolInvocation extends BaseToolInvocation<
           `Command: ${this.params.command}`,
           `Directory: ${this.getDirPath() || '(root)'}`,
           `Stdout: ${filteredOutput || '(empty)'}`,
-          `Stderr: ${result.stderr || '(empty)'}`,
+          `Stderr: (empty)`,
           `Error: ${finalError}`,
           `Exit Code: ${result.exitCode ?? '(none)'}`,
           `Signal: ${result.signal ?? '(none)'}`,

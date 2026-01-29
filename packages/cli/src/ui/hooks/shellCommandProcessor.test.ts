@@ -115,6 +115,9 @@ describe('useShellCommandProcessor', () => {
         onDebugMessageMock,
         mockConfig,
         mockGeminiClient,
+        () => {},
+        80,
+        24,
       ),
     );
 
@@ -123,8 +126,6 @@ describe('useShellCommandProcessor', () => {
   ): ShellExecutionResult => ({
     rawOutput: Buffer.from(overrides.output || ''),
     output: 'Success',
-    stdout: 'Success',
-    stderr: '',
     exitCode: 0,
     signal: null,
     error: null,

@@ -226,6 +226,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
         mockPerformMemoryRefresh,
         mockOnEditorClose,
         mockOnCancelSubmit,
+        () => {}, // setShellInputFocused
       ),
     );
 
@@ -294,6 +295,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
         mockPerformMemoryRefresh,
         mockOnEditorClose,
         mockOnCancelSubmit,
+        () => {}, // setShellInputFocused
       ),
     );
 

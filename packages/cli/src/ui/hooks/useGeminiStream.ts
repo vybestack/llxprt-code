@@ -151,6 +151,9 @@ export const useGeminiStream = (
   performMemoryRefresh: () => Promise<void>,
   onEditorClose: () => void,
   onCancelSubmit: () => void,
+  setShellInputFocused: (value: boolean) => void,
+  terminalWidth?: number,
+  terminalHeight?: number,
   onTodoPause?: () => void,
   onEditorOpen: () => void = () => {},
 ) => {
@@ -372,13 +375,16 @@ export const useGeminiStream = (
     await done;
     setIsResponding(false);
   }, []);
-  const { handleShellCommand } = useShellCommandProcessor(
+  const { handleShellCommand, activeShellPtyId } = useShellCommandProcessor(
     addItem,
     setPendingHistoryItem,
     onExec,
     onDebugMessage,
     config,
     geminiClient,
+    setShellInputFocused,
+    terminalWidth,
+    terminalHeight,
   );
 
   const streamingState = useMemo(() => {
@@ -1627,5 +1633,6 @@ export const useGeminiStream = (
     pendingHistoryItems,
     thought,
     cancelOngoingRequest,
+    activeShellPtyId,
   };
 };

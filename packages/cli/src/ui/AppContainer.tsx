@@ -1573,6 +1573,9 @@ export const AppContainer = (props: AppContainerProps) => {
     performMemoryRefresh,
     refreshStatic,
     handleUserCancel,
+    setEmbeddedShellFocused,
+    stdout?.columns,
+    stdout?.rows,
     registerTodoPause,
     handleExternalEditorOpen,
   );
