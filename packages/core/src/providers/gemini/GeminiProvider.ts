@@ -1585,9 +1585,11 @@ export class GeminiProvider extends BaseProvider {
         options.userMemory,
         () => options.invocation?.userMemory,
       );
+      const subagentConfig =
+        options.config ?? options.runtime?.config ?? this.globalConfig;
       const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
         toolNamesForPrompt ?? [],
-        () => options.config?.getSubagentManager?.(),
+        () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
@@ -1762,9 +1764,11 @@ export class GeminiProvider extends BaseProvider {
         options.userMemory,
         () => options.invocation?.userMemory,
       );
+      const subagentConfig =
+        options.config ?? options.runtime?.config ?? this.globalConfig;
       const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
         toolNamesForPrompt ?? [],
-        () => options.config?.getSubagentManager?.(),
+        () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
