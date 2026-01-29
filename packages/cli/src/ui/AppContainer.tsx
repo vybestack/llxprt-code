@@ -688,71 +688,60 @@ export const AppContainer = (props: AppContainerProps) => {
     validateUIHistory,
   ]);
 
-  // Part 2: Restore core history when historyService becomes available (for AI context)
+  // Part 2: Restore core history using the new restoreHistory API (for AI context)
+  // P0 Fix: Use synchronous API that ensures chat is initialized before returning
   useEffect(() => {
     if (!restoredSession || coreHistoryRestoredRef.current) {
       return;
     }
 
+    coreHistoryRestoredRef.current = true;
+
     const geminiClient = config.getGeminiClient();
-    if (geminiClient) {
-      geminiClient.resetChat().catch((err) => {
-        debug.error('Failed to initialize chat for session restore:', err);
-      });
-    }
-
-    const TIMEOUT_MS = 30000; // 30 second timeout
-
-    const timeout = setTimeout(() => {
-      clearInterval(checkInterval);
-      debug.warn(
-        'Timed out waiting for history service to restore core history',
-      );
+    if (!geminiClient) {
+      debug.error('GeminiClient not available for session restore');
       addItem(
         {
-          type: 'warning',
-          text: 'Could not restore AI context - history service unavailable.',
+          type: 'error',
+          text: 'Could not restore AI context - client not initialized.',
         },
         Date.now(),
       );
-    }, TIMEOUT_MS);
+      return;
+    }
 
-    const checkInterval = setInterval(() => {
-      const geminiClient = config.getGeminiClient();
-      const historyService = geminiClient?.getHistoryService?.();
-
-      if (!historyService) {
-        return;
-      }
-
-      clearInterval(checkInterval);
-      clearTimeout(timeout);
-      coreHistoryRestoredRef.current = true;
-
-      try {
-        historyService.validateAndFix();
-        historyService.addAll(restoredSession.history);
-
+    // Use the new restoreHistory API that ensures chat/content generator are ready
+    geminiClient
+      .restoreHistory(restoredSession.history)
+      .then(() => {
         debug.log(
           `Restored ${restoredSession.history.length} items to core history for AI context`,
         );
-      } catch (err) {
+      })
+      .catch((err: unknown) => {
         debug.error('Failed to restore core history:', err);
-        // Notify user that AI context is missing - this is critical!
+        const errorMessage = err instanceof Error ? err.message : String(err);
+
+        // Surface specific error details to help diagnose the issue
+        let userMessage =
+          'Previous session display restored, but AI context could not be loaded. The AI will not remember the previous conversation.';
+        if (
+          errorMessage.includes('Content generator') ||
+          errorMessage.includes('auth')
+        ) {
+          userMessage += ' (Authentication may be required)';
+        } else if (errorMessage.includes('Chat initialization')) {
+          userMessage += ' (Chat service unavailable)';
+        }
+
         addItem(
           {
             type: 'warning',
-            text: 'Previous session display restored, but AI context could not be loaded. The AI will not remember the previous conversation.',
+            text: userMessage,
           },
           Date.now(),
         );
-      }
-    }, 100);
-
-    return () => {
-      clearInterval(checkInterval);
-      clearTimeout(timeout);
-    };
+      });
   }, [restoredSession, config, addItem]);
 
   const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);

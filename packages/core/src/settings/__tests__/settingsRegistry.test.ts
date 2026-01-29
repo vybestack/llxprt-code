@@ -166,6 +166,32 @@ describe('getSettingHelp', () => {
 
     expect(help['shell-replacement']).not.toBe('');
   });
+
+  describe('file-read-max-lines setting', () => {
+    it('validates positive integer for file-read-max-lines', () => {
+      const result = validateSetting('file-read-max-lines', 3000);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects negative value for file-read-max-lines', () => {
+      const result = validateSetting('file-read-max-lines', -100);
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects non-integer value for file-read-max-lines', () => {
+      const result = validateSetting('file-read-max-lines', 100.5);
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects zero value for file-read-max-lines', () => {
+      const result = validateSetting('file-read-max-lines', 0);
+
+      expect(result.success).toBe(false);
+    });
+  });
 });
 
 describe('validateSetting', () => {

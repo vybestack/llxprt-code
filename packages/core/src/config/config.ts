@@ -102,7 +102,7 @@ import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import type { PolicyEngineConfig } from '../policy/types.js';
 import { setGlobalProxy } from '../utils/fetch.js';
-import { coreEvents } from '../utils/events.js';
+import { coreEvents, CoreEvent } from '../utils/events.js';
 import {
   type ExtensionLoader,
   SimpleExtensionLoader,
@@ -1803,6 +1803,12 @@ export class Config {
     this.setUserMemory(memoryContent);
     this.setLlxprtMdFileCount(fileCount);
     this.setLlxprtMdFilePaths(filePaths);
+
+    coreEvents.emit(CoreEvent.MemoryChanged, {
+      memoryContent,
+      fileCount,
+      filePaths,
+    });
 
     return { memoryContent, fileCount, filePaths };
   }

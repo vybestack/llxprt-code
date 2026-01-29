@@ -315,6 +315,19 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Wait for npm propagation
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.vars.outputs.is_nightly == 'false' }}
+        run: |
+          echo "Waiting 120 seconds for npm to propagate..."
+          sleep 120
+
+      - name: Update Homebrew formula
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.vars.outputs.is_nightly == 'false' }}
+        continue-on-error: true
+        run: node scripts/update-homebrew-formula.js ${{ steps.version.outputs.RELEASE_VERSION }}
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.GH_SECRET }}
+
       - name: Prepare sandbox package tarballs
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         run: |

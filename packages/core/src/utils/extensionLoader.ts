@@ -20,6 +20,9 @@ export abstract class ExtensionLoader {
   protected stoppingCount: number = 0;
   protected stopCompletedCount: number = 0;
 
+  // Whether or not we are currently executing `start`
+  private isStarting: boolean = false;
+
   constructor(private readonly eventEmitter?: EventEmitter<ExtensionEvents>) {}
 
   /**
@@ -34,16 +37,21 @@ export abstract class ExtensionLoader {
    * McpClientManager, PromptRegistry, and GeminiChat set up.
    */
   async start(config: Config): Promise<void> {
-    if (!this.config) {
-      this.config = config;
-    } else {
-      throw new Error('Already started, you may only call `start` once.');
+    this.isStarting = true;
+    try {
+      if (!this.config) {
+        this.config = config;
+      } else {
+        throw new Error('Already started, you may only call `start` once.');
+      }
+      await Promise.all(
+        this.getExtensions()
+          .filter((e) => e.isActive)
+          .map(this.startExtension.bind(this)),
+      );
+    } finally {
+      this.isStarting = false;
     }
-    await Promise.all(
-      this.getExtensions()
-        .filter((e) => e.isActive)
-        .map(this.startExtension.bind(this)),
-    );
   }
 
   /**
@@ -66,10 +74,12 @@ export abstract class ExtensionLoader {
     });
     try {
       await this.config.getMcpClientManager()!.startExtension(extension);
+      await this.maybeRefreshGeminiTools(extension);
+      // Note: Context files are loaded only once all extensions are done
+      // loading/unloading to reduce churn, see the `maybeRefreshMemory` call
+      // below.
       // TODO: Move all extension features here, including at least:
-      // - context file loading
       // - custom command loading
-      // - excluded tool configuration
     } finally {
       this.startCompletedCount++;
       this.eventEmitter?.emit('extensionsStarting', {
@@ -80,6 +90,7 @@ export abstract class ExtensionLoader {
         this.startingCount = 0;
         this.startCompletedCount = 0;
       }
+      await this.maybeRefreshMemory();
     }
   }
 
@@ -95,6 +106,40 @@ export abstract class ExtensionLoader {
       return this.startExtension(extension);
     }
     return;
+  }
+
+  /**
+   * Refreshes the gemini tools list if it is initialized and the extension has
+   * any excludeTools settings.
+   */
+  private async maybeRefreshGeminiTools(
+    extension: GeminiCLIExtension,
+  ): Promise<void> {
+    if (extension.excludeTools && extension.excludeTools.length > 0) {
+      const geminiClient = this.config?.getGeminiClient();
+      if (geminiClient?.isInitialized()) {
+        await geminiClient.setTools();
+      }
+    }
+  }
+
+  /**
+   * Refreshes memory only after all extensions are done loading/unloading.
+   */
+  private async maybeRefreshMemory(): Promise<void> {
+    if (!this.config) {
+      throw new Error('Cannot refresh memory prior to calling `start`.');
+    }
+    if (
+      !this.isStarting && // Don't refresh memories on the first call to `start`.
+      this.startingCount === this.startCompletedCount &&
+      this.stoppingCount === this.stopCompletedCount
+    ) {
+      // Wait until all extensions are done starting and stopping before we
+      // reload memory, this is somewhat expensive and also busts the context
+      // cache, we want to only do it once.
+      await this.config.refreshMemory();
+    }
   }
 
   /**
@@ -118,10 +163,12 @@ export abstract class ExtensionLoader {
 
     try {
       await this.config.getMcpClientManager()!.stopExtension(extension);
+      await this.maybeRefreshGeminiTools(extension);
+      // Note: Context files are loaded only once all extensions are done
+      // loading/unloading to reduce churn, see the `maybeRefreshMemory` call
+      // below.
       // TODO: Remove all extension features here, including at least:
-      // - context files
       // - custom commands
-      // - excluded tools
     } finally {
       this.stopCompletedCount++;
       this.eventEmitter?.emit('extensionsStopping', {
@@ -132,6 +179,7 @@ export abstract class ExtensionLoader {
         this.stoppingCount = 0;
         this.stopCompletedCount = 0;
       }
+      await this.maybeRefreshMemory();
     }
   }
 
@@ -147,6 +195,21 @@ export abstract class ExtensionLoader {
       return this.stopExtension(extension);
     }
     return;
+  }
+
+  /**
+   * Restarts an extension by stopping and then starting it.
+   * This is a public method available for runtime extension management.
+   */
+  async restartExtension(extension: GeminiCLIExtension): Promise<void> {
+    if (!this.config) {
+      throw new Error('Cannot restart extension prior to calling `start`.');
+    }
+    if (!this.config.getEnableExtensionReloading()) {
+      throw new Error('Extension reloading is not enabled.');
+    }
+    await this.stopExtension(extension);
+    await this.startExtension(extension);
   }
 }
 

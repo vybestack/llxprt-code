@@ -11,6 +11,7 @@ import {
   ideContext,
   IdeContextNotificationSchema,
   IdeDiffAcceptedNotificationSchema,
+  IdeDiffRejectedNotificationSchema,
   IdeDiffClosedNotificationSchema,
   CloseDiffResponseSchema,
   type DiffUpdateResult,
@@ -373,6 +374,8 @@ export class IdeClient {
     if (!this.ideProcessInfo) {
       return {};
     }
+
+    // For backwards compatibility
     try {
       const portFile = path.join(
         os.tmpdir(),
@@ -392,7 +395,7 @@ export class IdeClient {
   }
 
   private createProxyAwareFetch() {
-    // ignore proxy for '127.0.0.1' by deafult to allow connecting to the ide mcp server
+    // ignore proxy for '127.0.0.1' by default to allow connecting to the ide mcp server
     const existingNoProxy = process.env['NO_PROXY'] || '';
     const agent = new EnvHttpProxyAgent({
       noProxy: [existingNoProxy, '127.0.0.1'].filter(Boolean).join(','),
@@ -464,6 +467,22 @@ export class IdeClient {
       },
     );
 
+    this.client.setNotificationHandler(
+      IdeDiffRejectedNotificationSchema,
+      (notification) => {
+        const { filePath } = notification.params;
+        const resolver = this.diffResponses.get(filePath);
+        if (resolver) {
+          resolver({ status: 'rejected', content: undefined });
+          this.diffResponses.delete(filePath);
+        } else {
+          logger.debug(`No resolver found for ${filePath}`);
+        }
+      },
+    );
+
+    // For backwards compatibility. Newer extension versions will only send
+    // IdeDiffRejectedNotificationSchema.
     this.client.setNotificationHandler(
       IdeDiffClosedNotificationSchema,
       (notification) => {

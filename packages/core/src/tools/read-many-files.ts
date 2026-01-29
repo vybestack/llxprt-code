@@ -21,6 +21,7 @@ import {
   processSingleFileContent,
   DEFAULT_ENCODING,
   getSpecificMimeType,
+  DEFAULT_MAX_LINES_TEXT_FILE,
 } from '../utils/fileUtils.js';
 import { type PartListUnion } from '@google/genai';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
@@ -395,10 +396,17 @@ ${finalExclusionPatternsForDescription
       }
 
       // Use processSingleFileContent for all file types now
+      const ephemeralSettings = this.config.getEphemeralSettings();
+      const maxLinesPerFile =
+        (ephemeralSettings['file-read-max-lines'] as number | undefined) ??
+        DEFAULT_MAX_LINES_TEXT_FILE;
+
       const fileReadResult = await processSingleFileContent(
         filePath,
         this.config.getTargetDir(),
         this.config.getFileSystemService(),
+        undefined,
+        maxLinesPerFile,
       );
 
       if (fileReadResult.error) {

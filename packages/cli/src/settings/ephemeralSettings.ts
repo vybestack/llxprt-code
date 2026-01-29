@@ -59,3 +59,20 @@ export function parseEphemeralSettingValue(
     value: validation.value ?? parsed,
   };
 }
+
+/**
+ * Validates whether a given key-value pair is a valid ephemeral setting.
+ * Used for runtime validation of ephemeral settings.
+ * @param key - The ephemeral setting key
+ * @param value - The value to validate
+ * @returns true if the setting is valid, false otherwise
+ */
+export function isValidEphemeralSetting(key: string, value: unknown): boolean {
+  // Resolve aliases first so 'max-tokens' etc. work the same as in parseEphemeralSettingValue
+  const resolved = resolveAlias(key);
+  if (!validEphemeralKeys.includes(resolved)) {
+    return false;
+  }
+  const result = parseEphemeralSettingValue(resolved, String(value));
+  return result.success;
+}

@@ -6,10 +6,10 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import Gradient from 'ink-gradient';
-import { Colors } from '../colors.js';
+import { Colors, SemanticColors } from '../colors.js';
 import { shortAsciiLogo, longAsciiLogo } from './AsciiArt.js';
 import { getAsciiArtWidth } from '../utils/textUtils.js';
+import { ThemedGradient } from './ThemedGradient.js';
 
 interface HeaderProps {
   customAsciiArt?: string; // For user-defined ASCII art
@@ -44,17 +44,17 @@ export const Header: React.FC<HeaderProps> = ({
       flexDirection="column"
     >
       {Colors.GradientColors ? (
-        <Gradient colors={Colors.GradientColors}>
+        <ThemedGradient colors={Colors.GradientColors}>
           <Text color={Colors.Foreground}>{displayTitle}</Text>
-        </Gradient>
+        </ThemedGradient>
       ) : (
-        <Text color={Colors.AccentBlue}>{displayTitle}</Text>
+        <Text color={SemanticColors.text.accent}>{displayTitle}</Text>
       )}
       {nightly && (
         <Box width="100%" flexDirection="row" justifyContent="flex-end">
-          <Gradient colors={Colors.GradientColors}>
+          <ThemedGradient colors={Colors.GradientColors}>
             <Text color={Colors.Foreground}>v{version}</Text>
-          </Gradient>
+          </ThemedGradient>
         </Box>
       )}
     </Box>

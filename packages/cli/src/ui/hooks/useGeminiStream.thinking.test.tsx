@@ -173,19 +173,25 @@ vi.mock('../utils/markdownUtilities.js', () => ({
 }));
 
 vi.mock('./useStateAndRef.js', () => ({
-  useStateAndRef: vi.fn((initial) => {
-    let val = initial;
-    const ref = { current: val };
-    const setVal = vi.fn((updater) => {
-      if (typeof updater === 'function') {
-        val = updater(val);
-      } else {
-        val = updater;
-      }
-      ref.current = val;
-    });
-    return [val, ref, setVal];
-  }),
+  useStateAndRef: <T,>(
+    initial: T,
+  ): [
+    T,
+    React.MutableRefObject<T>,
+    React.Dispatch<React.SetStateAction<T>>,
+  ] => {
+    const [state, setState] = React.useState(initial);
+    const ref = React.useRef(initial);
+    const setStateInternal = (valueOrUpdater: React.SetStateAction<T>) => {
+      const nextValue =
+        typeof valueOrUpdater === 'function'
+          ? valueOrUpdater(ref.current)
+          : valueOrUpdater;
+      ref.current = nextValue;
+      setState(nextValue);
+    };
+    return [state, ref, setStateInternal];
+  },
 }));
 
 vi.mock('./useLogger.js', () => ({
@@ -390,7 +396,65 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     };
   };
 
-  it('should accumulate thinking from Thought events into history item', async () => {
+  it('should verify thought field is replaced (overwritten) not appended', async () => {
+    const resolvers: Array<() => void> = [];
+    mockSendMessageStream.mockReturnValue(
+      (async function* () {
+        yield {
+          type: ServerGeminiEventType.Thought,
+          value: {
+            subject: 'First',
+            description: 'thought',
+          },
+        };
+        await new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        });
+        yield {
+          type: ServerGeminiEventType.Thought,
+          value: {
+            subject: 'Second',
+            description: 'thought',
+          },
+        };
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Response',
+        };
+        yield {
+          type: ServerGeminiEventType.Finished,
+          value: { reason: FinishReason.STOP },
+        };
+      })(),
+    );
+
+    const { result } = renderTestHook();
+
+    act(() => {
+      void result.current.submitQuery('test query');
+    });
+
+    await waitFor(() => {
+      expect(result.current.thought).toBeDefined();
+      expect(result.current.thought?.subject).toBe('First');
+    });
+
+    const firstThoughtValue = result.current.thought;
+
+    act(() => {
+      resolvers[0]?.();
+    });
+
+    await waitFor(() => {
+      expect(result.current.thought).toBeDefined();
+      expect(result.current.thought?.subject).toBe('Second');
+    });
+
+    const secondThoughtValue = result.current.thought;
+    expect(secondThoughtValue).not.toEqual(firstThoughtValue);
+  });
+
+  it('should replace thinking content on subsequent Thought events (not append)', async () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
         yield {
@@ -437,6 +501,47 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       type: 'thinking',
       thought: 'Analyzing request: First thought process',
       sourceField: 'thought',
+    });
+  });
+
+  it('should expose pending thinking blocks before content arrives', async () => {
+    const resolvers: Array<() => void> = [];
+    mockSendMessageStream.mockReturnValue(
+      (async function* () {
+        yield {
+          type: ServerGeminiEventType.Thought,
+          value: {
+            subject: 'Streaming thought',
+            description: 'before content',
+          },
+        };
+        await new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        });
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Now content',
+        };
+        yield {
+          type: ServerGeminiEventType.Finished,
+          value: { reason: FinishReason.STOP },
+        };
+      })(),
+    );
+
+    const { result } = renderTestHook();
+
+    act(() => {
+      void result.current.submitQuery('test query');
+    });
+
+    await waitFor(() => {
+      const pending = result.current.pendingHistoryItems;
+      const thinkingText = pending
+        .flatMap((item) => item.thinkingBlocks ?? [])
+        .map((block) => block.thought)
+        .join('');
+      expect(thinkingText).toContain('Streaming thought');
     });
   });
 

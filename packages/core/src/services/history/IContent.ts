@@ -188,6 +188,9 @@ export interface ThinkingBlock {
 
   /** Signature for Anthropic extended thinking */
   signature?: string;
+
+  /** Base64-encoded reasoning content (for OpenAI Codex/Responses API) */
+  encryptedContent?: string;
 }
 
 /**
@@ -230,13 +233,20 @@ export const ContentValidation = {
         return !!block.data && !!block.mimeType;
       }
       if (block.type === 'thinking') {
-        if (!block.thought || block.thought.trim().length === 0) {
-          return false;
-        }
+        // A thinking block is valid if it has:
+        // 1. Thought content (text), OR
+        // 2. Encrypted content (for OpenAI Codex round-trip reasoning)
+        const hasThought = !!block.thought && block.thought.trim().length > 0;
+        const hasEncrypted =
+          !!block.encryptedContent && block.encryptedContent.trim().length > 0;
+
+        // For Anthropic extended thinking, require signature
         if (block.sourceField === 'thinking') {
-          return Boolean(block.signature);
+          return hasThought && Boolean(block.signature);
         }
-        return true;
+
+        // For OpenAI/Codex, either thought OR encrypted content is valid
+        return hasThought || hasEncrypted;
       }
       if (block.type === 'code') {
         return !!block.code && block.code.trim().length > 0;
