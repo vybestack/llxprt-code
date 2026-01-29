@@ -341,6 +341,23 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     },
   },
   {
+    key: 'file-read-max-lines',
+    category: 'cli-behavior',
+    description:
+      'Default maximum lines to read from text files when no explicit limit is provided (default: 2000)',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'file-read-max-lines must be a positive integer',
+      };
+    },
+  },
+  {
     key: 'tool-output-max-tokens',
     category: 'cli-behavior',
     description: 'Maximum tokens in tool output',
