@@ -558,8 +558,15 @@ export class OpenAIResponsesProvider extends BaseProvider {
     const input: ResponsesInputItem[] = [];
 
     // Check if reasoning should be included in context
+    // Precedence: invocation ephemerals > invocation modelBehavior > settings
+    const includeReasoningInContextSetting =
+      options.invocation?.ephemerals?.['reasoning.includeInContext'] ??
+      options.invocation?.getModelBehavior<boolean>(
+        'reasoning.includeInContext',
+      ) ??
+      options.settings?.get('reasoning.includeInContext');
     const includeReasoningInContext =
-      options.settings?.get('reasoning.includeInContext') !== false;
+      includeReasoningInContextSetting !== false;
 
     // Counter for generating unique reasoning IDs within a single request
     let reasoningIdCounter = 0;
@@ -794,20 +801,32 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }
 
     // Add include parameter for reasoning when reasoning is enabled
+    // Precedence: invocation ephemerals > invocation modelBehavior > settings
     const reasoningEnabled =
-      options.settings?.get('reasoning.enabled') === true;
+      (options.invocation?.ephemerals?.['reasoning.enabled'] ??
+        options.invocation?.getModelBehavior<boolean>('reasoning.enabled') ??
+        options.settings?.get('reasoning.enabled')) === true;
     // Reasoning settings come from model-behavior (via invocation.getModelBehavior or settings)
     // not from modelParams (which is for pass-through API params like temperature)
     const reasoningEffort =
+      options.invocation?.ephemerals?.['reasoning.effort'] ??
       options.invocation?.getModelBehavior<string>('reasoning.effort') ??
       options.settings?.get('reasoning.effort');
     const reasoningSummary =
+      options.invocation?.ephemerals?.['reasoning.summary'] ??
       options.invocation?.getModelBehavior<string>('reasoning.summary') ??
       options.settings?.get('reasoning.summary');
     // Check if thinking blocks should be shown in the response (defaults to true)
     // This respects the reasoning.includeInResponse setting (fixes #922)
+    // Precedence: invocation ephemerals > invocation modelBehavior > settings
+    const includeThinkingInResponseSetting =
+      options.invocation?.ephemerals?.['reasoning.includeInResponse'] ??
+      options.invocation?.getModelBehavior<boolean>(
+        'reasoning.includeInResponse',
+      ) ??
+      options.settings?.get('reasoning.includeInResponse');
     const includeThinkingInResponse =
-      options.settings?.get('reasoning.includeInResponse') !== false;
+      includeThinkingInResponseSetting !== false;
     const shouldRequestReasoning =
       reasoningEnabled || reasoningEffort !== undefined;
 

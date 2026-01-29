@@ -68,9 +68,11 @@ export function parseEphemeralSettingValue(
  * @returns true if the setting is valid, false otherwise
  */
 export function isValidEphemeralSetting(key: string, value: unknown): boolean {
-  if (!validEphemeralKeys.includes(key)) {
+  // Resolve aliases first so 'max-tokens' etc. work the same as in parseEphemeralSettingValue
+  const resolved = resolveAlias(key);
+  if (!validEphemeralKeys.includes(resolved)) {
     return false;
   }
-  const result = parseEphemeralSettingValue(key, String(value));
+  const result = parseEphemeralSettingValue(resolved, String(value));
   return result.success;
 }

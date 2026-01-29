@@ -103,8 +103,11 @@ export async function* parseResponsesStream(
   // - response.reasoning_text.done / response.reasoning_summary_text.done
   // - response.output_item.done with item.type === 'reasoning'
   // - response.completed / response.done (fallback)
-  // We deduplicate by tracking what we've already emitted.
-  const emittedThoughts = new Set<string>();
+  // We use a Map to track both emission AND whether we've captured encrypted_content.
+  // This handles the case where reasoning_text.done arrives before output_item.done:
+  // - First event (reasoning_text.done): emit visible block, record hasEncrypted: false
+  // - Second event (output_item.done with encrypted_content): re-emit hidden block WITH encrypted_content
+  const emittedThoughts = new Map<string, { hasEncrypted: boolean }>();
 
   let lastLoggedType: string | undefined;
 
@@ -199,7 +202,8 @@ export async function* parseResponsesStream(
                 // This preserves encrypted content for round-trip while hiding UI display
                 const thoughtContent = (event.text || reasoningText).trim();
                 if (thoughtContent && !emittedThoughts.has(thoughtContent)) {
-                  emittedThoughts.add(thoughtContent);
+                  // Mark as emitted without encrypted content - output_item.done may follow with it
+                  emittedThoughts.set(thoughtContent, { hasEncrypted: false });
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -224,7 +228,8 @@ export async function* parseResponsesStream(
                   event.text || reasoningSummaryText
                 ).trim();
                 if (summaryContent && !emittedThoughts.has(summaryContent)) {
-                  emittedThoughts.add(summaryContent);
+                  // Mark as emitted without encrypted content - output_item.done may follow with it
+                  emittedThoughts.set(summaryContent, { hasEncrypted: false });
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -298,20 +303,30 @@ export async function* parseResponsesStream(
                   );
 
                   const finalThought = thoughtText.trim();
-                  // Only emit if not already emitted (dedupe against reasoning_text.done etc.)
-                  // When includeThinkingInResponse is false, still emit but with isHidden: true
-                  // This preserves encrypted content for round-trip while hiding UI display
-                  if (finalThought && !emittedThoughts.has(finalThought)) {
-                    emittedThoughts.add(finalThought);
+                  const hasEncryptedContent = Boolean(
+                    event.item?.encrypted_content,
+                  );
+                  const prior = emittedThoughts.get(finalThought);
+
+                  // Emit if:
+                  // 1. Never emitted this thought before, OR
+                  // 2. Previously emitted WITHOUT encrypted_content, but now we have it
+                  //    (reasoning_text.done arrived before output_item.done)
+                  const shouldEmit =
+                    finalThought &&
+                    (!prior || (hasEncryptedContent && !prior.hasEncrypted));
+
+                  if (shouldEmit) {
+                    // If re-emitting for encrypted_content, hide it so UI doesn't show duplicate
+                    const shouldHide =
+                      !includeThinkingInResponse || Boolean(prior);
+
                     const baseReasoningBlock: ContentBlock = {
                       type: 'thinking',
                       thought: finalThought,
                       sourceField: 'reasoning_content',
-                      isHidden: !includeThinkingInResponse,
+                      isHidden: shouldHide,
                     };
-                    const hasEncryptedContent = Boolean(
-                      event.item?.encrypted_content,
-                    );
                     const reasoningBlock: ContentBlock = hasEncryptedContent
                       ? {
                           ...baseReasoningBlock,
@@ -323,6 +338,12 @@ export async function* parseResponsesStream(
                       speaker: 'ai',
                       blocks: [reasoningBlock],
                     };
+
+                    // Update tracking
+                    emittedThoughts.set(finalThought, {
+                      hasEncrypted:
+                        Boolean(prior?.hasEncrypted) || hasEncryptedContent,
+                    });
                   }
 
                   // Clear buffers regardless of whether we emitted
@@ -386,7 +407,9 @@ export async function* parseResponsesStream(
                   remainingReasoning &&
                   !emittedThoughts.has(remainingReasoning)
                 ) {
-                  emittedThoughts.add(remainingReasoning);
+                  emittedThoughts.set(remainingReasoning, {
+                    hasEncrypted: false,
+                  });
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -404,7 +427,9 @@ export async function* parseResponsesStream(
                   remainingSummary &&
                   !emittedThoughts.has(remainingSummary)
                 ) {
-                  emittedThoughts.add(remainingSummary);
+                  emittedThoughts.set(remainingSummary, {
+                    hasEncrypted: false,
+                  });
                   yield {
                     speaker: 'ai',
                     blocks: [
