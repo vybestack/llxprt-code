@@ -50,7 +50,7 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
       return null;
     }
     return render(
-      <KeypressProvider kittyProtocolEnabled={useKitty}>
+      <KeypressProvider >
         <TestComponent />
       </KeypressProvider>,
     );

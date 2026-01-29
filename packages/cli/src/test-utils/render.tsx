@@ -157,11 +157,11 @@ export const useMockRuntimeApi = (): MockRuntimeApi => {
 export const renderWithProviders = (
   component: React.ReactElement,
   {
-    kittyProtocolEnabled = true,
+    
     settings = mockSettings,
     uiState = baseMockUiState,
   }: {
-    kittyProtocolEnabled?: boolean;
+    
     settings?: LoadedSettings;
     uiState?: Partial<UIState>;
   } = {},
@@ -170,7 +170,7 @@ export const renderWithProviders = (
     <SettingsContext.Provider value={settings}>
       <UIStateContext.Provider value={uiState as UIState}>
         <MockRuntimeContextProvider>
-          <KeypressProvider kittyProtocolEnabled={kittyProtocolEnabled}>
+          <KeypressProvider>
             {component}
           </KeypressProvider>
         </MockRuntimeContextProvider>
