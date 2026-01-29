@@ -44,6 +44,7 @@ import {
 } from '../../tools/doubleEscapeUtils.js';
 import { coerceParametersToSchema } from '../../utils/parameterCoercion.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
@@ -1362,12 +1363,19 @@ ${block.code}
       cacheLogger.debug(() => `Prompt caching enabled with TTL: ${ttl}`);
     }
 
+    // Determine whether to include subagent delegation prompt
+    const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+      toolNamesForPrompt ?? [],
+      () => options.config?.getSubagentManager?.(),
+    );
+
     // For OAuth mode, inject core system prompt as the first human message
     if (isOAuth) {
       const corePrompt = await getCoreSystemPromptAsync({
         userMemory,
         model: currentModel,
         tools: toolNamesForPrompt,
+        includeSubagentDelegation,
       });
       if (corePrompt) {
         if (wantCaching) {
@@ -1402,6 +1410,7 @@ ${block.code}
           userMemory,
           model: currentModel,
           tools: toolNamesForPrompt,
+          includeSubagentDelegation,
         })
       : undefined;
 
