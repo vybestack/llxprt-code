@@ -18,6 +18,7 @@ import {
   getModelRegistry,
 } from '../models/registry.js';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
+import { RetryOrchestrator } from './RetryOrchestrator.js';
 import {
   logProviderSwitch,
   logProviderCapability,
@@ -671,16 +672,29 @@ export class ProviderManager implements IProviderManager {
 
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @plan PLAN-20260128issue808
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 3-5
    */
   registerProvider(provider: IProvider): void {
     this.syncProviderRuntime(provider);
-    // ALWAYS wrap provider to enable token tracking
-    // (LoggingProviderWrapper handles both token tracking AND conversation logging)
-    let finalProvider = provider;
+
+    // Wrapping order (inner to outer):
+    // 1. Raw provider (fast-fail on errors)
+    // 2. RetryOrchestrator (retry, backoff, bucket failover)
+    // 3. LoggingProviderWrapper (token tracking, telemetry)
+
+    let finalProvider: IProvider = provider;
+
+    // First wrap with RetryOrchestrator for centralized retry/failover
+    finalProvider = new RetryOrchestrator(finalProvider, {
+      // Config will be read from ephemeral settings at call time
+      // Default values will be used if not provided
+    });
+
+    // Then wrap with LoggingProviderWrapper for token tracking
     if (this.config) {
-      finalProvider = new LoggingProviderWrapper(provider, this.config);
+      finalProvider = new LoggingProviderWrapper(finalProvider, this.config);
     }
 
     this.syncProviderRuntime(finalProvider);
