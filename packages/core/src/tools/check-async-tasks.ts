@@ -256,7 +256,11 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
     ) {
       lines.push('Emitted variables:');
       for (const [key, value] of Object.entries(task.output.emitted_vars)) {
-        lines.push(`  - ${key}: ${String(value).substring(0, 50)}...`);
+        const valueStr = String(value);
+        const truncated = valueStr.substring(0, 50);
+        lines.push(
+          `  - ${key}: ${truncated}${valueStr.length > 50 ? '...' : ''}`,
+        );
       }
     }
 

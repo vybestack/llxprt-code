@@ -30,7 +30,9 @@ describe('Async Task Integration', () => {
 
   afterEach(() => {
     // Clean up all subscriptions
-    unsubscribeFns.forEach((fn) => fn());
+    unsubscribeFns.forEach((fn) => {
+      fn();
+    });
     unsubscribeFns = [];
   });
 
@@ -475,10 +477,10 @@ describe('Async Task Integration', () => {
 
       // Simulate cancellation
       abortController.abort();
-      manager.failTask('cancel-test', 'Cancelled by user');
+      manager.cancelTask('cancel-test', 'Cancelled by user');
 
       const task = manager.getTask('cancel-test');
-      expect(task?.status).toBe('failed');
+      expect(task?.status).toBe('cancelled');
 
       // Should not count towards running limit
       expect(manager.getRunningTasks().length).toBe(0);

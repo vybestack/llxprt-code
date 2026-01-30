@@ -571,6 +571,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     validate: (value: unknown): ValidationResult => {
       if (
         typeof value === 'number' &&
+        Number.isInteger(value) &&
         (value === -1 || (value >= 1 && value <= 100))
       ) {
         return { success: true, value };
@@ -578,7 +579,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
       return {
         success: false,
         message:
-          'task-max-async must be -1 (unlimited) or a number between 1 and 100',
+          'task-max-async must be -1 (unlimited) or an integer between 1 and 100',
       };
     },
   },

@@ -52,6 +52,12 @@ export class AsyncTaskAutoTrigger {
    * Returns an unsubscribe function.
    */
   subscribe(): () => void {
+    if (this.unsubscribeFunctions.length > 0) {
+      throw new Error(
+        'AsyncTaskAutoTrigger.subscribe() called multiple times. Call the returned unsubscribe function before subscribing again.',
+      );
+    }
+
     const unsubComplete = this.taskManager.onTaskCompleted((task) =>
       this.onTaskCompleted(task),
     );

@@ -706,6 +706,27 @@ class TaskToolInvocation extends BaseToolInvocation<
     // Create abort controller for async task cancellation
     const asyncAbortController = new AbortController();
 
+    // Set up timeout for async task (but don't wire to parent signal)
+    const settings = this.config.getEphemeralSettings?.() ?? {};
+    const defaultTimeoutSeconds =
+      (settings['task-default-timeout-seconds'] as number | undefined) ??
+      DEFAULT_TASK_TIMEOUT_SECONDS;
+    const maxTimeoutSeconds =
+      (settings['task-max-timeout-seconds'] as number | undefined) ??
+      MAX_TASK_TIMEOUT_SECONDS;
+
+    const timeoutSeconds = this.resolveTimeoutSeconds(
+      this.params.timeout_seconds,
+      defaultTimeoutSeconds,
+      maxTimeoutSeconds,
+    );
+    const timeoutMs =
+      timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
+    const timeoutId =
+      timeoutMs === undefined
+        ? null
+        : setTimeout(() => asyncAbortController.abort(), timeoutMs);
+
     // Register with AsyncTaskManager BEFORE starting background execution
     asyncTaskManager.registerTask({
       id: agentId,
@@ -741,6 +762,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       asyncTaskManager,
       dispose,
       asyncAbortController.signal,
+      timeoutId,
     );
 
     // Return immediately with launch status
@@ -768,6 +790,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     asyncTaskManager: AsyncTaskManager,
     dispose: () => Promise<void>,
     signal: AbortSignal,
+    timeoutId: ReturnType<typeof setTimeout> | null,
   ): void {
     // Use IIFE to avoid returning promise
     (async () => {
@@ -795,6 +818,11 @@ class TaskToolInvocation extends BaseToolInvocation<
           error instanceof Error ? error.message : String(error);
         asyncTaskManager.failTask(agentId, errorMessage);
       } finally {
+        // Clear timeout
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+        }
+
         // Always dispose
         try {
           await dispose();
