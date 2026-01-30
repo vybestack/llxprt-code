@@ -17,6 +17,7 @@ import {
   getProfilePersistableKeys,
   resolveAlias,
   getProviderConfigKeys,
+  isLoadBalancerProfile,
 } from '@vybestack/llxprt-code-core';
 import type {
   ProviderManager,
@@ -1110,6 +1111,59 @@ export async function applyProfileSnapshot(
         () =>
           `[issue1151] Proactively wired failover handler for ${profile.provider} with ${bucketCount} buckets`,
       );
+    }
+
+    // @fix issue1250 - Proactively wire the failover handler for LoadBalancer sub-profiles
+    // This is a follow-up to issue #1151 which only handled StandardProfile.
+    // For LoadBalancer profiles, we need to iterate through all sub-profiles and
+    // proactively wire failover handlers for any OAuth multi-bucket sub-profiles.
+    if (isLoadBalancerProfile(profile)) {
+      const subProfileNames = profile.profiles || [];
+      logger.debug(
+        () =>
+          `[issue1250] LoadBalancer profile detected with ${subProfileNames.length} sub-profile(s)`,
+      );
+
+      for (const subProfileName of subProfileNames) {
+        try {
+          const subProfile = await new ProfileManager().loadProfile(
+            subProfileName,
+          );
+          const subProfileAuth = (
+            subProfile as { auth?: { type?: string; buckets?: string[] } }
+          ).auth;
+
+          if (
+            subProfileAuth?.type === 'oauth' &&
+            subProfileAuth.buckets &&
+            subProfileAuth.buckets.length > 1
+          ) {
+            const subBucketCount = subProfileAuth.buckets.length;
+            // Touch getOAuthToken to ensure handler is wired to config
+            void oauthManager
+              .getOAuthToken(subProfile.provider)
+              .catch((error) => {
+                logger.debug(
+                  () =>
+                    `[issue1250] Failed to proactively wire failover handler for sub-profile '${subProfileName}': ${
+                      error instanceof Error ? error.message : String(error)
+                    }`,
+                );
+              });
+            logger.debug(
+              () =>
+                `[issue1250] Proactively wired failover handler for sub-profile '${subProfileName}' (${subProfile.provider}) with ${subBucketCount} buckets`,
+            );
+          }
+        } catch (error) {
+          logger.debug(
+            () =>
+              `[issue1250] Failed to load sub-profile '${subProfileName}': ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+          );
+        }
+      }
     }
   }
 
