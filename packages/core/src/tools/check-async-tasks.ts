@@ -93,11 +93,9 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
             : task.status === 'failed'
               ? '[ERROR]'
               : '';
-      const idPrefix = task.id.substring(0, 8);
+      // Use full task ID (agentId like "hardproblemcoder-cmh7yw") for uniqueness
       const duration = this.formatDuration(task.launchedAt, task.completedAt);
-      lines.push(
-        `${statusIcon} [${idPrefix}] ${task.subagentName} - ${task.status} (${duration})`,
-      );
+      lines.push(`${statusIcon} [${task.id}] - ${task.status} (${duration})`);
     }
 
     const llmContent = lines.join('\n');
@@ -112,7 +110,8 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
             : t.status === 'failed'
               ? '[ERROR]'
               : '';
-      return `${icon} **${t.subagentName}** (\`${t.id.substring(0, 8)}\`) - ${t.status}`;
+      // Use full task ID (agentId) for uniqueness
+      return `${icon} **${t.id}** - ${t.status}`;
     });
 
     return {
@@ -146,15 +145,8 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
     }
 
     if (candidates && candidates.length > 0) {
-      // Ambiguous prefix
-      const candidateList = candidates
-        .map((c) => {
-          // Show first 11 chars (or whole ID if shorter) with "..." to indicate truncation
-          const idDisplay =
-            c.id.length > 11 ? `${c.id.substring(0, 11)}...` : c.id;
-          return `- ${idDisplay} (${c.subagentName})`;
-        })
-        .join('\n');
+      // Ambiguous prefix - show full task IDs since they're now the unique agentId
+      const candidateList = candidates.map((c) => `- ${c.id}`).join('\n');
 
       return {
         llmContent: `Ambiguous task ID prefix '${taskId}'. Candidates:\n${candidateList}`,

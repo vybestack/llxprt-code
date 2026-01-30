@@ -40,7 +40,9 @@ function formatDuration(startTime: number, endTime?: number): string {
 }
 
 /**
- * Format task for display
+ * Format task for display.
+ * Uses the full task ID (which is the agentId like "hardproblemcoder-cmh7yw")
+ * to ensure uniqueness and allow users to reference specific tasks.
  */
 function formatTask(task: AsyncTaskInfo): string {
   const statusIcon =
@@ -52,18 +54,19 @@ function formatTask(task: AsyncTaskInfo): string {
           ? '[FAILED]'
           : '[CANCELLED]';
 
-  const idPrefix = task.id.substring(0, 8);
   const duration = formatDuration(task.launchedAt, task.completedAt);
   const goalPreview =
     task.goalPrompt.length > 40
       ? task.goalPrompt.substring(0, 40) + '...'
       : task.goalPrompt;
 
-  return `${statusIcon} ${idPrefix}  ${task.subagentName}  ${duration}\n   Goal: ${goalPreview}`;
+  // Use full task ID (agentId) for uniqueness - it includes the subagent name + unique suffix
+  return `${statusIcon} ${task.id}  ${duration}\n   Goal: ${goalPreview}`;
 }
 
 /**
- * Get running task IDs for autocomplete
+ * Get running task IDs for autocomplete.
+ * Returns full task IDs (agentIds) for uniqueness.
  */
 function getRunningTaskIds(context: CommandContext): string[] {
   const asyncTaskManager = context.services.config?.getAsyncTaskManager?.();
@@ -74,7 +77,7 @@ function getRunningTaskIds(context: CommandContext): string[] {
   return asyncTaskManager
     .getAllTasks()
     .filter((t) => t.status === 'running')
-    .map((t) => t.id.substring(0, 8));
+    .map((t) => t.id);
 }
 
 /**
@@ -192,9 +195,9 @@ export const taskCommand: SlashCommand = {
           if (result.task) {
             task = result.task;
           } else if (result.candidates && result.candidates.length > 0) {
-            // Ambiguous
+            // Ambiguous - show full task IDs
             const candidateList = result.candidates
-              .map((c) => `  ${c.id.substring(0, 8)}  ${c.subagentName}`)
+              .map((c) => `  ${c.id}`)
               .join('\n');
 
             context.ui.addItem(
@@ -222,7 +225,7 @@ export const taskCommand: SlashCommand = {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: `Task ${task.id.substring(0, 8)} is already ${task.status}.`,
+              text: `Task ${task.id} is already ${task.status}.`,
             },
             Date.now(),
           );
@@ -236,7 +239,7 @@ export const taskCommand: SlashCommand = {
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: `Cancelled task: ${task.subagentName} (${task.id.substring(0, 8)})`,
+              text: `Cancelled task: ${task.id}`,
             },
             Date.now(),
           );
@@ -244,7 +247,7 @@ export const taskCommand: SlashCommand = {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
-              text: `Failed to cancel task ${task.id.substring(0, 8)}. It may have already completed.`,
+              text: `Failed to cancel task ${task.id}. It may have already completed.`,
             },
             Date.now(),
           );

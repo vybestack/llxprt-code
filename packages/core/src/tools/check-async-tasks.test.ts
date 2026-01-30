@@ -56,8 +56,9 @@ describe('CheckAsyncTasksTool', () => {
       expect(result.llmContent).toContain('Async Tasks Summary');
       expect(result.llmContent).toContain('Running: 1');
       expect(result.llmContent).toContain('Completed: 1');
-      expect(result.llmContent).toContain('deepthinker');
-      expect(result.llmContent).toContain('typescriptexpert');
+      // Full task IDs are shown, not subagent names (those are in peek mode)
+      expect(result.llmContent).toContain('task-abc123');
+      expect(result.llmContent).toContain('task-def456');
     });
 
     it('returns "no tasks" when empty', async () => {
@@ -146,8 +147,9 @@ describe('CheckAsyncTasksTool', () => {
       expect(result.llmContent).toContain(
         "Ambiguous task ID prefix 'task-abc'",
       );
-      expect(result.llmContent).toContain('task-abc-11... (deepthinker)');
-      expect(result.llmContent).toContain('task-abc-22... (typescriptexpert)');
+      // Full task IDs now shown for ambiguous matches
+      expect(result.llmContent).toContain('task-abc-111');
+      expect(result.llmContent).toContain('task-abc-222');
     });
 
     it('returns error for not found', async () => {

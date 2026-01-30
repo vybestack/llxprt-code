@@ -115,8 +115,8 @@ describe('tasksCommand', () => {
       );
 
       const callText = addItemMock.mock.calls[0][0].text;
+      // Full task ID is shown (agentId format)
       expect(callText).toContain('task-123');
-      expect(callText).toContain('deepthinker');
       expect(callText).toContain('Analyze the codebase structure');
     });
 
@@ -148,8 +148,8 @@ describe('tasksCommand', () => {
       );
 
       const callText = addItemMock.mock.calls[0][0].text;
+      // Full task ID is shown (agentId format)
       expect(callText).toContain('task-456');
-      expect(callText).toContain('typescriptexpert');
     });
   });
 
@@ -170,7 +170,7 @@ describe('tasksCommand', () => {
       expect(addItemMock).toHaveBeenCalledWith(
         {
           type: MessageType.INFO,
-          text: 'Cancelled task: codereviewer (task-789)',
+          text: 'Cancelled task: task-789',
         },
         expect.any(Number),
       );
@@ -192,7 +192,7 @@ describe('tasksCommand', () => {
       expect(addItemMock).toHaveBeenCalledWith(
         {
           type: MessageType.INFO,
-          text: 'Cancelled task: researcher (task-abc)',
+          text: 'Cancelled task: task-abc123',
         },
         expect.any(Number),
       );
@@ -227,9 +227,9 @@ describe('tasksCommand', () => {
       );
 
       const callText = addItemMock.mock.calls[0][0].text;
-      expect(callText).toContain('task-abc');
-      expect(callText).toContain('researcher');
-      expect(callText).toContain('deepthinker');
+      // Full task IDs shown in ambiguous list
+      expect(callText).toContain('task-abc123');
+      expect(callText).toContain('task-abc456');
     });
 
     it('should show error for unknown task ID', () => {
@@ -266,6 +266,7 @@ describe('tasksCommand', () => {
       );
       endSubCommand?.action?.(context, 'task-xyz');
 
+      // Full task ID shown in error message
       expect(addItemMock).toHaveBeenCalledWith(
         {
           type: MessageType.ERROR,
@@ -317,9 +318,9 @@ describe('tasksCommand', () => {
       );
       const completions = await endSubCommand?.completion?.(context, '');
 
-      // Only running task should be in completions
-      expect(completions).toContain('task-abc');
-      expect(completions).not.toContain('task-xyz');
+      // Only running task should be in completions - full IDs now
+      expect(completions).toContain('task-abc123');
+      expect(completions).not.toContain('task-xyz789');
     });
 
     it('should filter completions by partial input', async () => {
@@ -342,8 +343,9 @@ describe('tasksCommand', () => {
       );
       const completions = await endSubCommand?.completion?.(context, 'task-a');
 
-      expect(completions).toContain('task-abc');
-      expect(completions).not.toContain('task-def');
+      // Full task IDs returned - filtered by prefix
+      expect(completions).toContain('task-abc123');
+      expect(completions).not.toContain('task-def456');
     });
   });
 });
