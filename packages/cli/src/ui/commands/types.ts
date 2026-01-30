@@ -198,7 +198,8 @@ export type DialogType =
   | 'models'
   | 'profileList'
   | 'profileDetail'
-  | 'profileEditor';
+  | 'profileEditor'
+  | 'welcome';
 
 /** Map dialog types to their associated data types for type-safe access */
 export interface DialogDataMap {
