@@ -6,7 +6,12 @@
 
 import type React from 'react';
 import { Box, Text } from 'ink';
-import type { AnsiLine, AnsiOutput, AnsiToken } from '@vybestack/llxprt-code-core';
+import type {
+  AnsiLine,
+  AnsiOutput,
+  AnsiToken,
+} from '@vybestack/llxprt-code-core';
+import { Colors } from '../colors.js';
 
 const DEFAULT_HEIGHT = 24;
 
@@ -29,15 +34,14 @@ export const AnsiOutputText: React.FC<AnsiOutputProps> = ({
   return (
     <Box flexDirection="column" width={width} flexShrink={0}>
       {lastLines.map((line: AnsiLine, lineIndex: number) => (
-        <Text key={lineIndex} wrap="truncate">
+        <Text key={lineIndex} wrap="truncate" color={Colors.Foreground}>
           {line.length > 0
             ? line.map((token: AnsiToken, tokenIndex: number) => (
                 <Text
                   key={tokenIndex}
-                  color={token.fg}
+                  color={token.dim ? Colors.DimComment : (token.fg ?? Colors.Foreground)}
                   backgroundColor={token.bg}
                   inverse={token.inverse}
-                  dimColor={token.dim}
                   bold={token.bold}
                   italic={token.italic}
                   underline={token.underline}

@@ -225,8 +225,10 @@ describe('ShellTool', () => {
         expect.any(Function),
         expect.any(AbortSignal),
         false,
-        undefined,
-        undefined,
+        {
+          terminalWidth: undefined,
+          terminalHeight: undefined,
+        },
       );
       // Check that it contains background PIDs but not the service PID
       const backgroundLine = result.llmContent
@@ -263,8 +265,10 @@ describe('ShellTool', () => {
         expect.any(Function),
         expect.any(AbortSignal),
         false,
-        undefined,
-        undefined,
+        {
+          terminalWidth: undefined,
+          terminalHeight: undefined,
+        },
       );
     });
 
@@ -581,24 +585,31 @@ describe('ShellTool', () => {
         const invocation = shellTool.build({ command: 'stream' });
         const promise = invocation.execute(mockAbortSignal, updateOutputMock);
 
-        // First chunk, should be throttled.
+        // First chunk triggers an update immediately (lastUpdateTime starts at 0).
         mockShellOutputCallback({
           type: 'data',
           chunk: 'hello ',
         });
-        expect(updateOutputMock).not.toHaveBeenCalled();
+        expect(updateOutputMock).toHaveBeenCalledOnce();
+        expect(updateOutputMock).toHaveBeenCalledWith('hello ');
 
-        // Advance time past the throttle interval.
-        await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
-
-        // Send a second chunk. THIS event triggers the update with the CUMULATIVE content.
+        // Second chunk should be throttled (within OUTPUT_UPDATE_INTERVAL_MS).
         mockShellOutputCallback({
           type: 'data',
           chunk: 'world',
         });
+        expect(updateOutputMock).toHaveBeenCalledOnce(); // Still only one call
 
-        // It should have been called once now with the combined output.
-        expect(updateOutputMock).toHaveBeenCalledExactlyOnceWith('hello world');
+        // Advance time past the throttle interval.
+        await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
+
+        // Third chunk triggers update with cumulative content.
+        mockShellOutputCallback({
+          type: 'data',
+          chunk: '!',
+        });
+        expect(updateOutputMock).toHaveBeenCalledTimes(2);
+        expect(updateOutputMock).toHaveBeenLastCalledWith('hello world!');
 
         resolveExecutionPromise({
           rawOutput: Buffer.from(''),

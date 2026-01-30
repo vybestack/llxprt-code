@@ -45,6 +45,7 @@ import {
   ShellExecutionService,
   type ShellOutputEvent,
 } from '../services/shellExecutionService.js';
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 import {
   getCommandRoots,
@@ -52,8 +53,11 @@ import {
   stripShellWrapper,
 } from '../utils/shell-utils.js';
 import { isShellInvocationAllowlisted } from '../utils/tool-utils.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
-export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
+// Throttle interval for shell output updates to avoid excessive UI updates.
+// Using 100ms provides responsive feedback without overwhelming the system.
+export const OUTPUT_UPDATE_INTERVAL_MS = 100;
 
 // Tool timeout settings (Issue #1049)
 const DEFAULT_SHELL_TIMEOUT_SECONDS = 300;
@@ -111,6 +115,8 @@ class ShellToolInvocation extends BaseToolInvocation<
   ShellToolParams,
   ToolResult
 > {
+  private readonly logger = DebugLogger.getLogger('llxprt:shell');
+
   constructor(
     private readonly config: Config,
     params: ShellToolParams,
@@ -194,7 +200,7 @@ class ShellToolInvocation extends BaseToolInvocation<
 
   async execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (output: string | AnsiOutput) => void,
     terminalColumns?: number,
     terminalRows?: number,
   ): Promise<ToolResult> {
@@ -302,9 +308,9 @@ class ShellToolInvocation extends BaseToolInvocation<
         this.getDirPath() || '',
       );
 
-      let cumulativeOutput = '';
-      let outputChunks: string[] = [cumulativeOutput];
-      let lastUpdateTime = Date.now();
+      let cumulativeOutput: string | AnsiOutput = '';
+      // Initialize to 0 to allow immediate first update
+      let lastUpdateTime = 0;
       let isBinaryStream = false;
 
       const executionResult = await ShellExecutionService.execute(
@@ -315,34 +321,26 @@ class ShellToolInvocation extends BaseToolInvocation<
             return;
           }
 
-          let currentDisplayOutput = '';
           let shouldUpdate = false;
 
           switch (event.type) {
             case 'data': {
               if (isBinaryStream) break;
-              const chunk =
-                typeof event.chunk === 'string'
-                  ? event.chunk
-                  : JSON.stringify(event.chunk);
-              outputChunks.push(chunk);
-              if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
-                cumulativeOutput = outputChunks.join('');
-                outputChunks = [cumulativeOutput];
-                currentDisplayOutput = cumulativeOutput;
-                shouldUpdate = true;
-              }
+              // In PTY mode, event.chunk is AnsiOutput (full screen state)
+              // In child_process mode, event.chunk is string (incremental)
+              cumulativeOutput = event.chunk;
+              shouldUpdate = true;
               break;
             }
             case 'binary_detected':
               isBinaryStream = true;
-              currentDisplayOutput =
+              cumulativeOutput =
                 '[Binary output detected. Halting stream...]';
               shouldUpdate = true;
               break;
             case 'binary_progress':
               isBinaryStream = true;
-              currentDisplayOutput = `[Receiving binary output... ${formatMemoryUsage(
+              cumulativeOutput = `[Receiving binary output... ${formatMemoryUsage(
                 event.bytesReceived,
               )} received]`;
               if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
@@ -355,7 +353,7 @@ class ShellToolInvocation extends BaseToolInvocation<
           }
 
           if (shouldUpdate) {
-            updateOutput(currentDisplayOutput);
+            updateOutput(cumulativeOutput);
             lastUpdateTime = Date.now();
           }
         },
@@ -592,6 +590,10 @@ class ShellToolInvocation extends BaseToolInvocation<
           ...executionError,
         };
       }
+
+      this.logger.debug(
+        `Final returnDisplayMessage length=${returnDisplayMessage?.length ?? 0}, preview=${returnDisplayMessage?.slice(0, 100) ?? 'EMPTY'}`,
+      );
 
       return {
         llmContent: limitedResult.content,

@@ -22,6 +22,7 @@ import {
   stripShellMarkers,
   type Config,
   type AnsiOutput,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { AnsiOutputText } from '../AnsiOutput.js';
@@ -32,6 +33,8 @@ const STATIC_HEIGHT = 1;
 const RESERVED_LINE_COUNT = 5; // for tool name, status, padding etc.
 const STATUS_INDICATOR_WIDTH = 3;
 const MIN_LINES_SHOWN = 2; // show at least this many lines
+
+const logger = DebugLogger.getLogger('llxprt:cli:tool-message');
 
 // Large threshold to ensure we don't cause performance issues for very large
 // outputs that will get truncated further MaxSizedBox anyway.
@@ -266,6 +269,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
           </Text>
         </Box>
       )}
+        {(() => {
+          logger.debug(
+            `name=${name}, status=${status}, resultDisplay type=${typeof resultDisplay}, isAnsiOutput=${isAnsiOutput}, hasValue=${!!resultDisplay}, renderAsMarkdown=${renderOutputAsMarkdown}, preview=${typeof resultDisplay === 'string' ? resultDisplay.slice(0, 50) : 'non-string'}`,
+          );
+          return null;
+        })()}
         {resultDisplay && (
           <Box paddingLeft={STATUS_INDICATOR_WIDTH} width="100%" marginTop={1}>
             <Box flexDirection="column">

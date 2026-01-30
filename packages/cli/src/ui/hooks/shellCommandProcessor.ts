@@ -28,7 +28,9 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 
-export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
+// Throttle interval for PTY output updates to avoid excessive re-renders.
+// Using 100ms provides smooth visual updates without overwhelming React.
+export const OUTPUT_UPDATE_INTERVAL_MS = 100;
 const MAX_OUTPUT_LENGTH = 10000;
 
 function addShellCommandToGeminiHistory(
@@ -112,7 +114,8 @@ export const useShellCommandProcessor = (
       const executeCommand = async (
         resolve: (value: void | PromiseLike<void>) => void,
       ) => {
-        let lastUpdateTime = Date.now();
+        // Initialize lastUpdateTime to 0 to allow the first update immediately
+        let lastUpdateTime = 0;
         let cumulativeStdout: string | AnsiOutput = '';
         let isBinaryStream = false;
         let binaryBytesReceived = 0;
@@ -228,10 +231,20 @@ export const useShellCommandProcessor = (
           executionPid = pid;
           if (pid) {
             setActiveShellPtyId(pid);
-            setPendingHistoryItem({
-              type: 'tool_group',
-              agentId: DEFAULT_AGENT_ID,
-              tools: [{ ...initialToolDisplay, ptyId: pid }],
+            setPendingHistoryItem((prevItem) => {
+              if (prevItem?.type === 'tool_group') {
+                return {
+                  ...prevItem,
+                  tools: prevItem.tools.map((tool) =>
+                    tool.callId === callId ? { ...tool, ptyId: pid } : tool,
+                  ),
+                };
+              }
+              return {
+                type: 'tool_group',
+                agentId: DEFAULT_AGENT_ID,
+                tools: [{ ...initialToolDisplay, ptyId: pid }],
+              };
             });
           }
 

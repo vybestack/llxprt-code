@@ -58,6 +58,7 @@ import {
 } from '../utils/toolOutputLimiter.js';
 import { DebugLogger } from '../debug/index.js';
 import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
 
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
@@ -103,7 +104,7 @@ export type ExecutingToolCall = {
   request: ToolCallRequestInfo;
   tool: AnyDeclarativeTool;
   invocation: AnyToolInvocation;
-  liveOutput?: string;
+  liveOutput?: string | AnsiOutput;
   startTime?: number;
   outcome?: ToolConfirmationOutcome;
 };
@@ -156,7 +157,7 @@ export type ConfirmHandler = (
 
 export type OutputUpdateHandler = (
   toolCallId: string,
-  outputChunk: string,
+  outputChunk: string | AnsiOutput,
 ) => void;
 
 export type AllToolCallsCompleteHandler = (
@@ -385,6 +386,7 @@ export interface CoreToolSchedulerOptions {
 }
 
 export class CoreToolScheduler {
+  private readonly logger = DebugLogger.getLogger('llxprt:scheduler');
   private toolRegistry: ToolRegistry;
   private toolCalls: ToolCall[] = [];
   private outputUpdateHandler?: OutputUpdateHandler;
@@ -1620,6 +1622,10 @@ export class CoreToolScheduler {
           metadataAgentId ?? scheduledCall.request.agentId ?? DEFAULT_AGENT_ID,
       };
 
+      this.logger.debug(
+        `callId=${callId}, toolName=${toolName}, returnDisplay type=${typeof result.returnDisplay}, hasValue=${!!result.returnDisplay}`,
+      );
+
       this.setStatusInternal(callId, 'success', successResponse);
     } else {
       // Error case
@@ -1670,7 +1676,7 @@ export class CoreToolScheduler {
 
         const liveOutputCallback =
           scheduledCall.tool.canUpdateOutput && this.outputUpdateHandler
-            ? (outputChunk: string) => {
+            ? (outputChunk: string | AnsiOutput) => {
                 if (this.outputUpdateHandler) {
                   this.outputUpdateHandler(callId, outputChunk);
                 }
