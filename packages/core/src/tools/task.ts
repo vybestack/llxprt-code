@@ -782,6 +782,11 @@ class TaskToolInvocation extends BaseToolInvocation<
 
   /**
    * @plan PLAN-20260130-ASYNCTASK.P11
+   *
+   * Execute async task in background using the SAME execution path as sync tasks.
+   * The only difference is the foreground agent doesn't wait for completion.
+   * - Interactive environment → runInteractive() with shared scheduler (tool calls show in UI)
+   * - Non-interactive environment → runNonInteractive()
    */
   private executeInBackground(
     scope: SubAgentScope,
@@ -795,8 +800,24 @@ class TaskToolInvocation extends BaseToolInvocation<
     // Use IIFE to avoid returning promise
     (async () => {
       try {
-        // Use non-interactive mode for background execution
-        await scope.runNonInteractive(contextState);
+        // Use the SAME execution path as sync tasks:
+        // - Interactive environment → runInteractive() (tool calls go through shared scheduler/UI)
+        // - Non-interactive environment → runNonInteractive()
+        const environmentInteractive =
+          this.deps.isInteractiveEnvironment?.() ?? true;
+
+        if (
+          environmentInteractive &&
+          typeof scope.runInteractive === 'function'
+        ) {
+          const schedulerFactory = this.deps.getSchedulerFactory?.();
+          const interactiveOptions = schedulerFactory
+            ? { schedulerFactory }
+            : undefined;
+          await scope.runInteractive(contextState, interactiveOptions);
+        } else {
+          await scope.runNonInteractive(contextState);
+        }
 
         // Check if cancelled
         if (signal.aborted) {
