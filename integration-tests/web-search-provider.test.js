@@ -8,8 +8,9 @@ import { test } from 'node:test';
 import { strict as assert } from 'assert';
 import { TestRig } from './test-helper.js';
 
-// Skip web search tests in CI when auth type is none
-const skipInCI = process.env.LLXPRT_AUTH_TYPE === 'none';
+// Skip web search tests in CI unless explicitly enabled via RUN_WEB_TESTS=true
+const skipInCI =
+  process.env.CI === 'true' && process.env.RUN_WEB_TESTS !== 'true';
 const testFn = skipInCI ? test.skip : test;
 
 testFn(
