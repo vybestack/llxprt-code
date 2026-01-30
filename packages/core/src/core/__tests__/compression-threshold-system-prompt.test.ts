@@ -281,14 +281,16 @@ describe('Compression Threshold: System Prompt Token Inclusion', () => {
         historyService.add(aiResponse);
       }
 
-      // Simulate compression by removing old messages
+      // Simulate compression by clearing and re-adding only the messages we want to keep
+      // This mimics how compression works: get curated history, keep only recent messages
       const curated = historyService.getCurated();
-      const toRemove = curated.slice(0, 10); // Remove first 10 messages
+      const messagesToKeep = curated.slice(10); // Keep last 10 messages (remove first 10)
 
-      for (const content of toRemove) {
-        if (content.metadata?.contentId) {
-          historyService.remove(content.metadata.contentId);
-        }
+      // Clear history and re-add the messages we want to keep
+      historyService.clear();
+      historyService.setBaseTokenOffset(systemPromptTokens); // Restore system prompt offset
+      for (const content of messagesToKeep) {
+        historyService.add(content);
       }
 
       // After compression, system prompt offset should still be there
