@@ -86,6 +86,7 @@
 9. `18cb40ceb` - AnsiOutput rendering for PTY mode
 10. `8fdfcd3e0` - Pass AnsiOutput directly to resultDisplay
 11. `8b4ba4cbc` - Sync AnsiOutput dimColor and color handling
+12. `0dc3c0317` - Full AnsiOutput type support through tool execution chain
 
 ---
 
@@ -134,3 +135,8 @@ Implemented the Interactive Shell feature from upstream commit `181898cb`:
 **Bug Fixes:**
 - `8fdfcd3e0` - Fixed JSON.stringify wrapper that was converting AnsiOutput to string
 - `8b4ba4cbc` - Fixed missing dimColor prop and incorrect color handling in AnsiOutputText component
+- `0dc3c0317` - Fixed type system to support AnsiOutput through entire execution chain:
+  - Updated OutputUpdateHandler, ExecutingToolCall.liveOutput, ToolInvocation.execute() signatures
+  - Updated shell.ts, shellCommandProcessor.ts, useReactToolScheduler.ts, schedulerSingleton.ts
+  - Updated subagent.ts and a2a-server/task.ts to convert AnsiOutput to text
+  - Fixed AnsiOutput.tsx lint errors

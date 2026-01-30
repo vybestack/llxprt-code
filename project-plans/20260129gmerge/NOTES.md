@@ -83,6 +83,7 @@ During StickyHeader integration research, discovered that upstream has a signifi
 - `18cb40ceb` - feat(shell): Port AnsiOutput rendering from upstream for PTY mode
 - `8fdfcd3e0` - fix(shell): Pass AnsiOutput directly to resultDisplay instead of stringifying
 - `8b4ba4cbc` - fix(shell): Sync AnsiOutput component with upstream to fix dimColor and color handling
+- `0dc3c0317` - fix(shell): Add full AnsiOutput type support through tool execution chain
 
 **What was implemented:**
 - `terminalSerializer.ts` - Serializes xterm buffer to AnsiOutput
@@ -109,6 +110,18 @@ During StickyHeader integration research, discovered that upstream has a signifi
    - Added `dimColor={token.dim}` prop
    - Removed `color=""` from outer Text (was overriding token colors)
    - Removed `|| ''` fallback on color prop (was causing issues)
+
+4. Type system didn't support AnsiOutput through execution chain. Fixed in commit `0dc3c0317`:
+   - Updated OutputUpdateHandler type to accept `string | AnsiOutput`
+   - Updated ExecutingToolCall.liveOutput type
+   - Updated ToolInvocation.execute() and buildAndExecute() signatures
+   - Updated shell.ts execute method signature
+   - Updated shellCommandProcessor.ts setPendingHistoryItem
+   - Updated useReactToolScheduler.ts updatePendingHistoryItem and updateToolCallOutput
+   - Updated schedulerSingleton.ts SchedulerCallbacks interface
+   - Updated subagent.ts to convert AnsiOutput to text for message display
+   - Updated a2a-server/task.ts to convert AnsiOutput to text for A2A protocol
+   - Fixed AnsiOutput.tsx lint errors (add Colors.Foreground, remove dimColor prop)
 
 ---
 

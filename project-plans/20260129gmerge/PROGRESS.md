@@ -28,6 +28,7 @@
 | AnsiOutput Rendering | 18cb40ceb | Port serializeTerminalToObject() for PTY mode ANSI colors |
 | AnsiOutput Fix | 8fdfcd3e0 | Pass AnsiOutput directly instead of JSON.stringify |
 | AnsiOutput dimColor | 8b4ba4cbc | Sync dimColor and color handling with upstream |
+| AnsiOutput Type Chain | 0dc3c0317 | Full type support through CoreToolScheduler → shell → UI chain |
 
 ---
 
@@ -37,7 +38,7 @@
 - **Completed:** 4 (1 skipped - features already present)
 - **In progress:** 0
 - **Remaining:** 0
-- **Additional features:** 6 (Interactive Shell, StickyHeader integration, Settings fix, AnsiOutput rendering + fixes)
+- **Additional features:** 7 (Interactive Shell, StickyHeader integration, Settings fix, AnsiOutput rendering + fixes + type chain)
 
 ---
 
@@ -79,3 +80,4 @@
 9. **18cb40ceb** - AnsiOutput rendering for PTY mode
 10. **8fdfcd3e0** - Pass AnsiOutput directly to resultDisplay
 11. **8b4ba4cbc** - Sync AnsiOutput dimColor and color handling
+12. **0dc3c0317** - Full AnsiOutput type support through execution chain
