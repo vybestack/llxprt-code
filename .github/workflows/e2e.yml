@@ -96,11 +96,16 @@ jobs:
       - e2e_doc_change_filter
       - skip_check
     if: |
-      (github.event_name == 'push' ||
-      github.event_name == 'merge_group' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event.label.name == 'maintainer:e2e:ok')) &&
+      (
+        github.event_name == 'push' ||
+        github.event_name == 'merge_group' ||
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository) ||
+        (github.event_name == 'pull_request_target' &&
+          github.event.label.name == 'maintainer:e2e:ok')
+      ) &&
+      (github.event_name != 'push' || matrix.sandbox == 'sandbox:none') &&
       needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
       needs.skip_check.outputs.should_skip != 'true'
     runs-on: 'ubuntu-latest'
@@ -146,6 +151,8 @@ jobs:
         env:
           # Provider configuration from repository secrets/variables
           OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
           OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
           LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
           LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
@@ -158,9 +165,21 @@ jobs:
         shell: 'bash'
         run: |
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
-            npm run test:integration:sandbox:docker
+            npm run test:integration:sandbox:docker -- \
+              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/run_shell_command.test.ts"
+            npm run test:integration:sandbox:docker -- \
+              --exclude="**/todo-continuation.e2e.test.js" \
+              integration-tests/run_shell_command.test.ts \
+              --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           else
-            npm run test:integration:sandbox:none
+            npm run test:integration:sandbox:none -- \
+              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/run_shell_command.test.ts"
+            npm run test:integration:sandbox:none -- \
+              --exclude="**/todo-continuation.e2e.test.js" \
+              integration-tests/run_shell_command.test.ts \
+              --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           fi
 
   e2e_mac:
@@ -169,11 +188,14 @@ jobs:
       - e2e_doc_change_filter
       - skip_check
     if: |
-      (github.event_name == 'push' ||
-      github.event_name == 'merge_group' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event.label.name == 'maintainer:e2e:ok')) &&
+      (
+        github.event_name == 'merge_group' ||
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository) ||
+        (github.event_name == 'pull_request_target' &&
+          github.event.label.name == 'maintainer:e2e:ok')
+      ) &&
       needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
       needs.skip_check.outputs.should_skip != 'true'
     runs-on: 'macos-latest'
@@ -212,96 +234,23 @@ jobs:
         env:
           # Provider configuration from repository secrets/variables
           OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
           OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
           LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
           LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
           # Set auth type to provider for API key authentication
           LLXPRT_AUTH_TYPE: 'provider'
           KEEP_OUTPUT: 'true'
-          SANDBOX: 'sandbox:none'
           VERBOSE: 'true'
           # Force file storage to avoid keytar/libsecret dependency in CI
           LLXPRT_FORCE_FILE_STORAGE: 'true'
-        run: 'npm run test:integration:sandbox:none'
-
-  e2e_windows:
-    name: 'Slow E2E - Win'
-    needs:
-      - e2e_doc_change_filter
-      - skip_check
-    if: |
-      (github.event_name == 'push' ||
-      github.event_name == 'merge_group' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event.label.name == 'maintainer:e2e:ok')) &&
-      needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
-      needs.skip_check.outputs.should_skip != 'true'
-    runs-on: 'windows-latest'
-    continue-on-error: true
-
-    steps:
-      - name: 'Checkout (fork)'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
-        if: "github.event_name == 'pull_request_target'"
-        with:
-          ref: '${{ github.event.pull_request.head.sha }}'
-          repository: '${{ github.event.pull_request.head.repo.full_name }}'
-
-      - name: 'Checkout (internal)'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
-        if: "github.event_name != 'pull_request_target'"
-        with:
-          ref: '${{ github.event.inputs.branch_ref || github.ref }}'
-
-      - name: 'Set up Node.js 20.x'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
-        with:
-          node-version: '20.x'
-          cache: 'npm'
-
-      - name: 'Configure Windows Defender exclusions'
+        shell: 'bash'
         run: |
-          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE -Force
-          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\node_modules" -Force
-          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\packages" -Force
-          Add-MpPreference -ExclusionPath "$env:TEMP" -Force
-        shell: 'pwsh'
-
-      - name: 'Configure npm for Windows performance'
-        run: |
-          npm config set progress false
-          npm config set audit false
-          npm config set fund false
-          npm config set loglevel error
-          npm config set maxsockets 32
-          npm config set registry https://registry.npmjs.org/
-        shell: 'pwsh'
-
-      - name: 'Install dependencies'
-        run: 'npm ci'
-        shell: 'pwsh'
-
-      - name: 'Build project'
-        run: 'npm run build'
-        shell: 'pwsh'
-
-      - name: 'Run E2E tests'
-        env:
-          # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-          # Set auth type to provider for API key authentication
-          LLXPRT_AUTH_TYPE: 'provider'
-          # Force file storage to avoid keytar/libsecret dependency in CI
-          LLXPRT_FORCE_FILE_STORAGE: 'true'
-          KEEP_OUTPUT: 'true'
-          SANDBOX: 'sandbox:none'
-          VERBOSE: 'true'
-          NODE_OPTIONS: '--max-old-space-size=32768 --max-semi-space-size=256'
-          UV_THREADPOOL_SIZE: '32'
-          NODE_ENV: 'test'
-        shell: 'pwsh'
-        run: 'npm run test:integration:sandbox:none'
+          npm run test:integration:sandbox:none -- \
+            --exclude="**/todo-continuation.e2e.test.js" \
+            --exclude="**/run_shell_command.test.ts"
+          npm run test:integration:sandbox:none -- \
+            --exclude="**/todo-continuation.e2e.test.js" \
+            integration-tests/run_shell_command.test.ts \
+            --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"

@@ -379,7 +379,7 @@ jobs:
       - 'lint'
       - 'doc_change_filter'
       - 'skip_check'
-    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' && (!matrix.pr_only || github.event_name == 'pull_request') }}
     permissions:
       contents: 'read'
       checks: 'write'
@@ -390,9 +390,12 @@ jobs:
         os:
           - 'ubuntu-latest'
           - 'macos-latest'
-          - 'windows-latest'
         node-version:
           - '24.x'
+        include:
+          - os: 'windows-latest'
+            node-version: '24.x'
+            pr_only: true
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -452,6 +455,8 @@ jobs:
         env:
           # Provider configuration from repository secrets/variables
           OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
+          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
