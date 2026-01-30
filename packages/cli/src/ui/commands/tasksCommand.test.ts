@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { tasksCommands } from './tasksCommand.js';
+import { taskCommand, tasksCommands } from './tasksCommand.js';
 import type { CommandContext } from './types.js';
 import {
   AsyncTaskManager,
@@ -65,10 +65,24 @@ describe('tasksCommand', () => {
     };
   });
 
-  describe('/tasks list', () => {
+  it('should export taskCommand with subCommands', () => {
+    expect(taskCommand.name).toBe('task');
+    expect(taskCommand.subCommands).toHaveLength(2);
+    expect(taskCommand.subCommands?.[0].name).toBe('list');
+    expect(taskCommand.subCommands?.[1].name).toBe('end');
+  });
+
+  it('should export tasksCommands array with taskCommand', () => {
+    expect(tasksCommands).toHaveLength(1);
+    expect(tasksCommands[0]).toBe(taskCommand);
+  });
+
+  describe('/task list', () => {
     it('should return "No async tasks" when there are no tasks', () => {
-      const tasksCommand = tasksCommands[0];
-      tasksCommand.action?.(context, 'list');
+      const listSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'list',
+      );
+      listSubCommand?.action?.(context, '');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -87,8 +101,10 @@ describe('tasksCommand', () => {
         abortController: new AbortController(),
       });
 
-      const tasksCommand = tasksCommands[0];
-      tasksCommand.action?.(context, 'list');
+      const listSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'list',
+      );
+      listSubCommand?.action?.(context, '');
 
       expect(addItemMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -118,8 +134,10 @@ describe('tasksCommand', () => {
         terminate_reason: SubagentTerminateMode.GOAL,
       });
 
-      const tasksCommand = tasksCommands[0];
-      tasksCommand.action?.(context, 'list');
+      const listSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'list',
+      );
+      listSubCommand?.action?.(context, '');
 
       expect(addItemMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -144,8 +162,10 @@ describe('tasksCommand', () => {
         abortController: new AbortController(),
       });
 
-      const taskCommand = tasksCommands[1];
-      taskCommand.action?.(context, 'end task-789');
+      const endSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'end',
+      );
+      endSubCommand?.action?.(context, 'task-789');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -164,8 +184,10 @@ describe('tasksCommand', () => {
         abortController: new AbortController(),
       });
 
-      const taskCommand = tasksCommands[1];
-      taskCommand.action?.(context, 'end task-abc');
+      const endSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'end',
+      );
+      endSubCommand?.action?.(context, 'task-abc');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -191,8 +213,10 @@ describe('tasksCommand', () => {
         abortController: new AbortController(),
       });
 
-      const taskCommand = tasksCommands[1];
-      taskCommand.action?.(context, 'end task-ab');
+      const endSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'end',
+      );
+      endSubCommand?.action?.(context, 'task-ab');
 
       expect(addItemMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -209,8 +233,10 @@ describe('tasksCommand', () => {
     });
 
     it('should show error for unknown task ID', () => {
-      const taskCommand = tasksCommands[1];
-      taskCommand.action?.(context, 'end unknown-id');
+      const endSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'end',
+      );
+      endSubCommand?.action?.(context, 'unknown-id');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -235,8 +261,10 @@ describe('tasksCommand', () => {
         terminate_reason: SubagentTerminateMode.GOAL,
       });
 
-      const taskCommand = tasksCommands[1];
-      taskCommand.action?.(context, 'end task-xyz');
+      const endSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'end',
+      );
+      endSubCommand?.action?.(context, 'task-xyz');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -245,6 +273,77 @@ describe('tasksCommand', () => {
         },
         expect.any(Number),
       );
+    });
+
+    it('should show usage error when no task ID provided', () => {
+      const endSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'end',
+      );
+      endSubCommand?.action?.(context, '');
+
+      expect(addItemMock).toHaveBeenCalledWith(
+        {
+          type: MessageType.ERROR,
+          text: 'Usage: /task end <task_id>',
+        },
+        expect.any(Number),
+      );
+    });
+
+    it('should provide completion for running task IDs', async () => {
+      asyncTaskManager.registerTask({
+        id: 'task-abc123',
+        subagentName: 'researcher',
+        goalPrompt: 'Research patterns',
+        abortController: new AbortController(),
+      });
+
+      asyncTaskManager.registerTask({
+        id: 'task-xyz789',
+        subagentName: 'deepthinker',
+        goalPrompt: 'Deep analysis',
+        abortController: new AbortController(),
+      });
+
+      // Complete one task so it doesn't show in completions
+      asyncTaskManager.completeTask('task-xyz789', {
+        emitted_vars: {},
+        final_message: 'Done',
+        terminate_reason: SubagentTerminateMode.GOAL,
+      });
+
+      const endSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'end',
+      );
+      const completions = await endSubCommand?.completion?.(context, '');
+
+      // Only running task should be in completions
+      expect(completions).toContain('task-abc');
+      expect(completions).not.toContain('task-xyz');
+    });
+
+    it('should filter completions by partial input', async () => {
+      asyncTaskManager.registerTask({
+        id: 'task-abc123',
+        subagentName: 'researcher',
+        goalPrompt: 'Research patterns',
+        abortController: new AbortController(),
+      });
+
+      asyncTaskManager.registerTask({
+        id: 'task-def456',
+        subagentName: 'deepthinker',
+        goalPrompt: 'Deep analysis',
+        abortController: new AbortController(),
+      });
+
+      const endSubCommand = taskCommand.subCommands?.find(
+        (c) => c.name === 'end',
+      );
+      const completions = await endSubCommand?.completion?.(context, 'task-a');
+
+      expect(completions).toContain('task-abc');
+      expect(completions).not.toContain('task-def');
     });
   });
 });

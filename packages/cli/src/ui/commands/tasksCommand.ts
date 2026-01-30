@@ -63,188 +63,196 @@ function formatTask(task: AsyncTaskInfo): string {
 }
 
 /**
- * /tasks command - List async background tasks
- * @plan PLAN-20260130-ASYNCTASK.P15
- * @plan PLAN-20260130-ASYNCTASK.P17
- * @requirement REQ-ASYNC-006
+ * Get running task IDs for autocomplete
  */
-const tasksListCommand: SlashCommand = {
-  name: 'tasks',
-  description: 'List async background tasks',
-  kind: CommandKind.BUILT_IN,
-  action: (context: CommandContext, args: string) => {
-    const subcommand = args.trim().toLowerCase() || 'list';
+function getRunningTaskIds(context: CommandContext): string[] {
+  const asyncTaskManager = context.services.config?.getAsyncTaskManager?.();
+  if (!asyncTaskManager) {
+    return [];
+  }
 
-    if (subcommand !== 'list') {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: `Unknown subcommand: ${subcommand}. Use '/tasks list'.`,
-        },
-        Date.now(),
-      );
-      return;
-    }
-
-    const asyncTaskManager = context.services.config?.getAsyncTaskManager?.();
-    if (!asyncTaskManager) {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: 'AsyncTaskManager not available',
-        },
-        Date.now(),
-      );
-      return;
-    }
-
-    const tasks = asyncTaskManager.getAllTasks();
-
-    if (tasks.length === 0) {
-      context.ui.addItem(
-        {
-          type: MessageType.INFO,
-          text: 'No async tasks.',
-        },
-        Date.now(),
-      );
-      return;
-    }
-
-    const lines: string[] = ['Async Tasks:', ''];
-
-    for (const task of tasks) {
-      lines.push(formatTask(task));
-      lines.push('');
-    }
-
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: lines.join('\n'),
-      },
-      Date.now(),
-    );
-  },
-};
+  return asyncTaskManager
+    .getAllTasks()
+    .filter((t) => t.status === 'running')
+    .map((t) => t.id.substring(0, 8));
+}
 
 /**
- * /task command - Manage a specific async task
+ * /task command - Manage async background tasks
+ * Subcommands:
+ *   /task list - List all async tasks
+ *   /task end <id> - Cancel a running async task
+ *
  * @plan PLAN-20260130-ASYNCTASK.P15
  * @plan PLAN-20260130-ASYNCTASK.P17
- * @requirement REQ-ASYNC-007
+ * @requirement REQ-ASYNC-006, REQ-ASYNC-007
  */
-const taskEndCommand: SlashCommand = {
+export const taskCommand: SlashCommand = {
   name: 'task',
-  description: 'Manage a specific async task',
+  description: 'Manage async background tasks',
   kind: CommandKind.BUILT_IN,
-  action: (context: CommandContext, args: string) => {
-    const parts = args.trim().split(/\s+/);
-    const subcommand = parts[0]?.toLowerCase();
+  subCommands: [
+    {
+      name: 'list',
+      description: 'List all async background tasks',
+      kind: CommandKind.BUILT_IN,
+      action: (context: CommandContext) => {
+        const asyncTaskManager =
+          context.services.config?.getAsyncTaskManager?.();
+        if (!asyncTaskManager) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: 'AsyncTaskManager not available',
+            },
+            Date.now(),
+          );
+          return;
+        }
 
-    if (subcommand !== 'end') {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: `Unknown subcommand: ${subcommand}. Use '/task end <id>'.`,
-        },
-        Date.now(),
-      );
-      return;
-    }
+        const tasks = asyncTaskManager.getAllTasks();
 
-    const taskId = parts[1];
-    if (!taskId) {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: 'Usage: /task end <task_id>',
-        },
-        Date.now(),
-      );
-      return;
-    }
+        if (tasks.length === 0) {
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: 'No async tasks.',
+            },
+            Date.now(),
+          );
+          return;
+        }
 
-    const asyncTaskManager = context.services.config?.getAsyncTaskManager?.();
-    if (!asyncTaskManager) {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: 'AsyncTaskManager not available',
-        },
-        Date.now(),
-      );
-      return;
-    }
+        const lines: string[] = ['Async Tasks:', ''];
 
-    // Try exact match first
-    let task = asyncTaskManager.getTask(taskId);
-
-    if (!task) {
-      // Try prefix match
-      const result = asyncTaskManager.getTaskByPrefix(taskId);
-
-      if (result.task) {
-        task = result.task;
-      } else if (result.candidates && result.candidates.length > 0) {
-        // Ambiguous
-        const candidateList = result.candidates
-          .map((c) => `  ${c.id.substring(0, 8)}  ${c.subagentName}`)
-          .join('\n');
+        for (const task of tasks) {
+          lines.push(formatTask(task));
+          lines.push('');
+        }
 
         context.ui.addItem(
           {
-            type: MessageType.ERROR,
-            text: `Ambiguous task ID. Did you mean:\n${candidateList}`,
+            type: MessageType.INFO,
+            text: lines.join('\n'),
           },
           Date.now(),
         );
-        return;
-      } else {
-        context.ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: `Task not found: ${taskId}`,
-          },
-          Date.now(),
+      },
+    },
+    {
+      name: 'end',
+      description: 'Cancel a running async task',
+      kind: CommandKind.BUILT_IN,
+      completion: async (
+        context: CommandContext,
+        partialArg: string,
+      ): Promise<string[]> => {
+        const taskIds = getRunningTaskIds(context);
+        if (!partialArg) {
+          return taskIds;
+        }
+        return taskIds.filter((id) =>
+          id.toLowerCase().startsWith(partialArg.toLowerCase()),
         );
-        return;
-      }
-    }
+      },
+      action: (context: CommandContext, args: string) => {
+        const taskId = args.trim();
 
-    // Check if already terminal
-    if (task.status !== 'running') {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: `Task ${task.id.substring(0, 8)} is already ${task.status}.`,
-        },
-        Date.now(),
-      );
-      return;
-    }
+        if (!taskId) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: 'Usage: /task end <task_id>',
+            },
+            Date.now(),
+          );
+          return;
+        }
 
-    // Cancel the task
-    const cancelled = asyncTaskManager.cancelTask(task.id);
+        const asyncTaskManager =
+          context.services.config?.getAsyncTaskManager?.();
+        if (!asyncTaskManager) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: 'AsyncTaskManager not available',
+            },
+            Date.now(),
+          );
+          return;
+        }
 
-    if (cancelled) {
-      context.ui.addItem(
-        {
-          type: MessageType.INFO,
-          text: `Cancelled task: ${task.subagentName} (${task.id.substring(0, 8)})`,
-        },
-        Date.now(),
-      );
-    } else {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: `Failed to cancel task ${task.id.substring(0, 8)}. It may have already completed.`,
-        },
-        Date.now(),
-      );
-    }
-  },
+        // Try exact match first
+        let task = asyncTaskManager.getTask(taskId);
+
+        if (!task) {
+          // Try prefix match
+          const result = asyncTaskManager.getTaskByPrefix(taskId);
+
+          if (result.task) {
+            task = result.task;
+          } else if (result.candidates && result.candidates.length > 0) {
+            // Ambiguous
+            const candidateList = result.candidates
+              .map((c) => `  ${c.id.substring(0, 8)}  ${c.subagentName}`)
+              .join('\n');
+
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Ambiguous task ID. Did you mean:\n${candidateList}`,
+              },
+              Date.now(),
+            );
+            return;
+          } else {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Task not found: ${taskId}`,
+              },
+              Date.now(),
+            );
+            return;
+          }
+        }
+
+        // Check if already terminal
+        if (task.status !== 'running') {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: `Task ${task.id.substring(0, 8)} is already ${task.status}.`,
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        // Cancel the task
+        const cancelled = asyncTaskManager.cancelTask(task.id);
+
+        if (cancelled) {
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Cancelled task: ${task.subagentName} (${task.id.substring(0, 8)})`,
+            },
+            Date.now(),
+          );
+        } else {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: `Failed to cancel task ${task.id.substring(0, 8)}. It may have already completed.`,
+            },
+            Date.now(),
+          );
+        }
+      },
+    },
+  ],
 };
 
-export const tasksCommands: SlashCommand[] = [tasksListCommand, taskEndCommand];
+// Export as array for compatibility with BuiltinCommandLoader
+export const tasksCommands: SlashCommand[] = [taskCommand];
