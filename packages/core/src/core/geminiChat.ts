@@ -1725,7 +1725,17 @@ export class GeminiChat {
   }
 
   /**
-   * Check if compression is needed based on token count
+   * Check if compression is needed based on token count.
+   *
+   * Token calculation includes system prompt in both paths:
+   * 1. When lastPromptTokenCount (actual API data) is available - it already includes
+   *    the system prompt as part of the request sent to the API
+   * 2. When falling back to getEffectiveTokenCount() - it uses historyService.getTotalTokens()
+   *    which adds baseTokenOffset (system prompt tokens) to history tokens
+   *
+   * NOTE: System prompt is NEVER compressed - it is static and critical. Only conversation
+   * history is subject to compression via getCompressionSplit().
+   *
    * @plan PLAN-20251028-STATELESS6.P10
    * @requirement REQ-STAT6-002.2
    * @pseudocode agent-runtime-context.md line 86 (step 006.3)
