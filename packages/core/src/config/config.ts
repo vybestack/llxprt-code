@@ -2026,6 +2026,7 @@ export class Config {
       subagentManager,
       schedulerFactoryProvider: () =>
         this.getInteractiveSubagentSchedulerFactory(),
+      getAsyncTaskManager: () => this.getAsyncTaskManager(),
     };
 
     if (profileManager && subagentManager) {
