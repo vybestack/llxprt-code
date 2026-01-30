@@ -105,7 +105,6 @@ jobs:
         (github.event_name == 'pull_request_target' &&
           github.event.label.name == 'maintainer:e2e:ok')
       ) &&
-      (github.event_name != 'push' || matrix.sandbox == 'sandbox:none') &&
       needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
       needs.skip_check.outputs.should_skip != 'true'
     runs-on: 'ubuntu-latest'
@@ -117,6 +116,9 @@ jobs:
           - 'sandbox:docker'
         node-version:
           - '20.x'
+        exclude:
+          # On push to main, only run sandbox:none (skip docker)
+          - sandbox: ${{ github.event_name == 'push' && 'sandbox:docker' || 'NEVER_MATCH' }}
 
     steps:
       - name: 'Checkout (fork)'
