@@ -34,7 +34,7 @@ jobs:
         with:
           concurrent_skipping: 'same_content'
           skip_after_successful_duplicate: 'true'
-          do_not_skip: '["workflow_dispatch"]'
+          do_not_skip: '["workflow_dispatch", "merge_group"]'
   e2e_doc_change_filter:
     name: 'Detect doc-only changes for E2E'
     runs-on: 'ubuntu-latest'

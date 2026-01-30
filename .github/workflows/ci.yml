@@ -41,7 +41,7 @@ jobs:
         with:
           concurrent_skipping: 'same_content'
           skip_after_successful_duplicate: 'true'
-          do_not_skip: '["workflow_dispatch"]'
+          do_not_skip: '["workflow_dispatch", "merge_group"]'
   doc_change_filter:
     name: 'Detect doc-only changes'
     runs-on: 'ubuntu-latest'
