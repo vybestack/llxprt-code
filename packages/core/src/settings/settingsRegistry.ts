@@ -560,6 +560,29 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     },
   },
   {
+    // @plan PLAN-20260130-ASYNCTASK.P21
+    // @requirement REQ-ASYNC-012
+    key: 'task-max-async',
+    category: 'cli-behavior',
+    description:
+      'Maximum concurrent async tasks. Default 5, use -1 for unlimited.',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        (value === -1 || (value >= 1 && value <= 100))
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'task-max-async must be -1 (unlimited) or a number between 1 and 100',
+      };
+    },
+  },
+  {
     key: 'shell-default-timeout-seconds',
     category: 'cli-behavior',
     description: 'Default timeout in seconds for shell command executions',

@@ -19,6 +19,7 @@ import {
   ContextState,
   SubagentTerminateMode,
   type OutputObject,
+  type SubAgentScope,
 } from '../core/subagent.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '../config/subagentManager.js';
@@ -27,6 +28,7 @@ import { ToolErrorType } from './tool-error.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import type { ToolRegistry } from './tool-registry.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
@@ -51,6 +53,7 @@ export interface TaskToolParams {
   context_vars?: Record<string, unknown>;
   contextVars?: Record<string, unknown>;
   timeout_seconds?: number;
+  async?: boolean;
 }
 
 interface TaskToolInvocationParams {
@@ -60,6 +63,7 @@ interface TaskToolInvocationParams {
   toolWhitelist?: string[];
   outputSpec?: Record<string, string>;
   context: Record<string, unknown>;
+  async: boolean;
 }
 
 export interface TaskToolDependencies {
@@ -68,6 +72,7 @@ export interface TaskToolDependencies {
   subagentManager?: SubagentManager;
   schedulerFactoryProvider?: () => SubagentSchedulerFactory | undefined;
   isInteractiveEnvironment?: () => boolean;
+  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
 }
 
 interface TaskToolInvocationDeps {
@@ -75,6 +80,7 @@ interface TaskToolInvocationDeps {
   getToolRegistry?: () => ToolRegistry | undefined;
   getSchedulerFactory?: () => SubagentSchedulerFactory | undefined;
   isInteractiveEnvironment?: () => boolean;
+  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
 }
 
 /**
@@ -205,6 +211,10 @@ class TaskToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
+    if (this.normalized.async) {
+      return this.executeAsync(signal, updateOutput);
+    }
+
     const {
       timeoutMs,
       timeoutSeconds,
@@ -631,6 +641,169 @@ class TaskToolInvocation extends BaseToolInvocation<
       },
     };
   }
+
+  /**
+   * @plan PLAN-20260130-ASYNCTASK.P11
+   */
+  private async executeAsync(
+    signal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
+    // Get AsyncTaskManager
+    const asyncTaskManager = this.deps.getAsyncTaskManager?.();
+    if (asyncTaskManager === undefined) {
+      return {
+        llmContent: 'Async mode requires AsyncTaskManager to be configured.',
+        returnDisplay: 'Error: Async mode not available.',
+        error: {
+          message: 'AsyncTaskManager not configured',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
+    // Check limit BEFORE launching
+    const canLaunch = asyncTaskManager.canLaunchAsync();
+    if (!canLaunch.allowed) {
+      return {
+        llmContent: canLaunch.reason ?? 'Cannot launch async task.',
+        returnDisplay: canLaunch.reason ?? 'Async task limit reached.',
+        error: {
+          message: canLaunch.reason ?? 'Limit reached',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
+    // Create orchestrator (same as sync)
+    let orchestrator: SubagentOrchestrator;
+    try {
+      orchestrator = this.deps.createOrchestrator();
+    } catch (error) {
+      return this.createErrorResult(
+        error,
+        'Failed to create orchestrator for async task.',
+      );
+    }
+
+    // Create launch request (no timeout for launch itself)
+    const launchRequest = this.createLaunchRequest(undefined);
+
+    // Launch subagent
+    let launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>;
+    try {
+      launchResult = await orchestrator.launch(launchRequest, signal);
+    } catch (error) {
+      return this.createErrorResult(
+        error,
+        `Failed to launch async subagent '${this.normalized.subagentName}'.`,
+      );
+    }
+
+    const { scope, agentId, dispose } = launchResult;
+    const contextState = this.buildContextState();
+
+    // Create abort controller for async task cancellation
+    const asyncAbortController = new AbortController();
+
+    // Register with AsyncTaskManager BEFORE starting background execution
+    asyncTaskManager.registerTask({
+      id: agentId,
+      subagentName: this.normalized.subagentName,
+      goalPrompt: this.normalized.goalPrompt,
+      abortController: asyncAbortController,
+    });
+
+    // Set up message streaming (same as sync)
+    if (updateOutput) {
+      const existingHandler = scope.onMessage;
+      const normalizeForStreaming = (text: string): string => {
+        if (!text) {
+          return '';
+        }
+        const lf = text.replace(/\r\n?/g, '\n');
+        return lf.endsWith('\n') ? lf : lf + '\n';
+      };
+      scope.onMessage = (message: string) => {
+        const cleaned = normalizeForStreaming(message);
+        if (cleaned.trim().length > 0) {
+          updateOutput(`[${agentId}] ${cleaned}`);
+        }
+        existingHandler?.(message);
+      };
+    }
+
+    // DO NOT await this - execute in background
+    this.executeInBackground(
+      scope,
+      contextState,
+      agentId,
+      asyncTaskManager,
+      dispose,
+      asyncAbortController.signal,
+    );
+
+    // Return immediately with launch status
+    return {
+      llmContent:
+        `Async task launched: subagent '${this.normalized.subagentName}' (ID: ${agentId}). ` +
+        `Task is running in background. Use 'check_async_tasks' to monitor progress.`,
+      returnDisplay: `Async task started: **${this.normalized.subagentName}** (\`${agentId}\`)`,
+
+      metadata: {
+        agentId,
+        async: true,
+        status: 'running',
+      },
+    };
+  }
+
+  /**
+   * @plan PLAN-20260130-ASYNCTASK.P11
+   */
+  private executeInBackground(
+    scope: SubAgentScope,
+    contextState: ContextState,
+    agentId: string,
+    asyncTaskManager: AsyncTaskManager,
+    dispose: () => Promise<void>,
+    signal: AbortSignal,
+  ): void {
+    // Use IIFE to avoid returning promise
+    (async () => {
+      try {
+        // Use non-interactive mode for background execution
+        await scope.runNonInteractive(contextState);
+
+        // Check if cancelled
+        if (signal.aborted) {
+          // Already cancelled via cancelTask - don't override
+          return;
+        }
+
+        // Get output
+        const output = scope.output ?? {
+          terminate_reason: SubagentTerminateMode.ERROR,
+          emitted_vars: {},
+        };
+
+        // Update AsyncTaskManager
+        asyncTaskManager.completeTask(agentId, output);
+      } catch (error) {
+        // Update AsyncTaskManager with failure
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        asyncTaskManager.failTask(agentId, errorMessage);
+      } finally {
+        // Always dispose
+        try {
+          await dispose();
+        } catch {
+          // Swallow dispose errors
+        }
+      }
+    })();
+  }
 }
 
 /**
@@ -689,6 +862,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
             description:
               'Optional timeout in seconds for the task execution (-1 for unlimited).',
           },
+          async: {
+            type: 'boolean',
+            description:
+              'If true, launch subagent in background and return immediately. Default: false.',
+          },
           context: {
             type: 'object',
             description:
@@ -732,6 +910,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       isInteractiveEnvironment:
         this.dependencies.isInteractiveEnvironment ??
         (() => this.config.isInteractive()),
+      getAsyncTaskManager: this.dependencies.getAsyncTaskManager,
     });
   }
 
@@ -771,6 +950,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       toolWhitelist: toolWhitelist.length > 0 ? toolWhitelist : undefined,
       outputSpec,
       context,
+      async: params.async ?? false,
     };
   }
 

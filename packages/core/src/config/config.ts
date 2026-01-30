@@ -53,6 +53,11 @@ import type { HookDefinition, HookEventName } from '../hooks/types.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
+// @plan PLAN-20260130-ASYNCTASK.P09
+import { AsyncTaskManager } from '../services/asyncTaskManager.js';
+// @plan PLAN-20260130-ASYNCTASK.P22
+import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
+import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
 import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import { OutputFormat } from '../utils/output-format.js';
 import {
@@ -459,6 +464,11 @@ export class Config {
   private alwaysAllowedCommands: Set<string> = new Set();
   private fileDiscoveryService: FileDiscoveryService | null = null;
   private gitService: GitService | undefined = undefined;
+  // @plan PLAN-20260130-ASYNCTASK.P09
+  private asyncTaskManager: AsyncTaskManager | undefined = undefined;
+  // @plan PLAN-20260130-ASYNCTASK.P22
+  private asyncTaskReminderService?: AsyncTaskReminderService;
+  private asyncTaskAutoTrigger?: AsyncTaskAutoTrigger;
   private readonly checkpointing: boolean;
   private readonly dumpOnError: boolean;
   private readonly proxy: string | undefined;
@@ -1627,6 +1637,16 @@ export class Config {
     // Line 90: Direct delegation, no local storage
     this.settingsService.set(key, settingValue);
 
+    // @plan PLAN-20260130-ASYNCTASK.P21
+    // @requirement REQ-ASYNC-012
+    // Propagate task-max-async changes to AsyncTaskManager
+    if (key === 'task-max-async' && typeof settingValue === 'number') {
+      const asyncTaskManager = this.getAsyncTaskManager();
+      if (asyncTaskManager) {
+        asyncTaskManager.setMaxAsyncTasks(settingValue);
+      }
+    }
+
     // Clear provider caches when auth settings or base-url change
     // This fixes the issue where cached auth tokens persist after clearing auth settings
     if (
@@ -1770,6 +1790,68 @@ export class Config {
       await this.gitService.initialize();
     }
     return this.gitService;
+  }
+
+  /**
+   * Get the AsyncTaskManager instance
+   * @plan PLAN-20260130-ASYNCTASK.P09
+   */
+  getAsyncTaskManager(): AsyncTaskManager | undefined {
+    if (!this.asyncTaskManager) {
+      // Initialize lazily using the 'task-max-async' setting (default 5)
+      const settingsService = this.getSettingsService();
+      const maxAsyncTasks =
+        (settingsService.get('task-max-async') as number) ?? 5;
+      this.asyncTaskManager = new AsyncTaskManager(maxAsyncTasks);
+    }
+    return this.asyncTaskManager;
+  }
+
+  /**
+   * Get the AsyncTaskReminderService instance
+   * @plan PLAN-20260130-ASYNCTASK.P22
+   */
+  getAsyncTaskReminderService(): AsyncTaskReminderService | undefined {
+    if (!this.asyncTaskReminderService) {
+      const asyncTaskManager = this.getAsyncTaskManager();
+      if (asyncTaskManager) {
+        this.asyncTaskReminderService = new AsyncTaskReminderService(
+          asyncTaskManager,
+        );
+      }
+    }
+    return this.asyncTaskReminderService;
+  }
+
+  /**
+   * Set up AsyncTaskAutoTrigger with client callbacks
+   * @plan PLAN-20260130-ASYNCTASK.P22
+   * @param isAgentBusy Function to check if the agent is busy
+   * @param triggerAgentTurn Function to trigger an agent turn with a message
+   * @returns Cleanup function to unsubscribe from auto-trigger
+   */
+  setupAsyncTaskAutoTrigger(
+    isAgentBusy: () => boolean,
+    triggerAgentTurn: (message: string) => Promise<void>,
+  ): () => void {
+    const asyncTaskManager = this.getAsyncTaskManager();
+    const reminderService = this.getAsyncTaskReminderService();
+
+    if (!asyncTaskManager || !reminderService) {
+      // Return a no-op cleanup function if components aren't available
+      return () => {};
+    }
+
+    if (!this.asyncTaskAutoTrigger) {
+      this.asyncTaskAutoTrigger = new AsyncTaskAutoTrigger(
+        asyncTaskManager,
+        reminderService,
+        isAgentBusy,
+        triggerAgentTurn,
+      );
+    }
+
+    return this.asyncTaskAutoTrigger.subscribe();
   }
 
   /**
