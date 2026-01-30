@@ -71,7 +71,7 @@ export async function validateNonInteractiveAuth(
   if (!hasProvider && !hasEnvAuth) {
     reportNonInteractiveAuthError(
       nonInteractiveConfig,
-      `Please set an Auth method. Use one of the following environment variables: GEMINI_API_KEY, LLXPRT_API_KEY, GOOGLE_GENAI_USE_VERTEXAI, GOOGLE_GENAI_USE_GCA, OPENAI_API_KEY, ANTHROPIC_API_KEY`,
+      `Please set an Auth method. Use one of the following environment variables: GEMINI_API_KEY, LLXPRT_API_KEY, GOOGLE_GENAI_USE_VERTEXAI (requires GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION), GOOGLE_GENAI_USE_GCA, OPENAI_API_KEY, ANTHROPIC_API_KEY`,
     );
     process.exit(1);
   }
