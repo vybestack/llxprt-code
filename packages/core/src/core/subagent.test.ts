@@ -259,6 +259,7 @@ describe('subagent.ts', () => {
         getCuratedForProvider: vi.fn(() => []),
         getIdGeneratorCallback: vi.fn(() => vi.fn()),
         findUnmatchedToolCalls: vi.fn(() => []),
+        generateTurnKey: vi.fn(() => `turn-${Date.now()}`),
       } as unknown as HistoryService;
 
       const toolRegistry =
