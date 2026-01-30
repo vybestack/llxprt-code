@@ -558,7 +558,7 @@ export class ProviderManager implements IProviderManager {
       const providerInstance = this.providers.get(targetProvider);
 
       // Check for getAuthToken on the actual provider
-      // (might be wrapped in LoggingProviderWrapper)
+      // (might be wrapped in multiple layers: LoggingProviderWrapper → RetryOrchestrator → BaseProvider)
       interface ProviderWithWrapper {
         wrappedProvider?: IProvider;
       }
@@ -566,9 +566,10 @@ export class ProviderManager implements IProviderManager {
         getAuthToken?: () => Promise<string>;
       }
 
+      // Traverse the full wrapper chain to find the actual provider
       let actualProvider: IProvider | undefined = providerInstance;
-      if (providerInstance && 'wrappedProvider' in providerInstance) {
-        actualProvider = (providerInstance as ProviderWithWrapper)
+      while (actualProvider && 'wrappedProvider' in actualProvider) {
+        actualProvider = (actualProvider as ProviderWithWrapper)
           .wrappedProvider;
       }
 

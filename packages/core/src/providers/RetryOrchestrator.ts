@@ -101,6 +101,17 @@ export class RetryOrchestrator implements IProvider {
     };
   }
 
+  /**
+   * Check if the wrapped provider is a LoadBalancingProvider
+   * LoadBalancingProvider has its own retry/failover logic, so we should
+   * pass through without adding retry orchestration
+   */
+  private isLoadBalancer(): boolean {
+    // Check by name pattern rather than importing LoadBalancingProvider
+    // to avoid circular dependency
+    return this.wrappedProvider.name.includes('-lb-');
+  }
+
   // Delegate all IProvider methods to wrapped provider
 
   async getModels(): Promise<IModel[]> {
@@ -198,6 +209,18 @@ export class RetryOrchestrator implements IProvider {
   private async *generateChatCompletionWithRetry(
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    // If the wrapped provider is a LoadBalancingProvider, pass through without retry logic
+    // because LoadBalancingProvider already has its own failover and retry mechanisms.
+    // Don't buffer chunks for LoadBalancingProvider to avoid timeout issues.
+    if (this.isLoadBalancer()) {
+      for await (const chunk of this.wrappedProvider.generateChatCompletion(
+        options,
+      )) {
+        yield chunk;
+      }
+      return;
+    }
+
     // Extract signal - it may be on invocation or in options directly
     const signal = (options.invocation as { signal?: AbortSignal })?.signal;
 

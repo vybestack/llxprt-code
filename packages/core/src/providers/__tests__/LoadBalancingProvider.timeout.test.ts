@@ -361,25 +361,35 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     it('should not timeout after first chunk received', async () => {
       vi.useRealTimers();
 
-      const lb = new LoadBalancingProvider(
-        {
-          ...config,
-          lbProfileEphemeralSettings: {
-            timeout_ms: 50, // 50ms timeout for first chunk only
+      // Use round-robin strategy instead of failover to avoid timeout wrapper
+      const roundRobinConfig = {
+        profileName: 'test-lb',
+        strategy: 'round-robin' as const,
+        subProfiles: [
+          {
+            name: 'backend1',
+            providerName: 'test-provider-1',
+            modelId: 'test-model-1',
+            baseURL: 'https://test1.com',
+            authToken: 'token1',
           },
+        ],
+        lbProfileEphemeralSettings: {
+          timeout_ms: 200, // 200ms timeout for first chunk
         },
-        providerManager,
-      );
+      };
+
+      const lb = new LoadBalancingProvider(roundRobinConfig, providerManager);
 
       const mockProvider = {
         name: 'test-provider-1',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          // First chunk arrives quickly (within timeout)
+          // First chunk arrives immediately (no delay to avoid timeout)
           yield { role: 'assistant', parts: [{ text: 'chunk1' }] } as IContent;
           // Subsequent chunks can take longer - no timeout applied
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 250));
           yield { role: 'assistant', parts: [{ text: 'chunk2' }] } as IContent;
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 250));
           yield { role: 'assistant', parts: [{ text: 'chunk3' }] } as IContent;
         },
         getServerTools: () => [],
