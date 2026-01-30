@@ -665,271 +665,6 @@ describe('todoCommand', () => {
 
       await removeSubcommand!.action!(ctx, '');
 
-      describe('/todo delete (disk files)', () => {
-        /**
-         * @requirement REQ-010
-         * @scenario Delete saved TODO session by number
-         * @given User has saved TODO sessions
-         * @when User executes /todo delete 1
-         * @then First saved session is deleted from disk
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('deletes saved TODO session at position 1', async () => {
-          const ctx = createMockContext([]);
-
-          const deleteSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'delete',
-          );
-          expect(deleteSubcommand).toBeDefined();
-
-          // Note: This test relies on actual filesystem state
-          // In real implementation, we'd need to create temp TODO files
-          await deleteSubcommand!.action!(ctx, '1');
-
-          // Verify that addItem was called with appropriate message
-          expect(ctx.ui.addItem).toHaveBeenCalled();
-        });
-
-        /**
-         * @requirement REQ-010
-         * @scenario Delete range of saved TODO sessions
-         * @given User has 5 saved sessions
-         * @when User executes /todo delete 1-3
-         * @then Sessions 1, 2, 3 are deleted from disk
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('deletes range of saved TODO sessions', async () => {
-          const ctx = createMockContext([]);
-
-          const deleteSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'delete',
-          );
-
-          await deleteSubcommand!.action!(ctx, '1-3');
-
-          // Verify that addItem was called
-          expect(ctx.ui.addItem).toHaveBeenCalled();
-        });
-
-        /**
-         * @requirement REQ-010
-         * @scenario Delete all saved TODO sessions
-         * @given User has saved sessions
-         * @when User executes /todo delete all
-         * @then All saved sessions are deleted from disk
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('deletes all saved TODO sessions with "all" keyword', async () => {
-          const ctx = createMockContext([]);
-
-          const deleteSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'delete',
-          );
-
-          await deleteSubcommand!.action!(ctx, 'all');
-
-          expect(ctx.ui.addItem).toHaveBeenCalled();
-        });
-
-        /**
-         * @requirement REQ-010
-         * @scenario Delete session with out of range number
-         * @given User has 2 saved sessions
-         * @when User executes /todo delete 99
-         * @then Error message is displayed
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('shows error when deleting out-of-range session', async () => {
-          const ctx = createMockContext([]);
-
-          const deleteSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'delete',
-          );
-
-          await deleteSubcommand!.action!(ctx, '99');
-
-          expect(ctx.ui.addItem).toHaveBeenCalled();
-          const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
-            .calls[0][0];
-          // Should either be error for no files, or error for out of range
-          expect(call.type).toMatch(/error|info/i);
-        });
-
-        /**
-         * @requirement REQ-010
-         * @scenario Delete session without arguments
-         * @given User has saved sessions
-         * @when User executes /todo delete
-         * @then Usage help is displayed
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('shows usage help when no number is provided', async () => {
-          const ctx = createMockContext([]);
-
-          const deleteSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'delete',
-          );
-
-          await deleteSubcommand!.action!(ctx, '');
-
-          expect(ctx.ui.addItem).toHaveBeenCalled();
-          const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
-            .calls[0][0];
-          expect(call.type).toBe('info');
-          expect(call.text).toContain('Usage');
-          expect(call.text).toContain('disk');
-        });
-      });
-
-      describe('/todo undo', () => {
-        /**
-         * @requirement REQ-011
-         * @scenario Undo TODO at single position
-         * @given User has TODO at position 1 with status completed
-         * @when User executes /todo undo 1
-         * @then TODO status changes to pending
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('resets TODO at position 1 to pending', async () => {
-          const ctx = createMockContext([
-            { id: '1', content: 'Task 1', status: 'completed' },
-            { id: '2', content: 'Task 2', status: 'in_progress' },
-          ]);
-
-          const undoSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'undo',
-          );
-          expect(undoSubcommand).toBeDefined();
-
-          await undoSubcommand!.action!(ctx, '1');
-
-          expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
-          const updatedTodos = (
-            ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>
-          ).mock.calls[0][0];
-          expect(updatedTodos[0].status).toBe('pending');
-          expect(updatedTodos[0].content).toBe('Task 1');
-        });
-
-        /**
-         * @requirement REQ-011
-         * @scenario Undo range of TODOs
-         * @given User has 5 TODOs with various statuses
-         * @when User executes /todo undo 1-3
-         * @then TODOs 1, 2, 3 status change to pending
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('resets range of TODOs to pending', async () => {
-          const ctx = createMockContext([
-            { id: '1', content: 'Task 1', status: 'completed' },
-            { id: '2', content: 'Task 2', status: 'in_progress' },
-            { id: '3', content: 'Task 3', status: 'completed' },
-            { id: '4', content: 'Task 4', status: 'pending' },
-            { id: '5', content: 'Task 5', status: 'completed' },
-          ]);
-
-          const undoSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'undo',
-          );
-
-          await undoSubcommand!.action!(ctx, '1-3');
-
-          expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
-          const updatedTodos = (
-            ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>
-          ).mock.calls[0][0];
-          expect(updatedTodos[0].status).toBe('pending');
-          expect(updatedTodos[1].status).toBe('pending');
-          expect(updatedTodos[2].status).toBe('pending');
-          expect(updatedTodos[3].status).toBe('pending'); // unchanged
-          expect(updatedTodos[4].status).toBe('completed'); // unchanged
-        });
-
-        /**
-         * @requirement REQ-011
-         * @scenario Undo all TODOs
-         * @given User has 3 TODOs with various statuses
-         * @when User executes /todo undo all
-         * @then All TODOs status change to pending
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('resets all TODOs to pending with "all" keyword', async () => {
-          const ctx = createMockContext([
-            { id: '1', content: 'Task 1', status: 'completed' },
-            { id: '2', content: 'Task 2', status: 'in_progress' },
-            { id: '3', content: 'Task 3', status: 'completed' },
-          ]);
-
-          const undoSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'undo',
-          );
-
-          await undoSubcommand!.action!(ctx, 'all');
-
-          expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
-          const updatedTodos = (
-            ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>
-          ).mock.calls[0][0];
-          expect(updatedTodos[0].status).toBe('pending');
-          expect(updatedTodos[1].status).toBe('pending');
-          expect(updatedTodos[2].status).toBe('pending');
-        });
-
-        /**
-         * @requirement REQ-011
-         * @scenario Undo without arguments
-         * @given User has TODOs
-         * @when User executes /todo undo
-         * @then Usage help is displayed
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('shows usage help when no arguments provided', async () => {
-          const ctx = createMockContext([
-            { id: '1', content: 'Task 1', status: 'completed' },
-          ]);
-
-          const undoSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'undo',
-          );
-
-          await undoSubcommand!.action!(ctx, '');
-
-          expect(ctx.ui.addItem).toHaveBeenCalled();
-          const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
-            .calls[0][0];
-          expect(call.type).toBe('info');
-          expect(call.text).toContain('Usage');
-          expect(call.text).toContain('pending');
-        });
-
-        /**
-         * @requirement REQ-011
-         * @scenario Undo non-existent TODO position
-         * @given User has 2 TODOs
-         * @when User executes /todo undo 99
-         * @then Error message is displayed
-         * @plan PLAN-20260129-TODOPERSIST-EXT.P21
-         */
-        it('shows error when undoing non-existent position', async () => {
-          const ctx = createMockContext([
-            { id: '1', content: 'Task 1', status: 'completed' },
-            { id: '2', content: 'Task 2', status: 'in_progress' },
-          ]);
-
-          const undoSubcommand = todoCommand.subCommands?.find(
-            (cmd) => cmd.name === 'undo',
-          );
-
-          await undoSubcommand!.action!(ctx, '99');
-
-          expect(ctx.ui.addItem).toHaveBeenCalled();
-          const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
-            .calls[0][0];
-          expect(call.type).toBe('error');
-          expect(call.text).toContain('Position');
-        });
-      });
-
       expect(ctx.ui.addItem).toHaveBeenCalled();
       const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
         .calls[0][0];
@@ -937,6 +672,271 @@ describe('todoCommand', () => {
       expect(call.text).toContain('Position formats');
       expect(call.text).toContain('all');
       expect(call.text).toContain('1-5');
+    });
+  });
+
+  describe('/todo delete (disk files)', () => {
+    /**
+     * @requirement REQ-010
+     * @scenario Delete saved TODO session by number
+     * @given User has saved TODO sessions
+     * @when User executes /todo delete 1
+     * @then First saved session is deleted from disk
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('deletes saved TODO session at position 1', async () => {
+      const ctx = createMockContext([]);
+
+      const deleteSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'delete',
+      );
+      expect(deleteSubcommand).toBeDefined();
+
+      // Note: This test relies on actual filesystem state
+      // In real implementation, we'd need to create temp TODO files
+      await deleteSubcommand!.action!(ctx, '1');
+
+      // Verify that addItem was called with appropriate message
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+    });
+
+    /**
+     * @requirement REQ-010
+     * @scenario Delete range of saved TODO sessions
+     * @given User has 5 saved sessions
+     * @when User executes /todo delete 1-3
+     * @then Sessions 1, 2, 3 are deleted from disk
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('deletes range of saved TODO sessions', async () => {
+      const ctx = createMockContext([]);
+
+      const deleteSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'delete',
+      );
+
+      await deleteSubcommand!.action!(ctx, '1-3');
+
+      // Verify that addItem was called
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+    });
+
+    /**
+     * @requirement REQ-010
+     * @scenario Delete all saved TODO sessions
+     * @given User has saved sessions
+     * @when User executes /todo delete all
+     * @then All saved sessions are deleted from disk
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('deletes all saved TODO sessions with "all" keyword', async () => {
+      const ctx = createMockContext([]);
+
+      const deleteSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'delete',
+      );
+
+      await deleteSubcommand!.action!(ctx, 'all');
+
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+    });
+
+    /**
+     * @requirement REQ-010
+     * @scenario Delete session with out of range number
+     * @given User has 2 saved sessions
+     * @when User executes /todo delete 99
+     * @then Error message is displayed
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('shows error when deleting out-of-range session', async () => {
+      const ctx = createMockContext([]);
+
+      const deleteSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'delete',
+      );
+
+      await deleteSubcommand!.action!(ctx, '99');
+
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      // Should either be error for no files, or error for out of range
+      expect(call.type).toMatch(/error|info/i);
+    });
+
+    /**
+     * @requirement REQ-010
+     * @scenario Delete session without arguments
+     * @given User has saved sessions
+     * @when User executes /todo delete
+     * @then Usage help is displayed
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('shows usage help when no number is provided', async () => {
+      const ctx = createMockContext([]);
+
+      const deleteSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'delete',
+      );
+
+      await deleteSubcommand!.action!(ctx, '');
+
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(call.type).toBe('info');
+      expect(call.text).toContain('Usage');
+      expect(call.text).toContain('disk');
+    });
+  });
+
+  describe('/todo undo', () => {
+    /**
+     * @requirement REQ-011
+     * @scenario Undo TODO at single position
+     * @given User has TODO at position 1 with status completed
+     * @when User executes /todo undo 1
+     * @then TODO status changes to pending
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('resets TODO at position 1 to pending', async () => {
+      const ctx = createMockContext([
+        { id: '1', content: 'Task 1', status: 'completed' },
+        { id: '2', content: 'Task 2', status: 'in_progress' },
+      ]);
+
+      const undoSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'undo',
+      );
+      expect(undoSubcommand).toBeDefined();
+
+      await undoSubcommand!.action!(ctx, '1');
+
+      expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
+      const updatedTodos = (
+        ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>
+      ).mock.calls[0][0];
+      expect(updatedTodos[0].status).toBe('pending');
+      expect(updatedTodos[0].content).toBe('Task 1');
+    });
+
+    /**
+     * @requirement REQ-011
+     * @scenario Undo range of TODOs
+     * @given User has 5 TODOs with various statuses
+     * @when User executes /todo undo 1-3
+     * @then TODOs 1, 2, 3 status change to pending
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('resets range of TODOs to pending', async () => {
+      const ctx = createMockContext([
+        { id: '1', content: 'Task 1', status: 'completed' },
+        { id: '2', content: 'Task 2', status: 'in_progress' },
+        { id: '3', content: 'Task 3', status: 'completed' },
+        { id: '4', content: 'Task 4', status: 'pending' },
+        { id: '5', content: 'Task 5', status: 'completed' },
+      ]);
+
+      const undoSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'undo',
+      );
+
+      await undoSubcommand!.action!(ctx, '1-3');
+
+      expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
+      const updatedTodos = (
+        ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>
+      ).mock.calls[0][0];
+      expect(updatedTodos[0].status).toBe('pending');
+      expect(updatedTodos[1].status).toBe('pending');
+      expect(updatedTodos[2].status).toBe('pending');
+      expect(updatedTodos[3].status).toBe('pending'); // unchanged
+      expect(updatedTodos[4].status).toBe('completed'); // unchanged
+    });
+
+    /**
+     * @requirement REQ-011
+     * @scenario Undo all TODOs
+     * @given User has 3 TODOs with various statuses
+     * @when User executes /todo undo all
+     * @then All TODOs status change to pending
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('resets all TODOs to pending with "all" keyword', async () => {
+      const ctx = createMockContext([
+        { id: '1', content: 'Task 1', status: 'completed' },
+        { id: '2', content: 'Task 2', status: 'in_progress' },
+        { id: '3', content: 'Task 3', status: 'completed' },
+      ]);
+
+      const undoSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'undo',
+      );
+
+      await undoSubcommand!.action!(ctx, 'all');
+
+      expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
+      const updatedTodos = (
+        ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>
+      ).mock.calls[0][0];
+      expect(updatedTodos[0].status).toBe('pending');
+      expect(updatedTodos[1].status).toBe('pending');
+      expect(updatedTodos[2].status).toBe('pending');
+    });
+
+    /**
+     * @requirement REQ-011
+     * @scenario Undo without arguments
+     * @given User has TODOs
+     * @when User executes /todo undo
+     * @then Usage help is displayed
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('shows usage help when no arguments provided', async () => {
+      const ctx = createMockContext([
+        { id: '1', content: 'Task 1', status: 'completed' },
+      ]);
+
+      const undoSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'undo',
+      );
+
+      await undoSubcommand!.action!(ctx, '');
+
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(call.type).toBe('info');
+      expect(call.text).toContain('Usage');
+      expect(call.text).toContain('pending');
+    });
+
+    /**
+     * @requirement REQ-011
+     * @scenario Undo non-existent TODO position
+     * @given User has 2 TODOs
+     * @when User executes /todo undo 99
+     * @then Error message is displayed
+     * @plan PLAN-20260129-TODOPERSIST-EXT.P21
+     */
+    it('shows error when undoing non-existent position', async () => {
+      const ctx = createMockContext([
+        { id: '1', content: 'Task 1', status: 'completed' },
+        { id: '2', content: 'Task 2', status: 'in_progress' },
+      ]);
+
+      const undoSubcommand = todoCommand.subCommands?.find(
+        (cmd) => cmd.name === 'undo',
+      );
+
+      await undoSubcommand!.action!(ctx, '99');
+
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(call.type).toBe('error');
+      expect(call.text).toContain('Position');
     });
   });
 
@@ -1174,15 +1174,12 @@ describe('todoCommand', () => {
 
             setSubcommand!.action!(ctx, position.toString());
 
-            if (ctx.todoContext?.updateTodos) {
-              const calls = (
-                ctx.todoContext.updateTodos as ReturnType<typeof vi.fn>
-              ).mock.calls;
-              if (calls.length > 0) {
-                const updatedTodos = calls[0][0];
-                expect(updatedTodos[position - 1].status).toBe('in_progress');
-              }
-            }
+            expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
+            const calls = (
+              ctx.todoContext!.updateTodos as ReturnType<typeof vi.fn>
+            ).mock.calls;
+            const updatedTodos = calls[0][0];
+            expect(updatedTodos[position - 1].status).toBe('in_progress');
           },
         ),
         { numRuns: 10 },
@@ -1265,9 +1262,13 @@ describe('todoCommand', () => {
       // In real implementation, we'd need to create temp TODO files
       await loadSubcommand!.action!(ctx, '1');
 
-      // If files exist, updateTodos should be called
-      // If no files exist, an error message should be shown
-      expect(ctx.todoContext?.updateTodos || ctx.ui.addItem).toHaveBeenCalled();
+      // Either updateTodos is called (files exist) or addItem shows error (no files)
+      const updateTodosCalled =
+        (ctx.todoContext?.updateTodos as ReturnType<typeof vi.fn>).mock.calls
+          .length > 0;
+      const addItemCalled =
+        (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls.length > 0;
+      expect(updateTodosCalled || addItemCalled).toBe(true);
     });
 
     /**
@@ -1488,11 +1489,42 @@ describe('todoCommand', () => {
               content: fc.string(),
               status: fc.constantFrom('pending', 'in_progress', 'completed'),
             }),
-            { minLength: 0, maxLength: 5 },
+            { minLength: 1, maxLength: 5 },
           ),
           (initialTodos) => {
-            // Stub phase - just verify no crash
-            expect(initialTodos).toBeDefined();
+            const ctx = createMockContext(initialTodos as Todo[]);
+            const initialLength = initialTodos.length;
+
+            const addSubcommand = todoCommand.subCommands?.find(
+              (cmd) => cmd.name === 'add',
+            );
+            const removeSubcommand = todoCommand.subCommands?.find(
+              (cmd) => cmd.name === 'remove',
+            );
+
+            // Add a todo at last position
+            addSubcommand!.action!(ctx, 'last New task');
+
+            expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
+            let calls = (
+              ctx.todoContext!.updateTodos as ReturnType<typeof vi.fn>
+            ).mock.calls;
+            const todosAfterAdd = calls[calls.length - 1][0];
+            expect(todosAfterAdd.length).toBe(initialLength + 1);
+
+            // Reset mock to track next call
+            (
+              ctx.todoContext!.updateTodos as ReturnType<typeof vi.fn>
+            ).mockClear();
+
+            // Remove the last todo
+            removeSubcommand!.action!(ctx, todosAfterAdd.length.toString());
+
+            expect(ctx.todoContext?.updateTodos).toHaveBeenCalled();
+            calls = (ctx.todoContext!.updateTodos as ReturnType<typeof vi.fn>)
+              .mock.calls;
+            const todosAfterRemove = calls[calls.length - 1][0];
+            expect(todosAfterRemove.length).toBe(initialLength);
           },
         ),
         { numRuns: 10 },

@@ -802,7 +802,9 @@ Examples:
           // Check for "all" keyword
           if (posStr === 'all') {
             const count = files.length;
-            files.forEach((file) => fs.unlinkSync(file.path));
+            files.forEach((file) => {
+              fs.unlinkSync(file.path);
+            });
             context.ui.addItem(
               {
                 type: MessageType.INFO,
