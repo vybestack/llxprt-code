@@ -1081,6 +1081,36 @@ export async function applyProfileSnapshot(
             }`,
         );
       });
+
+    // @fix issue1151 - Proactively wire the failover handler BEFORE any API calls
+    // This ensures the handler is available when the first 403 error occurs.
+    // Without this, the handler is only created inside getOAuthToken() which may
+    // be too late if the 403 happens on the first request.
+    // Only applies to StandardProfile (not LoadBalancerProfile)
+    const standardProfile = profile as {
+      auth?: { type?: string; buckets?: string[] };
+    };
+    const authConfig = standardProfile.auth;
+    if (
+      authConfig?.type === 'oauth' &&
+      authConfig.buckets &&
+      authConfig.buckets.length > 1
+    ) {
+      const bucketCount = authConfig.buckets.length;
+      // Touch getOAuthToken to ensure handler is wired to config
+      void oauthManager.getOAuthToken(profile.provider).catch((error) => {
+        logger.debug(
+          () =>
+            `[issue1151] Failed to proactively wire failover handler: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+      });
+      logger.debug(
+        () =>
+          `[issue1151] Proactively wired failover handler for ${profile.provider} with ${bucketCount} buckets`,
+      );
+    }
   }
 
   return {
