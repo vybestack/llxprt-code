@@ -30,7 +30,7 @@ jobs:
       paths_result: ${{ steps.skip_check.outputs.paths_result }}
     steps:
       - id: skip_check
-        uses: 'step-security/skip-duplicate-actions@7d9de88a66bb11a2cc0de9ce06dd5fdf45c888bc' # ratchet:step-security/skip-duplicate-actions@v5
+        uses: 'step-security/skip-duplicate-actions@352510048825167eb9cb8e4cffd4dccf946fcd56' # ratchet:step-security/skip-duplicate-actions@v5.3.3
         with:
           concurrent_skipping: 'same_content'
           skip_after_successful_duplicate: 'true'
