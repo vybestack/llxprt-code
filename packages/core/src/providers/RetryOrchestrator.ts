@@ -38,6 +38,7 @@ import {
 } from '../utils/retry.js';
 import { delay, createAbortError } from '../utils/delay.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { AllBucketsExhaustedError } from './errors.js';
 
 export interface RetryOrchestratorConfig {
   /** Maximum retry attempts (default: 6) */
@@ -269,13 +270,9 @@ export class RetryOrchestrator implements IProvider {
             signal,
           );
         } else {
-          // No timeout - consume and buffer stream to detect mid-stream errors
-          const chunks: IContent[] = [];
+          // No timeout - yield chunks as they arrive (true streaming)
+          // Let retry logic handle mid-stream errors
           for await (const chunk of stream) {
-            chunks.push(chunk);
-          }
-          // Success - yield all chunks
-          for (const chunk of chunks) {
             yield chunk;
           }
         }
@@ -422,21 +419,35 @@ export class RetryOrchestrator implements IProvider {
 
       // Apply timeout only for first chunk
       if (firstChunk && timeoutMs > 0) {
+        let timeoutId: NodeJS.Timeout | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(
+          timeoutId = setTimeout(
             () => reject(new Error('Stream timeout: first chunk not received')),
             timeoutMs,
           );
         });
 
-        const result = await Promise.race([nextPromise, timeoutPromise]);
+        try {
+          const result = await Promise.race([nextPromise, timeoutPromise]);
 
-        if (result.done) {
-          return;
+          // Clear the timeout now that we got the first chunk
+          if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+          }
+
+          if (result.done) {
+            return;
+          }
+
+          firstChunk = false;
+          yield result.value;
+        } catch (error) {
+          // Clear timeout on error
+          if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+          }
+          throw error;
         }
-
-        firstChunk = false;
-        yield result.value;
       } else {
         const result = await nextPromise;
 
@@ -555,9 +566,8 @@ export class RetryOrchestrator implements IProvider {
   private createAllBucketsExhaustedError(
     handler: BucketFailoverHandler,
     lastError: Error,
-  ): Error {
+  ): AllBucketsExhaustedError {
     const buckets = handler.getBuckets();
-    const message = `All buckets exhausted for provider '${this.name}':\n${buckets.map((b) => `  - ${b}: failed`).join('\n')}\n\nLast error: ${lastError.message}\n\nTry again later or add more OAuth buckets to the profile.`;
-    return new Error(message);
+    return new AllBucketsExhaustedError(this.name, buckets, lastError);
   }
 }

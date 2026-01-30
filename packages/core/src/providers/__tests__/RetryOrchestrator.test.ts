@@ -27,7 +27,7 @@ function createTestProvider(config: {
   let callCount = 0;
 
   const successContent: IContent = {
-    role: 'assistant',
+    speaker: 'ai',
     blocks: [{ type: 'text', text: 'test response' }],
   };
 
@@ -813,11 +813,11 @@ describe('RetryOrchestrator', () => {
   describe('Streaming Support', () => {
     it('should yield chunks as they arrive', async () => {
       const chunk1: IContent = {
-        role: 'assistant',
+        speaker: 'ai',
         blocks: [{ type: 'text', text: 'chunk1' }],
       };
       const chunk2: IContent = {
-        role: 'assistant',
+        speaker: 'ai',
         blocks: [{ type: 'text', text: 'chunk2' }],
       };
 
@@ -858,14 +858,14 @@ describe('RetryOrchestrator', () => {
           if (attemptCount === 1) {
             // First attempt - yield one chunk then error
             yield {
-              role: 'assistant',
+              speaker: 'ai',
               blocks: [{ type: 'text', text: 'partial' }],
             } as IContent;
             throw createNetworkError('STREAM_INTERRUPTED');
           } else {
             // Second attempt - succeed
             yield {
-              role: 'assistant',
+              speaker: 'ai',
               blocks: [{ type: 'text', text: 'complete' }],
             } as IContent;
           }
@@ -897,8 +897,14 @@ describe('RetryOrchestrator', () => {
         orchestrator.generateChatCompletion(options),
       );
 
-      expect(chunks).toHaveLength(1);
+      // With true streaming (streamingTimeoutMs=0), chunks are yielded immediately
+      // So we see the partial chunk from first attempt, then complete chunk from retry
+      expect(chunks).toHaveLength(2);
       expect(chunks[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'partial',
+      });
+      expect(chunks[1].blocks[0]).toMatchObject({
         type: 'text',
         text: 'complete',
       });
@@ -912,7 +918,7 @@ describe('RetryOrchestrator', () => {
           // Delay before first chunk
           await delay(200);
           yield {
-            role: 'assistant',
+            speaker: 'ai',
             blocks: [{ type: 'text', text: 'slow' }],
           } as IContent;
         },
@@ -956,13 +962,13 @@ describe('RetryOrchestrator', () => {
             // First attempt times out (slow)
             await delay(200);
             yield {
-              role: 'assistant',
+              speaker: 'ai',
               blocks: [{ type: 'text', text: 'too slow' }],
             } as IContent;
           } else {
             // Second attempt succeeds quickly
             yield {
-              role: 'assistant',
+              speaker: 'ai',
               blocks: [{ type: 'text', text: 'success' }],
             } as IContent;
           }
@@ -1153,7 +1159,7 @@ describe('RetryOrchestrator', () => {
           }
 
           yield {
-            role: 'assistant',
+            speaker: 'ai',
             blocks: [{ type: 'text', text: 'test' }],
           } as IContent;
         },

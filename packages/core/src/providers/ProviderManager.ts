@@ -229,6 +229,7 @@ export class ProviderManager implements IProviderManager {
 
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @plan PLAN-20260128issue808
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 3-5
    */
@@ -241,18 +242,28 @@ export class ProviderManager implements IProviderManager {
     const providers = new Map(this.providers);
 
     for (const [name, provider] of providers) {
-      // Unwrap if it's already wrapped
+      // Fully unwrap to get the base provider
       let baseProvider = provider;
-      if ('wrappedProvider' in provider && provider.wrappedProvider) {
-        baseProvider = provider.wrappedProvider as IProvider;
+      while (
+        'wrappedProvider' in baseProvider &&
+        baseProvider.wrappedProvider
+      ) {
+        baseProvider = baseProvider.wrappedProvider as IProvider;
       }
 
       this.syncProviderRuntime(baseProvider);
 
-      // ALWAYS wrap with LoggingProviderWrapper for token tracking
-      let finalProvider = baseProvider;
+      // Apply wrapping order (inner to outer):
+      // 1. RetryOrchestrator (retry, backoff, bucket failover)
+      // 2. LoggingProviderWrapper (token tracking, telemetry)
+      let finalProvider: IProvider = baseProvider;
+
+      // First wrap with RetryOrchestrator
+      finalProvider = new RetryOrchestrator(finalProvider);
+
+      // Then wrap with LoggingProviderWrapper if config is available
       if (this.config) {
-        finalProvider = new LoggingProviderWrapper(baseProvider, this.config);
+        finalProvider = new LoggingProviderWrapper(finalProvider, this.config);
       }
 
       this.syncProviderRuntime(finalProvider);

@@ -217,16 +217,19 @@ export abstract class ProviderError extends Error {
   abstract readonly shouldFailover: boolean;
   readonly status?: number;
   readonly retryAfter?: number;
-  readonly errorCause?: Error;
+  readonly cause?: Error;
 
   constructor(
     message: string,
     options?: { status?: number; retryAfter?: number; cause?: Error },
   ) {
     super(message);
-    this.errorCause = options?.cause;
+    this.name = this.constructor.name;
     this.status = options?.status;
     this.retryAfter = options?.retryAfter;
+    if (options?.cause) {
+      this.cause = options.cause;
+    }
   }
 }
 
