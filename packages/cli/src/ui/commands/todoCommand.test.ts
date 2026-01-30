@@ -1207,7 +1207,13 @@ describe('todoCommand', () => {
       );
 
       await listSubcommand!.action!(ctx, '');
-      expect(true).toBe(true);
+
+      // Verify addItem was called with a message
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      // Should either show files or "No saved TODO lists found"
+      expect(call.type).toBe('info');
     });
 
     /**
@@ -1226,7 +1232,15 @@ describe('todoCommand', () => {
       );
 
       await listSubcommand!.action!(ctx, '');
-      expect(true).toBe(true);
+
+      // Verify addItem was called with a message
+      expect(ctx.ui.addItem).toHaveBeenCalled();
+      const call = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(call.type).toBe('info');
+      // Should either show files or "No saved TODO lists found" message
+      // (depending on whether files exist in the system from previous tests)
+      expect(call.text).toMatch(/No saved TODO lists found|Saved TODO Lists/);
     });
   });
 

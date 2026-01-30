@@ -99,6 +99,7 @@ function formatAge(date: Date): string {
   const diffDays = Math.floor(diffHours / 24);
 
   if (diffHours < 1) return 'Just now';
+  if (diffHours === 1) return '1 hour ago';
   if (diffHours < 24) return `${diffHours} hours ago`;
   if (diffDays === 1) return '1 day ago';
   return `${diffDays} days ago`;
@@ -506,11 +507,9 @@ Examples:
           if (parsed.subtaskIndex !== undefined) {
             // Add as subtask
             const newTodos = [...todos];
-            const parent = newTodos[parsed.parentIndex];
-
-            if (!parent.subtasks) {
-              parent.subtasks = [];
-            }
+            // Clone the parent object and its subtasks to avoid mutation
+            const parent = { ...newTodos[parsed.parentIndex] };
+            parent.subtasks = parent.subtasks ? [...parent.subtasks] : [];
 
             const newSubtask = {
               id: `${newId}-${parsed.subtaskIndex}`,
@@ -519,6 +518,9 @@ Examples:
 
             // Insert at position
             parent.subtasks.splice(parsed.subtaskIndex, 0, newSubtask);
+
+            // Assign the cloned parent back into newTodos
+            newTodos[parsed.parentIndex] = parent;
 
             context.todoContext.updateTodos(newTodos);
             context.ui.addItem(
@@ -693,7 +695,15 @@ Examples:
               return;
             }
 
-            parent.subtasks.splice(parsed.subtaskIndex, 1);
+            // Clone the parent object and its subtasks to avoid mutation
+            const clonedParent = { ...parent };
+            clonedParent.subtasks = [...parent.subtasks];
+
+            // Remove the subtask
+            clonedParent.subtasks.splice(parsed.subtaskIndex, 1);
+
+            // Assign the cloned parent back into newTodos
+            newTodos[parsed.parentIndex] = clonedParent;
 
             context.todoContext.updateTodos(newTodos);
             context.ui.addItem(

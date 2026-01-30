@@ -224,7 +224,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
   useMemoryMonitor({ addItem });
-  const { updateTodos } = useTodoContext();
+  const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
   const registerTodoPause = useCallback(() => {
     todoPauseController.registerTodoPause();
@@ -1487,7 +1487,6 @@ export const AppContainer = (props: AppContainerProps) => {
    * @plan PLAN-20260129-TODOPERSIST.P07
    * Get TodoContext for /todo command integration
    */
-  const { todos } = useTodoContext();
   const todoContextForCommands = useMemo(
     () => ({
       todos,
