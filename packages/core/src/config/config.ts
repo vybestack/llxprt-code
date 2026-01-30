@@ -58,6 +58,8 @@ import { AsyncTaskManager } from '../services/asyncTaskManager.js';
 // @plan PLAN-20260130-ASYNCTASK.P22
 import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
 import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
+// @plan PLAN-20260130-ASYNCTASK.P14
+import { CheckAsyncTasksTool } from '../tools/check-async-tasks.js';
 import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import { OutputFormat } from '../utils/output-format.js';
 import {
@@ -2068,6 +2070,13 @@ export class Config {
       };
       this.allPotentialTools.push(listSubagentsRecord);
     }
+
+    // @plan PLAN-20260130-ASYNCTASK.P14
+    // Register CheckAsyncTasksTool
+    const checkAsyncTasksArgs = {
+      getAsyncTaskManager: () => this.getAsyncTaskManager(),
+    };
+    registerCoreTool(CheckAsyncTasksTool, checkAsyncTasksArgs);
 
     await registry.discoverAllTools();
     registry.sortTools();
