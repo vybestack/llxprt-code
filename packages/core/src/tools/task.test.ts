@@ -10,6 +10,7 @@ import type { Config } from '../config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { ContextState, SubagentTerminateMode } from '../core/subagent.js';
 import { ToolErrorType } from './tool-error.js';
+import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -959,6 +960,7 @@ describe('TaskTool', () => {
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
         subagent_name: 'helper',
@@ -1006,6 +1008,7 @@ describe('TaskTool', () => {
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
         subagent_name: 'helper',

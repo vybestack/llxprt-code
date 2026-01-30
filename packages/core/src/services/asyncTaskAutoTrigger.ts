@@ -20,7 +20,6 @@ import type { AsyncTaskReminderService } from './asyncTaskReminderService.js';
  */
 export class AsyncTaskAutoTrigger {
   private isTriggering = false;
-  private unsubscribeFunctions: Array<() => void> = [];
 
   constructor(
     private readonly taskManager: AsyncTaskManager,
@@ -52,12 +51,6 @@ export class AsyncTaskAutoTrigger {
    * Returns an unsubscribe function.
    */
   subscribe(): () => void {
-    if (this.unsubscribeFunctions.length > 0) {
-      throw new Error(
-        'AsyncTaskAutoTrigger.subscribe() called multiple times. Call the returned unsubscribe function before subscribing again.',
-      );
-    }
-
     const unsubComplete = this.taskManager.onTaskCompleted((task) =>
       this.onTaskCompleted(task),
     );
@@ -65,13 +58,12 @@ export class AsyncTaskAutoTrigger {
       this.onTaskFailed(task),
     );
 
-    this.unsubscribeFunctions.push(unsubComplete, unsubFailed);
+    const localUnsubscribeFunctions = [unsubComplete, unsubFailed];
 
     return () => {
-      for (const unsub of this.unsubscribeFunctions) {
+      for (const unsub of localUnsubscribeFunctions) {
         unsub();
       }
-      this.unsubscribeFunctions = [];
     };
   }
 

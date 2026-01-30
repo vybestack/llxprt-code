@@ -644,6 +644,11 @@ class TaskToolInvocation extends BaseToolInvocation<
 
   /**
    * @plan PLAN-20260130-ASYNCTASK.P11
+   *
+   * Note: Async tasks are designed to run independently in the background.
+   * Unlike foreground task execution, they do NOT wire cancellation or timeout
+   * to the parent agent's signal. This is an intentional design choice to allow
+   * async tasks to continue running even if the foreground agent is interrupted.
    */
   private async executeAsync(
     signal: AbortSignal,
