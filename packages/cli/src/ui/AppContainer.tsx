@@ -1457,6 +1457,7 @@ export const AppContainer = (props: AppContainerProps) => {
       toggleDebugProfiler,
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
+      openWelcomeDialog: welcomeActions.resetAndReopen,
     }),
     [
       openAuthDialog,
@@ -1480,6 +1481,7 @@ export const AppContainer = (props: AppContainerProps) => {
       toggleDebugProfiler,
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
+      welcomeActions.resetAndReopen,
     ],
   );
 

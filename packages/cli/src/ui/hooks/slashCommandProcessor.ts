@@ -78,6 +78,7 @@ interface SlashCommandProcessorActions {
   toggleDebugProfiler: () => void;
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void;
   addConfirmUpdateExtensionRequest: (request: ConfirmationRequest) => void;
+  openWelcomeDialog: () => void;
 }
 
 /**
@@ -578,6 +579,9 @@ export const useSlashCommandProcessor = (
                       actions.openModelsDialog(modelsData);
                       return { type: 'handled' };
                     }
+                    case 'welcome':
+                      actions.openWelcomeDialog();
+                      return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;
                       throw new Error(

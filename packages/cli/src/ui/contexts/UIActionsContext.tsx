@@ -108,6 +108,7 @@ export interface UIActions {
     goBack: () => void;
     saveProfile: (name: string) => Promise<void>;
     dismiss: () => void;
+    resetAndReopen: () => void;
   };
   triggerWelcomeAuth: (
     provider: string,

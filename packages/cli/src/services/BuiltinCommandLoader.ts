@@ -55,6 +55,7 @@ import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
 import { policiesCommand } from '../ui/commands/policiesCommand.js';
 import { dumpcontextCommand } from '../ui/commands/dumpcontextCommand.js';
 import { todoCommand } from '../ui/commands/todoCommand.js';
+import { setupCommand } from '../ui/commands/setupCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -162,6 +163,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       policiesCommand,
       dumpcontextCommand,
       todoCommand,
+      setupCommand,
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);
