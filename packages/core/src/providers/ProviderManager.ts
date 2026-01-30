@@ -18,6 +18,7 @@ import {
   getModelRegistry,
 } from '../models/registry.js';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
+import { RetryOrchestrator } from './RetryOrchestrator.js';
 import {
   logProviderSwitch,
   logProviderCapability,
@@ -228,6 +229,7 @@ export class ProviderManager implements IProviderManager {
 
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @plan PLAN-20260128issue808
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 3-5
    */
@@ -240,18 +242,28 @@ export class ProviderManager implements IProviderManager {
     const providers = new Map(this.providers);
 
     for (const [name, provider] of providers) {
-      // Unwrap if it's already wrapped
+      // Fully unwrap to get the base provider
       let baseProvider = provider;
-      if ('wrappedProvider' in provider && provider.wrappedProvider) {
-        baseProvider = provider.wrappedProvider as IProvider;
+      while (
+        'wrappedProvider' in baseProvider &&
+        baseProvider.wrappedProvider
+      ) {
+        baseProvider = baseProvider.wrappedProvider as IProvider;
       }
 
       this.syncProviderRuntime(baseProvider);
 
-      // ALWAYS wrap with LoggingProviderWrapper for token tracking
-      let finalProvider = baseProvider;
+      // Apply wrapping order (inner to outer):
+      // 1. RetryOrchestrator (retry, backoff, bucket failover)
+      // 2. LoggingProviderWrapper (token tracking, telemetry)
+      let finalProvider: IProvider = baseProvider;
+
+      // First wrap with RetryOrchestrator
+      finalProvider = new RetryOrchestrator(finalProvider);
+
+      // Then wrap with LoggingProviderWrapper if config is available
       if (this.config) {
-        finalProvider = new LoggingProviderWrapper(baseProvider, this.config);
+        finalProvider = new LoggingProviderWrapper(finalProvider, this.config);
       }
 
       this.syncProviderRuntime(finalProvider);
@@ -557,7 +569,7 @@ export class ProviderManager implements IProviderManager {
       const providerInstance = this.providers.get(targetProvider);
 
       // Check for getAuthToken on the actual provider
-      // (might be wrapped in LoggingProviderWrapper)
+      // (might be wrapped in multiple layers: LoggingProviderWrapper → RetryOrchestrator → BaseProvider)
       interface ProviderWithWrapper {
         wrappedProvider?: IProvider;
       }
@@ -565,9 +577,10 @@ export class ProviderManager implements IProviderManager {
         getAuthToken?: () => Promise<string>;
       }
 
+      // Traverse the full wrapper chain to find the actual provider
       let actualProvider: IProvider | undefined = providerInstance;
-      if (providerInstance && 'wrappedProvider' in providerInstance) {
-        actualProvider = (providerInstance as ProviderWithWrapper)
+      while (actualProvider && 'wrappedProvider' in actualProvider) {
+        actualProvider = (actualProvider as ProviderWithWrapper)
           .wrappedProvider;
       }
 
@@ -671,16 +684,29 @@ export class ProviderManager implements IProviderManager {
 
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @plan PLAN-20260128issue808
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 3-5
    */
   registerProvider(provider: IProvider): void {
     this.syncProviderRuntime(provider);
-    // ALWAYS wrap provider to enable token tracking
-    // (LoggingProviderWrapper handles both token tracking AND conversation logging)
-    let finalProvider = provider;
+
+    // Wrapping order (inner to outer):
+    // 1. Raw provider (fast-fail on errors)
+    // 2. RetryOrchestrator (retry, backoff, bucket failover)
+    // 3. LoggingProviderWrapper (token tracking, telemetry)
+
+    let finalProvider: IProvider = provider;
+
+    // First wrap with RetryOrchestrator for centralized retry/failover
+    finalProvider = new RetryOrchestrator(finalProvider, {
+      // Config will be read from ephemeral settings at call time
+      // Default values will be used if not provided
+    });
+
+    // Then wrap with LoggingProviderWrapper for token tracking
     if (this.config) {
-      finalProvider = new LoggingProviderWrapper(provider, this.config);
+      finalProvider = new LoggingProviderWrapper(finalProvider, this.config);
     }
 
     this.syncProviderRuntime(finalProvider);
