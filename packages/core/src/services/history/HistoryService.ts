@@ -138,7 +138,12 @@ export class HistoryService
   }
 
   /**
-   * Get the current total token count
+   * Get the current total token count including base offset (system prompt).
+   *
+   * This value is used for compression threshold calculations and should always
+   * reflect the total context size that will be sent to the API.
+   *
+   * @returns baseTokenOffset + totalTokens (history tokens)
    */
   getTotalTokens(): number {
     return this.baseTokenOffset + this.totalTokens;
@@ -171,6 +176,15 @@ export class HistoryService
   /**
    * Set a base offset that is always included in the total token count.
    * Useful for accounting for system prompts or other fixed overhead.
+   *
+   * The system prompt token count should be set once at chat start using this method.
+   * This offset is included in getTotalTokens() to ensure compression threshold
+   * calculations account for the full context size (system prompt + history).
+   *
+   * NOTE: The system prompt itself is NEVER compressed - only conversation history
+   * returned by getCurated() is subject to compression.
+   *
+   * @param offset - Number of tokens in the system prompt or fixed overhead
    */
   setBaseTokenOffset(offset: number): void {
     const normalized = Math.max(0, Math.floor(offset));
