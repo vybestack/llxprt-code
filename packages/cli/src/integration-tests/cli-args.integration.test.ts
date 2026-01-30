@@ -147,7 +147,7 @@ describe('CLI --profile-load Integration Tests', () => {
       expect(fullOutput).toMatch(/gemini|provider.*gemini/i);
     });
 
-    it('should handle non-existent profile gracefully', async () => {
+    it('should error when non-existent profile is explicitly specified', async () => {
       // Create a keyfile so it doesn't hang on auth
       const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
 
@@ -166,16 +166,16 @@ describe('CLI --profile-load Integration Tests', () => {
         },
       );
 
-      // Should log error but continue
+      // Should log error and exit with non-zero code
       const fullOutput = result.stdout + result.stderr;
       expect(fullOutput).toMatch(
         /Failed to load profile.*non-existent-profile|Profile.*non-existent-profile.*not found/i,
       );
-      // Should not crash with timeout
-      expect(result.exitCode).not.toBe(-1);
+      // Should exit with error code 1 when profile fails to load
+      expect(result.exitCode).toBe(1);
     });
 
-    it('should handle invalid profile format', async () => {
+    it('should error when invalid profile format is explicitly specified', async () => {
       // Create an invalid profile file
       const profilesDir = path.join(tempDir, '.llxprt', 'profiles');
       await fs.mkdir(profilesDir, { recursive: true });
@@ -196,6 +196,8 @@ describe('CLI --profile-load Integration Tests', () => {
       expect(fullOutput).toMatch(
         /Failed to load profile.*invalid-profile|Profile.*invalid-profile.*corrupted/i,
       );
+      // Should exit with error code 1 when profile is corrupted
+      expect(result.exitCode).toBe(1);
     });
   });
 

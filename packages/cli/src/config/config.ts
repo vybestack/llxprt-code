@@ -899,6 +899,11 @@ export async function loadCliConfig(
             )
           : undefined));
 
+  // Track whether profile was explicitly specified via --profile-load
+  const profileExplicitlySpecified =
+    bootstrapArgs.profileName != null &&
+    normaliseProfileName(bootstrapArgs.profileName) != null;
+
   if (profileToLoad) {
     try {
       const profileManager = new ProfileManager();
@@ -944,6 +949,13 @@ export async function loadCliConfig(
         return failureSummary;
       });
       console.error(failureSummary);
+
+      // If profile was explicitly specified via --profile-load, error out
+      if (profileExplicitlySpecified) {
+        throw error;
+      }
+
+      // Otherwise, warn and continue (profile from env var or default setting)
       profileWarnings.push(failureSummary);
       // Continue without the profile settings
     }
