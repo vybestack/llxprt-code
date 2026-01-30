@@ -37,6 +37,7 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
+import { useTodoContinuation } from './hooks/useTodoContinuation.js';
 import {
   isMouseEventsActive,
   setMouseEventsActive,
@@ -223,7 +224,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
   useMemoryMonitor({ addItem });
-  const { updateTodos } = useTodoContext();
+  const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
   const registerTodoPause = useCallback(() => {
     todoPauseController.registerTodoPause();
@@ -1482,6 +1483,21 @@ export const AppContainer = (props: AppContainerProps) => {
     ],
   );
 
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P07
+   * Get TodoContext for /todo command integration
+   */
+  const todoContextForCommands = useMemo(
+    () => ({
+      todos,
+      updateTodos,
+      refreshTodos: () => {
+        /* refreshTodos is available but not needed in commands */
+      },
+    }),
+    [todos, updateTodos],
+  );
+
   const {
     handleSlashCommand,
     slashCommands,
@@ -1502,6 +1518,7 @@ export const AppContainer = (props: AppContainerProps) => {
     slashCommandProcessorActions,
     extensionsUpdateState,
     true, // isConfigInitialized
+    todoContextForCommands, // @plan PLAN-20260129-TODOPERSIST.P07
   );
 
   // Memoize viewport to ensure it updates when inputWidth changes
@@ -1599,6 +1616,14 @@ export const AppContainer = (props: AppContainerProps) => {
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
       if (trimmedValue.length > 0) {
+        /**
+         * @plan PLAN-20260129-TODOPERSIST.P12
+         * Reset continuation attempt counter when user submits a new prompt.
+         * This prevents the continuation limit from blocking future continuations
+         * after user interaction.
+         */
+        hadToolCallsRef.current = false;
+
         // Add to independent input history
         inputHistoryStore.addInput(trimmedValue);
         submitQuery(trimmedValue);
@@ -1611,6 +1636,7 @@ export const AppContainer = (props: AppContainerProps) => {
     controller: todoPauseController,
     updateTodos,
     handleFinalSubmit,
+    todos,
   });
 
   const handleIdePromptComplete = useCallback(
@@ -1975,8 +2001,47 @@ export const AppContainer = (props: AppContainerProps) => {
     [storage, sessionId],
   );
 
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P12
+   * Wire up todo continuation detection to trigger continuation prompts
+   * when streams complete without tool calls and active TODOs exist.
+   */
+  const geminiClientForContinuation = config.getGeminiClient();
+  const todoContinuation = useTodoContinuation(
+    geminiClientForContinuation,
+    config,
+    streamingState === StreamingState.Responding ||
+      streamingState === StreamingState.WaitingForConfirmation,
+    setDebugMessage,
+  );
+
   // Track previous streaming state to detect turn completion
   const prevStreamingStateRef = useRef<StreamingState>(streamingState);
+
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P12
+   * Track whether tool calls were made during the turn for continuation decision.
+   * Tool calls signal the AI made progress, so we don't need continuation.
+   */
+  const hadToolCallsRef = useRef<boolean>(false);
+
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P12
+   * Track tool calls by detecting tool_group items in history and pending items.
+   */
+  useEffect(() => {
+    const hasToolCalls =
+      history.some((item) => item.type === 'tool_group') ||
+      pendingHistoryItems.some((item) => item.type === 'tool_group');
+
+    if (
+      hasToolCalls &&
+      (streamingState === StreamingState.Responding ||
+        streamingState === StreamingState.WaitingForConfirmation)
+    ) {
+      hadToolCallsRef.current = true;
+    }
+  }, [history, pendingHistoryItems, streamingState]);
 
   // Save session when turn completes (streaming goes idle)
   useEffect(() => {
@@ -1989,6 +2054,16 @@ export const AppContainer = (props: AppContainerProps) => {
     if (!wasActive || !isNowIdle) {
       return;
     }
+
+    /**
+     * @plan PLAN-20260129-TODOPERSIST.P12
+     * Notify continuation logic that stream completed.
+     * Pass hadToolCalls to determine if continuation is needed.
+     */
+    todoContinuation.handleStreamCompleted(hadToolCallsRef.current);
+
+    // Reset for next turn
+    hadToolCallsRef.current = false;
 
     // Get history from gemini client and save
     const geminiClient = config.getGeminiClient();
@@ -2015,7 +2090,7 @@ export const AppContainer = (props: AppContainerProps) => {
       .catch((err: unknown) => {
         debug.error('Failed to save session:', err);
       });
-  }, [streamingState, sessionPersistence, config, history]);
+  }, [streamingState, sessionPersistence, config, history, todoContinuation]);
 
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {
