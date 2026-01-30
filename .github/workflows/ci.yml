@@ -29,9 +29,25 @@ env:
   SHELLCHECK_VERSION: '0.11.0'
   YAMLLINT_VERSION: '1.35.1'
 jobs:
+  skip_check:
+    name: 'Skip Duplicate Check'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+      paths_result: ${{ steps.skip_check.outputs.paths_result }}
+    steps:
+      - id: skip_check
+        uses: 'step-security/skip-duplicate-actions@7d9de88a66bb11a2cc0de9ce06dd5fdf45c888bc' # ratchet:step-security/skip-duplicate-actions@v5
+        with:
+          concurrent_skipping: 'same_content'
+          skip_after_successful_duplicate: 'true'
+          do_not_skip: '["workflow_dispatch"]'
   doc_change_filter:
     name: 'Detect doc-only changes'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     env:
       GH_TOKEN: '${{ github.token }}'
     outputs:
@@ -95,6 +111,9 @@ jobs:
   lint_github_actions:
     name: 'Lint (GitHub Actions)'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -140,6 +159,9 @@ jobs:
   lint_javascript:
     name: 'Lint (Javascript)'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -232,6 +254,9 @@ jobs:
   lint_shell:
     name: 'Lint (Shell)'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -304,6 +329,9 @@ jobs:
   lint_yaml:
     name: 'Lint (YAML)'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -350,7 +378,8 @@ jobs:
     needs:
       - 'lint'
       - 'doc_change_filter'
-    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' }}
+      - 'skip_check'
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
       checks: 'write'
@@ -520,6 +549,9 @@ jobs:
   codeql:
     name: 'CodeQL'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       actions: 'read'
       contents: 'read'
