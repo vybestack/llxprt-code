@@ -1226,10 +1226,17 @@ describe('subagent.ts', () => {
         expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
 
         // Check the tool response sent back in the second call
+        // The response now includes a full functionResponse object for proper
+        // Anthropic tool_use/tool_result pairing
         const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
-        expect(secondCallArgs.message).toEqual([
-          { text: 'Emitted variable result successfully' },
-        ]);
+        expect(secondCallArgs.message).toHaveLength(1);
+        expect(secondCallArgs.message[0]).toHaveProperty('functionResponse');
+        expect(secondCallArgs.message[0].functionResponse.name).toBe(
+          'self_emitvalue',
+        );
+        expect(
+          secondCallArgs.message[0].functionResponse.response.message,
+        ).toBe('Emitted variable result successfully');
       });
 
       it('should execute external tools and provide the response to the model', async () => {
