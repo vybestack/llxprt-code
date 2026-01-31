@@ -198,3 +198,119 @@ export class LoadBalancerFailoverError extends Error {
     this.failures = failures;
   }
 }
+
+/**
+ * @plan PLAN-20260128issue808
+ * Standardized provider error hierarchy for RetryOrchestrator
+ *
+ * Base class for all provider errors with consistent retry/failover behavior
+ */
+export abstract class ProviderError extends Error {
+  abstract readonly category:
+    | 'rate_limit'
+    | 'quota'
+    | 'authentication'
+    | 'server_error'
+    | 'network'
+    | 'client_error';
+  abstract readonly isRetryable: boolean;
+  abstract readonly shouldFailover: boolean;
+  readonly status?: number;
+  readonly retryAfter?: number;
+  readonly cause?: Error;
+
+  constructor(
+    message: string,
+    options?: { status?: number; retryAfter?: number; cause?: Error },
+  ) {
+    super(message);
+    this.name = this.constructor.name;
+    this.status = options?.status;
+    this.retryAfter = options?.retryAfter;
+    if (options?.cause) {
+      this.cause = options.cause;
+    }
+  }
+}
+
+/**
+ * Error for rate limit (429) responses
+ * Retryable with exponential backoff, triggers bucket failover
+ */
+export class RateLimitError extends ProviderError {
+  readonly category = 'rate_limit' as const;
+  readonly isRetryable = true;
+  readonly shouldFailover = true;
+}
+
+/**
+ * Error for quota exceeded (402 payment required)
+ * Triggers immediate bucket failover
+ */
+export class QuotaError extends ProviderError {
+  readonly category = 'quota' as const;
+  readonly isRetryable = true;
+  readonly shouldFailover = true; // Instant bucket failover
+}
+
+/**
+ * Error for authentication failures (401/403)
+ * Retryable once to allow token refresh, then triggers bucket failover
+ */
+export class AuthenticationError extends ProviderError {
+  readonly category = 'authentication' as const;
+  readonly isRetryable = true; // Allow one retry for token refresh
+  readonly shouldFailover = true;
+}
+
+/**
+ * Error for server errors (5xx)
+ * Retryable with exponential backoff, does not trigger bucket failover
+ */
+export class ServerError extends ProviderError {
+  readonly category = 'server_error' as const;
+  readonly isRetryable = true;
+  readonly shouldFailover = false;
+}
+
+/**
+ * Error for network/transient errors (ECONNRESET, etc.)
+ * Retryable with exponential backoff, does not trigger bucket failover
+ */
+export class NetworkError extends ProviderError {
+  readonly category = 'network' as const;
+  readonly isRetryable = true;
+  readonly shouldFailover = false;
+}
+
+/**
+ * Error for client errors (400, 404, etc.)
+ * Not retryable, does not trigger bucket failover
+ */
+export class ClientError extends ProviderError {
+  readonly category = 'client_error' as const;
+  readonly isRetryable = false;
+  readonly shouldFailover = false;
+}
+
+/**
+ * Thrown when all OAuth buckets are exhausted during failover
+ * @plan PLAN-20260128issue808
+ */
+export class AllBucketsExhaustedError extends Error {
+  readonly attemptedBuckets: string[];
+  readonly lastError: Error;
+
+  constructor(
+    providerName: string,
+    attemptedBuckets: string[],
+    lastError: Error,
+  ) {
+    super(
+      `All buckets exhausted for provider '${providerName}': ${attemptedBuckets.join(', ')}`,
+    );
+    this.name = 'AllBucketsExhaustedError';
+    this.attemptedBuckets = attemptedBuckets;
+    this.lastError = lastError;
+  }
+}
