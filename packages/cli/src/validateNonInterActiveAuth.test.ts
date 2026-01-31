@@ -10,46 +10,49 @@ import {
   NonInteractiveConfig,
 } from './validateNonInterActiveAuth.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
-import * as auth from './config/auth.js';
 
 describe('validateNonInterActiveAuth', () => {
-  let originalEnvGeminiApiKey: string | undefined;
-  let originalEnvVertexAi: string | undefined;
-  let originalEnvGcp: string | undefined;
+  // Store all auth-related env vars that need to be cleaned up
+  const authEnvVars = [
+    'GEMINI_API_KEY',
+    'LLXPRT_API_KEY',
+    'GOOGLE_GENAI_USE_VERTEXAI',
+    'GOOGLE_GENAI_USE_GCA',
+    'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'GOOGLE_CLOUD_PROJECT',
+    'GOOGLE_CLOUD_LOCATION',
+    'GOOGLE_API_KEY',
+  ] as const;
+
+  let originalEnvVars: Map<string, string | undefined>;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let processExitSpy: ReturnType<typeof vi.spyOn>;
   let refreshAuthMock: ReturnType<(typeof vi)['fn']>;
 
   beforeEach(() => {
-    originalEnvGeminiApiKey = process.env.GEMINI_API_KEY;
-    originalEnvVertexAi = process.env.GOOGLE_GENAI_USE_VERTEXAI;
-    originalEnvGcp = process.env.GOOGLE_GENAI_USE_GCA;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
-    delete process.env.GOOGLE_GENAI_USE_GCA;
+    // Store and clear all auth-related env vars
+    originalEnvVars = new Map();
+    for (const envVar of authEnvVars) {
+      originalEnvVars.set(envVar, process.env[envVar]);
+      delete process.env[envVar];
+    }
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`process.exit(${code}) called`);
     });
-    vi.spyOn(auth, 'validateAuthMethod').mockReturnValue(null);
     refreshAuthMock = vi.fn().mockResolvedValue('refreshed');
   });
 
   afterEach(() => {
-    if (originalEnvGeminiApiKey !== undefined) {
-      process.env.GEMINI_API_KEY = originalEnvGeminiApiKey;
-    } else {
-      delete process.env.GEMINI_API_KEY;
-    }
-    if (originalEnvVertexAi !== undefined) {
-      process.env.GOOGLE_GENAI_USE_VERTEXAI = originalEnvVertexAi;
-    } else {
-      delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
-    }
-    if (originalEnvGcp !== undefined) {
-      process.env.GOOGLE_GENAI_USE_GCA = originalEnvGcp;
-    } else {
-      delete process.env.GOOGLE_GENAI_USE_GCA;
+    // Restore all original env var values
+    for (const envVar of authEnvVars) {
+      const originalValue = originalEnvVars.get(envVar);
+      if (originalValue !== undefined) {
+        process.env[envVar] = originalValue;
+      } else {
+        delete process.env[envVar];
+      }
     }
     vi.restoreAllMocks();
   });
@@ -179,8 +182,11 @@ describe('validateNonInterActiveAuth', () => {
     expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
   });
 
-  it('uses configuredAuthType if provided', async () => {
-    // Set required env var for USE_GEMINI
+  // UPDATED (issue #443): configuredAuthType is now deprecated/ignored.
+  // validateNonInteractiveAuth always uses USE_PROVIDER since providers
+  // handle auth detection internally via determineBestAuth().
+  it('ignores configuredAuthType and always uses USE_PROVIDER (issue #443)', async () => {
+    // Set required env var for auth detection
     process.env.GEMINI_API_KEY = 'fake-key';
     const nonInteractiveConfig: NonInteractiveConfig = {
       refreshAuth: refreshAuthMock,
@@ -188,52 +194,56 @@ describe('validateNonInterActiveAuth', () => {
       getProviderManager: () => undefined,
     };
     await validateNonInteractiveAuth(
-      AuthType.USE_GEMINI,
+      AuthType.USE_GEMINI, // This is ignored now
       undefined,
       nonInteractiveConfig,
     );
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_GEMINI);
+    // Always uses USE_PROVIDER, not the passed-in type
+    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
   });
 
-  it('exits if validateAuthMethod returns error', async () => {
-    // Mock validateAuthMethod to return error
-    vi.spyOn(auth, 'validateAuthMethod').mockReturnValue('Auth error!');
+  // UPDATED (issue #443): validateAuthMethod is no longer called.
+  // Providers handle auth validation internally.
+  it('exits if no auth env vars are set', async () => {
+    // No env vars set, no provider configured
     const nonInteractiveConfig: NonInteractiveConfig = {
       refreshAuth: refreshAuthMock,
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
     const promise = validateNonInteractiveAuth(
-      AuthType.USE_GEMINI,
+      undefined,
       undefined,
       nonInteractiveConfig,
     );
     await expect(promise).rejects.toThrow('process.exit(1) called');
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Auth error!');
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Please set an Auth method'),
+    );
     expect(processExitSpy).toHaveBeenCalledWith(1);
   });
 
-  it('skips validation if useExternalAuth is true', async () => {
-    // Mock validateAuthMethod to return error to ensure it's not being called
-    const validateAuthMethodSpy = vi
-      .spyOn(auth, 'validateAuthMethod')
-      .mockReturnValue('Auth error!');
+  // UPDATED (issue #443): useExternalAuth parameter is now deprecated/ignored.
+  // Auth validation no longer happens - providers handle this internally.
+  it('useExternalAuth param is deprecated and ignored (issue #443)', async () => {
+    // Set env vars so auth check passes
+    process.env.GEMINI_API_KEY = 'fake-key';
+
     const nonInteractiveConfig: NonInteractiveConfig = {
       refreshAuth: refreshAuthMock,
+      getProvider: () => undefined,
+      getProviderManager: () => undefined,
     };
 
-    // Even with an invalid auth type, it should not exit
-    // because validation is skipped.
     await validateNonInteractiveAuth(
-      'invalid-auth-type' as AuthType,
-      true, // useExternalAuth = true
+      'invalid-auth-type' as AuthType, // Ignored
+      true, // useExternalAuth is now ignored
       nonInteractiveConfig,
     );
 
-    expect(validateAuthMethodSpy).not.toHaveBeenCalled();
+    // Should succeed with USE_PROVIDER since env var is set
     expect(consoleErrorSpy).not.toHaveBeenCalled();
     expect(processExitSpy).not.toHaveBeenCalled();
-    // We still expect refreshAuth to be called with the (invalid) type
-    expect(refreshAuthMock).toHaveBeenCalledWith('invalid-auth-type');
+    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
   });
 });

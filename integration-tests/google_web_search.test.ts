@@ -8,10 +8,10 @@ import { describe, it, expect } from 'vitest';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 import { GOOGLE_WEB_SEARCH_TOOL } from '../packages/core/src/tools/tool-names.js';
 
-// Skip web search tests in CI or when auth type is none (requires OAuth)
+// Skip web search tests in CI unless explicitly enabled via RUN_WEB_TESTS=true
 // We do not run this in CI because it depends on Gemini-backed server tools.
 const skipInCI =
-  process.env.CI === 'true' || process.env.LLXPRT_AUTH_TYPE === 'none';
+  process.env.CI === 'true' && process.env.RUN_WEB_TESTS !== 'true';
 
 describe('google_web_search', () => {
   it.skipIf(skipInCI)('should be able to search the web', async () => {

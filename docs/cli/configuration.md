@@ -108,9 +108,8 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 #### `selectedAuthType`
 
 - **`selectedAuthType`** (string):
-  - **Description:** The currently selected authentication type.
+  - **Description:** DEPRECATED: Authentication is now handled by providers. This setting is ignored.
   - **Default:** `"provider"`
-  - **Requires restart:** Yes
 
 #### `useExternalAuth`
 
