@@ -824,35 +824,6 @@ export class SubAgentScope {
 
         const toolRequests = [...turn.pendingToolCalls];
         if (toolRequests.length > 0) {
-          // Record the model's response with tool_call blocks to history FIRST
-          // This ensures proper tool_use/tool_result pairing for Anthropic
-          const modelParts: Part[] = [];
-          if (textResponse.trim()) {
-            modelParts.push({ text: textResponse });
-          }
-          toolRequests.forEach((req) => {
-            modelParts.push({
-              functionCall: {
-                id: req.callId,
-                name: req.name,
-                args: req.args as Record<string, unknown>,
-              },
-            });
-          });
-          const modelContent: Content = { role: 'model', parts: modelParts };
-          const turnKey = this.runtimeContext.history.generateTurnKey();
-          const idGen =
-            this.runtimeContext.history.getIdGeneratorCallback(turnKey);
-          this.runtimeContext.history.add(
-            ContentConverters.toIContent(
-              modelContent,
-              idGen,
-              undefined,
-              turnKey,
-            ),
-            this.modelConfig.model,
-          );
-
           const manualParts: Part[] = [];
           const schedulerRequests: ToolCallRequestInfo[] = [];
 
