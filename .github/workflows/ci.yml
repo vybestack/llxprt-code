@@ -29,9 +29,26 @@ env:
   SHELLCHECK_VERSION: '0.11.0'
   YAMLLINT_VERSION: '1.35.1'
 jobs:
+  skip_check:
+    name: 'Skip Duplicate Check'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+      paths_result: ${{ steps.skip_check.outputs.paths_result }}
+    steps:
+      - id: skip_check
+        # ratchet:fkirc/skip-duplicate-actions@v5.3.1
+        uses: 'fkirc/skip-duplicate-actions@f75f66ce1886f00957d99748a42c724f4330bdcf'
+        with:
+          concurrent_skipping: 'same_content'
+          skip_after_successful_duplicate: 'true'
+          do_not_skip: '["workflow_dispatch", "merge_group"]'
   doc_change_filter:
     name: 'Detect doc-only changes'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     env:
       GH_TOKEN: '${{ github.token }}'
     outputs:
@@ -95,6 +112,9 @@ jobs:
   lint_github_actions:
     name: 'Lint (GitHub Actions)'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -140,6 +160,9 @@ jobs:
   lint_javascript:
     name: 'Lint (Javascript)'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -232,6 +255,9 @@ jobs:
   lint_shell:
     name: 'Lint (Shell)'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -304,6 +330,9 @@ jobs:
   lint_yaml:
     name: 'Lint (YAML)'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -342,7 +371,7 @@ jobs:
           echo 'All linters finished!'
 
   #
-  # Test: Node
+  # Test: Node (Linux and macOS - always run)
   #
   test:
     name: 'Test'
@@ -350,7 +379,8 @@ jobs:
     needs:
       - 'lint'
       - 'doc_change_filter'
-    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' }}
+      - 'skip_check'
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       contents: 'read'
       checks: 'write'
@@ -361,7 +391,6 @@ jobs:
         os:
           - 'ubuntu-latest'
           - 'macos-latest'
-          - 'windows-latest'
         node-version:
           - '24.x'
     steps:
@@ -423,6 +452,8 @@ jobs:
         env:
           # Provider configuration from repository secrets/variables
           OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
+          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
@@ -520,6 +551,9 @@ jobs:
   codeql:
     name: 'CodeQL'
     runs-on: 'ubuntu-latest'
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     permissions:
       actions: 'read'
       contents: 'read'
