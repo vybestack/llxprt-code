@@ -1225,6 +1225,25 @@ export const useGeminiStream = (
     }
   }, [streamingState, scheduleNextQueuedSubmission]);
 
+  // Wire up async task auto-trigger
+  // @plan PLAN-20260130-ASYNCTASK.P22
+  useEffect(() => {
+    const isAgentBusy = () => streamingState !== StreamingState.Idle;
+    const triggerAgentTurn = async (message: string) => {
+      queuedSubmissionsRef.current.push({ query: [{ text: message }] });
+      scheduleNextQueuedSubmission();
+    };
+
+    const unsubscribe = config.setupAsyncTaskAutoTrigger(
+      isAgentBusy,
+      triggerAgentTurn,
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [config, streamingState, scheduleNextQueuedSubmission]);
+
   // Issue #1113: When isResponding becomes false, process any tool completions
   // that we stored while the stream was active. We store the actual tools because
   // useReactToolScheduler clears toolCalls after onAllToolCallsComplete fires.

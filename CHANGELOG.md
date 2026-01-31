@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Async task execution: Launch subagents with `async=true` to run in background (#244)
+- `check_async_tasks` tool for model to query async task status
+- `/tasks list` command to show all async tasks
+- `/task end <id>` command to cancel async tasks
+- `task-max-async` setting to limit concurrent async tasks (default: 5)
+- Auto-trigger notifications when async tasks complete
+
 ## [0.5.3] - 2025-10-28
 
 ### Changed

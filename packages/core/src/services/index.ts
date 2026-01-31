@@ -13,3 +13,11 @@ export type {
   AnalysisStats,
 } from './complexity-analyzer.js';
 export { ClipboardService } from './ClipboardService.js';
+export { AsyncTaskManager } from './asyncTaskManager.js';
+export type {
+  AsyncTaskInfo,
+  AsyncTaskStatus,
+  RegisterTaskInput,
+} from './asyncTaskManager.js';
+export { AsyncTaskReminderService } from './asyncTaskReminderService.js';
+export { AsyncTaskAutoTrigger } from './asyncTaskAutoTrigger.js';
