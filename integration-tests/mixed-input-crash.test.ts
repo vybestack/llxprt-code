@@ -16,12 +16,11 @@ describe('mixed input crash prevention', () => {
     const stdinContent = "say '1'.";
 
     try {
-      await rig.run(
-        { stdin: stdinContent },
-        '--prompt-interactive',
-        "say '2'.",
-        "say '3'.",
-      );
+      // This test validates CLI error handling, not LLM functionality.
+      // Use runCommand to bypass profile loading and test the raw CLI behavior.
+      await rig.runCommand(['--prompt-interactive', "say '2'.", "say '3'."], {
+        stdin: stdinContent,
+      });
       throw new Error('Expected the command to fail, but it succeeded');
     } catch (error: unknown) {
       expect(error).toBeInstanceOf(Error);
@@ -49,11 +48,11 @@ describe('mixed input crash prevention', () => {
     rig.setup('should provide clear error message for mixed input');
 
     try {
-      await rig.run(
-        { stdin: 'test input' },
-        '--prompt-interactive',
-        'test prompt',
-      );
+      // This test validates CLI error handling, not LLM functionality.
+      // Use runCommand to bypass profile loading and test the raw CLI behavior.
+      await rig.runCommand(['--prompt-interactive', 'test prompt'], {
+        stdin: 'test input',
+      });
       throw new Error('Expected the command to fail, but it succeeded');
     } catch (error: unknown) {
       expect(error).toBeInstanceOf(Error);
