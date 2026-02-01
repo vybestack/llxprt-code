@@ -709,6 +709,21 @@ export async function main() {
       console.error(chalk.red((e as Error).message));
       process.exit(1);
     }
+  } else {
+    // No explicit provider specified - ensure default provider (gemini) is activated
+    // This calls refreshAuth() which initializes contentGeneratorConfig
+    // Without this, sending messages fails with "Content generator config not initialized"
+    try {
+      const defaultProvider =
+        providerManager.getActiveProviderName() || 'gemini';
+      await switchActiveProvider(defaultProvider);
+    } catch (e) {
+      // Log but don't exit - auth will be triggered lazily on first API call
+      const logger = new DebugLogger('llxprt:gemini');
+      logger.debug(
+        () => `Default provider activation skipped: ${(e as Error).message}`,
+      );
+    }
   }
 
   if (settings.merged.ui?.theme) {
