@@ -107,9 +107,9 @@
       "type": "boolean"
     },
     "selectedAuthType": {
-      "title": "Selected Auth Type",
-      "description": "The currently selected authentication type.",
-      "markdownDescription": "The currently selected authentication type.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `provider`",
+      "title": "Selected Auth Type (Deprecated)",
+      "description": "DEPRECATED: Authentication is now handled by providers. This setting is ignored.",
+      "markdownDescription": "DEPRECATED: Authentication is now handled by providers. This setting is ignored.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `provider`",
       "default": "provider",
       "type": "string"
     },

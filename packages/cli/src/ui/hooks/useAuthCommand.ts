@@ -4,20 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { AuthType, Config, getErrorMessage } from '@vybestack/llxprt-code-core';
+import { AuthType } from '@vybestack/llxprt-code-core';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const useAuthCommand = (
   settings: LoadedSettings,
   appState: AppState,
-  config: Config,
+  _config: unknown, // DEPRECATED: config param kept for API compat, unused (issue #443)
 ) => {
   const appDispatch = useAppDispatch();
-  const runtime = useRuntimeApi();
   const isAuthDialogOpen = appState.openDialogs.auth;
 
   // Commented out to implement lazy authentication
@@ -34,75 +32,10 @@ export const useAuthCommand = (
 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-  useEffect(() => {
-    const authFlow = async () => {
-      const authType = settings.merged.selectedAuthType;
-      if (isAuthDialogOpen || !authType) {
-        return;
-      }
-
-      try {
-        setIsAuthenticating(true);
-        await config.refreshAuth(authType);
-
-        // Apply compression settings after authentication
-        const contextLimit = config.getEphemeralSetting('context-limit') as
-          | number
-          | undefined;
-        const compressionThreshold = config.getEphemeralSetting(
-          'compression-threshold',
-        ) as number | undefined;
-
-        // Set compression settings via ephemeral settings
-        if (compressionThreshold !== undefined) {
-          config.setEphemeralSetting(
-            'compression-threshold',
-            compressionThreshold,
-          );
-        }
-        if (contextLimit !== undefined) {
-          config.setEphemeralSetting('context-limit', contextLimit);
-        }
-
-        // Update serverToolsProvider after authentication
-        const providerManager = runtime.getCliProviderManager();
-        if (providerManager) {
-          const serverToolsProvider = providerManager.getServerToolsProvider();
-          if (
-            serverToolsProvider &&
-            serverToolsProvider.name === 'gemini' &&
-            'setConfig' in serverToolsProvider
-          ) {
-            // This will trigger determineBestAuth() with the new auth state
-            const geminiProvider = serverToolsProvider as {
-              setConfig: (config: Config) => void;
-            };
-            geminiProvider.setConfig(config);
-          }
-        }
-
-        console.log(`Authenticated via "${authType}".`);
-      } catch (e) {
-        const errorMessage = getErrorMessage(e);
-        appDispatch({
-          type: 'SET_AUTH_ERROR',
-          payload: `Failed to login. Message: ${errorMessage}`,
-        });
-        // NEVER automatically open auth dialog - user must use /auth command
-      } finally {
-        setIsAuthenticating(false);
-      }
-    };
-
-    void authFlow();
-  }, [
-    isAuthDialogOpen,
-    settings,
-    config,
-    appDispatch,
-    openAuthDialog,
-    runtime,
-  ]);
+  // DEPRECATED: selectedAuthType-based auth flow is vestigial (issue #443).
+  // Providers (GeminiProvider, etc.) now handle auth detection internally via determineBestAuth().
+  // OAuth is triggered lazily on first API call, not on startup.
+  // This effect is intentionally disabled - keeping structure for potential future use.
 
   const handleAuthSelect = useCallback(
     async (authType: AuthType | undefined, scope: SettingScope) => {
