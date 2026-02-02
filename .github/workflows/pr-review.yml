@@ -212,7 +212,7 @@ jobs:
                 return null;
               }
               const data = await response.json();
-              if (!data.subscription || typeof data.subscription.limit !== "number") {
+              if (!data.subscription || typeof data.subscription.limit !== "number" || typeof data.subscription.requests !== "number") {
                 console.log(keyName + " quota response missing required fields");
                 return null;
               }
