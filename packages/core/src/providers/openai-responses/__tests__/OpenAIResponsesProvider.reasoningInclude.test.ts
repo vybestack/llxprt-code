@@ -398,7 +398,7 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
       expect(thinkingBlock.encryptedContent).toBe(encryptedContent);
     });
 
-    it('should parse response.reasoning_summary_text.delta events and accumulate', async () => {
+    it('should parse response.reasoning_summary_text.delta events incrementally', async () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         'https://api.openai.com/v1',
@@ -463,9 +463,9 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
             (block as { type?: string }).type === 'thinking',
         ),
       );
-      const lastThinkingBlock = thinkingBlocks[thinkingBlocks.length - 1];
-      expect(lastThinkingBlock?.thought).toContain('First part of thinking');
-      expect(lastThinkingBlock?.thought).toContain('Second part');
+      expect(thinkingBlocks).toHaveLength(2);
+      expect(thinkingBlocks[0]?.thought).toBe('First part of thinking...');
+      expect(thinkingBlocks[1]?.thought).toBe(' Second part...');
     });
   });
 

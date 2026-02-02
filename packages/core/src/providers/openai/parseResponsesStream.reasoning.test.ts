@@ -20,7 +20,7 @@ function createSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 describe('parseResponsesStream - Reasoning/Thinking Support', () => {
-  it('should parse reasoning-only stream with delta and done events', async () => {
+  it('should emit thinking blocks incrementally on each delta event', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Let me think about this..."}\n\n',
       'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":" The user wants to know..."}\n\n',
@@ -134,7 +134,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     expect(thoughts).toEqual(['First', 'chunk', 'next']);
   });
 
-  it('should handle reasoning with usage metadata', async () => {
+  it('should emit thinking incrementally and include usage metadata', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Thinking deeply..."}\n\n',
       'data: {"type":"response.reasoning_text.done","sequence_number":2}\n\n',
@@ -262,7 +262,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     expect(thoughts).toEqual(['First', 'second']);
   });
 
-  it('should not duplicate reasoning when output_item.done follows deltas', async () => {
+  it('should emit thinking deltas immediately and not duplicate at done', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"First"}\n\n',
       'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"second"}\n\n',

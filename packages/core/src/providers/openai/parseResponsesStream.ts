@@ -220,25 +220,13 @@ export async function* parseResponsesStream(
                 break;
               }
 
-              case 'response.reasoning_text.done': {
-                const thoughtContent = (event.text || reasoningText).trim();
-                if (thoughtContent) {
-                  emittedThoughts.set(thoughtContent, { hasEncrypted: false });
-                }
+              case 'response.reasoning_text.done':
                 reasoningText = '';
                 break;
-              }
 
-              case 'response.reasoning_summary_text.done': {
-                const summaryContent = (
-                  event.text || reasoningSummaryText
-                ).trim();
-                if (summaryContent) {
-                  emittedThoughts.set(summaryContent, { hasEncrypted: false });
-                }
+              case 'response.reasoning_summary_text.done':
                 reasoningSummaryText = '';
                 break;
-              }
 
               case 'response.output_item.added':
                 // New function call started
@@ -392,53 +380,7 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.completed':
-              case 'response.done': {
-                // Fallback: emit any remaining reasoning that wasn't emitted via other events
-                // When includeThinkingInResponse is false, still emit but with isHidden: true
-                // This preserves encrypted content for round-trip while hiding UI display
-                const remainingReasoning = reasoningText.trim();
-                if (
-                  remainingReasoning &&
-                  !emittedThoughts.has(remainingReasoning)
-                ) {
-                  emittedThoughts.set(remainingReasoning, {
-                    hasEncrypted: false,
-                  });
-                  yield {
-                    speaker: 'ai',
-                    blocks: [
-                      {
-                        type: 'thinking',
-                        thought: remainingReasoning,
-                        sourceField: 'reasoning_content',
-                        isHidden: !includeThinkingInResponse,
-                      },
-                    ],
-                  };
-                }
-                const remainingSummary = reasoningSummaryText.trim();
-                if (
-                  remainingSummary &&
-                  !emittedThoughts.has(remainingSummary)
-                ) {
-                  emittedThoughts.set(remainingSummary, {
-                    hasEncrypted: false,
-                  });
-                  yield {
-                    speaker: 'ai',
-                    blocks: [
-                      {
-                        type: 'thinking',
-                        thought: remainingSummary,
-                        sourceField: 'reasoning_content',
-                        isHidden: !includeThinkingInResponse,
-                      },
-                    ],
-                  };
-                }
-                reasoningText = '';
-                reasoningSummaryText = '';
-
+              case 'response.done':
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
                 if (event.response?.usage) {
                   yield {
@@ -457,7 +399,6 @@ export async function* parseResponsesStream(
                   };
                 }
                 break;
-              }
 
               default:
                 // Ignore unknown event types
