@@ -2007,15 +2007,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           if (!choice) continue;
 
           // Parse reasoning_content from streaming delta (Phase 16 integration)
-          // ACCUMULATE instead of yielding immediately to handle token-by-token streaming
           // Extract embedded Kimi K2 tool calls from reasoning_content (fixes #749)
           // @plan PLAN-20251202-THINKING.P16
           // @requirement REQ-KIMI-REASONING-001.1
           const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
             this.parseStreamingReasoningDelta(choice.delta);
           if (reasoningBlock) {
-            // Accumulate reasoning content - will emit ONE block later
             accumulatedReasoningContent += reasoningBlock.thought;
+            if (reasoningBlock.thought.trim()) {
+              yield {
+                speaker: 'ai',
+                blocks: [reasoningBlock],
+              } as IContent;
+            }
           }
           // Accumulate tool calls extracted from reasoning_content
           if (reasoningToolCalls.length > 0) {
@@ -2495,29 +2499,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         hasEmittedThinking = true;
       }
 
-      // Emit accumulated reasoning_content as ONE ThinkingBlock (legacy path)
-      // This consolidates token-by-token reasoning from Synthetic API into a single block
-      // Clean Kimi tokens from the accumulated content (not per-chunk) to handle split tokens
+      // Extract and emit Kimi tool calls from accumulated reasoning_content (if any)
       // @plan PLAN-20251202-THINKING.P16
       if (accumulatedReasoningContent.length > 0) {
-        // Extract Kimi tool calls from the complete accumulated reasoning content
-        const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
+        const { toolCalls: reasoningToolCalls } =
           this.extractKimiToolCallsFromText(accumulatedReasoningContent);
-
-        // Emit the cleaned thinking block
-        if (cleanedReasoning.length > 0) {
-          yield {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'thinking',
-                thought: cleanedReasoning,
-                sourceField: 'reasoning_content',
-                isHidden: false,
-              } as ThinkingBlock,
-            ],
-          } as IContent;
-        }
 
         // Emit any tool calls extracted from reasoning content
         if (reasoningToolCalls.length > 0) {
@@ -2527,6 +2513,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           } as IContent;
         }
       }
+
 
       // Process and emit tool calls using legacy accumulated approach
       if (accumulatedToolCalls.length > 0) {
