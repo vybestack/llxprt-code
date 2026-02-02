@@ -1301,17 +1301,64 @@ export const useGeminiStream = (
       // if the turn has been cancelled. Mark the tools as submitted to
       // prevent them from being reprocessed, but don't send to Gemini.
       if (turnCancelledRef.current) {
-        const callIds = completedToolCallsFromScheduler
-          .filter(
+        const completedToolsWithResponses =
+          completedToolCallsFromScheduler.filter(
             (tc): tc is TrackedCompletedToolCall | TrackedCancelledToolCall =>
               (tc.status === 'success' ||
                 tc.status === 'error' ||
                 tc.status === 'cancelled') &&
               (tc as TrackedCompletedToolCall | TrackedCancelledToolCall)
                 .response?.responseParts !== undefined,
-          )
-          .map((tc) => tc.request.callId);
+          );
+        const callIds = completedToolsWithResponses.map(
+          (tc) => tc.request.callId,
+        );
         if (callIds.length > 0) {
+          if (geminiClient) {
+            // Similar to the allToolsCancelled branch, we need to properly separate
+            // functionCall and functionResponse parts. Unlike the original broken code
+            // that filtered out functionCall parts entirely, we need to preserve both.
+            const allParts = completedToolsWithResponses.flatMap(
+              (toolCall) => toolCall.response.responseParts,
+            );
+
+            // Separate parts by type to maintain proper tool usage pattern
+            const functionCalls: Part[] = [];
+            const functionResponses: Part[] = [];
+            const otherParts: Part[] = [];
+
+            for (const part of allParts) {
+              if (part && typeof part === 'object' && 'functionCall' in part) {
+                functionCalls.push(part);
+                continue;
+              }
+              if (
+                part &&
+                typeof part === 'object' &&
+                'functionResponse' in part
+              ) {
+                functionResponses.push(part);
+                continue;
+              }
+              otherParts.push(part);
+            }
+
+            // Add function calls as 'model' role (tool_use blocks)
+            if (functionCalls.length > 0) {
+              geminiClient.addHistory({
+                role: 'model',
+                parts: functionCalls,
+              });
+            }
+
+            // Add function responses and other parts as 'user' role (tool_result blocks)
+            if (functionResponses.length > 0 || otherParts.length > 0) {
+              geminiClient.addHistory({
+                role: 'user',
+                parts: [...functionResponses, ...otherParts],
+              });
+            }
+          }
           markToolsAsSubmitted(callIds);
         }
         return;
