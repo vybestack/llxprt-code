@@ -279,13 +279,17 @@ export const SETTINGS_SCHEMA = {
     showInDialog: true,
   },
 
+  // DEPRECATED: selectedAuthType is vestigial and will be removed.
+  // Authentication is now handled by providers directly (GeminiProvider, etc.)
+  // See issue #443. Keeping for backwards compatibility with existing configs.
   selectedAuthType: {
     type: 'string',
-    label: 'Selected Auth Type',
+    label: 'Selected Auth Type (Deprecated)',
     category: 'Advanced',
-    requiresRestart: true,
+    requiresRestart: false,
     default: 'provider' as AuthType,
-    description: 'The currently selected authentication type.',
+    description:
+      'DEPRECATED: Authentication is now handled by providers. This setting is ignored.',
     showInDialog: false,
   },
   useExternalAuth: {

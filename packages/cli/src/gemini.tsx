@@ -58,13 +58,10 @@ import {
   DnsResolutionOrder,
   LoadedSettings,
   loadSettings,
-  SettingScope,
 } from './config/settings.js';
 import {
   Config,
   sessionId,
-  AuthType,
-  getOauthClient,
   setGitStatsService,
   FatalConfigError,
   JsonFormatter,
@@ -569,22 +566,9 @@ export async function main() {
     process.exit(0);
   }
 
-  // Set a default auth type if one isn't set.
-  if (!settings.merged.selectedAuthType) {
-    if (process.env.CLOUD_SHELL === 'true') {
-      settings.setValue(
-        SettingScope.User,
-        'selectedAuthType',
-        AuthType.CLOUD_SHELL,
-      );
-    } else if (process.env.LLXPRT_AUTH_TYPE === 'none') {
-      settings.setValue(
-        SettingScope.User,
-        'selectedAuthType',
-        AuthType.USE_NONE,
-      );
-    }
-  }
+  // DEPRECATED: selectedAuthType is vestigial (issue #443).
+  // Providers (GeminiProvider, etc.) now handle auth detection internally.
+  // Cloud Shell detection is also handled by GeminiProvider.
 
   setMaxSizedBoxDebugging(config.getDebugMode());
 
@@ -876,13 +860,9 @@ export async function main() {
     // Note: Non-sandbox memory relaunch is now handled at the top of main()
   }
 
-  if (
-    settings.merged.selectedAuthType === AuthType.LOGIN_WITH_GOOGLE &&
-    config.isBrowserLaunchSuppressed()
-  ) {
-    // Do oauth before app renders to make copying the link possible.
-    await getOauthClient(settings.merged.selectedAuthType, config);
-  }
+  // DEPRECATED (issue #443): Pre-OAuth initialization based on selectedAuthType is vestigial.
+  // GeminiProvider now handles OAuth lazily via determineBestAuth() on first API call.
+  // Keeping this comment as a marker for the removed code.
 
   // Cleanup sessions after config initialization
   await cleanupExpiredSessions(config, settings.merged);
