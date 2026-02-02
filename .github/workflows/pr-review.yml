@@ -216,6 +216,10 @@ jobs:
                 console.log(keyName + " quota response missing required fields");
                 return null;
               }
+              if (data.subscription.limit <= 0) {
+                console.log(keyName + " quota response has non-positive limit");
+                return null;
+              }
               const usagePercent = (data.subscription.requests / data.subscription.limit) * 100;
               console.log(keyName + ": " + usagePercent.toFixed(1) + "% used (" + data.subscription.requests + "/" + data.subscription.limit + ")");
               return { usagePercent, key: apiKey };
