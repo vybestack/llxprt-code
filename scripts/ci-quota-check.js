@@ -122,14 +122,30 @@ async function selectOptimalKey() {
 }
 
 async function main() {
-  // Only check quota if using Synthetic provider
   const keyVarName = process.env.KEY_VAR_NAME || '';
+  const githubEnvPath = process.env.GITHUB_ENV;
+
+  if (!githubEnvPath) {
+    console.error('GITHUB_ENV environment variable not set');
+    process.exit(1);
+  }
 
   if (keyVarName.includes('SYNTHETIC')) {
     console.log('Using Synthetic provider, checking quota...');
     await selectOptimalKey();
   } else {
-    console.log('Not using Synthetic provider, skipping quota check');
+    console.log('Not using Synthetic provider, using primary key');
+    // For non-Synthetic providers, just write the primary key to GITHUB_ENV
+    const primaryKey = process.env.OPENAI_API_KEY;
+    if (!primaryKey) {
+      console.error('No primary API key configured');
+      process.exit(1);
+    }
+    fs.appendFileSync(
+      githubEnvPath,
+      `OPENAI_API_KEY=${primaryKey}
+`,
+    );
   }
 }
 
