@@ -97,6 +97,8 @@ export async function* parseResponsesStream(
   const functionCalls = new Map<string, FunctionCallState>();
   let reasoningText = '';
   let reasoningSummaryText = '';
+  let sawReasoningTextDelta = false;
+  let sawReasoningSummaryDelta = false;
 
   // Track emitted thinking content to prevent duplicates (fixes #922).
   // The API can send the same reasoning via multiple event types:
@@ -178,6 +180,7 @@ export async function* parseResponsesStream(
 
               case 'response.reasoning_text.delta': {
                 if (event.delta) {
+                  sawReasoningTextDelta = true;
                   reasoningText = appendReasoningDelta(
                     reasoningText,
                     event.delta,
@@ -200,6 +203,7 @@ export async function* parseResponsesStream(
 
               case 'response.reasoning_summary_text.delta': {
                 if (event.delta) {
+                  sawReasoningSummaryDelta = true;
                   reasoningSummaryText = appendReasoningDelta(
                     reasoningSummaryText,
                     event.delta,
@@ -220,13 +224,45 @@ export async function* parseResponsesStream(
                 break;
               }
 
-              case 'response.reasoning_text.done':
+              case 'response.reasoning_text.done': {
+                if (!sawReasoningTextDelta && event.text?.trim()) {
+                  if (includeThinkingInResponse) {
+                    yield {
+                      speaker: 'ai',
+                      blocks: [
+                        {
+                          type: 'thinking',
+                          thought: event.text,
+                          sourceField: 'reasoning_content',
+                        },
+                      ],
+                    };
+                  }
+                }
                 reasoningText = '';
+                sawReasoningTextDelta = false;
                 break;
+              }
 
-              case 'response.reasoning_summary_text.done':
+              case 'response.reasoning_summary_text.done': {
+                if (!sawReasoningSummaryDelta && event.text?.trim()) {
+                  if (includeThinkingInResponse) {
+                    yield {
+                      speaker: 'ai',
+                      blocks: [
+                        {
+                          type: 'thinking',
+                          thought: event.text,
+                          sourceField: 'reasoning_content',
+                        },
+                      ],
+                    };
+                  }
+                }
                 reasoningSummaryText = '';
+                sawReasoningSummaryDelta = false;
                 break;
+              }
 
               case 'response.output_item.added':
                 // New function call started
