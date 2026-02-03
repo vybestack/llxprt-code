@@ -106,13 +106,6 @@
       "default": false,
       "type": "boolean"
     },
-    "selectedAuthType": {
-      "title": "Selected Auth Type (Deprecated)",
-      "description": "DEPRECATED: Authentication is now handled by providers. This setting is ignored.",
-      "markdownDescription": "DEPRECATED: Authentication is now handled by providers. This setting is ignored.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `provider`",
-      "default": "provider",
-      "type": "string"
-    },
     "useExternalAuth": {
       "title": "Use External Auth",
       "description": "Whether to use an external authentication flow.",
