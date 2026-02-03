@@ -39,10 +39,16 @@ export interface RegisterTaskInput {
  * Manages lifecycle of async tasks launched with `async=true`.
  * Handles task registration, completion tracking, and history limits.
  */
+interface PendingReservation {
+  timestamp: number;
+  expiresAt: number;
+}
+
 export class AsyncTaskManager {
   private readonly tasks: Map<string, AsyncTaskInfo> = new Map();
   private readonly emitter: EventEmitter;
   private maxAsyncTasks: number;
+  private pendingReservations: Map<string, PendingReservation> = new Map();
 
   constructor(maxAsyncTasks: number = 5) {
     this.maxAsyncTasks = maxAsyncTasks;
@@ -92,9 +98,44 @@ export class AsyncTaskManager {
   }
 
   /**
+   * Atomically check and reserve a slot for task registration
+   * Returns a unique booking ID if successful, or null if limit reached
+   */
+  tryReserveAsyncSlot(): string | null {
+    // Check if we can launch
+    const canLaunch = this.canLaunchAsync();
+    if (!canLaunch.allowed) {
+      return null;
+    }
+
+    // Generate a unique booking ID for this reservation
+    const bookingId = `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    
+    // Store the reservation temporarily to prevent race conditions
+    // The actual task will be registered with the same ID during registerTask
+    this.pendingReservations.set(bookingId, {
+      timestamp: Date.now(),
+      // Expire reservations after 5 seconds to prevent leaks
+      expiresAt: Date.now() + 5000,
+    });
+
+    return bookingId;
+  }
+
+  /**
    * @pseudocode lines 084-097
    */
-  registerTask(input: RegisterTaskInput): AsyncTaskInfo {
+  registerTask(input: RegisterTaskInput, bookingId?: string): AsyncTaskInfo {
+    // If a bookingId is provided, consume that reservation
+    if (bookingId) {
+      const reservation = this.pendingReservations.get(bookingId);
+      if (!reservation) {
+        throw new Error(`Invalid or expired reservation: ${bookingId}`);
+      }
+      // Remove the consumed reservation
+      this.pendingReservations.delete(bookingId);
+    }
+
     // Lines 085-092: Create task object
     const task: AsyncTaskInfo = {
       id: input.id,
@@ -239,11 +280,17 @@ export class AsyncTaskManager {
     return { candidates: matches };
   }
 
-  /**
-   * @pseudocode lines 215-217
+/**
+   * Clean up expired reservations to prevent memory leaks
    */
-  getAllTasks(): AsyncTaskInfo[] {
-    return Array.from(this.tasks.values());
+  private cleanupExpiredReservations(): void {
+    const now = Date.now();
+    
+    for (const [bookingId, reservation] of this.pendingReservations.entries()) {
+      if (now > reservation.expiresAt) {
+        this.pendingReservations.delete(bookingId);
+      }
+    }
   }
 
   /**

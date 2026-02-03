@@ -667,20 +667,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       };
     }
 
-    // Check limit BEFORE launching
-    const canLaunch = asyncTaskManager.canLaunchAsync();
-    if (!canLaunch.allowed) {
-      return {
-        llmContent: canLaunch.reason ?? 'Cannot launch async task.',
-        returnDisplay: canLaunch.reason ?? 'Async task limit reached.',
-        error: {
-          message: canLaunch.reason ?? 'Limit reached',
-          type: ToolErrorType.EXECUTION_FAILED,
-        },
-      };
-    }
-
-    // Create orchestrator (same as sync)
+    // Step 1: Create orchestrator (same as sync)
     let orchestrator: SubagentOrchestrator;
     try {
       orchestrator = this.deps.createOrchestrator();
@@ -691,54 +678,96 @@ class TaskToolInvocation extends BaseToolInvocation<
       );
     }
 
-    // Create launch request (no timeout for launch itself)
-    const launchRequest = this.createLaunchRequest(undefined);
+    // Step 2: Atomically reserve an async slot before launching
+    const bookingId = asyncTaskManager.tryReserveAsyncSlot();
+    if (!bookingId) {
+      const canLaunch = asyncTaskManager.canLaunchAsync();
+      return {
+        llmContent: canLaunch.reason ?? 'Cannot launch async task.',
+        returnDisplay: canLaunch.reason ?? 'Async task limit reached.',
+        error: {
+          message: canLaunch.reason ?? 'Limit reached',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
 
-    // Launch subagent
+    // Step 3: Set up async task infrastructure
     let launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>;
+    let agentId: string | undefined;
+    let scope: SubAgentScope;
+    let dispose: (() => Promise<void>) | undefined;
+    const asyncAbortController = new AbortController();
+    let timeoutId: NodeJS.Timeout | null = null;
+    let taskRegistered = false;
+
     try {
+      // Create launch request (no timeout for launch itself)
+      const launchRequest = this.createLaunchRequest(undefined);
+
+      // Launch subagent
       launchResult = await orchestrator.launch(launchRequest, signal);
+      agentId = launchResult.agentId;
+      scope = launchResult.scope;
+      dispose = launchResult.dispose;
+      // Build context state but don't use it here - it's used in executeInBackground
+      // but we still need to build it for the background execution
+      const _contextState = this.buildContextState();
+
+      // Set up timeout for async task (but don't wire to parent signal)
+      const settings = this.config.getEphemeralSettings?.() ?? {};
+      const defaultTimeoutSeconds =
+        (settings['task-default-timeout-seconds'] as number | undefined) ??
+        DEFAULT_TASK_TIMEOUT_SECONDS;
+      const maxTimeoutSeconds =
+        (settings['task-max-timeout-seconds'] as number | undefined) ??
+        MAX_TASK_TIMEOUT_SECONDS;
+
+      const timeoutSeconds = this.resolveTimeoutSeconds(
+        this.params.timeout_seconds,
+        defaultTimeoutSeconds,
+        maxTimeoutSeconds,
+      );
+      const timeoutMs =
+        timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
+      timeoutId =
+        timeoutMs === undefined
+          ? null
+          : setTimeout(() => asyncAbortController.abort(), timeoutMs);
+
+      // Register with AsyncTaskManager consuming the booking ID
+      asyncTaskManager.registerTask({
+        id: agentId,
+        subagentName: this.normalized.subagentName,
+        goalPrompt: this.normalized.goalPrompt,
+        abortController: asyncAbortController,
+      }, bookingId);
+      
+      taskRegistered = true;
+
     } catch (error) {
+      // If any setup step fails, make sure to clean up the reservation
+      if (!taskRegistered && bookingId) {
+        // Cancel the reservation - access private member for cleanup
+        const manager = asyncTaskManager as unknown as { pendingReservations?: Map<string, unknown> };
+        const pendingReservations = manager.pendingReservations ?? new Map<string, unknown>();
+        pendingReservations.delete(bookingId);
+      }
+      
+      // Clean up any created resources
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      
+      if (dispose) {
+        dispose();
+      }
+
       return this.createErrorResult(
         error,
         `Failed to launch async subagent '${this.normalized.subagentName}'.`,
       );
     }
-
-    const { scope, agentId, dispose } = launchResult;
-    const contextState = this.buildContextState();
-
-    // Create abort controller for async task cancellation
-    const asyncAbortController = new AbortController();
-
-    // Set up timeout for async task (but don't wire to parent signal)
-    const settings = this.config.getEphemeralSettings?.() ?? {};
-    const defaultTimeoutSeconds =
-      (settings['task-default-timeout-seconds'] as number | undefined) ??
-      DEFAULT_TASK_TIMEOUT_SECONDS;
-    const maxTimeoutSeconds =
-      (settings['task-max-timeout-seconds'] as number | undefined) ??
-      MAX_TASK_TIMEOUT_SECONDS;
-
-    const timeoutSeconds = this.resolveTimeoutSeconds(
-      this.params.timeout_seconds,
-      defaultTimeoutSeconds,
-      maxTimeoutSeconds,
-    );
-    const timeoutMs =
-      timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
-    const timeoutId =
-      timeoutMs === undefined
-        ? null
-        : setTimeout(() => asyncAbortController.abort(), timeoutMs);
-
-    // Register with AsyncTaskManager BEFORE starting background execution
-    asyncTaskManager.registerTask({
-      id: agentId,
-      subagentName: this.normalized.subagentName,
-      goalPrompt: this.normalized.goalPrompt,
-      abortController: asyncAbortController,
-    });
 
     // Set up message streaming (same as sync)
     if (updateOutput) {

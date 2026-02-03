@@ -1642,10 +1642,24 @@ export class Config {
     // @plan PLAN-20260130-ASYNCTASK.P21
     // @requirement REQ-ASYNC-012
     // Propagate task-max-async changes to AsyncTaskManager
-    if (key === 'task-max-async' && typeof settingValue === 'number') {
+    if (key === 'task-max-async') {
+      // Normalize the setting value to handle both string and number inputs
+      let normalizedValue: number;
+      
+      if (typeof settingValue === 'number') {
+        normalizedValue = settingValue;
+      } else if (typeof settingValue === 'string') {
+        // Try to parse as integer, fallback to 0 if invalid
+        const parsed = parseInt(settingValue, 10);
+        normalizedValue = isNaN(parsed) ? 0 : parsed;
+      } else {
+        // Fallback for other types
+        normalizedValue = 0;
+      }
+      
       const asyncTaskManager = this.getAsyncTaskManager();
       if (asyncTaskManager) {
-        asyncTaskManager.setMaxAsyncTasks(settingValue);
+        asyncTaskManager.setMaxAsyncTasks(normalizedValue);
       }
     }
 
