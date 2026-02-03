@@ -33,7 +33,6 @@ import {
   EmojiFilter,
   type EmojiFilterMode,
   DEFAULT_AGENT_ID,
-  type ThinkingBlock,
   tokenLimit,
   DebugLogger,
   uiTelemetryService,
@@ -181,7 +180,8 @@ export const useGeminiStream = (
 
   // @plan:PLAN-20251202-THINKING-UI.P08
   // @requirement:REQ-THINK-UI-001
-  const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
+  // Single accumulated thinking text for streaming display (not array of blocks)
+  const thinkingTextRef = useRef<string>('');
 
   // Initialize emoji filter
   const emojiFilter = useMemo(() => {
@@ -264,16 +264,24 @@ export const useGeminiStream = (
         const itemWithThinking = {
           ...pending,
           text: sanitized,
-          ...(thinkingBlocksRef.current.length > 0
-            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+          ...(thinkingTextRef.current
+            ? {
+                thinkingBlocks: [
+                  {
+                    type: 'thinking' as const,
+                    thought: thinkingTextRef.current,
+                    sourceField: 'reasoning_content' as const,
+                  },
+                ],
+              }
             : {}),
         };
 
         addItem(itemWithThinking, timestamp);
 
-        // Clear thinking blocks after committing to history to prevent
+        // Clear thinking text after committing to history to prevent
         // accumulation across multiple tool calls in the same turn (fixes #922)
-        thinkingBlocksRef.current = [];
+        thinkingTextRef.current = '';
 
         if (feedback) {
           addItem({ type: MessageType.INFO, text: feedback }, timestamp);
@@ -657,8 +665,16 @@ export const useGeminiStream = (
         setPendingHistoryItem({
           type: 'gemini',
           text: '',
-          ...(thinkingBlocksRef.current.length > 0
-            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+          ...(thinkingTextRef.current
+            ? {
+                thinkingBlocks: [
+                  {
+                    type: 'thinking' as const,
+                    thought: thinkingTextRef.current,
+                    sourceField: 'reasoning_content' as const,
+                  },
+                ],
+              }
             : {}),
         });
       }
@@ -670,8 +686,16 @@ export const useGeminiStream = (
         setPendingHistoryItem((item) => ({
           type: item?.type as 'gemini' | 'gemini_content',
           text: sanitizedCombined,
-          ...(thinkingBlocksRef.current.length > 0
-            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+          ...(thinkingTextRef.current
+            ? {
+                thinkingBlocks: [
+                  {
+                    type: 'thinking' as const,
+                    thought: thinkingTextRef.current,
+                    sourceField: 'reasoning_content' as const,
+                  },
+                ],
+              }
             : {}),
         }));
         return sanitizedCombined;
@@ -693,8 +717,16 @@ export const useGeminiStream = (
           {
             type: pendingType,
             text: beforeText,
-            ...(thinkingBlocksRef.current.length > 0
-              ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+            ...(thinkingTextRef.current
+              ? {
+                  thinkingBlocks: [
+                    {
+                      type: 'thinking' as const,
+                      thought: thinkingTextRef.current,
+                      sourceField: 'reasoning_content' as const,
+                    },
+                  ],
+                }
               : {}),
           },
           userMessageTimestamp,
@@ -706,8 +738,16 @@ export const useGeminiStream = (
       setPendingHistoryItem({
         type: 'gemini_content',
         text: afterText,
-        ...(thinkingBlocksRef.current.length > 0
-          ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+        ...(thinkingTextRef.current
+          ? {
+              thinkingBlocks: [
+                {
+                  type: 'thinking' as const,
+                  thought: thinkingTextRef.current,
+                  sourceField: 'reasoning_content' as const,
+                },
+              ],
+            }
           : {}),
       });
       return afterText;
@@ -951,7 +991,7 @@ export const useGeminiStream = (
             // @requirement:REQ-THINK-UI-001
             setThought(event.value);
 
-            // Accumulate as ThinkingBlock for history
+            // Accumulate thinking text for streaming display (like content buffer)
             {
               let thoughtText = [event.value.subject, event.value.description]
                 .filter(Boolean)
@@ -959,25 +999,25 @@ export const useGeminiStream = (
               const sanitized = sanitizeContent(thoughtText);
               thoughtText = sanitized.blocked ? '' : sanitized.text;
 
-              // Only add if this exact thought hasn't been added yet (fixes #922 duplicate thoughts)
-              const alreadyHasThought = thinkingBlocksRef.current.some(
-                (tb) => tb.thought === thoughtText,
-              );
+              if (thoughtText) {
+                // Append to accumulated thinking text (with space separator if needed)
+                if (thinkingTextRef.current) {
+                  thinkingTextRef.current += ' ' + thoughtText;
+                } else {
+                  thinkingTextRef.current = thoughtText;
+                }
 
-              if (thoughtText && !alreadyHasThought) {
-                const thinkingBlock: ThinkingBlock = {
-                  type: 'thinking',
-                  thought: thoughtText,
-                  sourceField: 'thought',
-                };
-                thinkingBlocksRef.current.push(thinkingBlock);
-
-                // Update pending history item with thinking blocks so they
-                // are visible in pendingHistoryItems during streaming
+                // Update pending history item with accumulated thinking text
                 setPendingHistoryItem((item) => ({
                   type: (item?.type as 'gemini' | 'gemini_content') || 'gemini',
                   text: item?.text || '',
-                  thinkingBlocks: [...thinkingBlocksRef.current],
+                  thinkingBlocks: [
+                    {
+                      type: 'thinking' as const,
+                      thought: thinkingTextRef.current,
+                      sourceField: 'reasoning_content' as const,
+                    },
+                  ],
                 }));
               }
             }
@@ -1144,7 +1184,7 @@ export const useGeminiStream = (
         startNewPrompt();
         setThought(null); // Reset thought when starting a new prompt
         // @plan:PLAN-20251202-THINKING-UI.P08
-        thinkingBlocksRef.current = [];
+        thinkingTextRef.current = '';
       }
 
       setIsResponding(true);

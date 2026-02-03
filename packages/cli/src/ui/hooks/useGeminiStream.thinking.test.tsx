@@ -499,9 +499,11 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     expect(historyItem.thinkingBlocks).toHaveLength(1);
     expect(historyItem.thinkingBlocks![0]).toMatchObject({
       type: 'thinking',
-      thought: 'Analyzing request: First thought process',
-      sourceField: 'thought',
+      sourceField: 'reasoning_content',
     });
+    expect(historyItem.thinkingBlocks![0].thought).toContain(
+      'Analyzing request: First thought process',
+    );
   });
 
   it('should expose pending thinking blocks before content arrives', async () => {
@@ -545,7 +547,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     });
   });
 
-  it('should accumulate multiple Thought events into multiple blocks', async () => {
+  it('should accumulate multiple Thought events into single streaming block', async () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {
         yield {
@@ -593,18 +595,20 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     expect(lastGeminiCall).toBeDefined();
     const historyItem = lastGeminiCall[0] as HistoryItemGemini;
 
+    // Now we accumulate all thoughts into a single block (streaming behavior)
     expect(historyItem.thinkingBlocks).toBeDefined();
-    expect(historyItem.thinkingBlocks).toHaveLength(2);
+    expect(historyItem.thinkingBlocks).toHaveLength(1);
     expect(historyItem.thinkingBlocks![0]).toMatchObject({
       type: 'thinking',
-      thought: 'First subject: First description',
-      sourceField: 'thought',
+      sourceField: 'reasoning_content',
     });
-    expect(historyItem.thinkingBlocks![1]).toMatchObject({
-      type: 'thinking',
-      thought: 'Second subject: Second description',
-      sourceField: 'thought',
-    });
+    // Both thoughts should be concatenated in the single block
+    expect(historyItem.thinkingBlocks![0].thought).toContain(
+      'First subject: First description',
+    );
+    expect(historyItem.thinkingBlocks![0].thought).toContain(
+      'Second subject: Second description',
+    );
   });
 
   it('should verify ThinkingBlock structure matches IContent specification', async () => {
@@ -651,7 +655,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     expect(block.type).toBe('thinking');
     expect(typeof block.thought).toBe('string');
     expect(block.thought.length).toBeGreaterThan(0);
-    expect(block.sourceField).toBe('thought');
+    expect(block.sourceField).toBe('reasoning_content');
     expect(block.isHidden).toBeUndefined();
   });
 
@@ -986,12 +990,13 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     const historyItem = lastGeminiCall[0] as HistoryItemGemini;
     expect(historyItem.thinkingBlocks).toBeDefined();
-    expect(historyItem.thinkingBlocks!.length).toBe(2);
+    // Now we accumulate into a single block (streaming behavior)
+    expect(historyItem.thinkingBlocks!.length).toBe(1);
 
-    // Verify that empty fields are handled gracefully
+    // Verify that empty fields are handled gracefully - both in single concatenated block
     expect(historyItem.thinkingBlocks![0].thought).toContain(
       'Description only',
     );
-    expect(historyItem.thinkingBlocks![1].thought).toContain('Subject only');
+    expect(historyItem.thinkingBlocks![0].thought).toContain('Subject only');
   });
 });
