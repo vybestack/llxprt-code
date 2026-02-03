@@ -997,6 +997,108 @@ describe('Gemini Client (client.ts)', () => {
       expect(result.compressionStatus).toBe(CompressionStatus.COMPRESSED);
     });
 
+    it('uses history token count when prompt tokens lag behind history totals', async () => {
+      const originalHistory: Content[] = Array.from(
+        { length: 10 },
+        (_, index) => ({
+          role: index % 2 === 0 ? 'user' : 'model',
+          parts: [{ text: `message ${index}` }],
+        }),
+      );
+
+      let historyState = [...originalHistory];
+
+      const mockHistoryService = {
+        getTotalTokens: vi.fn().mockReturnValue(200),
+        emit: vi.fn(),
+        syncTotalTokens: vi.fn(),
+        waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockChat = {
+        getHistory: vi.fn((_curated?: boolean) => historyState),
+        setHistory: vi.fn((nextHistory: Content[]) => {
+          historyState = [...nextHistory];
+        }),
+        sendMessage: vi.fn().mockResolvedValue({ text: 'summary' }),
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(100),
+      };
+
+      client['chat'] = mockChat as unknown as GeminiChat;
+
+      client['startChat'] = vi.fn().mockResolvedValue({
+        getHistory: vi.fn().mockReturnValue([]),
+        setHistory: vi.fn(),
+        sendMessage: vi.fn(),
+        getHistoryService: vi.fn().mockReturnValue({
+          getTotalTokens: vi.fn().mockReturnValue(100),
+          emit: vi.fn(),
+        }),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      } as unknown as GeminiChat);
+
+      const result = await client.tryCompressChat('prompt-id-lagging', true);
+
+      expect(result.originalTokenCount).toBe(200);
+      expect(result.compressionStatus).toBe(CompressionStatus.COMPRESSED);
+    });
+
+    it('waits for token updates before evaluating compressed token count', async () => {
+      const originalHistory: Content[] = Array.from(
+        { length: 10 },
+        (_, index) => ({
+          role: index % 2 === 0 ? 'user' : 'model',
+          parts: [{ text: `message ${index}` }],
+        }),
+      );
+
+      let historyState = [...originalHistory];
+      let totalTokens = 100;
+      let waitCalls = 0;
+
+      const mockHistoryService = {
+        getTotalTokens: vi.fn(() => totalTokens),
+        emit: vi.fn(),
+        syncTotalTokens: vi.fn(),
+        waitForTokenUpdates: vi.fn().mockImplementation(async () => {
+          waitCalls += 1;
+          if (waitCalls === 1) {
+            totalTokens = 50;
+          }
+        }),
+      };
+
+      const mockChat = {
+        getHistory: vi.fn((_curated?: boolean) => historyState),
+        setHistory: vi.fn((nextHistory: Content[]) => {
+          historyState = [...nextHistory];
+          totalTokens = 0;
+        }),
+        sendMessage: vi.fn().mockResolvedValue({ text: 'summary' }),
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(100),
+      };
+
+      client['chat'] = mockChat as unknown as GeminiChat;
+
+      client['startChat'] = vi.fn().mockResolvedValue({
+        getHistory: vi.fn().mockReturnValue([]),
+        setHistory: vi.fn(),
+        sendMessage: vi.fn(),
+        getHistoryService: vi.fn().mockReturnValue({
+          getTotalTokens: vi.fn().mockReturnValue(200),
+          emit: vi.fn(),
+        }),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      } as unknown as GeminiChat);
+
+      const result = await client.tryCompressChat('prompt-id-updates', true);
+
+      expect(result.newTokenCount).toBe(50);
+      expect(result.compressionStatus).toBe(CompressionStatus.COMPRESSED);
+    });
+
     it('restores history when compression inflates token count', async () => {
       const originalHistory: Content[] = Array.from(
         { length: 10 },

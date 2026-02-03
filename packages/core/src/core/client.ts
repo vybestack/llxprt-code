@@ -1918,12 +1918,15 @@ export class GeminiClient {
       };
     }
 
-    // Prefer prompt token count when available, otherwise fall back to history tokens.
+    // Prefer prompt token count when it matches or exceeds history totals; otherwise fall back to history tokens.
     const promptTokenCount = this.getChat().getLastPromptTokenCount();
+    const historyTokenCount = this.getChat()
+      .getHistoryService()
+      .getTotalTokens();
     const originalTokenCount =
-      promptTokenCount > 0
+      promptTokenCount > 0 && promptTokenCount >= historyTokenCount
         ? promptTokenCount
-        : this.getChat().getHistoryService().getTotalTokens();
+        : historyTokenCount;
 
     const contextPercentageThreshold =
       this.config.getChatCompression()?.contextPercentageThreshold;
@@ -2039,6 +2042,9 @@ export class GeminiClient {
     this.forceFullIdeContext = true;
 
     const compressedHistoryService = compressionChat.getHistoryService();
+    if (compressedHistoryService) {
+      await compressedHistoryService.waitForTokenUpdates();
+    }
     const newTokenCount = compressedHistoryService
       ? compressedHistoryService.getTotalTokens()
       : 0;
