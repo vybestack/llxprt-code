@@ -296,6 +296,13 @@ export function useMouseSelection({
 
       if (event.name === 'left-release') {
         if (!isDraggingRef.current) return;
+        const anchor = anchorPointRef.current;
+        if (anchor) {
+          const releasePoint = resolveSelectionPoint(event);
+          if (releasePoint) {
+            updateSelectionRange(anchor, releasePoint);
+          }
+        }
         isDraggingRef.current = false;
         void copySelectionToClipboard();
       }
@@ -311,5 +318,5 @@ export function useMouseSelection({
 
   useMouse(mouseHandler, { isActive: enabled });
 
-  return { clearSelection };
+  return { clearSelection, copySelectionToClipboard };
 }
