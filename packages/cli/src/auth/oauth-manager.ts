@@ -674,6 +674,60 @@ export class OAuthManager {
       () =>
         `[FLOW] No existing token for ${providerName}, triggering OAuth flow...`,
     );
+
+    // @fix issue1262 & issue1195: Before triggering OAuth, check disk with lock
+    // Another process or earlier run may have written a valid token that we missed
+    // Use the same locking pattern as PR #1258 to prevent race conditions
+    const bucketToCheck = typeof bucket === 'string' ? bucket : undefined;
+    const lockAcquired = await this.tokenStore.acquireRefreshLock(
+      providerName,
+      {
+        waitMs: 5000, // Wait up to 5 seconds for lock
+        staleMs: 30000,
+        bucket: bucketToCheck,
+      },
+    );
+
+    if (lockAcquired) {
+      try {
+        // Double-check disk for token written by another process
+        const diskToken = await this.tokenStore.getToken(
+          providerName,
+          bucketToCheck,
+        );
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        const thirtySecondsFromNow = nowInSeconds + 30;
+
+        if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+          // Valid token found on disk! Use it instead of triggering OAuth
+          logger.debug(
+            () =>
+              `[issue1262/1195] Found valid token on disk for ${providerName}, skipping OAuth`,
+          );
+          return diskToken.access_token;
+        }
+      } finally {
+        await this.tokenStore.releaseRefreshLock(providerName, bucketToCheck);
+      }
+    } else {
+      // Couldn't acquire lock - check disk anyway, another process may have just written a token
+      const diskToken = await this.tokenStore.getToken(
+        providerName,
+        bucketToCheck,
+      );
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const thirtySecondsFromNow = nowInSeconds + 30;
+
+      if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+        logger.debug(
+          () =>
+            `[issue1262/1195] Found valid token on disk after lock timeout for ${providerName}`,
+        );
+        return diskToken.access_token;
+      }
+    }
+
+    // No valid token on disk, proceed with OAuth flow
     try {
       const buckets = await this.getProfileBuckets(providerName);
 
