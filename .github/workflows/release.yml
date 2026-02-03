@@ -196,12 +196,20 @@ jobs:
           fi
           echo "should_create_branch=${should_create_branch}" >> "$GITHUB_OUTPUT"
 
+      - name: Check API quota and select optimal key
+        if: github.event.inputs.force_skip_tests != 'true'
+        run: node scripts/ci-quota-check.js
+        env:
+          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
+          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
+
       - name: Run Preflight Checks
         if: github.event.inputs.force_skip_tests != 'true'
         run: node scripts/preflight-ci.js
         env:
           # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
@@ -221,7 +229,7 @@ jobs:
           # npm run test:integration:sandbox:docker
         env:
           # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
