@@ -191,7 +191,6 @@ describe('Settings Loading and Merging', () => {
       });
       expect(settings.merged.mcp).toEqual({});
       expect(settings.merged.output).toEqual({ format: 'text' });
-      expect(settings.merged.selectedAuthType).toBe('provider');
       expect(settings.errors.length).toBe(0);
     });
 
@@ -257,7 +256,7 @@ describe('Settings Loading and Merging', () => {
         providerKeyfiles: {},
         providerToolFormatOverrides: {},
         security: {},
-        selectedAuthType: 'provider',
+
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
 
@@ -337,7 +336,7 @@ describe('Settings Loading and Merging', () => {
         providerKeyfiles: {},
         providerToolFormatOverrides: {},
         security: {},
-        selectedAuthType: 'provider',
+
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
 
@@ -417,7 +416,7 @@ describe('Settings Loading and Merging', () => {
         providerToolFormatOverrides: {},
         sandbox: true,
         security: {},
-        selectedAuthType: 'provider',
+
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
 
@@ -500,7 +499,7 @@ describe('Settings Loading and Merging', () => {
         providerToolFormatOverrides: {},
         sandbox: true,
         security: {},
-        selectedAuthType: 'provider',
+
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
 
@@ -595,7 +594,7 @@ describe('Settings Loading and Merging', () => {
         providerToolFormatOverrides: {},
         sandbox: false,
         security: {},
-        selectedAuthType: 'provider',
+
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
 
@@ -702,7 +701,7 @@ describe('Settings Loading and Merging', () => {
         providerToolFormatOverrides: {},
         sandbox: false,
         security: {},
-        selectedAuthType: 'provider',
+
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
 
@@ -1698,7 +1697,7 @@ describe('Settings Loading and Merging', () => {
           providerKeyfiles: {},
           providerToolFormatOverrides: {},
           security: {},
-          selectedAuthType: 'provider',
+
           shellReplacement: 'allowlist',
           shouldUseNodePtyShell: false,
 

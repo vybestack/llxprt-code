@@ -6,7 +6,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { AuthType } from '@vybestack/llxprt-code-core';
 import { renderWithProviders } from '../../test-utils/render.js';
 
 const mockGetAuthStatus = vi.fn();
@@ -54,9 +53,7 @@ describe('AuthDialog', () => {
         path: '',
       },
       {
-        settings: {
-          selectedAuthType: AuthType.USE_GEMINI,
-        },
+        settings: {},
         path: '',
       },
       {
@@ -87,7 +84,6 @@ describe('AuthDialog', () => {
       const settings: LoadedSettings = new LoadedSettings(
         {
           settings: {
-            selectedAuthType: undefined,
             ui: { customThemes: {} },
             mcpServers: {},
           },
@@ -124,20 +120,20 @@ describe('AuthDialog', () => {
         {
           provider: 'gemini',
           authenticated: true,
-          authType: 'oauth',
+          method: 'oauth',
           expiresIn: 3600,
           oauthEnabled: true,
         },
         {
           provider: 'qwen',
           authenticated: false,
-          authType: 'none',
+          method: 'none',
           oauthEnabled: false,
         },
         {
           provider: 'anthropic',
           authenticated: true,
-          authType: 'oauth',
+          method: 'oauth',
           oauthEnabled: true,
         },
       ]);
@@ -145,7 +141,6 @@ describe('AuthDialog', () => {
       const settings: LoadedSettings = new LoadedSettings(
         {
           settings: {
-            selectedAuthType: undefined,
             ui: { customThemes: {} },
             mcpServers: {},
           },
@@ -187,12 +182,11 @@ describe('AuthDialog', () => {
 
     it('should show OAuth options regardless of GEMINI_DEFAULT_AUTH_TYPE', () => {
       process.env.GEMINI_API_KEY = 'foobar';
-      process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.LOGIN_WITH_GOOGLE;
+      process.env.GEMINI_DEFAULT_AUTH_TYPE = 'oauth-personal';
 
       const settings: LoadedSettings = new LoadedSettings(
         {
           settings: {
-            selectedAuthType: undefined,
             ui: { customThemes: {} },
             mcpServers: {},
           },
@@ -226,12 +220,11 @@ describe('AuthDialog', () => {
 
     it('should show OAuth dialog even when GEMINI_DEFAULT_AUTH_TYPE is set to use api key', () => {
       process.env.GEMINI_API_KEY = 'foobar';
-      process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.USE_GEMINI;
+      process.env.GEMINI_DEFAULT_AUTH_TYPE = 'gemini-api-key';
 
       const settings: LoadedSettings = new LoadedSettings(
         {
           settings: {
-            selectedAuthType: undefined,
             ui: { customThemes: {} },
             mcpServers: {},
           },
@@ -267,12 +260,11 @@ describe('AuthDialog', () => {
 
   describe('GEMINI_DEFAULT_AUTH_TYPE environment variable', () => {
     it('should select the auth type specified by GEMINI_DEFAULT_AUTH_TYPE', () => {
-      process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.LOGIN_WITH_GOOGLE;
+      process.env.GEMINI_DEFAULT_AUTH_TYPE = 'oauth-personal';
 
       const settings: LoadedSettings = new LoadedSettings(
         {
           settings: {
-            selectedAuthType: undefined,
             ui: { customThemes: {} },
             mcpServers: {},
           },
@@ -305,7 +297,6 @@ describe('AuthDialog', () => {
       const settings: LoadedSettings = new LoadedSettings(
         {
           settings: {
-            selectedAuthType: undefined,
             ui: { customThemes: {} },
             mcpServers: {},
           },
@@ -340,7 +331,6 @@ describe('AuthDialog', () => {
       const settings: LoadedSettings = new LoadedSettings(
         {
           settings: {
-            selectedAuthType: undefined,
             ui: { customThemes: {} },
             mcpServers: {},
           },
@@ -388,7 +378,6 @@ describe('AuthDialog', () => {
       },
       {
         settings: {
-          selectedAuthType: undefined,
           ui: { customThemes: {} },
           mcpServers: {},
         },
@@ -428,7 +417,6 @@ describe('AuthDialog', () => {
       },
       {
         settings: {
-          selectedAuthType: undefined,
           ui: { customThemes: {} },
           mcpServers: {},
         },
@@ -474,7 +462,6 @@ describe('AuthDialog', () => {
       },
       {
         settings: {
-          selectedAuthType: AuthType.USE_GEMINI,
           ui: { customThemes: {} },
           mcpServers: {},
         },

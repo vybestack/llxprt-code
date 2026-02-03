@@ -66,7 +66,7 @@ describe('errors', () => {
 
     // Create mock config
     mockConfig = {
-      getContentGeneratorConfig: vi.fn().mockReturnValue({ authType: 'test' }),
+      getContentGeneratorConfig: vi.fn().mockReturnValue({}),
     } as unknown as Config;
   });
 

@@ -58,12 +58,7 @@ describe('aboutCommand', () => {
     setFileSystem(mockFileSystem);
 
     // Set up mock settings file with controlled content
-    mockFileSystem.setMockFile(
-      USER_SETTINGS_PATH,
-      JSON.stringify({
-        selectedAuthType: 'test-auth',
-      }),
-    );
+    mockFileSystem.setMockFile(USER_SETTINGS_PATH, JSON.stringify({}));
     mockContext = createMockCommandContext({
       services: {
         config: {
@@ -72,9 +67,7 @@ describe('aboutCommand', () => {
           getIdeMode: vi.fn().mockReturnValue(true),
         },
         settings: {
-          merged: {
-            selectedAuthType: 'test-auth',
-          },
+          merged: {},
         },
       },
       ui: {
@@ -126,7 +119,6 @@ describe('aboutCommand', () => {
         osVersion: 'test-os',
         sandboxEnv: 'no sandbox',
         modelVersion: 'test-model',
-        selectedAuthType: 'test-auth',
         gcpProject: 'test-gcp-project',
         keyfile: '',
         key: '',
@@ -190,7 +182,6 @@ describe('aboutCommand', () => {
         osVersion: 'test-os',
         sandboxEnv: 'no sandbox',
         modelVersion: 'test-model',
-        selectedAuthType: 'test-auth',
         gcpProject: 'test-gcp-project',
         ideClient: '',
         provider: 'Unknown',

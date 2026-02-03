@@ -11,7 +11,6 @@ import { type CompletedToolCall } from '../core/coreToolScheduler.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import { ToolConfirmationOutcome, type FileDiff } from '../tools/tools.js';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
-import { AuthType } from '../core/contentGenerator.js';
 import type { IContent } from '../services/history/IContent.js';
 import type {
   ProviderCapabilities,
@@ -65,12 +64,8 @@ export class StartSessionEvent {
     const generatorConfig = config.getContentGeneratorConfig();
     const mcpServers = config.getMcpServers();
 
-    let useGemini = false;
-    let useVertex = false;
-    if (generatorConfig && generatorConfig.authType) {
-      useGemini = generatorConfig.authType === AuthType.USE_GEMINI;
-      useVertex = generatorConfig.authType === AuthType.USE_VERTEX_AI;
-    }
+    const useGemini = !!generatorConfig?.apiKey && !generatorConfig?.vertexai;
+    const useVertex = !!generatorConfig?.vertexai;
 
     this['event.name'] = 'cli_config';
     this.model = config.getModel();
@@ -108,20 +103,13 @@ export class UserPromptEvent {
   'event.timestamp': string; // ISO 8601
   prompt_length: number;
   prompt_id: string;
-  auth_type?: string;
   prompt?: string;
 
-  constructor(
-    prompt_length: number,
-    prompt_Id: string,
-    auth_type?: string,
-    prompt?: string,
-  ) {
+  constructor(prompt_length: number, prompt_Id: string, prompt?: string) {
     this['event.name'] = 'user_prompt';
     this['event.timestamp'] = new Date().toISOString();
     this.prompt_length = prompt_length;
     this.prompt_id = prompt_Id;
-    this.auth_type = auth_type;
     this.prompt = prompt;
   }
 }
@@ -204,14 +192,12 @@ export class ApiErrorEvent {
   status_code?: number | string;
   duration_ms: number;
   prompt_id: string;
-  auth_type?: string;
 
   constructor(
     model: string,
     error: string,
     duration_ms: number,
     prompt_id: string,
-    auth_type?: string,
     error_type?: string,
     status_code?: number | string,
   ) {
@@ -223,7 +209,6 @@ export class ApiErrorEvent {
     this.status_code = status_code;
     this.duration_ms = duration_ms;
     this.prompt_id = prompt_id;
-    this.auth_type = auth_type;
   }
 }
 
@@ -242,13 +227,11 @@ export class ApiResponseEvent {
   total_token_count: number;
   response_text?: string;
   prompt_id: string;
-  auth_type?: string;
 
   constructor(
     model: string,
     duration_ms: number,
     prompt_id: string,
-    auth_type?: string,
     usage_data?: GenerateContentResponseUsageMetadata,
     response_text?: string,
     error?: string,
@@ -267,7 +250,6 @@ export class ApiResponseEvent {
     this.response_text = response_text;
     this.error = error;
     this.prompt_id = prompt_id;
-    this.auth_type = auth_type;
   }
 }
 

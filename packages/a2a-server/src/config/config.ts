@@ -11,7 +11,6 @@ import * as dotenv from 'dotenv';
 
 import type { TelemetryTarget } from '@vybestack/llxprt-code-core';
 import {
-  AuthType,
   Config,
   type ConfigParameters,
   FileDiscoveryService,
@@ -100,13 +99,13 @@ export async function loadConfig(
         `[Config] USE_CCPA env var is true but unable to resolve GOOGLE_APPLICATION_CREDENTIALS file path ${adcFilePath}. Error ${e}`,
       );
     }
-    await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+    await config.refreshAuth('oauth-personal');
     logger.info(
       `[Config] GOOGLE_CLOUD_PROJECT: ${process.env['GOOGLE_CLOUD_PROJECT']}`,
     );
   } else if (process.env['GEMINI_API_KEY']) {
     logger.info('[Config] Using Gemini API Key');
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth('gemini-api-key');
   } else {
     logger.error(
       `[Config] Unable to set GeneratorConfig. Please provide a GEMINI_API_KEY or set USE_CCPA.`,

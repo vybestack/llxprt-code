@@ -41,7 +41,6 @@ describe('AboutBox theming', () => {
         osVersion="test-os"
         sandboxEnv="test-sandbox"
         modelVersion="test-model"
-        selectedAuthType="oauth"
         gcpProject=""
         keyfile=""
         key=""

@@ -20,7 +20,6 @@ import { Config, ConfigParameters } from '../config/config.js';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
 import {
   createContentGenerator,
-  AuthType,
   type ContentGenerator,
 } from './contentGenerator.js';
 import { SettingsService } from '../settings/SettingsService.js';
@@ -125,12 +124,11 @@ async function createMockConfig(
   };
   const config = new Config(configParams);
   await config.initialize();
-  await config.refreshAuth(AuthType.USE_PROVIDER);
+  await config.refreshAuth();
 
   // Mock getContentGeneratorConfig to return a valid config
   vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
     model: DEFAULT_GEMINI_MODEL,
-    authType: AuthType.USE_PROVIDER,
   });
 
   // Mock ToolRegistry
@@ -274,9 +272,7 @@ describe('subagent.ts', () => {
           runtimeId: 'runtime-123',
           provider: 'gemini',
           model: defaultModelConfig.model,
-          authType: AuthType.USE_PROVIDER,
           sessionId: 'runtime-session',
-          authPayload: undefined,
           proxyUrl: undefined,
           modelParams: {
             temperature: defaultModelConfig.temp,

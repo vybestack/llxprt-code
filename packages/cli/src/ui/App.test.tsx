@@ -18,7 +18,6 @@ import {
   SandboxConfig,
   LLxprtClient,
   ideContext,
-  type AuthType,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
@@ -1330,7 +1329,6 @@ describe('App UI', () => {
       const validateAuthMethodSpy = vi.spyOn(auth, 'validateAuthMethod');
       mockSettings = createMockSettings({
         workspace: {
-          selectedAuthType: 'USE_GEMINI' as AuthType,
           useExternalAuth: false,
           theme: 'Default',
         },
@@ -1352,7 +1350,6 @@ describe('App UI', () => {
       const validateAuthMethodSpy = vi.spyOn(auth, 'validateAuthMethod');
       mockSettings = createMockSettings({
         workspace: {
-          selectedAuthType: 'USE_GEMINI' as AuthType,
           useExternalAuth: true,
           theme: 'Default',
         },

@@ -187,7 +187,6 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     infoMessages: [],
     warnings: [],
     providerChanged: false,
-    authType: undefined,
     didFallback: false,
     requestedProvider: 'openai',
   }));
@@ -200,7 +199,6 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     previousProvider: null,
     nextProvider: 'openai',
     infoMessages: [],
-    authType: undefined,
   }));
   const applyCliArgumentOverrides = vi.fn(async () => {});
   const registerCliProviderInfrastructure = vi.fn();

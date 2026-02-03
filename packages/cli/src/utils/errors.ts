@@ -68,10 +68,7 @@ export function handleError(
   config: Config,
   customErrorCode?: string | number,
 ): never {
-  const errorMessage = parseAndFormatApiError(
-    error,
-    config.getContentGeneratorConfig()?.authType,
-  );
+  const errorMessage = parseAndFormatApiError(error);
 
   console.error(errorMessage);
 

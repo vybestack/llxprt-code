@@ -124,7 +124,6 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,

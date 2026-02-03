@@ -429,7 +429,6 @@ export class OAuthManager {
           statuses.push({
             provider: providerName,
             authenticated: false,
-            authType: 'none',
             oauthEnabled,
           });
           continue;
@@ -445,7 +444,6 @@ export class OAuthManager {
           statuses.push({
             provider: providerName,
             authenticated: true,
-            authType: 'oauth',
             expiresIn,
             oauthEnabled,
           });
@@ -454,7 +452,6 @@ export class OAuthManager {
           statuses.push({
             provider: providerName,
             authenticated: false,
-            authType: 'none',
             oauthEnabled,
           });
         }
@@ -464,7 +461,6 @@ export class OAuthManager {
         statuses.push({
           provider: providerName,
           authenticated: false,
-          authType: 'none',
           oauthEnabled,
         });
       }

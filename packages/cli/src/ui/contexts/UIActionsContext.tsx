@@ -9,7 +9,7 @@ import type { IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
 import type { HistoryItem } from '../types.js';
 import type { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { Key } from '../hooks/useKeypress.js';
-import type { AuthType, EditorType } from '@vybestack/llxprt-code-core';
+import type { EditorType } from '@vybestack/llxprt-code-core';
 import type { SettingScope } from '../../config/settings.js';
 import type { SubagentView } from '../components/SubagentManagement/types.js';
 
@@ -45,7 +45,7 @@ export interface UIActions {
   // Auth dialog
   openAuthDialog: () => void;
   handleAuthSelect: (
-    authType: AuthType | undefined,
+    method: string | undefined,
     scope: SettingScope,
   ) => Promise<void>;
   cancelAuthentication: () => void;

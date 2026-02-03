@@ -7,7 +7,6 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import {
   createContentGenerator,
-  AuthType,
   createContentGeneratorConfig,
 } from './contentGenerator.js';
 import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
@@ -30,7 +29,7 @@ describe('createContentGenerator', () => {
     const generator = await createContentGenerator(
       {
         model: 'test-model',
-        authType: AuthType.LOGIN_WITH_GOOGLE,
+        vertexai: true,
       },
       mockConfig,
     );
@@ -47,7 +46,6 @@ describe('createContentGenerator', () => {
       {
         model: 'test-model',
         apiKey: 'test-api-key',
-        authType: AuthType.USE_GEMINI,
       },
       mockConfig,
     );
@@ -89,30 +87,21 @@ describe('createContentGeneratorConfig', () => {
 
   it('should configure for Gemini using GEMINI_API_KEY when set', async () => {
     process.env.GEMINI_API_KEY = 'env-gemini-key';
-    const config = await createContentGeneratorConfig(
-      mockConfig,
-      AuthType.USE_GEMINI,
-    );
+    const config = await createContentGeneratorConfig(mockConfig);
     expect(config.apiKey).toBe('env-gemini-key');
     expect(config.vertexai).toBe(false);
   });
 
   it('should not configure for Gemini if GEMINI_API_KEY is empty', async () => {
     process.env.GEMINI_API_KEY = '';
-    const config = await createContentGeneratorConfig(
-      mockConfig,
-      AuthType.USE_GEMINI,
-    );
+    const config = await createContentGeneratorConfig(mockConfig);
     expect(config.apiKey).toBeUndefined();
     expect(config.vertexai).toBeUndefined();
   });
 
   it('should configure for Vertex AI using GOOGLE_API_KEY when set', async () => {
     process.env.GOOGLE_API_KEY = 'env-google-key';
-    const config = await createContentGeneratorConfig(
-      mockConfig,
-      AuthType.USE_VERTEX_AI,
-    );
+    const config = await createContentGeneratorConfig(mockConfig);
     expect(config.apiKey).toBe('env-google-key');
     expect(config.vertexai).toBe(true);
   });
@@ -120,10 +109,7 @@ describe('createContentGeneratorConfig', () => {
   it('should configure for Vertex AI using GCP project and location when set', async () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-gcp-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'env-gcp-location';
-    const config = await createContentGeneratorConfig(
-      mockConfig,
-      AuthType.USE_VERTEX_AI,
-    );
+    const config = await createContentGeneratorConfig(mockConfig);
     expect(config.vertexai).toBe(true);
     expect(config.apiKey).toBeUndefined();
   });
@@ -132,10 +118,7 @@ describe('createContentGeneratorConfig', () => {
     process.env.GOOGLE_API_KEY = '';
     process.env.GOOGLE_CLOUD_PROJECT = '';
     process.env.GOOGLE_CLOUD_LOCATION = '';
-    const config = await createContentGeneratorConfig(
-      mockConfig,
-      AuthType.USE_VERTEX_AI,
-    );
+    const config = await createContentGeneratorConfig(mockConfig);
     expect(config.apiKey).toBeUndefined();
     expect(config.vertexai).toBeUndefined();
   });

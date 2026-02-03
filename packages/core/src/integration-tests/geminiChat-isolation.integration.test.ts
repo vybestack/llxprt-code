@@ -21,7 +21,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
-import { AuthType } from '../core/contentGenerator.js';
 import { DEFAULT_TOKEN_LIMIT } from '../core/tokenLimits.js';
 import type {
   ReadonlySettingsSnapshot,
@@ -123,7 +122,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
     new Config({
       provider: 'gemini',
       model: 'gemini-2.0-flash-exp',
-      authType: AuthType.USE_GEMINI,
       targetDir: process.cwd(),
       sandbox: false,
     });
@@ -148,7 +146,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'foreground-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'foreground-session',
       });
 
@@ -167,7 +164,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'subagent-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash-thinking-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'subagent-session',
       });
 
@@ -229,7 +225,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'subagent-1-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash-thinking-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'subagent-1-session',
       });
 
@@ -239,7 +234,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'subagent-2-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash-thinking-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'subagent-2-session',
       });
 
@@ -307,7 +301,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'foreground-runtime-123',
         provider: 'gemini',
         model: 'gemini-2.0-flash-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'shared-session-456',
       });
 
@@ -330,7 +323,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'subagent-runtime-789',
         provider: 'gemini',
         model: 'gemini-2.0-flash-thinking-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'shared-session-456', // Same session, different runtime
       });
 
@@ -354,7 +346,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: foregroundState.runtimeId,
         provider: foregroundState.provider,
         model: foregroundState.model,
-        authType: foregroundState.authType,
         timestamp: Date.now(),
         payload: '{"prompt": "foreground query"}',
       };
@@ -364,7 +355,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: subagentState.runtimeId,
         provider: subagentState.provider,
         model: subagentState.model,
-        authType: subagentState.authType,
         timestamp: Date.now(),
         payload: '{"prompt": "subagent query"}',
       };
@@ -396,7 +386,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'runtime-a',
         provider: 'gemini',
         model: 'gemini-2.0-flash-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'session-test',
       });
 
@@ -408,7 +397,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'runtime-b',
         provider: 'gemini',
         model: 'gemini-2.0-flash-thinking-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'session-test',
       });
 
@@ -426,7 +414,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: context1State.runtimeId,
         provider: context1State.provider,
         model: context1State.model,
-        authType: context1State.authType,
         timestamp: Date.now(),
       };
 
@@ -435,7 +422,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: context2State.runtimeId,
         provider: context2State.provider,
         model: context2State.model,
-        authType: context2State.authType,
         timestamp: Date.now(),
       };
 
@@ -468,7 +454,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'foreground-runtime',
         provider: 'gemini',
         model: originalModel,
-        authType: AuthType.USE_GEMINI,
         sessionId: 'test-session',
       });
 
@@ -480,7 +465,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'subagent-runtime',
         provider: 'gemini',
         model: subagentModel,
-        authType: AuthType.USE_GEMINI,
         sessionId: 'test-session',
       });
 
@@ -509,7 +493,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
       const mockConfig = new Config({
         provider: 'gemini',
         model: 'gemini-2.0-flash-exp',
-        authType: AuthType.USE_GEMINI,
         targetDir: process.cwd(),
         sandbox: false,
       });
@@ -528,7 +511,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'subagent-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash-thinking-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: mockConfig.getSessionId(),
       });
 
@@ -559,7 +541,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
           runtimeId: `runtime-${index}`,
           provider: 'gemini',
           model,
-          authType: AuthType.USE_GEMINI,
           sessionId: `session-${index}`,
         });
 
@@ -596,7 +577,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'foreground-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'test-session',
       });
 
@@ -616,7 +596,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'subagent-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash-thinking-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'test-session',
       });
 
@@ -666,7 +645,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
             runtimeId: 'runtime-1',
             provider: 'gemini',
             model: 'gemini-2.0-flash-exp',
-            authType: AuthType.USE_GEMINI,
             sessionId: 'session-1',
           }),
           settings: { compressionThreshold: 0.5, contextLimit: 50000 },
@@ -676,7 +654,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
             runtimeId: 'runtime-2',
             provider: 'gemini',
             model: 'gemini-2.0-flash-exp',
-            authType: AuthType.USE_GEMINI,
             sessionId: 'session-2',
           }),
           settings: { compressionThreshold: 0.7, contextLimit: 70000 },
@@ -686,7 +663,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
             runtimeId: 'runtime-3',
             provider: 'gemini',
             model: 'gemini-2.0-flash-exp',
-            authType: AuthType.USE_GEMINI,
             sessionId: 'session-3',
           }),
           settings: { compressionThreshold: 0.9, contextLimit: 90000 },
@@ -723,7 +699,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'runtime-defaults',
         provider: 'gemini',
         model: 'gemini-2.0-flash-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'test-session',
       });
 
@@ -746,7 +721,6 @@ describe('GeminiChat Isolation Integration Tests', () => {
         runtimeId: 'runtime-partial',
         provider: 'gemini',
         model: 'gemini-2.0-flash-exp',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'test-session',
       });
 

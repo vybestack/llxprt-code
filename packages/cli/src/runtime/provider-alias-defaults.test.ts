@@ -57,7 +57,7 @@ const {
     private ephemeral: Record<string, unknown> = {};
     private providerManager: unknown;
     private settingsService: InstanceType<typeof StubSettingsService>;
-    private lastRefreshedAuthType: string | undefined;
+    initializeContentGeneratorConfig = vi.fn(async () => {});
 
     constructor(settingsService: InstanceType<typeof StubSettingsService>) {
       this.settingsService = settingsService;
@@ -106,14 +106,6 @@ const {
     getProviderManager(): unknown {
       return this.providerManager;
     }
-
-    getContentGeneratorConfig(): { authType?: string } | undefined {
-      return { authType: this.lastRefreshedAuthType };
-    }
-
-    async refreshAuth(authType: string): Promise<void> {
-      this.lastRefreshedAuthType = authType;
-    }
   }
 
   class StubProvider {
@@ -146,6 +138,7 @@ const StubProvider = StubProviderClass;
 const providers: Record<string, StubProviderInstance> = {
   openai: new StubProvider('openai'),
   qwenvercel: new StubProvider('qwenvercel'),
+  gemini: new StubProvider('gemini'),
 };
 
 let activeProviderName = 'openai';
@@ -281,6 +274,16 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     );
   });
 
+  it('initializes content generator config when switching providers with auth key', async () => {
+    stubConfig.setEphemeralSetting('auth-key', 'test-key');
+
+    await switchActiveProvider('gemini');
+
+    expect(stubConfig.initializeContentGeneratorConfig).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
   it('does not override preserved ephemerals', async () => {
     stubConfig.setEphemeralSetting('max_tokens', 8192);
 
@@ -305,6 +308,26 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
     expect(stubConfig.getEphemeralSetting('api-key')).toBeUndefined();
     expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+  });
+
+  it('uses gemini alias default model and provider auth on switch', async () => {
+    aliasEntries.push({
+      alias: 'gemini',
+      source: 'builtin',
+      filePath: '/fake/gemini.config',
+      config: {
+        baseProvider: 'gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        defaultModel: 'gemini-2.5-pro',
+      },
+    });
+
+    await switchActiveProvider('gemini');
+
+    expect(stubConfig.getModel()).toBe('gemini-2.5-pro');
+    expect(stubSettingsService.getProviderSettings('gemini').model).toBe(
+      'gemini-2.5-pro',
+    );
   });
 
   it('ignores non-scalar alias ephemeral values', async () => {

@@ -9,7 +9,6 @@ import {
   validateNonInteractiveAuth,
   NonInteractiveConfig,
 } from './validateNonInterActiveAuth.js';
-import { AuthType } from '@vybestack/llxprt-code-core';
 
 describe('validateNonInterActiveAuth', () => {
   // Store all auth-related env vars that need to be cleaned up
@@ -67,24 +66,18 @@ describe('validateNonInterActiveAuth', () => {
   // configuration takes precedence, and the test doesn't properly mock the
   // provider configuration scenario.
 
-  it('uses USE_GEMINI if GEMINI_API_KEY is set', async () => {
+  it('refreshes auth when GEMINI_API_KEY is set', async () => {
     process.env.GEMINI_API_KEY = 'fake-key';
     const nonInteractiveConfig: NonInteractiveConfig = {
       refreshAuth: refreshAuthMock,
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(
-      undefined,
-      undefined,
-      nonInteractiveConfig,
-    );
-    // llxprt-code's multi-provider architecture always returns USE_PROVIDER
-    // instead of specific auth types like USE_GEMINI when no CLI provider is configured
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
+    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    expect(refreshAuthMock).toHaveBeenCalledWith();
   });
 
-  it('uses USE_VERTEX_AI if GOOGLE_GENAI_USE_VERTEXAI is true (with GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION)', async () => {
+  it('refreshes auth when GOOGLE_GENAI_USE_VERTEXAI is true with project and location', async () => {
     process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
     process.env.GOOGLE_CLOUD_PROJECT = 'test-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
@@ -93,17 +86,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(
-      undefined,
-      undefined,
-      nonInteractiveConfig,
-    );
-    // llxprt-code's multi-provider architecture always returns USE_PROVIDER
-    // instead of specific auth types like USE_VERTEX_AI when no CLI provider is configured
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
+    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    expect(refreshAuthMock).toHaveBeenCalledWith();
   });
 
-  it('uses USE_VERTEX_AI if GOOGLE_GENAI_USE_VERTEXAI is true and GOOGLE_API_KEY is set', async () => {
+  it('refreshes auth when GOOGLE_GENAI_USE_VERTEXAI is true and GOOGLE_API_KEY is set', async () => {
     process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
     process.env.GOOGLE_API_KEY = 'vertex-api-key';
     const nonInteractiveConfig: NonInteractiveConfig = {
@@ -111,17 +98,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(
-      undefined,
-      undefined,
-      nonInteractiveConfig,
-    );
-    // llxprt-code's multi-provider architecture always returns USE_PROVIDER
-    // instead of specific auth types like USE_VERTEX_AI when no CLI provider is configured
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
+    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    expect(refreshAuthMock).toHaveBeenCalledWith();
   });
 
-  it('uses LOGIN_WITH_GOOGLE if GOOGLE_GENAI_USE_GCA is set, even with other env vars', async () => {
+  it('refreshes auth when GOOGLE_GENAI_USE_GCA is set, even with other env vars', async () => {
     process.env.GOOGLE_GENAI_USE_GCA = 'true';
     process.env.GEMINI_API_KEY = 'fake-key';
     process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
@@ -132,17 +113,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(
-      undefined,
-      undefined,
-      nonInteractiveConfig,
-    );
-    // llxprt-code's multi-provider architecture always returns USE_PROVIDER
-    // instead of specific auth types like LOGIN_WITH_GOOGLE when no CLI provider is configured
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
+    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    expect(refreshAuthMock).toHaveBeenCalledWith();
   });
 
-  it('uses USE_VERTEX_AI if both GEMINI_API_KEY and GOOGLE_GENAI_USE_VERTEXAI are set', async () => {
+  it('refreshes auth when GEMINI_API_KEY and GOOGLE_GENAI_USE_VERTEXAI are set', async () => {
     process.env.GEMINI_API_KEY = 'fake-key';
     process.env.GOOGLE_GENAI_USE_VERTEXAI = 'true';
     process.env.GOOGLE_CLOUD_PROJECT = 'test-project';
@@ -152,17 +127,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(
-      undefined,
-      undefined,
-      nonInteractiveConfig,
-    );
-    // llxprt-code's multi-provider architecture always returns USE_PROVIDER
-    // instead of specific auth types like USE_VERTEX_AI when no CLI provider is configured
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
+    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    expect(refreshAuthMock).toHaveBeenCalledWith();
   });
 
-  it('uses USE_GEMINI if GOOGLE_GENAI_USE_VERTEXAI is false, GEMINI_API_KEY is set, and project/location are available', async () => {
+  it('refreshes auth when GEMINI_API_KEY is set and GOOGLE_GENAI_USE_VERTEXAI is false', async () => {
     process.env.GOOGLE_GENAI_USE_VERTEXAI = 'false';
     process.env.GEMINI_API_KEY = 'fake-key';
     process.env.GOOGLE_CLOUD_PROJECT = 'test-project';
@@ -172,34 +141,19 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(
-      undefined,
-      undefined,
-      nonInteractiveConfig,
-    );
-    // llxprt-code's multi-provider architecture always returns USE_PROVIDER
-    // instead of specific auth types like USE_GEMINI when no CLI provider is configured
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
+    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    expect(refreshAuthMock).toHaveBeenCalledWith();
   });
 
-  // UPDATED (issue #443): configuredAuthType is now deprecated/ignored.
-  // validateNonInteractiveAuth always uses USE_PROVIDER since providers
-  // handle auth detection internally via determineBestAuth().
-  it('ignores configuredAuthType and always uses USE_PROVIDER (issue #443)', async () => {
-    // Set required env var for auth detection
+  it('refreshes auth when useExternalAuth is false', async () => {
     process.env.GEMINI_API_KEY = 'fake-key';
     const nonInteractiveConfig: NonInteractiveConfig = {
       refreshAuth: refreshAuthMock,
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(
-      AuthType.USE_GEMINI, // This is ignored now
-      undefined,
-      nonInteractiveConfig,
-    );
-    // Always uses USE_PROVIDER, not the passed-in type
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
+    await validateNonInteractiveAuth(false, nonInteractiveConfig);
+    expect(refreshAuthMock).toHaveBeenCalledWith();
   });
 
   // UPDATED (issue #443): validateAuthMethod is no longer called.
@@ -211,11 +165,7 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    const promise = validateNonInteractiveAuth(
-      undefined,
-      undefined,
-      nonInteractiveConfig,
-    );
+    const promise = validateNonInteractiveAuth(undefined, nonInteractiveConfig);
     await expect(promise).rejects.toThrow('process.exit(1) called');
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Please set an Auth method'),
@@ -225,8 +175,7 @@ describe('validateNonInterActiveAuth', () => {
 
   // UPDATED (issue #443): useExternalAuth parameter is now deprecated/ignored.
   // Auth validation no longer happens - providers handle this internally.
-  it('useExternalAuth param is deprecated and ignored (issue #443)', async () => {
-    // Set env vars so auth check passes
+  it('skips refreshAuth when useExternalAuth is true', async () => {
     process.env.GEMINI_API_KEY = 'fake-key';
 
     const nonInteractiveConfig: NonInteractiveConfig = {
@@ -235,15 +184,10 @@ describe('validateNonInterActiveAuth', () => {
       getProviderManager: () => undefined,
     };
 
-    await validateNonInteractiveAuth(
-      'invalid-auth-type' as AuthType, // Ignored
-      true, // useExternalAuth is now ignored
-      nonInteractiveConfig,
-    );
+    await validateNonInteractiveAuth(true, nonInteractiveConfig);
 
-    // Should succeed with USE_PROVIDER since env var is set
     expect(consoleErrorSpy).not.toHaveBeenCalled();
     expect(processExitSpy).not.toHaveBeenCalled();
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
+    expect(refreshAuthMock).not.toHaveBeenCalled();
   });
 });

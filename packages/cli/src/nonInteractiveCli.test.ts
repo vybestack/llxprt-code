@@ -13,6 +13,7 @@ import {
   GeminiEventType,
   ServerGeminiStreamEvent,
   OutputFormat,
+  type IContent,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
@@ -124,6 +125,9 @@ describe('runNonInteractive', () => {
       getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
       getSessionId: vi.fn().mockReturnValue('test-session'),
       getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+      getSettingsService: vi
+        .fn()
+        .mockReturnValue({ get: vi.fn(), set: vi.fn() }),
       storage: {
         getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
       },
@@ -232,6 +236,53 @@ describe('runNonInteractive', () => {
     expect(output).toContain('<think>First Second</think>');
   });
 
+  it('should stream provider responses via provider manager', async () => {
+    const providerStream: IContent[] = [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Hello' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: ' World' }] },
+    ];
+    const provider = {
+      name: 'openai',
+      generateChatCompletion: vi.fn(async function* () {
+        for (const chunk of providerStream) {
+          yield chunk;
+        }
+      }),
+    };
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue(provider),
+    };
+    (mockConfig.getToolRegistry as unknown as vi.Mock).mockReturnValue({
+      getFunctionDeclarations: vi.fn().mockReturnValue([]),
+    });
+    (mockConfig.getProviderManager as unknown as vi.Mock).mockReturnValue(
+      providerManager,
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Provider input',
+      prompt_id: 'prompt-id-provider-stream',
+    });
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: expect.arrayContaining([
+          expect.objectContaining({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Provider input' }],
+          }),
+        ]),
+        config: mockConfig,
+      }),
+    );
+    const meaningfulWrites = processStdoutSpy.mock.calls
+      .map(([value]) => value)
+      .filter((value) => value !== '');
+    expect(meaningfulWrites.join('')).toBe('Hello World\n');
+  });
+
   it('should handle a single tool call and respond', async () => {
     const toolCallEvent: ServerGeminiStreamEvent = {
       type: GeminiEventType.ToolCallRequest,
@@ -284,30 +335,40 @@ describe('runNonInteractive', () => {
   });
 
   it('should execute tool calls when using a non-gemini provider', async () => {
-    const toolCallEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.ToolCallRequest,
-      value: {
-        callId: 'call-1',
-        name: 'testTool',
-        args: { arg: 'value' },
-        isClientInitiated: false,
-        prompt_id: 'prompt-provider',
-      },
+    let providerCallCount = 0;
+    const provider = {
+      name: 'openai',
+      generateChatCompletion: vi.fn(async function* () {
+        if (providerCallCount === 0) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call-1',
+                name: 'testTool',
+                parameters: { arg: 'value' },
+              },
+            ],
+          } as IContent;
+          providerCallCount += 1;
+          return;
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'All done' }],
+        } as IContent;
+      }),
     };
-    const finalResponse: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'All done' },
-    ];
-
-    mockGeminiClient.sendMessageStream
-      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
-      .mockReturnValueOnce(createStreamFromEvents(finalResponse));
-
     const providerManager = {
-      getActiveProvider: vi.fn().mockReturnValue({ name: 'openai' }),
+      getActiveProvider: vi.fn().mockReturnValue(provider),
     };
     (mockConfig.getProviderManager as unknown as vi.Mock).mockReturnValue(
       providerManager,
     );
+    (mockConfig.getToolRegistry as unknown as vi.Mock).mockReturnValue({
+      getFunctionDeclarations: vi.fn().mockReturnValue([{ name: 'testTool' }]),
+    });
 
     mockCoreExecuteToolCall.mockResolvedValue({
       response: {
@@ -335,13 +396,7 @@ describe('runNonInteractive', () => {
       prompt_id: 'prompt-provider',
     });
 
-    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
-    expect(mockGeminiClient.sendMessageStream).toHaveBeenNthCalledWith(
-      1,
-      [{ text: 'Use the non-gemini provider' }],
-      expect.any(AbortSignal),
-      'prompt-provider',
-    );
+    expect(provider.generateChatCompletion).toHaveBeenCalled();
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
       expect.objectContaining({

@@ -18,7 +18,6 @@ import {
 import {
   Config,
   GeminiClient,
-  AuthType,
   EditorType,
   AnyToolInvocation,
 } from '@vybestack/llxprt-code-core';
@@ -165,7 +164,6 @@ describe('useGeminiStream subagent isolation', () => {
       model: 'test-model',
       apiKey: 'test-key',
       vertexai: false,
-      authType: AuthType.USE_GEMINI,
     };
 
     const mockGetGeminiClient = vi.fn().mockImplementation(() => {

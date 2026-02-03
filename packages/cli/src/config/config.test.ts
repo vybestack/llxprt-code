@@ -126,7 +126,6 @@ vi.mock('../runtime/runtimeSettings.js', () => ({
     changed: true,
     previousProvider: null,
     nextProvider: 'mock-provider',
-    authType: 'USE_PROVIDER',
     infoMessages: [],
   })),
   registerCliProviderInfrastructure: vi.fn(

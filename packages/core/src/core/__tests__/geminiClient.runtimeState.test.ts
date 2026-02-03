@@ -25,7 +25,6 @@ import {
   updateAgentRuntimeState,
   type AgentRuntimeState,
 } from '../../runtime/AgentRuntimeState.js';
-import { AuthType } from '../contentGenerator.js';
 import { HistoryService } from '../../services/history/HistoryService.js';
 
 /**
@@ -50,8 +49,6 @@ function createTestRuntimeState(
     runtimeId: 'test-runtime-001',
     provider: 'gemini',
     model: 'gemini-2.0-flash',
-    authType: AuthType.API_KEY,
-    authPayload: { apiKey: 'runtime-api-key' },
     sessionId: 'test-session-001',
     ...overrides,
   });
@@ -106,7 +103,7 @@ describe('GeminiClient - Runtime State Integration', () => {
    * Test: GeminiClient uses runtime state for provider/model/auth
    */
   describe('Runtime State Usage', () => {
-    it('should read provider from runtime state not Config', async () => {
+    it('should read provider from runtime state when config differs', async () => {
       // @plan PLAN-20251027-STATELESS5.P09
       // @requirement REQ-STAT5-003.1
       // @pseudocode gemini-runtime.md lines 245-248
@@ -147,28 +144,23 @@ describe('GeminiClient - Runtime State Integration', () => {
       expect(client['runtimeState']?.model).toBe('gemini-2.0-flash');
     });
 
-    it('should read auth from runtime state not Config', async () => {
+    it('should read provider from runtime state for explicit provider override', async () => {
       // @plan PLAN-20251027-STATELESS5.P09
       // @requirement REQ-STAT5-003.1
       // @pseudocode gemini-runtime.md lines 90-104
 
       const config = createTestConfig();
-      // Config has different auth (via constructor defaults)
+      config.setProvider('openai');
 
       const runtimeState = createTestRuntimeState({
-        authType: AuthType.USE_GEMINI,
-        authPayload: { apiKey: 'runtime-api-key' }, // Runtime state has different key
+        provider: 'gemini',
       });
 
       // @ts-expect-error - Testing future API
       const client = new GeminiClient(config, runtimeState);
 
-      // Auth should use runtime state value
       expect(client['runtimeState']).toBeDefined();
-      expect(client['runtimeState']?.authType).toBe(AuthType.USE_GEMINI);
-      expect(client['runtimeState']?.authPayload).toEqual({
-        apiKey: 'runtime-api-key',
-      });
+      expect(client['runtimeState']?.provider).toBe('gemini');
     });
   });
 
@@ -308,8 +300,6 @@ describe('GeminiClient - Runtime State Integration', () => {
         runtimeId: 'test-runtime-001',
         provider: '', // Invalid
         model: 'gemini-2.0-flash',
-        authType: AuthType.USE_GEMINI,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session-001',
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -331,8 +321,6 @@ describe('GeminiClient - Runtime State Integration', () => {
         runtimeId: 'test-runtime-001',
         provider: 'gemini',
         model: '', // Invalid
-        authType: AuthType.USE_GEMINI,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session-001',
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -344,7 +332,7 @@ describe('GeminiClient - Runtime State Integration', () => {
       }).toThrow(/model/i);
     });
 
-    it('should throw error when runtime state has invalid auth', () => {
+    it('should throw error when runtime state has blank provider override', () => {
       // @plan PLAN-20251027-STATELESS5.P09
       // @requirement REQ-STAT5-003.1
 
@@ -352,15 +340,14 @@ describe('GeminiClient - Runtime State Integration', () => {
       const baseState = createTestRuntimeState();
       const runtimeState = Object.freeze({
         ...baseState,
-        authType: AuthType.API_KEY,
-        authPayload: undefined, // Invalid - missing apiKey
+        provider: '',
         updatedAt: Date.now(),
       }) as AgentRuntimeState;
 
       expect(() => {
         // @ts-expect-error - Testing future API
         new GeminiClient(config, runtimeState);
-      }).toThrow(/auth/i);
+      }).toThrow(/provider/i);
     });
   });
 });

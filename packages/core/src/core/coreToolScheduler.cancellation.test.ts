@@ -58,7 +58,6 @@ function createMockConfig(
     getAllowedTools: () => [],
     getContentGeneratorConfig: () => ({
       model: 'test-model',
-      authType: 'oauth-personal',
     }),
     getToolRegistry: () => mockToolRegistry,
     getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),

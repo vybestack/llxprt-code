@@ -771,7 +771,6 @@ export class LoggingProviderWrapper implements IProvider {
             errorMessage,
             duration,
             '', // promptId
-            undefined, // auth_type
             'stream_error', // error_type
             undefined, // status_code
           ),

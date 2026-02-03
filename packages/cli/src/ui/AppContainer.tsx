@@ -82,7 +82,6 @@ import {
   type UserFeedbackPayload,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
-import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useSessionStats } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
@@ -1115,20 +1114,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isAuthenticating,
     cancelAuthentication,
   } = useAuthCommand(settings, appState, config);
-
-  useEffect(() => {
-    if (settings.merged.selectedAuthType && !settings.merged.useExternalAuth) {
-      const error = validateAuthMethod(settings.merged.selectedAuthType);
-      if (error) {
-        setAuthError(error);
-        // Don't automatically open auth dialog - user must use /auth command
-      }
-    }
-  }, [
-    settings.merged.selectedAuthType,
-    settings.merged.useExternalAuth,
-    setAuthError,
-  ]);
 
   // Check for OAuth code needed flag
   useEffect(() => {

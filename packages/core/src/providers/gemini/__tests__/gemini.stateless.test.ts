@@ -134,7 +134,6 @@ class TestGeminiProvider extends GeminiProvider {
   ) {
     return (await createCodeAssistContentGenerator(
       httpOptions,
-      'login-with-google' as never,
       config as never,
       baseURL,
     )) as Awaited<ReturnType<typeof createCodeAssistContentGenerator>>;
@@ -561,6 +560,57 @@ describe('Gemini provider stateless contract tests', () => {
     expect(firstSession).toContain('runtime-oauth-a');
     expect(secondSession).toContain('runtime-oauth-b');
     expect(firstSession).not.toBe(secondSession);
+  });
+
+  it('ignores provider base URL for OAuth Code Assist requests', async () => {
+    queueCodeAssistStream([
+      {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'oauth-chunk' }],
+            },
+          },
+        ],
+      },
+    ]);
+
+    const authMock = mockDetermineBestAuth([
+      { authMode: 'oauth', token: 'oauth-token' },
+    ]);
+    authMock.useMode(0);
+
+    const provider = new TestGeminiProvider(
+      undefined,
+      'https://generativelanguage.googleapis.com/v1beta',
+    );
+    const settings = new SettingsService();
+    settings.set('call-id', 'runtime-oauth-base-url');
+    const config = createRuntimeConfigStub(settings) as Config;
+    provider.setConfig(config);
+    const runtime = createProviderRuntimeContext({
+      runtimeId: 'runtime-oauth-base-url',
+      settingsService: settings,
+      config,
+    });
+
+    const oauthIterator = provider.generateChatCompletion(
+      buildCallOptions(provider, {
+        contents: [createHumanContent('oauth-base-url')],
+        settings,
+        config,
+        runtime,
+      }),
+    );
+    await oauthIterator.next();
+
+    authMock.restore();
+
+    expect(createCodeAssistContentGenerator).toHaveBeenCalled();
+    const lastCall = vi
+      .mocked(createCodeAssistContentGenerator)
+      .mock.calls.at(-1);
+    expect(lastCall?.[3]).toBeUndefined();
   });
 
   it('honors invocation overrides without touching config ephemerals', async () => {

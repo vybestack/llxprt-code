@@ -18,7 +18,6 @@ import {
 } from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import type { ContentGenerator } from './contentGenerator.js';
-import { AuthType } from './contentGenerator.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import {
@@ -119,7 +118,6 @@ describe('GeminiChat runtime context', () => {
       runtimeId: 'runtime-test',
       provider: provider.name,
       model: config.getModel(),
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
     const historyService = new HistoryService();
@@ -197,7 +195,6 @@ describe('GeminiChat runtime context', () => {
       runtimeId: 'runtime-test',
       provider: provider.name,
       model: config.getModel(),
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
     const historyService = new HistoryService();
@@ -317,7 +314,6 @@ describe('GeminiChat runtime context', () => {
       runtimeId: 'runtime-test',
       provider: provider.name,
       model: config.getModel(),
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
     const historyService = new HistoryService();
@@ -398,7 +394,6 @@ describe('GeminiChat runtime context', () => {
       runtimeId: 'runtime-test',
       provider: provider.name,
       model: config.getModel(),
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
     const historyService = new HistoryService();
@@ -513,8 +508,7 @@ describe('GeminiChat runtime context', () => {
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'runtime-test',
       provider: 'anthropic',
-      model: 'claude-test',
-      authType: AuthType.USE_NONE,
+      model: config.getModel(),
       sessionId: config.getSessionId(),
     });
 

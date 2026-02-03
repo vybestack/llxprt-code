@@ -10,6 +10,7 @@ import {
   setupUnhandledRejectionHandler,
   validateDnsResolutionOrder,
   startInteractiveUI,
+  formatNonInteractiveError,
 } from './gemini.js';
 import {
   LoadedSettings,
@@ -19,7 +20,8 @@ import {
 import { loadCliConfig } from './config/config.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { FatalConfigError } from '@vybestack/llxprt-code-core';
+import { FatalConfigError, OutputFormat } from '@vybestack/llxprt-code-core';
+import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
 
@@ -54,14 +56,10 @@ vi.mock('./config/settings.js', () => ({
 
 vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn().mockResolvedValue({
-    config: {
-      getSandbox: vi.fn(() => false),
-      getQuestion: vi.fn(() => ''),
-    },
-    modelWasSwitched: false,
-    originalModelBeforeSwitch: null,
-    finalModel: 'test-model',
-  }),
+    getSandbox: vi.fn(() => false),
+    getQuestion: vi.fn(() => ''),
+    getProvider: vi.fn(() => undefined),
+  } as unknown as Config),
   parseArguments: vi.fn().mockResolvedValue({
     model: undefined,
     sandbox: undefined,
@@ -127,6 +125,7 @@ describe('gemini.tsx main function', () => {
 
   beforeEach(() => {
     loadSettingsMock = vi.mocked(loadSettings);
+    dynamicSettingsRegistry.reset();
 
     // Store and clear sandbox-related env variables to ensure a consistent test environment
     originalEnvGeminiSandbox = process.env.LLXPRT_SANDBOX;
@@ -207,6 +206,59 @@ describe('gemini.tsx main function', () => {
 
     // Avoid the process.exit error from being thrown.
     processExitSpy.mockRestore();
+  });
+
+  it('initializes content generator config before interactive provider usage', async () => {
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
+      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+      getServerToolsProvider: vi.fn().mockReturnValue(null),
+    };
+    const mockConfig = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      refreshAuth: vi.fn().mockResolvedValue(undefined),
+      getProvider: vi.fn(() => undefined),
+      getProviderManager: vi.fn(() => providerManager),
+      getConversationLoggingEnabled: vi.fn(() => false),
+      getMcpServers: vi.fn(() => ({})),
+      getDebugMode: vi.fn(() => false),
+      getIdeMode: vi.fn(() => false),
+      getIdeClient: vi.fn(() => null),
+      getListExtensions: vi.fn(() => false),
+      getOutputFormat: vi.fn(() => OutputFormat.TEXT),
+      getToolRegistryInfo: vi.fn(() => ({
+        registered: [],
+        unregistered: [],
+      })),
+      getSandbox: vi.fn(() => false),
+      getModel: vi.fn(() => 'gemini-2.5-pro'),
+      getProjectRoot: vi.fn(() => '/tmp/project'),
+      isInteractive: vi.fn(() => true),
+      getSessionId: vi.fn(() => 'session-1'),
+      getQuestion: vi.fn(() => ''),
+      getExperimentalZedIntegration: vi.fn(() => false),
+      getZedIntegrationEnabled: vi.fn(() => false),
+      getTrustedFolder: vi.fn(() => true),
+    } as unknown as Config;
+
+    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
+    await expect(main()).rejects.toThrow(MockProcessExitError);
+
+    expect(mockConfig.refreshAuth).toHaveBeenCalledTimes(1);
+
+    // Avoid the process.exit error from being thrown in later tests.
+    processExitSpy.mockRestore();
+  });
+
+  it('formats non-interactive errors with readable details for objects', () => {
+    const error = {
+      message: 'Request failed',
+      status: 404,
+      error: { message: 'Not Found', code: 404 },
+    };
+
+    expect(formatNonInteractiveError(error)).toContain('Request failed');
+    expect(formatNonInteractiveError(error)).not.toContain('[object Object]');
   });
 });
 

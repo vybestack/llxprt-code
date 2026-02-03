@@ -1,6 +1,5 @@
 import {
   Config,
-  AuthType,
   ProviderManager,
   OpenAIProvider,
   AnthropicProvider,
@@ -139,24 +138,6 @@ export function createConfigSession(
         }
       }
 
-      // Determine auth type based on provider
-      let authType: AuthType;
-
-      if (providerName === 'gemini' || !providerName) {
-        // For Gemini: use API key auth if available, otherwise vertex AI for keyfile
-        if (options.apiKey) {
-          authType = AuthType.USE_GEMINI;
-        } else if (options.authKeyfile) {
-          authType = AuthType.USE_VERTEX_AI;
-        } else {
-          authType = AuthType.USE_GEMINI;
-        }
-      } else {
-        // For other providers: use provider-managed auth (requires ProviderManager)
-        authType = AuthType.USE_PROVIDER;
-      }
-
-      await config.refreshAuth(authType);
       client = config.getGeminiClient();
       initialized = true;
     },

@@ -202,7 +202,6 @@ describe('CoreToolScheduler Duplication Prevention', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,
@@ -327,7 +326,6 @@ describe('CoreToolScheduler Duplication Prevention', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,
@@ -428,7 +426,6 @@ describe('CoreToolScheduler Duplication Prevention', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,
@@ -546,7 +543,6 @@ describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,

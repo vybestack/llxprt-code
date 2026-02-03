@@ -20,11 +20,7 @@ export interface RetryOptions {
   maxDelayMs: number;
   shouldRetryOnError: (error: Error) => boolean;
   shouldRetryOnContent?: (content: GenerateContentResponse) => boolean;
-  onPersistent429?: (
-    authType?: string,
-    error?: unknown,
-  ) => Promise<string | boolean | null>;
-  authType?: string;
+  onPersistent429?: (error?: unknown) => Promise<string | boolean | null>;
   trackThrottleWaitTime?: (waitTimeMs: number) => void;
   retryFetchErrors?: boolean;
   signal?: AbortSignal;
@@ -382,10 +378,7 @@ export async function retryWithBackoff<T>(
         logger.debug(
           () => `Attempting bucket failover after ${failoverReason}`,
         );
-        const failoverResult = await options.onPersistent429(
-          options.authType,
-          error,
-        );
+        const failoverResult = await options.onPersistent429(error);
 
         logger.debug(
           () =>

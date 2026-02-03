@@ -19,7 +19,7 @@ import { promises as fs } from 'node:fs';
 import type { Config } from '../config/config.js';
 import { getErrorMessage, FatalAuthenticationError } from '../utils/errors.js';
 import { UserAccountManager } from '../utils/userAccountManager.js';
-import { AuthType } from '../core/contentGenerator.js';
+
 import readline from 'node:readline';
 import open from 'open';
 import { ClipboardService } from '../services/ClipboardService.js';
@@ -61,17 +61,9 @@ export interface OauthWebLogin {
   loginCompletePromise: Promise<void>;
 }
 
-const oauthClientPromises = new Map<AuthType, Promise<OAuth2Client>>();
+let oauthClientPromise: Promise<OAuth2Client> | null = null;
 
-async function initOauthClient(
-  authType: AuthType,
-  config: Config,
-): Promise<OAuth2Client> {
-  // Handle USE_NONE auth type - skip OAuth entirely
-  if (authType === AuthType.USE_NONE) {
-    throw new Error('OAuth not required for USE_NONE auth type');
-  }
-
+async function initOauthClient(config: Config): Promise<OAuth2Client> {
   const client = new OAuth2Client({
     clientId: OAUTH_CLIENT_ID,
     clientSecret: OAUTH_CLIENT_SECRET,
@@ -117,7 +109,7 @@ async function initOauthClient(
   // In Google Cloud Shell, we can use Application Default Credentials (ADC)
   // provided via its metadata server to authenticate non-interactively using
   // the identity of the user logged into Cloud Shell.
-  if (authType === AuthType.CLOUD_SHELL) {
+  if (process.env.CLOUD_SHELL === 'true') {
     try {
       console.log("Attempting to authenticate via Cloud Shell VM's ADC.");
       const computeClient = new Compute({
@@ -246,22 +238,16 @@ async function initOauthClient(
   return client;
 }
 
-export async function performLogin(
-  authType: AuthType,
-  config: Config,
-): Promise<boolean> {
-  await initOauthClient(authType, config);
+export async function performLogin(config: Config): Promise<boolean> {
+  await initOauthClient(config);
   return true;
 }
 
-export async function getOauthClient(
-  authType: AuthType,
-  config: Config,
-): Promise<OAuth2Client> {
-  if (!oauthClientPromises.has(authType)) {
-    oauthClientPromises.set(authType, initOauthClient(authType, config));
+export async function getOauthClient(config: Config): Promise<OAuth2Client> {
+  if (!oauthClientPromise) {
+    oauthClientPromise = initOauthClient(config);
   }
-  return oauthClientPromises.get(authType)!;
+  return oauthClientPromise;
 }
 
 interface OAuthUrlItem {
@@ -702,15 +688,11 @@ async function fetchAndCacheUserInfo(client: OAuth2Client): Promise<void> {
  * Clears the OAuth client cache to prevent session leakage during logout.
  * This is critical for security - without clearing the cache, users cannot properly logout.
  *
- * @param authType Optional specific auth type to clear. If not provided, clears entire cache.
+ * Clears the OAuth client cache.
  */
-export function clearOauthClientCache(authType?: AuthType): void {
+export function clearOauthClientCache(): void {
   try {
-    if (authType) {
-      oauthClientPromises.delete(authType);
-    } else {
-      oauthClientPromises.clear();
-    }
+    oauthClientPromise = null;
   } catch (error) {
     // Log warning but don't throw - logout should continue even if cache clearing fails
     console.warn('Failed to clear OAuth client cache:', error);
@@ -719,5 +701,5 @@ export function clearOauthClientCache(authType?: AuthType): void {
 
 // Helper to ensure test isolation
 export function resetOauthClientForTesting() {
-  oauthClientPromises.clear();
+  oauthClientPromise = null;
 }

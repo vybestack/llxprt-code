@@ -50,7 +50,7 @@ export const statusCommand: SlashCommand = {
         let line = `${indicator} ${status.provider}: `;
 
         if (status.authenticated) {
-          line += `authenticated (${status.authType})`;
+          line += 'authenticated';
           if (status.expiresIn && status.expiresIn > 0) {
             const hours = Math.floor(status.expiresIn / 3600);
             const minutes = Math.floor((status.expiresIn % 3600) / 60);

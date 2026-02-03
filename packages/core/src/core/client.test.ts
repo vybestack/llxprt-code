@@ -34,7 +34,6 @@ import {
 import { findCompressSplitPoint, GeminiClient } from './client.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import {
-  AuthType,
   ContentGenerator,
   ContentGeneratorConfig,
 } from './contentGenerator.js';
@@ -352,7 +351,6 @@ describe('Gemini Client (client.ts)', () => {
       model: 'test-model',
       apiKey: 'test-key',
       vertexai: false,
-      authType: AuthType.USE_GEMINI,
     };
     const mockConfigObject = {
       getContentGeneratorConfig: vi
@@ -405,7 +403,6 @@ describe('Gemini Client (client.ts)', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'test-model',
-      authType: AuthType.USE_NONE,
       sessionId: 'test-session-id',
     });
     client = new GeminiClient(mockConfig, runtimeState);
@@ -2809,7 +2806,6 @@ describe('Gemini Client (client.ts)', () => {
 
       const mockConfig = {
         getContentGeneratorConfig: vi.fn().mockReturnValue({
-          authType: AuthType.USE_GEMINI,
           apiKey: 'test-api-key',
         }),
       };
@@ -2846,7 +2842,7 @@ describe('Gemini Client (client.ts)', () => {
       // Arrange
       const mockConfig = {
         getContentGeneratorConfig: vi.fn().mockReturnValue({
-          authType: AuthType.LOGIN_WITH_GOOGLE,
+          vertexai: true,
         }),
       };
       client['config'] = mockConfig as unknown as Config;

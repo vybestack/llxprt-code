@@ -37,7 +37,7 @@ import {
 import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
-import { AuthType, type ContentGeneratorConfig } from './contentGenerator.js';
+import type { ContentGeneratorConfig } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 
 type RuntimeLoader = (
@@ -326,18 +326,8 @@ export class SubagentOrchestrator {
       'proxy-url',
     ]);
 
-    let authType: AuthType | undefined;
-    if (authKey) {
-      authType = profile.provider.includes('gemini')
-        ? AuthType.USE_GEMINI
-        : AuthType.API_KEY;
-    } else {
-      authType = AuthType.USE_PROVIDER;
-    }
-
     return {
       model: modelConfig.model,
-      authType,
       apiKey: authKey,
       proxy,
     };
@@ -538,15 +528,6 @@ export class SubagentOrchestrator {
     modelConfig: ModelConfig,
     agentRuntimeId: string,
   ): AgentRuntimeState {
-    const authKey = this.getStringSetting(profile.ephemeralSettings, [
-      'auth-key',
-    ]);
-    const authType = authKey
-      ? profile.provider.includes('gemini')
-        ? AuthType.USE_GEMINI
-        : AuthType.API_KEY
-      : AuthType.USE_PROVIDER;
-
     const sessionId = `${this.baseSessionId()}::${agentRuntimeId}`;
     const baseUrl = this.getStringSetting(profile.ephemeralSettings, [
       'base-url',
@@ -556,8 +537,6 @@ export class SubagentOrchestrator {
       runtimeId: agentRuntimeId,
       provider: profile.provider,
       model: modelConfig.model,
-      authType,
-      authPayload: authKey ? { apiKey: authKey } : undefined,
       baseUrl,
       proxyUrl: this.getStringSetting(profile.ephemeralSettings, [
         'proxy',

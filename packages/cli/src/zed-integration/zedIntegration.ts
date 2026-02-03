@@ -7,7 +7,6 @@
 import { WritableStream, ReadableStream } from 'node:stream/web';
 
 import {
-  AuthType,
   Config,
   ContentGeneratorConfig,
   GeminiChat,
@@ -39,7 +38,7 @@ import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import { Readable, Writable } from 'node:stream';
 import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
-import { LoadedSettings, SettingScope } from '../config/settings.js';
+import { LoadedSettings } from '../config/settings.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
@@ -117,7 +116,7 @@ class GeminiAgent {
 
   constructor(
     private config: Config,
-    private settings: LoadedSettings,
+    _settings: LoadedSettings,
     private client: acp.Client,
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
@@ -173,18 +172,18 @@ class GeminiAgent {
     this.clientCapabilities = args.clientCapabilities;
     const authMethods = [
       {
-        id: AuthType.LOGIN_WITH_GOOGLE,
+        id: 'oauth-personal',
         name: 'Log in with Google',
         description: null,
       },
       {
-        id: AuthType.USE_GEMINI,
+        id: 'gemini-api-key',
         name: 'Use Gemini API key',
         description:
           'Requires setting the `GEMINI_API_KEY` environment variable',
       },
       {
-        id: AuthType.USE_VERTEX_AI,
+        id: 'vertex-ai',
         name: 'Vertex AI',
         description: null,
       },
@@ -205,11 +204,10 @@ class GeminiAgent {
   }
 
   async authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
-    const method = z.nativeEnum(AuthType).parse(methodId);
+    const method = z.string().parse(methodId);
 
     await clearCachedCredentialFile();
     await this.config.refreshAuth(method);
-    this.settings.setValue(SettingScope.User, 'selectedAuthType', method);
   }
 
   async newSession({
@@ -394,7 +392,7 @@ class GeminiAgent {
             }
           }
 
-          await sessionConfig.refreshAuth(AuthType.USE_PROVIDER);
+          await sessionConfig.refreshAuth('provider');
 
           // After refreshAuth, verify ContentGeneratorConfig was created with provider manager
           const contentGenConfig = sessionConfig.getContentGeneratorConfig();
@@ -407,11 +405,11 @@ class GeminiAgent {
         } else if (process.env.GEMINI_API_KEY) {
           // Use API key if available
           this.logger.debug(() => 'Auto-authenticating with GEMINI_API_KEY');
-          await sessionConfig.refreshAuth(AuthType.USE_GEMINI);
+          await sessionConfig.refreshAuth('gemini-api-key');
         } else {
           // Try OAuth as last resort (this might open a browser)
           this.logger.debug(() => 'Auto-authenticating with OAuth');
-          await sessionConfig.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+          await sessionConfig.refreshAuth('oauth-personal');
         }
 
         geminiClient = sessionConfig.getGeminiClient();
@@ -435,10 +433,6 @@ class GeminiAgent {
           this.logger.debug(
             () =>
               `ContentGeneratorConfig has providerManager: ${!!(contentGenConfig as Record<string, unknown>).providerManager}`,
-          );
-          this.logger.debug(
-            () =>
-              `ContentGeneratorConfig authType: ${(contentGenConfig as Record<string, unknown>).authType}`,
           );
         }
       } catch (error) {
@@ -473,11 +467,11 @@ class GeminiAgent {
 
           const providerManager = sessionConfig.getProviderManager();
           if (providerManager && providerManager.hasActiveProvider()) {
-            await sessionConfig.refreshAuth(AuthType.USE_PROVIDER);
+            await sessionConfig.refreshAuth('provider');
           } else if (process.env.GEMINI_API_KEY) {
-            await sessionConfig.refreshAuth(AuthType.USE_GEMINI);
+            await sessionConfig.refreshAuth('gemini-api-key');
           } else {
-            await sessionConfig.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+            await sessionConfig.refreshAuth('oauth-personal');
           }
 
           // Try again after auth

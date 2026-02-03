@@ -313,14 +313,8 @@ export class TestRig {
       },
       sandbox:
         env['LLXPRT_SANDBOX'] !== 'false' ? env['LLXPRT_SANDBOX'] : false,
-      selectedAuthType: 'provider', // Use provider-based auth (API keys)
       provider: env['LLXPRT_DEFAULT_PROVIDER'], // No default - must be set explicitly
       debug: true, // Enable debug logging
-      security: {
-        auth: {
-          selectedType: 'provider',
-        },
-      },
       // Don't show the IDE connection dialog when running from VsCode
       ide: { enabled: false, hasSeenNudge: true },
       ...settingsOverridesWithoutUi, // Allow tests to override/add settings

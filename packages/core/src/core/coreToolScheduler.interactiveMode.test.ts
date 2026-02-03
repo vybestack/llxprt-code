@@ -89,7 +89,6 @@ function createMockConfig(
     getExcludeTools: () => [],
     getContentGeneratorConfig: () => ({
       model: 'test-model',
-      authType: 'oauth-personal',
     }),
     getToolRegistry: () => toolRegistry,
     getMessageBus: () => mockMessageBus,

@@ -7,7 +7,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { GeminiClient } from '../core/client.js';
 import { Config } from '../config/config.js';
-import { AuthType } from '../core/contentGenerator.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import {
   summarizeToolOutput,
@@ -44,7 +43,6 @@ describe('summarizers', () => {
       runtimeId: 'summarizer-test-runtime',
       provider: 'gemini',
       model: 'gemini-pro',
-      authType: AuthType.USE_NONE,
     });
     mockGeminiClient = new GeminiClient(mockConfigInstance, runtimeState);
     (mockGeminiClient.generateContent as Mock) = vi.fn();

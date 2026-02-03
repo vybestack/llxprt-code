@@ -1,6 +1,5 @@
 import {
   type Profile,
-  type AuthType,
   type ModelParams,
   DebugLogger,
   LoadBalancingProvider,
@@ -44,7 +43,6 @@ export interface ProfileApplicationResult {
   infoMessages: string[];
   warnings: string[];
   providerChanged: boolean;
-  authType?: AuthType;
   didFallback: boolean;
   requestedProvider: string | null;
   baseUrl?: string;
@@ -674,11 +672,6 @@ export async function applyProfileWithGuards(
     );
   }
 
-  const authType: AuthType | undefined =
-    providerSwitch.authType ??
-    config.getContentGeneratorConfig()?.authType ??
-    undefined;
-
   const resolvedBaseUrl =
     appliedBaseUrl ??
     (config.getEphemeralSetting('base-url') as string | undefined);
@@ -689,7 +682,6 @@ export async function applyProfileWithGuards(
     infoMessages,
     warnings,
     providerChanged: providerSwitch.changed,
-    authType,
     didFallback: selection.didFallback,
     requestedProvider,
     baseUrl: resolvedBaseUrl,

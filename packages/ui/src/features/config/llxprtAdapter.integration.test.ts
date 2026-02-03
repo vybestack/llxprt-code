@@ -90,7 +90,7 @@ describe('llxprtAdapter end-to-end', () => {
      * 5. Verify we get actual text content
      *
      * This test would catch:
-     * - AuthType configuration errors
+     * - Authentication configuration errors
      * - ProviderManager setup issues
      * - Authorization header format issues
      * - API key reading issues

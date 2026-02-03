@@ -71,7 +71,6 @@ describe('CoreToolScheduler publishing error handling', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -166,7 +165,6 @@ describe('CoreToolScheduler publishing error handling', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),

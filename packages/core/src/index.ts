@@ -306,10 +306,9 @@ export type {
   RuntimeStateChangedEvent,
   RuntimeStateChangeCallback,
   UnsubscribeFunction,
-  AuthPayload,
-  ModelParams,
-  SanitizedAuthPayload,
-  RuntimeStateErrorCode,
+  getBaseUrl,
+  getSessionId,
+  getModelParams,
 } from './runtime/AgentRuntimeState.js';
 export {
   createAgentRuntimeState,
@@ -317,14 +316,6 @@ export {
   updateAgentRuntimeStateBatch,
   getAgentRuntimeStateSnapshot,
   subscribeToAgentRuntimeState,
-  RuntimeStateError,
-  getProvider,
-  getModel,
-  getAuthType,
-  getAuthPayload,
-  getBaseUrl,
-  getSessionId,
-  getModelParams,
 } from './runtime/AgentRuntimeState.js';
 export type { RuntimeStateFromConfigOptions } from './runtime/runtimeStateFactory.js';
 export { createAgentRuntimeStateFromConfig as createRuntimeStateFromConfig } from './runtime/runtimeStateFactory.js';
