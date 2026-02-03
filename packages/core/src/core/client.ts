@@ -1918,9 +1918,12 @@ export class GeminiClient {
       };
     }
 
-    // Use lastPromptTokenCount from chat as the source of truth
-    // This is more accurate than estimating from history
-    const originalTokenCount = this.getChat().getLastPromptTokenCount();
+    // Prefer prompt token count when available, otherwise fall back to history tokens.
+    const promptTokenCount = this.getChat().getLastPromptTokenCount();
+    const originalTokenCount =
+      promptTokenCount > 0
+        ? promptTokenCount
+        : this.getChat().getHistoryService().getTotalTokens();
 
     const contextPercentageThreshold =
       this.config.getChatCompression()?.contextPercentageThreshold;
@@ -2003,9 +2006,12 @@ export class GeminiClient {
       };
     }
 
-    this.getChat().setHistory(historyToCompress);
+    const compressionChat = this.getChat();
+    const originalHistory = compressionChat.getHistory(true);
 
-    const { text: summary } = await this.getChat().sendMessage(
+    compressionChat.setHistory(historyToCompress);
+
+    const { text: summary } = await compressionChat.sendMessage(
       {
         message: {
           text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
@@ -2018,10 +2024,7 @@ export class GeminiClient {
       prompt_id,
     );
 
-    // For compression, we don't want to preserve the HistoryService
-    // because we're creating a new compressed conversation state
-    // The UI should reflect that compression happened
-    const compressedChat = await this.startChat([
+    compressionChat.setHistory([
       ...historyToKeepTop.map((h) => ({ role: h.role, parts: h.parts })),
       {
         role: 'user',
@@ -2035,8 +2038,7 @@ export class GeminiClient {
     ]);
     this.forceFullIdeContext = true;
 
-    // Use HistoryService's token count for consistency with the UI display
-    const compressedHistoryService = compressedChat.getHistoryService();
+    const compressedHistoryService = compressionChat.getHistoryService();
     const newTokenCount = compressedHistoryService
       ? compressedHistoryService.getTotalTokens()
       : 0;
@@ -2045,6 +2047,7 @@ export class GeminiClient {
         () => 'Could not determine compressed history token count.',
       );
       this.hasFailedCompressionAttempt = !force && true;
+      compressionChat.setHistory(originalHistory);
       return {
         originalTokenCount,
         newTokenCount: originalTokenCount,
@@ -2061,35 +2064,34 @@ export class GeminiClient {
 
     if (newTokenCount > originalTokenCount) {
       this.hasFailedCompressionAttempt = !force && true;
+      compressionChat.setHistory(originalHistory);
       return {
         originalTokenCount,
         newTokenCount,
         compressionStatus:
           CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
       };
-    } else {
-      this.chat = compressedChat; // Chat compression successful, set new state.
+    }
 
-      // Update telemetry service with new token count from the chat
-      this.updateTelemetryTokenCount();
+    // Update telemetry service with new token count from the chat
+    this.updateTelemetryTokenCount();
 
-      // Emit token update event for the new compressed chat
-      // This ensures the UI updates with the new token count
-      // Only emit if compression was successful
-      if (typeof compressedChat.getHistoryService === 'function') {
-        const historyService = compressedChat.getHistoryService();
-        if (historyService) {
-          const userContextLimit = this.config.getEphemeralSetting(
-            'context-limit',
-          ) as number | undefined;
-          // @plan PLAN-20251027-STATELESS5.P10
-          // @requirement REQ-STAT5-003.1
-          historyService.emit('tokensUpdated', {
-            totalTokens: newTokenCount,
-            addedTokens: newTokenCount - originalTokenCount,
-            tokenLimit: tokenLimit(this.runtimeState.model, userContextLimit),
-          });
-        }
+    // Emit token update event for the new compressed chat
+    // This ensures the UI updates with the new token count
+    // Only emit if compression was successful
+    if (typeof compressionChat.getHistoryService === 'function') {
+      const historyService = compressionChat.getHistoryService();
+      if (historyService) {
+        const userContextLimit = this.config.getEphemeralSetting(
+          'context-limit',
+        ) as number | undefined;
+        // @plan PLAN-20251027-STATELESS5.P10
+        // @requirement REQ-STAT5-003.1
+        historyService.emit('tokensUpdated', {
+          totalTokens: newTokenCount,
+          addedTokens: newTokenCount - originalTokenCount,
+          tokenLimit: tokenLimit(this.runtimeState.model, userContextLimit),
+        });
       }
     }
 
