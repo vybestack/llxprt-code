@@ -74,10 +74,12 @@ describe('useShellCommandProcessor', () => {
   let resolveExecutionPromise: (result: ShellExecutionResult) => void;
 
   let pendingHistoryItemState: HistoryItemWithoutId | null = null;
+  let pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     pendingHistoryItemState = null;
+    pendingHistoryItemRef = { current: null };
 
     addItemToHistoryMock = vi.fn();
     // Mock that tracks state and handles both direct values and updater functions
@@ -87,6 +89,8 @@ describe('useShellCommandProcessor', () => {
       } else {
         pendingHistoryItemState = updaterOrValue;
       }
+      // Keep ref in sync with state for tests
+      pendingHistoryItemRef.current = pendingHistoryItemState;
     });
     onExecMock = vi.fn();
     onDebugMessageMock = vi.fn();
@@ -129,6 +133,7 @@ describe('useShellCommandProcessor', () => {
         () => {},
         80,
         24,
+        pendingHistoryItemRef,
       ),
     );
 
@@ -262,7 +267,10 @@ describe('useShellCommandProcessor', () => {
       const callsAfterInit = setPendingHistoryItemMock.mock.calls.length;
       expect(callsAfterInit).toBeGreaterThanOrEqual(1);
 
-      // Simulate rapid output (within throttle window)
+      // Simulate first output with time advancement
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
       act(() => {
         mockShellOutputCallback({
           type: 'data',
@@ -270,10 +278,15 @@ describe('useShellCommandProcessor', () => {
         });
       });
 
-      // Should not have updated yet (still within throttle window)
-      const callsAfterFirstData = setPendingHistoryItemMock.mock.calls.length;
+      // With -Infinity initialization, first output triggers immediately
+      // Verify the first output was captured in state
+      expect(
+        pendingHistoryItemState &&
+          pendingHistoryItemState.type === 'tool_group' &&
+          pendingHistoryItemState.tools[0].resultDisplay,
+      ).toBe('hello');
 
-      // Advance time past the throttle window and send another event
+      // Advance time past throttle window and send second output
       await act(async () => {
         await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
       });
@@ -284,11 +297,7 @@ describe('useShellCommandProcessor', () => {
         });
       });
 
-      // Should now have been called once more with the cumulative output
-      expect(setPendingHistoryItemMock.mock.calls.length).toBeGreaterThan(
-        callsAfterFirstData,
-      );
-      // The implementation now uses an updater function, so check the resulting state
+      // Verify second output was cumulative
       expect(pendingHistoryItemState).toEqual(
         expect.objectContaining({
           tools: [expect.objectContaining({ resultDisplay: 'hello world' })],
@@ -298,23 +307,21 @@ describe('useShellCommandProcessor', () => {
 
     it('should show binary progress messages correctly', async () => {
       const { result } = renderProcessorHook();
-      act(() => {
+      await act(async () => {
         result.current.handleShellCommand(
           'cat img',
           new AbortController().signal,
         );
+        // Allow microtasks to run for the async execute() to complete
+        await Promise.resolve();
       });
 
-      // Should immediately show the detection message
+      // Binary detection should show immediately (lastUpdateTime is -Infinity)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
       act(() => {
         mockShellOutputCallback({ type: 'binary_detected' });
-      });
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
-      });
-      // Send another event to trigger the update
-      act(() => {
-        mockShellOutputCallback({ type: 'binary_progress', bytesReceived: 0 });
       });
 
       // The implementation now uses an updater function, so check the resulting state

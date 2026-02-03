@@ -362,6 +362,7 @@ class ShellToolInvocation extends BaseToolInvocation<
         {
           terminalWidth: terminalColumns,
           terminalHeight: terminalRows,
+          showColor: true,
         },
       );
 

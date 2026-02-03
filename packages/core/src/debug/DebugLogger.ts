@@ -138,6 +138,8 @@ export class DebugLogger {
       level: 'log',
       message,
       args: args.length > 0 ? args : undefined,
+      runId: this._fileOutput.runId,
+      pid: process.pid,
     };
 
     const target = this._configManager.getOutputTarget();
@@ -183,6 +185,8 @@ export class DebugLogger {
       level: 'debug',
       message,
       args: args.length > 0 ? args : undefined,
+      runId: this._fileOutput.runId,
+      pid: process.pid,
     };
 
     const target = this._configManager.getOutputTarget();
@@ -196,12 +200,15 @@ export class DebugLogger {
   }
 
   warn(messageOrFn: string | (() => string), ...args: unknown[]): void {
-    // Use error level for warnings for now
-    this.error(messageOrFn, ...args);
+    // Use warn level for warnings
+    this._logWithLevel('warn', messageOrFn, ...args);
   }
 
-  error(messageOrFn: string | (() => string), ...args: unknown[]): void {
-    // Lines 66-70
+  private _logWithLevel(
+    level: 'warn' | 'error',
+    messageOrFn: string | (() => string),
+    ...args: unknown[]
+  ): void {
     if (!this._enabled) {
       return;
     }
@@ -223,9 +230,11 @@ export class DebugLogger {
     const logEntry: LogEntry = {
       timestamp,
       namespace: this._namespace,
-      level: 'error',
+      level,
       message,
       args: args.length > 0 ? args : undefined,
+      runId: this._fileOutput.runId,
+      pid: process.pid,
     };
 
     const target = this._configManager.getOutputTarget();
@@ -236,6 +245,10 @@ export class DebugLogger {
     if (target.includes('stderr')) {
       this.debugInstance(message, ...args);
     }
+  }
+
+  error(messageOrFn: string | (() => string), ...args: unknown[]): void {
+    this._logWithLevel('error', messageOrFn, ...args);
   }
 
   checkEnabled(): boolean {

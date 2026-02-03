@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type React from 'react';
+import React from 'react';
 import { Box, Text } from 'ink';
 import type {
   AnsiLine,
@@ -26,31 +26,54 @@ export const AnsiOutputText: React.FC<AnsiOutputProps> = ({
   availableTerminalHeight,
   width,
 }) => {
-  const lastLines = data.slice(
-    -(availableTerminalHeight && availableTerminalHeight > 0
+  const linesToShow =
+    availableTerminalHeight && availableTerminalHeight > 0
       ? availableTerminalHeight
-      : DEFAULT_HEIGHT),
-  );
+      : DEFAULT_HEIGHT;
+
+  let lastNonEmpty = -1;
+  for (let i = data.length - 1; i >= 0; i -= 1) {
+    const line = data[i];
+    const lineText = line.map((token) => token.text).join('');
+    if (lineText.trim().length > 0) {
+      lastNonEmpty = i;
+      break;
+    }
+  }
+
+  if (data.length === 0) {
+    return null;
+  }
+
+  const endIndex = lastNonEmpty >= 0 ? lastNonEmpty + 1 : data.length;
+  const startIndex = Math.max(0, endIndex - linesToShow);
+  const linesToRender = data.slice(startIndex, endIndex);
+
+
   return (
     <Box flexDirection="column" width={width} flexShrink={0}>
-      {lastLines.map((line: AnsiLine, lineIndex: number) => (
-        <Text key={lineIndex} wrap="truncate" color={Colors.Foreground}>
-          {line.length > 0
-            ? line.map((token: AnsiToken, tokenIndex: number) => (
-                <Text
-                  key={tokenIndex}
-                  color={token.dim ? Colors.DimComment : (token.fg ?? Colors.Foreground)}
-                  backgroundColor={token.bg}
-                  inverse={token.inverse}
-                  bold={token.bold}
-                  italic={token.italic}
-                  underline={token.underline}
-                >
-                  {token.text}
-                </Text>
-              ))
-            : null}
-        </Text>
+      {linesToRender.map((line: AnsiLine, lineIndex: number) => (
+        <Box key={lineIndex} width={width} flexShrink={0}>
+          {line.length > 0 ? (
+            line.map((token: AnsiToken, tokenIndex: number) => (
+              <Text
+                key={tokenIndex}
+                color={
+                  token.dim ? Colors.DimComment : token.fg || Colors.Foreground
+                }
+                backgroundColor={token.bg || undefined}
+                inverse={token.inverse}
+                bold={token.bold}
+                italic={token.italic}
+                underline={token.underline}
+              >
+                {token.text.replace(/\u00a0/g, ' ')}
+              </Text>
+            ))
+          ) : (
+            <Text color={Colors.Foreground}> </Text>
+          )}
+        </Box>
       ))}
     </Box>
   );

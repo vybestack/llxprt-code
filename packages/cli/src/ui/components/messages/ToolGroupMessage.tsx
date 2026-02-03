@@ -220,33 +220,31 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
         const isFirst = index === 0;
         return (
           <Box key={tool.callId} flexDirection="column" minHeight={1}>
-            <Box flexDirection="row" alignItems="center">
-              <ToolMessage
-                callId={tool.callId}
-                name={tool.name}
-                description={tool.description}
-                resultDisplay={tool.resultDisplay}
-                status={tool.status}
-                confirmationDetails={tool.confirmationDetails}
-                availableTerminalHeight={availableTerminalHeightPerToolMessage}
-                terminalWidth={innerWidth}
-                emphasis={
-                  isConfirming
-                    ? 'high'
-                    : toolAwaitingApproval
-                      ? 'low'
-                      : 'medium'
-                }
-                renderOutputAsMarkdown={tool.renderOutputAsMarkdown}
-                activeShellPtyId={activeShellPtyId}
-                embeddedShellFocused={embeddedShellFocused}
-                ptyId={tool.ptyId}
-                config={config}
-                isFirst={isFirst}
-                borderColor={borderColor}
-                borderDimColor={borderDimColor}
-              />
-            </Box>
+            <ToolMessage
+              callId={tool.callId}
+              name={tool.name}
+              description={tool.description}
+              resultDisplay={tool.resultDisplay}
+              status={tool.status}
+              confirmationDetails={tool.confirmationDetails}
+              availableTerminalHeight={availableTerminalHeightPerToolMessage}
+              terminalWidth={innerWidth}
+              emphasis={
+                isConfirming
+                  ? 'high'
+                  : toolAwaitingApproval
+                    ? 'low'
+                    : 'medium'
+              }
+              renderOutputAsMarkdown={tool.renderOutputAsMarkdown}
+              activeShellPtyId={activeShellPtyId}
+              embeddedShellFocused={embeddedShellFocused}
+              ptyId={tool.ptyId}
+              config={config}
+              isFirst={isFirst}
+              borderColor={borderColor}
+              borderDimColor={borderDimColor}
+            />
             {tool.status === ToolCallStatus.Confirming &&
               isConfirming &&
               tool.confirmationDetails && (

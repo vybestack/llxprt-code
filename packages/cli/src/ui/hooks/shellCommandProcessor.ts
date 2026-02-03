@@ -79,10 +79,12 @@ export const useShellCommandProcessor = (
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,
   terminalHeight?: number,
+  pendingHistoryItemRef?: React.MutableRefObject<HistoryItemWithoutId | null>,
 ) => {
   const [activeShellPtyId, setActiveShellPtyId] = useState<number | null>(null);
   const handleShellCommand = useCallback(
     (rawQuery: PartListUnion, abortSignal: AbortSignal): boolean => {
+      setShellInputFocused(true);
       if (typeof rawQuery !== 'string' || rawQuery.trim() === '') {
         return false;
       }
@@ -114,8 +116,9 @@ export const useShellCommandProcessor = (
       const executeCommand = async (
         resolve: (value: void | PromiseLike<void>) => void,
       ) => {
-        // Initialize lastUpdateTime to 0 to allow the first update immediately
-        let lastUpdateTime = 0;
+        // Initialize lastUpdateTime to ensure first update happens immediately
+        // Use -Infinity to guarantee first update passes throttle check
+        let lastUpdateTime = -Infinity;
         let cumulativeStdout: string | AnsiOutput = '';
         let isBinaryStream = false;
         let binaryBytesReceived = 0;
@@ -129,11 +132,16 @@ export const useShellCommandProcessor = (
           confirmationDetails: undefined,
         };
 
-        setPendingHistoryItem({
+        const initialPendingItem: HistoryItemWithoutId = {
           type: 'tool_group',
           agentId: DEFAULT_AGENT_ID,
           tools: [initialToolDisplay],
-        });
+        };
+
+        if (pendingHistoryItemRef) {
+          pendingHistoryItemRef.current = initialPendingItem;
+        }
+        setPendingHistoryItem(initialPendingItem);
 
         let executionPid: number | undefined;
 
@@ -203,20 +211,20 @@ export const useShellCommandProcessor = (
                 shouldUpdate &&
                 Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS
               ) {
-                setPendingHistoryItem((prevItem) => {
-                  if (prevItem?.type === 'tool_group') {
-                    return {
-                      ...prevItem,
-                      tools: prevItem.tools.map((tool) =>
-                        tool.callId === callId
-                          ? { ...tool, resultDisplay: currentDisplayOutput }
-                          : tool,
-                      ),
-                    };
-                  }
-                  return prevItem;
-                });
-                lastUpdateTime = Date.now();
+                // Always update ref first to ensure it has the latest output
+                if (pendingHistoryItemRef?.current?.type === 'tool_group') {
+                  const nextItem = {
+                    ...pendingHistoryItemRef.current,
+                    tools: pendingHistoryItemRef.current.tools.map((tool) =>
+                      tool.callId === callId
+                        ? { ...tool, resultDisplay: currentDisplayOutput }
+                        : tool,
+                    ),
+                  };
+                  pendingHistoryItemRef.current = nextItem;
+                  setPendingHistoryItem(nextItem);
+                  lastUpdateTime = Date.now();
+                }
               }
             },
             abortSignal,
@@ -228,27 +236,28 @@ export const useShellCommandProcessor = (
             },
           );
 
-          executionPid = pid;
-          if (pid) {
-            setActiveShellPtyId(pid);
-            setPendingHistoryItem((prevItem) => {
-              if (prevItem?.type === 'tool_group') {
+            executionPid = pid;
+            if (pid) {
+              setActiveShellPtyId(pid);
+              setPendingHistoryItem((prevItem) => {
+                if (prevItem?.type === 'tool_group') {
+                  return {
+                    ...prevItem,
+                    tools: prevItem.tools.map((tool) =>
+                      tool.callId === callId ? { ...tool, ptyId: pid } : tool,
+                    ),
+                  };
+                }
                 return {
-                  ...prevItem,
-                  tools: prevItem.tools.map((tool) =>
-                    tool.callId === callId ? { ...tool, ptyId: pid } : tool,
-                  ),
+                  type: 'tool_group',
+                  agentId: DEFAULT_AGENT_ID,
+                  tools: [{ ...initialToolDisplay, ptyId: pid }],
                 };
-              }
-              return {
-                type: 'tool_group',
-                agentId: DEFAULT_AGENT_ID,
-                tools: [{ ...initialToolDisplay, ptyId: pid }],
-              };
-            });
-          }
+              });
+            }
 
-          result
+            result
+
             .then((result: ShellExecutionResult) => {
               setPendingHistoryItem(null);
 
@@ -370,6 +379,7 @@ export const useShellCommandProcessor = (
       setShellInputFocused,
       terminalWidth,
       terminalHeight,
+      pendingHistoryItemRef,
     ],
   );
 

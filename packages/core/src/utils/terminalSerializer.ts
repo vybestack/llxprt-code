@@ -78,7 +78,9 @@ class Cell {
       this.attributes += Attribute.dim;
     }
 
-    if (cell.isFgRGB()) {
+    if (cell.isFgDefault()) {
+      this.fgColorMode = ColorMode.DEFAULT;
+    } else if (cell.isFgRGB()) {
       this.fgColorMode = ColorMode.RGB;
     } else if (cell.isFgPalette()) {
       this.fgColorMode = ColorMode.PALETTE;
@@ -86,7 +88,9 @@ class Cell {
       this.fgColorMode = ColorMode.DEFAULT;
     }
 
-    if (cell.isBgRGB()) {
+    if (cell.isBgDefault()) {
+      this.bgColorMode = ColorMode.DEFAULT;
+    } else if (cell.isBgRGB()) {
       this.bgColorMode = ColorMode.RGB;
     } else if (cell.isBgPalette()) {
       this.bgColorMode = ColorMode.PALETTE;
@@ -190,7 +194,11 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
       currentLine.push(token);
     }
 
-    result.push(currentLine);
+    // Drop fully-empty lines to reduce blank padding (prevents hiding visible rows).
+    const isBlankLine = currentLine.every(
+      (token) => token.text.trim().length === 0,
+    );
+    result.push(isBlankLine ? [] : currentLine);
   }
 
   return result;

@@ -385,6 +385,7 @@ export const useGeminiStream = (
     setShellInputFocused,
     terminalWidth,
     terminalHeight,
+    pendingHistoryItemRef,
   );
 
   const streamingState = useMemo(() => {

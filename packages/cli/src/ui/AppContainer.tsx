@@ -886,9 +886,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
   const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
-  // TODO: Wire up activeShellPtyId from tool execution events in future phases
-  const [_activeShellPtyId, _setActiveShellPtyId] = useState<number | null>(null);
-  const activeShellPtyId = _activeShellPtyId; // Expose for conditional logic
 
   const openPermissionsDialog = useCallback(() => {
     setIsPermissionsDialogOpen(true);
@@ -1559,6 +1556,7 @@ export const AppContainer = (props: AppContainerProps) => {
     pendingHistoryItems: pendingGeminiHistoryItems,
     thought,
     cancelOngoingRequest,
+    activeShellPtyId: geminiActiveShellPtyId,
   } = useGeminiStream(
     config.getGeminiClient(),
     history,
@@ -1584,6 +1582,9 @@ export const AppContainer = (props: AppContainerProps) => {
     () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
     [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
   );
+
+  // Use the activeShellPtyId from useGeminiStream (which gets it from useShellCommandProcessor)
+  const activeShellPtyId = geminiActiveShellPtyId;
 
   // Update the cancel handler with message queue support
   const cancelHandlerRef = useRef<(() => void) | null>(null);

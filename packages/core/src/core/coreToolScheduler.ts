@@ -470,7 +470,7 @@ export class CoreToolScheduler {
             `Received TOOL_CONFIRMATION_RESPONSE for unknown correlationId=${response.correlationId}`,
         );
       }
-      return; // Not our confirmation request
+      return;
     }
 
     const waitingToolCall = this.toolCalls.find(
@@ -486,6 +486,7 @@ export class CoreToolScheduler {
         );
       }
       this.pendingConfirmations.delete(response.correlationId);
+
       return;
     }
 
@@ -1674,20 +1675,19 @@ export class CoreToolScheduler {
 
         this.setStatusInternal(callId, 'executing');
 
-        const liveOutputCallback =
-          scheduledCall.tool.canUpdateOutput && this.outputUpdateHandler
-            ? (outputChunk: string | AnsiOutput) => {
-                if (this.outputUpdateHandler) {
-                  this.outputUpdateHandler(callId, outputChunk);
-                }
-                this.toolCalls = this.toolCalls.map((tc) =>
-                  tc.request.callId === callId && tc.status === 'executing'
-                    ? { ...tc, liveOutput: outputChunk }
-                    : tc,
-                );
-                this.notifyToolCallsUpdate();
+        const liveOutputCallback = scheduledCall.tool.canUpdateOutput
+          ? (outputChunk: string | AnsiOutput) => {
+              if (this.outputUpdateHandler) {
+                this.outputUpdateHandler(callId, outputChunk);
               }
-            : undefined;
+              this.toolCalls = this.toolCalls.map((tc) =>
+                tc.request.callId === callId && tc.status === 'executing'
+                  ? { ...tc, liveOutput: outputChunk }
+                  : tc,
+              );
+              this.notifyToolCallsUpdate();
+            }
+          : undefined;
 
         invocation
           .execute(signal, liveOutputCallback)

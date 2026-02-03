@@ -38,6 +38,7 @@ function stripAnsiIfPresent(value: string): string {
 }
 
 // Note: getFullText was removed as the PTY path now uses truncatedOutput
+
 // for bounded memory instead of extracting the full xterm terminal buffer.
 
 const BASH_SHOPT_OPTIONS = 'promptvars nullglob extglob nocaseglob dotglob';
@@ -163,6 +164,7 @@ export class ShellExecutionService {
       abortSignal,
     );
   }
+
 
   private static appendAndTruncate(
     currentBuffer: string,

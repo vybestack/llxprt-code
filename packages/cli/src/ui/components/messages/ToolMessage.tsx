@@ -22,7 +22,6 @@ import {
   stripShellMarkers,
   type Config,
   type AnsiOutput,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { AnsiOutputText } from '../AnsiOutput.js';
@@ -33,8 +32,6 @@ const STATIC_HEIGHT = 1;
 const RESERVED_LINE_COUNT = 5; // for tool name, status, padding etc.
 const STATUS_INDICATOR_WIDTH = 3;
 const MIN_LINES_SHOWN = 2; // show at least this many lines
-
-const logger = DebugLogger.getLogger('llxprt:cli:tool-message');
 
 // Large threshold to ensure we don't cause performance issues for very large
 // outputs that will get truncated further MaxSizedBox anyway.
@@ -254,134 +251,131 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         borderRight={true}
         paddingX={1}
         flexDirection="column"
+        overflowX="hidden"
       >
-      {status === ToolCallStatus.Executing && !isDetailsVisible && (
-        <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
-          <Text color={Colors.DimComment}>
-            Press &apos;ctrl+r&apos; to show running command
-          </Text>
-        </Box>
-      )}
-      {currentSubcommand && (
-        <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
-          <Text color={Colors.AccentCyan}>
-            Running: <Text color={Colors.Foreground}>{currentSubcommand}</Text>
-          </Text>
-        </Box>
-      )}
-        {(() => {
-          logger.debug(
-            `name=${name}, status=${status}, resultDisplay type=${typeof resultDisplay}, isAnsiOutput=${isAnsiOutput}, hasValue=${!!resultDisplay}, renderAsMarkdown=${renderOutputAsMarkdown}, preview=${typeof resultDisplay === 'string' ? resultDisplay.slice(0, 50) : 'non-string'}`,
-          );
-          return null;
-        })()}
+        {status === ToolCallStatus.Executing && !isDetailsVisible && (
+          <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
+            <Text color={Colors.DimComment}>
+              Press &apos;ctrl+r&apos; to show running command
+            </Text>
+          </Box>
+        )}
+        {currentSubcommand && (
+          <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
+            <Text color={Colors.AccentCyan}>
+              Running: <Text color={Colors.Foreground}>{currentSubcommand}</Text>
+            </Text>
+          </Box>
+        )}
         {resultDisplay && (
-          <Box paddingLeft={STATUS_INDICATOR_WIDTH} width="100%" marginTop={1}>
-            <Box flexDirection="column">
-              {isAnsiOutput && (
-                <AnsiOutputText
-                  data={resultDisplay as unknown as AnsiOutput}
-                  availableTerminalHeight={availableHeight}
-                  width={childWidth}
+          <Box
+            paddingLeft={STATUS_INDICATOR_WIDTH}
+            width="100%"
+            marginTop={1}
+            flexDirection="column"
+          >
+            {isAnsiOutput && (
+              <AnsiOutputText
+                data={resultDisplay as unknown as AnsiOutput}
+                availableTerminalHeight={availableHeight}
+                width={childWidth}
+              />
+            )}
+            {typeof resultDisplay === 'string' && renderOutputAsMarkdown && (
+              <Box flexDirection="column">
+                <MarkdownDisplay
+                  text={visualResultDisplay as string}
+                  isPending={false}
+                  terminalWidth={childWidth}
+                  renderMarkdown={renderMarkdown}
                 />
-              )}
-              {typeof resultDisplay === 'string' && renderOutputAsMarkdown && (
-                <Box flexDirection="column">
-                  <MarkdownDisplay
-                    text={visualResultDisplay as string}
-                    isPending={false}
-                    availableTerminalHeight={availableHeight}
-                    terminalWidth={childWidth}
-                    renderMarkdown={renderMarkdown}
-                  />
+              </Box>
+            )}
+            {typeof resultDisplay === 'string' && !renderOutputAsMarkdown && (
+              <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
+                <Box>
+                  <Text color={Colors.Foreground} wrap="wrap">
+                    {visualResultDisplay as string}
+                  </Text>
                 </Box>
-              )}
-              {typeof resultDisplay === 'string' && !renderOutputAsMarkdown && (
-                <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
-                  <Box>
-                    <Text color={Colors.Foreground} wrap="wrap">
-                      {visualResultDisplay as string}
-                    </Text>
-                  </Box>
-                </MaxSizedBox>
-              )}
-              {!isAnsiOutput && typeof resultDisplay !== 'string' && (
-                <Box flexDirection="column">
-                  {'fileDiff' in resultDisplay && (
-                    <>
-                      {(() => {
-                        const astValidation = resultDisplay.metadata
-                          ?.astValidation as
-                          | { valid: boolean; errors: string[] }
-                          | undefined;
-                        if (!astValidation) return null;
+              </MaxSizedBox>
+            )}
+            {!isAnsiOutput && typeof resultDisplay !== 'string' && (
+              <Box flexDirection="column">
+                {'fileDiff' in resultDisplay && (
+                  <>
+                    {(() => {
+                      const astValidation = resultDisplay.metadata
+                        ?.astValidation as
+                        | { valid: boolean; errors: string[] }
+                        | undefined;
+                      if (!astValidation) return null;
 
-                        return (
-                          <Box marginBottom={1}>
-                            {astValidation.valid ? (
-                              <Text color={Colors.AccentGreen}>
-                                 AST Validation Passed
+                      return (
+                        <Box marginBottom={1}>
+                          {astValidation.valid ? (
+                            <Text color={Colors.AccentGreen}>
+                               AST Validation Passed
+                            </Text>
+                          ) : (
+                            <Box flexDirection="column">
+                              <Text color={Colors.AccentRed} bold>
+                                 AST Validation Failed
                               </Text>
-                            ) : (
-                              <Box flexDirection="column">
-                                <Text color={Colors.AccentRed} bold>
-                                   AST Validation Failed
-                                </Text>
-                                {astValidation.errors.map(
-                                  (err: string, i: number) => (
-                                    <Text key={i} color={Colors.AccentRed}>
-                                      - {err}
-                                    </Text>
-                                  ),
-                                )}
-                              </Box>
+                              {astValidation.errors.map(
+                                (err: string, i: number) => (
+                                  <Text key={i} color={Colors.AccentRed}>
+                                    - {err}
+                                  </Text>
+                                ),
+                              )}
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })()}
+                    <DiffRenderer
+                      diffContent={resultDisplay.fileDiff}
+                      filename={resultDisplay.fileName}
+                      availableTerminalHeight={availableHeight}
+                      terminalWidth={childWidth}
+                    />
+                  </>
+                )}
+                {'content' in resultDisplay && (
+                  <Box flexDirection="column">
+                    <Box marginBottom={1} flexDirection="column">
+                      {(() => {
+                        const language = resultDisplay.metadata?.language;
+                        const declarationsCount =
+                          resultDisplay.metadata?.declarationsCount;
+                        return (
+                          <>
+                            {typeof language === 'string' && (
+                              <Text color={Colors.AccentGreen}>
+                                 Language: {language}
+                              </Text>
                             )}
-                          </Box>
+                            {typeof declarationsCount === 'number' && (
+                              <Text color={Colors.AccentGreen}>
+                                 Declarations Found: {declarationsCount}
+                              </Text>
+                            )}
+                          </>
                         );
                       })()}
-                      <DiffRenderer
-                        diffContent={resultDisplay.fileDiff}
-                        filename={resultDisplay.fileName}
-                        availableTerminalHeight={availableHeight}
-                        terminalWidth={childWidth}
-                      />
-                    </>
-                  )}
-                  {'content' in resultDisplay && (
-                    <Box flexDirection="column">
-                      <Box marginBottom={1} flexDirection="column">
-                        {(() => {
-                          const language = resultDisplay.metadata?.language;
-                          const declarationsCount =
-                            resultDisplay.metadata?.declarationsCount;
-                          return (
-                            <>
-                              {typeof language === 'string' && (
-                                <Text color={Colors.AccentGreen}>
-                                   Language: {language}
-                                </Text>
-                              )}
-                              {typeof declarationsCount === 'number' && (
-                                <Text color={Colors.AccentGreen}>
-                                   Declarations Found: {declarationsCount}
-                                </Text>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </Box>
-                      <MarkdownDisplay
-                        text={resultDisplay.content}
-                        isPending={false}
-                        availableTerminalHeight={availableHeight}
-                        terminalWidth={childWidth}
-                        renderMarkdown={renderMarkdown}
-                      />
                     </Box>
-                  )}
-                </Box>
-              )}
-            </Box>
+                    <MarkdownDisplay
+                      text={resultDisplay.content}
+                      isPending={false}
+                      availableTerminalHeight={availableHeight}
+                      terminalWidth={childWidth}
+                      renderMarkdown={renderMarkdown}
+                    />
+                  </Box>
+                )}
+              </Box>
+            )}
           </Box>
         )}
         {isThisShellFocused && config && (

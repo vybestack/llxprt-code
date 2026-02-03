@@ -64,8 +64,9 @@ export const StickyHeader: React.FC<StickyHeaderProps> = ({
       borderLeft={true}
       borderRight={true}
       paddingX={1}
-      paddingBottom={1}
       paddingTop={isFirst ? 0 : 1}
+      paddingBottom={0}
+      flexDirection="column"
     >
       {children}
     </Box>
