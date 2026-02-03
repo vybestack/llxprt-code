@@ -16,7 +16,7 @@
  *   1 - Error (both keys >90% used, no keys configured, or other error)
  */
 
-const fs = require('fs');
+import fs from 'node:fs';
 
 async function checkQuota(apiKey, keyName) {
   if (!apiKey) return null;
