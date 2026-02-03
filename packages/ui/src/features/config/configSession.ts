@@ -119,8 +119,6 @@ export function createConfigSession(
       }
       await config.initialize();
 
-      const providerName = options.provider?.toLowerCase();
-
       // For non-Gemini providers, set up ProviderManager first
       if (requiresProviderManager(options.provider)) {
         const provider = createProvider(
