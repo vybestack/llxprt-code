@@ -298,7 +298,7 @@ jobs:
         run: node scripts/preflight-ci.js
         env:
           # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
@@ -318,7 +318,7 @@ jobs:
           # npm run test:integration:sandbox:docker
         env:
           # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
