@@ -34,15 +34,19 @@ async function checkQuota(apiKey, keyName) {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.log(`${keyName} quota check failed with status ${response.status}`);
+      console.log(
+        `${keyName} quota check failed with status ${response.status}`,
+      );
       return null;
     }
 
     const data = await response.json();
 
-    if (!data.subscription ||
-        typeof data.subscription.limit !== 'number' ||
-        typeof data.subscription.requests !== 'number') {
+    if (
+      !data.subscription ||
+      typeof data.subscription.limit !== 'number' ||
+      typeof data.subscription.requests !== 'number'
+    ) {
       console.log(`${keyName} quota response missing required fields`);
       return null;
     }
@@ -52,8 +56,11 @@ async function checkQuota(apiKey, keyName) {
       return null;
     }
 
-    const usagePercent = (data.subscription.requests / data.subscription.limit) * 100;
-    console.log(`${keyName}: ${usagePercent.toFixed(1)}% used (${data.subscription.requests}/${data.subscription.limit})`);
+    const usagePercent =
+      (data.subscription.requests / data.subscription.limit) * 100;
+    console.log(
+      `${keyName}: ${usagePercent.toFixed(1)}% used (${data.subscription.requests}/${data.subscription.limit})`,
+    );
 
     return { usagePercent, key: apiKey };
   } catch (e) {
@@ -75,7 +82,12 @@ async function selectOptimalKey() {
   const quota2 = await checkQuota(key2, 'Key 2');
 
   // If both keys are >90% used, fail
-  if (quota1 && quota1.usagePercent > 90 && quota2 && quota2.usagePercent > 90) {
+  if (
+    quota1 &&
+    quota1.usagePercent > 90 &&
+    quota2 &&
+    quota2.usagePercent > 90
+  ) {
     console.error('Both API keys are over 90% quota usage');
     process.exit(1);
   }
@@ -121,7 +133,7 @@ async function main() {
   }
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error('Quota selection failed:', e.message);
   process.exit(1);
 });
