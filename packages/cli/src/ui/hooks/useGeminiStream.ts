@@ -261,15 +261,27 @@ export const useGeminiStream = (
         // @plan:PLAN-20251202-THINKING-UI.P08
         // @requirement:REQ-THINK-UI-003
         // Always include thinkingBlocks for storage (display is controlled separately)
+        // Apply emoji filtering to accumulated thinking text at flush time (not per-delta)
+        // Issue #1272: Per-delta filtering via filterStreamChunk loses spaces
+        let thinkingText = thinkingTextRef.current;
+        if (thinkingText && emojiFilter) {
+          const thinkingFiltered = emojiFilter.filterText(thinkingText);
+          if (
+            !thinkingFiltered.blocked &&
+            typeof thinkingFiltered.filtered === 'string'
+          ) {
+            thinkingText = thinkingFiltered.filtered;
+          }
+        }
         const itemWithThinking = {
           ...pending,
           text: sanitized,
-          ...(thinkingTextRef.current
+          ...(thinkingText
             ? {
                 thinkingBlocks: [
                   {
                     type: 'thinking' as const,
-                    thought: thinkingTextRef.current,
+                    thought: thinkingText,
                     sourceField: 'reasoning_content' as const,
                   },
                 ],
@@ -292,7 +304,13 @@ export const useGeminiStream = (
 
       setPendingHistoryItem(null);
     },
-    [addItem, pendingHistoryItemRef, sanitizeContent, setPendingHistoryItem],
+    [
+      addItem,
+      emojiFilter,
+      pendingHistoryItemRef,
+      sanitizeContent,
+      setPendingHistoryItem,
+    ],
   );
   const logger = useLogger(storage);
   const gitService = useMemo(() => {
@@ -992,10 +1010,13 @@ export const useGeminiStream = (
             setThought(event.value);
 
             // Accumulate thinking text for streaming display (like content buffer)
+            // NOTE: Do NOT use sanitizeContent (emoji filter streaming) here as it
+            // buffers text and loses spaces between chunks. Apply emoji filtering
+            // only to the accumulated result when flushing, not per-delta.
+            // Issue #1272: Spaces were being lost because filterStreamChunk buffers
+            // incomplete words and loses the spaces between them.
             {
-              let thoughtText = event.value.rawText;
-              const sanitized = sanitizeContent(thoughtText);
-              thoughtText = sanitized.blocked ? '' : sanitized.text;
+              const thoughtText = event.value.rawText;
 
               if (thoughtText) {
                 thinkingTextRef.current += thoughtText;
@@ -1114,7 +1135,6 @@ export const useGeminiStream = (
       handleMaxSessionTurnsEvent,
       handleContextWindowWillOverflowEvent,
       handleCitationEvent,
-      sanitizeContent,
       setPendingHistoryItem,
     ],
   );
