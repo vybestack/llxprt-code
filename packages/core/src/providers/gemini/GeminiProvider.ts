@@ -1344,6 +1344,21 @@ export class GeminiProvider extends BaseProvider {
     const requestConfig: Record<string, unknown> = {
       ...modelParams,
     };
+
+    // Translate generic maxOutputTokens ephemeral to Gemini's maxOutputTokens
+    const rawMaxOutput = options.settings?.get('maxOutputTokens');
+    const genericMaxOutput =
+      typeof rawMaxOutput === 'number' &&
+      Number.isFinite(rawMaxOutput) &&
+      rawMaxOutput > 0
+        ? rawMaxOutput
+        : undefined;
+    if (
+      genericMaxOutput !== undefined &&
+      requestConfig['maxOutputTokens'] === undefined
+    ) {
+      requestConfig['maxOutputTokens'] = genericMaxOutput;
+    }
     requestConfig.serverTools = serverTools;
     if (geminiTools) {
       requestConfig.tools = geminiTools;

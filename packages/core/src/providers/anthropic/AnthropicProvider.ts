@@ -1385,8 +1385,24 @@ ${block.code}
 
     // Get pre-separated model parameters from invocation context
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
-    const requestOverrides: Record<string, unknown> =
-      options.invocation?.modelParams ?? {};
+    const requestOverrides: Record<string, unknown> = {
+      ...(options.invocation?.modelParams ?? {}),
+    };
+
+    // Translate generic maxOutputTokens ephemeral to Anthropic's max_tokens
+    const rawMaxOutput = options.settings.get('maxOutputTokens');
+    const genericMaxOutput =
+      typeof rawMaxOutput === 'number' &&
+      Number.isFinite(rawMaxOutput) &&
+      rawMaxOutput > 0
+        ? rawMaxOutput
+        : undefined;
+    if (
+      genericMaxOutput !== undefined &&
+      requestOverrides['max_tokens'] === undefined
+    ) {
+      requestOverrides['max_tokens'] = genericMaxOutput;
+    }
 
     const configEphemeralSettings = options.invocation?.ephemerals ?? {};
 
