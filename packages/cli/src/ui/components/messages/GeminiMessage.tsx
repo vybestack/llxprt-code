@@ -63,10 +63,11 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
   const prefix = ' ';
   const prefixWidth = prefix.length;
 
-  // Don't show thinkingBlocks in pending items - LoadingIndicator shows the
-  // thought subject/description as spinner text during streaming. Only show
-  // thinkingBlocks in committed history items to avoid duplication (fixes #922).
-  const shouldShowThinkingBlocks = showThinking && !isPending;
+  // Show thinkingBlocks during streaming (isPending=true) so thinking content
+  // streams to the UI as it arrives, not just after the response completes.
+  // Issue #1272: Previously thinking was hidden during streaming, only showing
+  // the subject in LoadingIndicator. Now we show the full thinking content.
+  const shouldShowThinkingBlocks = showThinking;
   const mergedThinkingBlock = useMemo(
     () => mergeThinkingBlocks(thinkingBlocks),
     [thinkingBlocks],
@@ -80,13 +81,7 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
         </Box>
       )}
       {shouldShowThinkingBlocks && mergedThinkingBlock && (
-        <ThinkingBlockDisplay
-          block={mergedThinkingBlock}
-          visible={true}
-          isPending={isPending}
-          availableTerminalHeight={availableTerminalHeight}
-          terminalWidth={terminalWidth}
-        />
+        <ThinkingBlockDisplay block={mergedThinkingBlock} visible={true} />
       )}
       <Box flexDirection="row">
         <Box width={prefixWidth}>
