@@ -61,6 +61,25 @@ import {
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
+type AnthropicMessageBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | {
+      type: 'tool_result';
+      tool_use_id: string;
+      content: string;
+      is_error?: boolean;
+    }
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string };
+
+type AnthropicMessageContent = string | AnthropicMessageBlock[];
+
+type AnthropicMessage = {
+  role: 'user' | 'assistant';
+  content: AnthropicMessageContent;
+};
+
 /**
  * Rate limit information from Anthropic API response headers
  */
@@ -828,23 +847,7 @@ export class AnthropicProvider extends BaseProvider {
     );
 
     // Convert IContent directly to Anthropic API format (no IMessage!)
-    const anthropicMessages: Array<{
-      role: 'user' | 'assistant';
-      content:
-        | string
-        | Array<
-            | { type: 'text'; text: string }
-            | { type: 'tool_use'; id: string; name: string; input: unknown }
-            | {
-                type: 'tool_result';
-                tool_use_id: string;
-                content: string;
-                is_error?: boolean;
-              }
-            | { type: 'thinking'; thinking: string; signature?: string }
-            | { type: 'redacted_thinking'; data: string }
-          >;
-    }> = [];
+    const anthropicMessages: AnthropicMessage[] = [];
 
     // Extract system message if present
     // let systemMessage: string | undefined;
@@ -1285,6 +1288,49 @@ ${block.code}
       });
     }
 
+    const isEmptyAnthropicContent = (
+      content: AnthropicMessageContent,
+    ): boolean => {
+      if (typeof content === 'string') {
+        return content.trim() === '';
+      }
+      if (content.length === 0) {
+        return true;
+      }
+      if (content.some((block) => block.type !== 'text')) {
+        return false;
+      }
+      return content.every(
+        (block) => block.type === 'text' && block.text.trim() === '',
+      );
+    };
+
+    const sanitizeEmptyAnthropicMessages = (
+      messages: AnthropicMessage[],
+    ): AnthropicMessage[] =>
+      messages.map((message, index) => {
+        const isLast = index === messages.length - 1;
+        const isEmpty = isEmptyAnthropicContent(message.content);
+        if (isLast) {
+          return message;
+        }
+        if (!isEmpty) {
+          return message;
+        }
+        const placeholder =
+          message.role === 'assistant'
+            ? '[No content generated]'
+            : '[Empty message]';
+        return {
+          ...message,
+          content: placeholder,
+        };
+      });
+
+    const sanitizedMessages = sanitizeEmptyAnthropicMessages(anthropicMessages);
+    anthropicMessages.length = 0;
+    anthropicMessages.push(...sanitizedMessages);
+
     // Convert Gemini format tools to Anthropic format using provider-specific converter
     let anthropicTools = convertToolsToAnthropic(tools, isOAuth);
 
@@ -1339,8 +1385,24 @@ ${block.code}
 
     // Get pre-separated model parameters from invocation context
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
-    const requestOverrides: Record<string, unknown> =
-      options.invocation?.modelParams ?? {};
+    const requestOverrides: Record<string, unknown> = {
+      ...(options.invocation?.modelParams ?? {}),
+    };
+
+    // Translate generic maxOutputTokens ephemeral to Anthropic's max_tokens
+    const rawMaxOutput = options.settings.get('maxOutputTokens');
+    const genericMaxOutput =
+      typeof rawMaxOutput === 'number' &&
+      Number.isFinite(rawMaxOutput) &&
+      rawMaxOutput > 0
+        ? rawMaxOutput
+        : undefined;
+    if (
+      genericMaxOutput !== undefined &&
+      requestOverrides['max_tokens'] === undefined
+    ) {
+      requestOverrides['max_tokens'] = genericMaxOutput;
+    }
 
     const configEphemeralSettings = options.invocation?.ephemerals ?? {};
 

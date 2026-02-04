@@ -382,8 +382,6 @@ export class GeminiChat {
   // A promise to represent any ongoing compression operation
   private compressionPromise: Promise<void> | null = null;
   private logger = new DebugLogger('llxprt:gemini:chat');
-  // Cache the compression threshold to avoid recalculating
-  private cachedCompressionThreshold: number | null = null;
   private lastPromptTokenCount: number | null = null;
   private readonly generationConfig: GenerateContentConfig;
 
@@ -1730,19 +1728,17 @@ export class GeminiChat {
    * @pseudocode agent-runtime-context.md line 86 (step 006.3)
    */
   private shouldCompress(pendingTokens: number = 0): boolean {
-    // Calculate compression threshold only if not cached
-    if (this.cachedCompressionThreshold === null) {
-      // Step 006.3: Replace config.getEphemeralSetting with view.ephemerals
-      const threshold = this.runtimeContext.ephemerals.compressionThreshold();
-      const contextLimit = this.runtimeContext.ephemerals.contextLimit();
+    // Step 006.3: Replace config.getEphemeralSetting with view.ephemerals
+    // Calculate fresh each time to respect runtime setting changes
+    const threshold = this.runtimeContext.ephemerals.compressionThreshold();
+    const contextLimit = this.runtimeContext.ephemerals.contextLimit();
+    const compressionThreshold = threshold * contextLimit;
 
-      this.cachedCompressionThreshold = threshold * contextLimit;
-      this.logger.debug('Calculated compression threshold:', {
-        threshold,
-        contextLimit,
-        compressionThreshold: this.cachedCompressionThreshold,
-      });
-    }
+    this.logger.debug('Compression threshold:', {
+      threshold,
+      contextLimit,
+      compressionThreshold,
+    });
 
     // Use lastPromptTokenCount (actual API data) when available, else fall back to estimate
     const baseTokenCount =
@@ -1751,12 +1747,12 @@ export class GeminiChat {
         : this.getEffectiveTokenCount();
 
     const currentTokens = baseTokenCount + Math.max(0, pendingTokens);
-    const shouldCompress = currentTokens >= this.cachedCompressionThreshold;
+    const shouldCompress = currentTokens >= compressionThreshold;
 
     if (shouldCompress) {
       this.logger.debug('Compression needed:', {
         currentTokens,
-        threshold: this.cachedCompressionThreshold,
+        threshold: compressionThreshold,
         usingActualApiCount:
           this.lastPromptTokenCount !== null && this.lastPromptTokenCount > 0,
       });
@@ -1908,6 +1904,16 @@ export class GeminiChat {
   }
 
   private getCompletionBudget(provider?: IProvider): number {
+    // Check global ephemeral setting for maxOutputTokens (set via /set maxOutputTokens)
+    // This is a generic setting that providers should translate to their native param
+    const settingsService =
+      this.runtimeContext.providerRuntime?.settingsService;
+    const liveMaxOutputTokens = settingsService?.get('maxOutputTokens');
+    const liveBudget = this.asNumber(liveMaxOutputTokens);
+    if (liveBudget !== undefined && liveBudget > 0) {
+      return liveBudget;
+    }
+
     const generationBudget = this.asNumber(
       (this.generationConfig as { maxOutputTokens?: unknown }).maxOutputTokens,
     );
@@ -1916,11 +1922,6 @@ export class GeminiChat {
     const providerBudget = this.extractCompletionBudgetFromParams(
       providerParams as Record<string, unknown> | undefined,
     );
-
-    // @plan PLAN-20251028-STATELESS6.P10
-    // @requirement REQ-STAT6-002.2
-    // @pseudocode agent-runtime-context.md line 86 (step 006.3)
-    // Note: maxOutputTokens is not part of core ephemerals; removed config dependency
 
     return (
       generationBudget ?? providerBudget ?? GeminiChat.DEFAULT_COMPLETION_BUDGET
@@ -1993,8 +1994,6 @@ export class GeminiChat {
    */
   async performCompression(prompt_id: string): Promise<void> {
     this.logger.debug('Starting compression');
-    // Reset cached threshold after compression in case settings changed
-    this.cachedCompressionThreshold = null;
 
     // Lock history service
     this.historyService.startCompression();

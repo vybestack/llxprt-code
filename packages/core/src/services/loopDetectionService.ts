@@ -10,10 +10,12 @@ import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import { Config } from '../config/config.js';
 
-const TOOL_CALL_LOOP_THRESHOLD = 10;
-const CONTENT_LOOP_THRESHOLD = 15;
 const CONTENT_CHUNK_SIZE = 50;
 const MAX_HISTORY_LENGTH = 5000;
+
+// Default threshold values (used when config is undefined)
+const DEFAULT_TOOL_CALL_LOOP_THRESHOLD = 50;
+const DEFAULT_CONTENT_LOOP_THRESHOLD = 50;
 
 /**
  * Service for detecting and preventing infinite loops in AI responses.
@@ -53,6 +55,14 @@ export class LoopDetectionService {
    * @returns true if a loop is detected, false otherwise
    */
   addAndCheck(event: ServerGeminiStreamEvent): boolean {
+    // Check if loop detection is disabled
+    const loopDetectionEnabled =
+      (this.config.getEphemeralSetting('loopDetectionEnabled') as boolean) ??
+      true;
+    if (!loopDetectionEnabled) {
+      return false;
+    }
+
     if (this.loopDetected) {
       return true;
     }
@@ -83,11 +93,19 @@ export class LoopDetectionService {
    * @returns true if max turns exceeded, false otherwise
    */
   async turnStarted(_signal: AbortSignal) {
+    // Check if loop detection is disabled (master switch)
+    const loopDetectionEnabled =
+      (this.config.getEphemeralSetting('loopDetectionEnabled') as boolean) ??
+      true;
+    if (!loopDetectionEnabled) {
+      return false;
+    }
+
     this.turnsInCurrentPrompt++;
 
     // Check if max turns per prompt is configured and exceeded
     const maxTurnsPerPrompt =
-      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as number) ?? 200;
+      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as number) ?? -1;
     if (
       maxTurnsPerPrompt > 0 &&
       this.turnsInCurrentPrompt >= maxTurnsPerPrompt
@@ -103,6 +121,12 @@ export class LoopDetectionService {
   }
 
   private checkToolCallLoop(toolCall: { name: string; args: object }): boolean {
+    const threshold =
+      (this.config.getEphemeralSetting('toolCallLoopThreshold') as number) ??
+      DEFAULT_TOOL_CALL_LOOP_THRESHOLD;
+    if (threshold === -1) {
+      return false; // Disabled
+    }
     const key = this.getToolCallKey(toolCall);
     if (this.lastToolCallKey === key) {
       this.toolCallRepetitionCount++;
@@ -110,7 +134,7 @@ export class LoopDetectionService {
       this.lastToolCallKey = key;
       this.toolCallRepetitionCount = 1;
     }
-    if (this.toolCallRepetitionCount >= TOOL_CALL_LOOP_THRESHOLD) {
+    if (this.toolCallRepetitionCount >= threshold) {
       logLoopDetected(
         this.config,
         new LoopDetectedEvent(
@@ -255,10 +279,17 @@ export class LoopDetectionService {
    * 1. Check if we've seen this hash before (new chunks are stored for future comparison)
    * 2. Verify actual content matches to prevent hash collisions
    * 3. Track all positions where this chunk appears
-   * 4. A loop is detected when the same chunk appears CONTENT_LOOP_THRESHOLD times
-   *    within a small average distance (≤ 5 * chunk size)
+   * 4. A loop is detected when the same chunk appears threshold times
+   *    within a small average distance (<= 5 * chunk size)
    */
   private isLoopDetectedForChunk(chunk: string, hash: string): boolean {
+    const threshold =
+      (this.config.getEphemeralSetting('contentLoopThreshold') as number) ??
+      DEFAULT_CONTENT_LOOP_THRESHOLD;
+    if (threshold === -1) {
+      return false; // Disabled
+    }
+
     const existingIndices = this.contentStats.get(hash);
 
     if (!existingIndices) {
@@ -272,15 +303,15 @@ export class LoopDetectionService {
 
     existingIndices.push(this.lastContentIndex);
 
-    if (existingIndices.length < CONTENT_LOOP_THRESHOLD) {
+    if (existingIndices.length < threshold) {
       return false;
     }
 
     // Analyze the most recent occurrences to see if they're clustered closely together
-    const recentIndices = existingIndices.slice(-CONTENT_LOOP_THRESHOLD);
+    const recentIndices = existingIndices.slice(-threshold);
     const totalDistance =
       recentIndices[recentIndices.length - 1] - recentIndices[0];
-    const averageDistance = totalDistance / (CONTENT_LOOP_THRESHOLD - 1);
+    const averageDistance = totalDistance / (threshold - 1);
     const maxAllowedDistance = CONTENT_CHUNK_SIZE * 5;
 
     return averageDistance <= maxAllowedDistance;

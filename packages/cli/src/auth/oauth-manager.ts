@@ -1724,6 +1724,96 @@ export class OAuthManager {
    * If the current profile has auth.buckets configured, return those.
    * Otherwise, return empty array (single-bucket or non-OAuth profile)
    */
+
+  /**
+   * Get Anthropic usage information from OAuth endpoint for a specific bucket
+   * Returns full usage data for Claude Code/Max plans
+   * Only works with OAuth tokens (sk-ant-oat01-...), not API keys
+   * @param bucket - Optional bucket name, defaults to current session bucket or 'default'
+   */
+  async getAnthropicUsageInfo(
+    bucket?: string,
+  ): Promise<Record<string, unknown> | null> {
+    const provider = this.providers.get('anthropic');
+    if (!provider) {
+      return null;
+    }
+
+    // Get the token for the specified bucket
+    const bucketToUse =
+      bucket ?? this.sessionBuckets.get('anthropic') ?? 'default';
+    const token = await this.tokenStore.getToken('anthropic', bucketToUse);
+
+    if (!token) {
+      return null;
+    }
+
+    try {
+      const { fetchAnthropicUsage } = await import(
+        '@vybestack/llxprt-code-core'
+      );
+      return await fetchAnthropicUsage(token.access_token);
+    } catch (error) {
+      logger.debug(
+        `Error fetching Anthropic usage info for bucket ${bucketToUse}:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Get Anthropic usage information for all authenticated buckets
+   * Returns a map of bucket name to usage info for all buckets that have valid OAuth tokens
+   */
+  async getAllAnthropicUsageInfo(): Promise<
+    Map<string, Record<string, unknown>>
+  > {
+    const result = new Map<string, Record<string, unknown>>();
+
+    // Get all buckets for anthropic
+    const buckets = await this.tokenStore.listBuckets('anthropic');
+
+    // If no buckets, try 'default'
+    const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
+
+    // Import once before the loop
+    const { fetchAnthropicUsage } = await import('@vybestack/llxprt-code-core');
+
+    for (const bucket of bucketsToCheck) {
+      // Check if this bucket has a valid OAuth token
+      const token = await this.tokenStore.getToken('anthropic', bucket);
+      if (!token) {
+        continue;
+      }
+
+      // Check if token is expired
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      if (token.expiry <= nowInSeconds) {
+        continue;
+      }
+
+      // Check if it's an OAuth token (sk-ant-oat01-...)
+      if (!token.access_token.startsWith('sk-ant-oat01-')) {
+        continue;
+      }
+
+      try {
+        const usageInfo = await fetchAnthropicUsage(token.access_token);
+        if (usageInfo) {
+          result.set(bucket, usageInfo);
+        }
+      } catch (error) {
+        logger.debug(
+          `Error fetching Anthropic usage info for bucket ${bucket}:`,
+          error,
+        );
+      }
+    }
+
+    return result;
+  }
+
   private async getProfileBuckets(providerName: string): Promise<string[]> {
     try {
       // Try to get profile from runtime settings

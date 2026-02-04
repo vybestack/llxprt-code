@@ -285,7 +285,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private extractModelParamsFromOptions(
     options: NormalizedGenerateChatOptions,
   ): Record<string, unknown> | undefined {
-    const modelParams = options.invocation?.modelParams ?? {};
+    const modelParams = { ...(options.invocation?.modelParams ?? {}) };
+
+    // Translate generic maxOutputTokens ephemeral to OpenAI's max_tokens
+    const rawMaxOutput = options.settings?.get('maxOutputTokens');
+    const genericMaxOutput =
+      typeof rawMaxOutput === 'number' &&
+      Number.isFinite(rawMaxOutput) &&
+      rawMaxOutput > 0
+        ? rawMaxOutput
+        : undefined;
+    if (
+      genericMaxOutput !== undefined &&
+      modelParams['max_tokens'] === undefined
+    ) {
+      modelParams['max_tokens'] = genericMaxOutput;
+    }
 
     return Object.keys(modelParams).length > 0 ? modelParams : undefined;
   }

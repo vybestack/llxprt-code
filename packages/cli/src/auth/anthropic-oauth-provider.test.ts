@@ -258,3 +258,105 @@ describe('AnthropicOAuthProvider', () => {
     expect(ClipboardService.copyToClipboard).toHaveBeenCalled();
   });
 });
+
+describe('AnthropicOAuthProvider getUsageInfo', () => {
+  let provider: AnthropicOAuthProvider;
+  let mockTokenStore: import('vitest').MockedObject<TokenStore>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockTokenStore = {
+      getToken: vi.fn().mockResolvedValue(null),
+      saveToken: vi.fn().mockResolvedValue(undefined),
+      removeToken: vi.fn().mockResolvedValue(undefined),
+      listProviders: vi.fn().mockResolvedValue([]),
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getBucketStats: vi.fn().mockResolvedValue(null),
+      acquireRefreshLock: vi.fn().mockResolvedValue(true),
+      releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+    };
+
+    provider = new AnthropicOAuthProvider(mockTokenStore);
+
+    // Mock fetchAnthropicUsage from core
+    vi.doMock('@vybestack/llxprt-code-core', async () => {
+      const actual = await vi.importActual('@vybestack/llxprt-code-core');
+      return {
+        ...actual,
+        fetchAnthropicUsage: vi.fn(),
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should return null when no token is stored', async () => {
+    const result = await provider.getUsageInfo();
+    expect(result).toBeNull();
+  });
+
+  it('should return null when token store is not available', async () => {
+    const noStoreProvider = new AnthropicOAuthProvider(undefined);
+    const result = await noStoreProvider.getUsageInfo();
+    expect(result).toBeNull();
+  });
+
+  it('should fetch and return full usage info when OAuth token exists', async () => {
+    const oauthToken = {
+      access_token: 'sk-ant-oat01-test-token',
+      refresh_token: 'refresh-token',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      token_type: 'Bearer' as const,
+    };
+
+    mockTokenStore.getToken.mockResolvedValue(oauthToken);
+
+    const mockUsageInfo = {
+      five_hour: {
+        utilization: 6.5,
+        resets_at: '2025-11-04T04:00:00Z',
+      },
+      seven_day: {
+        utilization: 35.0,
+        resets_at: '2025-11-06T00:00:00Z',
+      },
+      seven_day_oauth_apps: null,
+      seven_day_opus: {
+        utilization: 0.0,
+        resets_at: null,
+      },
+    };
+
+    const { fetchAnthropicUsage: mockFetchUsage } = await import(
+      '@vybestack/llxprt-code-core'
+    );
+    vi.mocked(mockFetchUsage).mockResolvedValue(mockUsageInfo);
+
+    const result = await provider.getUsageInfo();
+
+    expect(mockFetchUsage).toHaveBeenCalledWith('sk-ant-oat01-test-token');
+    expect(result).toEqual(mockUsageInfo);
+  });
+
+  it('should return null when fetchAnthropicUsage returns null', async () => {
+    const oauthToken = {
+      access_token: 'sk-ant-oat01-test-token',
+      refresh_token: 'refresh-token',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      token_type: 'Bearer' as const,
+    };
+
+    mockTokenStore.getToken.mockResolvedValue(oauthToken);
+
+    const { fetchAnthropicUsage: mockFetchUsage } = await import(
+      '@vybestack/llxprt-code-core'
+    );
+    vi.mocked(mockFetchUsage).mockResolvedValue(null);
+
+    const result = await provider.getUsageInfo();
+    expect(result).toBeNull();
+  });
+});

@@ -234,6 +234,7 @@ export { ConversationCache } from './providers/openai/ConversationCache.js';
 export { getOpenAIProviderInfo } from './providers/openai/getOpenAIProviderInfo.js';
 export { OpenAIVercelProvider } from './providers/openai-vercel/index.js';
 export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';
+export * from './providers/anthropic/usageInfo.js';
 export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
 export * from './providers/ProviderManager.js';
 export * from './providers/errors.js';
