@@ -559,14 +559,16 @@ export function mapToDisplay(
             resultDisplay: undefined,
             confirmationDetails: trackedCall.confirmationDetails,
           };
-        case 'executing':
+        case 'executing': {
+          const executingCall = trackedCall as TrackedExecutingToolCall;
           return {
             ...baseDisplayProperties,
             status: mapCoreStatusToDisplayStatus(trackedCall.status),
-            resultDisplay:
-              (trackedCall as TrackedExecutingToolCall).liveOutput ?? undefined,
+            resultDisplay: executingCall.liveOutput ?? undefined,
             confirmationDetails: undefined,
+            ptyId: executingCall.pid,
           };
+        }
         case 'validating': // Fallthrough
         case 'scheduled':
           return {

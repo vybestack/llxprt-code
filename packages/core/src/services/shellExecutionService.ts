@@ -882,6 +882,10 @@ export class ShellExecutionService {
     }
   }
 
+  static isActivePty(pid: number): boolean {
+    return this.activePtys.has(pid);
+  }
+
   /**
    * Resizes the pseudo-terminal (PTY) of a running process.
    *

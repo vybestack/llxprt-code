@@ -107,6 +107,7 @@ export type ExecutingToolCall = {
   liveOutput?: string | AnsiOutput;
   startTime?: number;
   outcome?: ToolConfirmationOutcome;
+  pid?: number;
 };
 
 export type CancelledToolCall = {
@@ -780,6 +781,19 @@ export class CoreToolScheduler {
         invocation: invocationOrError,
       };
     });
+  }
+
+  private setPidInternal(targetCallId: string, pid: number): void {
+    this.toolCalls = this.toolCalls.map((call) => {
+      if (call.request.callId !== targetCallId || call.status !== 'executing') {
+        return call;
+      }
+      return {
+        ...call,
+        pid,
+      } as ExecutingToolCall;
+    });
+    this.notifyToolCallsUpdate();
   }
 
   private isRunning(): boolean {
@@ -1689,8 +1703,12 @@ export class CoreToolScheduler {
             }
           : undefined;
 
+        const setPidCallback = (pid: number) => {
+          this.setPidInternal(callId, pid);
+        };
+
         invocation
-          .execute(signal, liveOutputCallback)
+          .execute(signal, liveOutputCallback, undefined, undefined, setPidCallback)
           .then(async (toolResult: ToolResult) => {
             if (signal.aborted) {
               this.setStatusInternal(

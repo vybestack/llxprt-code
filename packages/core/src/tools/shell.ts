@@ -203,6 +203,7 @@ class ShellToolInvocation extends BaseToolInvocation<
     updateOutput?: (output: string | AnsiOutput) => void,
     terminalColumns?: number,
     terminalRows?: number,
+    setPidCallback?: (pid: number) => void,
   ): Promise<ToolResult> {
     // Validate filtering parameters
     if (this.params.head_lines) {
@@ -369,6 +370,11 @@ class ShellToolInvocation extends BaseToolInvocation<
       );
 
       const result = await executionResult.result;
+      const pid = executionResult.pid;
+
+      if (pid && setPidCallback && this.config.getShouldUseNodePtyShell() && ShellExecutionService.isActivePty(pid)) {
+        setPidCallback(pid);
+      }
 
       const backgroundPIDs: number[] = [];
       let pgid: number | null = null;

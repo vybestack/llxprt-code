@@ -98,6 +98,12 @@ describe('ShellTool', () => {
         },
       }),
       isInteractive: vi.fn().mockReturnValue(true),
+      getShellExecutionConfig: vi.fn().mockReturnValue({
+        showColor: false,
+        scrollback: 600000,
+      }),
+      getPtyTerminalWidth: vi.fn().mockReturnValue(80),
+      getPtyTerminalHeight: vi.fn().mockReturnValue(24),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);
@@ -226,10 +232,10 @@ describe('ShellTool', () => {
         expect.any(Function),
         expect.any(AbortSignal),
         false,
-        {
-          terminalWidth: undefined,
-          terminalHeight: undefined,
-        },
+        expect.objectContaining({
+          terminalWidth: 80,
+          terminalHeight: 24,
+        }),
       );
       // Check that it contains background PIDs but not the service PID
       const backgroundLine = result.llmContent
@@ -266,10 +272,10 @@ describe('ShellTool', () => {
         expect.any(Function),
         expect.any(AbortSignal),
         false,
-        {
-          terminalWidth: undefined,
-          terminalHeight: undefined,
-        },
+        expect.objectContaining({
+          terminalWidth: 80,
+          terminalHeight: 24,
+        }),
       );
     });
 
@@ -849,6 +855,12 @@ describe('Shell Tool Filtering Behavior', () => {
       getWorkspaceContext: vi.fn().mockReturnValue({
         getWorkspaceDirectories: () => ['/test/dir'],
       }),
+      getShellExecutionConfig: vi.fn().mockReturnValue({
+        showColor: false,
+        scrollback: 600000,
+      }),
+      getPtyTerminalWidth: vi.fn().mockReturnValue(80),
+      getPtyTerminalHeight: vi.fn().mockReturnValue(24),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig as unknown as Config);

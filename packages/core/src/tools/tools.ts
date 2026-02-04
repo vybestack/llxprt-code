@@ -66,11 +66,17 @@ export interface ToolInvocation<
    * Executes the tool with the validated parameters.
    * @param signal AbortSignal for tool cancellation.
    * @param updateOutput Optional callback to stream output.
+   * @param terminalColumns Optional terminal width for PTY mode.
+   * @param terminalRows Optional terminal height for PTY mode.
+   * @param setPidCallback Optional callback to propagate PTY PID.
    * @returns Result of the tool execution.
    */
   execute(
     signal: AbortSignal,
     updateOutput?: (output: string | AnsiOutput) => void,
+    terminalColumns?: number,
+    terminalRows?: number,
+    setPidCallback?: (pid: number) => void,
   ): Promise<TResult>;
 }
 
@@ -240,6 +246,9 @@ export abstract class BaseToolInvocation<
   abstract execute(
     signal: AbortSignal,
     updateOutput?: (output: string | AnsiOutput) => void,
+    terminalColumns?: number,
+    terminalRows?: number,
+    setPidCallback?: (pid: number) => void,
   ): Promise<TResult>;
 }
 
@@ -833,6 +842,9 @@ class BaseToolLegacyInvocation<
   async execute(
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
+    _terminalColumns?: number,
+    _terminalRows?: number,
+    _setPidCallback?: (pid: number) => void,
   ): Promise<TResult> {
     return this.tool.execute(this.params, signal, updateOutput);
   }
