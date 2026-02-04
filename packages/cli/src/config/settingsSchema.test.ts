@@ -49,6 +49,9 @@ describe('SettingsSchema', () => {
         'debugKeystrokeLogging',
         'toolCallProcessingMode',
         'enableFuzzyFiltering',
+        'shouldUseNodePtyShell',
+        'allowPtyThemeOverride',
+        'ptyScrollbackLimit',
       ];
 
       expectedSettings.forEach((setting) => {

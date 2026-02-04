@@ -57,7 +57,9 @@ TAIL`;
       expect(result.originalLength).toBe(content.length);
       expect(result.content).toContain('HEAD');
       expect(result.content).toContain('TAIL');
-      expect(result.content).toContain('... [middle ');
+      expect(result.content).toContain(
+        '...[middle clipped due to token limits]...',
+      );
       expect(result.content.length).toBeGreaterThan(0);
       expect(result.content.length).toBeLessThan(content.length);
     });
@@ -66,7 +68,9 @@ TAIL`;
       const content = 'A'.repeat(200);
       const result = clipMiddle(content, 50, 0, 0);
       expect(result.wasTruncated).toBe(true);
-      expect(result.content).toContain('... [middle ');
+      expect(result.content).toContain(
+        '...[middle clipped due to token limits]...',
+      );
     });
   });
 

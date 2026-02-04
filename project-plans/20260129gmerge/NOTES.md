@@ -146,3 +146,31 @@ None - all changes applied cleanly or were skipped appropriately.
 2. **Telemetry updates skipped in Batch 5**: The upstream commit also updates recordContentRetry and recordContentRetryFailure to pass error_type, but LLxprt has a different telemetry structure. The core functionality (MALFORMED_FUNCTION_CALL detection and retry) is implemented.
 
 3. **ShellExecutionResult interface change**: Removed `stdout` and `stderr` fields since PTY mode combines output streams. Updated test files accordingly.
+
+---
+
+## Ctrl+F Interactive Shell Fix Plan - READY
+
+Created detailed implementation plan for fixing the Ctrl+F interactive shell feature. When the LLM invokes the shell tool (e.g., `bash` with no arguments), pressing Ctrl+F should toggle focus to that shell so the user can type commands that get sent to the PTY.
+
+**Plan location:** `INTERACTIVE_SHELL_FIX_PLAN.md`
+
+**Root cause:** `ptyId` is never set on `IndividualToolCallDisplay` for LLM-invoked shell tools because there's no mechanism to propagate PID from ShellExecutionService through the scheduler to the UI.
+
+**Key changes:**
+1. Add `pid?: number` to `ExecutingToolCall` type
+2. Add `setPidCallback` parameter to `ToolInvocation.execute()` interface
+3. Add `isActivePty(pid)` method to `ShellExecutionService`
+4. Update `shell.ts` to call setPidCallback with PID after isActivePty check
+5. Map `pid` to `ptyId` in `useReactToolScheduler.ts`
+
+**Plan verified by deepthinker:** Ready for implementation.
+
+**Files to modify:**
+- packages/core/src/tools/tools.ts
+- packages/core/src/core/coreToolScheduler.ts
+- packages/core/src/services/shellExecutionService.ts
+- packages/core/src/tools/shell.ts
+- packages/core/src/tools/ast-edit.ts (direct ToolInvocation implementations)
+- packages/core/src/tools/tools.test.ts (test implementation)
+- packages/cli/src/ui/hooks/useReactToolScheduler.ts

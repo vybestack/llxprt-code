@@ -172,9 +172,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   const borderDimColor = hasPending && !isShellCommand;
 
   const staticHeight = /* border */ 2 + /* marginBottom */ 1;
-  // This is a bit of a magic number, but it accounts for the border and
-  // marginLeft.
-  const innerWidth = terminalWidth - 4;
+  const innerWidth = terminalWidth;
 
   let countToolCallsWithResults = 0;
   for (const tool of filteredToolCalls) {

@@ -19,36 +19,32 @@ export const ShellInputPrompt: React.FC<ShellInputPromptProps> = ({
   activeShellPtyId,
   focus = true,
 }) => {
-  const handleShellInputSubmit = useCallback(
-    (input: string) => {
-      if (activeShellPtyId) {
-        ShellExecutionService.writeToPty(activeShellPtyId, input);
-      }
-    },
-    [activeShellPtyId],
-  );
-
   const handleInput = useCallback(
     (key: Key) => {
-      if (!focus || !activeShellPtyId) {
+      if (!focus) {
+        return;
+      }
+      const targetPtyId =
+        activeShellPtyId ?? ShellExecutionService.getLastActivePtyId();
+      if (!targetPtyId) {
         return;
       }
       if (key.ctrl && key.shift && key.name === 'up') {
-        ShellExecutionService.scrollPty(activeShellPtyId, -1);
+        ShellExecutionService.scrollPty(targetPtyId, -1);
         return;
       }
 
       if (key.ctrl && key.shift && key.name === 'down') {
-        ShellExecutionService.scrollPty(activeShellPtyId, 1);
+        ShellExecutionService.scrollPty(targetPtyId, 1);
         return;
       }
 
       const ansiSequence = keyToAnsi(key);
       if (ansiSequence) {
-        handleShellInputSubmit(ansiSequence);
+        ShellExecutionService.writeToPty(targetPtyId, ansiSequence);
       }
     },
-    [focus, handleShellInputSubmit, activeShellPtyId],
+    [focus, activeShellPtyId],
   );
 
   useKeypress(handleInput, { isActive: focus });

@@ -29,45 +29,47 @@ export const Composer = ({
   const uiState = useUIState();
   const uiActions = useUIActions();
 
-  const {
-    buffer,
-    inputWidth,
-    suggestionsWidth,
-    slashCommands,
-    commandContext,
-    shellModeActive,
-    isFocused,
-    vimModeEnabled,
-    showAutoAcceptIndicator,
-    placeholder,
-    inputHistory,
-    streamingState,
-    queueErrorMessage,
-  } = uiState;
+    const {
+      buffer,
+      inputWidth,
+      suggestionsWidth,
+      slashCommands,
+      commandContext,
+      shellModeActive,
+      isFocused,
+      vimModeEnabled,
+      showAutoAcceptIndicator,
+      placeholder,
+      inputHistory,
+      streamingState,
+      queueErrorMessage,
+      embeddedShellFocused,
+    } = uiState;
 
-  return (
-    <InputPrompt
-      buffer={buffer}
-      inputWidth={inputWidth}
-      suggestionsWidth={suggestionsWidth}
-      onSubmit={uiActions.handleUserInputSubmit}
-      userMessages={inputHistory}
-      onClearScreen={uiActions.handleClearScreen}
-      config={config}
-      slashCommands={slashCommands || []}
-      commandContext={commandContext}
-      shellModeActive={shellModeActive}
-      setShellModeActive={uiActions.setShellModeActive}
-      onEscapePromptChange={uiActions.handleEscapePromptChange}
-      onSuggestionsVisibilityChange={onSuggestionsVisibilityChange}
-      focus={isFocused}
-      vimHandleInput={uiActions.vimHandleInput}
-      placeholder={placeholder}
-      approvalMode={showAutoAcceptIndicator}
-      vimModeEnabled={vimModeEnabled}
-      setQueueErrorMessage={uiActions.setQueueErrorMessage}
-      streamingState={streamingState}
-      queueErrorMessage={queueErrorMessage}
-    />
-  );
+    return (
+      <InputPrompt
+        buffer={buffer}
+        inputWidth={inputWidth}
+        suggestionsWidth={suggestionsWidth}
+        onSubmit={uiActions.handleUserInputSubmit}
+        userMessages={inputHistory}
+        onClearScreen={uiActions.handleClearScreen}
+        config={config}
+        slashCommands={slashCommands || []}
+        commandContext={commandContext}
+        shellModeActive={shellModeActive}
+        setShellModeActive={uiActions.setShellModeActive}
+        onEscapePromptChange={uiActions.handleEscapePromptChange}
+        onSuggestionsVisibilityChange={onSuggestionsVisibilityChange}
+        focus={isFocused}
+        vimHandleInput={uiActions.vimHandleInput}
+        placeholder={placeholder}
+        approvalMode={showAutoAcceptIndicator}
+        vimModeEnabled={vimModeEnabled}
+        setQueueErrorMessage={uiActions.setQueueErrorMessage}
+        streamingState={streamingState}
+        queueErrorMessage={queueErrorMessage}
+        isEmbeddedShellFocused={embeddedShellFocused}
+      />
+    );
 };

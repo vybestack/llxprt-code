@@ -97,7 +97,9 @@ describe('useShellCommandProcessor', () => {
     mockConfig = {
       getTargetDir: () => '/test/dir',
       getShouldUseNodePtyShell: () => false,
-    } as Config;
+      getAllowPtyThemeOverride: () => false,
+      getPtyScrollbackLimit: () => 600000,
+    } as unknown as Config;
     mockGeminiClient = { addHistory: vi.fn() } as unknown as GeminiClient;
 
     // os functions are already mocked in the vi.mock call above
@@ -181,7 +183,8 @@ describe('useShellCommandProcessor', () => {
       expect.any(Object),
       false,
       expect.objectContaining({
-        showColor: true,
+        showColor: false,
+        scrollback: 600000,
       }),
     );
     expect(onExecMock).toHaveBeenCalledWith(expect.any(Promise));
@@ -375,7 +378,8 @@ describe('useShellCommandProcessor', () => {
       expect.any(Object),
       false,
       expect.objectContaining({
-        showColor: true,
+        showColor: false,
+        scrollback: 600000,
       }),
     );
   });

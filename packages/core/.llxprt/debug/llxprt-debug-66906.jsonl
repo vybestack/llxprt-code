@@ -1,0 +1,4 @@
+{"timestamp":"2026-02-03T19:41:32.869Z","namespace":"llxprt:core:bfsFileSearch","level":"debug","message":"Scanning [1/50]: batch of 1","runId":"66906","pid":68882}
+{"timestamp":"2026-02-03T19:41:32.873Z","namespace":"llxprt:core:bfsFileSearch","level":"debug","message":"Scanning [16/50]: batch of 15","runId":"66906","pid":68882}
+{"timestamp":"2026-02-03T19:41:32.873Z","namespace":"llxprt:core:bfsFileSearch","level":"debug","message":"Scanning [31/50]: batch of 15","runId":"66906","pid":68882}
+{"timestamp":"2026-02-03T19:41:32.874Z","namespace":"llxprt:core:bfsFileSearch","level":"debug","message":"Scanning [46/50]: batch of 15","runId":"66906","pid":68882}

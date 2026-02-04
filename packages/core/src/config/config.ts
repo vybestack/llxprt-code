@@ -109,6 +109,8 @@ import {
 } from '../utils/extensionLoader.js';
 import { McpClientManager } from '../tools/mcp-client-manager.js';
 
+import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
+
 // Import privacy-related types
 export interface RedactionConfig {
   redactApiKeys: boolean;
@@ -395,6 +397,10 @@ export interface ConfigParameters {
   trustedFolder?: boolean;
   useRipgrep?: boolean;
   shouldUseNodePtyShell?: boolean;
+  allowPtyThemeOverride?: boolean;
+  ptyScrollbackLimit?: number;
+  ptyTerminalWidth?: number;
+  ptyTerminalHeight?: number;
   skipNextSpeakerCheck?: boolean;
   extensionManagement?: boolean;
   enablePromptCompletion?: boolean;
@@ -558,6 +564,10 @@ export class Config {
   private readonly trustedFolder: boolean | undefined;
   private readonly useRipgrep: boolean;
   private readonly shouldUseNodePtyShell: boolean;
+  private readonly allowPtyThemeOverride: boolean;
+  private readonly ptyScrollbackLimit: number;
+  private ptyTerminalWidth?: number;
+  private ptyTerminalHeight?: number;
   private readonly skipNextSpeakerCheck: boolean;
   private readonly extensionManagement: boolean;
   private readonly enablePromptCompletion: boolean = false;
@@ -709,6 +719,10 @@ export class Config {
     this.trustedFolder = params.trustedFolder;
     this.useRipgrep = params.useRipgrep ?? false;
     this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
+    this.allowPtyThemeOverride = params.allowPtyThemeOverride ?? false;
+    this.ptyScrollbackLimit = params.ptyScrollbackLimit ?? 600000;
+    this.ptyTerminalWidth = params.ptyTerminalWidth;
+    this.ptyTerminalHeight = params.ptyTerminalHeight;
     this.skipNextSpeakerCheck = params.skipNextSpeakerCheck ?? false;
     this.truncateToolOutputThreshold =
       params.truncateToolOutputThreshold ??
@@ -1742,6 +1756,45 @@ export class Config {
 
   getShouldUseNodePtyShell(): boolean {
     return this.shouldUseNodePtyShell;
+  }
+
+  getAllowPtyThemeOverride(): boolean {
+    return this.allowPtyThemeOverride;
+  }
+
+  getPtyScrollbackLimit(): number {
+    return this.ptyScrollbackLimit;
+  }
+
+  getPtyTerminalWidth(): number | undefined {
+    return this.ptyTerminalWidth;
+  }
+
+  getPtyTerminalHeight(): number | undefined {
+    return this.ptyTerminalHeight;
+  }
+
+  setPtyTerminalSize(width: number | undefined, height: number | undefined): void {
+    if (typeof width === 'number' && Number.isFinite(width)) {
+      this.ptyTerminalWidth = Math.floor(width);
+    } else {
+      this.ptyTerminalWidth = undefined;
+    }
+
+    if (typeof height === 'number' && Number.isFinite(height)) {
+      this.ptyTerminalHeight = Math.floor(height);
+    } else {
+      this.ptyTerminalHeight = undefined;
+    }
+  }
+
+  getShellExecutionConfig(): ShellExecutionConfig {
+    return {
+      terminalWidth: this.getPtyTerminalWidth(),
+      terminalHeight: this.getPtyTerminalHeight(),
+      showColor: this.getAllowPtyThemeOverride(),
+      scrollback: this.getPtyScrollbackLimit(),
+    };
   }
 
   getSkipNextSpeakerCheck(): boolean {

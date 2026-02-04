@@ -27,9 +27,9 @@ const ANSI_ESCAPE = '\u001b';
 const ANSI_CSI = '\u009b';
 
 // We want to allow shell outputs that are close to the context window in size.
-// 300,000 lines is roughly equivalent to a large context window, ensuring
+// 600,000 lines is roughly equivalent to a large context window, ensuring
 // we capture significant output from long-running commands.
-export const SCROLLBACK_LIMIT = 300000;
+export const SCROLLBACK_LIMIT = 600000;
 
 function stripAnsiIfPresent(value: string): string {
   return value.includes(ANSI_ESCAPE) || value.includes(ANSI_CSI)
@@ -119,6 +119,7 @@ interface ActivePty {
 
 export class ShellExecutionService {
   private static activePtys = new Map<number, ActivePty>();
+  private static lastActivePtyId: number | null = null;
   /**
    * Executes a shell command using `node-pty`, capturing all output and lifecycle events.
    *
@@ -431,8 +432,6 @@ export class ShellExecutionService {
           error,
           rawOutput: Buffer.from(''),
           output: '',
-          stdout: '',
-          stderr: '',
           exitCode: 1,
           signal: null,
           aborted: false,
@@ -479,137 +478,185 @@ export class ShellExecutionService {
         handleFlowControl: true,
       });
 
-      const result = new Promise<ShellExecutionResult>((resolve) => {
-        const headlessTerminal = new Terminal({
-          allowProposedApi: true,
-          cols,
-          rows,
-          scrollback: shellExecutionConfig.scrollback ?? SCROLLBACK_LIMIT,
-        });
-        headlessTerminal.scrollToTop();
+        const result = new Promise<ShellExecutionResult>((resolve) => {
+          const headlessTerminal = new Terminal({
+            allowProposedApi: true,
+            cols,
+            rows,
+            scrollback: shellExecutionConfig.scrollback ?? SCROLLBACK_LIMIT,
+          });
+          headlessTerminal.scrollToTop();
 
-        ShellExecutionService.activePtys.set(ptyProcess.pid, {
-          ptyProcess,
-          headlessTerminal,
-        });
+          ShellExecutionService.activePtys.set(ptyProcess.pid, {
+            ptyProcess,
+            headlessTerminal,
+          });
+          ShellExecutionService.lastActivePtyId = ptyProcess.pid;
 
-        let processingChain = Promise.resolve();
-        let decoder: TextDecoder | null = null;
-        let output: string | AnsiOutput | null = null;
-        const outputChunks: Buffer[] = [];
-        const error: Error | null = null;
-        let exited = false;
+          let processingChain = Promise.resolve();
+          let decoder: TextDecoder | null = null;
+          let output: string | AnsiOutput | null = null;
+          const outputChunks: Buffer[] = [];
+          const error: Error | null = null;
+          let exited = false;
+          let hasResolved = false;
+          let abortFinalizeTimeout: NodeJS.Timeout | null = null;
 
-        let isStreamingRawContent = true;
-        const MAX_SNIFF_SIZE = 4096;
-        let sniffedBytes = 0;
-        let isWriting = false;
-        let hasStartedOutput = false;
-        let renderTimeout: NodeJS.Timeout | null = null;
+          let isStreamingRawContent = true;
+          const MAX_SNIFF_SIZE = 4096;
+          let sniffedBytes = 0;
+          let isWriting = false;
+          let hasStartedOutput = false;
+          let renderTimeout: NodeJS.Timeout | null = null;
 
-        const getFullBufferText = (terminal: pkg.Terminal): string => {
-          const buffer = terminal.buffer.active;
-          const lines: string[] = [];
-          for (let i = 0; i < buffer.length; i++) {
-            const line = buffer.getLine(i);
-            if (!line) {
-              continue;
+          const cleanupActivePty = () => {
+            if (ShellExecutionService.activePtys.has(ptyProcess.pid)) {
+              ShellExecutionService.activePtys.delete(ptyProcess.pid);
             }
-            // If the NEXT line is wrapped, it means it's a continuation of THIS line.
-            // We should not trim the right side of this line because trailing spaces
-            // might be significant parts of the wrapped content.
-            // If it's not wrapped, we trim normally.
-            let trimRight = true;
-            if (i + 1 < buffer.length) {
-              const nextLine = buffer.getLine(i + 1);
-              if (nextLine?.isWrapped) {
-                trimRight = false;
+            if (ShellExecutionService.lastActivePtyId === ptyProcess.pid) {
+              ShellExecutionService.lastActivePtyId = null;
+            }
+            if (renderTimeout) {
+              clearTimeout(renderTimeout);
+              renderTimeout = null;
+            }
+            if (typeof headlessTerminal.dispose === 'function') {
+              headlessTerminal.dispose();
+            }
+          };
+
+          const resolveResult = (resultValue: ShellExecutionResult) => {
+            if (hasResolved) {
+              return;
+            }
+            hasResolved = true;
+            if (abortFinalizeTimeout) {
+              clearTimeout(abortFinalizeTimeout);
+              abortFinalizeTimeout = null;
+            }
+            cleanupActivePty();
+            resolve(resultValue);
+          };
+
+          const getFullBufferText = (terminal: pkg.Terminal): string => {
+            const buffer = terminal.buffer.active;
+            const lines: string[] = [];
+            for (let i = 0; i < buffer.length; i++) {
+              const line = buffer.getLine(i);
+              if (!line) {
+                continue;
+              }
+              // If the NEXT line is wrapped, it means it's a continuation of THIS line.
+              // We should not trim the right side of this line because trailing spaces
+              // might be significant parts of the wrapped content.
+              // If it's not wrapped, we trim normally.
+              let trimRight = true;
+              if (i + 1 < buffer.length) {
+                const nextLine = buffer.getLine(i + 1);
+                if (nextLine?.isWrapped) {
+                  trimRight = false;
+                }
+              }
+
+              const lineContent = line.translateToString(trimRight);
+
+              if (line.isWrapped && lines.length > 0) {
+                lines[lines.length - 1] += lineContent;
+              } else {
+                lines.push(lineContent);
               }
             }
 
-            const lineContent = line.translateToString(trimRight);
+            // Remove trailing empty lines
+            while (lines.length > 0 && lines[lines.length - 1] === '') {
+              lines.pop();
+            }
 
-            if (line.isWrapped && lines.length > 0) {
-              lines[lines.length - 1] += lineContent;
+            return lines.join('\n');
+
+          };
+
+          const renderFn = () => {
+            renderTimeout = null;
+
+            if (!isStreamingRawContent) {
+              return;
+            }
+
+            if (!shellExecutionConfig.disableDynamicLineTrimming) {
+              if (!hasStartedOutput) {
+                const bufferText = getFullBufferText(headlessTerminal);
+                if (bufferText.trim().length === 0) {
+                  return;
+                }
+                hasStartedOutput = true;
+              }
+            }
+
+            const buffer = headlessTerminal.buffer.active;
+            let newOutput: AnsiOutput;
+            if (shellExecutionConfig.showColor) {
+              newOutput = serializeTerminalToObject(headlessTerminal);
             } else {
-              lines.push(lineContent);
+              newOutput = (serializeTerminalToObject(headlessTerminal) || []).map(
+                (line) =>
+                  line.map((token) => {
+                    token.fg = '';
+                    token.bg = '';
+                    return token;
+                  }),
+              );
             }
-          }
 
-          // Remove trailing empty lines
-          while (lines.length > 0 && lines[lines.length - 1] === '') {
-            lines.pop();
-          }
-
-          return lines.join('\n');
-
-        };
-
-        const renderFn = () => {
-          renderTimeout = null;
-
-          if (!isStreamingRawContent) {
-            return;
-          }
-
-          if (!shellExecutionConfig.disableDynamicLineTrimming) {
-            if (!hasStartedOutput) {
-              const bufferText = getFullBufferText(headlessTerminal);
-              if (bufferText.trim().length === 0) {
-                return;
+            let lastNonEmptyLine = -1;
+            for (let i = newOutput.length - 1; i >= 0; i--) {
+              const line = newOutput[i];
+              if (
+                line
+                  .map((segment) => segment.text)
+                  .join('')
+                  .trim().length > 0
+              ) {
+                lastNonEmptyLine = i;
+                break;
               }
-              hasStartedOutput = true;
             }
-          }
 
-          const buffer = headlessTerminal.buffer.active;
-          let newOutput: AnsiOutput;
-          if (shellExecutionConfig.showColor) {
-            newOutput = serializeTerminalToObject(headlessTerminal);
-          } else {
-            newOutput = (serializeTerminalToObject(headlessTerminal) || []).map(
-              (line) =>
-                line.map((token) => {
-                  token.fg = '';
-                  token.bg = '';
-                  return token;
-                }),
-            );
-          }
-
-          let lastNonEmptyLine = -1;
-          for (let i = newOutput.length - 1; i >= 0; i--) {
-            const line = newOutput[i];
-            if (
-              line
-                .map((segment) => segment.text)
-                .join('')
-                .trim().length > 0
-            ) {
-              lastNonEmptyLine = i;
-              break;
+            if (buffer.cursorY > lastNonEmptyLine) {
+              lastNonEmptyLine = buffer.cursorY;
             }
-          }
 
-          if (buffer.cursorY > lastNonEmptyLine) {
-            lastNonEmptyLine = buffer.cursorY;
-          }
+            const trimmedOutput = newOutput.slice(0, lastNonEmptyLine + 1);
 
-          const trimmedOutput = newOutput.slice(0, lastNonEmptyLine + 1);
+            const finalOutput = shellExecutionConfig.disableDynamicLineTrimming
+              ? newOutput
+              : trimmedOutput;
 
-          const finalOutput = shellExecutionConfig.disableDynamicLineTrimming
-            ? newOutput
-            : trimmedOutput;
+            // Using stringify for a quick deep comparison.
+            if (JSON.stringify(output) !== JSON.stringify(finalOutput)) {
+              output = finalOutput;
+              onOutputEvent({
+                type: 'data',
+                chunk: finalOutput,
+              });
+            }
+          };
 
-          // Using stringify for a quick deep comparison.
-          if (JSON.stringify(output) !== JSON.stringify(finalOutput)) {
-            output = finalOutput;
-            onOutputEvent({
-              type: 'data',
-              chunk: finalOutput,
+          const finalizeResult = (exitCode: number, signal?: number | null) => {
+            render(true);
+            const finalBuffer = Buffer.concat(outputChunks);
+            const fullOutput = getFullBufferText(headlessTerminal);
+            resolveResult({
+              rawOutput: finalBuffer,
+              output: fullOutput,
+              exitCode,
+              signal: signal ?? null,
+              error,
+              aborted: abortSignal.aborted,
+              pid: ptyProcess.pid,
+              executionMethod: ptyInfo.name ?? 'node-pty',
             });
-          }
-        };
+          };
 
         const render = (finalRender = false) => {
           if (finalRender) {
@@ -698,30 +745,8 @@ export class ShellExecutionService {
             exited = true;
             abortSignal.removeEventListener('abort', abortHandler);
 
-            const finalize = () => {
-              render(true);
-              ShellExecutionService.activePtys.delete(ptyProcess.pid);
-              if (typeof headlessTerminal.dispose === 'function') {
-                headlessTerminal.dispose();
-              }
-
-              const finalBuffer = Buffer.concat(outputChunks);
-
-              const fullOutput = getFullBufferText(headlessTerminal);
-              resolve({
-                rawOutput: finalBuffer,
-                output: fullOutput,
-                exitCode,
-                signal: signal ?? null,
-                error,
-                aborted: abortSignal.aborted,
-                pid: ptyProcess.pid,
-                executionMethod: ptyInfo.name ?? 'node-pty',
-              });
-            };
-
             if (abortSignal.aborted) {
-              finalize();
+              finalizeResult(exitCode, signal ?? null);
               return;
             }
 
@@ -737,7 +762,7 @@ export class ShellExecutionService {
             });
 
             Promise.race([processingComplete, abortFired]).then(() => {
-              finalize();
+              finalizeResult(exitCode, signal ?? null);
             });
           },
         );
@@ -747,10 +772,17 @@ export class ShellExecutionService {
             const pid = ptyProcess.pid;
             if (isWindows) {
               cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
-              ShellExecutionService.activePtys.delete(pid);
-              if (typeof headlessTerminal.dispose === 'function') {
-                headlessTerminal.dispose();
-              }
+              cleanupActivePty();
+              resolveResult({
+                rawOutput: Buffer.concat(outputChunks),
+                output: getFullBufferText(headlessTerminal),
+                exitCode: 1,
+                signal: null,
+                error,
+                aborted: true,
+                pid,
+                executionMethod: ptyInfo.name ?? 'node-pty',
+              });
               return;
             }
 
@@ -780,6 +812,19 @@ export class ShellExecutionService {
             } catch (_e) {
               // ignore
             }
+
+            abortFinalizeTimeout = setTimeout(() => {
+              resolveResult({
+                rawOutput: Buffer.concat(outputChunks),
+                output: getFullBufferText(headlessTerminal),
+                exitCode: 1,
+                signal: null,
+                error,
+                aborted: true,
+                pid,
+                executionMethod: ptyInfo.name ?? 'node-pty',
+              });
+            }, SIGKILL_TIMEOUT_MS);
           }
         };
 
@@ -795,8 +840,6 @@ export class ShellExecutionService {
           error,
           rawOutput: Buffer.from(''),
           output: '',
-          stdout: '',
-          stderr: '',
           exitCode: 1,
           signal: null,
           aborted: false,
@@ -814,13 +857,18 @@ export class ShellExecutionService {
    * @param input The string to write to the terminal.
    */
   static writeToPty(pid: number, input: string): void {
-    if (!this.isPtyActive(pid)) {
-      return;
-    }
-
     const activePty = this.activePtys.get(pid);
     if (activePty) {
       activePty.ptyProcess.write(input);
+      return;
+    }
+
+    const fallbackPtyId = this.lastActivePtyId;
+    if (fallbackPtyId && fallbackPtyId !== pid) {
+      const fallbackPty = this.activePtys.get(fallbackPtyId);
+      if (fallbackPty) {
+        fallbackPty.ptyProcess.write(input);
+      }
     }
   }
 
@@ -869,6 +917,50 @@ export class ShellExecutionService {
     }
   }
 
+  static getLastActivePtyId(): number | null {
+    return this.lastActivePtyId;
+  }
+
+  /**
+   * Terminates the pseudo-terminal (PTY) process.
+   *
+   * @param pid The process ID of the target PTY.
+   */
+  static terminatePty(pid: number): void {
+    const activePty = this.activePtys.get(pid);
+    if (!activePty) {
+      return;
+    }
+
+    try {
+      process.kill(-pid, 'SIGTERM');
+    } catch (_e) {
+      // ignore
+    }
+
+    try {
+      activePty.ptyProcess.kill('SIGTERM');
+    } catch (_e) {
+      // ignore
+    }
+
+    setTimeout(() => {
+      if (!this.activePtys.has(pid)) {
+        return;
+      }
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch (_e) {
+        // ignore
+      }
+      try {
+        activePty.ptyProcess.kill('SIGKILL');
+      } catch (_e) {
+        // ignore
+      }
+    }, SIGKILL_TIMEOUT_MS);
+  }
+
   /**
    * Scrolls the pseudo-terminal (PTY) of a running process.
    *
@@ -876,25 +968,30 @@ export class ShellExecutionService {
    * @param lines The number of lines to scroll.
    */
   static scrollPty(pid: number, lines: number): void {
-    if (!this.isPtyActive(pid)) {
+    const activePty = this.activePtys.get(pid);
+    const fallbackPtyId = this.lastActivePtyId;
+    const targetPty = activePty
+      ? { id: pid, pty: activePty }
+      : fallbackPtyId
+        ? { id: fallbackPtyId, pty: this.activePtys.get(fallbackPtyId) }
+        : null;
+
+    if (!targetPty?.pty) {
       return;
     }
 
-    const activePty = this.activePtys.get(pid);
-    if (activePty) {
-      try {
-        activePty.headlessTerminal.scrollLines(lines);
-        if (activePty.headlessTerminal.buffer.active.viewportY < 0) {
-          activePty.headlessTerminal.scrollToTop();
-        }
-      } catch (e) {
-        // Ignore errors if the pty has already exited, which can happen
-        // due to a race condition between the exit event and this call.
-        if (e instanceof Error && 'code' in e && e.code === 'ESRCH') {
-          // ignore
-        } else {
-          throw e;
-        }
+    try {
+      targetPty.pty.headlessTerminal.scrollLines(lines);
+      if (targetPty.pty.headlessTerminal.buffer.active.viewportY < 0) {
+        targetPty.pty.headlessTerminal.scrollToTop();
+      }
+    } catch (e) {
+      // Ignore errors if the pty has already exited, which can happen
+      // due to a race condition between the exit event and this call.
+      if (e instanceof Error && 'code' in e && e.code === 'ESRCH') {
+        // ignore
+      } else {
+        throw e;
       }
     }
   }

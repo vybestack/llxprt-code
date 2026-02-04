@@ -87,6 +87,7 @@ describe('ShellTool', () => {
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
+      getAllowPtyThemeOverride: vi.fn().mockReturnValue(false),
       getContentGeneratorConfig: vi.fn().mockReturnValue({
         providerManager: {
           getServerToolsProvider: vi.fn().mockReturnValue({
@@ -840,6 +841,7 @@ describe('Shell Tool Filtering Behavior', () => {
       getExcludeTools: vi.fn().mockReturnValue([]),
       getCoreTools: vi.fn().mockReturnValue([]),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
+      getAllowPtyThemeOverride: vi.fn().mockReturnValue(false),
       getDebugMode: vi.fn().mockReturnValue(false),
       getSummarizeToolOutputConfig: vi.fn().mockReturnValue(null),
       getContentGeneratorConfig: vi.fn().mockReturnValue(null),

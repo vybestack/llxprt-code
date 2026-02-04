@@ -79,6 +79,7 @@ import {
   coreEvents,
   CoreEvent,
   type UserFeedbackPayload,
+  ShellExecutionService,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { validateAuthMethod } from '../config/auth.js';
@@ -1791,13 +1792,9 @@ export const AppContainer = (props: AppContainerProps) => {
         keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS](key) &&
         config.getEnableInteractiveShell()
       ) {
-        // Toggle focus between shell and LLxprt input
-        if (activeShellPtyId && embeddedShellFocused) {
-          // Unfocus shell
-          setEmbeddedShellFocused(false);
-        } else if (activeShellPtyId) {
-          // Focus shell
-          setEmbeddedShellFocused(true);
+        if (activeShellPtyId || ShellExecutionService.getLastActivePtyId()) {
+          // Toggle focus between shell and LLxprt input.
+          setEmbeddedShellFocused((prev) => !prev);
         }
       }
     },
@@ -1827,7 +1824,6 @@ export const AppContainer = (props: AppContainerProps) => {
       copyModeEnabled,
       settings.merged.ui?.useAlternateBuffer,
       activeShellPtyId,
-      embeddedShellFocused,
     ],
   );
 
@@ -1981,6 +1977,7 @@ export const AppContainer = (props: AppContainerProps) => {
     };
   }, [terminalWidth, terminalHeight, refreshStatic, streamingState]);
 
+
   useEffect(() => {
     if (streamingState === StreamingState.Idle && _staticNeedsRefresh) {
       setStaticNeedsRefresh(false);
@@ -2104,6 +2101,10 @@ export const AppContainer = (props: AppContainerProps) => {
     : isPowerShell
       ? '  Type your message, @path/to/file or +path/to/file'
       : '  Type your message or @path/to/file';
+
+  useEffect(() => {
+    config.setPtyTerminalSize(mainAreaWidth, terminalHeight);
+  }, [config, mainAreaWidth, terminalHeight]);
 
   // Build UIState object
   const uiState: UIState = {

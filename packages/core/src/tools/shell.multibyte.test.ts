@@ -67,6 +67,7 @@ describe('ShellTool multibyte handling', () => {
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
+      getAllowPtyThemeOverride: vi.fn().mockReturnValue(false),
     } as unknown as Config;
 
     tool = new ShellTool(config);

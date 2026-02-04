@@ -20,6 +20,7 @@ import {
 import { useKeypress } from '../../hooks/useKeypress.js';
 import {
   stripShellMarkers,
+  ShellExecutionService,
   type Config,
   type AnsiOutput,
 } from '@vybestack/llxprt-code-core';
@@ -73,16 +74,22 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   
   // Check if this shell is focused
   const isShellTool = name === SHELL_COMMAND_NAME || name === SHELL_NAME;
+  // For LLM-invoked shells, activeShellPtyId is null but we can use lastActivePtyId
+  const lastActivePtyId = ShellExecutionService.getLastActivePtyId();
+  const isThisShellTargeted =
+    ptyId === activeShellPtyId ||
+    (activeShellPtyId == null && ptyId === lastActivePtyId);
   const isThisShellFocused =
     isShellTool &&
     status === ToolCallStatus.Executing &&
-    ptyId === activeShellPtyId &&
+    isThisShellTargeted &&
     embeddedShellFocused;
 
   const isThisShellFocusable =
     isShellTool &&
     status === ToolCallStatus.Executing &&
-    config?.getEnableInteractiveShell();
+    config?.getEnableInteractiveShell() &&
+    isThisShellTargeted;
   const availableHeight = availableTerminalHeight
     ? Math.max(
         availableTerminalHeight - STATIC_HEIGHT - RESERVED_LINE_COUNT,
@@ -111,7 +118,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     { isActive: isFocused },
   );
 
-  const childWidth = terminalWidth - 3; // account for padding.
+  const childWidth = terminalWidth;
   if (typeof resultDisplay === 'string') {
     if (resultDisplay.length > MAXIMUM_RESULT_DISPLAY_CHARACTERS) {
       // Truncate the result display to fit within the available width.
@@ -234,7 +241,9 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         {isThisShellFocusable && (
           <Box marginLeft={1} flexShrink={0}>
             <Text color={Colors.AccentCyan}>
-              {isThisShellFocused ? '(Focused)' : '(tab to focus)'}
+              {isThisShellFocused
+                ? '(Ctrl+F to return to prompt)'
+                : '(Ctrl+F to send keys to shell)'}
             </Text>
           </Box>
         )}

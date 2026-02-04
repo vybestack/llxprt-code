@@ -360,9 +360,11 @@ class ShellToolInvocation extends BaseToolInvocation<
         combinedSignal,
         this.config.getShouldUseNodePtyShell(),
         {
-          terminalWidth: terminalColumns,
-          terminalHeight: terminalRows,
-          showColor: true,
+          ...this.config.getShellExecutionConfig(),
+          terminalWidth:
+            terminalColumns ?? this.config.getPtyTerminalWidth(),
+          terminalHeight:
+            terminalRows ?? this.config.getPtyTerminalHeight(),
         },
       );
 
