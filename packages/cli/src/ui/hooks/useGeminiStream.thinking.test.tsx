@@ -405,6 +405,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'First',
             description: 'thought',
+            rawText: 'First thought',
           },
         };
         await new Promise<void>((resolve) => {
@@ -415,6 +416,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'Second',
             description: 'thought',
+            rawText: 'Second thought',
           },
         };
         yield {
@@ -462,6 +464,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'Analyzing request',
             description: 'First thought process',
+            rawText: 'Analyzing request: First thought process',
           },
         };
         yield {
@@ -515,6 +518,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'Streaming thought',
             description: 'before content',
+            rawText: 'Streaming thought: before content',
           },
         };
         await new Promise<void>((resolve) => {
@@ -555,6 +559,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'First subject',
             description: 'First description',
+            rawText: 'First subject: First description',
           },
         };
         yield {
@@ -562,6 +567,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'Second subject',
             description: 'Second description',
+            rawText: 'Second subject: Second description',
           },
         };
         yield {
@@ -619,6 +625,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'Test subject',
             description: 'Test description',
+            rawText: 'Test subject: Test description',
           },
         };
         yield {
@@ -676,6 +683,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'With reasoning enabled',
             description: 'This should be included',
+            rawText: 'With reasoning enabled: This should be included',
           },
         };
         yield {
@@ -818,6 +826,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'With reasoning disabled',
             description: 'This should still be stored',
+            rawText: 'With reasoning disabled: This should still be stored',
           },
         };
         yield {
@@ -882,6 +891,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'First query thought',
             description: 'First description',
+            rawText: 'First query thought: First description',
           },
         };
         yield {
@@ -951,6 +961,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: '',
             description: 'Description only',
+            rawText: 'Description only',
           },
         };
         yield {
@@ -958,6 +969,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
           value: {
             subject: 'Subject only',
             description: '',
+            rawText: 'Subject only',
           },
         };
         yield {

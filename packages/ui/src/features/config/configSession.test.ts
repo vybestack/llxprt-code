@@ -36,6 +36,19 @@ describe('ConfigSession', () => {
       expect(session.config.getProvider()).toBe('openai');
     });
 
+    it('should store model in provider settings when provider is specified', () => {
+      const session = createConfigSession({
+        model: 'gpt-4',
+        provider: 'openai',
+        workingDir: tempDir,
+      });
+
+      const settings = session.config.getSettingsService();
+      const providerSettings = settings.getProviderSettings('openai');
+
+      expect(providerSettings.model).toBe('gpt-4');
+    });
+
     it('should disable telemetry by default', () => {
       const session = createConfigSession({
         model: 'gemini-2.5-flash',

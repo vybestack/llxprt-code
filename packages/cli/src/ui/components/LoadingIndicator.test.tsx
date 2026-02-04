@@ -192,6 +192,7 @@ describe('<LoadingIndicator />', () => {
       thought: {
         subject: 'Thinking about something...',
         description: 'and other stuff.',
+        rawText: '**Thinking about something...** and other stuff.',
       },
       elapsedTime: 5,
     };
@@ -211,6 +212,7 @@ describe('<LoadingIndicator />', () => {
       thought: {
         subject: 'This should be displayed',
         description: 'A description',
+        rawText: '**This should be displayed** A description',
       },
       currentLoadingPhrase: 'This should not be displayed',
       elapsedTime: 5,

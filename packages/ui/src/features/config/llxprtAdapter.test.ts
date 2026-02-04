@@ -25,12 +25,16 @@ describe('transformEvent', () => {
   it('should convert Thought event to thinking_delta', () => {
     const input: ServerGeminiThoughtEvent = {
       type: GeminiEventType.Thought,
-      value: { subject: 'analysis', description: 'thinking about the problem' },
+      value: {
+        subject: 'analysis',
+        description: 'thinking about the problem',
+        rawText: 'analysis: thinking about the problem',
+      },
     };
     const result = transformEvent(input);
     expect(result).toStrictEqual({
       type: 'thinking_delta',
-      text: 'thinking about the problem',
+      text: 'analysis: thinking about the problem',
     });
   });
 

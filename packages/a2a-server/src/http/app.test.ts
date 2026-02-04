@@ -606,7 +606,15 @@ describe('E2E Tests', () => {
     sendMessageStreamSpy.mockImplementation(async function* () {
       yield* [
         { type: 'content', value: 'Hello', traceId },
-        { type: 'thought', value: { subject: 'Thinking...' }, traceId },
+        {
+          type: 'thought',
+          value: {
+            subject: 'Thinking...',
+            description: '',
+            rawText: 'Thinking...',
+          },
+          traceId,
+        },
       ];
     });
 

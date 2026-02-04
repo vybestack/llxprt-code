@@ -15,32 +15,49 @@ describe('parseThought', () => {
       expected: {
         subject: 'Subject:',
         description: 'This is the description.',
+        rawText: '**Subject:** This is the description.',
       },
     },
     {
       name: 'leading and trailing whitespace in the raw string',
       rawText: '  **Subject** description with spaces   ',
-      expected: { subject: 'Subject', description: 'description with spaces' },
+      expected: {
+        subject: 'Subject',
+        description: 'description with spaces',
+        rawText: '  **Subject** description with spaces   ',
+      },
     },
     {
       name: 'whitespace surrounding the subject content',
       rawText: '** Subject  **',
-      expected: { subject: 'Subject', description: '' },
+      expected: {
+        subject: 'Subject',
+        description: '',
+        rawText: '** Subject  **',
+      },
     },
     {
       name: 'a thought with only a subject',
       rawText: '**Only Subject**',
-      expected: { subject: 'Only Subject', description: '' },
+      expected: {
+        subject: 'Only Subject',
+        description: '',
+        rawText: '**Only Subject**',
+      },
     },
     {
       name: 'a thought with only a description (no subject)',
       rawText: 'This is just a description.',
-      expected: { subject: '', description: 'This is just a description.' },
+      expected: {
+        subject: '',
+        description: 'This is just a description.',
+        rawText: 'This is just a description.',
+      },
     },
     {
       name: 'an empty string input',
       rawText: '',
-      expected: { subject: '', description: '' },
+      expected: { subject: '', description: '', rawText: '' },
     },
     {
       name: 'newlines within the subject and description',
@@ -49,12 +66,18 @@ describe('parseThought', () => {
       expected: {
         subject: 'Multi-line\nSubject',
         description: 'Here is a description\nspread across lines.',
+        rawText:
+          '**Multi-line\nSubject**\nHere is a description\nspread across lines.',
       },
     },
     {
       name: 'only the first subject if multiple are present',
       rawText: '**First** some text **Second**',
-      expected: { subject: 'First', description: 'some text **Second**' },
+      expected: {
+        subject: 'First',
+        description: 'some text **Second**',
+        rawText: '**First** some text **Second**',
+      },
     },
     {
       name: 'text before and after the subject',
@@ -62,17 +85,26 @@ describe('parseThought', () => {
       expected: {
         subject: 'Subject',
         description: 'Prefix text  Suffix text.',
+        rawText: 'Prefix text **Subject** Suffix text.',
       },
     },
     {
       name: 'an unclosed subject tag',
       rawText: 'Text with **an unclosed subject',
-      expected: { subject: '', description: 'Text with **an unclosed subject' },
+      expected: {
+        subject: '',
+        description: 'Text with **an unclosed subject',
+        rawText: 'Text with **an unclosed subject',
+      },
     },
     {
       name: 'an empty subject tag',
       rawText: 'A thought with **** in the middle.',
-      expected: { subject: '', description: 'A thought with  in the middle.' },
+      expected: {
+        subject: '',
+        description: 'A thought with  in the middle.',
+        rawText: 'A thought with **** in the middle.',
+      },
     },
   ])('should correctly parse $name', ({ rawText, expected }) => {
     expect(parseThought(rawText)).toEqual(expected);

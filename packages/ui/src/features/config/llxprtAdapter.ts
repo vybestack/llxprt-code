@@ -129,7 +129,7 @@ export function transformEvent(event: ServerGeminiStreamEvent): AdapterEvent {
     return { type: 'text_delta', text: event.value };
   }
   if (event.type === GeminiEventType.Thought) {
-    return { type: 'thinking_delta', text: event.value.description };
+    return { type: 'thinking_delta', text: event.value.rawText };
   }
   if (event.type === GeminiEventType.ToolCallRequest) {
     return {

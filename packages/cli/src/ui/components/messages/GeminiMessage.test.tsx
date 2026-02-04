@@ -149,5 +149,33 @@ describe('<GeminiMessage />', () => {
 
       expect(lastFrame()).not.toContain('MockThinking');
     });
+
+    it('should merge thinking blocks before rendering', () => {
+      const { lastFrame } = renderWithProviders(
+        <GeminiMessage
+          {...baseProps}
+          thinkingBlocks={[
+            {
+              type: 'thinking',
+              thought: 'First',
+              sourceField: 'reasoning_content',
+            },
+            {
+              type: 'thinking',
+              thought: ' Second',
+              sourceField: 'reasoning_content',
+            },
+          ]}
+        />,
+        {
+          uiState: {
+            renderMarkdown: true,
+            streamingState: StreamingState.Idle,
+          },
+        },
+      );
+
+      expect(lastFrame()).toContain('MockThinking:First Second');
+    });
   });
 });

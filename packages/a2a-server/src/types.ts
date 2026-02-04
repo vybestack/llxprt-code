@@ -67,6 +67,7 @@ export interface Thought {
 export type ThoughtSummary = {
   subject: string;
   description: string;
+  rawText: string;
 };
 
 export interface ToolConfirmationResponse {

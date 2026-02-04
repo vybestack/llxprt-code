@@ -262,6 +262,13 @@ export class EmojiFilter {
    * @pseudocode lines 140-147
    */
   private detectEmojis(text: string): boolean {
+    // First check the conversion map - these are also emojis we need to detect
+    for (const [emoji] of this.conversions) {
+      if (text.includes(emoji)) {
+        return true;
+      }
+    }
+    // Then check patterns for other emojis
     for (const pattern of this.patterns) {
       // Reset lastIndex to ensure test starts from beginning
       pattern.lastIndex = 0;
@@ -356,6 +363,14 @@ export class EmojiFilter {
    * Compiles emoji detection patterns
    * @returns Array of compiled regex patterns
    * @pseudocode line 09
+   *
+   * NOTE: Variation selectors (\uFE0E, \uFE0F) and zero-width joiner (\u200D)
+   * are NOT included here. These are Unicode combining characters that:
+   * - Control how characters are displayed (text vs emoji presentation)
+   * - Join characters into compound emojis (e.g.,  developer)
+   * - Should NOT be stripped as they're essential for proper Unicode rendering
+   * - Stripping them corrupts text formatting and breaks compound characters
+   * @issue #1272
    */
   private compileEmojiPatterns(): CompiledRegexArray {
     return [
@@ -364,15 +379,14 @@ export class EmojiFilter {
       /[\u{1FA00}-\u{1FAFF}]/gu, // Extended Symbols and Pictographs (includes magic wand, rock, blood, planet, berries, vegetables, teapot, beans, jar)
       /[\u{2600}-\u{26FF}]/gu, // Miscellaneous Symbols
       /[\u{2700}-\u{27BF}]/gu, // Dingbats
-      /[\u{1F170}-\u{1F1FF}]/gu, // Enclosed Alphanumeric Supplement (includes 🆙 U+1F199) and Regional Indicators
+      /[\u{1F170}-\u{1F1FF}]/gu, // Enclosed Alphanumeric Supplement (includes U+1F199) and Regional Indicators
       /[\u{1F600}-\u{1F64F}]/gu, // Emoticons
       /[\u{1F680}-\u{1F6FF}]/gu, // Transport and Map Symbols
-      /[\u{23E9}-\u{23FF}]/gu, // Additional symbols including ⏳ (hourglass)
+      /[\u{2300}-\u{23FF}]/gu, // Miscellaneous Technical (includes keyboard U+2328, hourglass U+23F3)
       // Specific functional emojis that might not be caught by ranges
       /[\u2705\u2713\u26A0\u274C\u26A1]|\u26A0\uFE0F/gu,
-      // Variation selectors and combining characters often used with emojis
-      /[\uFE0E\uFE0F]/gu, // Variation selectors
-      /[\u200D]/gu, // Zero-width joiner
+      // NOTE: DO NOT add variation selectors (\uFE0E, \uFE0F) or zero-width joiner (\u200D)
+      // These are combining characters, not emojis. Stripping them breaks Unicode text. (#1272)
     ];
   }
 

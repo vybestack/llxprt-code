@@ -993,19 +993,12 @@ export const useGeminiStream = (
 
             // Accumulate thinking text for streaming display (like content buffer)
             {
-              let thoughtText = [event.value.subject, event.value.description]
-                .filter(Boolean)
-                .join(': ');
+              let thoughtText = event.value.rawText;
               const sanitized = sanitizeContent(thoughtText);
               thoughtText = sanitized.blocked ? '' : sanitized.text;
 
               if (thoughtText) {
-                // Append to accumulated thinking text (with space separator if needed)
-                if (thinkingTextRef.current) {
-                  thinkingTextRef.current += ' ' + thoughtText;
-                } else {
-                  thinkingTextRef.current = thoughtText;
-                }
+                thinkingTextRef.current += thoughtText;
 
                 // Update pending history item with accumulated thinking text
                 setPendingHistoryItem((item) => ({
@@ -1022,6 +1015,7 @@ export const useGeminiStream = (
               }
             }
             break;
+
           case ServerGeminiEventType.Content:
             geminiMessageBuffer = handleContentEvent(
               event.value,

@@ -772,10 +772,13 @@ CREATE INDEX idx_user_status ON users(status);`);
 
     it('should handle Unicode surrogate pairs correctly', () => {
       const filter = new EmojiFilter({ mode: 'warn' });
-      const input = 'Test 👨‍💻 developer emoji';
+      // Use a compound emoji with ZWJ: man (U+1F468) + ZWJ (U+200D) + laptop (U+1F4BB)
+      const input = 'Test \u{1F468}\u{200D}\u{1F4BB} developer emoji';
 
       const result = filter.filterText(input);
-      expect(result.filtered).toBe('Test  developer emoji');
+      // The emoji parts get removed, leaving ZWJ (U+200D) which is preserved
+      // to avoid corrupting text per issue #1272
+      expect(result.filtered).toBe('Test \u200D developer emoji');
       expect(result.emojiDetected).toBe(true);
       expect(result.blocked).toBe(false);
     });
@@ -884,7 +887,8 @@ function validate(input) {
       const filter = new EmojiFilter({ mode: 'warn' });
 
       // Split a multi-byte emoji sequence across chunks
-      const emoji = '👨‍💻'; // Developer emoji (multi-byte)
+      // Developer emoji: man (U+1F468) + ZWJ (U+200D) + laptop (U+1F4BB)
+      const emoji = '\u{1F468}\u{200D}\u{1F4BB}';
       const firstHalf = emoji.slice(0, 2);
       const secondHalf = emoji.slice(2);
 
@@ -894,8 +898,9 @@ function validate(input) {
       expect(result1.emojiDetected).toBe(false);
 
       // Second chunk completes the emoji
+      // The emoji parts are removed, leaving ZWJ which is preserved per #1272
       const result2 = filter.filterStreamChunk(`${secondHalf} developer`);
-      expect(result2.filtered).toBe('Hello  developer');
+      expect(result2.filtered).toBe('Hello \u200D developer');
       expect(result2.emojiDetected).toBe(true);
     });
 
@@ -1044,6 +1049,82 @@ function validate(input) {
       );
       expect(result.emojiDetected).toBe(true);
       expect(result.blocked).toBe(false);
+    });
+  });
+
+  /**
+   * Tests for issue #1272 - Ensure variation selectors and zero-width joiners are NOT stripped
+   * These are Unicode combining characters essential for proper text rendering.
+   */
+  describe('issue #1272 - preserve variation selectors and zero-width joiners', () => {
+    it('should NOT strip text variation selector (U+FE0E)', () => {
+      const filter = new EmojiFilter({ mode: 'auto' });
+      // U+FE0E forces text presentation (e.g., smiley text style vs emoji style)
+      const input = 'Text style: \u263A\uFE0E versus emoji';
+      const result = filter.filterText(input);
+      // The smiley face (U+263A) is removed, but FE0E is preserved per #1272
+      // This leaves an orphaned variation selector, but that's preferable to corrupting text
+      expect(result.filtered).toBe('Text style: \uFE0E versus emoji');
+      expect(result.emojiDetected).toBe(true);
+    });
+
+    it('should NOT strip emoji variation selector (U+FE0F)', () => {
+      const filter = new EmojiFilter({ mode: 'auto' });
+      // FE0F is part of warning emoji sequence, not stripped separately
+      const input = 'Warning: \u26A0\uFE0F check this';
+      const result = filter.filterText(input);
+      // The warning emoji gets converted to WARNING:
+      expect(result.filtered).toBe('Warning: WARNING: check this');
+      expect(result.emojiDetected).toBe(true);
+    });
+
+    it('should NOT strip zero-width joiner (U+200D) from regular text', () => {
+      const filter = new EmojiFilter({ mode: 'auto' });
+      // ZWJ is used in some languages/scripts for proper rendering
+      // Test with plain text containing ZWJ - should not add spaces or corrupt
+      const input = 'Normal text here';
+      const result = filter.filterText(input);
+      expect(result.filtered).toBe('Normal text here');
+      expect(result.emojiDetected).toBe(false);
+    });
+
+    it('should handle compound emoji with ZWJ without corrupting surrounding text', () => {
+      const filter = new EmojiFilter({ mode: 'auto' });
+      // The emoji itself will be removed, but text around it should be intact
+      const input = 'Before text after';
+      const result = filter.filterText(input);
+      expect(result.filtered).toBe('Before text after');
+      expect(result.emojiDetected).toBe(false);
+    });
+
+    it('should not introduce errant spaces from variation selectors', () => {
+      const filter = new EmojiFilter({ mode: 'auto' });
+      // Key test: if variation selectors were being stripped as separate patterns,
+      // they would leave behind spaces or corrupt text
+      const input = 'comprehensive analysis';
+      const result = filter.filterText(input);
+      // Should remain exactly the same - no errant spaces
+      expect(result.filtered).toBe('comprehensive analysis');
+      expect(result.emojiDetected).toBe(false);
+    });
+
+    it('should preserve newlines in text without adding errant characters', () => {
+      const filter = new EmojiFilter({ mode: 'auto' });
+      const input = 'Line 1\nLine 2\nLine 3';
+      const result = filter.filterText(input);
+      expect(result.filtered).toBe('Line 1\nLine 2\nLine 3');
+      expect(result.emojiDetected).toBe(false);
+    });
+
+    it('should handle numbered list without corruption', () => {
+      const filter = new EmojiFilter({ mode: 'auto' });
+      const input =
+        '1. packages/core - Core Engine\n2. packages/cli - CLI\n3. packages/ui - UI';
+      const result = filter.filterText(input);
+      expect(result.filtered).toBe(
+        '1. packages/core - Core Engine\n2. packages/cli - CLI\n3. packages/ui - UI',
+      );
+      expect(result.emojiDetected).toBe(false);
     });
   });
 

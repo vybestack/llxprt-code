@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Text, Box } from 'ink';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { Colors } from '../../colors.js';
@@ -22,6 +22,25 @@ interface GeminiMessageProps {
   model?: string;
   thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 }
+
+const mergeThinkingBlocks = (
+  blocks: ThinkingBlock[] | undefined,
+): ThinkingBlock | null => {
+  if (!blocks || blocks.length === 0) {
+    return null;
+  }
+  const visibleBlocks = blocks.filter(
+    (block) => !block.isHidden && block.thought.length > 0,
+  );
+  if (visibleBlocks.length === 0) {
+    return null;
+  }
+  const thought = visibleBlocks.map((block) => block.thought).join('');
+  if (!thought.trim()) {
+    return null;
+  }
+  return { ...visibleBlocks[0], thought };
+};
 
 export const GeminiMessage: React.FC<GeminiMessageProps> = ({
   text,
@@ -48,6 +67,10 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
   // thought subject/description as spinner text during streaming. Only show
   // thinkingBlocks in committed history items to avoid duplication (fixes #922).
   const shouldShowThinkingBlocks = showThinking && !isPending;
+  const mergedThinkingBlock = useMemo(
+    () => mergeThinkingBlocks(thinkingBlocks),
+    [thinkingBlocks],
+  );
 
   return (
     <Box flexDirection="column">
@@ -56,14 +79,15 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
           <Text color={Colors.DimComment}>{model}</Text>
         </Box>
       )}
-      {shouldShowThinkingBlocks &&
-        thinkingBlocks?.map((block, index) => (
-          <ThinkingBlockDisplay
-            key={`thinking-${index}`}
-            block={block}
-            visible={true}
-          />
-        ))}
+      {shouldShowThinkingBlocks && mergedThinkingBlock && (
+        <ThinkingBlockDisplay
+          block={mergedThinkingBlock}
+          visible={true}
+          isPending={isPending}
+          availableTerminalHeight={availableTerminalHeight}
+          terminalWidth={terminalWidth}
+        />
+      )}
       <Box flexDirection="row">
         <Box width={prefixWidth}>
           <Text

@@ -2144,9 +2144,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                     tagBasedThinking.thought,
                   );
                   // Accumulate thinking content - don't emit yet
-                  // Use newline to preserve formatting between chunks (not space)
+                  // Join with spaces to avoid per-chunk newlines in UI rendering.
                   if (accumulatedThinkingContent.length > 0) {
-                    accumulatedThinkingContent += '\n';
+                    accumulatedThinkingContent += ' ';
                   }
                   accumulatedThinkingContent += cleanedThought;
                   logger.debug(
@@ -2387,9 +2387,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           const cleanedThought = this.cleanThinkingContent(
             tagBasedThinking.thought,
           );
-          // Use newline to preserve formatting between chunks (not space)
+          // Join with spaces to avoid per-chunk newlines in UI rendering.
           if (accumulatedThinkingContent.length > 0) {
-            accumulatedThinkingContent += '\n';
+            accumulatedThinkingContent += ' ';
           }
           accumulatedThinkingContent += cleanedThought;
         }
@@ -3764,11 +3764,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                     tagBasedThinking.thought,
                   );
                   // Accumulate thinking content - don't emit yet
-                  // Use newline to preserve formatting between chunks (not space)
+                  // Join with spaces to avoid per-chunk newlines in UI rendering.
                   if (accumulatedThinkingContent.length > 0) {
-                    accumulatedThinkingContent += '\n';
+                    accumulatedThinkingContent += ' ';
                   }
                   accumulatedThinkingContent += cleanedThought;
+
                   logger.debug(
                     () =>
                       `[Streaming] Accumulated thinking: ${accumulatedThinkingContent.length} chars total`,
@@ -3991,9 +3992,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           const cleanedThought = this.cleanThinkingContent(
             tagBasedThinking.thought,
           );
-          // Use newline to preserve formatting between chunks (not space)
+          // Join with spaces to avoid per-chunk newlines in UI rendering.
           if (accumulatedThinkingContent.length > 0) {
-            accumulatedThinkingContent += '\n';
+            accumulatedThinkingContent += ' ';
           }
           accumulatedThinkingContent += cleanedThought;
         }

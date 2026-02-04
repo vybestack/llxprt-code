@@ -22,6 +22,7 @@ interface RefHandle<T> {
 interface StreamContext {
   modelMessageId: string | null;
   thinkingMessageId: string | null;
+  thinkingText: string;
   /** Track tool calls by their backend callId */
   toolCalls: Map<string, string>;
 }
@@ -73,11 +74,16 @@ function handleAdapterEvent(
       }
       const id = appendMessage('thinking', text);
       setResponderWordCount((count) => count + countWords(text));
-      return { ...context, thinkingMessageId: id };
+      return {
+        ...context,
+        thinkingMessageId: id,
+        thinkingText: text,
+      };
     }
+    const nextText = context.thinkingText + text;
     appendToMessage(context.thinkingMessageId, text);
     setResponderWordCount((count) => count + countWords(text));
-    return context;
+    return { ...context, thinkingText: nextText };
   }
   if (event.type === 'tool_pending') {
     // Create a new ToolCall entry in UI
@@ -99,6 +105,7 @@ function handleAdapterEvent(
     return {
       modelMessageId: null,
       thinkingMessageId: null,
+      thinkingText: '',
       toolCalls: newToolCalls,
     };
   }
@@ -198,6 +205,7 @@ export function useStreamingResponder(
       let context: StreamContext = {
         modelMessageId: null,
         thinkingMessageId: null,
+        thinkingText: '',
         toolCalls: new Map(),
       };
 
@@ -350,6 +358,7 @@ export async function continueStreamingAfterTools(
   let context: StreamContext = {
     modelMessageId: null,
     thinkingMessageId: null,
+    thinkingText: '',
     toolCalls: new Map(),
   };
 

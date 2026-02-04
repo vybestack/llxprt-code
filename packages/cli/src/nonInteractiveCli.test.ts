@@ -208,11 +208,11 @@ describe('runNonInteractive', () => {
     const events: ServerGeminiStreamEvent[] = [
       {
         type: GeminiEventType.Thought,
-        value: { subject: 'First', description: '' },
+        value: { subject: 'First', description: '', rawText: 'First' },
       },
       {
         type: GeminiEventType.Thought,
-        value: { subject: 'Second', description: '' },
+        value: { subject: 'Second', description: '', rawText: 'Second' },
       },
       { type: GeminiEventType.Content, value: 'Content' },
     ];
@@ -229,7 +229,7 @@ describe('runNonInteractive', () => {
 
     const writes = processStdoutSpy.mock.calls.map(([value]) => value);
     const output = writes.join('');
-    expect(output).toContain('<think>First Second</think>');
+    expect(output).toContain('<think>FirstSecond</think>');
   });
 
   it('should handle a single tool call and respond', async () => {
@@ -765,6 +765,7 @@ describe('runNonInteractive', () => {
       value: {
         subject: 'First',
         description: 'thought',
+        rawText: 'First thought',
       },
     };
     const thoughtEvent2: ServerGeminiStreamEvent = {
@@ -772,6 +773,7 @@ describe('runNonInteractive', () => {
       value: {
         subject: 'Second',
         description: 'thought',
+        rawText: 'Second thought',
       },
     };
     const contentEvent: ServerGeminiStreamEvent = {
@@ -815,6 +817,7 @@ describe('runNonInteractive', () => {
       value: {
         subject: 'Analyzing',
         description: '',
+        rawText: 'Analyzing',
       },
     };
     const thoughtEvent2: ServerGeminiStreamEvent = {
@@ -822,6 +825,7 @@ describe('runNonInteractive', () => {
       value: {
         subject: 'request',
         description: '',
+        rawText: 'request',
       },
     };
     const contentEvent: ServerGeminiStreamEvent = {
@@ -928,6 +932,8 @@ describe('runNonInteractive', () => {
         value: {
           subject: 'Planning \u{1F914} the approach',
           description: 'Let me think \u{1F4AD} carefully',
+          rawText:
+            'Planning \u{1F914} the approach Let me think \u{1F4AD} carefully',
         },
       },
       { type: GeminiEventType.Content, value: 'Here is my answer' },
@@ -971,6 +977,7 @@ describe('runNonInteractive', () => {
         value: {
           subject: 'Planning \u{1F914}',
           description: 'Think carefully \u{1F4AD}',
+          rawText: 'Planning \u{1F914} Think carefully \u{1F4AD}',
         },
       },
       { type: GeminiEventType.Content, value: 'Here is my answer' },
@@ -1008,6 +1015,7 @@ describe('runNonInteractive', () => {
         value: {
           subject: 'Planning \u{1F914}',
           description: 'Think carefully \u{1F4AD}',
+          rawText: 'Planning \u{1F914} Think carefully \u{1F4AD}',
         },
       },
       { type: GeminiEventType.Content, value: 'Here is my answer' },

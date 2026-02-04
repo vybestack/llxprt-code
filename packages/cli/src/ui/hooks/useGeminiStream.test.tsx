@@ -2238,6 +2238,7 @@ describe('useGeminiStream', () => {
             value: {
               subject: 'Previous thought',
               description: 'Old description',
+              rawText: 'Previous thought: Old description',
             },
           };
           yield {
@@ -2396,7 +2397,11 @@ describe('useGeminiStream', () => {
         (async function* () {
           yield {
             type: ServerGeminiEventType.Thought,
-            value: { subject: 'Some thought', description: 'Description' },
+            value: {
+              subject: 'Some thought',
+              description: 'Description',
+              rawText: 'Some thought: Description',
+            },
           };
           yield { type: ServerGeminiEventType.UserCancelled };
         })(),
@@ -2451,7 +2456,11 @@ describe('useGeminiStream', () => {
         (async function* () {
           yield {
             type: ServerGeminiEventType.Thought,
-            value: { subject: 'Some thought', description: 'Description' },
+            value: {
+              subject: 'Some thought',
+              description: 'Description',
+              rawText: 'Some thought: Description',
+            },
           };
           yield {
             type: ServerGeminiEventType.Error,

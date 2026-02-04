@@ -315,12 +315,7 @@ export async function runNonInteractive({
         if (event.type === GeminiEventType.Thought) {
           if (includeThinking) {
             const thoughtEvent = event as ServerGeminiThoughtEvent;
-            const thought = thoughtEvent.value;
-            // Format thought with subject and description
-            let thoughtText =
-              thought.subject && thought.description
-                ? `${thought.subject}: ${thought.description}`
-                : thought.subject || thought.description || '';
+            let thoughtText = thoughtEvent.value.rawText;
 
             if (thoughtText.trim()) {
               // Apply emoji filter if enabled
@@ -333,10 +328,7 @@ export async function runNonInteractive({
                   thoughtText = filterResult.filtered;
                 }
               }
-              // Buffer thoughts to prevent duplicate/pyramid output
-              thoughtBuffer = thoughtBuffer
-                ? `${thoughtBuffer} ${thoughtText}`
-                : thoughtText;
+              thoughtBuffer += thoughtText;
             }
           }
         } else if (event.type === GeminiEventType.Content) {

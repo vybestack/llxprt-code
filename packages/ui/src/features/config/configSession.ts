@@ -70,8 +70,12 @@ export function createConfigSession(
   const settings = new SettingsService();
   registerSettingsService(settings);
 
-  // CRITICAL: Set model in SettingsService - providers read from here, not from Config
-  settings.set('model', options.model);
+  if (options.provider) {
+    settings.set('activeProvider', options.provider);
+    settings.setProviderSetting(options.provider, 'model', options.model);
+  } else {
+    settings.set('model', options.model);
+  }
 
   if (options.baseUrl) {
     settings.set('base-url', options.baseUrl);
@@ -81,9 +85,6 @@ export function createConfigSession(
   }
   if (options.apiKey) {
     settings.set('auth-key', options.apiKey);
-  }
-  if (options.provider) {
-    settings.set('activeProvider', options.provider);
   }
 
   const timestamp = Date.now();

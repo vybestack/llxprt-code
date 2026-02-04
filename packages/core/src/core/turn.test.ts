@@ -642,7 +642,11 @@ describe('Turn', () => {
       expect(events).toEqual([
         {
           type: GeminiEventType.Thought,
-          value: { subject: '', description: '[Thought: thinking]' },
+          value: {
+            subject: '',
+            description: '[Thought: thinking]',
+            rawText: '[Thought: thinking]',
+          },
           traceId: 'trace-456',
         },
       ]);

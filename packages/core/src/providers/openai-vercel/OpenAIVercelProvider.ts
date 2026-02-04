@@ -1053,6 +1053,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         // Extract thinking tags and accumulate
         const thinkBlock = extractThinkTags(buffer);
         if (thinkBlock) {
+          // Join with spaces to avoid per-chunk newlines in UI rendering.
           if (accumulatedThinkingContent.length > 0) {
             accumulatedThinkingContent += ' ';
           }
@@ -1062,7 +1063,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
               `[OpenAIVercelProvider] Accumulated thinking: ${accumulatedThinkingContent.length} chars`,
           );
         }
-
         // Emit accumulated thinking block before other content
         if (
           !hasEmittedThinking &&
@@ -1231,6 +1231,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
                   } as IContent;
                 } else if (rsIncludeInResponse) {
                   // Accumulate mode: buffer for K2/field mode
+                  // Join with spaces to avoid per-chunk newlines in UI rendering.
                   if (accumulatedThinkingContent.length > 0) {
                     accumulatedThinkingContent += ' ';
                   }
