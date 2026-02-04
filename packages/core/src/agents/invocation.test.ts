@@ -262,9 +262,13 @@ describe('SubagentInvocation', () => {
       expect(result.returnDisplay).toBe(
         `Subagent Failed: MockAgent\nError: ${error.message}`,
       );
-      expect(result.llmContent).toBe(
-        `Subagent 'MockAgent' failed. Error: ${error.message}`,
-      );
+      expect(typeof result.llmContent).not.toBe('string');
+      expect(Array.isArray(result.llmContent)).toBe(true);
+      expect(result.llmContent).toEqual([
+        {
+          text: `Subagent 'MockAgent' failed. Error: ${error.message}`,
+        },
+      ]);
     });
 
     it('should handle executor creation failure', async () => {
@@ -279,6 +283,13 @@ describe('SubagentInvocation', () => {
         type: ToolErrorType.EXECUTION_FAILED,
       });
       expect(result.returnDisplay).toContain(`Error: ${creationError.message}`);
+      expect(typeof result.llmContent).not.toBe('string');
+      expect(Array.isArray(result.llmContent)).toBe(true);
+      expect(result.llmContent).toEqual([
+        {
+          text: `Subagent 'MockAgent' failed. Error: ${creationError.message}`,
+        },
+      ]);
     });
 
     /**
