@@ -14,22 +14,40 @@ const logger = new DebugLogger('llxprt:anthropic:usage');
  */
 export const UsagePeriodSchema = z.object({
   utilization: z.number().describe('Usage percentage (0-100)'),
-  resets_at: z.string().describe('ISO 8601 timestamp for reset time'),
+  resets_at: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('ISO 8601 timestamp for reset time, or null if not applicable'),
 });
 
 /**
  * Schema for Anthropic OAuth usage response
  * Based on https://api.anthropic.com/api/oauth/usage endpoint
+ *
+ * The response includes multiple quota types:
+ * - five_hour: 5-hour rolling window usage
+ * - seven_day: 7-day rolling window usage (general)
+ * - seven_day_oauth_apps: OAuth apps specific quota
+ * - seven_day_opus: Opus model specific quota
+ * - seven_day_sonnet: Sonnet model specific quota (if applicable)
+ *
+ * Uses passthrough() to allow for unknown fields from the API
  */
-export const AnthropicUsageInfoSchema = z.object({
-  five_hour: UsagePeriodSchema.optional(),
-  seven_day: UsagePeriodSchema.optional(),
-});
+export const AnthropicUsageInfoSchema = z
+  .object({
+    five_hour: UsagePeriodSchema.nullable().optional(),
+    seven_day: UsagePeriodSchema.nullable().optional(),
+    seven_day_oauth_apps: UsagePeriodSchema.nullable().optional(),
+    seven_day_opus: UsagePeriodSchema.nullable().optional(),
+    seven_day_sonnet: UsagePeriodSchema.nullable().optional(),
+  })
+  .passthrough();
 
 /**
- * Single usage period information
+ * Single usage period information (may be null)
  */
-export type UsagePeriod = z.infer<typeof UsagePeriodSchema>;
+export type UsagePeriod = z.infer<typeof UsagePeriodSchema> | null;
 
 /**
  * Anthropic usage information from OAuth endpoint
@@ -107,23 +125,82 @@ export async function fetchAnthropicUsage(
 /**
  * Format a usage period for display
  */
-export function formatUsagePeriod(period: UsagePeriod, label: string): string {
+export function formatUsagePeriod(
+  period: UsagePeriod,
+  label: string,
+): string | null {
+  if (!period || typeof period.utilization !== 'number') {
+    return null;
+  }
+
   const utilization = period.utilization.toFixed(1);
-  const resetDate = new Date(period.resets_at);
-  const now = new Date();
-  const diffMs = resetDate.getTime() - now.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
+  const resetDate = period.resets_at ? new Date(period.resets_at) : null;
 
   let timeUntilReset: string;
-  if (diffHours > 0) {
-    const remainingMins = diffMins % 60;
-    timeUntilReset = `in ${diffHours}h ${remainingMins}m`;
-  } else if (diffMins > 0) {
-    timeUntilReset = `in ${diffMins}m`;
+  if (resetDate) {
+    const now = new Date();
+    const diffMs = resetDate.getTime() - now.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+
+    if (diffHours > 0) {
+      const remainingMins = diffMins % 60;
+      timeUntilReset = `in ${diffHours}h ${remainingMins}m`;
+    } else if (diffMins > 0) {
+      timeUntilReset = `in ${diffMins}m`;
+    } else {
+      timeUntilReset = 'soon';
+    }
   } else {
-    timeUntilReset = 'soon';
+    timeUntilReset = 'N/A';
   }
 
   return `  ${label}: ${utilization}% used (resets ${timeUntilReset})`;
+}
+
+/**
+ * Known quota period labels for display
+ */
+const KNOWN_PERIOD_LABELS: Record<string, string> = {
+  five_hour: '5-hour window',
+  seven_day: '7-day window',
+  seven_day_oauth_apps: '7-day OAuth apps',
+  seven_day_opus: '7-day Opus',
+  seven_day_sonnet: '7-day Sonnet',
+};
+
+/**
+ * Check if a value looks like a valid usage period object
+ */
+function isValidUsagePeriod(
+  value: unknown,
+): value is { utilization: number; resets_at?: string | null } {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'utilization' in value &&
+    typeof (value as { utilization: unknown }).utilization === 'number'
+  );
+}
+
+/**
+ * Format all available usage periods for display
+ * Handles both known and unknown quota types from the API
+ */
+export function formatAllUsagePeriods(usage: AnthropicUsageInfo): string[] {
+  const lines: string[] = [];
+
+  // Process all fields in the usage object, not just known ones
+  for (const [key, value] of Object.entries(usage)) {
+    if (isValidUsagePeriod(value)) {
+      // Use known label or generate one from the key
+      const label =
+        KNOWN_PERIOD_LABELS[key] ||
+        key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      const formatted = formatUsagePeriod(value as UsagePeriod, label);
+      if (formatted) lines.push(formatted);
+    }
+  }
+
+  return lines;
 }

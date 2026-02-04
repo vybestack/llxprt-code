@@ -262,7 +262,6 @@ describe('AnthropicOAuthProvider', () => {
 describe('AnthropicOAuthProvider getUsageInfo', () => {
   let provider: AnthropicOAuthProvider;
   let mockTokenStore: import('vitest').MockedObject<TokenStore>;
-  let mockFetch: ReturnType<typeof import('vitest').vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -279,10 +278,6 @@ describe('AnthropicOAuthProvider getUsageInfo', () => {
     };
 
     provider = new AnthropicOAuthProvider(mockTokenStore);
-
-    // Mock fetch globally
-    mockFetch = vi.fn();
-    global.fetch = mockFetch;
 
     // Mock fetchAnthropicUsage from core
     vi.doMock('@vybestack/llxprt-code-core', async () => {
@@ -309,7 +304,7 @@ describe('AnthropicOAuthProvider getUsageInfo', () => {
     expect(result).toBeNull();
   });
 
-  it('should fetch and return usage info when OAuth token exists', async () => {
+  it('should fetch and return full usage info when OAuth token exists', async () => {
     const oauthToken = {
       access_token: 'sk-ant-oat01-test-token',
       refresh_token: 'refresh-token',
@@ -324,34 +319,14 @@ describe('AnthropicOAuthProvider getUsageInfo', () => {
         utilization: 6.5,
         resets_at: '2025-11-04T04:00:00Z',
       },
-    };
-
-    // Mock the import to return our usage info
-    const { fetchAnthropicUsage: mockFetchUsage } = await import(
-      '@vybestack/llxprt-code-core'
-    );
-    vi.mocked(mockFetchUsage).mockResolvedValue(mockUsageInfo);
-
-    const result = await provider.getUsageInfo();
-
-    expect(mockFetchUsage).toHaveBeenCalledWith('sk-ant-oat01-test-token');
-    expect(result).toEqual(mockUsageInfo.five_hour);
-  });
-
-  it('should return null when fetchAnthropicUsage returns null', async () => {
-    const oauthToken = {
-      access_token: 'sk-ant-oat01-test-token',
-      refresh_token: 'refresh-token',
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-      token_type: 'Bearer' as const,
-    };
-
-    mockTokenStore.getToken.mockResolvedValue(oauthToken);
-
-    const mockUsageInfo = {
       seven_day: {
-        utilization: 15.2,
-        resets_at: '2025-11-10T00:00:00Z',
+        utilization: 35.0,
+        resets_at: '2025-11-06T00:00:00Z',
+      },
+      seven_day_oauth_apps: null,
+      seven_day_opus: {
+        utilization: 0.0,
+        resets_at: null,
       },
     };
 
@@ -363,7 +338,7 @@ describe('AnthropicOAuthProvider getUsageInfo', () => {
     const result = await provider.getUsageInfo();
 
     expect(mockFetchUsage).toHaveBeenCalledWith('sk-ant-oat01-test-token');
-    expect(result).toEqual(mockUsageInfo.seven_day);
+    expect(result).toEqual(mockUsageInfo);
   });
 
   it('should return null when fetchAnthropicUsage returns null', async () => {

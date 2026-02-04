@@ -661,13 +661,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
   /**
    * Get usage information from Anthropic OAuth endpoint
-   * Returns usage data for Claude Code/Max plans with five_hour and seven_day windows
+   * Returns full usage data for Claude Code/Max plans
    * Only works with OAuth tokens (sk-ant-oat01-...), not API keys
    */
-  async getUsageInfo(): Promise<{
-    utilization: number;
-    resets_at: string;
-  } | null> {
+  async getUsageInfo(): Promise<Record<string, unknown> | null> {
     await this.ensureInitialized();
     if (!this._tokenStore) {
       return null;
@@ -684,12 +681,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       );
       const usageInfo = await fetchAnthropicUsage(token.access_token);
 
-      if (!usageInfo) {
-        return null;
-      }
-
-      // Return five_hour usage as primary (most relevant for Claude Code users)
-      return usageInfo.five_hour || usageInfo.seven_day || null;
+      return usageInfo;
     } catch (error) {
       this.logger.debug(
         () =>
