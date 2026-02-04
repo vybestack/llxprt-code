@@ -309,12 +309,14 @@ describe('gemini.tsx main function', () => {
       configurable: true,
     });
 
-    await main();
-
-    Object.defineProperty(process.stdin, 'isTTY', {
-      value: originalIsTTY,
-      configurable: true,
-    });
+    try {
+      await main();
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: originalIsTTY,
+        configurable: true,
+      });
+    }
 
     const { render } = await import('ink');
     expect(vi.mocked(render)).toHaveBeenCalledTimes(1);

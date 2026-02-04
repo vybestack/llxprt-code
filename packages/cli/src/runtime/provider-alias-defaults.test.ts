@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const { aliasEntries } = vi.hoisted(() => ({
   aliasEntries: [] as Array<Record<string, unknown>>,
@@ -220,7 +221,9 @@ const mockOAuthManager = {
   setConfigGetter: vi.fn(),
 } as never;
 
-const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+const debugLoggerWarnSpy = vi
+  .spyOn(DebugLogger.prototype, 'warn')
+  .mockImplementation(() => {});
 
 describe('Provider alias defaults (model + ephemerals)', () => {
   beforeEach(() => {
@@ -261,7 +264,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
   });
 
   afterEach(() => {
-    consoleWarnSpy.mockReset();
+    debugLoggerWarnSpy.mockReset();
     vi.clearAllMocks();
   });
 
@@ -289,9 +292,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     expect(stubConfig.initializeContentGeneratorConfig).toHaveBeenCalledTimes(
       1,
     );
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      '[cli-runtime] Failed to initialize content generator config: init failed',
-    );
+    expect(debugLoggerWarnSpy).toHaveBeenCalledWith(expect.any(Function));
   });
 
   it('does not override preserved ephemerals', async () => {

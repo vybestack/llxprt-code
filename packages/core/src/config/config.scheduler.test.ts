@@ -78,12 +78,8 @@ describe('Config - CoreToolScheduler Singleton', () => {
     clearAllSchedulers();
   });
 
-  afterEach(async () => {
-    await config.disposeScheduler(testSessionId);
-    clearAllSchedulers();
-  });
-
   afterEach(() => {
+    config.disposeScheduler(testSessionId);
     clearAllSchedulers();
   });
 

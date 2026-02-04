@@ -1976,8 +1976,9 @@ export async function switchActiveProvider(
       ).initializeContentGeneratorConfig();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[cli-runtime] Failed to initialize content generator config: ${message}`,
+      logger.warn(
+        () =>
+          `[cli-runtime] Failed to initialize content generator config: ${message}`,
       );
     }
   }

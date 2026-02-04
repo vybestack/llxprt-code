@@ -277,6 +277,7 @@ describe('runNonInteractive', () => {
         config: mockConfig,
       }),
     );
+    expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
     const meaningfulWrites = processStdoutSpy.mock.calls
       .map(([value]) => value)
       .filter((value) => value !== '');

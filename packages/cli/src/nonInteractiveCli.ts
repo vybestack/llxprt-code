@@ -273,11 +273,15 @@ export async function runNonInteractive({
             ],
           } as IContent;
         }
-        const text = 'text' in part ? part.text : '';
-        return {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: text ?? '' }],
-        } as IContent;
+        if ('text' in part && typeof part.text === 'string') {
+          return {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: part.text }],
+          } as IContent;
+        }
+        throw new FatalInputError(
+          'Unsupported Part type in non-interactive provider path.',
+        );
       });
 
     const toProviderTools = (): ProviderToolset => [
@@ -298,11 +302,20 @@ export async function runNonInteractive({
       parts: Part[],
     ): AsyncGenerator<ServerGeminiStreamEvent> {
       if (!providerManager) {
-        return;
+        throw new FatalInputError(
+          'No provider manager configured for non-interactive provider run.',
+        );
       }
       const provider = providerManager.getActiveProvider();
-      if (!provider?.generateChatCompletion) {
-        return;
+      if (!provider) {
+        throw new FatalInputError(
+          'No active provider available for non-interactive run.',
+        );
+      }
+      if (!provider.generateChatCompletion) {
+        throw new FatalInputError(
+          `Active provider "${provider.name}" does not support generateChatCompletion.`,
+        );
       }
       const settingsService = config.getSettingsService();
       const runtimeContext = {

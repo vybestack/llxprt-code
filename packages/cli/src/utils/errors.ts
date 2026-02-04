@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
 import {
   parseAndFormatApiError,
   FatalTurnLimitedError,
   FatalCancellationError,
   FatalToolExecutionError,
   isFatalToolError,
+  type Config,
+  type UserTierId,
 } from '@vybestack/llxprt-code-core';
 
 /**
@@ -68,10 +69,13 @@ export function handleError(
   config: Config,
   customErrorCode?: string | number,
 ): never {
-  const errorMessage = parseAndFormatApiError(
-    error,
-    config.getGeminiClient().getContentGenerator().userTier,
-  );
+  let userTier: UserTierId | undefined;
+  try {
+    userTier = config.getGeminiClient().getContentGenerator().userTier;
+  } catch {
+    userTier = undefined;
+  }
+  const errorMessage = parseAndFormatApiError(error, userTier);
 
   console.error(errorMessage);
 

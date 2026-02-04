@@ -99,16 +99,24 @@ export async function loadConfig(
         `[Config] USE_CCPA env var is true but unable to resolve GOOGLE_APPLICATION_CREDENTIALS file path ${adcFilePath}. Error ${e}`,
       );
     }
-    await config.refreshAuth('oauth-personal');
+    await config.refreshAuth('vertex-ai');
     logger.info(
       `[Config] GOOGLE_CLOUD_PROJECT: ${process.env['GOOGLE_CLOUD_PROJECT']}`,
     );
   } else if (process.env['GEMINI_API_KEY']) {
     logger.info('[Config] Using Gemini API Key');
     await config.refreshAuth('gemini-api-key');
+  } else if (
+    process.env['GOOGLE_APPLICATION_CREDENTIALS'] ||
+    process.env['GOOGLE_CLOUD_PROJECT'] ||
+    process.env['GOOGLE_CLOUD_LOCATION'] ||
+    process.env['GOOGLE_API_KEY']
+  ) {
+    logger.info('[Config] Using Vertex AI credentials');
+    await config.refreshAuth('vertex-ai');
   } else {
     logger.warn(
-      `[Config] No GEMINI_API_KEY or USE_CCPA configured. Falling back to OAuth.`,
+      `[Config] No GEMINI_API_KEY, USE_CCPA, or Vertex AI credentials configured. Falling back to OAuth.`,
     );
     await config.refreshAuth('oauth-personal');
   }
