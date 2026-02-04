@@ -658,4 +658,38 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     // @pseudocode line 30: Check expiry with buffer
     return token.expiry <= now + buffer;
   }
+
+  /**
+   * Get usage information from Anthropic OAuth endpoint
+   * Returns full usage data for Claude Code/Max plans
+   * Only works with OAuth tokens (sk-ant-oat01-...), not API keys
+   */
+  async getUsageInfo(): Promise<Record<string, unknown> | null> {
+    await this.ensureInitialized();
+    if (!this._tokenStore) {
+      return null;
+    }
+
+    const token = await this._tokenStore.getToken('anthropic');
+    if (!token) {
+      return null;
+    }
+
+    try {
+      const { fetchAnthropicUsage } = await import(
+        '@vybestack/llxprt-code-core'
+      );
+      const usageInfo = await fetchAnthropicUsage(token.access_token);
+
+      return usageInfo;
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Error fetching usage info: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+      return null;
+    }
+  }
 }
