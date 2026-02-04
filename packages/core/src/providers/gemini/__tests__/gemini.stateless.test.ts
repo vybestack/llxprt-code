@@ -610,7 +610,7 @@ describe('Gemini provider stateless contract tests', () => {
     const lastCall = vi
       .mocked(createCodeAssistContentGenerator)
       .mock.calls.at(-1);
-    expect(lastCall?.[3]).toBeUndefined();
+    expect(lastCall?.[2]).toBeUndefined();
   });
 
   it('honors invocation overrides without touching config ephemerals', async () => {

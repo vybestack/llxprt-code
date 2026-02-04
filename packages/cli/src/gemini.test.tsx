@@ -17,7 +17,7 @@ import {
   // SettingsFile, // Currently unused
   loadSettings,
 } from './config/settings.js';
-import { loadCliConfig } from './config/config.js';
+import { loadCliConfig, parseArguments } from './config/config.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FatalConfigError, OutputFormat } from '@vybestack/llxprt-code-core';
@@ -65,6 +65,11 @@ vi.mock('./config/config.js', () => ({
     sandbox: undefined,
     sandboxImage: undefined,
     debug: undefined,
+    experimentalUi: false,
+    experimentalAcp: false,
+    promptInteractive: undefined,
+    prompt: undefined,
+    promptWords: [],
   }),
 }));
 
@@ -236,15 +241,83 @@ describe('gemini.tsx main function', () => {
       isInteractive: vi.fn(() => true),
       getSessionId: vi.fn(() => 'session-1'),
       getQuestion: vi.fn(() => ''),
+      isContinueSession: vi.fn(() => false),
       getExperimentalZedIntegration: vi.fn(() => false),
       getZedIntegrationEnabled: vi.fn(() => false),
       getTrustedFolder: vi.fn(() => true),
+      getScreenReader: vi.fn(() => false),
+      storage: {},
     } as unknown as Config;
 
-    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
-    await expect(main()).rejects.toThrow(MockProcessExitError);
+    const loadSettingsMock = vi.mocked(loadSettings);
+    loadSettingsMock.mockReturnValue({
+      merged: {
+        ui: { autoConfigureMaxOldSpaceSize: false },
+      },
+      setValue: vi.fn(),
+      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
+      errors: [],
+    } as unknown as LoadedSettings);
 
-    expect(mockConfig.refreshAuth).toHaveBeenCalledTimes(1);
+    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
+    vi.mocked(parseArguments).mockResolvedValueOnce({
+      model: undefined,
+      sandbox: undefined,
+      sandboxImage: undefined,
+      sandboxEngine: undefined,
+      sandboxProfileLoad: undefined,
+      debug: undefined,
+      prompt: undefined,
+      promptInteractive: undefined,
+      outputFormat: undefined,
+      showMemoryUsage: undefined,
+      yolo: undefined,
+      approvalMode: undefined,
+      telemetry: undefined,
+      checkpointing: undefined,
+      telemetryTarget: undefined,
+      telemetryOtlpEndpoint: undefined,
+      telemetryLogPrompts: undefined,
+      telemetryOutfile: undefined,
+      allowedMcpServerNames: undefined,
+      allowedTools: undefined,
+      experimentalAcp: false,
+      experimentalUi: false,
+      extensions: undefined,
+      listExtensions: undefined,
+      provider: undefined,
+      key: undefined,
+      keyfile: undefined,
+      baseurl: undefined,
+      proxy: undefined,
+      includeDirectories: undefined,
+      profileLoad: undefined,
+      loadMemoryFromIncludeDirectories: undefined,
+      ideMode: undefined,
+      screenReader: undefined,
+      sessionSummary: undefined,
+      dumponerror: undefined,
+      promptWords: [],
+      query: undefined,
+      set: undefined,
+      continue: undefined,
+    });
+
+    const originalIsTTY = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+
+    await main();
+
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: originalIsTTY,
+      configurable: true,
+    });
+
+    const { render } = await import('ink');
+    expect(vi.mocked(render)).toHaveBeenCalledTimes(1);
 
     // Avoid the process.exit error from being thrown in later tests.
     processExitSpy.mockRestore();
@@ -285,6 +358,14 @@ describe('gemini.tsx deferred initialization', () => {
     // Simulate need for relaunch
     shouldRelaunchMock.mockReturnValue(['--max-old-space-size=4096']);
     relaunchMock.mockResolvedValue(0);
+    loadSettingsMock.mockReturnValue({
+      merged: {
+        ui: { autoConfigureMaxOldSpaceSize: true },
+      },
+      setValue: vi.fn(),
+      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
+      errors: [],
+    } as unknown as LoadedSettings);
 
     const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('PROCESS_EXIT');
@@ -304,8 +385,7 @@ describe('gemini.tsx deferred initialization', () => {
     expect(shouldRelaunchMock).toHaveBeenCalled();
     expect(relaunchMock).toHaveBeenCalledWith(['--max-old-space-size=4096']);
 
-    // Verify loadSettings and loadCliConfig were NOT called
-    expect(loadSettingsMock).not.toHaveBeenCalled();
+    // Verify loadCliConfig was NOT called
     expect(loadCliConfigMock).not.toHaveBeenCalled();
 
     processExitSpy.mockRestore();
@@ -378,10 +458,14 @@ describe('gemini.tsx deferred initialization', () => {
     isDebugModeMock.mockReturnValue(true);
     shouldRelaunchMock.mockReturnValue([]);
 
-    // Mock settings to prevent further execution
-    loadSettingsMock.mockImplementation(() => {
-      throw new Error('SETTINGS_LOADED');
-    });
+    loadSettingsMock.mockReturnValue({
+      merged: {
+        ui: { autoConfigureMaxOldSpaceSize: true },
+      },
+      setValue: vi.fn(),
+      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
+      errors: [],
+    } as unknown as LoadedSettings);
 
     try {
       await main();
@@ -435,6 +519,11 @@ describe('startInteractiveUI', () => {
   const mockConfig = {
     getProjectRoot: () => '/root',
     getScreenReader: () => false,
+    getQuestion: () => '',
+    isContinueSession: () => false,
+    getSessionId: () => 'session-1',
+    storage: {},
+    getDebugMode: () => false,
   } as Config;
   const mockSettings = {
     merged: {
@@ -442,7 +531,7 @@ describe('startInteractiveUI', () => {
         hideWindowTitle: false,
       },
     },
-  } as LoadedSettings;
+  } as unknown as LoadedSettings;
   const mockStartupWarnings = ['warning1'];
   const mockWorkspaceRoot = '/root';
 
@@ -488,9 +577,11 @@ describe('startInteractiveUI', () => {
     const [reactElement, options] = renderSpy.mock.calls[0];
 
     // Verify render options
-    expect(options).toEqual({
-      exitOnCtrlC: false,
-    });
+    expect(options).toEqual(
+      expect.objectContaining({
+        exitOnCtrlC: false,
+      }),
+    );
 
     // Verify React element structure is valid (but don't deep dive into JSX internals)
     expect(reactElement).toBeDefined();

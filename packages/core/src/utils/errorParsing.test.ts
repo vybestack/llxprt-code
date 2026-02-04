@@ -257,7 +257,7 @@ describe('parseAndFormatApiError', () => {
     );
   });
 
-  it('should format a 429 API error with Pro quota exceeded message for Google auth (Legacy tier)', () => {
+  it('should format a 429 API error with Pro quota exceeded message for Google auth', () => {
     const errorMessage =
       'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Quota exceeded for quota metric \'Gemini 2.5 Pro Requests\' and limit \'RequestsPerDay\' of service \'generativelanguage.googleapis.com\' for consumer \'project_number:123456789\'.","status":"RESOURCE_EXHAUSTED"}}';
     const result = parseAndFormatApiError(

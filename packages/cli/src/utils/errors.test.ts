@@ -22,12 +22,15 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
   return {
     ...original,
-    parseAndFormatApiError: vi.fn((error: unknown) => {
-      if (error instanceof Error) {
-        return `API Error: ${error.message}`;
-      }
-      return `API Error: ${String(error)}`;
-    }),
+    parseAndFormatApiError: vi.fn(
+      (error: unknown, userTier?: string | undefined) => {
+        const tierSuffix = userTier ? ` (tier=${userTier})` : '';
+        if (error instanceof Error) {
+          return `API Error: ${error.message}${tierSuffix}`;
+        }
+        return `API Error: ${String(error)}${tierSuffix}`;
+      },
+    ),
     FatalToolExecutionError: class extends Error {
       constructor(message: string) {
         super(message);
@@ -66,7 +69,9 @@ describe('errors', () => {
 
     // Create mock config
     mockConfig = {
-      getContentGeneratorConfig: vi.fn().mockReturnValue({}),
+      getGeminiClient: vi.fn(() => ({
+        getContentGenerator: vi.fn(() => ({ userTier: 'standard' })),
+      })),
     } as unknown as Config;
   });
 
@@ -102,7 +107,9 @@ describe('errors', () => {
         handleError(testError, mockConfig);
       }).toThrow('process.exit called with code: 1');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('API Error: Test error');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'API Error: Test error (tier=standard)',
+      );
     });
 
     it('should handle non-Error objects and exit with default code 1', () => {
@@ -112,7 +119,9 @@ describe('errors', () => {
         handleError(testError, mockConfig);
       }).toThrow('process.exit called with code: 1');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('API Error: String error');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'API Error: String error (tier=standard)',
+      );
     });
 
     it('should use custom error code when provided', () => {
@@ -122,7 +131,9 @@ describe('errors', () => {
         handleError(testError, mockConfig, 42);
       }).toThrow('process.exit called with code: 42');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('API Error: Test error');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'API Error: Test error (tier=standard)',
+      );
     });
 
     it('should extract exitCode from FatalError instances', () => {
@@ -132,7 +143,9 @@ describe('errors', () => {
         handleError(fatalError, mockConfig);
       }).toThrow('process.exit called with code: 42');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('API Error: Fatal error');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'API Error: Fatal error (tier=standard)',
+      );
     });
 
     it('should handle error with code property', () => {

@@ -410,6 +410,76 @@ describe('runNonInteractive', () => {
     expect(processStdoutSpy).toHaveBeenCalledWith('\n');
   });
 
+  it('should count provider tool calls toward max session turns', async () => {
+    vi.mocked(mockConfig.getMaxSessionTurns).mockReturnValue(1);
+    let providerCallCount = 0;
+    const provider = {
+      name: 'openai',
+      generateChatCompletion: vi.fn(async function* () {
+        if (providerCallCount === 0) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call-1',
+                name: 'testTool',
+                parameters: { arg: 'value' },
+              },
+            ],
+          } as IContent;
+          providerCallCount += 1;
+          return;
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'All done' }],
+        } as IContent;
+      }),
+    };
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue(provider),
+    };
+    (mockConfig.getProviderManager as unknown as vi.Mock).mockReturnValue(
+      providerManager,
+    );
+    (mockConfig.getToolRegistry as unknown as vi.Mock).mockReturnValue({
+      getFunctionDeclarations: vi.fn().mockReturnValue([{ name: 'testTool' }]),
+    });
+
+    mockCoreExecuteToolCall.mockResolvedValue({
+      response: {
+        callId: 'call-1',
+        responseParts: [
+          {
+            functionResponse: {
+              id: 'call-1',
+              name: 'testTool',
+              response: { output: 'tool result' },
+            },
+          },
+        ],
+        resultDisplay: undefined,
+        error: undefined,
+        errorType: undefined,
+        agentId: 'primary',
+      },
+    });
+
+    await expect(
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: 'Use the non-gemini provider',
+        prompt_id: 'prompt-provider',
+      }),
+    ).rejects.toThrow(
+      'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
+    );
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle error during tool execution and should send error back to the model', async () => {
     const toolCallEvent: ServerGeminiStreamEvent = {
       type: GeminiEventType.ToolCallRequest,

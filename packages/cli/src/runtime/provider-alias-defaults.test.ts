@@ -220,6 +220,8 @@ const mockOAuthManager = {
   setConfigGetter: vi.fn(),
 } as never;
 
+const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
 describe('Provider alias defaults (model + ephemerals)', () => {
   beforeEach(() => {
     stubSettingsService = new StubSettingsService();
@@ -259,6 +261,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
   });
 
   afterEach(() => {
+    consoleWarnSpy.mockReset();
     vi.clearAllMocks();
   });
 
@@ -274,13 +277,20 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     );
   });
 
-  it('initializes content generator config when switching providers with auth key', async () => {
+  it('warns if content generator config initialization fails when switching providers', async () => {
     stubConfig.setEphemeralSetting('auth-key', 'test-key');
+    const initError = new Error('init failed');
+    stubConfig.initializeContentGeneratorConfig = vi.fn(async () => {
+      throw initError;
+    });
 
     await switchActiveProvider('gemini');
 
     expect(stubConfig.initializeContentGeneratorConfig).toHaveBeenCalledTimes(
       1,
+    );
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[cli-runtime] Failed to initialize content generator config: init failed',
     );
   });
 

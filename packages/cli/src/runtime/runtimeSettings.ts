@@ -377,10 +377,6 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
     });
   }
 
-  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
-  // Legacy fallback to global context (should not be used under stateless hardening)
-  const context = getActiveProviderRuntimeContext();
-
   if (isStatelessProviderIntegrationEnabled()) {
     throw new Error(
       formatMissingRuntimeMessage({
@@ -390,6 +386,10 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
       }),
     );
   }
+
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // Legacy fallback to global context (should not be used under stateless hardening)
+  const context = getActiveProviderRuntimeContext();
 
   if (!context.config) {
     throw new Error(
@@ -1968,11 +1968,18 @@ export async function switchActiveProvider(
       }
     ).initializeContentGeneratorConfig === 'function'
   ) {
-    await (
-      config as Config & {
-        initializeContentGeneratorConfig: () => Promise<void>;
-      }
-    ).initializeContentGeneratorConfig();
+    try {
+      await (
+        config as Config & {
+          initializeContentGeneratorConfig: () => Promise<void>;
+        }
+      ).initializeContentGeneratorConfig();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[cli-runtime] Failed to initialize content generator config: ${message}`,
+      );
+    }
   }
 
   return {

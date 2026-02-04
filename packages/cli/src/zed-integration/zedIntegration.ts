@@ -62,6 +62,18 @@ type ToolRunResult = {
   message?: string | null;
 };
 
+const ZED_AUTH_METHOD_IDS = [
+  'oauth-personal',
+  'gemini-api-key',
+  'vertex-ai',
+] as const;
+
+type ZedAuthMethodId = (typeof ZED_AUTH_METHOD_IDS)[number];
+
+export function parseZedAuthMethodId(methodId: string): ZedAuthMethodId {
+  return z.enum(ZED_AUTH_METHOD_IDS).parse(methodId);
+}
+
 export async function runZedIntegration(
   config: Config,
   settings: LoadedSettings,
@@ -204,7 +216,7 @@ class GeminiAgent {
   }
 
   async authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
-    const method = z.string().parse(methodId);
+    const method = parseZedAuthMethodId(methodId);
 
     await clearCachedCredentialFile();
     await this.config.refreshAuth(method);

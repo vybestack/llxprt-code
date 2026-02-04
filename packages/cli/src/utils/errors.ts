@@ -68,7 +68,10 @@ export function handleError(
   config: Config,
   customErrorCode?: string | number,
 ): never {
-  const errorMessage = parseAndFormatApiError(error);
+  const errorMessage = parseAndFormatApiError(
+    error,
+    config.getGeminiClient().getContentGenerator().userTier,
+  );
 
   console.error(errorMessage);
 

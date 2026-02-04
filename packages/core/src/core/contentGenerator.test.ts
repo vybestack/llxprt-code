@@ -62,6 +62,23 @@ describe('createContentGenerator', () => {
     expect(generator).toHaveProperty('countTokens');
     expect(generator).toHaveProperty('embedContent');
   });
+
+  it('should fall back to CodeAssist when no API key is provided', async () => {
+    const mockGenerator = {} as unknown;
+    vi.mocked(createCodeAssistContentGenerator).mockResolvedValue(
+      mockGenerator as never,
+    );
+
+    const generator = await createContentGenerator(
+      {
+        model: 'test-model',
+      },
+      mockConfig,
+    );
+
+    expect(createCodeAssistContentGenerator).toHaveBeenCalled();
+    expect(generator).toBe(mockGenerator);
+  });
 });
 
 describe('createContentGeneratorConfig', () => {

@@ -2841,9 +2841,7 @@ describe('Gemini Client (client.ts)', () => {
     it('should return OAuth marker for OAuth auth types', async () => {
       // Arrange
       const mockConfig = {
-        getContentGeneratorConfig: vi.fn().mockReturnValue({
-          vertexai: true,
-        }),
+        getContentGeneratorConfig: vi.fn().mockReturnValue({}),
       };
       client['config'] = mockConfig as unknown as Config;
 

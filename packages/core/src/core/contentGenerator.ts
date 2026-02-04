@@ -100,24 +100,33 @@ export async function createContentGenerator(
     return new ProviderContentGenerator(config.providerManager, config);
   }
 
-  if (!config.vertexai) {
-    let headers: Record<string, string> = {};
-    if (gcConfig?.getUsageStatisticsEnabled()) {
-      const installationManager = new InstallationManager();
-      const installationId = installationManager.getInstallationId();
-      headers = {
-        ...headers,
-        'x-gemini-api-privileged-user-id': `${installationId}`,
-      };
-    }
-    const requestOptions = { headers };
-    return new GoogleGenAIWrapper(config, requestOptions);
+  if (config.vertexai) {
+    return createCodeAssistContentGenerator(
+      httpOptions,
+      gcConfig,
+      undefined,
+      sessionId,
+    );
   }
 
-  return createCodeAssistContentGenerator(
-    httpOptions,
-    gcConfig,
-    undefined,
-    sessionId,
-  );
+  if (!config.apiKey) {
+    return createCodeAssistContentGenerator(
+      httpOptions,
+      gcConfig,
+      undefined,
+      sessionId,
+    );
+  }
+
+  let headers: Record<string, string> = {};
+  if (gcConfig?.getUsageStatisticsEnabled()) {
+    const installationManager = new InstallationManager();
+    const installationId = installationManager.getInstallationId();
+    headers = {
+      ...headers,
+      'x-gemini-api-privileged-user-id': `${installationId}`,
+    };
+  }
+  const requestOptions = { headers };
+  return new GoogleGenAIWrapper(config, requestOptions);
 }

@@ -449,8 +449,6 @@ export async function runNonInteractive({
             prompt_id,
           );
 
-      const hasProviderManager = !!providerManager;
-
       for await (const event of responseStream) {
         if (abortController.signal.aborted) {
           console.error('Operation cancelled.');
@@ -661,9 +659,6 @@ export async function runNonInteractive({
         }
         currentMessages = [{ role: 'user', parts: toolResponseParts }];
         providerParts = toolResponseParts;
-        if (hasProviderManager) {
-          turnCount--;
-        }
       } else {
         // Emit final result event for streaming JSON
         if (streamFormatter) {
