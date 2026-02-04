@@ -118,15 +118,12 @@ export async function createContentGenerator(
     );
   }
 
-  let headers: Record<string, string> = {};
+  const requestOptions = { headers: {} as Record<string, string> };
   if (gcConfig?.getUsageStatisticsEnabled()) {
     const installationManager = new InstallationManager();
     const installationId = installationManager.getInstallationId();
-    headers = {
-      ...headers,
-      'x-gemini-api-privileged-user-id': `${installationId}`,
-    };
+    requestOptions.headers['x-gemini-api-privileged-user-id'] =
+      `${installationId}`;
   }
-  const requestOptions = { headers };
   return new GoogleGenAIWrapper(config, requestOptions);
 }

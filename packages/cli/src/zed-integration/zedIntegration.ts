@@ -55,6 +55,7 @@ import {
   setActiveModelParam,
   clearActiveModelParam,
   getActiveModelParams,
+  loadProfileByName,
 } from '../runtime/runtimeSettings.js';
 
 type ToolRunResult = {
@@ -62,16 +63,14 @@ type ToolRunResult = {
   message?: string | null;
 };
 
-const ZED_AUTH_METHOD_IDS = [
-  'oauth-personal',
-  'gemini-api-key',
-  'vertex-ai',
-] as const;
-
-type ZedAuthMethodId = (typeof ZED_AUTH_METHOD_IDS)[number];
-
-export function parseZedAuthMethodId(methodId: string): ZedAuthMethodId {
-  return z.enum(ZED_AUTH_METHOD_IDS).parse(methodId);
+export function parseZedAuthMethodId(
+  methodId: string,
+  availableProfiles: string[],
+): string {
+  if (availableProfiles.length === 0) {
+    throw new Error('No profiles available for selection');
+  }
+  return z.enum(availableProfiles as [string, ...string[]]).parse(methodId);
 }
 
 export async function runZedIntegration(
@@ -182,24 +181,15 @@ class GeminiAgent {
     args: acp.InitializeRequest,
   ): Promise<acp.InitializeResponse> {
     this.clientCapabilities = args.clientCapabilities;
-    const authMethods = [
-      {
-        id: 'oauth-personal',
-        name: 'Log in with Google',
-        description: null,
-      },
-      {
-        id: 'gemini-api-key',
-        name: 'Use Gemini API key',
-        description:
-          'Requires setting the `GEMINI_API_KEY` environment variable',
-      },
-      {
-        id: 'vertex-ai',
-        name: 'Vertex AI',
-        description: null,
-      },
-    ];
+    const profileManager = this.config.getProfileManager();
+    const profileNames = profileManager
+      ? await profileManager.listProfiles()
+      : [];
+    const authMethods = profileNames.map((name) => ({
+      id: name,
+      name,
+      description: null,
+    }));
 
     return {
       protocolVersion: acp.PROTOCOL_VERSION,
@@ -216,10 +206,14 @@ class GeminiAgent {
   }
 
   async authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
-    const method = parseZedAuthMethodId(methodId);
-
+    const profileManager = this.config.getProfileManager();
+    const availableProfiles = profileManager
+      ? await profileManager.listProfiles()
+      : [];
+    const profileName = parseZedAuthMethodId(methodId, availableProfiles);
     await clearCachedCredentialFile();
-    await this.config.refreshAuth(method);
+    await loadProfileByName(profileName);
+    await this.applyRuntimeProviderOverrides();
   }
 
   async newSession({
@@ -414,14 +408,10 @@ class GeminiAgent {
             );
             contentGenConfig.providerManager = providerManager;
           }
-        } else if (process.env.GEMINI_API_KEY) {
-          // Use API key if available
-          this.logger.debug(() => 'Auto-authenticating with GEMINI_API_KEY');
-          await sessionConfig.refreshAuth('gemini-api-key');
         } else {
           // Try OAuth as last resort (this might open a browser)
           this.logger.debug(() => 'Auto-authenticating with OAuth');
-          await sessionConfig.refreshAuth('oauth-personal');
+          await sessionConfig.refreshAuth('oauth');
         }
 
         geminiClient = sessionConfig.getGeminiClient();
@@ -480,10 +470,8 @@ class GeminiAgent {
           const providerManager = sessionConfig.getProviderManager();
           if (providerManager && providerManager.hasActiveProvider()) {
             await sessionConfig.refreshAuth('provider');
-          } else if (process.env.GEMINI_API_KEY) {
-            await sessionConfig.refreshAuth('gemini-api-key');
           } else {
-            await sessionConfig.refreshAuth('oauth-personal');
+            await sessionConfig.refreshAuth('oauth');
           }
 
           // Try again after auth

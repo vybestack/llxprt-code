@@ -48,7 +48,6 @@ export interface UIActions {
     method: string | undefined,
     scope: SettingScope,
   ) => Promise<void>;
-  cancelAuthentication: () => void;
   handleAuthTimeout: () => void;
 
   // Editor dialog

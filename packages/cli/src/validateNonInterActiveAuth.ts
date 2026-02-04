@@ -25,9 +25,6 @@ function hasAuthEnvVars(): boolean {
   );
 }
 
-// DEPRECATED (issue #443): Enforced auth type checking removed.
-// Providers handle auth detection internally via determineBestAuth().
-
 function reportNonInteractiveAuthError(config: Config, message: string): void {
   const outputFormat =
     typeof config.getOutputFormat === 'function'
@@ -45,7 +42,6 @@ function reportNonInteractiveAuthError(config: Config, message: string): void {
 
 /**
  * Validates and initializes authentication for non-interactive mode.
- * SIMPLIFIED (issue #443): providers handle auth internally.
  *
  * @param useExternalAuth Skip auth initialization when external auth is used
  * @param nonInteractiveConfig The Config instance to initialize

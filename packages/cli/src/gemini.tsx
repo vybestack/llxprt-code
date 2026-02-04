@@ -573,10 +573,6 @@ export async function main() {
     process.exit(0);
   }
 
-  // DEPRECATED: legacy auth-selection is vestigial (issue #443).
-  // Providers (GeminiProvider, etc.) now handle auth detection internally.
-  // Cloud Shell detection is also handled by GeminiProvider.
-
   setMaxSizedBoxDebugging(config.getDebugMode());
 
   const mcpServers = config.getMcpServers();
@@ -863,10 +859,6 @@ export async function main() {
     }
     // Note: Non-sandbox memory relaunch is now handled at the top of main()
   }
-
-  // DEPRECATED (issue #443): Pre-OAuth initialization based on legacy auth selection is vestigial.
-  // GeminiProvider now handles OAuth lazily via determineBestAuth() on first API call.
-  // Keeping this comment as a marker for the removed code.
 
   // Cleanup sessions after config initialization
   await cleanupExpiredSessions(config, settings.merged);

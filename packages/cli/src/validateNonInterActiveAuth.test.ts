@@ -156,8 +156,6 @@ describe('validateNonInterActiveAuth', () => {
     expect(refreshAuthMock).toHaveBeenCalledWith();
   });
 
-  // UPDATED (issue #443): validateAuthMethod is no longer called.
-  // Providers handle auth validation internally.
   it('exits if no auth env vars are set', async () => {
     // No env vars set, no provider configured
     const nonInteractiveConfig: NonInteractiveConfig = {
@@ -173,8 +171,6 @@ describe('validateNonInterActiveAuth', () => {
     expect(processExitSpy).toHaveBeenCalledWith(1);
   });
 
-  // UPDATED (issue #443): useExternalAuth parameter is now deprecated/ignored.
-  // Auth validation no longer happens - providers handle this internally.
   it('skips refreshAuth when useExternalAuth is true', async () => {
     process.env.GEMINI_API_KEY = 'fake-key';
 

@@ -11,7 +11,6 @@ import {
   FatalToolExecutionError,
   isFatalToolError,
   type Config,
-  type UserTierId,
 } from '@vybestack/llxprt-code-core';
 
 /**
@@ -69,13 +68,7 @@ export function handleError(
   config: Config,
   customErrorCode?: string | number,
 ): never {
-  let userTier: UserTierId | undefined;
-  try {
-    userTier = config.getGeminiClient().getContentGenerator().userTier;
-  } catch {
-    userTier = undefined;
-  }
-  const errorMessage = parseAndFormatApiError(error, userTier);
+  const errorMessage = parseAndFormatApiError(error);
 
   console.error(errorMessage);
 

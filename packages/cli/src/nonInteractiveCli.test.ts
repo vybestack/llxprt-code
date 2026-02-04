@@ -284,6 +284,63 @@ describe('runNonInteractive', () => {
     expect(meaningfulWrites.join('')).toBe('Hello World\n');
   });
 
+  it('should coerce non-text parts before provider runs', async () => {
+    const providerStream: IContent[] = [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Done' }] },
+    ];
+    const provider = {
+      name: 'openai',
+      generateChatCompletion: vi.fn(async function* () {
+        for (const chunk of providerStream) {
+          yield chunk;
+        }
+      }),
+    };
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue(provider),
+    };
+    (mockConfig.getToolRegistry as unknown as vi.Mock).mockReturnValue({
+      getFunctionDeclarations: vi.fn().mockReturnValue([]),
+    });
+    (mockConfig.getProviderManager as unknown as vi.Mock).mockReturnValue(
+      providerManager,
+    );
+
+    const { handleAtCommand } = await import(
+      './ui/hooks/atCommandProcessor.js'
+    );
+    vi.mocked(handleAtCommand).mockResolvedValue({
+      processedQuery: [
+        { inlineData: { mimeType: 'image/png', data: '' } },
+        { text: 'Follow-up' },
+      ],
+      shouldProceed: true,
+    });
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Provider input',
+      prompt_id: 'prompt-id-provider-nontext',
+    });
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: expect.arrayContaining([
+          expect.objectContaining({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: '<image/png>' }],
+          }),
+          expect.objectContaining({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Follow-up' }],
+          }),
+        ]),
+        config: mockConfig,
+      }),
+    );
+  });
+
   it('should handle a single tool call and respond', async () => {
     const toolCallEvent: ServerGeminiStreamEvent = {
       type: GeminiEventType.ToolCallRequest,

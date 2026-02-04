@@ -23,6 +23,7 @@ import {
   CoreEvent,
   parseThought,
   setActiveProviderRuntimeContext,
+  partToString,
   type UserFeedbackPayload,
   type EmojiFilterMode,
   type ServerGeminiThoughtEvent,
@@ -277,6 +278,13 @@ export async function runNonInteractive({
           return {
             speaker: 'human',
             blocks: [{ type: 'text', text: part.text }],
+          } as IContent;
+        }
+        const fallbackText = partToString(part, { verbose: true }).trim();
+        if (fallbackText) {
+          return {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: fallbackText }],
           } as IContent;
         }
         throw new FatalInputError(

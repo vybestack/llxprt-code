@@ -8,15 +8,20 @@ import { describe, expect, it } from 'vitest';
 import { parseZedAuthMethodId } from './zedIntegration.js';
 
 describe('zedIntegration auth method validation', () => {
-  it('accepts known auth methods', () => {
-    expect(parseZedAuthMethodId('oauth-personal')).toBe('oauth-personal');
-    expect(parseZedAuthMethodId('gemini-api-key')).toBe('gemini-api-key');
-    expect(parseZedAuthMethodId('vertex-ai')).toBe('vertex-ai');
+  it('accepts known profile names', () => {
+    expect(parseZedAuthMethodId('alpha', ['alpha', 'beta'])).toBe('alpha');
+    expect(parseZedAuthMethodId('beta', ['alpha', 'beta'])).toBe('beta');
   });
 
-  it('rejects unknown auth methods', () => {
-    expect(() => parseZedAuthMethodId('unknown-method')).toThrow(
+  it('rejects unknown profile names', () => {
+    expect(() => parseZedAuthMethodId('gamma', ['alpha', 'beta'])).toThrow(
       /Invalid enum value/,
+    );
+  });
+
+  it('rejects selection when no profiles exist', () => {
+    expect(() => parseZedAuthMethodId('alpha', [])).toThrow(
+      /No profiles available for selection/,
     );
   });
 });

@@ -16,8 +16,6 @@ interface PrivacyNoticeProps {
 
 /**
  * Privacy notice component that shows appropriate notice based on active provider.
- * SIMPLIFIED (issue #443): No longer checks legacy auth selection - uses provider detection only.
- * GeminiProvider handles auth mode internally via determineBestAuth().
  */
 const PrivacyNoticeText = ({
   config,

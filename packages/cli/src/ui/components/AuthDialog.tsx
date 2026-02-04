@@ -9,7 +9,6 @@ import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { validateAuthMethod as _validateAuthMethod } from '../../config/auth.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
@@ -18,9 +17,6 @@ interface AuthDialogProps {
   settings: LoadedSettings;
   initialErrorMessage?: string | null;
 }
-
-// TODO: Re-add _parseDefaultAuthMethod if needed for future auth method parsing
-// function was removed as it was unused
 
 export function AuthDialog({
   onSelect,
