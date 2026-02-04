@@ -1728,6 +1728,43 @@ export class OAuthManager {
    * If the current profile has auth.buckets configured, return those.
    * Otherwise, return empty array (single-bucket or non-OAuth profile)
    */
+  /**
+   * Get Anthropic usage information from OAuth endpoint
+   * Returns usage data for Claude Code/Max plans
+   * Only works with OAuth tokens (sk-ant-oat01-...), not API keys
+   */
+  async getAnthropicUsageInfo(): Promise<{
+    utilization: number;
+    resets_at: string;
+  } | null> {
+    const provider = this.providers.get('anthropic');
+    if (!provider) {
+      return null;
+    }
+
+    // Check if provider has getUsageInfo method
+    if (
+      'getUsageInfo' in provider &&
+      typeof provider.getUsageInfo === 'function'
+    ) {
+      try {
+        return await (
+          provider as {
+            getUsageInfo: () => Promise<{
+              utilization: number;
+              resets_at: string;
+            } | null>;
+          }
+        ).getUsageInfo();
+      } catch (error) {
+        logger.debug('Error fetching Anthropic usage info:', error);
+        return null;
+      }
+    }
+
+    return null;
+  }
+
   private async getProfileBuckets(providerName: string): Promise<string[]> {
     try {
       // Try to get profile from runtime settings

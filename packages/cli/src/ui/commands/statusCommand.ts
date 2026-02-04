@@ -46,7 +46,7 @@ export const statusCommand: SlashCommand = {
       statusMessage += '─'.repeat(50) + '\n';
 
       for (const status of statuses) {
-        const indicator = status.authenticated ? '✓' : '✗';
+        const indicator = status.authenticated ? '[OK]' : '';
         let line = `${indicator} ${status.provider}: `;
 
         if (status.authenticated) {
@@ -69,6 +69,26 @@ export const statusCommand: SlashCommand = {
 
       statusMessage += '\nUse /auth <provider> to configure OAuth settings';
       statusMessage += '\nUse /logout <provider> to sign out';
+
+      // Try to fetch Anthropic usage info if authenticated
+      const anthropicStatus = statuses.find((s) => s.provider === 'anthropic');
+      if (
+        anthropicStatus?.authenticated &&
+        anthropicStatus.authType === 'oauth'
+      ) {
+        const usageInfo = await oauthManager.getAnthropicUsageInfo();
+        if (usageInfo) {
+          const { formatUsagePeriod } = await import(
+            '@vybestack/llxprt-code-core'
+          );
+          const usageLine = formatUsagePeriod(usageInfo, 'Usage (5h window)');
+
+          statusMessage += '\n\n';
+          statusMessage += '─'.repeat(50) + '\n';
+          statusMessage += 'Quota Information:\n';
+          statusMessage += usageLine + '\n';
+        }
+      }
 
       return {
         type: 'message',
