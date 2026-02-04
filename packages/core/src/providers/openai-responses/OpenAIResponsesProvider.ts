@@ -699,8 +699,26 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002/REQ-SP4-003
     // Source per-call request overrides from normalized options (ephemeral settings take precedence)
-    const mergedParams: Record<string, unknown> =
-      options.invocation?.modelParams ?? {};
+    const mergedParams: Record<string, unknown> = {
+      ...(options.invocation?.modelParams ?? {}),
+    };
+
+    // Translate generic maxOutputTokens ephemeral to max_output_tokens for Responses API
+    const rawMaxOutput = options.settings?.get('maxOutputTokens');
+    const genericMaxOutput =
+      typeof rawMaxOutput === 'number' &&
+      Number.isFinite(rawMaxOutput) &&
+      rawMaxOutput > 0
+        ? rawMaxOutput
+        : undefined;
+    if (
+      genericMaxOutput !== undefined &&
+      mergedParams['max_tokens'] === undefined &&
+      mergedParams['max_completion_tokens'] === undefined &&
+      mergedParams['max_output_tokens'] === undefined
+    ) {
+      mergedParams['max_output_tokens'] = genericMaxOutput;
+    }
 
     // Translate max_tokens/max_completion_tokens to max_output_tokens for Responses API
     // The Responses API uses max_output_tokens, not max_tokens (GPT-5 models)

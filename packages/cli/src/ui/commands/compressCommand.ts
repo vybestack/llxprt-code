@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CompressionStatus } from '@vybestack/llxprt-code-core';
 import { HistoryItemCompression, MessageType } from '../types.js';
 import { CommandKind, SlashCommand } from './types.js';
 
@@ -39,8 +40,19 @@ export const compressCommand: SlashCommand = {
       ui.setPendingItem(pendingMessage);
       const promptId = `compress-${Date.now()}`;
       const geminiClient = context.services.config?.getGeminiClient();
-      const historyService = geminiClient?.getHistoryService();
-      if (!geminiClient || !historyService) {
+      if (!geminiClient || !geminiClient.hasChatInitialized()) {
+        ui.addItem(
+          {
+            type: MessageType.ERROR,
+            text: 'Chat instance not available for compression.',
+          },
+          Date.now(),
+        );
+        return;
+      }
+      const chat = geminiClient.getChat();
+      const historyService = chat.getHistoryService();
+      if (!historyService) {
         ui.addItem(
           {
             type: MessageType.ERROR,
@@ -51,25 +63,19 @@ export const compressCommand: SlashCommand = {
         return;
       }
       const originalTokenCount = historyService.getTotalTokens();
-      const compressed = await geminiClient.tryCompressChat(promptId, true);
-      if (!compressed) {
-        ui.addItem(
-          {
-            type: MessageType.ERROR,
-            text: 'Failed to compress chat history.',
-          },
-          Date.now(),
-        );
-        return;
-      }
+      await chat.performCompression(promptId);
       const newTokenCount = historyService.getTotalTokens();
+      const compressionStatus =
+        newTokenCount < originalTokenCount
+          ? CompressionStatus.COMPRESSED
+          : CompressionStatus.NOOP;
       const compressionResult: HistoryItemCompression = {
         type: MessageType.COMPRESSION,
         compression: {
           isPending: false,
           originalTokenCount,
           newTokenCount,
-          compressionStatus: compressed.compressionStatus,
+          compressionStatus,
         },
       };
       ui.addItem(compressionResult, Date.now());

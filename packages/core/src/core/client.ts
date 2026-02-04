@@ -24,17 +24,11 @@ import {
   GeminiEventType,
   DEFAULT_AGENT_ID,
 } from './turn.js';
-import type { ChatCompressionInfo, ToolCallResponseInfo } from './turn.js';
-import { CompressionStatus } from './turn.js';
+import type { ToolCallResponseInfo } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
-import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
+import { getCoreSystemPromptAsync } from './prompts.js';
 import { shouldIncludeSubagentDelegation } from '../prompt-config/subagent-delegation.js';
-import {
-  COMPRESSION_PRESERVE_THRESHOLD,
-  COMPRESSION_TOKEN_THRESHOLD,
-  COMPRESSION_TOP_PRESERVE_THRESHOLD,
-} from './compression-config.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
@@ -189,10 +183,6 @@ export class GeminiClient {
 
   /**
    * At any point in this conversation, was compression triggered without
-   * being forced and did it fail?
-   */
-  private hasFailedCompressionAttempt = false;
-
   /**
    * Runtime state for stateless operation (Phase 5)
    * @plan PLAN-20251027-STATELESS5.P10
@@ -877,7 +867,6 @@ export class GeminiClient {
 
   async startChat(extraHistory?: Content[]): Promise<GeminiChat> {
     this.forceFullIdeContext = true;
-    this.hasFailedCompressionAttempt = false;
 
     // Ensure content generator is initialized before creating chat
     await this.lazyInitialize();
@@ -1379,11 +1368,6 @@ export class GeminiClient {
       );
     }
 
-    const compressed = await this.tryCompressChat(prompt_id, false);
-    if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
-      yield { type: GeminiEventType.ChatCompressed, value: compressed };
-    }
-
     const history = await this.getHistory();
     const lastMessage =
       history.length > 0 ? history[history.length - 1] : undefined;
@@ -1877,235 +1861,6 @@ export class GeminiClient {
 
     // Result is already validated by BaseLLMClient
     return result as number[][];
-  }
-
-  /**
-   * Manually trigger chat compression
-   * Returns compression info if successful, null if not needed
-   */
-  async tryCompressChat(
-    prompt_id: string,
-    force: boolean = false,
-  ): Promise<ChatCompressionInfo> {
-    await this.lazyInitialize();
-
-    if (!this.hasChatInitialized()) {
-      return {
-        originalTokenCount: 0,
-        newTokenCount: 0,
-        compressionStatus: CompressionStatus.NOOP,
-      };
-    }
-
-    // If the model is 'auto', we will use a placeholder model to check.
-    // Compression occurs before we choose a model, so calling `count_tokens`
-    // before the model is chosen would result in an error.
-    // @plan PLAN-20251027-STATELESS5.P10
-    // @requirement REQ-STAT5-003.1
-    const model = this._getEffectiveModelForCurrentTurn();
-
-    const curatedHistory = this.getChat().getHistory(true);
-
-    // Regardless of `force`, don't do anything if the history is empty.
-    if (
-      curatedHistory.length === 0 ||
-      (this.hasFailedCompressionAttempt && !force)
-    ) {
-      return {
-        originalTokenCount: 0,
-        newTokenCount: 0,
-        compressionStatus: CompressionStatus.NOOP,
-      };
-    }
-
-    // Prefer prompt token count when it matches or exceeds history totals; otherwise fall back to history tokens.
-    const promptTokenCount = this.getChat().getLastPromptTokenCount();
-    const historyTokenCount = this.getChat()
-      .getHistoryService()
-      .getTotalTokens();
-    const originalTokenCount =
-      promptTokenCount > 0 && promptTokenCount >= historyTokenCount
-        ? promptTokenCount
-        : historyTokenCount;
-
-    const contextPercentageThreshold =
-      this.config.getChatCompression()?.contextPercentageThreshold;
-
-    // Don't compress if not forced and we are under the limit.
-    if (!force) {
-      const threshold =
-        contextPercentageThreshold ?? COMPRESSION_TOKEN_THRESHOLD;
-      const userContextLimit = this.config.getEphemeralSetting(
-        'context-limit',
-      ) as number | undefined;
-      if (
-        originalTokenCount <
-        threshold * tokenLimit(model, userContextLimit)
-      ) {
-        return {
-          originalTokenCount,
-          newTokenCount: originalTokenCount,
-          compressionStatus: CompressionStatus.NOOP,
-        };
-      }
-    }
-
-    // Use sandwich compression: preserve top and bottom, compress middle
-    // Get top preserve threshold from ephemeral settings
-    const topPreserveThreshold = this.config.getEphemeralSetting(
-      'top-preserve-threshold',
-    ) as number | undefined;
-
-    const topThreshold =
-      topPreserveThreshold ?? COMPRESSION_TOP_PRESERVE_THRESHOLD;
-    const bottomThreshold = COMPRESSION_PRESERVE_THRESHOLD;
-
-    // Calculate split points for three-section sandwich compression
-    let compressStartIndex = Math.floor(curatedHistory.length * topThreshold);
-    let compressEndIndex = Math.floor(
-      curatedHistory.length * (1 - bottomThreshold),
-    );
-
-    // Ensure minimum messages to compress
-    if (compressEndIndex - compressStartIndex < 4) {
-      return {
-        originalTokenCount,
-        newTokenCount: originalTokenCount,
-        compressionStatus: CompressionStatus.NOOP,
-      };
-    }
-
-    // Adjust split points to not break tool call boundaries
-    compressStartIndex = findCompressSplitPoint(
-      curatedHistory,
-      compressStartIndex / curatedHistory.length,
-    );
-    compressEndIndex = findCompressSplitPoint(
-      curatedHistory,
-      compressEndIndex / curatedHistory.length,
-    );
-
-    // Ensure we don't invert the splits after boundary adjustment
-    if (compressStartIndex >= compressEndIndex) {
-      return {
-        originalTokenCount,
-        newTokenCount: originalTokenCount,
-        compressionStatus: CompressionStatus.NOOP,
-      };
-    }
-
-    const historyToKeepTop = curatedHistory.slice(0, compressStartIndex);
-    const historyToCompress = curatedHistory.slice(
-      compressStartIndex,
-      compressEndIndex,
-    );
-    const historyToKeepBottom = curatedHistory.slice(compressEndIndex);
-
-    if (historyToCompress.length === 0) {
-      return {
-        originalTokenCount,
-        newTokenCount: originalTokenCount,
-        compressionStatus: CompressionStatus.NOOP,
-      };
-    }
-
-    const compressionChat = this.getChat();
-    const originalHistory = compressionChat.getHistory(true);
-
-    compressionChat.setHistory(historyToCompress);
-
-    const { text: summary } = await compressionChat.sendMessage(
-      {
-        message: {
-          text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
-        },
-        config: {
-          systemInstruction: { text: getCompressionPrompt() },
-          maxOutputTokens: originalTokenCount,
-        },
-      },
-      prompt_id,
-    );
-
-    compressionChat.setHistory([
-      ...historyToKeepTop.map((h) => ({ role: h.role, parts: h.parts })),
-      {
-        role: 'user',
-        parts: [{ text: summary }],
-      },
-      {
-        role: 'model',
-        parts: [{ text: 'Got it. Thanks for the additional context!' }],
-      },
-      ...historyToKeepBottom.map((h) => ({ role: h.role, parts: h.parts })),
-    ]);
-    this.forceFullIdeContext = true;
-
-    const compressedHistoryService = compressionChat.getHistoryService();
-    if (compressedHistoryService) {
-      await compressedHistoryService.waitForTokenUpdates();
-    }
-    const newTokenCount = compressedHistoryService
-      ? compressedHistoryService.getTotalTokens()
-      : 0;
-    if (newTokenCount === undefined || newTokenCount === 0) {
-      this.logger.warn(
-        () => 'Could not determine compressed history token count.',
-      );
-      this.hasFailedCompressionAttempt = !force && true;
-      compressionChat.setHistory(originalHistory);
-      return {
-        originalTokenCount,
-        newTokenCount: originalTokenCount,
-        compressionStatus:
-          CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
-      };
-    }
-
-    // TODO: Add proper telemetry logging once available
-    this.logger.debug(
-      () =>
-        `Chat compression: ${originalTokenCount} -> ${newTokenCount} tokens`,
-    );
-
-    if (newTokenCount > originalTokenCount) {
-      this.hasFailedCompressionAttempt = !force && true;
-      compressionChat.setHistory(originalHistory);
-      return {
-        originalTokenCount,
-        newTokenCount,
-        compressionStatus:
-          CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
-      };
-    }
-
-    // Update telemetry service with new token count from the chat
-    this.updateTelemetryTokenCount();
-
-    // Emit token update event for the new compressed chat
-    // This ensures the UI updates with the new token count
-    // Only emit if compression was successful
-    if (typeof compressionChat.getHistoryService === 'function') {
-      const historyService = compressionChat.getHistoryService();
-      if (historyService) {
-        const userContextLimit = this.config.getEphemeralSetting(
-          'context-limit',
-        ) as number | undefined;
-        // @plan PLAN-20251027-STATELESS5.P10
-        // @requirement REQ-STAT5-003.1
-        historyService.emit('tokensUpdated', {
-          totalTokens: newTokenCount,
-          addedTokens: newTokenCount - originalTokenCount,
-          tokenLimit: tokenLimit(this.runtimeState.model, userContextLimit),
-        });
-      }
-    }
-
-    return {
-      originalTokenCount,
-      newTokenCount,
-      compressionStatus: CompressionStatus.COMPRESSED,
-    };
   }
 
   private getToolGovernanceEphemerals():

@@ -17,7 +17,6 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
         warn: vi.fn(),
         error: vi.fn(),
       },
-      cachedCompressionThreshold: 1000,
       sendMessageStream: vi.fn().mockResolvedValue((async function* () {})()),
       getHistory: vi.fn().mockReturnValue([]),
       maybeIncludeSchemaDepthContext: vi.fn().mockResolvedValue(undefined),
