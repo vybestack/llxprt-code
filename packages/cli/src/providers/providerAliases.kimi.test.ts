@@ -24,6 +24,10 @@ describe('builtin kimi provider alias', () => {
     expect(ephemerals?.['context-limit']).toBe(262144);
     expect(ephemerals?.max_tokens).toBe(32768);
     expect(ephemerals?.['reasoning.effort']).toBe('medium');
+    expect(ephemerals?.['reasoning.enabled']).toBe(true);
+    expect(ephemerals?.['reasoning.includeInResponse']).toBe(true);
+    expect(ephemerals?.['reasoning.includeInContext']).toBe(true);
+    expect(ephemerals?.['reasoning.stripFromContext']).toBe('none');
     expect(ephemerals?.['user-agent']).toBe('RooCode/1.0');
   });
 });

@@ -26,7 +26,6 @@ import {
   LLXPRT_CONFIG_DIR,
   DEFAULT_CONTEXT_FILENAME,
 } from '../packages/core/src/tools/memoryTool.js';
-import { selectOptimalKey } from './quotaCheck.js';
 
 // Handle the case where import.meta.url might be undefined in CI
 const __dirname = import.meta?.url
@@ -45,9 +44,6 @@ const memoryFilePath = join(
 let originalMemoryContent: string | null = null;
 
 export async function setup() {
-  // Check Synthetic API quota and select the optimal key if using Synthetic provider
-  await selectOptimalKey();
-
   try {
     originalMemoryContent = await readFile(memoryFilePath, 'utf-8');
   } catch (e) {
