@@ -1781,6 +1781,9 @@ export class OAuthManager {
     // If no buckets, try 'default'
     const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
 
+    // Import once before the loop
+    const { fetchAnthropicUsage } = await import('@vybestack/llxprt-code-core');
+
     for (const bucket of bucketsToCheck) {
       // Check if this bucket has a valid OAuth token
       const token = await this.tokenStore.getToken('anthropic', bucket);
@@ -1800,9 +1803,6 @@ export class OAuthManager {
       }
 
       try {
-        const { fetchAnthropicUsage } = await import(
-          '@vybestack/llxprt-code-core'
-        );
         const usageInfo = await fetchAnthropicUsage(token.access_token);
         if (usageInfo) {
           result.set(bucket, usageInfo);
