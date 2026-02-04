@@ -2015,12 +2015,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             this.parseStreamingReasoningDelta(choice.delta);
           if (reasoningBlock) {
             accumulatedReasoningContent += reasoningBlock.thought;
-            if (reasoningBlock.thought.trim()) {
-              yield {
-                speaker: 'ai',
-                blocks: [reasoningBlock],
-              } as IContent;
-            }
+            // Issue #1272: Always yield the delta, even if whitespace-only.
+            // Whitespace-only deltas are important for proper spacing between tokens.
+            // Previously, .trim() check caused space tokens to be skipped, resulting
+            // in concatenated words like "spend70%" instead of "spend 70%".
+            yield {
+              speaker: 'ai',
+              blocks: [reasoningBlock],
+            } as IContent;
           }
           // Accumulate tool calls extracted from reasoning_content
           if (reasoningToolCalls.length > 0) {
@@ -3631,13 +3633,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           if (reasoningBlock) {
             // Accumulate reasoning content for tool extraction (Kimi K2)
             accumulatedReasoningContent += reasoningBlock.thought;
-            // Emit delta immediately for UI streaming
-            if (reasoningBlock.thought.trim()) {
-              yield {
-                speaker: 'ai',
-                blocks: [reasoningBlock],
-              } as IContent;
-            }
+            // Issue #1272: Always yield the delta, even if whitespace-only.
+            // Whitespace-only deltas are important for proper spacing between tokens.
+            // Previously, .trim() check caused space tokens to be skipped, resulting
+            // in concatenated words like "spend70%" instead of "spend 70%".
+            yield {
+              speaker: 'ai',
+              blocks: [reasoningBlock],
+            } as IContent;
           }
           // Add tool calls extracted from reasoning_content to pipeline
           if (reasoningToolCalls.length > 0) {
