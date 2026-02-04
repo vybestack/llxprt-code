@@ -1909,7 +1909,27 @@ export const AppContainer = (props: AppContainerProps) => {
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
 
-  useMouseSelection({ enabled: true, rootRef: rootUiRef });
+  const { copySelectionToClipboard } = useMouseSelection({
+    enabled: true,
+    rootRef: rootUiRef,
+    onCopiedText: (text) => {
+      if (selectionLogger.enabled) {
+        selectionLogger.debug(
+          () => `Copied ${text.length} characters to clipboard`,
+        );
+      }
+    },
+  });
+
+  // Fix for issue #1284: Add keyboard shortcut for Cmd+C/Ctrl+C to copy selection
+  useKeypress(
+    (key) => {
+      if (key.name === 'c' && (key.ctrl || key.meta)) {
+        void copySelectionToClipboard();
+      }
+    },
+    { isActive: true },
+  );
 
   useLayoutEffect(() => {
     if (mainControlsRef.current) {
