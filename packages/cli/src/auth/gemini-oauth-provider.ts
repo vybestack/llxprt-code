@@ -202,19 +202,19 @@ export class GeminiOAuthProvider implements OAuthProvider {
         try {
           // Import the existing Google OAuth infrastructure
           const coreModule = await import('@vybestack/llxprt-code-core');
-          const { getOauthClient, AuthType } = coreModule;
+          const { getOauthClient } = coreModule;
 
           // Create a minimal config for OAuth - use type assertion for test environment
           // Type assertion is needed since we're creating a partial Config for test mode
           const config = {
             getProxy: () => undefined,
             isBrowserLaunchSuppressed: () => !shouldLaunchBrowser(),
-          } as unknown as Parameters<typeof getOauthClient>[1];
+          } as unknown as Parameters<typeof getOauthClient>[0];
 
           // Use the existing Google OAuth infrastructure to get a client
           let client;
           try {
-            client = await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, config);
+            client = await getOauthClient(config);
           } catch (error) {
             // Handle browser auth cancellation or other auth failures
             if (error instanceof Error) {

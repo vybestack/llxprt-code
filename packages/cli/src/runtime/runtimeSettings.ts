@@ -9,7 +9,6 @@ import {
   DebugLogger,
   ProviderRuntimeContext,
   SettingsService,
-  AuthType,
   ProfileManager,
   createProviderRuntimeContext,
   getActiveProviderRuntimeContext,
@@ -378,10 +377,6 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
     });
   }
 
-  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
-  // Legacy fallback to global context (should not be used under stateless hardening)
-  const context = getActiveProviderRuntimeContext();
-
   if (isStatelessProviderIntegrationEnabled()) {
     throw new Error(
       formatMissingRuntimeMessage({
@@ -391,6 +386,10 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
       }),
     );
   }
+
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // Legacy fallback to global context (should not be used under stateless hardening)
+  const context = getActiveProviderRuntimeContext();
 
   if (!context.config) {
     throw new Error(
@@ -751,7 +750,6 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
   const resolvedModel = getActiveModelName();
   const modelName =
     resolvedModel && resolvedModel.trim() !== '' ? resolvedModel : null;
-  const authType = config.getContentGeneratorConfig()?.authType;
 
   try {
     const provider = providerManager.getActiveProvider();
@@ -780,7 +778,6 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
       modelName,
       displayLabel,
       isPaidMode: provider.isPaidMode?.(),
-      authType,
       baseURL,
     };
   } catch {
@@ -795,7 +792,6 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
       providerName,
       modelName,
       displayLabel: fallbackLabel,
-      authType,
     };
   }
 }
@@ -1041,7 +1037,6 @@ export interface ProfileLoadResult {
   infoMessages: string[];
   warnings: string[];
   providerChanged: boolean;
-  authType?: AuthType;
   baseUrl?: string;
   didFallback: boolean;
   requestedProvider: string | null;
@@ -1174,7 +1169,6 @@ export async function applyProfileSnapshot(
     infoMessages: applicationResult.infoMessages,
     warnings: applicationResult.warnings,
     providerChanged: applicationResult.providerChanged,
-    authType: applicationResult.authType,
     baseUrl: applicationResult.baseUrl,
     didFallback: applicationResult.didFallback,
     requestedProvider: applicationResult.requestedProvider,
@@ -1349,7 +1343,6 @@ export interface ProviderSwitchResult {
   previousProvider: string | null;
   nextProvider: string;
   defaultModel?: string;
-  authType?: AuthType;
   infoMessages: string[];
 }
 
@@ -1358,7 +1351,6 @@ export interface ApiKeyUpdateResult {
   providerName: string;
   message: string;
   isPaidMode?: boolean;
-  authType?: AuthType;
 }
 
 export interface BaseUrlUpdateResult {
@@ -1392,7 +1384,6 @@ export interface ProviderRuntimeStatus {
   modelName: string | null;
   displayLabel: string;
   isPaidMode?: boolean;
-  authType?: AuthType;
   baseURL?: string;
 }
 
@@ -1550,8 +1541,6 @@ export async function switchActiveProvider(
       changed: false,
       previousProvider: currentProvider,
       nextProvider: name,
-      authType:
-        config.getContentGeneratorConfig()?.authType ?? AuthType.USE_PROVIDER,
       infoMessages: [],
     };
   }
@@ -1768,29 +1757,6 @@ export async function switchActiveProvider(
   settingsService.setProviderSetting(name, 'model', modelToApply || undefined);
   config.setModel(modelToApply);
 
-  let authType: AuthType;
-  if (name === 'gemini') {
-    const currentAuthType = config.getContentGeneratorConfig()?.authType;
-    if (
-      currentAuthType === AuthType.USE_PROVIDER ||
-      currentAuthType === undefined
-    ) {
-      if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        authType = AuthType.USE_VERTEX_AI;
-      } else if (process.env.GEMINI_API_KEY) {
-        authType = AuthType.USE_GEMINI;
-      } else {
-        authType = AuthType.LOGIN_WITH_GOOGLE;
-      }
-    } else {
-      authType = currentAuthType;
-    }
-  } else {
-    authType = AuthType.USE_PROVIDER;
-  }
-
-  await config.refreshAuth(authType);
-
   const infoMessages: string[] = [];
 
   if (name === 'anthropic') {
@@ -1818,7 +1784,6 @@ export async function switchActiveProvider(
             }
             logger.debug(() => '[cli-runtime] Initiating Anthropic OAuth flow');
             await oauthManager.authenticate('anthropic');
-            await config.refreshAuth(authType);
             infoMessages.push(
               'Anthropic OAuth authentication completed. Use /auth anthropic to view status.',
             );
@@ -1996,12 +1961,33 @@ export async function switchActiveProvider(
     infoMessages.push('Use /key to set API key if needed.');
   }
 
+  if (
+    typeof (
+      config as Config & {
+        initializeContentGeneratorConfig?: () => Promise<void>;
+      }
+    ).initializeContentGeneratorConfig === 'function'
+  ) {
+    try {
+      await (
+        config as Config & {
+          initializeContentGeneratorConfig: () => Promise<void>;
+        }
+      ).initializeContentGeneratorConfig();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        () =>
+          `[cli-runtime] Failed to initialize content generator config: ${message}`,
+      );
+    }
+  }
+
   return {
     changed: true,
     previousProvider: currentProvider,
     nextProvider: name,
     defaultModel: modelToApply || undefined,
-    authType,
     infoMessages,
   };
 }
@@ -2026,17 +2012,11 @@ export async function updateActiveProviderApiKey(
     return `[runtime] updateActiveProviderApiKey provider='${providerName}' value=${masked} CALLED`;
   });
 
-  let authType: AuthType | undefined;
   if (!trimmed) {
     settingsService.setProviderSetting(providerName, 'apiKey', undefined);
     settingsService.setProviderSetting(providerName, 'auth-key', undefined);
     config.setEphemeralSetting('auth-key', undefined);
     config.setEphemeralSetting('auth-keyfile', undefined);
-
-    if (providerName === 'gemini') {
-      authType = AuthType.LOGIN_WITH_GOOGLE;
-      await config.refreshAuth(authType);
-    }
 
     const isPaidMode = provider.isPaidMode?.();
     logger.debug(
@@ -2049,21 +2029,15 @@ export async function updateActiveProviderApiKey(
       message:
         `API key removed for provider '${providerName}'` +
         (providerName === 'gemini' && isPaidMode === false
-          ? '\n✅ You are now using OAuth (no paid usage).'
+          ? '\n[OK] You are now using OAuth (no paid usage).'
           : ''),
       isPaidMode,
-      authType,
     };
   }
 
   settingsService.setProviderSetting(providerName, 'apiKey', trimmed);
   config.setEphemeralSetting('auth-key', trimmed);
   config.setEphemeralSetting('auth-keyfile', undefined);
-
-  if (providerName === 'gemini') {
-    authType = AuthType.USE_GEMINI;
-    await config.refreshAuth(authType);
-  }
 
   const isPaidMode = provider.isPaidMode?.();
   logger.debug(
@@ -2079,7 +2053,6 @@ export async function updateActiveProviderApiKey(
         ? '\nWARNING: Gemini now runs in paid mode.'
         : ''),
     isPaidMode,
-    authType,
   };
 }
 
@@ -2182,7 +2155,7 @@ export async function setActiveModel(
   const previousModel =
     (providerSettings.model as string | undefined) || config.getModel();
 
-  let authRefreshed = false;
+  const authRefreshed = false;
   try {
     settingsService.set('activeProvider', activeProvider.name);
     await settingsService.updateSettings(activeProvider.name, {
@@ -2196,22 +2169,6 @@ export async function setActiveModel(
   }
 
   config.setModel(modelName);
-
-  if (activeProvider.name === 'anthropic') {
-    const providerWithAuth = activeProvider as {
-      isAuthenticated?: () => Promise<boolean>;
-    };
-    if (typeof providerWithAuth.isAuthenticated === 'function') {
-      const hasAuth = await providerWithAuth.isAuthenticated();
-      if (!hasAuth) {
-        const currentAuthType =
-          config.getContentGeneratorConfig()?.authType ||
-          AuthType.LOGIN_WITH_GOOGLE;
-        await config.refreshAuth(currentAuthType);
-        authRefreshed = true;
-      }
-    }
-  }
 
   return {
     providerName: activeProvider.name,

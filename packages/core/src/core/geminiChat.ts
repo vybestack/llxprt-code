@@ -546,7 +546,6 @@ export class GeminiChat {
       sessionId: this.runtimeState.sessionId,
       runtimeId: this.runtimeState.runtimeId,
       provider: this.runtimeState.provider,
-      authType: this.runtimeState.authType,
       timestamp: Date.now(),
     });
   }
@@ -567,7 +566,6 @@ export class GeminiChat {
       model: this.runtimeState.model,
       promptId,
       durationMs,
-      authType: this.runtimeState.authType,
       sessionId: this.runtimeState.sessionId,
       runtimeId: this.runtimeState.runtimeId,
       provider: this.runtimeState.provider,
@@ -596,7 +594,6 @@ export class GeminiChat {
       durationMs,
       error: errorMessage,
       errorType,
-      authType: this.runtimeState.authType,
       sessionId: this.runtimeState.sessionId,
       runtimeId: this.runtimeState.runtimeId,
       provider: this.runtimeState.provider,
@@ -692,7 +689,6 @@ export class GeminiChat {
 
     const provider = this.resolveProviderForRuntime('sendMessage');
 
-    const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     // @plan PLAN-20251027-STATELESS5.P10
@@ -704,7 +700,6 @@ export class GeminiChat {
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeState.model,
         baseUrl: providerBaseUrl,
-        authType: activeAuthType,
       },
     );
 
@@ -810,7 +805,6 @@ export class GeminiChat {
             model: this.runtimeState.model,
             toolCount: tools?.length ?? 0,
             baseUrl: this.resolveProviderBaseUrl(provider),
-            authType: this.runtimeState.authType,
           },
         );
         const runtimeContext = this.buildProviderRuntime(
@@ -1285,7 +1279,6 @@ export class GeminiChat {
           );
 
           const baseUrlForCall = this.resolveProviderBaseUrl(provider);
-          const activeAuthType = this.runtimeState.authType;
 
           // @plan PLAN-20251027-STATELESS5.P10
           // @requirement REQ-STAT5-004.1
@@ -1297,7 +1290,6 @@ export class GeminiChat {
               model: this.runtimeState.model,
               toolCount: toolsFromConfig?.length ?? 0,
               baseUrl: baseUrlForCall,
-              authType: activeAuthType,
             },
           );
 
@@ -1408,7 +1400,6 @@ export class GeminiChat {
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const provider = this.resolveProviderForRuntime('stream');
 
-    const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     this.logger.debug(
@@ -1418,7 +1409,6 @@ export class GeminiChat {
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeState.model,
         baseUrl: providerBaseUrl,
-        authType: activeAuthType,
       },
     );
 
@@ -1490,9 +1480,9 @@ export class GeminiChat {
           historyLength: requestContents.length,
           toolCount: tools?.length ?? 0,
           baseUrl: providerBaseUrl,
-          authType: activeAuthType,
         },
       );
+
       // Create a runtime context that incorporates the config from params
       const baseRuntimeContext = this.buildProviderRuntime(
         'GeminiChat.generateRequest',
@@ -1582,7 +1572,6 @@ export class GeminiChat {
 
     const streamResponse = await retryWithBackoff(apiCall, {
       onPersistent429: onPersistent429Callback,
-      authType: activeAuthType,
       signal: params.config?.abortSignal,
     });
 
@@ -2218,7 +2207,6 @@ export class GeminiChat {
       throw new Error('Provider does not support compression');
     }
 
-    const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     // Build compression request with system prompt and user history
@@ -2256,7 +2244,6 @@ export class GeminiChat {
         model: this.runtimeState.model,
         historyLength: compressionRequest.length,
         baseUrl: providerBaseUrl,
-        authType: activeAuthType,
       },
     );
     const runtimeContext = this.buildProviderRuntime(

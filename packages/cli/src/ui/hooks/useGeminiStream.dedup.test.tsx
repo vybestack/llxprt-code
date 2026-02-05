@@ -124,7 +124,6 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
       getMaxSessionTurns: () => 100,
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getGeminiClient: () => mockGeminiClient,
       getSettingsService: () => undefined,

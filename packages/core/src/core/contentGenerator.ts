@@ -42,33 +42,16 @@ export interface ContentGenerator {
   userTier?: UserTierId;
 }
 
-export enum AuthType {
-  LOGIN_WITH_GOOGLE = 'oauth-personal',
-  USE_GEMINI = 'gemini-api-key',
-  USE_VERTEX_AI = 'vertex-ai',
-  CLOUD_SHELL = 'cloud-shell',
-  USE_PROVIDER = 'provider',
-  USE_NONE = 'none',
-  OAUTH_GEMINI = 'oauth_gemini',
-  OAUTH_QWEN = 'oauth_qwen',
-  OAUTH_ANTHROPIC = 'oauth_anthropic',
-  // Generic auth types for runtime state (Phase 5)
-  API_KEY = 'api-key',
-  OAUTH = 'oauth',
-}
-
 export type ContentGeneratorConfig = {
   model: string;
   apiKey?: string;
   vertexai?: boolean;
-  authType?: AuthType;
   providerManager?: ProviderManager;
   proxy?: string;
 };
 
 export function createContentGeneratorConfig(
   config: Config,
-  authType: AuthType | undefined,
 ): ContentGeneratorConfig {
   const geminiApiKey = process.env.GEMINI_API_KEY || undefined;
   const googleApiKey = process.env.GOOGLE_API_KEY || undefined;
@@ -83,32 +66,18 @@ export function createContentGeneratorConfig(
 
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: effectiveModel,
-    authType,
     proxy: config?.getProxy(),
   };
 
-  // If we are using Google auth or we are in Cloud Shell, there is nothing else to validate for now
-  if (
-    authType === AuthType.LOGIN_WITH_GOOGLE ||
-    authType === AuthType.CLOUD_SHELL
-  ) {
-    return contentGeneratorConfig;
-  }
-
-  if (authType === AuthType.USE_GEMINI && geminiApiKey) {
+  if (geminiApiKey) {
     contentGeneratorConfig.apiKey = geminiApiKey;
     contentGeneratorConfig.vertexai = false;
-
     return contentGeneratorConfig;
   }
 
-  if (
-    authType === AuthType.USE_VERTEX_AI &&
-    (googleApiKey || (googleCloudProject && googleCloudLocation))
-  ) {
+  if (googleApiKey || (googleCloudProject && googleCloudLocation)) {
     contentGeneratorConfig.apiKey = googleApiKey;
     contentGeneratorConfig.vertexai = true;
-
     return contentGeneratorConfig;
   }
 
@@ -131,36 +100,30 @@ export async function createContentGenerator(
     return new ProviderContentGenerator(config.providerManager, config);
   }
 
-  if (
-    config.authType === AuthType.LOGIN_WITH_GOOGLE ||
-    config.authType === AuthType.CLOUD_SHELL
-  ) {
+  if (config.vertexai) {
     return createCodeAssistContentGenerator(
       httpOptions,
-      config.authType,
       gcConfig,
+      undefined,
       sessionId,
     );
   }
 
-  if (
-    config.authType === AuthType.USE_GEMINI ||
-    config.authType === AuthType.USE_VERTEX_AI
-  ) {
-    let headers: Record<string, string> = {};
-    if (gcConfig?.getUsageStatisticsEnabled()) {
-      const installationManager = new InstallationManager();
-      const installationId = installationManager.getInstallationId();
-      headers = {
-        ...headers,
-        'x-gemini-api-privileged-user-id': `${installationId}`,
-      };
-    }
-    const httpOptions = { headers };
-    return new GoogleGenAIWrapper(config, httpOptions);
+  if (!config.apiKey) {
+    return createCodeAssistContentGenerator(
+      httpOptions,
+      gcConfig,
+      undefined,
+      sessionId,
+    );
   }
 
-  throw new Error(
-    `Error creating contentGenerator: Unsupported authType: ${config.authType}`,
-  );
+  const requestOptions = { headers: {} as Record<string, string> };
+  if (gcConfig?.getUsageStatisticsEnabled()) {
+    const installationManager = new InstallationManager();
+    const installationId = installationManager.getInstallationId();
+    requestOptions.headers['x-gemini-api-privileged-user-id'] =
+      `${installationId}`;
+  }
+  return new GoogleGenAIWrapper(config, requestOptions);
 }

@@ -27,7 +27,7 @@ vi.mock('./src/providers/providerAliases.js', () => ({
         modelsDevProviderId: 'google',
         baseProvider: 'gemini',
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-        defaultModel: 'gemini-2.0-flash',
+        defaultModel: 'gemini-2.5-pro',
         apiKeyEnv: 'GEMINI_API_KEY',
       },
       filePath: '/mock/aliases/gemini.config',

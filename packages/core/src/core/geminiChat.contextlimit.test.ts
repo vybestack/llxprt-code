@@ -10,7 +10,6 @@ import { Config } from '../config/config.js';
 import { DEFAULT_TOKEN_LIMIT } from './tokenLimits.js';
 import * as tokenLimitsModule from './tokenLimits.js';
 import { createGeminiChatRuntime } from '../test-utils/runtime.js';
-import { AuthType } from './contentGenerator.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -117,7 +116,6 @@ describe('GeminiChat Context Limit Enforcement', () => {
       runtimeId: runtimeSetup.runtime.runtimeId,
       provider: runtimeSetup.provider.name,
       model: 'hf:zai-org/GLM-4.6',
-      authType: AuthType.LOGIN_WITH_GOOGLE,
       sessionId: 'test-session-id',
     });
 
@@ -175,7 +173,6 @@ describe('GeminiChat Context Limit Enforcement', () => {
       runtimeId: runtimeSetup.runtime.runtimeId,
       provider: runtimeSetup.provider.name,
       model: 'hf:zai-org/GLM-4.6',
-      authType: AuthType.LOGIN_WITH_GOOGLE,
       sessionId: 'test-session-id',
     });
 
@@ -231,7 +228,6 @@ describe('GeminiChat Context Limit Enforcement', () => {
       runtimeId: runtimeSetup.runtime.runtimeId,
       provider: runtimeSetup.provider.name,
       model: 'hf:zai-org/GLM-4.6',
-      authType: AuthType.LOGIN_WITH_GOOGLE,
       sessionId: 'test-session-id',
     });
 

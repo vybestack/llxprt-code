@@ -43,7 +43,7 @@ type RuntimeServices = {
     getEphemeralSetting: (key: string) => unknown;
     setEphemeralSetting: (key: string, value: unknown) => void;
     getEphemeralSettings: () => Record<string, unknown>;
-    getContentGeneratorConfig: () => { authType?: string } | undefined;
+    getContentGeneratorConfig: () => Record<string, unknown> | undefined;
   };
   settingsService: {
     setCurrentProfileName?: (name: string | null) => void;
@@ -66,7 +66,6 @@ const switchActiveProviderMock = vi.fn<
   (providerName: string) => Promise<{
     infoMessages: string[];
     changed: boolean;
-    authType?: string;
   }>
 >();
 const setActiveModelMock =
@@ -112,7 +111,7 @@ const configStub = {
     return Object.fromEntries(this.ephemerals.entries());
   },
   getContentGeneratorConfig() {
-    return { authType: 'key' as const };
+    return { provider: 'stub' };
   },
 };
 
@@ -223,7 +222,6 @@ beforeEach(() => {
     return {
       infoMessages: [],
       changed: true,
-      authType: 'key',
     };
   });
   setActiveModelMock.mockResolvedValue({ nextModel: 'test-model' });
@@ -245,7 +243,7 @@ beforeEach(() => {
     profileManager: profileManagerStub,
   });
   getActiveProviderOrThrowMock.mockReturnValue({ name: 'gemini' });
-  isCliStatelessProviderModeEnabledMock.mockReturnValue(false);
+  isCliStatelessProviderModeEnabledMock.mockReturnValue(true);
   isCliRuntimeStatelessReadyMock.mockReturnValue(true);
 });
 

@@ -15,7 +15,6 @@ import {
   isNodeError,
   parseAndFormatApiError,
   createAgentRuntimeState,
-  AuthType,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import type {
@@ -93,10 +92,6 @@ export class Task {
       runtimeId: `${this.contextId}-task-runtime`,
       provider: this.config.getProvider?.() ?? 'gemini',
       model: this.config.getModel?.() ?? contentConfig?.model ?? 'gemini-pro',
-      authType: contentConfig?.authType ?? AuthType.USE_NONE,
-      authPayload: contentConfig?.apiKey
-        ? { apiKey: contentConfig.apiKey }
-        : undefined,
       proxyUrl: this.config.getProxy?.(),
       sessionId: this.config.getSessionId?.(),
     });

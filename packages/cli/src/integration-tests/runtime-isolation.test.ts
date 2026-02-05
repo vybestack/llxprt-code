@@ -14,7 +14,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   createAgentRuntimeState,
-  AuthType,
   type AgentRuntimeState,
   type Config,
 } from '@vybestack/llxprt-code-core';
@@ -48,7 +47,6 @@ describe('Runtime Isolation Integration', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-1.5-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session-123',
     });
 
@@ -68,7 +66,6 @@ describe('Runtime Isolation Integration', () => {
       expect(snapshot.runtimeId).toBe('test-runtime');
       expect(snapshot.provider).toBe('gemini');
       expect(snapshot.model).toBe('gemini-1.5-flash');
-      expect(snapshot.authType).toBe(AuthType.USE_GEMINI);
       expect(snapshot.sessionId).toBe('test-session-123');
     });
 
@@ -86,7 +83,6 @@ describe('Runtime Isolation Integration', () => {
     it('should expose runtime state fields via individual getters', () => {
       expect(adapter.getProvider()).toBe('gemini');
       expect(adapter.getModel()).toBe('gemini-1.5-flash');
-      expect(adapter.getAuthType()).toBe(AuthType.USE_GEMINI);
       expect(adapter.getSessionId()).toBe('test-session-123');
     });
 

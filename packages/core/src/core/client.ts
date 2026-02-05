@@ -44,7 +44,6 @@ import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
-  AuthType,
   type ContentGenerator,
   type ContentGeneratorConfig,
   createContentGenerator,
@@ -218,22 +217,6 @@ export class GeminiClient {
     }
     if (!runtimeState.model || runtimeState.model === '') {
       throw new Error('AgentRuntimeState must have a valid model');
-    }
-    if (
-      runtimeState.authType === AuthType.API_KEY &&
-      !runtimeState.authPayload?.apiKey
-    ) {
-      throw new Error(
-        'AgentRuntimeState must include apiKey when authType is API_KEY',
-      );
-    }
-    if (
-      runtimeState.authType === AuthType.OAUTH &&
-      !runtimeState.authPayload?.token
-    ) {
-      throw new Error(
-        'AgentRuntimeState must include token when authType is OAUTH',
-      );
     }
 
     this.runtimeState = runtimeState;

@@ -261,9 +261,6 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push('\n## Settings');
       const merged = settings?.merged || {};
       diagnostics.push(`- Theme: ${merged.ui?.theme || 'default'}`);
-      diagnostics.push(
-        `- Selected Auth Type: ${merged.selectedAuthType || 'none'}`,
-      );
       diagnostics.push(`- Default Profile: ${merged.defaultProfile || 'none'}`);
       diagnostics.push(`- Sandbox: ${merged.sandbox || 'disabled'}`);
 

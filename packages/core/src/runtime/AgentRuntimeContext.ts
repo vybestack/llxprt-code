@@ -115,7 +115,6 @@ export interface ApiRequestEvent {
   sessionId?: string;
   runtimeId?: string;
   provider?: string;
-  authType?: string;
   timestamp?: number;
 }
 
@@ -129,7 +128,6 @@ export interface ApiResponseEvent {
   model: string;
   promptId?: string;
   durationMs: number;
-  authType?: string;
   sessionId?: string;
   runtimeId?: string;
   provider?: string;
@@ -155,7 +153,6 @@ export interface ApiErrorEvent {
   promptId?: string;
   durationMs: number;
   error: string;
-  authType?: string;
   errorType?: string;
   statusCode?: number | string;
   sessionId?: string;

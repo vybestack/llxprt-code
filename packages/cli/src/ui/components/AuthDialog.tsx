@@ -9,19 +9,14 @@ import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { AuthType } from '@vybestack/llxprt-code-core';
-import { validateAuthMethod as _validateAuthMethod } from '../../config/auth.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface AuthDialogProps {
-  onSelect: (authMethod: AuthType | undefined, scope: SettingScope) => void;
+  onSelect: (authMethod: string | undefined, scope: SettingScope) => void;
   settings: LoadedSettings;
   initialErrorMessage?: string | null;
 }
-
-// TODO: Re-add _parseDefaultAuthType if needed for future auth type parsing
-// function was removed as it was unused
 
 export function AuthDialog({
   onSelect,

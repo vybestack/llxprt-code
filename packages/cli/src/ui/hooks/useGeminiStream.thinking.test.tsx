@@ -23,7 +23,6 @@ import {
 import {
   Config,
   EditorType,
-  AuthType,
   GeminiEventType as ServerGeminiEventType,
 } from '@vybestack/llxprt-code-core';
 import { FinishReason } from '@google/genai';
@@ -240,7 +239,6 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       model: 'test-model',
       apiKey: 'test-key',
       vertexai: false,
-      authType: AuthType.USE_GEMINI,
     };
 
     mockConfig = {

@@ -242,7 +242,6 @@ describe('SettingsUtils', () => {
       });
 
       it('should return false for settings marked to hide from dialog', () => {
-        expect(shouldShowInDialog('selectedAuthType')).toBe(false);
         expect(shouldShowInDialog('coreTools')).toBe(false);
         expect(shouldShowInDialog('ui.customThemes')).toBe(false);
         expect(shouldShowInDialog('ui.theme')).toBe(false); // Changed to false
@@ -293,7 +292,6 @@ describe('SettingsUtils', () => {
         expect(allKeys).toContain('disableAutoUpdate');
         expect(allKeys).toContain('ui.showMemoryUsage');
         expect(allKeys).not.toContain('ui.usageStatisticsEnabled');
-        expect(allKeys).not.toContain('selectedAuthType');
         expect(allKeys).not.toContain('coreTools');
         expect(allKeys).not.toContain('ui.theme'); // Now hidden
         expect(allKeys).not.toContain('ui.preferredEditor'); // Now hidden
@@ -309,7 +307,6 @@ describe('SettingsUtils', () => {
         expect(keys).toContain('ui.vimMode');
         expect(keys).toContain('ui.hideWindowTitle');
         expect(keys).not.toContain('ui.usageStatisticsEnabled');
-        expect(keys).not.toContain('selectedAuthType'); // Advanced setting
         expect(keys).not.toContain('useExternalAuth'); // Advanced setting
       });
 
@@ -320,7 +317,6 @@ describe('SettingsUtils', () => {
         // Note: theme and preferredEditor are now hidden from dialog
         expect(keys).not.toContain('theme'); // Now marked false
         expect(keys).not.toContain('preferredEditor'); // Now marked false
-        expect(keys).not.toContain('selectedAuthType'); // Advanced setting
 
         // Most string settings are now hidden, so let's just check they exclude advanced ones
         expect(keys.every((key) => !key.startsWith('tool'))).toBe(true); // No tool-related settings
@@ -348,7 +344,6 @@ describe('SettingsUtils', () => {
         expect(dialogKeys).not.toContain('theme'); // Hidden
         expect(dialogKeys).not.toContain('customThemes'); // Hidden
         expect(dialogKeys).not.toContain('preferredEditor'); // Hidden
-        expect(dialogKeys).not.toContain('selectedAuthType'); // Advanced
         expect(dialogKeys).not.toContain('coreTools'); // Advanced
         expect(dialogKeys).not.toContain('mcpServers'); // Advanced
         expect(dialogKeys).not.toContain('telemetry'); // Advanced

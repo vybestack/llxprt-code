@@ -58,7 +58,6 @@ describe('executeToolCall', () => {
       getDebugMode: () => false,
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getEphemeralSetting: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),

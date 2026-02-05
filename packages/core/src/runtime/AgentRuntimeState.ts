@@ -14,8 +14,6 @@
  * Actual implementation happens in Phase 05.
  */
 
-import { AuthType } from '../core/contentGenerator.js';
-
 /**
  * @plan PLAN-20251027-STATELESS5.P03
  * @requirement REQ-STAT5-001.1
@@ -30,8 +28,6 @@ export interface AgentRuntimeState {
   // Provider/model state (migrated from Config)
   readonly provider: string;
   readonly model: string;
-  readonly authType: AuthType;
-  readonly authPayload?: AuthPayload;
 
   // Connection settings
   readonly baseUrl?: string;
@@ -43,18 +39,6 @@ export interface AgentRuntimeState {
   // Session metadata
   readonly sessionId: string;
   readonly updatedAt: number; // Unix timestamp
-}
-
-/**
- * @plan PLAN-20251027-STATELESS5.P03
- * @requirement REQ-STAT5-001.1
- *
- * Auth payload union type for different authentication mechanisms.
- */
-export interface AuthPayload {
-  apiKey?: string;
-  token?: string;
-  [key: string]: unknown;
 }
 
 /**
@@ -81,8 +65,6 @@ export interface RuntimeStateParams {
   runtimeId: string;
   provider: string;
   model: string;
-  authType: AuthType;
-  authPayload?: AuthPayload;
   baseUrl?: string;
   proxyUrl?: string;
   modelParams?: ModelParams;
@@ -100,27 +82,12 @@ export interface RuntimeStateSnapshot {
   runtimeId: string;
   provider: string;
   model: string;
-  authType: AuthType;
-  authPayload?: SanitizedAuthPayload;
   baseUrl?: string;
   proxyUrl?: string;
   modelParams?: ModelParams;
   sessionId: string;
   updatedAt: number;
   version: number; // Schema version for future migrations
-}
-
-/**
- * @plan PLAN-20251027-STATELESS5.P03
- * @requirement REQ-STAT5-001.3
- *
- * Sanitized auth payload with sensitive data redacted.
- */
-export interface SanitizedAuthPayload {
-  type?: string;
-  apiKey?: string; // Masked (e.g., last 4 chars only)
-  token?: string; // '[REDACTED]'
-  [key: string]: unknown;
 }
 
 /**
@@ -169,9 +136,6 @@ export enum RuntimeStateErrorCode {
   PROVIDER_INVALID = 'provider.invalid',
   MODEL_MISSING = 'model.missing',
   MODEL_INVALID = 'model.invalid',
-  AUTH_TYPE_INVALID = 'authType.invalid',
-  AUTH_API_KEY_MISSING = 'auth.apiKey.missing',
-  AUTH_TOKEN_MISSING = 'auth.token.missing',
   BASE_URL_INVALID = 'baseUrl.invalid',
   UPDATE_UNSUPPORTED = 'update.unsupported',
   NOT_IMPLEMENTED = 'not.implemented',
@@ -253,28 +217,6 @@ export function createAgentRuntimeState(
     throw new RuntimeStateError(RuntimeStateErrorCode.MODEL_MISSING);
   }
 
-  // Validate authType (lines 81-82)
-  const validAuthTypes = Object.values(AuthType);
-  if (!validAuthTypes.includes(params.authType)) {
-    throw new RuntimeStateError(RuntimeStateErrorCode.AUTH_TYPE_INVALID, {
-      authType: params.authType,
-    });
-  }
-
-  // Validate API_KEY auth payload (lines 83-85)
-  if (params.authType === AuthType.API_KEY) {
-    if (!params.authPayload?.apiKey) {
-      throw new RuntimeStateError(RuntimeStateErrorCode.AUTH_API_KEY_MISSING);
-    }
-  }
-
-  // Validate OAUTH auth payload (lines 86-88)
-  if (params.authType === AuthType.OAUTH) {
-    if (!params.authPayload?.token) {
-      throw new RuntimeStateError(RuntimeStateErrorCode.AUTH_TOKEN_MISSING);
-    }
-  }
-
   // Validate baseUrl if provided (lines 89-91)
   if (params.baseUrl) {
     try {
@@ -296,10 +238,6 @@ export function createAgentRuntimeState(
     runtimeId: params.runtimeId,
     provider: params.provider,
     model: params.model,
-    authType: params.authType,
-    authPayload: params.authPayload
-      ? deepFreeze(params.authPayload)
-      : undefined,
     baseUrl: params.baseUrl,
     proxyUrl: params.proxyUrl,
     modelParams: params.modelParams
@@ -345,8 +283,6 @@ export function updateAgentRuntimeState(
   const allowedKeys = [
     'provider',
     'model',
-    'authType',
-    'authPayload',
     'baseUrl',
     'proxyUrl',
     'modelParams',
@@ -377,15 +313,6 @@ export function updateAgentRuntimeState(
     }
   }
 
-  if (updates.authType !== undefined) {
-    const validAuthTypes = Object.values(AuthType);
-    if (!validAuthTypes.includes(updates.authType)) {
-      throw new RuntimeStateError(RuntimeStateErrorCode.AUTH_TYPE_INVALID, {
-        authType: updates.authType,
-      });
-    }
-  }
-
   // Get timestamp ensuring it's > oldState.updatedAt (lines 226)
   const now = Date.now();
   let updatedAt = now;
@@ -405,9 +332,6 @@ export function updateAgentRuntimeState(
   const newState: AgentRuntimeState = Object.freeze({
     ...oldState,
     ...updates,
-    authPayload: updates.authPayload
-      ? deepFreeze(updates.authPayload)
-      : oldState.authPayload,
     modelParams: updates.modelParams
       ? deepFreeze(updates.modelParams)
       : oldState.modelParams,
@@ -468,16 +392,11 @@ export function updateAgentRuntimeStateBatch(
 export function getAgentRuntimeStateSnapshot(
   state: AgentRuntimeState,
 ): RuntimeStateSnapshot {
-  // Sanitize auth payload (lines 335, 344-352)
-  const sanitizedAuthPayload = sanitizeAuthPayload(state.authPayload);
-
   // Return frozen snapshot (lines 330-342)
   return Object.freeze({
     runtimeId: state.runtimeId,
     provider: state.provider,
     model: state.model,
-    authType: state.authType,
-    authPayload: sanitizedAuthPayload,
     baseUrl: state.baseUrl,
     proxyUrl: state.proxyUrl,
     modelParams: state.modelParams ? { ...state.modelParams } : undefined,
@@ -485,40 +404,6 @@ export function getAgentRuntimeStateSnapshot(
     updatedAt: state.updatedAt,
     version: 1, // Schema version (line 341)
   });
-}
-
-/**
- * @plan PLAN-20251027-STATELESS5.P05
- * @requirement REQ-STAT5-001.3
- * @pseudocode runtime-state.md lines 344-352
- *
- * Sanitizes auth payload for diagnostics by masking sensitive data.
- */
-function sanitizeAuthPayload(
-  payload?: AuthPayload,
-): SanitizedAuthPayload | undefined {
-  if (!payload) {
-    return undefined;
-  }
-
-  const result: SanitizedAuthPayload = {};
-
-  // Mask API key - show only last 4 chars (lines 348-349)
-  if (payload.apiKey) {
-    const apiKey = payload.apiKey;
-    if (apiKey.length > 4) {
-      result.apiKey = `***${apiKey.slice(-4)}`;
-    } else {
-      result.apiKey = '***';
-    }
-  }
-
-  // Redact OAuth token (lines 350-351)
-  if (payload.token) {
-    result.token = '[REDACTED]';
-  }
-
-  return result;
 }
 
 /**
@@ -622,19 +507,6 @@ export function getProvider(state: AgentRuntimeState): string {
 
 export function getModel(state: AgentRuntimeState): string {
   return state.model;
-}
-
-export function getAuthType(state: AgentRuntimeState): AuthType {
-  return state.authType;
-}
-
-export function getAuthPayload(
-  state: AgentRuntimeState,
-): Readonly<AuthPayload> | undefined {
-  if (!state.authPayload) {
-    return undefined;
-  }
-  return Object.freeze({ ...state.authPayload });
 }
 
 export function getBaseUrl(state: AgentRuntimeState): string | undefined {

@@ -5,7 +5,6 @@
  */
 
 import {
-  AuthType,
   Config,
   JsonFormatter,
   OutputFormat,
@@ -14,8 +13,6 @@ import { LoadedSettings } from './config/settings.js';
 
 /**
  * Check if any authentication environment variables are set.
- * SIMPLIFIED (issue #443): Always returns USE_PROVIDER since providers
- * handle their own auth detection via determineBestAuth().
  */
 function hasAuthEnvVars(): boolean {
   return !!(
@@ -27,9 +24,6 @@ function hasAuthEnvVars(): boolean {
     process.env.LLXPRT_API_KEY
   );
 }
-
-// DEPRECATED (issue #443): Enforced auth type checking removed.
-// Providers handle auth detection internally via determineBestAuth().
 
 function reportNonInteractiveAuthError(config: Config, message: string): void {
   const outputFormat =
@@ -48,16 +42,13 @@ function reportNonInteractiveAuthError(config: Config, message: string): void {
 
 /**
  * Validates and initializes authentication for non-interactive mode.
- * SIMPLIFIED (issue #443): Always uses USE_PROVIDER since providers handle auth internally.
  *
- * @param _configuredAuthType DEPRECATED - ignored, kept for API compat
- * @param _useExternalAuth DEPRECATED - ignored, kept for API compat
+ * @param useExternalAuth Skip auth initialization when external auth is used
  * @param nonInteractiveConfig The Config instance to initialize
  * @param settings Optional settings for compression config
  */
 export async function validateNonInteractiveAuth(
-  _configuredAuthType: AuthType | undefined, // DEPRECATED (issue #443)
-  _useExternalAuth: boolean | undefined, // DEPRECATED (issue #443)
+  useExternalAuth: boolean | undefined,
   nonInteractiveConfig: Config,
   settings?: LoadedSettings,
 ) {
@@ -76,8 +67,9 @@ export async function validateNonInteractiveAuth(
     process.exit(1);
   }
 
-  // Always use USE_PROVIDER - providers handle auth detection internally
-  await nonInteractiveConfig.refreshAuth(AuthType.USE_PROVIDER);
+  if (!useExternalAuth) {
+    await nonInteractiveConfig.refreshAuth();
+  }
 
   // Apply compression settings after authentication
   if (settings) {

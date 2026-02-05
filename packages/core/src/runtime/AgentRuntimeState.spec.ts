@@ -23,8 +23,6 @@ import {
   subscribeToAgentRuntimeState,
   getProvider,
   getModel,
-  getAuthType,
-  getAuthPayload,
   getBaseUrl,
   getSessionId,
   getModelParams,
@@ -34,7 +32,6 @@ import {
   type RuntimeStateParams,
   type RuntimeStateChangedEvent,
 } from './AgentRuntimeState.js';
-import { AuthType } from '../core/contentGenerator.js';
 
 describe('AgentRuntimeState - Constructor Validation', () => {
   /**
@@ -54,8 +51,6 @@ describe('AgentRuntimeState - Constructor Validation', () => {
       runtimeId: 'test-runtime-001',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
-      authPayload: { apiKey: 'test-key' },
       sessionId: 'test-session-001',
     };
 
@@ -64,7 +59,6 @@ describe('AgentRuntimeState - Constructor Validation', () => {
     expect(state.runtimeId).toBe('test-runtime-001');
     expect(state.provider).toBe('gemini');
     expect(state.model).toBe('gemini-2.0-flash');
-    expect(state.authType).toBe(AuthType.USE_GEMINI);
     expect(state.sessionId).toBe('test-session-001');
     expect(state.updatedAt).toBeGreaterThan(0);
   });
@@ -78,7 +72,6 @@ describe('AgentRuntimeState - Constructor Validation', () => {
       runtimeId: '',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
     } as RuntimeStateParams;
 
     expect(() => createAgentRuntimeState(params)).toThrow(RuntimeStateError);
@@ -94,7 +87,6 @@ describe('AgentRuntimeState - Constructor Validation', () => {
       runtimeId: 'test-runtime',
       provider: '',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
     } as RuntimeStateParams;
 
     expect(() => createAgentRuntimeState(params)).toThrow(RuntimeStateError);
@@ -110,65 +102,10 @@ describe('AgentRuntimeState - Constructor Validation', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: '',
-      authType: AuthType.USE_GEMINI,
     } as RuntimeStateParams;
 
     expect(() => createAgentRuntimeState(params)).toThrow(RuntimeStateError);
     expect(() => createAgentRuntimeState(params)).toThrow(/model\.missing/);
-  });
-
-  it('should throw error when authType is invalid', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.1
-    // @pseudocode runtime-state.md lines 81-82
-
-    const params = {
-      runtimeId: 'test-runtime',
-      provider: 'gemini',
-      model: 'gemini-2.0-flash',
-      authType: 'INVALID_AUTH_TYPE' as AuthType,
-    } as RuntimeStateParams;
-
-    expect(() => createAgentRuntimeState(params)).toThrow(RuntimeStateError);
-    expect(() => createAgentRuntimeState(params)).toThrow(/authType\.invalid/);
-  });
-
-  it('should throw error when API_KEY authType is missing apiKey in payload', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.1
-    // @pseudocode runtime-state.md lines 83-85
-
-    const params: RuntimeStateParams = {
-      runtimeId: 'test-runtime',
-      provider: 'openai',
-      model: 'gpt-4',
-      authType: AuthType.API_KEY,
-      authPayload: {}, // Missing apiKey
-    };
-
-    expect(() => createAgentRuntimeState(params)).toThrow(RuntimeStateError);
-    expect(() => createAgentRuntimeState(params)).toThrow(
-      /auth\.apiKey\.missing/,
-    );
-  });
-
-  it('should throw error when OAUTH authType is missing token in payload', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.1
-    // @pseudocode runtime-state.md lines 86-88
-
-    const params: RuntimeStateParams = {
-      runtimeId: 'test-runtime',
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      authType: AuthType.OAUTH,
-      authPayload: {}, // Missing token
-    };
-
-    expect(() => createAgentRuntimeState(params)).toThrow(RuntimeStateError);
-    expect(() => createAgentRuntimeState(params)).toThrow(
-      /auth\.token\.missing/,
-    );
   });
 
   it('should throw error when baseUrl is invalid URL format', () => {
@@ -180,7 +117,6 @@ describe('AgentRuntimeState - Constructor Validation', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       baseUrl: 'not-a-valid-url',
     };
 
@@ -197,7 +133,6 @@ describe('AgentRuntimeState - Constructor Validation', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       // sessionId omitted
     };
 
@@ -205,26 +140,6 @@ describe('AgentRuntimeState - Constructor Validation', () => {
 
     expect(state.sessionId).toBeDefined();
     expect(state.sessionId.length).toBeGreaterThan(0);
-  });
-
-  it('should deep freeze authPayload to prevent mutation', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.2
-    // @pseudocode runtime-state.md lines 97
-
-    const params: RuntimeStateParams = {
-      runtimeId: 'test-runtime',
-      provider: 'openai',
-      model: 'gpt-4',
-      authType: AuthType.API_KEY,
-      authPayload: { apiKey: 'test-key' },
-    };
-
-    const state = createAgentRuntimeState(params);
-
-    expect(() => {
-      (state.authPayload as Record<string, unknown>).apiKey = 'modified';
-    }).toThrow();
   });
 
   it('should deep freeze modelParams to prevent mutation', () => {
@@ -236,7 +151,6 @@ describe('AgentRuntimeState - Constructor Validation', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       modelParams: { temperature: 0.7 },
     };
 
@@ -264,8 +178,6 @@ describe('AgentRuntimeState - Immutable Updates', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
-      authPayload: { apiKey: 'test-key' },
       sessionId: 'test-session',
     };
     baseState = createAgentRuntimeState(params);
@@ -353,21 +265,6 @@ describe('AgentRuntimeState - Immutable Updates', () => {
     );
   });
 
-  it('should validate authType on update', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.2
-    // @pseudocode runtime-state.md lines 224-225
-
-    const invalidAuthType = 'INVALID' as AuthType;
-
-    expect(() =>
-      updateAgentRuntimeState(baseState, { authType: invalidAuthType }),
-    ).toThrow(RuntimeStateError);
-    expect(() =>
-      updateAgentRuntimeState(baseState, { authType: invalidAuthType }),
-    ).toThrow(/authType\.invalid/);
-  });
-
   it('should freeze returned state to prevent mutation', () => {
     // @plan PLAN-20251027-STATELESS5.P04
     // @requirement REQ-STAT5-001.2
@@ -399,7 +296,6 @@ describe('AgentRuntimeState - Event Emission', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     baseState = createAgentRuntimeState(params);
@@ -499,7 +395,6 @@ describe('AgentRuntimeState - Batch Updates', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     baseState = createAgentRuntimeState(params);
@@ -513,14 +408,11 @@ describe('AgentRuntimeState - Batch Updates', () => {
     const newState = updateAgentRuntimeStateBatch(baseState, {
       provider: 'anthropic',
       model: 'claude-3-5-sonnet-20241022',
-      authType: AuthType.OAUTH,
-      authPayload: { token: 'new-token' },
       baseUrl: 'https://api.anthropic.com',
     });
 
     expect(newState.provider).toBe('anthropic');
     expect(newState.model).toBe('claude-3-5-sonnet-20241022');
-    expect(newState.authType).toBe(AuthType.OAUTH);
     expect(newState.baseUrl).toBe('https://api.anthropic.com');
   });
 
@@ -594,7 +486,6 @@ describe('AgentRuntimeState - Event Subscription', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     baseState = createAgentRuntimeState(params);
@@ -731,8 +622,6 @@ describe('AgentRuntimeState - Snapshot Export', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
-      authPayload: { apiKey: 'test-key-12345' },
       baseUrl: 'https://api.gemini.com',
       sessionId: 'test-session',
       modelParams: { temperature: 0.7 },
@@ -744,52 +633,9 @@ describe('AgentRuntimeState - Snapshot Export', () => {
     expect(snapshot.runtimeId).toBe('test-runtime');
     expect(snapshot.provider).toBe('gemini');
     expect(snapshot.model).toBe('gemini-2.0-flash');
-    expect(snapshot.authType).toBe(AuthType.USE_GEMINI);
     expect(snapshot.baseUrl).toBe('https://api.gemini.com');
     expect(snapshot.sessionId).toBe('test-session');
     expect(snapshot.version).toBe(1);
-  });
-
-  it('should sanitize apiKey in snapshot showing only last 4 chars', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.3
-    // @pseudocode runtime-state.md lines 344-352
-
-    const params: RuntimeStateParams = {
-      runtimeId: 'test-runtime',
-      provider: 'openai',
-      model: 'gpt-4',
-      authType: AuthType.API_KEY,
-      authPayload: { apiKey: 'sk-test-key-12345' },
-      sessionId: 'test-session',
-    };
-    const state = createAgentRuntimeState(params);
-
-    const snapshot = getAgentRuntimeStateSnapshot(state);
-
-    expect(snapshot.authPayload?.apiKey).toBe('***2345');
-    expect(snapshot.authPayload?.apiKey).not.toBe('sk-test-key-12345');
-  });
-
-  it('should redact OAuth token in snapshot', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.3
-    // @pseudocode runtime-state.md lines 344-352
-
-    const params: RuntimeStateParams = {
-      runtimeId: 'test-runtime',
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      authType: AuthType.OAUTH,
-      authPayload: { token: 'secret-oauth-token' },
-      sessionId: 'test-session',
-    };
-    const state = createAgentRuntimeState(params);
-
-    const snapshot = getAgentRuntimeStateSnapshot(state);
-
-    expect(snapshot.authPayload?.token).toBe('[REDACTED]');
-    expect(snapshot.authPayload?.token).not.toBe('secret-oauth-token');
   });
 
   it('should return frozen snapshot object', () => {
@@ -801,7 +647,6 @@ describe('AgentRuntimeState - Snapshot Export', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const state = createAgentRuntimeState(params);
@@ -822,7 +667,6 @@ describe('AgentRuntimeState - Snapshot Export', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const state = createAgentRuntimeState(params);
@@ -849,8 +693,6 @@ describe('AgentRuntimeState - Synchronous Accessors', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
-      authPayload: { apiKey: 'test-key' },
       baseUrl: 'https://api.gemini.com',
       sessionId: 'test-session',
       modelParams: { temperature: 0.7 },
@@ -872,27 +714,6 @@ describe('AgentRuntimeState - Synchronous Accessors', () => {
     // @pseudocode runtime-state.md lines 155-156
 
     expect(getModel(state)).toBe('gemini-2.0-flash');
-  });
-
-  it('should return authType via getAuthType', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.1
-    // @pseudocode runtime-state.md lines 158-159
-
-    expect(getAuthType(state)).toBe(AuthType.USE_GEMINI);
-  });
-
-  it('should return frozen clone of authPayload via getAuthPayload', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.1
-    // @pseudocode runtime-state.md lines 161-163
-
-    const authPayload = getAuthPayload(state);
-
-    expect(authPayload).toEqual({ apiKey: 'test-key' });
-    expect(() => {
-      (authPayload as Record<string, unknown>).apiKey = 'modified';
-    }).toThrow();
   });
 
   it('should return baseUrl via getBaseUrl', () => {

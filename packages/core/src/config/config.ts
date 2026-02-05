@@ -8,7 +8,6 @@ import * as path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
 import {
-  AuthType,
   type ContentGeneratorConfig,
   createContentGeneratorConfig,
 } from '../core/contentGenerator.js';
@@ -827,8 +826,10 @@ export class Config {
     void this._modelSwitchedDuringSession;
   }
 
-  async refreshAuth(authMethod: AuthType) {
-    const logger = new DebugLogger('llxprt:config:refreshAuth');
+  initializeContentGeneratorConfig: () => Promise<void> = async () => {
+    const logger = new DebugLogger(
+      'llxprt:config:initializeContentGeneratorConfig',
+    );
 
     // Save the current conversation history AND HistoryService before creating a new client
     const previousGeminiClient = this.geminiClient;
@@ -841,15 +842,11 @@ export class Config {
       logger.debug('Retrieved existing state', {
         historyLength: existingHistory.length,
         hasHistoryService: !!existingHistoryService,
-        authMethod,
       });
     }
 
     // Create new content generator config
-    const newContentGeneratorConfig = createContentGeneratorConfig(
-      this,
-      authMethod,
-    );
+    const newContentGeneratorConfig = createContentGeneratorConfig(this);
 
     // Add provider manager to the config if available (llxprt multi-provider support)
     if (this.providerManager) {
@@ -860,11 +857,6 @@ export class Config {
       runtimeId: this.runtimeState.runtimeId,
       overrides: {
         model: newContentGeneratorConfig.model,
-        authType:
-          newContentGeneratorConfig.authType ?? this.runtimeState.authType,
-        authPayload: newContentGeneratorConfig.apiKey
-          ? { apiKey: newContentGeneratorConfig.apiKey }
-          : undefined,
         proxyUrl: newContentGeneratorConfig.proxy ?? this.runtimeState.proxyUrl,
       },
     });
@@ -886,8 +878,8 @@ export class Config {
       // Vertex and Genai have incompatible encryption and sending history with
       // throughtSignature from Genai to Vertex will fail, we need to strip them
       const fromGenaiToVertex =
-        this.contentGeneratorConfig?.authType === AuthType.USE_GEMINI &&
-        authMethod === AuthType.LOGIN_WITH_GOOGLE;
+        this.contentGeneratorConfig?.vertexai === false &&
+        newContentGeneratorConfig.vertexai === true;
 
       logger.debug('Storing history for later use', {
         historyLength: existingHistory.length,
@@ -959,6 +951,14 @@ export class Config {
 
     // Reset the session flag since we're explicitly changing auth and using default model
     this.inFallbackMode = false;
+  };
+
+  async refreshAuth(authMethod?: string) {
+    const logger = new DebugLogger('llxprt:config:refreshAuth');
+    logger.debug(
+      () => `refreshAuth invoked (authMethod=${authMethod ?? 'default'})`,
+    );
+    await this.initializeContentGeneratorConfig();
   }
 
   getSessionId(): string {

@@ -25,9 +25,7 @@ vi.mock('../utils/logger.js', () => ({
 vi.mock('../config/config.js', () => ({
   loadConfig: vi.fn().mockImplementation(async () => ({
     // Return a minimal Config-like object that satisfies test needs
-    getContentGeneratorConfig: vi
-      .fn()
-      .mockReturnValue({ model: 'gemini-pro', authType: 'USE_GEMINI' }),
+    getContentGeneratorConfig: vi.fn().mockReturnValue({ model: 'gemini-pro' }),
     getSessionId: () => 'test-session',
     getModel: () => 'gemini-pro',
   })),

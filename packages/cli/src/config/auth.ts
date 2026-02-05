@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AuthType } from '@vybestack/llxprt-code-core';
 import { loadEnvironment, loadSettings } from './settings.js';
 
 export function validateAuthMethod(authMethod: string): string | null {
@@ -19,25 +18,22 @@ export function validateAuthMethod(authMethod: string): string | null {
     return null;
   }
 
-  if (authMethod === AuthType.USE_PROVIDER) {
+  if (authMethod === 'provider') {
     return null;
   }
 
-  if (
-    authMethod === AuthType.LOGIN_WITH_GOOGLE ||
-    authMethod === AuthType.CLOUD_SHELL
-  ) {
+  if (authMethod === 'oauth-personal' || authMethod === 'cloud-shell') {
     return null;
   }
 
-  if (authMethod === AuthType.USE_GEMINI) {
+  if (authMethod === 'gemini-api-key') {
     if (!process.env.GEMINI_API_KEY) {
       return 'GEMINI_API_KEY environment variable not found. Add that to your environment and try again (no reload needed if using .env)!';
     }
     return null;
   }
 
-  if (authMethod === AuthType.USE_VERTEX_AI) {
+  if (authMethod === 'vertex-ai') {
     const hasVertexProjectLocationConfig =
       !!process.env.GOOGLE_CLOUD_PROJECT && !!process.env.GOOGLE_CLOUD_LOCATION;
     const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
@@ -52,7 +48,7 @@ export function validateAuthMethod(authMethod: string): string | null {
     return null;
   }
 
-  if (authMethod === AuthType.USE_NONE) {
+  if (authMethod === 'none') {
     // "None" is always valid - allows using environment variables or keyfiles
     return null;
   }

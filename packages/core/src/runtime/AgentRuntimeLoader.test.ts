@@ -28,7 +28,6 @@ import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import { AuthType } from '../core/contentGenerator.js';
 
 function createTestConfig(): Config {
   const settingsService = new SettingsService();
@@ -47,8 +46,6 @@ function createRuntimeState(): AgentRuntimeState {
     runtimeId: 'runtime-loader',
     provider: 'gemini',
     model: 'gemini-2.0-pro',
-    authType: AuthType.USE_GEMINI,
-    authPayload: { apiKey: 'test-key' },
     sessionId: 'test-session',
   });
 }
@@ -56,7 +53,6 @@ function createRuntimeState(): AgentRuntimeState {
 function createContentGeneratorConfig(): ContentGeneratorConfig {
   return {
     model: 'gemini-2.0-pro',
-    authType: AuthType.USE_GEMINI,
     apiKey: 'test-key',
   };
 }

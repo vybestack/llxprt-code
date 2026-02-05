@@ -20,7 +20,6 @@ import { ShellConfirmationDialog } from './ShellConfirmationDialog.js';
 import { ConsentPrompt } from './ConsentPrompt.js';
 import { ThemeDialog } from './ThemeDialog.js';
 import { SettingsDialog } from './SettingsDialog.js';
-import { AuthInProgress } from './AuthInProgress.js';
 import { AuthDialog } from './AuthDialog.js';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
@@ -273,9 +272,6 @@ export const DialogManager = ({
   // if (uiState.isModelDialogOpen) {
   //   return <ModelDialog onClose={uiActions.closeModelDialog} />;
   // }
-  if (uiState.isAuthenticating) {
-    return <AuthInProgress onTimeout={uiActions.handleAuthTimeout} />;
-  }
   if (uiState.isAuthDialogOpen) {
     return (
       <Box flexDirection="column">

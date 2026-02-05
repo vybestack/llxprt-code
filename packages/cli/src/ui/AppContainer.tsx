@@ -82,7 +82,6 @@ import {
   type UserFeedbackPayload,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
-import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useSessionStats } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
@@ -1108,27 +1107,10 @@ export const AppContainer = (props: AppContainerProps) => {
     { isActive: showIdeRestartPrompt },
   );
 
-  const {
-    isAuthDialogOpen,
-    openAuthDialog,
-    handleAuthSelect,
-    isAuthenticating,
-    cancelAuthentication,
-  } = useAuthCommand(settings, appState, config);
-
-  useEffect(() => {
-    if (settings.merged.selectedAuthType && !settings.merged.useExternalAuth) {
-      const error = validateAuthMethod(settings.merged.selectedAuthType);
-      if (error) {
-        setAuthError(error);
-        // Don't automatically open auth dialog - user must use /auth command
-      }
-    }
-  }, [
-    settings.merged.selectedAuthType,
-    settings.merged.useExternalAuth,
-    setAuthError,
-  ]);
+  const { isAuthDialogOpen, openAuthDialog, handleAuthSelect } = useAuthCommand(
+    settings,
+    appState,
+  );
 
   // Check for OAuth code needed flag
   useEffect(() => {
@@ -1419,9 +1401,8 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
-    cancelAuthentication();
     // NEVER automatically open auth dialog - user must use /auth
-  }, [setAuthError, cancelAuthentication]);
+  }, [setAuthError]);
 
   const handlePrivacyNoticeExit = useCallback(() => {
     setShowPrivacyNotice(false);
@@ -1730,10 +1711,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
       // Handle exit keys BEFORE dialog visibility check so exit prompts work even when dialogs are open
       if (keyMatchers[Command.QUIT](key)) {
-        // When authenticating, let AuthInProgress component handle Ctrl+C.
-        if (isAuthenticating) {
-          return;
-        }
         if (!ctrlCPressedOnce) {
           cancelOngoingRequest?.();
         }
@@ -1826,7 +1803,6 @@ export const AppContainer = (props: AppContainerProps) => {
       setCtrlDPressedOnce,
       ctrlDTimerRef,
       handleSlashCommand,
-      isAuthenticating,
       cancelOngoingRequest,
       addItem,
       settings.merged.debugKeystrokeLogging,
@@ -2138,7 +2114,6 @@ export const AppContainer = (props: AppContainerProps) => {
     if (
       initialPrompt &&
       !initialPromptSubmitted.current &&
-      !isAuthenticating &&
       !isAuthDialogOpen &&
       !isThemeDialogOpen &&
       !isEditorDialogOpen &&
@@ -2155,11 +2130,11 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [
     initialPrompt,
     submitQuery,
-    isAuthenticating,
     isAuthDialogOpen,
     isThemeDialogOpen,
     isEditorDialogOpen,
     isProviderDialogOpen,
+
     isToolsDialogOpen,
     isCreateProfileDialogOpen,
     showPrivacyNotice,
@@ -2207,7 +2182,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isThemeDialogOpen,
     isSettingsDialogOpen,
     isAuthDialogOpen,
-    isAuthenticating,
     isEditorDialogOpen,
     isProviderDialogOpen,
     isLoadProfileDialogOpen,
@@ -2377,7 +2351,6 @@ export const AppContainer = (props: AppContainerProps) => {
       // Auth dialog
       openAuthDialog,
       handleAuthSelect,
-      cancelAuthentication,
       handleAuthTimeout,
 
       // Editor dialog
@@ -2499,7 +2472,6 @@ export const AppContainer = (props: AppContainerProps) => {
       handleSettingsRestart,
       openAuthDialog,
       handleAuthSelect,
-      cancelAuthentication,
       handleAuthTimeout,
       openEditorDialog,
       handleEditorSelect,

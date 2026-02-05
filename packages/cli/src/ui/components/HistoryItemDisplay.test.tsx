@@ -76,7 +76,6 @@ describe('<HistoryItemDisplay />', () => {
       osVersion: 'test-os',
       sandboxEnv: 'test-env',
       modelVersion: 'test-model',
-      selectedAuthType: 'test-auth',
       gcpProject: 'test-project',
       keyfile: 'test-keyfile',
       key: 'test-key',

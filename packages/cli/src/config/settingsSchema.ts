@@ -8,7 +8,6 @@ import {
   MCPServerConfig,
   BugCommandSettings,
   TelemetrySettings,
-  AuthType,
   ChatCompressionSettings,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
@@ -279,19 +278,6 @@ export const SETTINGS_SCHEMA = {
     showInDialog: true,
   },
 
-  // DEPRECATED: selectedAuthType is vestigial and will be removed.
-  // Authentication is now handled by providers directly (GeminiProvider, etc.)
-  // See issue #443. Keeping for backwards compatibility with existing configs.
-  selectedAuthType: {
-    type: 'string',
-    label: 'Selected Auth Type (Deprecated)',
-    category: 'Advanced',
-    requiresRestart: false,
-    default: 'provider' as AuthType,
-    description:
-      'DEPRECATED: Authentication is now handled by providers. This setting is ignored.',
-    showInDialog: false,
-  },
   useExternalAuth: {
     type: 'boolean',
     label: 'Use External Auth',
@@ -1144,7 +1130,7 @@ export const SETTINGS_SCHEMA = {
             label: 'Selected Auth Type',
             category: 'Security',
             requiresRestart: true,
-            default: undefined as AuthType | undefined,
+            default: undefined as string | undefined,
             description: 'The currently selected authentication type.',
             showInDialog: false,
           },
