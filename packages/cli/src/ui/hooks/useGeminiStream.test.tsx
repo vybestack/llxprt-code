@@ -2390,6 +2390,69 @@ describe('useGeminiStream', () => {
       expect(thirdResult).not.toStrictEqual(secondResult);
     });
 
+    it('deduplicates pending tool groups by callId when both pending sources are tool groups', async () => {
+      const toolCallId = 'shared-call-1';
+
+      const pendingToolCall = {
+        request: { callId: toolCallId, name: 'run_shell_command', args: {} },
+        status: 'executing',
+        tool: {
+          name: 'run_shell_command',
+          displayName: 'Shell Command',
+          description: 'Shell',
+          build: vi.fn(),
+        },
+        invocation: {
+          getDescription: () => 'bash',
+        },
+        liveOutput: 'from scheduler',
+      } as unknown as TrackedExecutingToolCall;
+
+      mockUseReactToolScheduler.mockReturnValue([
+        [pendingToolCall],
+        mockScheduleToolCalls,
+        mockCancelAllToolCalls,
+        mockMarkToolsAsSubmitted,
+      ]);
+
+      const { result } = renderHook(() =>
+        useGeminiStream(
+          mockConfig.getGeminiClient(),
+          [],
+          mockAddItem,
+          mockConfig,
+          mockLoadedSettings,
+          mockOnDebugMessage,
+          mockHandleSlashCommand,
+          true,
+          () => 'vscode' as EditorType,
+          () => {},
+          () => Promise.resolve(),
+          false,
+          () => {},
+          () => {},
+          () => {},
+          () => {},
+          80,
+          24,
+        ),
+      );
+
+      await act(async () => {
+        await result.current.submitQuery('bash');
+      });
+
+      await waitFor(() => {
+        const pendingToolGroups = result.current.pendingHistoryItems.filter(
+          (item) => item.type === 'tool_group',
+        );
+
+        expect(pendingToolGroups).toHaveLength(1);
+        expect(pendingToolGroups[0].tools).toHaveLength(1);
+        expect(pendingToolGroups[0].tools[0].callId).toBe(toolCallId);
+      });
+    });
+
     it('should reset thought to null when user cancels', async () => {
       // Mock a stream that yields a thought then gets cancelled
       mockSendMessageStream.mockReturnValue(

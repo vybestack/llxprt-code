@@ -97,23 +97,34 @@ All five extension-related commits touch `extension-manager.ts` which doesn't ex
 
 ## Ink Fork Status
 
+**See [ink-fork-research.md](ink-fork-research.md) for detailed analysis.**
+
 ### Current Versions
-- **LLxprt**: `npm:@jrichman/ink@6.4.7`
-- **gemini-cli**: `npm:@jrichman/ink@6.4.8`
-- **Mainline ink**: `6.6.0`
+- **LLxprt**: `npm:@jrichman/ink@6.4.8` (bumped in Batch 4)
+- **gemini-cli HEAD**: `npm:@jrichman/ink@6.4.8` (same — IN SYNC)
+- **Latest fork on npm**: `@jrichman/ink@6.4.9` (published 2026-02-04)
+- **Mainline ink**: `6.6.0` (vadimdemedes/ink)
 
-### Fork History
-- Fork created: 2025-10-23
-- Latest fork version: 6.4.8 (2026-01-26)
-- Fork repo: https://github.com/jacob314/ink
+### Why the Fork Exists
+jacob314 (Jacob Richman, Google/gemini-cli engineer) forked ink to add native `overflow: 'scroll'` support for the chat UI. The feature uses Yoga's `YGOverflowScroll` and adds scrollbar rendering, `scrollTop`/`scrollLeft` props, and programmatic scroll APIs.
 
-### Can LLxprt Switch Back?
-**Unknown/Not Yet**. No evidence found of jrichman's changes being merged to upstream vadimdemedes/ink. gemini-cli is still on the fork (6.4.8) with ongoing version bumps and no reversion signals.
+**Upstream issue [vadimdemedes/ink#765](https://github.com/vadimdemedes/ink/issues/765) is still OPEN** — the fork's changes have NOT been merged to mainline ink.
+
+### Fork Timeline
+- 2025-10-31: gemini-cli switches to @jrichman/ink@6.4.0
+- 2025-11-17: v0.15.4 ships with @jrichman/ink@6.4.3
+- 2026-01-10: Updated to 6.4.7
+- 2026-01-26: Updated to 6.4.8 (current)
+- 2026-02-04: 6.4.9 published on npm
+
+### Can LLxprt Switch Back to Mainline ink?
+**No, not yet.** The scrolling feature is essential and not in mainline. No reversion signals from upstream. Fork is actively maintained with ongoing version bumps.
 
 ### Recommended Action
-1. Bump to `@jrichman/ink@6.4.8` to stay in sync with gemini-cli (done in Batch 4)
-2. Monitor upstream ink for merge of fork changes
-3. Diff @jrichman/ink against upstream 6.6.0 to identify concrete blockers for switching back
+1. **Stay on @jrichman/ink** — no choice until scrolling lands in mainline
+2. Consider bumping to 6.4.9 (check changelog first)
+3. Monitor vadimdemedes/ink#765 for upstream merge
+4. Track fork divergence as mainline advances (6.6.0 → ...)
 
 ---
 
@@ -180,6 +191,6 @@ Scrollbar drag support is fully implemented in LLxprt's Ink UI.
 | Session Resuming | Needs P0 fix for --continue bug | High |
 | Kitty Protocol | Keep support, consider unified parser later | Low |
 | Extension Commits | All 5 reimplemented in Batch 7-8 | Done |
-| Ink Fork | Bumped to 6.4.8, monitor for mainline merge | Low |
+| Ink Fork | Both at 6.4.8, can't leave fork yet (scrolling not in mainline) | Low |
 | Animated Scroll | Implementation plan ready | Medium |
 | Scrollbar Drag | Already implemented | Done |

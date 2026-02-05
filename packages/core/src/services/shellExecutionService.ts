@@ -19,7 +19,10 @@ import {
   serializeTerminalToObject,
   type AnsiOutput,
 } from '../utils/terminalSerializer.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 const { Terminal } = pkg;
+
+const shellDebug = new DebugLogger('llxprt:shell:render');
 
 const SIGKILL_TIMEOUT_MS = 200;
 const MAX_CHILD_PROCESS_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB
@@ -580,6 +583,7 @@ export class ShellExecutionService {
             renderTimeout = null;
 
             if (!isStreamingRawContent) {
+              shellDebug.log('renderFn: skipped (not streaming raw content)');
               return;
             }
 
@@ -587,6 +591,7 @@ export class ShellExecutionService {
               if (!hasStartedOutput) {
                 const bufferText = getFullBufferText(headlessTerminal);
                 if (bufferText.trim().length === 0) {
+                  shellDebug.log('renderFn: skipped (no output yet)');
                   return;
                 }
                 hasStartedOutput = true;
@@ -633,12 +638,33 @@ export class ShellExecutionService {
               : trimmedOutput;
 
             // Using stringify for a quick deep comparison.
-            if (JSON.stringify(output) !== JSON.stringify(finalOutput)) {
+            const finalJson = JSON.stringify(finalOutput);
+            const outputJson = JSON.stringify(output);
+            if (outputJson !== finalJson) {
+              // Extract text from cursor line for debug
+              const cursorLine = finalOutput[buffer.cursorY];
+              const cursorLineText = cursorLine
+                ?.map((t) => t.text)
+                .join('')
+                .trimEnd() ?? '(no line)';
+              shellDebug.log(
+                'renderFn: CHANGED cursorY=%d cursorX=%d lines=%d cursorLine=%s',
+                buffer.cursorY,
+                buffer.cursorX,
+                finalOutput.length,
+                JSON.stringify(cursorLineText),
+              );
               output = finalOutput;
               onOutputEvent({
                 type: 'data',
                 chunk: finalOutput,
               });
+            } else {
+              shellDebug.log(
+                'renderFn: no change (cursorY=%d cursorX=%d)',
+                buffer.cursorY,
+                buffer.cursorX,
+              );
             }
           };
 
@@ -662,19 +688,22 @@ export class ShellExecutionService {
           if (finalRender) {
             if (renderTimeout) {
               clearTimeout(renderTimeout);
+              renderTimeout = null;
             }
             renderFn();
             return;
           }
 
+          // Coalesce rapid writes (e.g. initial shell prompt burst) but
+          // keep latency low for interactive typing by using a short timer.
           if (renderTimeout) {
             return;
           }
 
           renderTimeout = setTimeout(() => {
-            renderFn();
             renderTimeout = null;
-          }, 68);
+            renderFn();
+          }, 16);
         };
 
         headlessTerminal.onScroll(() => {

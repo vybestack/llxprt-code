@@ -99,6 +99,14 @@ describe('useShellCommandProcessor', () => {
       getShouldUseNodePtyShell: () => false,
       getAllowPtyThemeOverride: () => false,
       getPtyScrollbackLimit: () => 600000,
+      getPtyTerminalWidth: () => undefined,
+      getPtyTerminalHeight: () => undefined,
+      getShellExecutionConfig: () => ({
+        showColor: false,
+        scrollback: 600000,
+        terminalWidth: 80,
+        terminalHeight: 24,
+      }),
     } as unknown as Config;
     mockGeminiClient = { addHistory: vi.fn() } as unknown as GeminiClient;
 

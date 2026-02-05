@@ -31,6 +31,15 @@ export const AnsiOutputText: React.FC<AnsiOutputProps> = ({
       ? availableTerminalHeight
       : DEFAULT_HEIGHT;
 
+  let cursorLineIndex = -1;
+  for (let i = data.length - 1; i >= 0; i -= 1) {
+    const line = data[i];
+    if (line.some((token) => token.inverse)) {
+      cursorLineIndex = i;
+      break;
+    }
+  }
+
   let lastNonEmpty = -1;
   for (let i = data.length - 1; i >= 0; i -= 1) {
     const line = data[i];
@@ -41,14 +50,15 @@ export const AnsiOutputText: React.FC<AnsiOutputProps> = ({
     }
   }
 
+  const renderEndIndex = Math.max(lastNonEmpty, cursorLineIndex);
+
   if (data.length === 0) {
     return null;
   }
 
-  const endIndex = lastNonEmpty >= 0 ? lastNonEmpty + 1 : data.length;
+  const endIndex = renderEndIndex + 1;
   const startIndex = Math.max(0, endIndex - linesToShow);
   const linesToRender = data.slice(startIndex, endIndex);
-
 
   return (
     <Box flexDirection="column" width={width} flexShrink={0}>

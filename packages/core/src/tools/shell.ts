@@ -369,12 +369,14 @@ class ShellToolInvocation extends BaseToolInvocation<
         },
       );
 
-      const result = await executionResult.result;
+      // Propagate PID immediately (before awaiting result) so the UI can
+      // offer Ctrl+F interactive shell focus while the process is running.
       const pid = executionResult.pid;
-
       if (pid && setPidCallback && this.config.getShouldUseNodePtyShell() && ShellExecutionService.isActivePty(pid)) {
         setPidCallback(pid);
       }
+
+      const result = await executionResult.result;
 
       const backgroundPIDs: number[] = [];
       let pgid: number | null = null;

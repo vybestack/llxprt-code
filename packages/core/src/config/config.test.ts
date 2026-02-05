@@ -167,6 +167,7 @@ vi.mock('../ide/ide-client.js', () => ({
 
 const mockCoreEvents = vi.hoisted(() => ({
   emitFeedback: vi.fn(),
+  emitModelChanged: vi.fn(),
 }));
 
 const mockSetGlobalProxy = vi.hoisted(() => vi.fn());
@@ -1434,7 +1435,9 @@ describe('Config getHooks', () => {
   });
 });
 
-describe('Config getExperiments', () => {
+// Note: getExperiments tests skipped - LLxprt doesn't include the experiments/flagId
+// system from upstream (Google A/B testing infrastructure)
+describe.skip('Config getExperiments', () => {
   const baseParams: ConfigParameters = {
     cwd: '/tmp',
     targetDir: '/path/to/target',
@@ -1479,7 +1482,9 @@ describe('Config getExperiments', () => {
   });
 });
 
-describe('Config setExperiments logging', () => {
+// Note: setExperiments tests skipped - LLxprt doesn't include the experiments/flagId
+// system from upstream (Google A/B testing infrastructure)
+describe.skip('Config setExperiments logging', () => {
   const baseParams: ConfigParameters = {
     cwd: '/tmp',
     targetDir: '/path/to/target',

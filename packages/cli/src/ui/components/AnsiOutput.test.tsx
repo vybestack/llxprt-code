@@ -101,4 +101,17 @@ describe('<AnsiOutputText />', () => {
     // We are just checking that it renders something without crashing.
     expect(lastFrame()).toBeDefined();
   });
+
+  it('keeps the cursor-only line visible when all text lines are blank', () => {
+    const data: AnsiOutput = [
+      [createAnsiToken({ text: '   ' })],
+      [createAnsiToken({ text: ' ', inverse: true })],
+    ];
+
+    const { lastFrame } = render(<AnsiOutputText data={data} width={80} />);
+    const output = lastFrame();
+
+    expect(output).toBeDefined();
+    expect(output?.split('\n').length).toBe(2);
+  });
 });

@@ -48,6 +48,7 @@ import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../constants/historyLimits.js';
+import { SHELL_COMMAND_NAME, SHELL_NAME } from './constants.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
 import { registerCleanup } from '../utils/cleanup.js';
@@ -1587,6 +1588,30 @@ export const AppContainer = (props: AppContainerProps) => {
   // Use the activeShellPtyId from useGeminiStream (which gets it from useShellCommandProcessor)
   const activeShellPtyId = geminiActiveShellPtyId;
 
+  // Auto-reset embeddedShellFocused when no shell tool is executing.
+  // Without this, cancelling a shell while focused (embeddedShellFocused=true)
+  // leaves the input prompt permanently disabled.
+  const anyShellExecuting = useMemo(
+    () =>
+      pendingHistoryItems.some(
+        (item) =>
+          item?.type === 'tool_group' &&
+          item.tools.some(
+            (tool) =>
+              (tool.name === SHELL_COMMAND_NAME || tool.name === SHELL_NAME) &&
+              tool.status === ToolCallStatus.Executing,
+          ),
+      ),
+    [pendingHistoryItems],
+  );
+
+  useEffect(() => {
+    if (embeddedShellFocused && !anyShellExecuting) {
+      debug.log('Auto-resetting embeddedShellFocused: no shell executing');
+      setEmbeddedShellFocused(false);
+    }
+  }, [embeddedShellFocused, anyShellExecuting]);
+
   // Update the cancel handler with message queue support
   const cancelHandlerRef = useRef<(() => void) | null>(null);
   cancelHandlerRef.current = useCallback(() => {
@@ -1792,9 +1817,15 @@ export const AppContainer = (props: AppContainerProps) => {
         keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS](key) &&
         config.getEnableInteractiveShell()
       ) {
-        if (activeShellPtyId || ShellExecutionService.getLastActivePtyId()) {
+        const lastPtyId = ShellExecutionService.getLastActivePtyId();
+        debug.log('Ctrl+F: activeShellPtyId=%s, lastActivePtyId=%s, will toggle=%s',
+          activeShellPtyId, lastPtyId, !!(activeShellPtyId || lastPtyId));
+        if (activeShellPtyId || lastPtyId) {
           // Toggle focus between shell and LLxprt input.
-          setEmbeddedShellFocused((prev) => !prev);
+          setEmbeddedShellFocused((prev) => {
+            debug.log('Ctrl+F: embeddedShellFocused %s -> %s', prev, !prev);
+            return !prev;
+          });
         }
       }
     },

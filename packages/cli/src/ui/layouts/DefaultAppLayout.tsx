@@ -124,6 +124,8 @@ export const DefaultAppLayout = ({
     tokenMetrics,
     currentModel,
     availableTerminalHeight: uiAvailableTerminalHeight,
+    activeShellPtyId,
+    embeddedShellFocused,
   } = uiState;
 
   // Use the UI state's availableTerminalHeight if constrainHeight is true
@@ -224,6 +226,8 @@ export const DefaultAppLayout = ({
               isFocused={!uiState.isEditorDialogOpen}
               slashCommands={slashCommands}
               showTodoPanel={showTodoPanelSetting}
+              activeShellPtyId={activeShellPtyId}
+              embeddedShellFocused={embeddedShellFocused}
             />
           ))}
           <ShowMoreLines constrainHeight={constrainHeight} />
@@ -249,6 +253,8 @@ export const DefaultAppLayout = ({
             config={config}
             slashCommands={slashCommands}
             showTodoPanel={showTodoPanelSetting}
+            activeShellPtyId={activeShellPtyId}
+            embeddedShellFocused={embeddedShellFocused}
           />
         ),
       })),
@@ -465,6 +471,8 @@ export const DefaultAppLayout = ({
                 config={config}
                 slashCommands={slashCommands}
                 showTodoPanel={showTodoPanelSetting}
+                activeShellPtyId={activeShellPtyId}
+                embeddedShellFocused={embeddedShellFocused}
               />
             )),
           ]}
@@ -486,6 +494,8 @@ export const DefaultAppLayout = ({
                 isFocused={!uiState.isEditorDialogOpen}
                 slashCommands={slashCommands}
                 showTodoPanel={showTodoPanelSetting}
+                activeShellPtyId={activeShellPtyId}
+                embeddedShellFocused={embeddedShellFocused}
               />
             ))}
             <ShowMoreLines constrainHeight={constrainHeight} />

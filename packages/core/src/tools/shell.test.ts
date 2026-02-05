@@ -19,7 +19,11 @@ const mockOsHomedir = vi.hoisted(() => vi.fn(() => '/home/user'));
 const mockOsTmpdir = vi.hoisted(() => vi.fn(() => '/tmp'));
 const mockOsPlatform = vi.hoisted(() => vi.fn(() => 'linux'));
 vi.mock('../services/shellExecutionService.js', () => ({
-  ShellExecutionService: { execute: mockShellExecutionService },
+  ShellExecutionService: {
+    execute: mockShellExecutionService,
+    isActivePty: vi.fn().mockReturnValue(true),
+    getLastActivePtyId: vi.fn().mockReturnValue(null),
+  },
 }));
 vi.mock('fs');
 vi.mock('os', () => ({
@@ -588,11 +592,13 @@ describe('ShellTool', () => {
         vi.useRealTimers();
       });
 
-      it('should throttle text output updates', async () => {
+      it('should update immediately on every data event', async () => {
+        // Data events represent full screen state (AnsiOutput in PTY mode or
+        // cumulative string in child_process mode), so each one is displayed
+        // immediately without throttling.
         const invocation = shellTool.build({ command: 'stream' });
         const promise = invocation.execute(mockAbortSignal, updateOutputMock);
 
-        // First chunk triggers an update immediately (lastUpdateTime starts at 0).
         mockShellOutputCallback({
           type: 'data',
           chunk: 'hello ',
@@ -600,23 +606,21 @@ describe('ShellTool', () => {
         expect(updateOutputMock).toHaveBeenCalledOnce();
         expect(updateOutputMock).toHaveBeenCalledWith('hello ');
 
-        // Second chunk should be throttled (within OUTPUT_UPDATE_INTERVAL_MS).
+        // Second chunk also updates immediately (no throttle for data events).
         mockShellOutputCallback({
           type: 'data',
           chunk: 'world',
         });
-        expect(updateOutputMock).toHaveBeenCalledOnce(); // Still only one call
+        expect(updateOutputMock).toHaveBeenCalledTimes(2);
+        expect(updateOutputMock).toHaveBeenLastCalledWith('world');
 
-        // Advance time past the throttle interval.
-        await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
-
-        // Third chunk triggers update with cumulative content.
+        // Third chunk also updates immediately.
         mockShellOutputCallback({
           type: 'data',
           chunk: '!',
         });
-        expect(updateOutputMock).toHaveBeenCalledTimes(2);
-        expect(updateOutputMock).toHaveBeenLastCalledWith('hello world!');
+        expect(updateOutputMock).toHaveBeenCalledTimes(3);
+        expect(updateOutputMock).toHaveBeenLastCalledWith('!');
 
         resolveExecutionPromise({
           rawOutput: Buffer.from(''),

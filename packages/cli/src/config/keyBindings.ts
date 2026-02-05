@@ -260,7 +260,18 @@ export const commandCategories: readonly CommandCategory[] = [
   },
   {
     title: 'Screen Control',
-    commands: [Command.CLEAR_SCREEN],
+    commands: [Command.CLEAR_SCREEN, Command.REFRESH_KEYPRESS],
+  },
+  {
+    title: 'Scrolling',
+    commands: [
+      Command.SCROLL_UP,
+      Command.SCROLL_DOWN,
+      Command.SCROLL_HOME,
+      Command.SCROLL_END,
+      Command.PAGE_UP,
+      Command.PAGE_DOWN,
+    ],
   },
   {
     title: 'History & Search',
@@ -314,6 +325,14 @@ export const commandCategories: readonly CommandCategory[] = [
   {
     title: 'Session Control',
     commands: [Command.QUIT, Command.EXIT],
+  },
+  {
+    title: 'Todo Dialog',
+    commands: [Command.TOGGLE_TODO_DIALOG, Command.TOGGLE_TOOL_DESCRIPTIONS],
+  },
+  {
+    title: 'Mouse',
+    commands: [Command.TOGGLE_MOUSE_EVENTS],
   },
 ];
 

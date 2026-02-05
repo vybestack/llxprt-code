@@ -65,6 +65,7 @@ import {
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
+import { SHELL_COMMAND_NAME, SHELL_NAME } from '../constants.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { useKeypress, type Key } from './useKeypress.js';
 
@@ -1499,13 +1500,61 @@ export const useGeminiStream = (
     handleCompletedToolsRef.current = handleCompletedTools;
   }, [handleCompletedTools]);
 
-  const pendingHistoryItems = useMemo(
-    () =>
-      [pendingHistoryItem, pendingToolCallGroupDisplay].filter(
-        (i) => i !== undefined && i !== null,
-      ),
-    [pendingHistoryItem, pendingToolCallGroupDisplay],
-  );
+  const pendingHistoryItems = useMemo(() => {
+    if (
+      pendingHistoryItem?.type === 'tool_group' &&
+      pendingToolCallGroupDisplay?.type === 'tool_group'
+    ) {
+      const schedulerToolCallIds = new Set(
+        pendingToolCallGroupDisplay.tools.map((tool) => tool.callId),
+      );
+
+      const overlappingCallIds = new Set(
+        pendingHistoryItem.tools
+          .filter((tool) => schedulerToolCallIds.has(tool.callId))
+          .map((tool) => tool.callId),
+      );
+
+      if (overlappingCallIds.size === 0) {
+        return [pendingHistoryItem, pendingToolCallGroupDisplay];
+      }
+
+      const filteredPendingTools = pendingHistoryItem.tools.filter(
+        (tool) => !overlappingCallIds.has(tool.callId),
+      );
+      const filteredSchedulerTools = pendingToolCallGroupDisplay.tools.filter(
+        (tool) => !overlappingCallIds.has(tool.callId),
+      );
+
+      const overlappingShellTools = pendingHistoryItem.tools.filter(
+        (tool) =>
+          overlappingCallIds.has(tool.callId) &&
+          (tool.name === SHELL_COMMAND_NAME || tool.name === SHELL_NAME),
+      );
+
+      const mergedItems: HistoryItemWithoutId[] = [];
+
+      if (filteredPendingTools.length > 0 || overlappingShellTools.length > 0) {
+        mergedItems.push({
+          ...pendingHistoryItem,
+          tools: [...filteredPendingTools, ...overlappingShellTools],
+        });
+      }
+
+      if (filteredSchedulerTools.length > 0) {
+        mergedItems.push({
+          ...pendingToolCallGroupDisplay,
+          tools: filteredSchedulerTools,
+        });
+      }
+
+      return mergedItems;
+    }
+
+    return [pendingHistoryItem, pendingToolCallGroupDisplay].filter(
+      (i) => i !== undefined && i !== null,
+    );
+  }, [pendingHistoryItem, pendingToolCallGroupDisplay]);
 
   useEffect(() => {
     const saveRestorableToolCalls = async () => {

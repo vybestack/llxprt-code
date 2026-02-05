@@ -68,6 +68,14 @@ describe('ShellTool multibyte handling', () => {
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
       getAllowPtyThemeOverride: vi.fn().mockReturnValue(false),
+      getShellExecutionConfig: vi.fn().mockReturnValue({
+        showColor: false,
+        scrollback: 600000,
+        terminalWidth: 80,
+        terminalHeight: 24,
+      }),
+      getPtyTerminalWidth: vi.fn().mockReturnValue(80),
+      getPtyTerminalHeight: vi.fn().mockReturnValue(24),
     } as unknown as Config;
 
     tool = new ShellTool(config);

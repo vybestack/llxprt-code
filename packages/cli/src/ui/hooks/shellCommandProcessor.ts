@@ -153,6 +153,10 @@ export const useShellCommandProcessor = (
         abortSignal.addEventListener('abort', abortHandler, { once: true });
 
         onDebugMessage(`Executing in ${targetDir}: ${commandToExecute}`);
+        const configuredPtyWidth = config.getPtyTerminalWidth();
+        const configuredPtyHeight = config.getPtyTerminalHeight();
+        const effectiveTerminalWidth = configuredPtyWidth ?? terminalWidth;
+        const effectiveTerminalHeight = configuredPtyHeight ?? terminalHeight;
 
         try {
           const { pid, result } = await ShellExecutionService.execute(
@@ -207,9 +211,15 @@ export const useShellCommandProcessor = (
               }
 
               // Throttle pending UI updates to avoid excessive re-renders.
+              // PTY data events already provide debounced full-screen snapshots,
+              // so only throttle binary progress updates.
+              const pastThrottle =
+                Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS;
+              const isPtyData =
+                event.type === 'data' && config.getShouldUseNodePtyShell();
               if (
                 shouldUpdate &&
-                Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS
+                (isPtyData || pastThrottle)
               ) {
                 // Always update ref first to ensure it has the latest output
                 if (pendingHistoryItemRef?.current?.type === 'tool_group') {
@@ -238,8 +248,8 @@ export const useShellCommandProcessor = (
                   scrollback?: number;
                 };
               }).getShellExecutionConfig?.(),
-              terminalWidth,
-              terminalHeight,
+              terminalWidth: effectiveTerminalWidth,
+              terminalHeight: effectiveTerminalHeight,
             },
           );
 
