@@ -1859,7 +1859,18 @@ export class OAuthManager {
 
       // Fetch usage info for this bucket
       try {
-        const usageInfo = await fetchCodexUsage(token.access_token, accountId);
+        const config = this.getConfig?.();
+        const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
+        const codexBaseUrl =
+          typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
+            ? runtimeBaseUrl
+            : undefined;
+
+        const usageInfo = await fetchCodexUsage(
+          token.access_token,
+          accountId,
+          codexBaseUrl,
+        );
         if (usageInfo) {
           result.set(bucket, usageInfo);
         }

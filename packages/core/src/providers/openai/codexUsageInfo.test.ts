@@ -223,7 +223,126 @@ describe('codexUsageInfo', () => {
       expect(result).toEqual(mockResponse);
       expect(result?.plan_type).toBe('premium_plus');
     });
+
+    it('should use ChatGPT wham usage endpoint when base URL includes /backend-api', async () => {
+      const mockResponse = {
+        plan_type: 'pro',
+        rate_limit: {
+          allowed: true,
+          limit_reached: false,
+          primary_window: {
+            used_percent: 20,
+            limit_window_seconds: 18000,
+            reset_after_seconds: 1800,
+            reset_at: 1738790000,
+          },
+          secondary_window: {
+            used_percent: 40,
+            limit_window_seconds: 604800,
+            reset_after_seconds: 86400,
+            reset_at: 1738874600,
+          },
+        },
+        credits: {
+          has_credits: true,
+          unlimited: false,
+          balance: '42',
+        },
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const result = await fetchCodexUsage(
+        'token123',
+        'account123',
+        'https://chatgpt.com/backend-api/codex',
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://chatgpt.com/backend-api/codex/wham/usage',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer token123',
+            'ChatGPT-Account-Id': 'account123',
+            Accept: 'application/json',
+          },
+        },
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should fall back to default Codex usage endpoint when custom base URL endpoint fails', async () => {
+      const mockResponse = {
+        plan_type: 'pro',
+        rate_limit: {
+          allowed: true,
+          limit_reached: false,
+          primary_window: {
+            used_percent: 10,
+            limit_window_seconds: 18000,
+            reset_after_seconds: 1200,
+            reset_at: 1738789000,
+          },
+          secondary_window: null,
+        },
+        credits: {
+          has_credits: true,
+          unlimited: false,
+          balance: '12',
+        },
+      };
+
+      fetchMock
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockResponse,
+        } as Response);
+
+      const result = await fetchCodexUsage(
+        'token123',
+        'account123',
+        'https://chatgpt.com/backend-api/codex',
+      );
+
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        'https://chatgpt.com/backend-api/codex/wham/usage',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer token123',
+            'ChatGPT-Account-Id': 'account123',
+            Accept: 'application/json',
+          },
+        },
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        'https://api.openai.com/api/codex/usage',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer token123',
+            'ChatGPT-Account-Id': 'account123',
+            Accept: 'application/json',
+          },
+        },
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
   });
+
+
 
   describe('formatCodexRateLimitWindow', () => {
     beforeEach(() => {

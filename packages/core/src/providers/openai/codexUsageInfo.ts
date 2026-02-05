@@ -89,7 +89,27 @@ export type CodexCredits = z.infer<typeof CodexCreditsSchema> | null;
  */
 export type CodexUsageInfo = z.infer<typeof CodexUsageInfoSchema>;
 
-const CODEX_USAGE_ENDPOINT = 'https://api.openai.com/api/codex/usage';
+const DEFAULT_CODEX_USAGE_ENDPOINT = 'https://api.openai.com/api/codex/usage';
+
+function buildCodexUsageEndpoints(baseUrl?: string): string[] {
+  const endpoints: string[] = [];
+  const normalizedBaseUrl =
+    typeof baseUrl === 'string' ? baseUrl.trim().replace(/\/+$/u, '') : '';
+
+  if (normalizedBaseUrl) {
+    // Match Codex upstream path style behavior:
+    // - /backend-api/* uses /wham/usage
+    // - otherwise use /api/codex/usage
+    if (normalizedBaseUrl.includes('/backend-api')) {
+      endpoints.push(`${normalizedBaseUrl}/wham/usage`);
+    } else {
+      endpoints.push(`${normalizedBaseUrl}/api/codex/usage`);
+    }
+  }
+
+  endpoints.push(DEFAULT_CODEX_USAGE_ENDPOINT);
+  return Array.from(new Set(endpoints));
+}
 
 /**
  * Fetch usage information from Codex usage endpoint
@@ -97,11 +117,13 @@ const CODEX_USAGE_ENDPOINT = 'https://api.openai.com/api/codex/usage';
  *
  * @param accessToken - OAuth access token
  * @param accountId - Account ID for ChatGPT-Account-Id header
+ * @param baseUrl - Optional Codex base URL for ChatGPT path-style usage endpoint
  * @returns Usage info if available, null on error
  */
 export async function fetchCodexUsage(
   accessToken: string,
   accountId: string,
+  baseUrl?: string,
 ): Promise<CodexUsageInfo | null> {
   if (!accessToken || typeof accessToken !== 'string') {
     logger.debug(() => 'Invalid access token provided');
@@ -113,49 +135,55 @@ export async function fetchCodexUsage(
     return null;
   }
 
-  try {
-    const response = await fetch(CODEX_USAGE_ENDPOINT, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'ChatGPT-Account-Id': accountId,
-        Accept: 'application/json',
-      },
-    });
+  const endpoints = buildCodexUsageEndpoints(baseUrl);
 
-    if (!response.ok) {
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'ChatGPT-Account-Id': accountId,
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        logger.debug(
+          () =>
+            `Usage endpoint ${endpoint} returned ${response.status}: ${response.statusText}`,
+        );
+        continue;
+      }
+
+      const data = await response.json();
+
+      const parsedData = CodexUsageInfoSchema.safeParse(data);
+      if (!parsedData.success) {
+        logger.debug(
+          () =>
+            `Failed to parse usage response from ${endpoint}: ${JSON.stringify(parsedData.error)}`,
+        );
+        continue;
+      }
+
       logger.debug(
         () =>
-          `Usage endpoint returned ${response.status}: ${response.statusText}`,
+          `Fetched Codex usage info from ${endpoint}: ${JSON.stringify(parsedData.data)}`,
       );
-      return null;
-    }
 
-    const data = await response.json();
-
-    const parsedData = CodexUsageInfoSchema.safeParse(data);
-    if (!parsedData.success) {
+      return parsedData.data;
+    } catch (error) {
       logger.debug(
         () =>
-          `Failed to parse usage response: ${JSON.stringify(parsedData.error)}`,
+          `Error fetching Codex usage info from ${endpoint}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
       );
-      return null;
     }
-
-    logger.debug(
-      () => `Fetched Codex usage info: ${JSON.stringify(parsedData.data)}`,
-    );
-
-    return parsedData.data;
-  } catch (error) {
-    logger.debug(
-      () =>
-        `Error fetching Codex usage info: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
-    return null;
   }
+
+  return null;
 }
 
 /**
