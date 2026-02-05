@@ -576,4 +576,224 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
       });
     });
   });
+
+  describe('Issue #1293: Fragmented tool_use blocks across 3+ AI messages', () => {
+    it('should merge 3+ consecutive AI messages including fragmented tool calls (issue #1293)', async () => {
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const realSignature = 'EqoBCkYIAxgCIkAKHgoSaXNzdWUxMjkzX3Rlc3Q=';
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Do two things' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Planning to execute both tasks...',
+              sourceField: 'thinking',
+              signature: realSignature,
+            } as ThinkingBlock,
+          ],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            { type: 'text', text: 'I will help with both tasks.' },
+            {
+              type: 'tool_call',
+              id: 'toolu_1293_A',
+              name: 'task_a',
+              parameters: { action: 'first' },
+            } as ToolCallBlock,
+          ],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'toolu_1293_B',
+              name: 'task_b',
+              parameters: { action: 'second' },
+            } as ToolCallBlock,
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'toolu_1293_A',
+              toolName: 'task_a',
+              result: 'Task A complete',
+            } as ToolResponseBlock,
+            {
+              type: 'tool_response',
+              callId: 'toolu_1293_B',
+              toolName: 'task_b',
+              result: 'Task B complete',
+            } as ToolResponseBlock,
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Thanks' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      const assistantMessages = getAssistantMessages(request);
+      const assistantWithToolUse = assistantMessages.find(
+        (m) =>
+          Array.isArray(m.content) &&
+          m.content.some((b) => b.type === 'tool_use'),
+      );
+
+      expect(assistantWithToolUse).toBeDefined();
+      const content = assistantWithToolUse!.content as AnthropicContentBlock[];
+
+      expect(
+        isThinkingBlock(content[0]),
+        `First block must be thinking, got ${content[0].type}`,
+      ).toBe(true);
+
+      const toolUseBlocks = content.filter((b) => b.type === 'tool_use');
+      expect(toolUseBlocks.length).toBe(2);
+
+      const toolUseIds = toolUseBlocks.map((b) => (b as { id: string }).id);
+      expect(toolUseIds).toContain('toolu_1293_A');
+      expect(toolUseIds).toContain('toolu_1293_B');
+
+      const userMessages = request.messages.filter((m) => m.role === 'user');
+      const toolResultMessage = userMessages.find((m) => {
+        if (Array.isArray(m.content)) {
+          return m.content.some((b) => b.type === 'tool_result');
+        }
+        return false;
+      });
+
+      expect(toolResultMessage).toBeDefined();
+      const toolResults = (
+        toolResultMessage!.content as AnthropicContentBlock[]
+      ).filter((b) => b.type === 'tool_result');
+      expect(toolResults.length).toBe(2);
+    });
+
+    it('should handle 4+ consecutive AI messages with multiple thinking blocks', async () => {
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const sig1 = 'EqoBCkYIAxgCIkAKHgoSc2lnXzE=';
+      const sig2 = 'EqoBCkYIAxgCIkAKHgoSc2lnXzI=';
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Complex task' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'First thought...',
+              sourceField: 'thinking',
+              signature: sig1,
+            } as ThinkingBlock,
+          ],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Second thought...',
+              sourceField: 'thinking',
+              signature: sig2,
+            } as ThinkingBlock,
+          ],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Working on it.' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'toolu_multi',
+              name: 'execute',
+              parameters: {},
+            } as ToolCallBlock,
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'toolu_multi',
+              toolName: 'execute',
+              result: 'Done',
+            } as ToolResponseBlock,
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Continue' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      const assistantMessages = getAssistantMessages(request);
+      const assistantWithToolUse = assistantMessages.find(
+        (m) =>
+          Array.isArray(m.content) &&
+          m.content.some((b) => b.type === 'tool_use'),
+      );
+
+      expect(assistantWithToolUse).toBeDefined();
+      const content = assistantWithToolUse!.content as AnthropicContentBlock[];
+
+      const thinkingBlocks = content.filter((b) => isThinkingBlock(b));
+      expect(thinkingBlocks.length).toBe(2);
+
+      expect(isThinkingBlock(content[0]), 'First block must be thinking').toBe(
+        true,
+      );
+      expect(isThinkingBlock(content[1]), 'Second block must be thinking').toBe(
+        true,
+      );
+
+      const textBlocks = content.filter((b) => b.type === 'text');
+      expect(textBlocks.length).toBe(1);
+
+      const toolUseBlocks = content.filter((b) => b.type === 'tool_use');
+      expect(toolUseBlocks.length).toBe(1);
+    });
+  });
 });
