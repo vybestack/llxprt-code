@@ -79,6 +79,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
   });
 
   afterEach(() => {
+    config.disposeScheduler(testSessionId);
     clearAllSchedulers();
   });
 
@@ -259,6 +260,38 @@ describe('Config - CoreToolScheduler Singleton', () => {
       config.disposeScheduler(testSessionId);
 
       expect(disposeSpy).toHaveBeenCalled();
+    });
+
+    it('should dispose scheduler entry even if dispose throws', async () => {
+      const callbacks = {
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
+        getPreferredEditor: () => undefined,
+        onEditorClose: vi.fn(),
+      };
+
+      const scheduler = await config.getOrCreateScheduler(
+        testSessionId,
+        callbacks,
+      );
+
+      vi.spyOn(
+        scheduler as { dispose: () => void },
+        'dispose',
+      ).mockImplementation(() => {
+        throw new Error('dispose failed');
+      });
+
+      expect(() => {
+        config.disposeScheduler(testSessionId);
+      }).not.toThrow();
+
+      const newScheduler = await config.getOrCreateScheduler(
+        testSessionId,
+        callbacks,
+      );
+      expect(newScheduler).not.toBe(scheduler);
     });
   });
 

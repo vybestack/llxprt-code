@@ -59,7 +59,6 @@ export const TokenResponseSchema = z.object({
 export const AuthStatusSchema = z.object({
   provider: z.string(),
   authenticated: z.boolean(),
-  authType: z.enum(['oauth', 'api-key', 'none']),
   expiresIn: z.number().optional(), // seconds until expiry
   oauthEnabled: z.boolean().optional(), // whether OAuth is enabled for this provider
 });

@@ -22,13 +22,11 @@ import type {
   UnsubscribeFunction,
 } from '@vybestack/llxprt-code-core';
 import {
-  AuthType,
   createAgentRuntimeState,
   updateAgentRuntimeState,
   subscribeToAgentRuntimeState,
   getAgentRuntimeStateSnapshot,
 } from '@vybestack/llxprt-code-core';
-import * as fs from 'fs';
 
 /**
  * @plan PLAN-20251027-STATELESS5.P08
@@ -100,10 +98,6 @@ export class AgentRuntimeAdapter {
       runtimeId: snapshot.runtimeId,
       provider: snapshot.provider,
       model: snapshot.model,
-      authType: snapshot.authType,
-      authPayload: snapshot.authPayload
-        ? Object.freeze({ ...snapshot.authPayload })
-        : undefined,
       baseUrl: snapshot.baseUrl,
       proxyUrl: snapshot.proxyUrl,
       modelParams: snapshot.modelParams
@@ -148,19 +142,6 @@ export class AgentRuntimeAdapter {
     // @plan PLAN-20251027-STATELESS5.P08
     // @pseudocode cli-runtime-adapter.md lines 205-206
     return this.runtimeState.model;
-  }
-
-  /**
-   * @plan PLAN-20251027-STATELESS5.P08
-   * @requirement REQ-STAT5-002.1
-   * @pseudocode cli-runtime-adapter.md lines 208-209
-   *
-   * Returns the current auth type.
-   */
-  getAuthType(): AuthType {
-    // @plan PLAN-20251027-STATELESS5.P08
-    // @pseudocode cli-runtime-adapter.md lines 208-209
-    return this.runtimeState.authType;
   }
 
   /**
@@ -289,23 +270,6 @@ export class AgentRuntimeAdapter {
    * @plan PLAN-20251027-STATELESS5.P08
    * @requirement REQ-STAT5-002.1
    * @requirement REQ-STAT5-002.3
-   * @pseudocode cli-runtime-adapter.md lines 258-264
-   *
-   * Sets the auth type.
-   */
-  setAuthType(authType: AuthType): void {
-    // @plan PLAN-20251027-STATELESS5.P08
-    // @pseudocode cli-runtime-adapter.md lines 258-264
-
-    const updates: Partial<RuntimeStateParams> = { authType };
-    this.runtimeState = updateAgentRuntimeState(this.runtimeState, updates);
-    this.mirrorStateToConfig(this.runtimeState);
-  }
-
-  /**
-   * @plan PLAN-20251027-STATELESS5.P08
-   * @requirement REQ-STAT5-002.1
-   * @requirement REQ-STAT5-002.3
    * @pseudocode cli-runtime-adapter.md lines 266-272
    *
    * Sets the base URL.
@@ -406,7 +370,6 @@ export class AgentRuntimeAdapter {
     }
 
     // Note: Config doesn't have setProxy, proxy is read-only
-    // Note: Config doesn't have setAuthType, auth type is read-only
 
     // Mirror model params as ephemeral settings
     if (state.modelParams) {
@@ -536,9 +499,6 @@ export function resolveRuntimeStateFromFlags(
     runtimeId: 'foreground-agent',
     provider: config.getProvider() || 'gemini',
     model: config.getModel(),
-    authType:
-      (config as unknown as { getAuthType?: () => AuthType }).getAuthType?.() ||
-      AuthType.USE_GEMINI,
     sessionId: config.getSessionId(),
     proxyUrl: config.getProxy(),
   };
@@ -550,15 +510,6 @@ export function resolveRuntimeStateFromFlags(
 
   if (flags.model) {
     params.model = flags.model;
-  }
-
-  if (flags.key || flags.keyfile) {
-    // CLI key overrides config auth
-    params.authType = AuthType.API_KEY;
-    params.authPayload = {
-      apiKey:
-        flags.key || fs.readFileSync(flags.keyfile as string, 'utf-8').trim(),
-    };
   }
 
   if (flags.set) {

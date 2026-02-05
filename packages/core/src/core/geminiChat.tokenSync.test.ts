@@ -8,7 +8,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat } from './geminiChat.js';
 import { Config } from '../config/config.js';
 import { createGeminiChatRuntime } from '../test-utils/runtime.js';
-import { AuthType } from './contentGenerator.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -121,8 +120,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
         runtimeId: runtimeSetup.runtime.runtimeId,
         provider: 'anthropic',
         model: 'claude-3-5-sonnet-20241022',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-api-key' },
         sessionId: 'test-session-id',
       });
 
@@ -222,8 +219,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
         runtimeId: runtimeSetup.runtime.runtimeId,
         provider: 'anthropic',
         model: 'claude-3-5-sonnet-20241022',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-api-key' },
         sessionId: 'test-session-id',
       });
 
@@ -310,8 +305,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
         runtimeId: runtimeSetup.runtime.runtimeId,
         provider: 'anthropic',
         model: 'claude-3-5-sonnet-20241022',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-api-key' },
         sessionId: 'test-session-id',
       });
 
@@ -399,7 +392,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
         runtimeId: runtimeSetup.runtime.runtimeId,
         provider: 'gemini',
         model: 'gemini-pro',
-        authType: AuthType.USE_GEMINI,
         sessionId: 'test-session-id',
       });
 
@@ -493,8 +485,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
         runtimeId: runtimeSetup.runtime.runtimeId,
         provider: 'anthropic',
         model: 'claude-3-5-sonnet-20241022',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-api-key' },
         sessionId: 'test-session-id',
       });
 
@@ -569,8 +559,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
         runtimeId: runtimeSetup.runtime.runtimeId,
         provider: 'anthropic',
         model: 'claude-3-5-sonnet-20241022',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-api-key' },
         sessionId: 'test-session-id',
       });
 
@@ -651,7 +639,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
           runtimeId: runtimeSetup.runtime.runtimeId,
           provider: 'gemini',
           model: 'gemini-pro',
-          authType: AuthType.USE_GEMINI,
           sessionId: 'test-session-id',
         });
 
@@ -745,8 +732,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
           runtimeId: runtimeSetup.runtime.runtimeId,
           provider: 'anthropic',
           model: 'claude-3-5-sonnet-20241022',
-          authType: AuthType.API_KEY,
-          authPayload: { apiKey: 'test-api-key' },
           sessionId: 'test-session-id',
         });
 
@@ -839,8 +824,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
           runtimeId: runtimeSetup.runtime.runtimeId,
           provider: 'openai',
           model: 'gpt-4',
-          authType: AuthType.API_KEY,
-          authPayload: { apiKey: 'test-api-key' },
           sessionId: 'test-session-id',
         });
 
@@ -933,8 +916,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
           runtimeId: runtimeSetup.runtime.runtimeId,
           provider: 'anthropic',
           model: 'claude-3-5-sonnet-20241022',
-          authType: AuthType.API_KEY,
-          authPayload: { apiKey: 'test-api-key' },
           sessionId: 'test-session-id',
         });
 
@@ -1012,8 +993,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
           runtimeId: runtimeSetup.runtime.runtimeId,
           provider: 'anthropic',
           model: 'claude-3-5-sonnet-20241022',
-          authType: AuthType.API_KEY,
-          authPayload: { apiKey: 'test-api-key' },
           sessionId: 'test-session-id',
         });
 

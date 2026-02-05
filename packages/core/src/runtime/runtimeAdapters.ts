@@ -87,7 +87,6 @@ export function createTelemetryAdapterFromConfig(
         event.model,
         event.durationMs,
         event.promptId ?? event.runtimeId ?? 'runtime',
-        event.authType,
         event.usageMetadata,
         event.responseText,
         event.error,
@@ -100,7 +99,6 @@ export function createTelemetryAdapterFromConfig(
         event.error,
         event.durationMs,
         event.promptId ?? event.runtimeId ?? 'runtime',
-        event.authType,
         event.errorType,
         event.statusCode,
       );

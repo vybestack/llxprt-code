@@ -84,10 +84,10 @@ export const useShellCommandProcessor = (
   const [activeShellPtyId, setActiveShellPtyId] = useState<number | null>(null);
   const handleShellCommand = useCallback(
     (rawQuery: PartListUnion, abortSignal: AbortSignal): boolean => {
-      setShellInputFocused(true);
       if (typeof rawQuery !== 'string' || rawQuery.trim() === '') {
         return false;
       }
+      setShellInputFocused(true);
 
       const userMessageTimestamp = Date.now();
       const callId = `shell-${userMessageTimestamp}`;
@@ -257,19 +257,25 @@ export const useShellCommandProcessor = (
             if (pid) {
               setActiveShellPtyId(pid);
               setPendingHistoryItem((prevItem) => {
-                if (prevItem?.type === 'tool_group') {
-                  return {
-                    ...prevItem,
-                    tools: prevItem.tools.map((tool) =>
-                      tool.callId === callId ? { ...tool, ptyId: pid } : tool,
-                    ),
-                  };
+                const nextItem: HistoryItemWithoutId =
+                  prevItem?.type === 'tool_group'
+                    ? {
+                        ...prevItem,
+                        tools: prevItem.tools.map((tool) =>
+                          tool.callId === callId ? { ...tool, ptyId: pid } : tool,
+                        ),
+                      }
+                    : {
+                        type: 'tool_group',
+                        agentId: DEFAULT_AGENT_ID,
+                        tools: [{ ...initialToolDisplay, ptyId: pid }],
+                      };
+
+                if (pendingHistoryItemRef) {
+                  pendingHistoryItemRef.current = nextItem;
                 }
-                return {
-                  type: 'tool_group',
-                  agentId: DEFAULT_AGENT_ID,
-                  tools: [{ ...initialToolDisplay, ptyId: pid }],
-                };
+
+                return nextItem;
               });
             }
 

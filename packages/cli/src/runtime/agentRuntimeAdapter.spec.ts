@@ -37,7 +37,6 @@ import {
   type AgentRuntimeState,
   type RuntimeStateParams,
   type Config,
-  AuthType,
 } from '@vybestack/llxprt-code-core';
 
 // Mock fs module for keyfile reading
@@ -94,7 +93,6 @@ function createMockConfig(): Config {
     setProvider: vi.fn(),
     getModel: vi.fn(() => 'gemini-2.0-flash'),
     setModel: vi.fn(),
-    getAuthType: vi.fn(() => AuthType.USE_GEMINI),
     getSessionId: vi.fn(() => 'test-session-id'),
     getProxy: vi.fn(() => undefined),
     setProxy: vi.fn(),
@@ -127,7 +125,6 @@ describe('AgentRuntimeAdapter - Constructor and Initialization', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -137,7 +134,6 @@ describe('AgentRuntimeAdapter - Constructor and Initialization', () => {
 
     expect(adapter.getProvider()).toBe('gemini');
     expect(adapter.getModel()).toBe('gemini-2.0-flash');
-    expect(adapter.getAuthType()).toBe(AuthType.USE_GEMINI);
   });
 
   it('should mirror initial state to legacy config on construction', () => {
@@ -149,8 +145,6 @@ describe('AgentRuntimeAdapter - Constructor and Initialization', () => {
       runtimeId: 'test-runtime',
       provider: 'anthropic',
       model: 'claude-3-5-sonnet-20241022',
-      authType: AuthType.OAUTH,
-      authPayload: { token: 'test-token' },
       baseUrl: 'https://api.anthropic.com',
       sessionId: 'test-session',
     };
@@ -176,7 +170,6 @@ describe('AgentRuntimeAdapter - Constructor and Initialization', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -210,8 +203,6 @@ describe('AgentRuntimeAdapter - Read Operations', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
-      authPayload: { apiKey: 'test-key' },
       baseUrl: 'https://custom.api.com',
       sessionId: 'test-session-123',
       modelParams: { temperature: 0.7 },
@@ -235,14 +226,6 @@ describe('AgentRuntimeAdapter - Read Operations', () => {
     // @pseudocode cli-runtime-adapter.md lines 205-206
 
     expect(adapter.getModel()).toBe('gemini-2.0-flash');
-  });
-
-  it('should return current auth type via getAuthType', () => {
-    // @plan PLAN-20251027-STATELESS5.P07
-    // @requirement REQ-STAT5-002.1
-    // @pseudocode cli-runtime-adapter.md lines 208-209
-
-    expect(adapter.getAuthType()).toBe(AuthType.USE_GEMINI);
   });
 
   it('should return current session ID via getSessionId', () => {
@@ -283,9 +266,6 @@ describe('AgentRuntimeAdapter - Read Operations', () => {
     expect(snapshot.runtimeId).toBe('test-runtime');
     expect(snapshot.provider).toBe('gemini');
     expect(snapshot.model).toBe('gemini-2.0-flash');
-    expect(snapshot.authType).toBe(AuthType.USE_GEMINI);
-    // Auth payload should be sanitized
-    expect(snapshot.authPayload?.apiKey).not.toBe('test-key');
   });
 });
 
@@ -306,7 +286,6 @@ describe('AgentRuntimeAdapter - Write Operations (Single Field)', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -357,16 +336,6 @@ describe('AgentRuntimeAdapter - Write Operations (Single Field)', () => {
     expect(config.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
   });
 
-  it('should update auth type via setAuthType', () => {
-    // @plan PLAN-20251027-STATELESS5.P07
-    // @requirement REQ-STAT5-002.1, REQ-STAT5-002.3
-    // @pseudocode cli-runtime-adapter.md lines 258-264
-
-    adapter.setAuthType(AuthType.API_KEY);
-
-    expect(adapter.getAuthType()).toBe(AuthType.API_KEY);
-  });
-
   it('should update base URL via setBaseUrl', () => {
     // @plan PLAN-20251027-STATELESS5.P07
     // @requirement REQ-STAT5-002.1, REQ-STAT5-002.3
@@ -399,7 +368,6 @@ describe('AgentRuntimeAdapter - Batch Write Operations', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       baseUrl: 'https://old.api.com',
       sessionId: 'test-session',
     };
@@ -504,7 +472,6 @@ describe('AgentRuntimeAdapter - Config Mirroring', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -530,17 +497,6 @@ describe('AgentRuntimeAdapter - Config Mirroring', () => {
     adapter.setModel('gemini-2.5-flash');
 
     expect(config.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
-  });
-
-  it('should mirror auth type updates to config', () => {
-    // @plan PLAN-20251027-STATELESS5.P07
-    // @requirement REQ-STAT5-002.3
-    // @pseudocode cli-runtime-adapter.md lines 335
-
-    adapter.setAuthType(AuthType.API_KEY);
-
-    // Auth type update should be reflected in adapter
-    expect(adapter.getAuthType()).toBe(AuthType.API_KEY);
   });
 
   it('should mirror base URL updates to config ephemeral settings', () => {
@@ -586,20 +542,6 @@ describe('AgentRuntimeAdapter - Config Mirroring', () => {
       expect.anything(),
     );
   });
-
-  it('should not mirror auth payload directly to config', () => {
-    // @plan PLAN-20251027-STATELESS5.P07
-    // @requirement REQ-STAT5-002.3
-    // @pseudocode cli-runtime-adapter.md lines 350
-
-    adapter.setAuthType(AuthType.API_KEY);
-
-    // Auth payload is sensitive and not mirrored as ephemeral setting
-    expect(config.setEphemeralSetting).not.toHaveBeenCalledWith(
-      'auth-payload',
-      expect.anything(),
-    );
-  });
 });
 
 describe('AgentRuntimeAdapter - Lifecycle Management', () => {
@@ -620,7 +562,6 @@ describe('AgentRuntimeAdapter - Lifecycle Management', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -648,7 +589,6 @@ describe('AgentRuntimeAdapter - Lifecycle Management', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -690,7 +630,6 @@ describe('AgentRuntimeAdapter - Global Registry', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -739,7 +678,6 @@ describe('CLI Bootstrap Functions - resolveRuntimeStateFromFlags', () => {
 
     expect(params.provider).toBe('gemini');
     expect(params.model).toBe('gemini-2.0-flash');
-    expect(params.authType).toBe(AuthType.USE_GEMINI);
   });
 
   it('should override provider from CLI flag', () => {
@@ -768,36 +706,6 @@ describe('CLI Bootstrap Functions - resolveRuntimeStateFromFlags', () => {
     const params = resolveRuntimeStateFromFlags(flags, config);
 
     expect(params.model).toBe('gemini-2.5-flash');
-  });
-
-  it('should set API_KEY auth type from --key flag', () => {
-    // @plan PLAN-20251027-STATELESS5.P07
-    // @requirement REQ-STAT5-002.2
-    // @pseudocode cli-runtime-adapter.md lines 162-168
-
-    const flags: CliFlags = {
-      key: 'test-api-key-12345',
-    };
-
-    const params = resolveRuntimeStateFromFlags(flags, config);
-
-    expect(params.authType).toBe(AuthType.API_KEY);
-    expect(params.authPayload).toEqual({ apiKey: 'test-api-key-12345' });
-  });
-
-  it('should set API_KEY auth type from --keyfile flag', () => {
-    // @plan PLAN-20251027-STATELESS5.P07
-    // @requirement REQ-STAT5-002.2
-    // @pseudocode cli-runtime-adapter.md lines 162-168
-
-    const flags: CliFlags = {
-      keyfile: '/path/to/keyfile',
-    };
-
-    const params = resolveRuntimeStateFromFlags(flags, config);
-
-    expect(params.authType).toBe(AuthType.API_KEY);
-    expect(params.authPayload?.apiKey).toBeTruthy();
   });
 
   it('should process --set flag for base-url', () => {
@@ -947,7 +855,6 @@ describe('Legacy Helper Functions - Provider Operations', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -1042,7 +949,6 @@ describe('AgentRuntimeAdapter - Event Handling', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -1067,7 +973,6 @@ describe('AgentRuntimeAdapter - Event Handling', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);
@@ -1098,7 +1003,6 @@ describe('AgentRuntimeAdapter - Error Handling', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
     };
     const runtimeState = createAgentRuntimeState(params);

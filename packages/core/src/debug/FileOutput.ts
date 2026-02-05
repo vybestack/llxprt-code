@@ -13,6 +13,8 @@ interface QueuedEntry {
   timestamp: number;
 }
 
+const LOG_FILE_DATE_LENGTH = 10;
+
 export class FileOutput {
   private static instance: FileOutput;
   private debugDir: string;
@@ -182,6 +184,15 @@ export class FileOutput {
   }
 
   private generateLogFileName(): string {
-    return join(this.debugDir, `llxprt-debug-${this.debugRunId}.jsonl`);
+    const now = new Date();
+    const datePart = now.toISOString().slice(0, LOG_FILE_DATE_LENGTH);
+    const timePart = now
+      .toTimeString()
+      .slice(0, 8)
+      .replace(/:/g, '-');
+    return join(
+      this.debugDir,
+      `llxprt-debug-${this.debugRunId}-${datePart}-${timePart}.jsonl`,
+    );
   }
 }

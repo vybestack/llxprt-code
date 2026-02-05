@@ -9,13 +9,14 @@ import {
   DebugLogger,
   ProviderRuntimeContext,
   SettingsService,
-  AuthType,
   ProfileManager,
   createProviderRuntimeContext,
   getActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   getProfilePersistableKeys,
   resolveAlias,
+  getProviderConfigKeys,
+  isLoadBalancerProfile,
 } from '@vybestack/llxprt-code-core';
 import type {
   ProviderManager,
@@ -376,10 +377,6 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
     });
   }
 
-  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
-  // Legacy fallback to global context (should not be used under stateless hardening)
-  const context = getActiveProviderRuntimeContext();
-
   if (isStatelessProviderIntegrationEnabled()) {
     throw new Error(
       formatMissingRuntimeMessage({
@@ -389,6 +386,10 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
       }),
     );
   }
+
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // Legacy fallback to global context (should not be used under stateless hardening)
+  const context = getActiveProviderRuntimeContext();
 
   if (!context.config) {
     throw new Error(
@@ -648,26 +649,7 @@ export function getCliOAuthManager(): OAuthManager | null {
   return runtimeRegistry.get(runtimeId)?.oauthManager ?? null;
 }
 
-const RESERVED_PROVIDER_SETTING_KEYS = new Set([
-  'model',
-  'enabled',
-  'apiKey',
-  'api-key',
-  'apiKeyfile',
-  'api-keyfile',
-  'auth-key',
-  'authKey',
-  'auth-keyfile',
-  'authKeyfile',
-  'baseUrl',
-  'baseURL',
-  'base-url',
-  'toolFormat',
-  'tool-format',
-  'toolFormatOverride',
-  'tool-format-override',
-  'defaultModel',
-]);
+const RESERVED_PROVIDER_SETTING_KEYS = new Set(getProviderConfigKeys());
 
 function resolveActiveProviderName(
   settingsService: SettingsService,
@@ -768,7 +750,6 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
   const resolvedModel = getActiveModelName();
   const modelName =
     resolvedModel && resolvedModel.trim() !== '' ? resolvedModel : null;
-  const authType = config.getContentGeneratorConfig()?.authType;
 
   try {
     const provider = providerManager.getActiveProvider();
@@ -797,7 +778,6 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
       modelName,
       displayLabel,
       isPaidMode: provider.isPaidMode?.(),
-      authType,
       baseURL,
     };
   } catch {
@@ -812,7 +792,6 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
       providerName,
       modelName,
       displayLabel: fallbackLabel,
-      authType,
     };
   }
 }
@@ -1058,7 +1037,6 @@ export interface ProfileLoadResult {
   infoMessages: string[];
   warnings: string[];
   providerChanged: boolean;
-  authType?: AuthType;
   baseUrl?: string;
   didFallback: boolean;
   requestedProvider: string | null;
@@ -1099,6 +1077,89 @@ export async function applyProfileSnapshot(
             }`,
         );
       });
+
+    // @fix issue1151 - Proactively wire the failover handler BEFORE any API calls
+    // This ensures the handler is available when the first 403 error occurs.
+    // Without this, the handler is only created inside getOAuthToken() which may
+    // be too late if the 403 happens on the first request.
+    // Only applies to StandardProfile (not LoadBalancerProfile)
+    const standardProfile = profile as {
+      auth?: { type?: string; buckets?: string[] };
+    };
+    const authConfig = standardProfile.auth;
+    if (
+      authConfig?.type === 'oauth' &&
+      authConfig.buckets &&
+      authConfig.buckets.length > 1
+    ) {
+      const bucketCount = authConfig.buckets.length;
+      // Touch getOAuthToken to ensure handler is wired to config
+      void oauthManager.getOAuthToken(profile.provider).catch((error) => {
+        logger.debug(
+          () =>
+            `[issue1151] Failed to proactively wire failover handler: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+      });
+      logger.debug(
+        () =>
+          `[issue1151] Proactively wired failover handler for ${profile.provider} with ${bucketCount} buckets`,
+      );
+    }
+
+    // @fix issue1250 - Proactively wire the failover handler for LoadBalancer sub-profiles
+    // This is a follow-up to issue #1151 which only handled StandardProfile.
+    // For LoadBalancer profiles, we need to iterate through all sub-profiles and
+    // proactively wire failover handlers for any OAuth multi-bucket sub-profiles.
+    if (isLoadBalancerProfile(profile)) {
+      const subProfileNames = profile.profiles || [];
+      logger.debug(
+        () =>
+          `[issue1250] LoadBalancer profile detected with ${subProfileNames.length} sub-profile(s)`,
+      );
+
+      for (const subProfileName of subProfileNames) {
+        try {
+          const subProfile = await new ProfileManager().loadProfile(
+            subProfileName,
+          );
+          const subProfileAuth = (
+            subProfile as { auth?: { type?: string; buckets?: string[] } }
+          ).auth;
+
+          if (
+            subProfileAuth?.type === 'oauth' &&
+            subProfileAuth.buckets &&
+            subProfileAuth.buckets.length > 1
+          ) {
+            const subBucketCount = subProfileAuth.buckets.length;
+            // Touch getOAuthToken to ensure handler is wired to config
+            void oauthManager
+              .getOAuthToken(subProfile.provider)
+              .catch((error) => {
+                logger.debug(
+                  () =>
+                    `[issue1250] Failed to proactively wire failover handler for sub-profile '${subProfileName}': ${
+                      error instanceof Error ? error.message : String(error)
+                    }`,
+                );
+              });
+            logger.debug(
+              () =>
+                `[issue1250] Proactively wired failover handler for sub-profile '${subProfileName}' (${subProfile.provider}) with ${subBucketCount} buckets`,
+            );
+          }
+        } catch (error) {
+          logger.debug(
+            () =>
+              `[issue1250] Failed to load sub-profile '${subProfileName}': ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+          );
+        }
+      }
+    }
   }
 
   return {
@@ -1108,7 +1169,6 @@ export async function applyProfileSnapshot(
     infoMessages: applicationResult.infoMessages,
     warnings: applicationResult.warnings,
     providerChanged: applicationResult.providerChanged,
-    authType: applicationResult.authType,
     baseUrl: applicationResult.baseUrl,
     didFallback: applicationResult.didFallback,
     requestedProvider: applicationResult.requestedProvider,
@@ -1283,7 +1343,6 @@ export interface ProviderSwitchResult {
   previousProvider: string | null;
   nextProvider: string;
   defaultModel?: string;
-  authType?: AuthType;
   infoMessages: string[];
 }
 
@@ -1292,7 +1351,6 @@ export interface ApiKeyUpdateResult {
   providerName: string;
   message: string;
   isPaidMode?: boolean;
-  authType?: AuthType;
 }
 
 export interface BaseUrlUpdateResult {
@@ -1326,7 +1384,6 @@ export interface ProviderRuntimeStatus {
   modelName: string | null;
   displayLabel: string;
   isPaidMode?: boolean;
-  authType?: AuthType;
   baseURL?: string;
 }
 
@@ -1484,8 +1541,6 @@ export async function switchActiveProvider(
       changed: false,
       previousProvider: currentProvider,
       nextProvider: name,
-      authType:
-        config.getContentGeneratorConfig()?.authType ?? AuthType.USE_PROVIDER,
       infoMessages: [],
     };
   }
@@ -1702,29 +1757,6 @@ export async function switchActiveProvider(
   settingsService.setProviderSetting(name, 'model', modelToApply || undefined);
   config.setModel(modelToApply);
 
-  let authType: AuthType;
-  if (name === 'gemini') {
-    const currentAuthType = config.getContentGeneratorConfig()?.authType;
-    if (
-      currentAuthType === AuthType.USE_PROVIDER ||
-      currentAuthType === undefined
-    ) {
-      if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        authType = AuthType.USE_VERTEX_AI;
-      } else if (process.env.GEMINI_API_KEY) {
-        authType = AuthType.USE_GEMINI;
-      } else {
-        authType = AuthType.LOGIN_WITH_GOOGLE;
-      }
-    } else {
-      authType = currentAuthType;
-    }
-  } else {
-    authType = AuthType.USE_PROVIDER;
-  }
-
-  await config.refreshAuth(authType);
-
   const infoMessages: string[] = [];
 
   if (name === 'anthropic') {
@@ -1752,7 +1784,6 @@ export async function switchActiveProvider(
             }
             logger.debug(() => '[cli-runtime] Initiating Anthropic OAuth flow');
             await oauthManager.authenticate('anthropic');
-            await config.refreshAuth(authType);
             infoMessages.push(
               'Anthropic OAuth authentication completed. Use /auth anthropic to view status.',
             );
@@ -1930,12 +1961,33 @@ export async function switchActiveProvider(
     infoMessages.push('Use /key to set API key if needed.');
   }
 
+  if (
+    typeof (
+      config as Config & {
+        initializeContentGeneratorConfig?: () => Promise<void>;
+      }
+    ).initializeContentGeneratorConfig === 'function'
+  ) {
+    try {
+      await (
+        config as Config & {
+          initializeContentGeneratorConfig: () => Promise<void>;
+        }
+      ).initializeContentGeneratorConfig();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        () =>
+          `[cli-runtime] Failed to initialize content generator config: ${message}`,
+      );
+    }
+  }
+
   return {
     changed: true,
     previousProvider: currentProvider,
     nextProvider: name,
     defaultModel: modelToApply || undefined,
-    authType,
     infoMessages,
   };
 }
@@ -1960,17 +2012,11 @@ export async function updateActiveProviderApiKey(
     return `[runtime] updateActiveProviderApiKey provider='${providerName}' value=${masked} CALLED`;
   });
 
-  let authType: AuthType | undefined;
   if (!trimmed) {
     settingsService.setProviderSetting(providerName, 'apiKey', undefined);
     settingsService.setProviderSetting(providerName, 'auth-key', undefined);
     config.setEphemeralSetting('auth-key', undefined);
     config.setEphemeralSetting('auth-keyfile', undefined);
-
-    if (providerName === 'gemini') {
-      authType = AuthType.LOGIN_WITH_GOOGLE;
-      await config.refreshAuth(authType);
-    }
 
     const isPaidMode = provider.isPaidMode?.();
     logger.debug(
@@ -1983,21 +2029,15 @@ export async function updateActiveProviderApiKey(
       message:
         `API key removed for provider '${providerName}'` +
         (providerName === 'gemini' && isPaidMode === false
-          ? '\n✅ You are now using OAuth (no paid usage).'
+          ? '\n[OK] You are now using OAuth (no paid usage).'
           : ''),
       isPaidMode,
-      authType,
     };
   }
 
   settingsService.setProviderSetting(providerName, 'apiKey', trimmed);
   config.setEphemeralSetting('auth-key', trimmed);
   config.setEphemeralSetting('auth-keyfile', undefined);
-
-  if (providerName === 'gemini') {
-    authType = AuthType.USE_GEMINI;
-    await config.refreshAuth(authType);
-  }
 
   const isPaidMode = provider.isPaidMode?.();
   logger.debug(
@@ -2013,7 +2053,6 @@ export async function updateActiveProviderApiKey(
         ? '\nWARNING: Gemini now runs in paid mode.'
         : ''),
     isPaidMode,
-    authType,
   };
 }
 
@@ -2116,7 +2155,7 @@ export async function setActiveModel(
   const previousModel =
     (providerSettings.model as string | undefined) || config.getModel();
 
-  let authRefreshed = false;
+  const authRefreshed = false;
   try {
     settingsService.set('activeProvider', activeProvider.name);
     await settingsService.updateSettings(activeProvider.name, {
@@ -2130,22 +2169,6 @@ export async function setActiveModel(
   }
 
   config.setModel(modelName);
-
-  if (activeProvider.name === 'anthropic') {
-    const providerWithAuth = activeProvider as {
-      isAuthenticated?: () => Promise<boolean>;
-    };
-    if (typeof providerWithAuth.isAuthenticated === 'function') {
-      const hasAuth = await providerWithAuth.isAuthenticated();
-      if (!hasAuth) {
-        const currentAuthType =
-          config.getContentGeneratorConfig()?.authType ||
-          AuthType.LOGIN_WITH_GOOGLE;
-        await config.refreshAuth(currentAuthType);
-        authRefreshed = true;
-      }
-    }
-  }
 
   return {
     providerName: activeProvider.name,

@@ -37,6 +37,7 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
+import { useTodoContinuation } from './hooks/useTodoContinuation.js';
 import {
   isMouseEventsActive,
   setMouseEventsActive,
@@ -83,7 +84,6 @@ import {
   ShellExecutionService,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
-import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useSessionStats } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
@@ -225,7 +225,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
   useMemoryMonitor({ addItem });
-  const { updateTodos } = useTodoContext();
+  const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
   const registerTodoPause = useCallback(() => {
     todoPauseController.registerTodoPause();
@@ -1110,27 +1110,10 @@ export const AppContainer = (props: AppContainerProps) => {
     { isActive: showIdeRestartPrompt },
   );
 
-  const {
-    isAuthDialogOpen,
-    openAuthDialog,
-    handleAuthSelect,
-    isAuthenticating,
-    cancelAuthentication,
-  } = useAuthCommand(settings, appState, config);
-
-  useEffect(() => {
-    if (settings.merged.selectedAuthType && !settings.merged.useExternalAuth) {
-      const error = validateAuthMethod(settings.merged.selectedAuthType);
-      if (error) {
-        setAuthError(error);
-        // Don't automatically open auth dialog - user must use /auth command
-      }
-    }
-  }, [
-    settings.merged.selectedAuthType,
-    settings.merged.useExternalAuth,
-    setAuthError,
-  ]);
+  const { isAuthDialogOpen, openAuthDialog, handleAuthSelect } = useAuthCommand(
+    settings,
+    appState,
+  );
 
   // Check for OAuth code needed flag
   useEffect(() => {
@@ -1421,9 +1404,8 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
-    cancelAuthentication();
     // NEVER automatically open auth dialog - user must use /auth
-  }, [setAuthError, cancelAuthentication]);
+  }, [setAuthError]);
 
   const handlePrivacyNoticeExit = useCallback(() => {
     setShowPrivacyNotice(false);
@@ -1459,6 +1441,7 @@ export const AppContainer = (props: AppContainerProps) => {
       toggleDebugProfiler,
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
+      openWelcomeDialog: welcomeActions.resetAndReopen,
     }),
     [
       openAuthDialog,
@@ -1482,7 +1465,23 @@ export const AppContainer = (props: AppContainerProps) => {
       toggleDebugProfiler,
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
+      welcomeActions.resetAndReopen,
     ],
+  );
+
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P07
+   * Get TodoContext for /todo command integration
+   */
+  const todoContextForCommands = useMemo(
+    () => ({
+      todos,
+      updateTodos,
+      refreshTodos: () => {
+        /* refreshTodos is available but not needed in commands */
+      },
+    }),
+    [todos, updateTodos],
   );
 
   const {
@@ -1505,6 +1504,7 @@ export const AppContainer = (props: AppContainerProps) => {
     slashCommandProcessorActions,
     extensionsUpdateState,
     true, // isConfigInitialized
+    todoContextForCommands, // @plan PLAN-20260129-TODOPERSIST.P07
   );
 
   // Memoize viewport to ensure it updates when inputWidth changes
@@ -1633,6 +1633,14 @@ export const AppContainer = (props: AppContainerProps) => {
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
       if (trimmedValue.length > 0) {
+        /**
+         * @plan PLAN-20260129-TODOPERSIST.P12
+         * Reset continuation attempt counter when user submits a new prompt.
+         * This prevents the continuation limit from blocking future continuations
+         * after user interaction.
+         */
+        hadToolCallsRef.current = false;
+
         // Add to independent input history
         inputHistoryStore.addInput(trimmedValue);
         submitQuery(trimmedValue);
@@ -1645,6 +1653,7 @@ export const AppContainer = (props: AppContainerProps) => {
     controller: todoPauseController,
     updateTodos,
     handleFinalSubmit,
+    todos,
   });
 
   const handleIdePromptComplete = useCallback(
@@ -1736,10 +1745,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
       // Handle exit keys BEFORE dialog visibility check so exit prompts work even when dialogs are open
       if (keyMatchers[Command.QUIT](key)) {
-        // When authenticating, let AuthInProgress component handle Ctrl+C.
-        if (isAuthenticating) {
-          return;
-        }
         if (!ctrlCPressedOnce) {
           cancelOngoingRequest?.();
         }
@@ -1846,7 +1851,6 @@ export const AppContainer = (props: AppContainerProps) => {
       setCtrlDPressedOnce,
       ctrlDTimerRef,
       handleSlashCommand,
-      isAuthenticating,
       cancelOngoingRequest,
       addItem,
       settings.merged.debugKeystrokeLogging,
@@ -1945,7 +1949,27 @@ export const AppContainer = (props: AppContainerProps) => {
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
 
-  useMouseSelection({ enabled: true, rootRef: rootUiRef });
+  const { copySelectionToClipboard } = useMouseSelection({
+    enabled: true,
+    rootRef: rootUiRef,
+    onCopiedText: (text) => {
+      if (selectionLogger.enabled) {
+        selectionLogger.debug(
+          () => `Copied ${text.length} characters to clipboard`,
+        );
+      }
+    },
+  });
+
+  // Fix for issue #1284: Add keyboard shortcut for Cmd+C/Ctrl+C to copy selection
+  useKeypress(
+    (key) => {
+      if (key.name === 'c' && (key.ctrl || key.meta)) {
+        void copySelectionToClipboard();
+      }
+    },
+    { isActive: true },
+  );
 
   useLayoutEffect(() => {
     if (mainControlsRef.current) {
@@ -2025,8 +2049,47 @@ export const AppContainer = (props: AppContainerProps) => {
     [storage, sessionId],
   );
 
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P12
+   * Wire up todo continuation detection to trigger continuation prompts
+   * when streams complete without tool calls and active TODOs exist.
+   */
+  const geminiClientForContinuation = config.getGeminiClient();
+  const todoContinuation = useTodoContinuation(
+    geminiClientForContinuation,
+    config,
+    streamingState === StreamingState.Responding ||
+      streamingState === StreamingState.WaitingForConfirmation,
+    setDebugMessage,
+  );
+
   // Track previous streaming state to detect turn completion
   const prevStreamingStateRef = useRef<StreamingState>(streamingState);
+
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P12
+   * Track whether tool calls were made during the turn for continuation decision.
+   * Tool calls signal the AI made progress, so we don't need continuation.
+   */
+  const hadToolCallsRef = useRef<boolean>(false);
+
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P12
+   * Track tool calls by detecting tool_group items in history and pending items.
+   */
+  useEffect(() => {
+    const hasToolCalls =
+      history.some((item) => item.type === 'tool_group') ||
+      pendingHistoryItems.some((item) => item.type === 'tool_group');
+
+    if (
+      hasToolCalls &&
+      (streamingState === StreamingState.Responding ||
+        streamingState === StreamingState.WaitingForConfirmation)
+    ) {
+      hadToolCallsRef.current = true;
+    }
+  }, [history, pendingHistoryItems, streamingState]);
 
   // Save session when turn completes (streaming goes idle)
   useEffect(() => {
@@ -2039,6 +2102,16 @@ export const AppContainer = (props: AppContainerProps) => {
     if (!wasActive || !isNowIdle) {
       return;
     }
+
+    /**
+     * @plan PLAN-20260129-TODOPERSIST.P12
+     * Notify continuation logic that stream completed.
+     * Pass hadToolCalls to determine if continuation is needed.
+     */
+    todoContinuation.handleStreamCompleted(hadToolCallsRef.current);
+
+    // Reset for next turn
+    hadToolCallsRef.current = false;
 
     // Get history from gemini client and save
     const geminiClient = config.getGeminiClient();
@@ -2065,7 +2138,7 @@ export const AppContainer = (props: AppContainerProps) => {
       .catch((err: unknown) => {
         debug.error('Failed to save session:', err);
       });
-  }, [streamingState, sessionPersistence, config, history]);
+  }, [streamingState, sessionPersistence, config, history, todoContinuation]);
 
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {
@@ -2091,7 +2164,6 @@ export const AppContainer = (props: AppContainerProps) => {
     if (
       initialPrompt &&
       !initialPromptSubmitted.current &&
-      !isAuthenticating &&
       !isAuthDialogOpen &&
       !isThemeDialogOpen &&
       !isEditorDialogOpen &&
@@ -2108,11 +2180,11 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [
     initialPrompt,
     submitQuery,
-    isAuthenticating,
     isAuthDialogOpen,
     isThemeDialogOpen,
     isEditorDialogOpen,
     isProviderDialogOpen,
+
     isToolsDialogOpen,
     isCreateProfileDialogOpen,
     showPrivacyNotice,
@@ -2164,7 +2236,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isThemeDialogOpen,
     isSettingsDialogOpen,
     isAuthDialogOpen,
-    isAuthenticating,
     isEditorDialogOpen,
     isProviderDialogOpen,
     isLoadProfileDialogOpen,
@@ -2338,7 +2409,6 @@ export const AppContainer = (props: AppContainerProps) => {
       // Auth dialog
       openAuthDialog,
       handleAuthSelect,
-      cancelAuthentication,
       handleAuthTimeout,
 
       // Editor dialog
@@ -2460,7 +2530,6 @@ export const AppContainer = (props: AppContainerProps) => {
       handleSettingsRestart,
       openAuthDialog,
       handleAuthSelect,
-      cancelAuthentication,
       handleAuthTimeout,
       openEditorDialog,
       handleEditorSelect,

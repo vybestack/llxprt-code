@@ -8,7 +8,6 @@ import {
   MCPServerConfig,
   BugCommandSettings,
   TelemetrySettings,
-  AuthType,
   ChatCompressionSettings,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
@@ -299,15 +298,6 @@ export const SETTINGS_SCHEMA = {
     showInDialog: true,
   },
 
-  selectedAuthType: {
-    type: 'string',
-    label: 'Selected Auth Type',
-    category: 'Advanced',
-    requiresRestart: true,
-    default: 'provider' as AuthType,
-    description: 'The currently selected authentication type.',
-    showInDialog: false,
-  },
   useExternalAuth: {
     type: 'boolean',
     label: 'Use External Auth',
@@ -1160,7 +1150,7 @@ export const SETTINGS_SCHEMA = {
             label: 'Selected Auth Type',
             category: 'Security',
             requiresRestart: true,
-            default: undefined as AuthType | undefined,
+            default: undefined as string | undefined,
             description: 'The currently selected authentication type.',
             showInDialog: false,
           },

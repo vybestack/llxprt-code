@@ -112,7 +112,11 @@ export function toFriendlyError(error: unknown): unknown {
 function parseResponseData(error: GaxiosError): ResponseData {
   // Inexplicably, Gaxios sometimes doesn't JSONify the response data.
   if (typeof error.response?.data === 'string') {
-    return JSON.parse(error.response?.data) as ResponseData;
+    try {
+      return JSON.parse(error.response?.data) as ResponseData;
+    } catch {
+      return {};
+    }
   }
   return error.response?.data as ResponseData;
 }

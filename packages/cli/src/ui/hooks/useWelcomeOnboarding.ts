@@ -47,6 +47,8 @@ export interface WelcomeActions {
   goBack: () => void;
   saveProfile: (name: string) => Promise<void>;
   dismiss: () => void;
+  /** Re-trigger the welcome onboarding flow (for /setup command) */
+  resetAndReopen: () => void;
 }
 
 export interface UseWelcomeOnboardingOptions {
@@ -313,6 +315,18 @@ export const useWelcomeOnboarding = (
     debug.log(`Welcome flow completed (skipped: ${skipped})`);
   }, [state.step]);
 
+  const resetAndReopen = useCallback(() => {
+    debug.log('[resetAndReopen] Re-triggering welcome onboarding');
+    // Reset local state
+    setWelcomeCompleted(false);
+    setState({
+      step: 'welcome',
+      authInProgress: false,
+      modelsLoadStatus: 'idle',
+    });
+    setAvailableModels([]);
+  }, []);
+
   // Trigger authentication for the selected provider
   // Flow is now: provider → auth → model, so we authenticate FIRST before setting provider/model
   const triggerAuth = useCallback(
@@ -384,6 +398,7 @@ export const useWelcomeOnboarding = (
       goBack,
       saveProfile,
       dismiss,
+      resetAndReopen,
     },
     availableProviders,
     availableModels,

@@ -313,6 +313,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     category: 'cli-behavior',
     description: 'Maximum number of tokens for the context window',
     type: 'number',
+    hint: 'positive integer (e.g., 100000)',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
       if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
@@ -330,6 +331,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     description:
       'Fraction of context limit that triggers compression (0.0-1.0)',
     type: 'number',
+    hint: 'decimal between 0 and 1 (e.g., 0.7)',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
       if (typeof value === 'number' && value >= 0 && value <= 1) {
@@ -407,9 +409,79 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
   {
     key: 'maxTurnsPerPrompt',
     category: 'cli-behavior',
-    description: 'Maximum number of turns allowed per prompt before stopping',
+    description:
+      'Maximum number of turns allowed per prompt before stopping (default: -1 for unlimited)',
     type: 'number',
     persistToProfile: true,
+    default: -1,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        (value === -1 || value > 0)
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'maxTurnsPerPrompt must be a positive integer or -1 for unlimited',
+      };
+    },
+  },
+  {
+    key: 'loopDetectionEnabled',
+    category: 'cli-behavior',
+    description: 'Enable/disable all loop detection mechanisms (true/false)',
+    type: 'boolean',
+    persistToProfile: true,
+    default: true,
+  },
+  {
+    key: 'toolCallLoopThreshold',
+    category: 'cli-behavior',
+    description:
+      'Number of consecutive identical tool calls before triggering loop detection (default: 50, -1 = unlimited)',
+    type: 'number',
+    persistToProfile: true,
+    default: 50,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        (value === -1 || value > 0)
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'toolCallLoopThreshold must be a positive integer or -1 for unlimited',
+      };
+    },
+  },
+  {
+    key: 'contentLoopThreshold',
+    category: 'cli-behavior',
+    description:
+      'Number of content chunk repetitions before triggering loop detection (default: 50, -1 = unlimited)',
+    type: 'number',
+    persistToProfile: true,
+    default: 50,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        (value === -1 || value > 0)
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'contentLoopThreshold must be a positive integer or -1 for unlimited',
+      };
+    },
   },
   {
     key: 'retries',
@@ -430,6 +502,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     category: 'cli-behavior',
     description: 'Request timeout in milliseconds for local AI servers',
     type: 'number',
+    hint: 'positive integer in milliseconds (e.g., 60000)',
     persistToProfile: true,
   },
   {
@@ -608,9 +681,17 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
   },
   {
     key: 'max_output_tokens',
-    aliases: ['max-output-tokens', 'maxOutputTokens'],
+    aliases: ['max-output-tokens'],
     category: 'model-param',
-    description: 'Maximum output tokens (Gemini)',
+    description: 'Maximum output tokens (Gemini native param)',
+    type: 'number',
+    persistToProfile: true,
+  },
+  {
+    key: 'maxOutputTokens',
+    aliases: ['max-output'],
+    category: 'cli-behavior',
+    description: 'Maximum output tokens (generic, translated by provider)',
     type: 'number',
     persistToProfile: true,
   },
@@ -1161,4 +1242,93 @@ export function getAutocompleteSuggestions(
   }
 
   return undefined;
+}
+
+function collectProviderConfigKeys(): string[] {
+  const keys: string[] = [];
+  for (const spec of SETTINGS_REGISTRY) {
+    if (spec.category === 'provider-config') {
+      keys.push(spec.key);
+      if (spec.aliases) {
+        keys.push(...spec.aliases);
+      }
+    }
+  }
+  return keys;
+}
+
+export function getProtectedSettingKeys(): string[] {
+  const keys = collectProviderConfigKeys();
+  keys.push('provider', 'currentProfile');
+  return keys;
+}
+
+export function getProviderConfigKeys(): string[] {
+  return collectProviderConfigKeys();
+}
+
+export interface DirectSettingSpec {
+  value: string;
+  hint: string;
+  description?: string;
+  options?: ReadonlyArray<{ value: string; description?: string }>;
+}
+
+function deriveHintFromSpec(spec: SettingSpec): string {
+  if (spec.hint) {
+    return spec.hint;
+  }
+
+  if (spec.type === 'boolean') {
+    return 'true or false';
+  }
+
+  if (spec.type === 'number') {
+    return 'number';
+  }
+
+  if (spec.type === 'enum' && spec.enumValues) {
+    return spec.enumValues.join(', ');
+  }
+
+  if (spec.type === 'json') {
+    return 'JSON object';
+  }
+
+  if (spec.type === 'string-array') {
+    return 'comma-separated list';
+  }
+
+  return 'value';
+}
+
+export function getDirectSettingSpecs(): DirectSettingSpec[] {
+  const specs: DirectSettingSpec[] = [];
+
+  for (const spec of SETTINGS_REGISTRY) {
+    if (
+      spec.category === 'model-param' ||
+      spec.category === 'custom-header' ||
+      spec.category === 'provider-config'
+    ) {
+      continue;
+    }
+
+    const hint = deriveHintFromSpec(spec);
+    const options =
+      spec.completionOptions ??
+      spec.enumValues?.map((v) => ({ value: v })) ??
+      (spec.type === 'boolean'
+        ? [{ value: 'true' }, { value: 'false' }]
+        : undefined);
+
+    specs.push({
+      value: spec.key,
+      hint,
+      description: spec.description,
+      options,
+    });
+  }
+
+  return specs;
 }

@@ -82,13 +82,13 @@ available combinations.
 
 | Action                                                            | Keys       |
 | ----------------------------------------------------------------- | ---------- |
-| Toggle detailed error information.                                | `F12`      |
-| Toggle the full TODO list.                                        | `Ctrl + T` |
-| Toggle IDE context details.                                       | `Ctrl + G` |
-| Toggle Markdown rendering.                                        | `Cmd + M`  |
-| Toggle copy mode when the terminal is using the alternate buffer. | `Ctrl + S` |
-| Expand a height-constrained response to show additional lines.    | `Ctrl + S` |
-| Toggle focus between the shell and Gemini input.                  | `Ctrl + F` |
+| Toggle detailed error information.                                                     | `F12`      |
+| Toggle tool descriptions display.                                                      | `Ctrl + T` |
+| Toggle IDE context details.                                                            | `Ctrl + G` |
+| Toggle Markdown rendering.                                                             | `Cmd + M`  |
+| Toggle copy mode when the terminal is using the alternate buffer.                     | `Ctrl + Y` |
+| Expand a height-constrained response to show additional lines (outside alternate mode). | `Ctrl + S` |
+| Toggle focus between the shell and Gemini input.                                       | `Ctrl + F` |
 
 #### Session Control
 

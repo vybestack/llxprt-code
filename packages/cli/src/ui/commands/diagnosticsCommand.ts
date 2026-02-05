@@ -84,6 +84,35 @@ export const diagnosticsCommand: SlashCommand = {
         diagnostics.push(`- OAuth Bucket: ${sessionBucket ?? 'default'}`);
       }
 
+      // Show bucket failover status
+      const failoverHandler = config.getBucketFailoverHandler?.();
+      if (failoverHandler) {
+        const buckets = failoverHandler.getBuckets?.() ?? [];
+        const currentBucket = failoverHandler.getCurrentBucket?.();
+        const isEnabled = failoverHandler.isEnabled?.() ?? false;
+        diagnostics.push(
+          `- Bucket Failover: ${isEnabled ? 'Enabled' : 'Disabled'}`,
+        );
+        if (buckets.length > 0) {
+          diagnostics.push(`- Failover Buckets: ${buckets.join(' → ')}`);
+          diagnostics.push(
+            `- Current Failover Bucket: ${currentBucket ?? buckets[0] ?? 'default'}`,
+          );
+          // Calculate next bucket
+          if (currentBucket && buckets.length > 1) {
+            const currentIndex = buckets.indexOf(currentBucket);
+            const nextBucket =
+              currentIndex >= 0 && currentIndex < buckets.length - 1
+                ? buckets[currentIndex + 1]
+                : '(none - last bucket)';
+            diagnostics.push(`- Next Failover Bucket: ${nextBucket}`);
+          }
+        }
+      } else if (oauthMgr && snapshot.providerName) {
+        // No handler but OAuth is configured - indicate failover not active
+        diagnostics.push(`- Bucket Failover: Not configured`);
+      }
+
       // Check for load balancer stats
       // NEW ARCHITECTURE: Get stats from LoadBalancingProvider directly
       const runtimeApi = getRuntimeApi();
@@ -232,9 +261,6 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push('\n## Settings');
       const merged = settings?.merged || {};
       diagnostics.push(`- Theme: ${merged.ui?.theme || 'default'}`);
-      diagnostics.push(
-        `- Selected Auth Type: ${merged.selectedAuthType || 'none'}`,
-      );
       diagnostics.push(`- Default Profile: ${merged.defaultProfile || 'none'}`);
       diagnostics.push(`- Sandbox: ${merged.sandbox || 'disabled'}`);
 

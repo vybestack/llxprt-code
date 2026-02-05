@@ -297,7 +297,6 @@ const mockConfig = {
   getAllowedTools: vi.fn(() => []),
   getContentGeneratorConfig: () => ({
     model: 'test-model',
-    authType: 'oauth-personal',
   }),
   getMessageBus: () => mockMessageBus,
   getPolicyEngine: vi.fn(() => ({

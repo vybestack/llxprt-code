@@ -10,7 +10,7 @@ import process from 'node:process';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, Todo } from '@vybestack/llxprt-code-core';
 import {
   GitService,
   Logger,
@@ -78,10 +78,13 @@ interface SlashCommandProcessorActions {
   toggleDebugProfiler: () => void;
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void;
   addConfirmUpdateExtensionRequest: (request: ConfirmationRequest) => void;
+  openWelcomeDialog: () => void;
 }
 
 /**
  * Hook to define and process slash commands (e.g., /help, /clear).
+ *
+ * @plan PLAN-20260129-TODOPERSIST.P07 - Added todoContext param
  */
 export const useSlashCommandProcessor = (
   config: Config | null,
@@ -96,6 +99,11 @@ export const useSlashCommandProcessor = (
   actions: SlashCommandProcessorActions,
   extensionsUpdateState: Map<string, ExtensionUpdateState>,
   isConfigInitialized: boolean,
+  todoContext?: {
+    todos: Todo[];
+    updateTodos: (todos: Todo[]) => void;
+    refreshTodos: () => void;
+  },
 ) => {
   const session = useSessionStats();
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
@@ -185,7 +193,6 @@ export const useSlashCommandProcessor = (
           osVersion: message.osVersion,
           sandboxEnv: message.sandboxEnv,
           modelVersion: message.modelVersion,
-          selectedAuthType: message.selectedAuthType,
           gcpProject: message.gcpProject,
           keyfile: message.keyfile || '',
           key: message.key || '',
@@ -254,6 +261,11 @@ export const useSlashCommandProcessor = (
     },
     [addItem],
   );
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P07
+   * @requirement REQ-003, REQ-004, REQ-005, REQ-006
+   * Added todoContext to CommandContext for /todo command integration
+   */
   const commandContext = useMemo(
     (): CommandContext => ({
       services: {
@@ -293,6 +305,7 @@ export const useSlashCommandProcessor = (
         stats: session.stats,
         sessionShellAllowlist,
       },
+      todoContext,
     }),
     [
       alternateBuffer,
@@ -316,6 +329,7 @@ export const useSlashCommandProcessor = (
       setLlxprtMdFileCount,
       reloadCommands,
       extensionsUpdateState,
+      todoContext,
     ],
   );
 
@@ -564,6 +578,9 @@ export const useSlashCommandProcessor = (
                       actions.openModelsDialog(modelsData);
                       return { type: 'handled' };
                     }
+                    case 'welcome':
+                      actions.openWelcomeDialog();
+                      return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;
                       throw new Error(

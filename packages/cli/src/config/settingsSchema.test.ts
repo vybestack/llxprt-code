@@ -23,7 +23,6 @@ describe('SettingsSchema', () => {
         'checkpointing',
         'fileFiltering',
         'disableAutoUpdate',
-        'selectedAuthType',
         'useExternalAuth',
         'sandbox',
         'coreTools',
@@ -200,7 +199,6 @@ describe('SettingsSchema', () => {
       ).toBe(false);
 
       // Check that advanced settings are hidden from dialog
-      expect(SETTINGS_SCHEMA.selectedAuthType.showInDialog).toBe(false);
       expect(SETTINGS_SCHEMA.coreTools.showInDialog).toBe(false);
       expect(SETTINGS_SCHEMA.mcpServers.showInDialog).toBe(false);
       expect(SETTINGS_SCHEMA.telemetry.showInDialog).toBe(false);

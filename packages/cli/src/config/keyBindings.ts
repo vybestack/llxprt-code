@@ -77,7 +77,6 @@ export enum Command {
   TOGGLE_MOUSE_EVENTS = 'toggleMouseEvents',
 
   // Additional commands from keyboard shortcuts autogen
-  SHOW_FULL_TODOS = 'showFullTodos',
   TOGGLE_SHELL_INPUT_FOCUS = 'toggleShellInputFocus',
   EXPAND_SUGGESTION = 'expandSuggestion',
   COLLAPSE_SUGGESTION = 'collapseSuggestion',
@@ -226,7 +225,6 @@ export const defaultKeyBindings: KeyBindingConfig = {
   ],
 
   // Additional commands from keyboard shortcuts autogen
-  [Command.SHOW_FULL_TODOS]: [{ key: 't', ctrl: true }],
   [Command.TOGGLE_SHELL_INPUT_FOCUS]: [{ key: 'f', ctrl: true }],
   [Command.EXPAND_SUGGESTION]: [{ key: 'right' }],
   [Command.COLLAPSE_SUGGESTION]: [{ key: 'left' }],
@@ -314,7 +312,6 @@ export const commandCategories: readonly CommandCategory[] = [
     title: 'App Controls',
     commands: [
       Command.SHOW_ERROR_DETAILS,
-      Command.SHOW_FULL_TODOS,
       Command.TOGGLE_IDE_CONTEXT_DETAIL,
       Command.TOGGLE_MARKDOWN,
       Command.TOGGLE_COPY_MODE,
@@ -372,7 +369,6 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.SHOW_ERROR_DETAILS]: 'Toggle detailed error information.',
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: 'Toggle tool descriptions display.',
   [Command.TOGGLE_TODO_DIALOG]: 'Toggle the TODO dialog visibility.',
-  [Command.SHOW_FULL_TODOS]: 'Toggle the full TODO list.',
   [Command.TOGGLE_IDE_CONTEXT_DETAIL]: 'Toggle IDE context details.',
   [Command.TOGGLE_MARKDOWN]: 'Toggle Markdown rendering.',
   [Command.TOGGLE_COPY_MODE]:

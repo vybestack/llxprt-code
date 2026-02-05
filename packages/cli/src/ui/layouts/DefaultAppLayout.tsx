@@ -157,7 +157,6 @@ export const DefaultAppLayout = ({
     uiState.confirmationRequest ||
     uiState.isThemeDialogOpen ||
     uiState.isSettingsDialogOpen ||
-    uiState.isAuthenticating ||
     uiState.isAuthDialogOpen ||
     uiState.isOAuthCodeDialogOpen ||
     uiState.isEditorDialogOpen ||

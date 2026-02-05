@@ -105,13 +105,6 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
-#### `selectedAuthType`
-
-- **`selectedAuthType`** (string):
-  - **Description:** The currently selected authentication type.
-  - **Default:** `"provider"`
-  - **Requires restart:** Yes
-
 #### `useExternalAuth`
 
 - **`useExternalAuth`** (boolean):

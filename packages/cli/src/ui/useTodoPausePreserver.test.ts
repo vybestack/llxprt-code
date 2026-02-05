@@ -12,14 +12,14 @@ describe('useTodoPausePreserver', () => {
     const controller = new TodoPausePreserver();
     const onClear = vi.fn();
 
-    controller.handleSubmit(onClear);
+    controller.handleSubmit(onClear, []);
     expect(onClear).toHaveBeenCalledTimes(1);
 
     controller.registerTodoPause();
-    controller.handleSubmit(onClear);
+    controller.handleSubmit(onClear, []);
     expect(onClear).toHaveBeenCalledTimes(1);
 
-    controller.handleSubmit(onClear);
+    controller.handleSubmit(onClear, []);
     expect(onClear).toHaveBeenCalledTimes(2);
   });
 });

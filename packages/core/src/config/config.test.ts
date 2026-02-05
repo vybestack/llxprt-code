@@ -23,7 +23,6 @@ import {
   DEFAULT_OTLP_ENDPOINT,
 } from '../telemetry/index.js';
 import {
-  AuthType,
   ContentGeneratorConfig,
   createContentGeneratorConfig,
 } from '../core/contentGenerator.js';
@@ -259,7 +258,6 @@ describe('Server Config (config.ts)', () => {
       // Initialize config to create GeminiClient instance
       await config.initialize();
 
-      const authType = AuthType.USE_GEMINI;
       const newModel = 'gemini-flash';
       const mockContentConfig = {
         model: newModel,
@@ -272,12 +270,9 @@ describe('Server Config (config.ts)', () => {
       config.setFallbackMode(true);
       expect(config.isInFallbackMode()).toBe(true);
 
-      await config.refreshAuth(authType);
+      await config.refreshAuth();
 
-      expect(createContentGeneratorConfig).toHaveBeenCalledWith(
-        config,
-        authType,
-      );
+      expect(createContentGeneratorConfig).toHaveBeenCalledWith(config);
       // Verify that contentGeneratorConfig is updated with the new model
       expect(config.getContentGeneratorConfig()).toEqual(mockContentConfig);
       expect(config.getContentGeneratorConfig()?.model).toBe(newModel);
@@ -295,7 +290,6 @@ describe('Server Config (config.ts)', () => {
 
     it('should preserve conversation history when refreshing auth', async () => {
       const config = new Config(baseParams);
-      const authType = AuthType.USE_GEMINI;
       const mockContentConfig = {
         model: 'gemini-pro',
         apiKey: 'test-key',
@@ -331,7 +325,7 @@ describe('Server Config (config.ts)', () => {
       ).geminiClient = mockExistingClient;
       (GeminiClient as Mock).mockImplementation(() => mockNewClient);
 
-      await config.refreshAuth(authType);
+      await config.refreshAuth();
 
       // Verify that existing history was retrieved
       expect(mockExistingClient.getHistory).toHaveBeenCalled();
@@ -355,7 +349,6 @@ describe('Server Config (config.ts)', () => {
 
     it('should handle case when no existing client is initialized', async () => {
       const config = new Config(baseParams);
-      const authType = AuthType.USE_GEMINI;
       const mockContentConfig = {
         model: 'gemini-pro',
         apiKey: 'test-key',
@@ -376,7 +369,7 @@ describe('Server Config (config.ts)', () => {
       (config as unknown as { geminiClient: null }).geminiClient = null;
       (GeminiClient as Mock).mockImplementation(() => mockNewClient);
 
-      await config.refreshAuth(authType);
+      await config.refreshAuth();
 
       // Verify that new client was created and initialized
       expect(GeminiClient).toHaveBeenCalledWith(
@@ -396,7 +389,7 @@ describe('Server Config (config.ts)', () => {
       const mockContentConfig = {
         model: 'gemini-pro',
         apiKey: 'test-key',
-        authType: AuthType.USE_GEMINI,
+        vertexai: false,
       };
       (
         config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
@@ -404,7 +397,7 @@ describe('Server Config (config.ts)', () => {
 
       (createContentGeneratorConfig as Mock).mockReturnValue({
         ...mockContentConfig,
-        authType: AuthType.LOGIN_WITH_GOOGLE,
+        vertexai: true,
       });
 
       const mockExistingHistory = [
@@ -429,7 +422,7 @@ describe('Server Config (config.ts)', () => {
       ).geminiClient = mockExistingClient;
       (GeminiClient as Mock).mockImplementation(() => mockNewClient);
 
-      await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      await config.refreshAuth();
 
       // When switching from GenAI to Vertex, thoughts should be stripped
       // The history is stored with thoughts stripped before initialize
@@ -446,7 +439,7 @@ describe('Server Config (config.ts)', () => {
       const mockContentConfig = {
         model: 'gemini-pro',
         apiKey: 'test-key',
-        authType: AuthType.LOGIN_WITH_GOOGLE,
+        vertexai: true,
       };
       (
         config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
@@ -454,7 +447,7 @@ describe('Server Config (config.ts)', () => {
 
       (createContentGeneratorConfig as Mock).mockReturnValue({
         ...mockContentConfig,
-        authType: AuthType.USE_GEMINI,
+        vertexai: false,
       });
 
       const mockExistingHistory = [
@@ -479,7 +472,7 @@ describe('Server Config (config.ts)', () => {
       ).geminiClient = mockExistingClient;
       (GeminiClient as Mock).mockImplementation(() => mockNewClient);
 
-      await config.refreshAuth(AuthType.USE_GEMINI);
+      await config.refreshAuth();
 
       // When switching from Vertex to GenAI, thoughts should NOT be stripped
       expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
@@ -515,7 +508,6 @@ describe('Server Config (config.ts)', () => {
 
       const mockContentConfig = {
         model: 'claude-3-5-sonnet-20241022',
-        authType: AuthType.USE_PROVIDER,
         oauthManager: mockOAuthManager,
       };
 
@@ -532,8 +524,8 @@ describe('Server Config (config.ts)', () => {
 
       (GeminiClient as Mock).mockImplementation(() => mockNewClient);
 
-      // Call refreshAuth - this should NOT trigger OAuth
-      await config.refreshAuth(AuthType.USE_PROVIDER);
+      // Call initializeContentGeneratorConfig - this should NOT trigger OAuth
+      await config.initializeContentGeneratorConfig();
 
       // Verify OAuth authenticate was NOT called
       expect(mockOAuthManager.authenticate).not.toHaveBeenCalled();
@@ -576,7 +568,6 @@ describe('Server Config (config.ts)', () => {
       const mockContentConfig = {
         model: 'gemini-pro',
         apiKey: 'test-key',
-        authType: AuthType.USE_GEMINI,
         oauthManager: mockOAuthManager,
       };
 
@@ -594,7 +585,7 @@ describe('Server Config (config.ts)', () => {
       (GeminiClient as Mock).mockImplementation(() => mockNewClient);
 
       // Refresh auth
-      await config.refreshAuth(AuthType.USE_GEMINI);
+      await config.refreshAuth();
 
       // Verify history was preserved
       expect(mockExistingClient.getHistory).toHaveBeenCalled();
@@ -615,9 +606,8 @@ describe('Server Config (config.ts)', () => {
 
     it('should dispose the previous Gemini client before replacing it', async () => {
       const config = new Config(baseParams);
-      const authType = AuthType.USE_GEMINI;
       const mockContentConfig = {
-        model: 'gemini-flash',
+        model: 'gemini-pro',
         apiKey: 'test-key',
       };
 
@@ -644,7 +634,7 @@ describe('Server Config (config.ts)', () => {
       ).geminiClient = mockExistingClient;
       (GeminiClient as Mock).mockImplementation(() => mockNewClient);
 
-      await config.refreshAuth(authType);
+      await config.refreshAuth();
 
       expect(dispose).toHaveBeenCalledTimes(1);
       expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);

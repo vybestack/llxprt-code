@@ -58,13 +58,10 @@ import {
   DnsResolutionOrder,
   LoadedSettings,
   loadSettings,
-  SettingScope,
 } from './config/settings.js';
 import {
   Config,
   sessionId,
-  AuthType,
-  getOauthClient,
   setGitStatsService,
   FatalConfigError,
   JsonFormatter,
@@ -76,6 +73,7 @@ import {
   ProfileManager,
   SessionPersistenceService,
   type PersistedSession,
+  parseAndFormatApiError,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
@@ -90,7 +88,6 @@ import {
   runExitCleanup,
 } from './utils/cleanup.js';
 import { getCliVersion } from './utils/version.js';
-import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 // createProviderManager removed - provider manager now created in loadCliConfig()
 import { runZedIntegration } from './zed-integration/zedIntegration.js';
@@ -119,6 +116,27 @@ import {
   applyCliArgumentOverrides,
 } from './runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
+
+export function formatNonInteractiveError(error: unknown): string {
+  const formatted = parseAndFormatApiError(error);
+  if (formatted && !formatted.includes('[object Object]')) {
+    return formatted;
+  }
+
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+
+  if (error && typeof error === 'object') {
+    try {
+      return JSON.stringify(error, null, 2);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+}
 
 export function validateDnsResolutionOrder(
   order: string | undefined,
@@ -280,20 +298,6 @@ export async function startInteractiveUI(
     process.on('exit', () => {
       disableMouseEvents();
     });
-  }
-
-  // Initialize authentication before rendering to ensure geminiClient is available
-  if (settings.merged.selectedAuthType) {
-    try {
-      const err = validateAuthMethod(settings.merged.selectedAuthType);
-      if (err) {
-        console.error('Error validating authentication method:', err);
-        process.exit(1);
-      }
-    } catch (err) {
-      console.error('Error authenticating:', err);
-      process.exit(1);
-    }
   }
 
   const instance = render(
@@ -569,23 +573,6 @@ export async function main() {
     process.exit(0);
   }
 
-  // Set a default auth type if one isn't set.
-  if (!settings.merged.selectedAuthType) {
-    if (process.env.CLOUD_SHELL === 'true') {
-      settings.setValue(
-        SettingScope.User,
-        'selectedAuthType',
-        AuthType.CLOUD_SHELL,
-      );
-    } else if (process.env.LLXPRT_AUTH_TYPE === 'none') {
-      settings.setValue(
-        SettingScope.User,
-        'selectedAuthType',
-        AuthType.USE_NONE,
-      );
-    }
-  }
-
   setMaxSizedBoxDebugging(config.getDebugMode());
 
   const mcpServers = config.getMcpServers();
@@ -664,6 +651,7 @@ export async function main() {
       );
 
       await switchActiveProvider(configProvider);
+      await config.refreshAuth();
 
       const activeProvider = providerManager.getActiveProvider();
       const configWithCliOverride = config as Config & {
@@ -725,6 +713,21 @@ export async function main() {
       console.error(chalk.red((e as Error).message));
       process.exit(1);
     }
+  } else {
+    // No explicit provider specified - ensure default provider (gemini) is activated
+    // This initializes contentGeneratorConfig to avoid runtime errors on first request
+    try {
+      const defaultProvider =
+        providerManager.getActiveProviderName() || 'gemini';
+      await switchActiveProvider(defaultProvider);
+      await config.refreshAuth();
+    } catch (e) {
+      // Log but don't exit - auth will be triggered lazily on first API call
+      const logger = new DebugLogger('llxprt:gemini');
+      logger.debug(
+        () => `Default provider activation skipped: ${(e as Error).message}`,
+      );
+    }
   }
 
   if (settings.merged.ui?.theme) {
@@ -771,25 +774,6 @@ export async function main() {
         { settingsService: runtimeSettingsService },
       );
 
-      if (
-        settings.merged.selectedAuthType &&
-        !settings.merged.useExternalAuth
-      ) {
-        // Validate authentication here because the sandbox will interfere with the Oauth2 web redirect.
-        try {
-          const err = validateAuthMethod(settings.merged.selectedAuthType);
-          if (err) {
-            throw new Error(err);
-          }
-          await partialConfig.refreshAuth(settings.merged.selectedAuthType);
-
-          // Compression settings are already applied via ephemeral settings in Config
-          // and will be read directly by geminiChat.ts during compression
-        } catch (err) {
-          console.error('Error authenticating:', err);
-          process.exit(1);
-        }
-      }
       let stdinData = '';
       if (hasPipedInput) {
         stdinData = await readStdinOnce();
@@ -874,14 +858,6 @@ export async function main() {
       process.exit(exitCode);
     }
     // Note: Non-sandbox memory relaunch is now handled at the top of main()
-  }
-
-  if (
-    settings.merged.selectedAuthType === AuthType.LOGIN_WITH_GOOGLE &&
-    config.isBrowserLaunchSuppressed()
-  ) {
-    // Do oauth before app renders to make copying the link possible.
-    await getOauthClient(settings.merged.selectedAuthType, config);
   }
 
   // Cleanup sessions after config initialization
@@ -1095,7 +1071,6 @@ export async function main() {
   const prompt_id = Math.random().toString(16).slice(2);
 
   const nonInteractiveConfig = await validateNonInteractiveAuth(
-    settings.merged.selectedAuthType,
     settings.merged.useExternalAuth,
     config,
     settings,
@@ -1120,8 +1095,7 @@ export async function main() {
         error instanceof Error ? error : new Error(String(error));
       process.stderr.write(`${formatter.formatError(normalizedError, 1)}\n`);
     } else {
-      const printableError =
-        error instanceof Error ? (error.stack ?? error.message) : String(error);
+      const printableError = formatNonInteractiveError(error);
       console.error(`Non-interactive run failed: ${printableError}`);
     }
     // Call cleanup before process.exit, which causes cleanup to not run

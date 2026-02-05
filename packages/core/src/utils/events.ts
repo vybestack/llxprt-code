@@ -98,6 +98,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (payload: MemoryChangedPayload) => void,
   ): this;
   override on(
+    event: CoreEvent.ModelChanged,
+    listener: (model: string) => void,
+  ): this;
+  override on(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     listener: (...args: any[]) => void,
@@ -112,6 +116,10 @@ export class CoreEventEmitter extends EventEmitter {
   override off(
     event: CoreEvent.MemoryChanged,
     listener: (payload: MemoryChangedPayload) => void,
+  ): this;
+  override off(
+    event: CoreEvent.ModelChanged,
+    listener: (model: string) => void,
   ): this;
   override off(
     event: string | symbol,

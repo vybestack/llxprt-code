@@ -6,7 +6,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { AuthType } from '@vybestack/llxprt-code-core';
 import { renderWithProviders } from '../../test-utils/render.js';
 
 const mockGetAuthStatus = vi.fn();
@@ -29,7 +28,6 @@ describe('AuthDialog', () => {
   beforeEach(() => {
     originalEnv = { ...process.env };
     process.env.GEMINI_API_KEY = '';
-    process.env.GEMINI_DEFAULT_AUTH_TYPE = '';
     vi.clearAllMocks();
     mockGetAuthStatus.mockReset();
     mockToggleOAuthEnabled.mockReset();
@@ -54,9 +52,7 @@ describe('AuthDialog', () => {
         path: '',
       },
       {
-        settings: {
-          selectedAuthType: AuthType.USE_GEMINI,
-        },
+        settings: {},
         path: '',
       },
       {
@@ -87,7 +83,6 @@ describe('AuthDialog', () => {
       const settings: LoadedSettings = new LoadedSettings(
         {
           settings: {
-            selectedAuthType: undefined,
             ui: { customThemes: {} },
             mcpServers: {},
           },
@@ -124,20 +119,20 @@ describe('AuthDialog', () => {
         {
           provider: 'gemini',
           authenticated: true,
-          authType: 'oauth',
+          method: 'oauth',
           expiresIn: 3600,
           oauthEnabled: true,
         },
         {
           provider: 'qwen',
           authenticated: false,
-          authType: 'none',
+          method: 'none',
           oauthEnabled: false,
         },
         {
           provider: 'anthropic',
           authenticated: true,
-          authType: 'oauth',
+          method: 'oauth',
           oauthEnabled: true,
         },
       ]);
@@ -145,7 +140,6 @@ describe('AuthDialog', () => {
       const settings: LoadedSettings = new LoadedSettings(
         {
           settings: {
-            selectedAuthType: undefined,
             ui: { customThemes: {} },
             mcpServers: {},
           },
@@ -184,195 +178,6 @@ describe('AuthDialog', () => {
       expect(frame).toContain('Qwen (OAuth) [OFF] (Not authenticated)');
       expect(frame).toContain('Anthropic Claude (OAuth) [ON] (Authenticated)');
     });
-
-    it('should show OAuth options regardless of GEMINI_DEFAULT_AUTH_TYPE', () => {
-      process.env.GEMINI_API_KEY = 'foobar';
-      process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.LOGIN_WITH_GOOGLE;
-
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            selectedAuthType: undefined,
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-      );
-
-      const { lastFrame } = renderWithProviders(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
-      );
-
-      // OAuth-only implementation doesn't show API key messages
-      expect(lastFrame()).not.toContain(
-        'Existing API key detected (GEMINI_API_KEY)',
-      );
-      expect(lastFrame()).toContain('OAuth Authentication');
-    });
-
-    it('should show OAuth dialog even when GEMINI_DEFAULT_AUTH_TYPE is set to use api key', () => {
-      process.env.GEMINI_API_KEY = 'foobar';
-      process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.USE_GEMINI;
-
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            selectedAuthType: undefined,
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-      );
-
-      const { lastFrame } = renderWithProviders(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
-      );
-
-      // OAuth-only dialog shows, API key message not shown
-      expect(lastFrame()).not.toContain(
-        'Existing API key detected (GEMINI_API_KEY)',
-      );
-      expect(lastFrame()).toContain('OAuth Authentication');
-      expect(lastFrame()).toContain('Note: You can also use API keys');
-    });
-  });
-
-  describe('GEMINI_DEFAULT_AUTH_TYPE environment variable', () => {
-    it('should select the auth type specified by GEMINI_DEFAULT_AUTH_TYPE', () => {
-      process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.LOGIN_WITH_GOOGLE;
-
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            selectedAuthType: undefined,
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-      );
-
-      const { lastFrame } = renderWithProviders(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
-      );
-
-      // OAuth-only implementation always shows first option selected by default
-      expect(lastFrame()).toContain('● 1. Gemini (Google OAuth)');
-    });
-
-    it('should fall back to default if GEMINI_DEFAULT_AUTH_TYPE is not set', () => {
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            selectedAuthType: undefined,
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-      );
-
-      const { lastFrame } = renderWithProviders(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
-      );
-
-      // OAuth-only implementation defaults to Gemini OAuth
-      expect(lastFrame()).toContain('● 1. Gemini (Google OAuth)');
-    });
-
-    it('should show an error and fall back to default if GEMINI_DEFAULT_AUTH_TYPE is invalid', () => {
-      process.env.GEMINI_DEFAULT_AUTH_TYPE = 'invalid-auth-type';
-
-      const settings: LoadedSettings = new LoadedSettings(
-        {
-          settings: {
-            selectedAuthType: undefined,
-            ui: { customThemes: {} },
-            mcpServers: {},
-          },
-          path: '',
-        },
-        {
-          settings: {},
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        {
-          settings: { ui: { customThemes: {} }, mcpServers: {} },
-          path: '',
-        },
-        true,
-      );
-
-      const { lastFrame } = renderWithProviders(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
-      );
-
-      // OAuth-only implementation doesn't validate GEMINI_DEFAULT_AUTH_TYPE anymore
-      expect(lastFrame()).not.toContain(
-        'Invalid value for GEMINI_DEFAULT_AUTH_TYPE',
-      );
-
-      // OAuth-only implementation defaults to Gemini OAuth
-      expect(lastFrame()).toContain('● 1. Gemini (Google OAuth)');
-    });
   });
 
   it('should close dialog when ESC is pressed', async () => {
@@ -388,47 +193,6 @@ describe('AuthDialog', () => {
       },
       {
         settings: {
-          selectedAuthType: undefined,
-          ui: { customThemes: {} },
-          mcpServers: {},
-        },
-        path: '',
-      },
-      {
-        settings: { ui: { customThemes: {} }, mcpServers: {} },
-        path: '',
-      },
-      true,
-    );
-
-    const { stdin, unmount } = renderWithProviders(
-      <AuthDialog onSelect={onSelect} settings={settings} />,
-    );
-    await wait();
-
-    // Simulate pressing escape key
-    stdin.write('\u001b'); // ESC key
-    await wait();
-
-    // Should call onSelect with undefined to close the dialog
-    expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
-    unmount();
-  });
-
-  it('should close dialog even with an error message when ESC is pressed', async () => {
-    const onSelect = vi.fn();
-    const settings: LoadedSettings = new LoadedSettings(
-      {
-        settings: { ui: { customThemes: {} }, mcpServers: {} },
-        path: '',
-      },
-      {
-        settings: {},
-        path: '',
-      },
-      {
-        settings: {
-          selectedAuthType: undefined,
           ui: { customThemes: {} },
           mcpServers: {},
         },
@@ -474,7 +238,6 @@ describe('AuthDialog', () => {
       },
       {
         settings: {
-          selectedAuthType: AuthType.USE_GEMINI,
           ui: { customThemes: {} },
           mcpServers: {},
         },

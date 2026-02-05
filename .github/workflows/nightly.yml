@@ -1,0 +1,277 @@
+name: 'Nightly Tests'
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  checks: 'write'
+  contents: 'read'
+  statuses: 'write'
+
+defaults:
+  run:
+    shell: 'bash'
+
+jobs:
+  windows_ci:
+    name: 'Windows CI (Nightly)'
+    runs-on: '${{ matrix.os }}'
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - 'windows-latest'
+        node-version:
+          - '24.x'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+
+      - name: 'Set up Node.js ${{ matrix.node-version }}'
+        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+        with:
+          node-version: '${{ matrix.node-version }}'
+          cache: 'npm'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version: 'latest'
+
+      - name: 'Configure Windows Defender exclusions'
+        run: |
+          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE -Force
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\node_modules" -Force
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\packages" -Force
+          Add-MpPreference -ExclusionPath "$env:TEMP" -Force
+        shell: 'pwsh'
+
+      - name: 'Configure npm for Windows performance'
+        run: |
+          npm config set progress false
+          npm config set audit false
+          npm config set fund false
+          npm config set loglevel error
+          npm config set maxsockets 32
+          npm config set registry https://registry.npmjs.org/
+        shell: 'pwsh'
+
+      - name: 'Install dependencies for testing'
+        run: |-
+          npm ci
+
+      - name: 'Install UI dependencies (bun)'
+        run: |-
+          cd packages/ui
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            bun install --no-save
+          else
+            bun install
+          fi
+
+      - name: 'Build project'
+        run: |-
+          npm run build
+
+      - name: 'Create bundle'
+        run: |-
+          npm run bundle
+
+      - name: 'Fix rollup platform dependency'
+        run: |-
+          # Explicitly install the platform-specific rollup package
+          # This is a workaround for https://github.com/npm/cli/issues/4828
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          fi
+        shell: 'bash'
+
+      - name: 'Limit Vitest forks on Windows'
+        if: runner.os == 'Windows'
+        run: |
+          echo "VITEST_MAX_FORKS=2" >> "$GITHUB_ENV"
+          echo "VITEST_MIN_FORKS=1" >> "$GITHUB_ENV"
+          echo "VITEST_TEST_TIMEOUT=30000" >> "$GITHUB_ENV"
+          echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
+
+      - name: 'Run tests and generate reports'
+        env:
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
+          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: provider
+          NO_COLOR: true
+          # Ensure OAuth tests are skipped in CI (they require browser interaction)
+          CI: true
+          # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
+          VITEST_TEST_TIMEOUT: 15000
+        run: 'npm run test'
+
+      - name: 'Run script harness tests (macOS)'
+        if: matrix.os == 'macos-latest'
+        env:
+          CI: true
+        run: npm run test:scripts
+
+      - name: 'Run UI tests (vitest with happy-dom)'
+        env:
+          CI: true
+        run: |-
+          cd packages/ui && bun run test
+
+      - name: 'Smoke test bundle'
+        run: 'node ./bundle/llxprt.js --version'
+
+      - name: 'Wait for file system sync'
+        run: 'sleep 2'
+
+      - name: 'Publish Test Report (for non-forks)'
+        if: |-
+          ${{ always() && (github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: 'dorny/test-reporter@dc3a92680fcc15842eef52e8c4606ea7ce6bd3f3' # ratchet:dorny/test-reporter@v2
+        with:
+          name: 'Test Results (Node ${{ matrix.node-version }})'
+          path: 'packages/*/junit.xml'
+          reporter: 'java-junit'
+          fail-on-error: 'false'
+
+      - name: 'Upload Test Results Artifact (for forks)'
+        if: |-
+          ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
+        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        with:
+          name: 'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}'
+          path: 'packages/*/junit.xml'
+
+      - name: 'Upload coverage reports'
+        if: |-
+          ${{ always() }}
+        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        with:
+          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}'
+          path: 'packages/*/coverage'
+
+  e2e_full:
+    name: 'E2E Full - ${{ matrix.os }} - ${{ matrix.sandbox }}'
+    runs-on: '${{ matrix.os }}'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: 'ubuntu-latest'
+            sandbox: 'sandbox:none'
+            node-version: '20.x'
+          - os: 'ubuntu-latest'
+            sandbox: 'sandbox:docker'
+            node-version: '20.x'
+          - os: 'macos-latest'
+            sandbox: 'sandbox:none'
+            node-version: '20.x'
+          - os: 'windows-latest'
+            sandbox: 'sandbox:none'
+            node-version: '20.x'
+
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+
+      - name: 'Set up Node.js ${{ matrix.node-version }}'
+        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
+        with:
+          node-version: '${{ matrix.node-version }}'
+
+      - name: 'Configure Windows Defender exclusions'
+        if: runner.os == 'Windows'
+        run: |
+          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE -Force
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\node_modules" -Force
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\packages" -Force
+          Add-MpPreference -ExclusionPath "$env:TEMP" -Force
+        shell: 'pwsh'
+
+      - name: 'Configure npm for Windows performance'
+        if: runner.os == 'Windows'
+        run: |
+          npm config set progress false
+          npm config set audit false
+          npm config set fund false
+          npm config set loglevel error
+          npm config set maxsockets 32
+          npm config set registry https://registry.npmjs.org/
+        shell: 'pwsh'
+
+      - name: 'Install dependencies'
+        run: 'npm ci'
+
+      - name: 'Build project'
+        run: 'npm run build'
+
+      - name: 'Fix rollup optional dependencies on macOS'
+        if: runner.os == 'macOS'
+        run: |
+          npm cache clean --force
+
+      - name: 'Set up Docker'
+        if: "matrix.sandbox == 'sandbox:docker'"
+        uses: 'docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435' # ratchet:docker/setup-buildx-action@v3
+
+      - name: 'Run E2E tests'
+        if: runner.os != 'Windows'
+        env:
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
+          KEEP_OUTPUT: 'true'
+          VERBOSE: 'true'
+          # Force file storage to avoid keytar/libsecret dependency in CI
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
+        shell: 'bash'
+        run: |
+          if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
+            npm run test:integration:sandbox:docker
+          else
+            npm run test:integration:sandbox:none
+          fi
+
+      - name: 'Run E2E tests (Windows)'
+        if: runner.os == 'Windows'
+        env:
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
+          # Force file storage to avoid keytar/libsecret dependency in CI
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
+          KEEP_OUTPUT: 'true'
+          VERBOSE: 'true'
+          SANDBOX: '${{ matrix.sandbox }}'
+          NODE_OPTIONS: '--max-old-space-size=32768 --max-semi-space-size=256'
+          UV_THREADPOOL_SIZE: '32'
+          NODE_ENV: 'test'
+        shell: 'pwsh'
+        run: |
+          if ($env:SANDBOX -eq 'sandbox:docker') {
+            npm run test:integration:sandbox:docker
+          } else {
+            npm run test:integration:sandbox:none
+          }

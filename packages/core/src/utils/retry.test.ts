@@ -447,11 +447,10 @@ describe('retryWithBackoff', () => {
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 3,
         initialDelayMs: 100,
-        onPersistent429: async (authType?: string) => {
+        onPersistent429: async () => {
           fallbackOccurred = true;
-          return await fallbackCallback(authType);
+          return await fallbackCallback();
         },
-        authType: 'oauth-personal',
       });
 
       // Advance all timers to complete retries
@@ -461,7 +460,7 @@ describe('retryWithBackoff', () => {
       await expect(promise).resolves.toBe('success');
 
       // Verify callback was called with correct auth type
-      expect(fallbackCallback).toHaveBeenCalledWith('oauth-personal');
+      expect(fallbackCallback).toHaveBeenCalled();
 
       // Should retry again after fallback
       expect(mockFn).toHaveBeenCalledTimes(3); // 2 initial attempts + 1 after fallback
@@ -480,7 +479,6 @@ describe('retryWithBackoff', () => {
         maxAttempts: 3,
         initialDelayMs: 100,
         onPersistent429: fallbackCallback,
-        authType: 'gemini-api-key',
       });
 
       // Handle the promise properly to avoid unhandled rejections
@@ -516,7 +514,6 @@ describe('retryWithBackoff', () => {
         maxAttempts: 3,
         initialDelayMs: 100,
         onPersistent429: fallbackCallback,
-        authType: 'oauth-personal',
       });
 
       await vi.runAllTimersAsync();
@@ -538,7 +535,6 @@ describe('retryWithBackoff', () => {
         maxAttempts: 3,
         initialDelayMs: 100,
         onPersistent429: fallbackCallback,
-        authType: 'oauth-personal',
       });
 
       // Handle the promise properly to avoid unhandled rejections
@@ -549,10 +545,7 @@ describe('retryWithBackoff', () => {
       // Should fail with original error when fallback is rejected
       expect(result).toBeInstanceOf(Error);
       expect(result.message).toBe('Rate limit exceeded');
-      expect(fallbackCallback).toHaveBeenCalledWith(
-        'oauth-personal',
-        expect.any(Error),
-      );
+      expect(fallbackCallback).toHaveBeenCalledWith(expect.any(Error));
     });
 
     it('should handle mixed error types (only count consecutive 429s)', async () => {
@@ -581,11 +574,10 @@ describe('retryWithBackoff', () => {
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 5,
         initialDelayMs: 100,
-        onPersistent429: async (authType?: string) => {
+        onPersistent429: async () => {
           fallbackOccurred = true;
-          return await fallbackCallback(authType);
+          return await fallbackCallback();
         },
-        authType: 'oauth-personal',
       });
 
       await vi.runAllTimersAsync();
@@ -593,7 +585,7 @@ describe('retryWithBackoff', () => {
       await expect(promise).resolves.toBe('success');
 
       // Should trigger fallback after 2 consecutive 429s (attempts 2-3)
-      expect(fallbackCallback).toHaveBeenCalledWith('oauth-personal');
+      expect(fallbackCallback).toHaveBeenCalled();
     });
   });
 
@@ -629,7 +621,6 @@ describe('retryWithBackoff', () => {
         maxAttempts: 1,
         initialDelayMs: 100,
         onPersistent429: failoverCallback,
-        authType: 'oauth-bucket',
       });
 
       await vi.runAllTimersAsync();
@@ -678,7 +669,6 @@ describe('retryWithBackoff', () => {
         maxAttempts: 1,
         initialDelayMs: 100,
         onPersistent429: failoverCallback,
-        authType: 'oauth-bucket',
       });
 
       await vi.runAllTimersAsync();
@@ -717,15 +707,11 @@ describe('retryWithBackoff', () => {
         maxAttempts: 1,
         initialDelayMs: 100,
         onPersistent429: failoverCallback,
-        authType: 'oauth-bucket',
       });
 
       await vi.runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
-      expect(failoverCallback).toHaveBeenCalledWith(
-        'oauth-bucket',
-        expect.any(Error),
-      );
+      expect(failoverCallback).toHaveBeenCalledWith(expect.any(Error));
       expect(mockFn).toHaveBeenCalledTimes(2);
     });
 
@@ -758,7 +744,6 @@ describe('retryWithBackoff', () => {
         maxAttempts: 3,
         initialDelayMs: 100,
         onPersistent429: failoverCallback,
-        authType: 'oauth-bucket',
       });
 
       await vi.runAllTimersAsync();
@@ -789,7 +774,6 @@ describe('retryWithBackoff', () => {
         maxAttempts: 3,
         initialDelayMs: 100,
         onPersistent429: failoverCallback,
-        authType: 'oauth-bucket',
       });
 
       // Properly handle the rejection
@@ -838,7 +822,6 @@ describe('retryWithBackoff', () => {
         maxAttempts: 3,
         initialDelayMs: 100,
         onPersistent429: failoverCallback,
-        authType: 'oauth-bucket',
       });
 
       await vi.runAllTimersAsync();
@@ -879,7 +862,6 @@ describe('retryWithBackoff', () => {
         maxAttempts: 3,
         initialDelayMs: 100,
         onPersistent429: failoverCallback,
-        authType: 'oauth-bucket',
       });
 
       await vi.runAllTimersAsync();

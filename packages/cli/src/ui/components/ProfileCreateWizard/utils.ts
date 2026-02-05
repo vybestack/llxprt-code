@@ -209,7 +209,7 @@ export async function testConnectionWithTimeout(
   provider: string,
   baseUrl: string | undefined,
   model: string,
-  authType: 'apikey' | 'keyfile',
+  authKind: 'apikey' | 'keyfile',
   authValue: string,
   timeoutMs = 30000,
 ): Promise<ConnectionTestResult> {
@@ -226,7 +226,7 @@ export async function testConnectionWithTimeout(
     provider,
     baseUrl,
     model,
-    authType,
+    authKind,
     authValue,
   )
     .then((res) => res)
@@ -267,13 +267,13 @@ async function testConnection(
   _provider: string,
   _baseUrl: string | undefined,
   _model: string,
-  authType: 'apikey' | 'keyfile',
+  authKind: 'apikey' | 'keyfile',
   authValue: string,
 ): Promise<ConnectionTestResult> {
   try {
     // Read key from file if keyfile type
     const apiKey =
-      authType === 'keyfile'
+      authKind === 'keyfile'
         ? await fs
             .readFile(expandTilde(authValue), 'utf-8')
             .then((k) => k.trim())

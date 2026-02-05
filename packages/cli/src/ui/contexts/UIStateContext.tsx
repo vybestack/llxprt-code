@@ -60,7 +60,6 @@ export interface UIState {
   isThemeDialogOpen: boolean;
   isSettingsDialogOpen: boolean;
   isAuthDialogOpen: boolean;
-  isAuthenticating: boolean;
   isEditorDialogOpen: boolean;
   isProviderDialogOpen: boolean;
   isLoadProfileDialogOpen: boolean;

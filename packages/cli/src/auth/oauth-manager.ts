@@ -429,7 +429,6 @@ export class OAuthManager {
           statuses.push({
             provider: providerName,
             authenticated: false,
-            authType: 'none',
             oauthEnabled,
           });
           continue;
@@ -445,7 +444,6 @@ export class OAuthManager {
           statuses.push({
             provider: providerName,
             authenticated: true,
-            authType: 'oauth',
             expiresIn,
             oauthEnabled,
           });
@@ -454,7 +452,6 @@ export class OAuthManager {
           statuses.push({
             provider: providerName,
             authenticated: false,
-            authType: 'none',
             oauthEnabled,
           });
         }
@@ -464,7 +461,6 @@ export class OAuthManager {
         statuses.push({
           provider: providerName,
           authenticated: false,
-          authType: 'none',
           oauthEnabled,
         });
       }
@@ -678,6 +674,60 @@ export class OAuthManager {
       () =>
         `[FLOW] No existing token for ${providerName}, triggering OAuth flow...`,
     );
+
+    // @fix issue1262 & issue1195: Before triggering OAuth, check disk with lock
+    // Another process or earlier run may have written a valid token that we missed
+    // Use the same locking pattern as PR #1258 to prevent race conditions
+    const bucketToCheck = typeof bucket === 'string' ? bucket : undefined;
+    const lockAcquired = await this.tokenStore.acquireRefreshLock(
+      providerName,
+      {
+        waitMs: 5000, // Wait up to 5 seconds for lock
+        staleMs: 30000,
+        bucket: bucketToCheck,
+      },
+    );
+
+    if (lockAcquired) {
+      try {
+        // Double-check disk for token written by another process
+        const diskToken = await this.tokenStore.getToken(
+          providerName,
+          bucketToCheck,
+        );
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        const thirtySecondsFromNow = nowInSeconds + 30;
+
+        if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+          // Valid token found on disk! Use it instead of triggering OAuth
+          logger.debug(
+            () =>
+              `[issue1262/1195] Found valid token on disk for ${providerName}, skipping OAuth`,
+          );
+          return diskToken.access_token;
+        }
+      } finally {
+        await this.tokenStore.releaseRefreshLock(providerName, bucketToCheck);
+      }
+    } else {
+      // Couldn't acquire lock - check disk anyway, another process may have just written a token
+      const diskToken = await this.tokenStore.getToken(
+        providerName,
+        bucketToCheck,
+      );
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const thirtySecondsFromNow = nowInSeconds + 30;
+
+      if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+        logger.debug(
+          () =>
+            `[issue1262/1195] Found valid token on disk after lock timeout for ${providerName}`,
+        );
+        return diskToken.access_token;
+      }
+    }
+
+    // No valid token on disk, proceed with OAuth flow
     try {
       const buckets = await this.getProfileBuckets(providerName);
 
@@ -1674,6 +1724,96 @@ export class OAuthManager {
    * If the current profile has auth.buckets configured, return those.
    * Otherwise, return empty array (single-bucket or non-OAuth profile)
    */
+
+  /**
+   * Get Anthropic usage information from OAuth endpoint for a specific bucket
+   * Returns full usage data for Claude Code/Max plans
+   * Only works with OAuth tokens (sk-ant-oat01-...), not API keys
+   * @param bucket - Optional bucket name, defaults to current session bucket or 'default'
+   */
+  async getAnthropicUsageInfo(
+    bucket?: string,
+  ): Promise<Record<string, unknown> | null> {
+    const provider = this.providers.get('anthropic');
+    if (!provider) {
+      return null;
+    }
+
+    // Get the token for the specified bucket
+    const bucketToUse =
+      bucket ?? this.sessionBuckets.get('anthropic') ?? 'default';
+    const token = await this.tokenStore.getToken('anthropic', bucketToUse);
+
+    if (!token) {
+      return null;
+    }
+
+    try {
+      const { fetchAnthropicUsage } = await import(
+        '@vybestack/llxprt-code-core'
+      );
+      return await fetchAnthropicUsage(token.access_token);
+    } catch (error) {
+      logger.debug(
+        `Error fetching Anthropic usage info for bucket ${bucketToUse}:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Get Anthropic usage information for all authenticated buckets
+   * Returns a map of bucket name to usage info for all buckets that have valid OAuth tokens
+   */
+  async getAllAnthropicUsageInfo(): Promise<
+    Map<string, Record<string, unknown>>
+  > {
+    const result = new Map<string, Record<string, unknown>>();
+
+    // Get all buckets for anthropic
+    const buckets = await this.tokenStore.listBuckets('anthropic');
+
+    // If no buckets, try 'default'
+    const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
+
+    // Import once before the loop
+    const { fetchAnthropicUsage } = await import('@vybestack/llxprt-code-core');
+
+    for (const bucket of bucketsToCheck) {
+      // Check if this bucket has a valid OAuth token
+      const token = await this.tokenStore.getToken('anthropic', bucket);
+      if (!token) {
+        continue;
+      }
+
+      // Check if token is expired
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      if (token.expiry <= nowInSeconds) {
+        continue;
+      }
+
+      // Check if it's an OAuth token (sk-ant-oat01-...)
+      if (!token.access_token.startsWith('sk-ant-oat01-')) {
+        continue;
+      }
+
+      try {
+        const usageInfo = await fetchAnthropicUsage(token.access_token);
+        if (usageInfo) {
+          result.set(bucket, usageInfo);
+        }
+      } catch (error) {
+        logger.debug(
+          `Error fetching Anthropic usage info for bucket ${bucket}:`,
+          error,
+        );
+      }
+    }
+
+    return result;
+  }
+
   private async getProfileBuckets(providerName: string): Promise<string[]> {
     try {
       // Try to get profile from runtime settings

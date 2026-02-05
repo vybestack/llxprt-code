@@ -20,6 +20,7 @@ import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   DebugLogger,
   MultiProviderTokenStore,
+  getProtectedSettingKeys,
 } from '@vybestack/llxprt-code-core';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
@@ -444,18 +445,7 @@ const saveCommand: SlashCommand = {
           }
         }
 
-        const PROTECTED_SETTINGS = [
-          'auth-key',
-          'auth-keyfile',
-          'base-url',
-          'apiKey',
-          'apiKeyfile',
-          'model',
-          'provider',
-          'currentProfile',
-          'GOOGLE_CLOUD_PROJECT',
-          'GOOGLE_CLOUD_LOCATION',
-        ];
+        const PROTECTED_SETTINGS = getProtectedSettingKeys();
 
         const currentEphemerals = runtime.getEphemeralSettings();
         const filteredEphemerals = Object.fromEntries(

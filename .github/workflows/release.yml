@@ -135,6 +135,11 @@ jobs:
           fi
           echo "should_run_standard_release=${should_run_standard_release}" >> "$GITHUB_OUTPUT"
 
+          # Determine if we should create a release branch
+          # Only major/minor releases (vX.Y.0) get branches, not patch releases or nightlies
+          # This will be finalized after we know the version in a later step
+          echo "should_create_branch=pending" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -172,17 +177,45 @@ jobs:
           IS_PREVIEW: ${{ steps.vars.outputs.is_preview }}
           MANUAL_VERSION: ${{ inputs.version }}
 
+      - name: Determine if release branch should be created
+        id: branch_decision
+        run: |
+          RELEASE_VERSION="${{ steps.version.outputs.RELEASE_VERSION }}"
+          IS_NIGHTLY="${{ steps.vars.outputs.is_nightly }}"
+
+          # Only create branches for major/minor releases (vX.Y.0), not for:
+          # - Nightly releases (v0.8.0-nightly.250129.abc1234)
+          # - Patch releases (v0.8.1, v0.8.2)
+          # - Preview/beta releases (v0.8.0-beta.0)
+          should_create_branch="false"
+          if [[ "$IS_NIGHTLY" == "false" && "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.0$ ]]; then
+            should_create_branch="true"
+            echo "Major/minor release detected (${RELEASE_VERSION}), will create release branch."
+          else
+            echo "Patch/nightly/preview release detected (${RELEASE_VERSION}), skipping branch creation."
+          fi
+          echo "should_create_branch=${should_create_branch}" >> "$GITHUB_OUTPUT"
+
+      - name: Check API quota and select optimal key
+        if: github.event.inputs.force_skip_tests != 'true'
+        run: node scripts/ci-quota-check.js
+        env:
+          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
+          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
+
       - name: Run Preflight Checks
         if: github.event.inputs.force_skip_tests != 'true'
         run: node scripts/preflight-ci.js
         env:
           # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
+          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
+          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: none
-          LLXPRT_TEST_PROFILE: synthetic
           LLXPRT_SKIP_IMAGE_HARNESS: 'true' # Avoid libspng flake on Linux runners (issue #816)
 
       - name: Build Bundle for Integration Tests
@@ -196,12 +229,13 @@ jobs:
           # npm run test:integration:sandbox:docker
         env:
           # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
+          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
+          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: none
-          LLXPRT_TEST_PROFILE: synthetic
 
       - name: Configure Git User
         run: |
@@ -209,7 +243,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create and switch to a release branch
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.branch_decision.outputs.should_create_branch == 'true' }}
         id: release_branch
         run: |
           BRANCH_NAME="release/${{ steps.version.outputs.RELEASE_TAG }}"
@@ -222,7 +256,7 @@ jobs:
           npm run release:version ${{ steps.version.outputs.RELEASE_VERSION }}
 
       - name: Commit and Conditionally Push package versions
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.branch_decision.outputs.should_create_branch == 'true' }}
         run: |
           git add package.json package-lock.json packages/*/package.json || true
           # Check if there are changes to commit
@@ -534,18 +568,26 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_BRANCH: ${{ steps.release_branch.outputs.BRANCH_NAME }}
           VSIX_PATH: ${{ steps.vscode_package.outputs.VSIX_PATH }}
+          SHOULD_CREATE_BRANCH: ${{ steps.branch_decision.outputs.should_create_branch }}
         run: |
+          # Determine target for the release: branch if created, otherwise current commit
+          if [[ "$SHOULD_CREATE_BRANCH" == "true" && -n "$RELEASE_BRANCH" ]]; then
+            TARGET_REF="$RELEASE_BRANCH"
+          else
+            TARGET_REF="${{ github.sha }}"
+          fi
+
           if [[ -n "${VSIX_PATH}" && -f "${VSIX_PATH}" ]]; then
             gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
               bundle/llxprt.js \
               "${VSIX_PATH}" \
-              --target "$RELEASE_BRANCH" \
+              --target "$TARGET_REF" \
               --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
               --notes-file release-notes.md
           else
             gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
               bundle/llxprt.js \
-              --target "$RELEASE_BRANCH" \
+              --target "$TARGET_REF" \
               --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
               --notes-file release-notes.md
           fi

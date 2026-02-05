@@ -22,13 +22,11 @@ import {
   subscribeToAgentRuntimeState,
   getProvider,
   getModel,
-  getAuthType,
   RuntimeStateError,
   RuntimeStateErrorCode,
   type AgentRuntimeState,
   type RuntimeStateParams,
 } from '../AgentRuntimeState.js';
-import { AuthType } from '../../core/contentGenerator.js';
 
 describe('AgentRuntimeState - Stub Verification', () => {
   /**
@@ -62,7 +60,6 @@ describe('AgentRuntimeState - Stub Verification', () => {
   it.skip('should export synchronous accessor functions', () => {
     expect(typeof getProvider).toBe('function');
     expect(typeof getModel).toBe('function');
-    expect(typeof getAuthType).toBe('function');
   });
 
   it.skip('should export RuntimeStateError class', () => {
@@ -76,8 +73,6 @@ describe('AgentRuntimeState - Stub Verification', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
-      authPayload: { apiKey: 'test-key' },
       sessionId: 'test-session',
     };
 
@@ -90,7 +85,6 @@ describe('AgentRuntimeState - Stub Verification', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
       updatedAt: Date.now(),
     };
@@ -106,7 +100,6 @@ describe('AgentRuntimeState - Stub Verification', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
       updatedAt: Date.now(),
     };
@@ -130,14 +123,12 @@ describe('AgentRuntimeState - Stub Verification', () => {
       runtimeId: 'test-runtime',
       provider: 'gemini',
       model: 'gemini-2.0-flash',
-      authType: AuthType.USE_GEMINI,
       sessionId: 'test-session',
       updatedAt: Date.now(),
     };
 
     expect(getProvider(stubState)).toBe('gemini');
     expect(getModel(stubState)).toBe('gemini-2.0-flash');
-    expect(getAuthType(stubState)).toBe(AuthType.USE_GEMINI);
   });
 
   it('should verify RuntimeStateError construction', () => {

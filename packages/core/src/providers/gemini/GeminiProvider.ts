@@ -16,8 +16,8 @@ import {
   type ThinkingBlock,
 } from '../../services/history/IContent.js';
 import { Config } from '../../config/config.js';
-import { AuthType } from '../../core/contentGenerator.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import {
   Type,
   type Part,
@@ -288,12 +288,7 @@ export class GeminiProvider extends BaseProvider {
     const { createCodeAssistContentGenerator } = await import(
       '../../code_assist/codeAssist.js'
     );
-    return createCodeAssistContentGenerator(
-      httpOptions,
-      AuthType.LOGIN_WITH_GOOGLE,
-      config,
-      baseURL,
-    );
+    return createCodeAssistContentGenerator(httpOptions, config, baseURL);
   }
 
   /**
@@ -452,7 +447,7 @@ export class GeminiProvider extends BaseProvider {
     //   this.currentModel = configModel;
     // }
 
-    // Update OAuth configuration based on OAuth manager state, not config authType
+    // Update OAuth configuration based on OAuth manager state, not legacy auth selection
     // This ensures that if OAuth is disabled via /auth gemini disable, it stays disabled
     this.updateOAuthState();
 
@@ -570,25 +565,6 @@ export class GeminiProvider extends BaseProvider {
   async getAuthMode(): Promise<GeminiAuthMode> {
     const { authMode } = await this.determineBestAuth();
     return authMode;
-  }
-
-  /**
-   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
-   * @requirement:REQ-SP4-002
-   * Gets the appropriate AuthType for the core library per call
-   */
-  async getCoreAuthType(): Promise<AuthType> {
-    const { authMode } = await this.determineBestAuth();
-    switch (authMode) {
-      case 'oauth':
-        return AuthType.LOGIN_WITH_GOOGLE;
-      case 'gemini-api-key':
-        return AuthType.USE_GEMINI;
-      case 'vertex-ai':
-        return AuthType.USE_VERTEX_AI;
-      default:
-        return AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth
-    }
   }
 
   /**
@@ -1057,7 +1033,7 @@ export class GeminiProvider extends BaseProvider {
           const oauthContentGenerator = await this.createOAuthContentGenerator(
             httpOptions,
             this.globalConfig!,
-            this.getBaseURL(),
+            undefined,
           );
 
           // For web fetch, always use gemini-2.5-flash regardless of the active model
@@ -1343,6 +1319,21 @@ export class GeminiProvider extends BaseProvider {
     const requestConfig: Record<string, unknown> = {
       ...modelParams,
     };
+
+    // Translate generic maxOutputTokens ephemeral to Gemini's maxOutputTokens
+    const rawMaxOutput = options.settings?.get('maxOutputTokens');
+    const genericMaxOutput =
+      typeof rawMaxOutput === 'number' &&
+      Number.isFinite(rawMaxOutput) &&
+      rawMaxOutput > 0
+        ? rawMaxOutput
+        : undefined;
+    if (
+      genericMaxOutput !== undefined &&
+      requestConfig['maxOutputTokens'] === undefined
+    ) {
+      requestConfig['maxOutputTokens'] = genericMaxOutput;
+    }
     requestConfig.serverTools = serverTools;
     if (geminiTools) {
       requestConfig.tools = geminiTools;
@@ -1573,10 +1564,11 @@ export class GeminiProvider extends BaseProvider {
       };
 
       // Create OAuth content generator per call - no caching
+      // Code Assist uses its own endpoint; ignore provider base URLs.
       const contentGenerator = await this.createOAuthContentGenerator(
         httpOptions,
         configForOAuth as Config,
-        baseURL,
+        undefined,
       );
 
       // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
@@ -1584,10 +1576,17 @@ export class GeminiProvider extends BaseProvider {
         options.userMemory,
         () => options.invocation?.userMemory,
       );
+      const subagentConfig =
+        options.config ?? options.runtime?.config ?? this.globalConfig;
+      const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+        toolNamesForPrompt ?? [],
+        () => subagentConfig?.getSubagentManager?.(),
+      );
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
         model: currentModel,
         tools: toolNamesForPrompt,
+        includeSubagentDelegation,
       });
 
       const contentsWithSystemPrompt = [
@@ -1756,10 +1755,17 @@ export class GeminiProvider extends BaseProvider {
         options.userMemory,
         () => options.invocation?.userMemory,
       );
+      const subagentConfig =
+        options.config ?? options.runtime?.config ?? this.globalConfig;
+      const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
+        toolNamesForPrompt ?? [],
+        () => subagentConfig?.getSubagentManager?.(),
+      );
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
         model: currentModel,
         tools: toolNamesForPrompt,
+        includeSubagentDelegation,
       });
 
       const apiRequest = {

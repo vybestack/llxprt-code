@@ -8,7 +8,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { createProviderManager } from './providerManagerInstance.js';
 import { IProvider, IModel } from './index.js';
 import {
-  AuthType,
   Config,
   SettingsService,
   createProviderRuntimeContext,
@@ -79,8 +78,8 @@ describe('Provider-Gemini Switching', () => {
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
 
-    await config.refreshAuth(AuthType.USE_GEMINI);
-    expect(config.refreshAuth).toHaveBeenCalledWith(AuthType.USE_GEMINI);
+    await config.refreshAuth('gemini-api-key');
+    expect(config.refreshAuth).toHaveBeenCalledWith('gemini-api-key');
   });
 
   it('respects active provider configuration when set', async () => {
@@ -103,8 +102,8 @@ describe('Provider-Gemini Switching', () => {
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
 
-    await config.refreshAuth(AuthType.USE_GEMINI);
-    expect(config.refreshAuth).toHaveBeenCalledWith(AuthType.USE_GEMINI);
+    await config.refreshAuth('gemini-api-key');
+    expect(config.refreshAuth).toHaveBeenCalledWith('gemini-api-key');
     expect(mockGeminiClient.chat.contentGenerator).toBeNull();
   });
 
@@ -128,7 +127,7 @@ describe('Provider-Gemini Switching', () => {
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
 
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    await config.refreshAuth('gemini-api-key');
     expect(config.refreshAuth).toHaveBeenCalled();
   });
 });

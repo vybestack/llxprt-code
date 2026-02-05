@@ -285,7 +285,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private extractModelParamsFromOptions(
     options: NormalizedGenerateChatOptions,
   ): Record<string, unknown> | undefined {
-    const modelParams = options.invocation?.modelParams ?? {};
+    const modelParams = { ...(options.invocation?.modelParams ?? {}) };
+
+    // Translate generic maxOutputTokens ephemeral to OpenAI's max_tokens
+    const rawMaxOutput = options.settings?.get('maxOutputTokens');
+    const genericMaxOutput =
+      typeof rawMaxOutput === 'number' &&
+      Number.isFinite(rawMaxOutput) &&
+      rawMaxOutput > 0
+        ? rawMaxOutput
+        : undefined;
+    if (
+      genericMaxOutput !== undefined &&
+      modelParams['max_tokens'] === undefined
+    ) {
+      modelParams['max_tokens'] = genericMaxOutput;
+    }
 
     return Object.keys(modelParams).length > 0 ? modelParams : undefined;
   }
@@ -1138,76 +1153,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     );
   }
 
-  private shouldCompressToolMessages(
-    error: unknown,
-    logger: DebugLogger,
-  ): boolean {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'status' in error &&
-      (error as { status?: number }).status === 400
-    ) {
-      const raw =
-        error &&
-        typeof error === 'object' &&
-        'error' in error &&
-        typeof (error as { error?: { metadata?: { raw?: string } } }).error ===
-          'object'
-          ? ((error as { error?: { metadata?: { raw?: string } } }).error ?? {})
-              .metadata?.raw
-          : undefined;
-      if (raw === 'ERROR') {
-        logger.debug(
-          () =>
-            `[OpenAIProvider] Detected OpenRouter 400 response with raw metadata. Will attempt tool-response compression.`,
-        );
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private compressToolMessages(
-    messages: OpenAI.Chat.ChatCompletionMessageParam[],
-    maxLength: number,
-    logger: DebugLogger,
-  ): boolean {
-    let modified = false;
-    messages.forEach((message, index) => {
-      if (message.role !== 'tool' || typeof message.content !== 'string') {
-        return;
-      }
-      const original = message.content;
-      if (original.length <= maxLength) {
-        return;
-      }
-
-      let nextContent = original;
-      try {
-        const parsed = JSON.parse(original) as {
-          result?: unknown;
-          truncated?: boolean;
-          originalLength?: number;
-        };
-        parsed.result = `[omitted ${original.length} chars due to provider limits]`;
-        parsed.truncated = true;
-        parsed.originalLength = original.length;
-        nextContent = JSON.stringify(parsed);
-      } catch {
-        nextContent = `${original.slice(0, maxLength)}… [truncated ${original.length - maxLength} chars]`;
-      }
-
-      message.content = ensureJsonSafe(nextContent);
-      modified = true;
-      logger.debug(
-        () =>
-          `[OpenAIProvider] Compressed tool message #${index} from ${original.length} chars to ${message.content.length} chars`,
-      );
-    });
-    return modified;
-  }
-
   /**
    * Build messages with optional reasoning_content based on settings.
    *
@@ -1895,7 +1840,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         onPersistent429: onPersistent429Callback,
       });
     } else {
-      let compressedOnce = false;
       while (true) {
         try {
           response = (await retryWithBackoff(executeRequest, {
@@ -1940,19 +1884,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               enhancedError as Error & { originalError?: unknown }
             ).originalError = error;
             throw enhancedError;
-          }
-
-          if (
-            !compressedOnce &&
-            this.shouldCompressToolMessages(error, logger) &&
-            this.compressToolMessages(requestBody.messages, 512, logger)
-          ) {
-            compressedOnce = true;
-            logger.warn(
-              () =>
-                `[OpenAIProvider] Retrying request after compressing tool responses due to provider 400`,
-            );
-            continue;
           }
 
           const capturedErrorMessage =
@@ -3390,8 +3321,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
 
     if (streamingEnabled) {
-      // Streaming mode - use retry loop with compression support
-      let compressedOnce = false;
       while (true) {
         try {
           // Use failover client if bucket failover happened, otherwise use original client
@@ -3454,20 +3383,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             throw enhancedError;
           }
 
-          // Tool message compression logic
-          if (
-            !compressedOnce &&
-            this.shouldCompressToolMessages(error, logger) &&
-            this.compressToolMessages(requestBody.messages, 512, logger)
-          ) {
-            compressedOnce = true;
-            logger.warn(
-              () =>
-                `[OpenAIProvider] Retrying streaming request after compressing tool responses due to provider 400`,
-            );
-            continue;
-          }
-
           // Dump error if enabled
           if (shouldDumpError) {
             const dumpErrorMessage =
@@ -3509,8 +3424,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
       }
     } else {
-      // Non-streaming mode - use comprehensive retry loop with compression
-      let compressedOnce = false;
       while (true) {
         try {
           // Use failover client if bucket failover happened, otherwise use original client
@@ -3580,20 +3493,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               enhancedError as Error & { originalError?: unknown }
             ).originalError = error;
             throw enhancedError;
-          }
-
-          // Tool message compression logic
-          if (
-            !compressedOnce &&
-            this.shouldCompressToolMessages(error, logger) &&
-            this.compressToolMessages(requestBody.messages, 512, logger)
-          ) {
-            compressedOnce = true;
-            logger.warn(
-              () =>
-                `[OpenAIProvider] Retrying request after compressing tool responses due to provider 400`,
-            );
-            continue;
           }
 
           // Dump error if enabled

@@ -66,6 +66,7 @@ export function createMockConfig(
     getMessageBus: vi.fn().mockReturnValue(defaultMessageBus),
     getPolicyEngine: vi.fn(),
     getEnableExtensionReloading: vi.fn().mockReturnValue(false),
+    disposeScheduler: vi.fn(),
     getOrCreateScheduler: vi
       .fn()
       .mockImplementation(
@@ -220,7 +221,6 @@ export function createMockConfig(
           return scheduler;
         },
       ),
-    disposeScheduler: vi.fn(),
     ...overrides,
   };
   return mockConfig;

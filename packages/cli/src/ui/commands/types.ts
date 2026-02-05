@@ -17,6 +17,7 @@ import type {
   Logger,
   ProfileManager,
   SubagentManager,
+  Todo,
 } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { OAuthManager } from '../../auth/oauth-manager.js';
@@ -93,6 +94,16 @@ export interface CommandContext {
     stats: SessionStatsState;
     /** A transient list of shell commands the user has approved for this session. */
     sessionShellAllowlist: Set<string>;
+  };
+  // TODO management
+  /**
+   * @plan PLAN-20260129-TODOPERSIST.P07
+   * @requirement REQ-003, REQ-004, REQ-005, REQ-006
+   */
+  todoContext?: {
+    todos: Todo[];
+    updateTodos: (todos: Todo[]) => void;
+    refreshTodos: () => void;
   };
   // Flag to indicate if an overwrite has been confirmed
   overwriteConfirmed?: boolean;
@@ -187,7 +198,8 @@ export type DialogType =
   | 'models'
   | 'profileList'
   | 'profileDetail'
-  | 'profileEditor';
+  | 'profileEditor'
+  | 'welcome';
 
 /** Map dialog types to their associated data types for type-safe access */
 export interface DialogDataMap {

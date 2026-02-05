@@ -235,6 +235,7 @@ export { ConversationCache } from './providers/openai/ConversationCache.js';
 export { getOpenAIProviderInfo } from './providers/openai/getOpenAIProviderInfo.js';
 export { OpenAIVercelProvider } from './providers/openai-vercel/index.js';
 export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';
+export * from './providers/anthropic/usageInfo.js';
 export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
 export * from './providers/ProviderManager.js';
 export * from './providers/errors.js';
@@ -307,10 +308,9 @@ export type {
   RuntimeStateChangedEvent,
   RuntimeStateChangeCallback,
   UnsubscribeFunction,
-  AuthPayload,
-  ModelParams,
-  SanitizedAuthPayload,
-  RuntimeStateErrorCode,
+  getBaseUrl,
+  getSessionId,
+  getModelParams,
 } from './runtime/AgentRuntimeState.js';
 export {
   createAgentRuntimeState,
@@ -318,14 +318,6 @@ export {
   updateAgentRuntimeStateBatch,
   getAgentRuntimeStateSnapshot,
   subscribeToAgentRuntimeState,
-  RuntimeStateError,
-  getProvider,
-  getModel,
-  getAuthType,
-  getAuthPayload,
-  getBaseUrl,
-  getSessionId,
-  getModelParams,
 } from './runtime/AgentRuntimeState.js';
 export type { RuntimeStateFromConfigOptions } from './runtime/runtimeStateFactory.js';
 export { createAgentRuntimeStateFromConfig as createRuntimeStateFromConfig } from './runtime/runtimeStateFactory.js';
@@ -410,6 +402,7 @@ export {
   type SettingSpec,
   type ValidationResult,
   type SeparatedSettings,
+  type DirectSettingSpec,
   SETTINGS_REGISTRY,
   separateSettings,
   getSettingSpec,
@@ -423,4 +416,7 @@ export {
   getAllSettingKeys,
   getValidationHelp,
   getAutocompleteSuggestions,
+  getProtectedSettingKeys,
+  getProviderConfigKeys,
+  getDirectSettingSpecs,
 } from './settings/index.js';

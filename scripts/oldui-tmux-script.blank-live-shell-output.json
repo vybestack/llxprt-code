@@ -43,7 +43,12 @@
 
     { "type": "capture", "label": "while-command-running", "scope": "screen" },
     { "type": "capture", "label": "while-command-running-scrollback", "scope": "scrollback" },
-    { "type": "expect", "scope": "screen", "contains": "LIVE" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LIVE",
+      "timeoutMs": 10000
+    },
 
     {
       "type": "waitFor",

@@ -10,7 +10,6 @@ const baseState = createAgentRuntimeState({
   runtimeId: 'stateless-runtime',
   provider: 'stub-provider',
   model: 'stub-model',
-  authType: 'none',
   sessionId: 'session-123',
 });
 

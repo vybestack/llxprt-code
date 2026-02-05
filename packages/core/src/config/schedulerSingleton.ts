@@ -230,6 +230,8 @@ export function disposeScheduler(sessionId: string): void {
     schedulerEntries.delete(sessionId);
     try {
       entry.scheduler.dispose();
+    } catch (_error) {
+      // Ignore errors during cleanup
     } finally {
       schedulerInitStates.delete(sessionId);
     }

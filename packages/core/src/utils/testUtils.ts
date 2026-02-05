@@ -11,19 +11,13 @@
 let requestCounter = 0;
 let simulate429Enabled = false;
 let simulate429AfterRequests = 0;
-let simulate429ForAuthType: string | undefined;
 let fallbackOccurred = false;
 
 /**
  * Check if we should simulate a 429 error for the current request
  */
-export function shouldSimulate429(authType?: string): boolean {
+export function shouldSimulate429(): boolean {
   if (!simulate429Enabled || fallbackOccurred) {
-    return false;
-  }
-
-  // If auth type filter is set, only simulate for that auth type
-  if (simulate429ForAuthType && authType !== simulate429ForAuthType) {
     return false;
   }
 
@@ -74,14 +68,9 @@ export function resetSimulationState(): void {
 /**
  * Enable/disable 429 simulation programmatically (for tests)
  */
-export function setSimulate429(
-  enabled: boolean,
-  afterRequests = 0,
-  forAuthType?: string,
-): void {
+export function setSimulate429(enabled: boolean, afterRequests = 0): void {
   simulate429Enabled = enabled;
   simulate429AfterRequests = afterRequests;
-  simulate429ForAuthType = forAuthType;
   fallbackOccurred = false; // Reset fallback state when simulation is re-enabled
   resetRequestCounter();
 }

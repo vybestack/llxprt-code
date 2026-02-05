@@ -47,7 +47,6 @@ import type {
 import type { ToolRegistry } from '../../tools/tool-registry.js';
 import type { ContentGenerator } from '../contentGenerator.js';
 import type { Part } from '@google/genai';
-import { AuthType } from '../contentGenerator.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type { HistoryService } from '../../services/history/HistoryService.js';
 
@@ -188,9 +187,7 @@ function createStatelessRuntimeBundle(options?: {
     runtimeId: 'runtime-bundle',
     provider: 'gemini',
     model: options?.model ?? 'gemini-2.0-flash-thinking-exp',
-    authType: AuthType.USE_PROVIDER,
     sessionId: 'runtime-session',
-    authPayload: undefined,
     proxyUrl: undefined,
     modelParams: {
       temperature: 0.7,
