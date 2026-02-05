@@ -1422,25 +1422,23 @@ ${block.code}
               }
             }
 
-            for (const toolUseId of toolUseIdsInMessage) {
-              if (!currentToolResultIds.has(toolUseId)) {
-                this.getToolsLogger().debug(
-                  () =>
-                    `Synthesizing missing tool_result for orphaned tool_use ${toolUseId}`,
-                );
-
-                anthropicMessages.splice(nextMsgIndex, 0, {
-                  role: 'user',
-                  content: [
-                    {
-                      type: 'tool_result',
-                      tool_use_id: toolUseId,
-                      content: '[tool execution interrupted]',
-                      is_error: true,
-                    },
-                  ],
-                });
-              }
+            const missingToolUseIds = toolUseIdsInMessage.filter(
+              (toolUseId) => !currentToolResultIds.has(toolUseId),
+            );
+            if (missingToolUseIds.length > 0) {
+              this.getToolsLogger().debug(
+                () =>
+                  `Synthesizing ${missingToolUseIds.length} missing tool_result(s) for orphaned tool_use`,
+              );
+              anthropicMessages.splice(nextMsgIndex, 0, {
+                role: 'user',
+                content: missingToolUseIds.map((toolUseId) => ({
+                  type: 'tool_result' as const,
+                  tool_use_id: toolUseId,
+                  content: '[tool execution interrupted]',
+                  is_error: true,
+                })),
+              });
             }
           }
         }
