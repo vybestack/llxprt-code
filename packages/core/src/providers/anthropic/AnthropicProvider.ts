@@ -1337,6 +1337,11 @@ ${block.code}
                 is_error?: boolean;
               }> = [];
 
+              const pendingRemovals: Array<{
+                msgIndex: number;
+                blockIndex: number;
+              }> = [];
+
               for (const missingId of missingToolResultIds) {
                 let foundResult: {
                   type: 'tool_result';
@@ -1369,11 +1374,10 @@ ${block.code}
                         content: string;
                         is_error?: boolean;
                       };
-                      laterMsg.content.splice(resultIdx, 1);
-
-                      if (laterMsg.content.length === 0) {
-                        anthropicMessages.splice(j, 1);
-                      }
+                      pendingRemovals.push({
+                        msgIndex: j,
+                        blockIndex: resultIdx,
+                      });
                       break;
                     }
                   }
@@ -1388,6 +1392,19 @@ ${block.code}
                     content: '[tool execution interrupted]',
                     is_error: true,
                   });
+                }
+              }
+
+              for (const removal of pendingRemovals.sort(
+                (a, b) =>
+                  b.msgIndex - a.msgIndex || b.blockIndex - a.blockIndex,
+              )) {
+                const laterMsg = anthropicMessages[removal.msgIndex];
+                if (Array.isArray(laterMsg.content)) {
+                  laterMsg.content.splice(removal.blockIndex, 1);
+                  if (laterMsg.content.length === 0) {
+                    anthropicMessages.splice(removal.msgIndex, 1);
+                  }
                 }
               }
 
