@@ -446,7 +446,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
      * Test when some tool responses are missing entirely
      * KNOWN BUG: Provider doesn't synthesize placeholder tool_results for missing responses
      */
-    it.skip('should detect when tool_results are missing for some tool_use ids', async () => {
+    it('should detect when tool_results are missing for some tool_use ids', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
         usage: { input_tokens: 100, output_tokens: 50 },
@@ -558,7 +558,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
      * Test when there's content between tool_use and tool_result
      * KNOWN BUG: Provider doesn't reorder messages to ensure adjacency
      */
-    it.skip('should not have other messages between assistant tool_use and user tool_result', async () => {
+    it('should not have other messages between assistant tool_use and user tool_result', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
         usage: { input_tokens: 100, output_tokens: 50 },

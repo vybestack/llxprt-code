@@ -37,6 +37,7 @@ import {
   type ToolResponseBlock,
   type TextBlock,
   type ThinkingBlock,
+  type CodeBlock,
 } from '../../services/history/IContent.js';
 import {
   processToolParameters,
@@ -868,27 +869,17 @@ export class AnthropicProvider extends BaseProvider {
     }
     const filteredContentRaw = content.slice(startIndex);
 
-    // Pre-process content to merge consecutive AI messages where one has only thinking
-    // and the next has tool calls. This handles the case where thinking and tool calls
-    // are streamed and stored separately during Anthropic Extended Thinking.
     const filteredContent: IContent[] = [];
-    const consumedOrphanedThinkingIndices = new Set<number>();
+    const consumedIndices = new Set<number>();
+
     for (let i = 0; i < filteredContentRaw.length; i++) {
-      if (consumedOrphanedThinkingIndices.has(i)) {
+      if (consumedIndices.has(i)) {
         continue;
       }
 
       const current = filteredContentRaw[i];
-      const next =
-        i + 1 < filteredContentRaw.length ? filteredContentRaw[i + 1] : null;
 
-      if (
-        reasoningEnabled &&
-        current.speaker === 'ai' &&
-        next &&
-        next.speaker === 'ai'
-      ) {
-        // Check if current has ONLY thinking blocks and next is any AI message.
+      if (reasoningEnabled && current.speaker === 'ai') {
         const currentThinking = current.blocks.filter(
           (b) =>
             b.type === 'thinking' &&
@@ -901,18 +892,60 @@ export class AnthropicProvider extends BaseProvider {
         );
 
         if (currentThinking.length > 0 && currentOther.length === 0) {
-          // Merge: combine thinking from current with all blocks from next
-          this.getLogger().debug(
-            () =>
-              `[AnthropicProvider] Merging orphaned thinking block with subsequent assistant message`,
-          );
-          filteredContent.push({
-            ...next,
-            blocks: [...currentThinking, ...next.blocks],
-          });
-          consumedOrphanedThinkingIndices.add(i);
-          i++; // Skip the next item since we merged it
-          continue;
+          let endIndex = i;
+          while (
+            endIndex + 1 < filteredContentRaw.length &&
+            filteredContentRaw[endIndex + 1].speaker === 'ai'
+          ) {
+            endIndex++;
+          }
+
+          if (endIndex > i) {
+            const thinkingBlocks: ThinkingBlock[] = [
+              ...(currentThinking as ThinkingBlock[]),
+            ];
+            const textBlocks: Array<TextBlock | CodeBlock> = [];
+            const toolCallBlocks: ToolCallBlock[] = [];
+
+            const otherBlocks: ContentBlock[] = [];
+
+            for (let j = i + 1; j <= endIndex; j++) {
+              for (const block of filteredContentRaw[j].blocks) {
+                if (
+                  block.type === 'thinking' &&
+                  (block as ThinkingBlock).sourceField === 'thinking'
+                ) {
+                  thinkingBlocks.push(block as ThinkingBlock);
+                } else if (block.type === 'text' || block.type === 'code') {
+                  textBlocks.push(block);
+                } else if (block.type === 'tool_call') {
+                  toolCallBlocks.push(block as ToolCallBlock);
+                } else {
+                  // Catch-all for unknown block types to prevent silent data loss
+                  otherBlocks.push(block);
+                }
+              }
+              consumedIndices.add(j);
+            }
+
+            this.getLogger().debug(
+              () =>
+                `[AnthropicProvider] Merging ${endIndex - i + 1} consecutive AI messages (thinking-only followed by ${endIndex - i} message(s))`,
+            );
+
+            filteredContent.push({
+              ...filteredContentRaw[endIndex],
+              blocks: [
+                ...thinkingBlocks,
+                ...textBlocks,
+                ...otherBlocks,
+                ...toolCallBlocks,
+              ],
+            });
+            consumedIndices.add(i);
+            i = endIndex;
+            continue;
+          }
         }
       }
 
@@ -1265,6 +1298,168 @@ ${block.code}
       // Replace the messages array
       anthropicMessages.length = 0;
       anthropicMessages.push(...filteredMessages);
+    }
+
+    for (let i = 0; i < anthropicMessages.length; i++) {
+      const msg = anthropicMessages[i];
+      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        const toolUseBlocks = msg.content.filter(
+          (block) => block.type === 'tool_use',
+        );
+
+        if (toolUseBlocks.length > 0) {
+          const toolUseIdsInMessage = toolUseBlocks.map(
+            (b) => (b as { id: string }).id,
+          );
+          const nextMsgIndex = i + 1;
+
+          if (
+            nextMsgIndex < anthropicMessages.length &&
+            anthropicMessages[nextMsgIndex].role === 'user'
+          ) {
+            const nextMsg = anthropicMessages[nextMsgIndex];
+            const nextMsgToolResults = Array.isArray(nextMsg.content)
+              ? nextMsg.content.filter((b) => b.type === 'tool_result')
+              : [];
+            const nextMsgToolResultIds = nextMsgToolResults.map(
+              (b) => (b as { tool_use_id: string }).tool_use_id,
+            );
+
+            const missingToolResultIds = toolUseIdsInMessage.filter(
+              (id) => !nextMsgToolResultIds.includes(id),
+            );
+
+            if (missingToolResultIds.length > 0) {
+              const collectedResults: Array<{
+                type: 'tool_result';
+                tool_use_id: string;
+                content: string;
+                is_error?: boolean;
+              }> = [];
+
+              const pendingRemovals: Array<{
+                msgIndex: number;
+                blockIndex: number;
+              }> = [];
+
+              for (const missingId of missingToolResultIds) {
+                let foundResult: {
+                  type: 'tool_result';
+                  tool_use_id: string;
+                  content: string;
+                  is_error?: boolean;
+                } | null = null;
+
+                for (
+                  let j = nextMsgIndex + 1;
+                  j < anthropicMessages.length;
+                  j++
+                ) {
+                  const laterMsg = anthropicMessages[j];
+                  if (
+                    laterMsg.role === 'user' &&
+                    Array.isArray(laterMsg.content)
+                  ) {
+                    const resultIdx = laterMsg.content.findIndex(
+                      (b) =>
+                        b.type === 'tool_result' &&
+                        (b as { tool_use_id: string }).tool_use_id ===
+                          missingId,
+                    );
+
+                    if (resultIdx >= 0) {
+                      foundResult = laterMsg.content[resultIdx] as {
+                        type: 'tool_result';
+                        tool_use_id: string;
+                        content: string;
+                        is_error?: boolean;
+                      };
+                      pendingRemovals.push({
+                        msgIndex: j,
+                        blockIndex: resultIdx,
+                      });
+                      break;
+                    }
+                  }
+                }
+
+                if (foundResult) {
+                  collectedResults.push(foundResult);
+                } else {
+                  collectedResults.push({
+                    type: 'tool_result',
+                    tool_use_id: missingId,
+                    content: '[tool execution interrupted]',
+                    is_error: true,
+                  });
+                }
+              }
+
+              for (const removal of pendingRemovals.sort(
+                (a, b) =>
+                  b.msgIndex - a.msgIndex || b.blockIndex - a.blockIndex,
+              )) {
+                const laterMsg = anthropicMessages[removal.msgIndex];
+                if (Array.isArray(laterMsg.content)) {
+                  laterMsg.content.splice(removal.blockIndex, 1);
+                  if (laterMsg.content.length === 0) {
+                    anthropicMessages.splice(removal.msgIndex, 1);
+                  }
+                }
+              }
+
+              if (collectedResults.length > 0) {
+                this.getToolsLogger().debug(
+                  () =>
+                    `Reordering ${collectedResults.length} tool_result(s) to immediately follow tool_use`,
+                );
+
+                if (Array.isArray(nextMsg.content)) {
+                  nextMsg.content.unshift(...collectedResults);
+                } else {
+                  const textBlock: { type: 'text'; text: string } = {
+                    type: 'text',
+                    text: nextMsg.content,
+                  };
+                  nextMsg.content = [...collectedResults, textBlock];
+                }
+              }
+            }
+          } else {
+            // Next message is not a user message - need to check if tool_result exists ANYWHERE
+            // Recompute the set of all tool_result IDs after adjacency enforcement mutations
+            const currentToolResultIds = new Set<string>();
+            for (const msg of anthropicMessages) {
+              if (msg.role === 'user' && Array.isArray(msg.content)) {
+                for (const block of msg.content) {
+                  if (block.type === 'tool_result') {
+                    currentToolResultIds.add(block.tool_use_id);
+                  }
+                }
+              }
+            }
+
+            const missingToolUseIds = toolUseIdsInMessage.filter(
+              (toolUseId) => !currentToolResultIds.has(toolUseId),
+            );
+            if (missingToolUseIds.length > 0) {
+              this.getToolsLogger().debug(
+                () =>
+                  `Synthesizing ${missingToolUseIds.length} missing tool_result(s) for orphaned tool_use`,
+              );
+              anthropicMessages.splice(nextMsgIndex, 0, {
+                role: 'user',
+                content: missingToolUseIds.map((toolUseId) => ({
+                  type: 'tool_result' as const,
+                  tool_use_id: toolUseId,
+                  content: '[tool execution interrupted]',
+                  is_error: true,
+                })),
+              });
+            }
+          }
+        }
+      }
     }
 
     // Ensure the conversation starts with a valid message type
