@@ -121,9 +121,11 @@ export const statsCommand: SlashCommand = {
             return;
           }
 
-          const { formatAllUsagePeriods, formatCodexUsage } = await import(
-            '@vybestack/llxprt-code-core'
-          );
+          const {
+            formatAllUsagePeriods,
+            formatCodexUsage,
+            CodexUsageInfoSchema,
+          } = await import('@vybestack/llxprt-code-core');
 
           const output: string[] = [];
 
@@ -185,10 +187,6 @@ export const statsCommand: SlashCommand = {
             for (const bucket of sortedBuckets) {
               const usageInfo = codexUsageInfo.get(bucket)!;
 
-              // Use Zod safeParse to validate the usage info before formatting
-              const { CodexUsageInfoSchema } = await import(
-                '@vybestack/llxprt-code-core'
-              );
               const parsed = CodexUsageInfoSchema.safeParse(usageInfo);
               if (!parsed.success) {
                 logger.warn(
