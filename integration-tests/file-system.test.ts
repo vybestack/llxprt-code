@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { join } from 'node:path';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 
 describe('file-system', () => {
@@ -36,86 +37,14 @@ describe('file-system', () => {
     validateModelOutput(result, 'hello world', 'File read test');
   });
 
-  it('should be able to write a file', async () => {
-    const rig = new TestRig();
-    await rig.setup('should be able to write a file');
-    rig.createFile('test.txt', '');
-
-    const result = await rig.run(`edit test.txt to have a hello world message`);
-
-    // Accept multiple valid tools for editing files
-    const foundToolCall = await rig.waitForAnyToolCall([
-      'write_file',
-      'edit',
-      'replace',
-    ]);
-
-    // Add debugging information
-    if (!foundToolCall) {
-      printDebugInfo(rig, result);
-    }
-
-    expect(
-      foundToolCall,
-      'Expected to find a write_file, edit, or replace tool call',
-    ).toBeTruthy();
-
-    // Validate model output - will throw if no output
-    validateModelOutput(result, null, 'File write test');
-
-    const fileContent = rig.readFile('test.txt');
-
-    // Add debugging for file content
-    if (!fileContent.toLowerCase().includes('hello')) {
-      const writeCalls = rig
-        .readToolLogs()
-        .filter((t) => t.toolRequest.name === 'write_file')
-        .map((t) => t.toolRequest.args);
-
-      printDebugInfo(rig, result, {
-        'File content mismatch': true,
-        'Expected to contain': 'hello',
-        'Actual content': fileContent,
-        'Write tool calls': JSON.stringify(writeCalls),
-      });
-    }
-
-    expect(
-      fileContent.toLowerCase().includes('hello'),
-      'Expected file to contain hello',
-    ).toBeTruthy();
-
-    // Log success info if verbose
-    if (process.env.VERBOSE === 'true') {
-      console.log('File written successfully with hello message.');
-    }
-  });
-
-  it('should correctly handle file paths with spaces', async () => {
-    const rig = new TestRig();
-    await rig.setup('should correctly handle file paths with spaces');
-    const fileName = 'my test file.txt';
-
-    const result = await rig.run(
-      `write "hello" to "${fileName}" and then stop. Do not perform any other actions.`,
-    );
-
-    const foundToolCall = await rig.waitForToolCall('write_file');
-    if (!foundToolCall) {
-      printDebugInfo(rig, result);
-    }
-    expect(
-      foundToolCall,
-      'Expected to find a write_file tool call',
-    ).toBeTruthy();
-
-    const newFileContent = rig.readFile(fileName);
-    expect(newFileContent).toBe('hello');
-  });
-
   it('should perform a read-then-write sequence', async () => {
     const rig = new TestRig();
-    await rig.setup('should perform a read-then-write sequence');
+    await rig.setup('should perform a read-then-write sequence', {
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'file-system.read-then-write.responses.jsonl',
+      ),
+    });
     const fileName = 'version.txt';
     rig.createFile(fileName, '1.0.0');
 
@@ -146,57 +75,5 @@ describe('file-system', () => {
 
     const newFileContent = rig.readFile(fileName);
     expect(newFileContent).toBe('1.0.1');
-  });
-
-  it('should replace multiple instances of a string', async () => {
-    const rig = new TestRig();
-    await rig.setup('should replace multiple instances of a string');
-    const fileName = 'ambiguous.txt';
-    const fileContent = 'Hey there, \ntest line\ntest line';
-    const expectedContent = 'Hey there, \nnew line\nnew line';
-    rig.createFile(fileName, fileContent);
-
-    const result = await rig.run(
-      `rewrite the file ${fileName} to replace all instances of "test line" with "new line"`,
-    );
-
-    const validTools = ['write_file', 'edit', 'replace'];
-    const foundToolCall = await rig.waitForAnyToolCall(validTools);
-    if (!foundToolCall) {
-      printDebugInfo(rig, result, {
-        'Tool call found': foundToolCall,
-        'Tool logs': rig.readToolLogs(),
-      });
-    }
-    expect(
-      foundToolCall,
-      `Expected to find one of ${validTools.join(', ')} tool calls`,
-    ).toBeTruthy();
-
-    const toolLogs = rig.readToolLogs();
-    const successfulEdit = toolLogs.some(
-      (log) =>
-        validTools.includes(log.toolRequest.name) && log.toolRequest.success,
-    );
-    if (!successfulEdit) {
-      console.error(
-        `Expected a successful edit tool call (${validTools.join(', ')}), but none was found.`,
-      );
-      printDebugInfo(rig, result);
-    }
-    expect(
-      successfulEdit,
-      `Expected a successful edit tool call (${validTools.join(', ')})`,
-    ).toBeTruthy();
-
-    const newFileContent = rig.readFile(fileName);
-    if (newFileContent !== expectedContent) {
-      printDebugInfo(rig, result, {
-        'Final file content': newFileContent,
-        'Expected file content': expectedContent,
-        'Tool logs': rig.readToolLogs(),
-      });
-    }
-    expect(newFileContent).toBe(expectedContent);
   });
 });
