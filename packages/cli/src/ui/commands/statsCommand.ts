@@ -105,10 +105,11 @@ export const statsCommand: SlashCommand = {
         }
 
         try {
-          // Get usage info for ALL authenticated buckets (both Anthropic and Codex)
-          const anthropicUsageInfo =
-            await oauthManager.getAllAnthropicUsageInfo();
-          const codexUsageInfo = await oauthManager.getAllCodexUsageInfo();
+          // Fetch both providers in parallel
+          const [anthropicUsageInfo, codexUsageInfo] = await Promise.all([
+            oauthManager.getAllAnthropicUsageInfo(),
+            oauthManager.getAllCodexUsageInfo(),
+          ]);
 
           if (anthropicUsageInfo.size === 0 && codexUsageInfo.size === 0) {
             context.ui.addItem(
@@ -129,11 +130,10 @@ export const statsCommand: SlashCommand = {
 
           const output: string[] = [];
 
-          // Format Anthropic usage info
+          // Collect Anthropic lines first, only add header if non-empty
           if (anthropicUsageInfo.size > 0) {
-            output.push('## Anthropic Quota Information\n');
+            const anthropicLines: string[] = [];
 
-            // Sort buckets: 'default' first, then alphabetical
             const sortedBuckets = Array.from(anthropicUsageInfo.keys()).sort(
               (a, b) => {
                 if (a === 'default') return -1;
@@ -142,7 +142,6 @@ export const statsCommand: SlashCommand = {
               },
             );
 
-            // Format usage for each bucket
             for (const bucket of sortedBuckets) {
               const usageInfo = anthropicUsageInfo.get(bucket)!;
               const lines = formatAllUsagePeriods(
@@ -150,31 +149,29 @@ export const statsCommand: SlashCommand = {
               );
 
               if (lines.length > 0) {
-                // Only show bucket name if there are multiple buckets
                 if (anthropicUsageInfo.size > 1) {
-                  output.push(`### Bucket: ${bucket}\n`);
+                  anthropicLines.push(`### Bucket: ${bucket}\n`);
                 }
-                output.push(...lines);
-                output.push(''); // Add spacing between buckets
+                anthropicLines.push(...lines);
+                anthropicLines.push('');
               }
             }
 
             // Remove trailing empty line
-            if (output[output.length - 1] === '') {
-              output.pop();
+            if (anthropicLines[anthropicLines.length - 1] === '') {
+              anthropicLines.pop();
+            }
+
+            if (anthropicLines.length > 0) {
+              output.push('## Anthropic Quota Information\n');
+              output.push(...anthropicLines);
             }
           }
 
-          // Format Codex usage info
+          // Collect Codex lines first, only add header if non-empty
           if (codexUsageInfo.size > 0) {
-            // Add spacing between Anthropic and Codex sections
-            if (output.length > 0) {
-              output.push('');
-            }
+            const codexLines: string[] = [];
 
-            output.push('## Codex Quota Information\n');
-
-            // Sort buckets: 'default' first, then alphabetical
             const sortedBuckets = Array.from(codexUsageInfo.keys()).sort(
               (a, b) => {
                 if (a === 'default') return -1;
@@ -183,7 +180,6 @@ export const statsCommand: SlashCommand = {
               },
             );
 
-            // Format usage for each bucket
             for (const bucket of sortedBuckets) {
               const usageInfo = codexUsageInfo.get(bucket)!;
 
@@ -199,23 +195,29 @@ export const statsCommand: SlashCommand = {
               const lines = formatCodexUsage(parsed.data);
 
               if (lines.length > 0) {
-                // Only show bucket name if there are multiple buckets
                 if (codexUsageInfo.size > 1) {
-                  output.push(`### Bucket: ${bucket}\n`);
+                  codexLines.push(`### Bucket: ${bucket}\n`);
                 }
-                output.push(...lines);
-                output.push(''); // Add spacing between buckets
+                codexLines.push(...lines);
+                codexLines.push('');
               }
             }
 
             // Remove trailing empty line
-            if (output[output.length - 1] === '') {
-              output.pop();
+            if (codexLines[codexLines.length - 1] === '') {
+              codexLines.pop();
+            }
+
+            if (codexLines.length > 0) {
+              if (output.length > 0) {
+                output.push('');
+              }
+              output.push('## Codex Quota Information\n');
+              output.push(...codexLines);
             }
           }
 
           if (output.length === 0) {
-            // No actual quota data
             context.ui.addItem(
               {
                 type: MessageType.INFO,
