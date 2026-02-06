@@ -251,14 +251,14 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       '[Tool call acknowledged - awaiting execution]',
     );
 
-    // OpenAI-compatible strict providers (e.g. Chutes/MiniMax) require tool messages
-    // to include the function name matching the prior assistant tool call.
-    // Regression guard: continuation placeholder tool message must include name.
+    // OpenAI chat-completions tool messages should remain schema-compatible:
+    // role/content/tool_call_id only. Some strict OpenAI-compatible backends
+    // reject unknown fields on tool messages.
     expect(toolResponseMsgs[0]).toMatchObject({
       role: 'tool',
       tool_call_id: 'call_123',
-      name: 'FindFiles',
     });
+    expect(toolResponseMsgs[0]).not.toHaveProperty('name');
 
     // Should have user continuation prompt
     const continuationPrompt = continuationMessages.find(

@@ -1282,17 +1282,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock[];
         for (const tr of toolResponses) {
-          // CRITICAL for Mistral API compatibility (#760):
-          // Tool messages must include a name field matching the function name.
-          // See: https://docs.mistral.ai/capabilities/function_calling
-          // Note: The OpenAI SDK types don't include name, but Mistral requires it.
-          // We use a type assertion to add this required field.
-          messages.push({
+          const toolMessage: Record<string, unknown> = {
             role: 'tool',
             content: this.buildToolResponseContent(tr, options.config),
             tool_call_id: resolveToolResponseId(tr),
-            name: tr.toolName,
-          } as OpenAI.Chat.ChatCompletionToolMessageParam);
+          };
+
+          // CRITICAL for Mistral compatibility (#760): Mistral requires
+          // `name` on tool messages. Standard OpenAI-compatible endpoints
+          // (including strict validators) reject unknown tool-message fields,
+          // so keep `name` scoped to mistral format only.
+          if (toolFormat === 'mistral') {
+            toolMessage.name = tr.toolName;
+          }
+
+          messages.push(
+            toolMessage as unknown as OpenAI.Chat.ChatCompletionToolMessageParam,
+          );
         }
       }
     }
@@ -4822,7 +4828,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       ...toolCalls.map((tc) => ({
         role: 'tool' as const,
         tool_call_id: tc.id,
-        name: tc.function.name,
         content: '[Tool call acknowledged - awaiting execution]',
       })),
       // Add continuation prompt
