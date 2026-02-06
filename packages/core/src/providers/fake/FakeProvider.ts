@@ -89,10 +89,11 @@ export class FakeProvider implements IProvider {
   async *generateChatCompletion(
     _optionsOrContent: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
-    const turn = this.turns[this.callCounter++];
+    const turnIndex = this.callCounter++;
+    const turn = this.turns[turnIndex];
     if (!turn) {
       throw new Error(
-        `FakeProvider: no more canned responses (call #${this.callCounter})`,
+        `FakeProvider: no more canned responses (call #${turnIndex + 1}, only ${this.turns.length} turn(s) available)`,
       );
     }
     for (const chunk of turn.chunks) {

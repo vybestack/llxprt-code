@@ -96,13 +96,15 @@ describe('FakeProvider', () => {
     }
     expect(chunks).toHaveLength(1);
 
-    // Second call throws
+    // Second call throws with a precise call index and available turn count
     const exhausted = provider.generateChatCompletion([]);
     await expect(async () => {
       for await (const _chunk of exhausted) {
         // drain
       }
-    }).rejects.toThrow(/no more canned responses/);
+    }).rejects.toThrow(
+      'FakeProvider: no more canned responses (call #2, only 1 turn(s) available)',
+    );
   });
 
   it('replaces {{CWD}} template with the provided cwd', async () => {
