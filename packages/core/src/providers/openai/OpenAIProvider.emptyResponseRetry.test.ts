@@ -162,6 +162,23 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
         role: ContentGeneratorRole.USER,
         content: 'look through the codebase and tell me what it does',
       },
+      {
+        role: ContentGeneratorRole.MODEL,
+        content: {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'pre-tool hidden reasoning that should not be replayed',
+              sourceField: 'reasoning_content',
+            },
+            {
+              type: 'text',
+              text: 'I will inspect the repository now.',
+            },
+          ],
+        },
+      },
     ];
 
     const tools: ITool[] = [
@@ -184,6 +201,8 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
         ],
       },
     ];
+
+    settingsService.set('reasoning.includeInContext', true);
 
     const generator = provider.generateChatCompletion(messages, tools, {
       stream: true,
@@ -226,7 +245,14 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       messages: Array<{
         role: string;
         content?: string;
-        tool_calls?: unknown[];
+        tool_calls?: Array<{
+          id?: string;
+          type?: string;
+          function?: {
+            name?: string;
+            arguments?: string;
+          };
+        }>;
         tool_call_id?: string;
       }>;
     };
@@ -251,6 +277,19 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       '[Tool call acknowledged - awaiting execution]',
     );
 
+    // Assistant tool_call IDs and following tool tool_call_id MUST stay aligned.
+    // Strict OpenAI-compatible gateways validate adjacency and exact ID matching.
+    const assistantToolCallIds =
+      assistantMsg?.tool_calls
+        ?.map((tc) => tc.id)
+        .filter((id): id is string => typeof id === 'string') ?? [];
+    const toolResponseIds = toolResponseMsgs
+      .map((m) => m.tool_call_id)
+      .filter((id): id is string => typeof id === 'string');
+
+    expect(assistantToolCallIds).toEqual(['call_123']);
+    expect(toolResponseIds).toEqual(assistantToolCallIds);
+
     // OpenAI chat-completions tool messages should remain schema-compatible:
     // role/content/tool_call_id only. Some strict OpenAI-compatible backends
     // reject unknown fields on tool messages.
@@ -259,6 +298,17 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       tool_call_id: 'call_123',
     });
     expect(toolResponseMsgs[0]).not.toHaveProperty('name');
+
+    // Continuation request should not leak reasoning_content fields into replayed
+    // history messages. Some strict OpenAI-compatible gateways reject assistant
+    // tool-call messages carrying extra fields (e.g. reasoning_content).
+    const assistantMessages = continuationMessages.filter(
+      (m) => m.role === 'assistant',
+    );
+    expect(assistantMessages.length).toBeGreaterThan(0);
+    for (const assistant of assistantMessages) {
+      expect(assistant).not.toHaveProperty('reasoning_content');
+    }
 
     // Should have user continuation prompt
     const continuationPrompt = continuationMessages.find(

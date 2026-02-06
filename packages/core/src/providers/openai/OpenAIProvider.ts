@@ -2654,7 +2654,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           abortSignal,
           model,
           logger,
-          customHeaders,
+          mergedHeaders,
         );
       }
 
@@ -3285,6 +3285,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     const customHeaders = this.getCustomHeaders();
 
+    // Merge invocation ephemerals (CLI /set, alias ephemerals) into custom headers.
+    // The continuation helper must use this merged header set too; otherwise the
+    // follow-up request can be routed/validated differently and fail on strict
+    // OpenAI-compatible gateways.
+    const mergedHeaders = this.mergeInvocationHeaders(options, customHeaders);
+
     if (logger.enabled) {
       logger.debug(() => `[OpenAIProvider] Request body preview`, {
         model: requestBody.model,
@@ -3292,6 +3298,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         hasMaxTokens: 'max_tokens' in requestBody,
         hasResponseFormat: 'response_format' in requestBody,
         overrideKeys: requestOverrides ? Object.keys(requestOverrides) : [],
+        mergedHeaderKeys: mergedHeaders ? Object.keys(mergedHeaders) : [],
       });
     }
 
@@ -3327,7 +3334,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               const currentClient = failoverClientTools ?? client;
               return currentClient.chat.completions.create(requestBody, {
                 ...(abortSignal ? { signal: abortSignal } : {}),
-                ...(customHeaders ? { headers: customHeaders } : {}),
+                ...(mergedHeaders ? { headers: mergedHeaders } : {}),
               });
             },
             {
@@ -3430,7 +3437,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               const currentClient = failoverClientTools ?? client;
               return currentClient.chat.completions.create(requestBody, {
                 ...(abortSignal ? { signal: abortSignal } : {}),
-                ...(customHeaders ? { headers: customHeaders } : {}),
+                ...(mergedHeaders ? { headers: mergedHeaders } : {}),
               });
             },
             {
@@ -4298,7 +4305,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           abortSignal,
           model,
           logger,
-          customHeaders,
+          mergedHeaders,
         );
       }
 
@@ -4812,19 +4819,34 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     abortSignal: AbortSignal | undefined,
     model: string,
     logger: DebugLogger,
-    customHeaders: Record<string, string> | undefined,
+    mergedHeaders: Record<string, string> | undefined,
   ): AsyncGenerator<IContent, void, unknown> {
-    // Build continuation messages
+    // Build continuation messages.
+    // Keep message shape strict for OpenAI-compatible gateways:
+    // - Drop assistant reasoning_content from prior history turns
+    // - Keep assistant tool-call replay minimal (role + tool_calls only)
+    const sanitizedHistory = messagesWithSystem.map((message) => {
+      if (message.role !== 'assistant') {
+        return message;
+      }
+
+      const sanitizedAssistant = {
+        ...message,
+      } as OpenAI.Chat.ChatCompletionAssistantMessageParam & {
+        reasoning_content?: unknown;
+      };
+      delete sanitizedAssistant.reasoning_content;
+      return sanitizedAssistant;
+    });
+
     const continuationMessages = [
-      ...messagesWithSystem,
+      ...sanitizedHistory,
       // Add the assistant's tool calls
       {
         role: 'assistant' as const,
         tool_calls: toolCalls,
       },
       // Add placeholder tool responses (tools have NOT been executed yet - only acknowledged)
-      // Include the tool name for strict OpenAI-compatible providers that validate
-      // tool message shape against the prior assistant tool_calls.
       ...toolCalls.map((tc) => ({
         role: 'tool' as const,
         tool_call_id: tc.id,
@@ -4848,7 +4870,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         },
         {
           ...(abortSignal ? { signal: abortSignal } : {}),
-          ...(customHeaders ? { headers: customHeaders } : {}),
+          ...(mergedHeaders ? { headers: mergedHeaders } : {}),
         },
       );
 
