@@ -105,11 +105,33 @@ export const statsCommand: SlashCommand = {
         }
 
         try {
-          // Fetch both providers in parallel
-          const [anthropicUsageInfo, codexUsageInfo] = await Promise.all([
+          // Fetch both providers in parallel; show whichever provider succeeds
+          const [anthropicResult, codexResult] = await Promise.allSettled([
             oauthManager.getAllAnthropicUsageInfo(),
             oauthManager.getAllCodexUsageInfo(),
           ]);
+
+          if (anthropicResult.status === 'rejected') {
+            logger.warn(
+              'Failed to fetch Anthropic usage info:',
+              anthropicResult.reason,
+            );
+          }
+          if (codexResult.status === 'rejected') {
+            logger.warn(
+              'Failed to fetch Codex usage info:',
+              codexResult.reason,
+            );
+          }
+
+          const anthropicUsageInfo =
+            anthropicResult.status === 'fulfilled'
+              ? anthropicResult.value
+              : new Map<string, Record<string, unknown>>();
+          const codexUsageInfo =
+            codexResult.status === 'fulfilled'
+              ? codexResult.value
+              : new Map<string, Record<string, unknown>>();
 
           if (anthropicUsageInfo.size === 0 && codexUsageInfo.size === 0) {
             context.ui.addItem(

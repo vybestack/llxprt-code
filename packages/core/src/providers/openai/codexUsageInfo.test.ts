@@ -70,7 +70,7 @@ describe('codexUsageInfo', () => {
       const result = await fetchCodexUsage('token123', 'account123');
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://api.openai.com/api/codex/usage',
+        'https://chatgpt.com/backend-api/wham/usage',
         {
           method: 'GET',
           headers: {
@@ -78,6 +78,7 @@ describe('codexUsageInfo', () => {
             'ChatGPT-Account-Id': 'account123',
             Accept: 'application/json',
           },
+          signal: expect.any(AbortSignal),
         },
       );
       expect(result).toEqual(mockResponse);
@@ -224,6 +225,38 @@ describe('codexUsageInfo', () => {
       expect(result?.plan_type).toBe('premium_plus');
     });
 
+    it('should accept overage used_percent values above 100', async () => {
+      const mockResponse = {
+        plan_type: 'pro',
+        rate_limit: {
+          allowed: true,
+          limit_reached: true,
+          primary_window: {
+            used_percent: 123,
+            limit_window_seconds: 18000,
+            reset_after_seconds: 1800,
+            reset_at: 1738790000,
+          },
+          secondary_window: null,
+        },
+        credits: {
+          has_credits: true,
+          unlimited: false,
+          balance: '1',
+        },
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const result = await fetchCodexUsage('token123', 'account123');
+
+      expect(result).toEqual(mockResponse);
+      expect(result?.rate_limit?.primary_window?.used_percent).toBe(123);
+    });
+
     it('should use ChatGPT wham usage endpoint when base URL includes /backend-api', async () => {
       const mockResponse = {
         plan_type: 'pro',
@@ -262,7 +295,7 @@ describe('codexUsageInfo', () => {
       );
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://chatgpt.com/backend-api/codex/wham/usage',
+        'https://chatgpt.com/backend-api/wham/usage',
         {
           method: 'GET',
           headers: {
@@ -270,9 +303,32 @@ describe('codexUsageInfo', () => {
             'ChatGPT-Account-Id': 'account123',
             Accept: 'application/json',
           },
+          signal: expect.any(AbortSignal),
         },
       );
       expect(result).toEqual(mockResponse);
+    });
+
+    it('should include fetch timeout signal in request options', async () => {
+      const mockResponse = {
+        plan_type: 'pro',
+        rate_limit: null,
+        credits: null,
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      await fetchCodexUsage('token123', 'account123');
+
+      const secondArg = fetchMock.mock.calls[0]?.[1] as {
+        signal?: unknown;
+      };
+      expect(secondArg).toBeDefined();
+      expect(secondArg.signal).toBeDefined();
+      expect(secondArg.signal).toBeInstanceOf(AbortSignal);
     });
 
     it('should fall back to default Codex usage endpoint when custom base URL endpoint fails', async () => {
@@ -315,7 +371,7 @@ describe('codexUsageInfo', () => {
 
       expect(fetchMock).toHaveBeenNthCalledWith(
         1,
-        'https://chatgpt.com/backend-api/codex/wham/usage',
+        'https://chatgpt.com/backend-api/wham/usage',
         {
           method: 'GET',
           headers: {
@@ -323,6 +379,7 @@ describe('codexUsageInfo', () => {
             'ChatGPT-Account-Id': 'account123',
             Accept: 'application/json',
           },
+          signal: expect.any(AbortSignal),
         },
       );
       expect(fetchMock).toHaveBeenNthCalledWith(
@@ -335,6 +392,54 @@ describe('codexUsageInfo', () => {
             'ChatGPT-Account-Id': 'account123',
             Accept: 'application/json',
           },
+          signal: expect.any(AbortSignal),
+        },
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should derive backend-api root when base URL includes /backend-api/codex segment', async () => {
+      const mockResponse = {
+        plan_type: 'pro',
+        rate_limit: {
+          allowed: true,
+          limit_reached: false,
+          primary_window: {
+            used_percent: 20,
+            limit_window_seconds: 18000,
+            reset_after_seconds: 1800,
+            reset_at: 1738790000,
+          },
+          secondary_window: null,
+        },
+        credits: {
+          has_credits: true,
+          unlimited: false,
+          balance: '42',
+        },
+      };
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const result = await fetchCodexUsage(
+        'token123',
+        'account123',
+        'https://chatgpt.com/backend-api/codex',
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://chatgpt.com/backend-api/wham/usage',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer token123',
+            'ChatGPT-Account-Id': 'account123',
+            Accept: 'application/json',
+          },
+          signal: expect.any(AbortSignal),
         },
       );
       expect(result).toEqual(mockResponse);
@@ -398,6 +503,15 @@ describe('codexUsageInfo', () => {
   });
 
   describe('formatCodexUsage', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-02-05T10:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should format all available data', () => {
       const usage = {
         plan_type: 'pro' as const,
@@ -428,9 +542,6 @@ describe('codexUsageInfo', () => {
         },
       };
 
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-02-05T10:00:00Z'));
-
       const result = formatCodexUsage(usage);
       expect(result).toHaveLength(3);
       expect(result[0]).toContain('5-hour limit');
@@ -438,8 +549,6 @@ describe('codexUsageInfo', () => {
       expect(result[1]).toContain('Weekly limit');
       expect(result[1]).toContain('52%');
       expect(result[2]).toContain('Credits: 80');
-
-      vi.useRealTimers();
     });
 
     it('should skip null rate_limit windows', () => {
@@ -472,6 +581,22 @@ describe('codexUsageInfo', () => {
       const result = formatCodexUsage(usage);
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('  Credits: Unlimited');
+    });
+
+    it('should show Credits: None when has_credits is false', () => {
+      const usage = {
+        plan_type: 'go' as const,
+        rate_limit: null,
+        credits: {
+          has_credits: false,
+          unlimited: false,
+          balance: '150',
+        },
+      };
+
+      const result = formatCodexUsage(usage);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe('  Credits: None');
     });
 
     it('should format credit balance', () => {
@@ -520,18 +645,13 @@ describe('codexUsageInfo', () => {
         credits: null,
       };
 
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-02-05T10:00:00Z'));
-
       const result = formatCodexUsage(usage);
       expect(result).toHaveLength(1);
       expect(result[0]).toContain('5-hour limit');
       expect(result[0]).toContain('30%');
-
-      vi.useRealTimers();
     });
 
-    it('should skip credits when balance is null and not unlimited', () => {
+    it('should show Credits: None when balance is null and has_credits is false', () => {
       const usage = {
         plan_type: 'go' as const,
         rate_limit: null,
@@ -543,7 +663,8 @@ describe('codexUsageInfo', () => {
       };
 
       const result = formatCodexUsage(usage);
-      expect(result).toHaveLength(0);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe('  Credits: None');
     });
   });
 });

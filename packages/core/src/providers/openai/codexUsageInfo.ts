@@ -13,7 +13,7 @@ const logger = new DebugLogger('llxprt:openai:codex:usage');
  * Schema for a single rate limit window from Codex usage endpoint
  */
 export const CodexRateLimitWindowSchema = z.object({
-  used_percent: z.number().min(0).max(100).describe('Usage percentage (0-100)'),
+  used_percent: z.number().min(0).describe('Usage percentage (0 = unused)'),
   limit_window_seconds: z
     .number()
     .int()
@@ -90,29 +90,40 @@ export type CodexCredits = z.infer<typeof CodexCreditsSchema> | null;
 export type CodexUsageInfo = z.infer<typeof CodexUsageInfoSchema>;
 
 const DEFAULT_CODEX_USAGE_ENDPOINT = 'https://api.openai.com/api/codex/usage';
+const CHATGPT_BACKEND_USAGE_ENDPOINT =
+  'https://chatgpt.com/backend-api/wham/usage';
+
+function normalizeBaseUrl(baseUrl?: string): string {
+  if (typeof baseUrl !== 'string') {
+    return '';
+  }
+
+  let normalized = baseUrl.trim();
+  while (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
 
 function buildCodexUsageEndpoints(baseUrl?: string): string[] {
   const endpoints: string[] = [];
-
-  let normalizedBaseUrl = '';
-  if (typeof baseUrl === 'string') {
-    normalizedBaseUrl = baseUrl.trim();
-    while (normalizedBaseUrl.endsWith('/')) {
-      normalizedBaseUrl = normalizedBaseUrl.slice(0, -1);
-    }
-  }
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
 
   if (normalizedBaseUrl) {
     // Match Codex upstream path style behavior:
-    // - /backend-api/* uses /wham/usage
+    // - /backend-api* uses /wham/usage rooted at /backend-api
     // - otherwise use /api/codex/usage
     if (normalizedBaseUrl.includes('/backend-api')) {
-      endpoints.push(`${normalizedBaseUrl}/wham/usage`);
+      const backendApiBase = normalizedBaseUrl.includes('/backend-api/codex')
+        ? normalizedBaseUrl.replace('/backend-api/codex', '/backend-api')
+        : normalizedBaseUrl;
+      endpoints.push(`${backendApiBase}/wham/usage`);
     } else {
       endpoints.push(`${normalizedBaseUrl}/api/codex/usage`);
     }
   }
 
+  endpoints.push(CHATGPT_BACKEND_USAGE_ENDPOINT);
   endpoints.push(DEFAULT_CODEX_USAGE_ENDPOINT);
   return Array.from(new Set(endpoints));
 }
@@ -152,6 +163,7 @@ export async function fetchCodexUsage(
           'ChatGPT-Account-Id': accountId,
           Accept: 'application/json',
         },
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (!response.ok) {
@@ -253,8 +265,10 @@ export function formatCodexUsage(usage: CodexUsageInfo): string[] {
   if (usage.credits) {
     if (usage.credits.unlimited) {
       lines.push('  Credits: Unlimited');
-    } else if (usage.credits.balance) {
+    } else if (usage.credits.has_credits && usage.credits.balance) {
       lines.push(`  Credits: ${usage.credits.balance}`);
+    } else if (!usage.credits.has_credits) {
+      lines.push('  Credits: None');
     }
   }
 
