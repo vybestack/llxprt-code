@@ -339,10 +339,7 @@ describe('codexUsageInfo', () => {
       );
       expect(result).toEqual(mockResponse);
     });
-
   });
-
-
 
   describe('formatCodexRateLimitWindow', () => {
     beforeEach(() => {
