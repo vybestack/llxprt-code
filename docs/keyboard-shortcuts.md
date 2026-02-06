@@ -22,12 +22,12 @@ available combinations.
 
 ## Editing
 
-| Action                                           | Keys                                      |
-| ------------------------------------------------ | ----------------------------------------- |
-| Delete from the cursor to the end of the line.   | `Ctrl + K`                                |
-| Delete from the cursor to the start of the line. | `Ctrl + U`                                |
-| Clear all text in the input field.               | `Ctrl + C`                                |
-| Delete the previous word.                        | `Ctrl + Backspace`<br />`Cmd + Backspace` |
+| Action                                                                | Keys                                      |
+| --------------------------------------------------------------------- | ----------------------------------------- |
+| Delete from the cursor to the end of the line.                        | `Ctrl + K`                                |
+| Delete from the cursor to the start of the line.                      | `Ctrl + U`                                |
+| Clear all text in the input field (when the input prompt is focused). | `Ctrl + C`                                |
+| Delete the previous word.                                             | `Ctrl + Backspace`<br />`Cmd + Backspace` |
 
 ## Screen Control
 
@@ -103,10 +103,10 @@ available combinations.
 
 ## Session Control
 
-| Action                                       | Keys       |
-| -------------------------------------------- | ---------- |
-| Cancel the current request or quit the CLI.  | `Ctrl + C` |
-| Exit the CLI when the input buffer is empty. | `Ctrl + D` |
+| Action                                                            | Keys       |
+| ----------------------------------------------------------------- | ---------- |
+| Cancel the current request or quit the CLI (global app shortcut). | `Ctrl + C` |
+| Exit the CLI when the input buffer is empty.                      | `Ctrl + D` |
 
 ## Todo Dialog
 

@@ -343,7 +343,8 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.END]: 'Move the cursor to the end of the line.',
   [Command.KILL_LINE_RIGHT]: 'Delete from the cursor to the end of the line.',
   [Command.KILL_LINE_LEFT]: 'Delete from the cursor to the start of the line.',
-  [Command.CLEAR_INPUT]: 'Clear all text in the input field.',
+  [Command.CLEAR_INPUT]:
+    'Clear all text in the input field (when the input prompt is focused).',
   [Command.DELETE_WORD_BACKWARD]: 'Delete the previous word.',
   [Command.CLEAR_SCREEN]: 'Clear the terminal screen and redraw the UI.',
   [Command.SCROLL_UP]: 'Scroll up one line.',
@@ -373,7 +374,8 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.TOGGLE_MARKDOWN]: 'Toggle Markdown rendering.',
   [Command.TOGGLE_COPY_MODE]:
     'Toggle copy mode when the terminal is using the alternate buffer.',
-  [Command.QUIT]: 'Cancel the current request or quit the CLI.',
+  [Command.QUIT]:
+    'Cancel the current request or quit the CLI (global app shortcut).',
   [Command.EXIT]: 'Exit the CLI when the input buffer is empty.',
   [Command.SHOW_MORE_LINES]:
     'Expand a height-constrained response to show additional lines.',
