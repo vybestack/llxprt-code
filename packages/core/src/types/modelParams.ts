@@ -181,6 +181,8 @@ export interface EphemeralSettings {
   'reasoning.maxTokens'?: number;
   /** Token budget for reasoning (Anthropic-specific) */
   'reasoning.budgetTokens'?: number;
+  /** Enable adaptive thinking for Anthropic Opus 4.6+ */
+  'reasoning.adaptiveThinking'?: boolean;
   /** Show thinking blocks in UI output */
   'reasoning.includeInResponse'?: boolean;
   /** Keep thinking in conversation history */

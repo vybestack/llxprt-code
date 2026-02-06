@@ -388,6 +388,61 @@ describe('AnthropicProvider', () => {
       expect(opus45Alias?.maxOutputTokens).toBe(32000);
     });
 
+    it('should include Claude Opus 4.6 models in OAuth model list', async () => {
+      const oauthProvider = new AnthropicProvider(
+        'sk-ant-oat-test-token',
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(oauthProvider, 'getAuthToken').mockResolvedValue(
+        'sk-ant-oat-test-token',
+      );
+
+      const models = await oauthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      // Verify Claude Opus 4.6 dated model is present
+      expect(modelIds).toContain('claude-opus-4-6-20250129');
+      // Verify Claude Opus 4.6 rolling alias is present
+      expect(modelIds).toContain('claude-opus-4-6');
+
+      // Verify the models have correct properties (200K context, 128K max output per issue #1307)
+      const opus46Dated = models.find(
+        (m) => m.id === 'claude-opus-4-6-20250129',
+      );
+      expect(opus46Dated).toBeDefined();
+      expect(opus46Dated?.name).toBe('Claude Opus 4.6');
+      expect(opus46Dated?.contextWindow).toBe(200000);
+      expect(opus46Dated?.maxOutputTokens).toBe(128000);
+
+      const opus46Alias = models.find((m) => m.id === 'claude-opus-4-6');
+      expect(opus46Alias).toBeDefined();
+      expect(opus46Alias?.name).toBe('Claude Opus 4.6');
+      expect(opus46Alias?.contextWindow).toBe(200000);
+      expect(opus46Alias?.maxOutputTokens).toBe(128000);
+    });
+
+    it('should include Claude Opus 4.6 models in default list when auth is unavailable', async () => {
+      const noAuthProvider = new AnthropicProvider(
+        undefined,
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(noAuthProvider, 'getAuthToken').mockResolvedValue(undefined);
+
+      const models = await noAuthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-opus-4-6-20250129');
+      expect(modelIds).toContain('claude-opus-4-6');
+
+      const opus46Alias = models.find((m) => m.id === 'claude-opus-4-6');
+      expect(opus46Alias?.contextWindow).toBe(200000);
+      expect(opus46Alias?.maxOutputTokens).toBe(128000);
+    });
+
     it('should return models with correct structure', async () => {
       const models = await provider.getModels();
 

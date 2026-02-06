@@ -154,6 +154,15 @@ export function createAgentRuntimeContext(
         );
         return typeof maxTokensValue === 'number' ? maxTokensValue : undefined;
       },
+      adaptiveThinking: (): boolean | undefined => {
+        const adaptiveThinkingValue = getLiveSetting(
+          'reasoning.adaptiveThinking',
+          options.settings['reasoning.adaptiveThinking'],
+        );
+        return typeof adaptiveThinkingValue === 'boolean'
+          ? adaptiveThinkingValue
+          : undefined;
+      },
     },
   };
 

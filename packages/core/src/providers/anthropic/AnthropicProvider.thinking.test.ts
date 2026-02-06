@@ -274,6 +274,306 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         .calls[0][0] as AnthropicRequestBody;
       expect(request.thinking?.budget_tokens).toBe(20000);
     });
+
+    it('should use adaptive thinking for Opus 4.6+ when no explicit budgetTokens @issue:1307', async () => {
+      // Use Opus 4.6 model
+      settingsService.set('reasoning.enabled', true);
+      // Don't set budgetTokens or set adaptiveThinking to true
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-opus-4-6-20250129',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('adaptive');
+      expect(request.thinking?.budget_tokens).toBeUndefined();
+    });
+
+    it('should use manual mode for Opus 4.6+ when explicit budgetTokens is set @issue:1307', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.budgetTokens', 15000);
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-opus-4-6-20250129',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('enabled');
+      expect(request.thinking?.budget_tokens).toBe(15000);
+    });
+
+    it('should use manual mode when adaptiveThinking is explicitly false @issue:1307', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.adaptiveThinking', false);
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-opus-4-6-20250129',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('enabled');
+      expect(request.thinking?.budget_tokens).toBe(10000); // default
+    });
+
+    it('should place effort in output_config not under thinking @issue:1307', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.effort', 'medium');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-opus-4-6-20250129',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.output_config).toBeDefined();
+      expect(request.output_config?.effort).toBe('medium');
+      // Effort should NOT be under thinking
+      expect((request.thinking as { effort?: string })?.effort).toBeUndefined();
+    });
+
+    it('should map xhigh effort to max for Opus 4.6+ @issue:1307', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.effort', 'xhigh');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-opus-4-6-20250129',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.output_config?.effort).toBe('max');
+    });
+
+    it('should downgrade xhigh effort to high for non-Opus-4.6 models @issue:1307', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.effort', 'xhigh');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-opus-4-5-20251101',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.output_config?.effort).toBe('high');
+    });
+
+    it('should downgrade max effort to high for non-Opus-4.6 models @issue:1307', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.effort', 'max' as unknown as 'xhigh');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-opus-4-5-20251101',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.output_config?.effort).toBe('high');
+    });
+
+    it('should map minimal effort to low @issue:1307', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.effort', 'minimal');
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-opus-4-6-20250129',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.output_config?.effort).toBe('low');
+    });
+
+    it('should use manual mode for non-Opus-4.6 models even without budgetTokens @issue:1307', async () => {
+      settingsService.set('reasoning.enabled', true);
+      // No budgetTokens set
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              model: 'claude-sonnet-4-5-20250929',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+      expect(request.thinking).toBeDefined();
+      expect(request.thinking?.type).toBe('enabled');
+      expect(request.thinking?.budget_tokens).toBe(10000);
+    });
   });
 
   describe('Streaming Thinking Tests @requirement:REQ-ANTHROPIC-THINK-002', () => {

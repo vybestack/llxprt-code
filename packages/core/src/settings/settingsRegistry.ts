@@ -196,6 +196,14 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'reasoning.adaptiveThinking',
+    category: 'model-behavior',
+    description:
+      'Enable adaptive thinking for Anthropic Opus 4.6+ (true/false)',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
     key: 'reasoning.includeInResponse',
     category: 'cli-behavior',
     description: 'Show thinking blocks in UI output',
