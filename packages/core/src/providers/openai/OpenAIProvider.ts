@@ -3945,6 +3945,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
                 // Add final complete tool call to pipeline
                 this.toolCallPipeline.addFragment(index, {
+                  id: toolCall.id,
                   name: toolCall.function?.name,
                   args: toolCall.function?.arguments,
                 });
@@ -4287,7 +4288,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
         const toolCallsForHistory = cachedPipelineResult.normalized.map(
           (normalizedCall, index) => ({
-            id: `call_${index}`,
+            id:
+              normalizedCall.id && normalizedCall.id.trim().length > 0
+                ? this.normalizeToOpenAIToolId(normalizedCall.id)
+                : `call_${index}`,
             type: 'function' as const,
             function: {
               name: normalizedCall.name,

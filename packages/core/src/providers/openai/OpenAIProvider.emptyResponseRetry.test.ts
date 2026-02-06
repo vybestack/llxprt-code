@@ -273,6 +273,16 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       (m) => m.role === 'tool',
     );
     expect(toolResponseMsgs).toHaveLength(1);
+
+    // In strict OpenAI-compatible mode we must preserve OpenAI-style IDs in
+    // continuation replay (e.g. call_123), not rewritten history IDs.
+    const continuationToolCallId =
+      assistantMsg?.tool_calls?.[0] &&
+      typeof assistantMsg.tool_calls[0].id === 'string'
+        ? assistantMsg.tool_calls[0].id
+        : undefined;
+    expect(continuationToolCallId).toMatch(/^call_/);
+
     expect(toolResponseMsgs[0]?.content).toBe(
       '[Tool call acknowledged - awaiting execution]',
     );
@@ -317,6 +327,175 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
         m.content?.includes('tool calls above have been registered'),
     );
     expect(continuationPrompt).toBeDefined();
+  });
+
+  it('should preserve provider tool_call IDs from choice.message in continuation replay', async () => {
+    // First response: provider emits tool call in choice.message.tool_calls,
+    // but no text. This should still trigger continuation.
+    const firstResponseChunks = [
+      JSON.stringify({
+        id: 'chatcmpl-provider-1',
+        object: 'chat.completion.chunk',
+        created: 1234567990,
+        model: 'openai/gpt-oss-120b',
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            message: {
+              tool_calls: [
+                {
+                  id: 'call_provider_999',
+                  type: 'function',
+                  function: {
+                    name: 'FindFiles',
+                    arguments: '{"pattern":"**/*.ts"}',
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      }),
+      JSON.stringify({
+        id: 'chatcmpl-provider-1',
+        object: 'chat.completion.chunk',
+        created: 1234567990,
+        model: 'openai/gpt-oss-120b',
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 80,
+          completion_tokens: 30,
+          total_tokens: 110,
+        },
+      }),
+    ];
+
+    // Continuation response includes text
+    const secondResponseChunks = [
+      JSON.stringify({
+        id: 'chatcmpl-provider-2',
+        object: 'chat.completion.chunk',
+        created: 1234567991,
+        model: 'openai/gpt-oss-120b',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              content: 'Found matching files and completed the scan.',
+            },
+            finish_reason: null,
+          },
+        ],
+      }),
+      JSON.stringify({
+        id: 'chatcmpl-provider-2',
+        object: 'chat.completion.chunk',
+        created: 1234567991,
+        model: 'openai/gpt-oss-120b',
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 95,
+          completion_tokens: 18,
+          total_tokens: 113,
+        },
+      }),
+    ];
+
+    let callCount = 0;
+    vi.mocked(global.fetch).mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return createStreamingResponse(firstResponseChunks);
+      }
+      return createStreamingResponse(secondResponseChunks);
+    });
+
+    const messages: IMessage[] = [
+      {
+        role: ContentGeneratorRole.USER,
+        content: 'scan this repository for TypeScript files',
+      },
+    ];
+
+    const tools: ITool[] = [
+      {
+        functionDeclarations: [
+          {
+            name: 'FindFiles',
+            description: 'Find files matching a pattern',
+            parameters: {
+              type: 'object',
+              properties: {
+                pattern: {
+                  type: 'string',
+                  description: 'The glob pattern to match',
+                },
+              },
+              required: ['pattern'],
+            },
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(messages, tools, {
+      stream: true,
+    });
+
+    for await (const _content of generator) {
+      // Drain stream so continuation request is fully executed.
+    }
+
+    expect(callCount).toBe(2);
+
+    const secondFetchCall = vi.mocked(global.fetch).mock.calls[1];
+    expect(secondFetchCall).toBeDefined();
+
+    const secondRequestBody = JSON.parse(
+      secondFetchCall?.[1]?.body as string,
+    ) as {
+      messages: Array<{
+        role: string;
+        content?: string;
+        tool_calls?: Array<{
+          id?: string;
+          type?: string;
+          function?: {
+            name?: string;
+            arguments?: string;
+          };
+        }>;
+        tool_call_id?: string;
+      }>;
+    };
+
+    const continuationAssistant = secondRequestBody.messages.find(
+      (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0,
+    );
+    expect(continuationAssistant).toBeDefined();
+
+    const continuationTool = secondRequestBody.messages.find(
+      (m) => m.role === 'tool',
+    );
+    expect(continuationTool).toBeDefined();
+
+    const assistantToolCallId = continuationAssistant?.tool_calls?.[0]?.id;
+    expect(assistantToolCallId).toBe('call_provider_999');
+    expect(continuationTool?.tool_call_id).toBe(assistantToolCallId);
   });
 
   it('should not retry when text is already present with tool calls', async () => {
