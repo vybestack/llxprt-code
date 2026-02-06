@@ -44,10 +44,15 @@ export class HookAggregator {
     const allOutputs: HookOutput[] = [];
     const errors: Error[] = [];
     let totalDuration = 0;
+    let hasFailure = false;
 
     // Collect all outputs and errors
     for (const result of results) {
       totalDuration += result.duration;
+
+      if (!result.success) {
+        hasFailure = true;
+      }
 
       if (result.error) {
         errors.push(result.error);
@@ -65,7 +70,7 @@ export class HookAggregator {
       : undefined;
 
     return {
-      success: errors.length === 0,
+      success: !hasFailure && errors.length === 0,
       finalOutput,
       allOutputs,
       errors,

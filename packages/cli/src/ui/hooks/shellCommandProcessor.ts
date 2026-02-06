@@ -217,69 +217,79 @@ export const useShellCommandProcessor = (
                 Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS;
               const isPtyData =
                 event.type === 'data' && config.getShouldUseNodePtyShell();
-              if (
-                shouldUpdate &&
-                (isPtyData || pastThrottle)
-              ) {
-                // Always update ref first to ensure it has the latest output
+              if (shouldUpdate && (isPtyData || pastThrottle)) {
+                const updateItem = (
+                  baseItem: HistoryItemWithoutId | null,
+                ): HistoryItemWithoutId | null =>
+                  baseItem?.type === 'tool_group'
+                    ? {
+                        ...baseItem,
+                        tools: baseItem.tools.map((tool) =>
+                          tool.callId === callId
+                            ? { ...tool, resultDisplay: currentDisplayOutput }
+                            : tool,
+                        ),
+                      }
+                    : baseItem;
+
                 if (pendingHistoryItemRef?.current?.type === 'tool_group') {
-                  const nextItem = {
-                    ...pendingHistoryItemRef.current,
-                    tools: pendingHistoryItemRef.current.tools.map((tool) =>
-                      tool.callId === callId
-                        ? { ...tool, resultDisplay: currentDisplayOutput }
-                        : tool,
-                    ),
-                  };
-                  pendingHistoryItemRef.current = nextItem;
+                  const nextItem = updateItem(pendingHistoryItemRef.current);
+                  if (nextItem?.type === 'tool_group') {
+                    pendingHistoryItemRef.current = nextItem;
+                  }
                   setPendingHistoryItem(nextItem);
-                  lastUpdateTime = Date.now();
+                } else {
+                  setPendingHistoryItem((prevItem) => updateItem(prevItem));
                 }
+
+                lastUpdateTime = Date.now();
               }
             },
             abortSignal,
             config.getShouldUseNodePtyShell(),
             {
-              ...(config as Config & {
-                getShellExecutionConfig?: () => {
-                  terminalWidth?: number;
-                  terminalHeight?: number;
-                  showColor?: boolean;
-                  scrollback?: number;
-                };
-              }).getShellExecutionConfig?.(),
+              ...(
+                config as Config & {
+                  getShellExecutionConfig?: () => {
+                    terminalWidth?: number;
+                    terminalHeight?: number;
+                    showColor?: boolean;
+                    scrollback?: number;
+                  };
+                }
+              ).getShellExecutionConfig?.(),
               terminalWidth: effectiveTerminalWidth,
               terminalHeight: effectiveTerminalHeight,
             },
           );
 
-            executionPid = pid;
-            if (pid) {
-              setActiveShellPtyId(pid);
-              setPendingHistoryItem((prevItem) => {
-                const nextItem: HistoryItemWithoutId =
-                  prevItem?.type === 'tool_group'
-                    ? {
-                        ...prevItem,
-                        tools: prevItem.tools.map((tool) =>
-                          tool.callId === callId ? { ...tool, ptyId: pid } : tool,
-                        ),
-                      }
-                    : {
-                        type: 'tool_group',
-                        agentId: DEFAULT_AGENT_ID,
-                        tools: [{ ...initialToolDisplay, ptyId: pid }],
-                      };
+          executionPid = pid;
+          if (pid) {
+            setActiveShellPtyId(pid);
+            setPendingHistoryItem((prevItem) => {
+              const nextItem: HistoryItemWithoutId =
+                prevItem?.type === 'tool_group'
+                  ? {
+                      ...prevItem,
+                      tools: prevItem.tools.map((tool) =>
+                        tool.callId === callId ? { ...tool, ptyId: pid } : tool,
+                      ),
+                    }
+                  : {
+                      type: 'tool_group',
+                      agentId: DEFAULT_AGENT_ID,
+                      tools: [{ ...initialToolDisplay, ptyId: pid }],
+                    };
 
-                if (pendingHistoryItemRef) {
-                  pendingHistoryItemRef.current = nextItem;
-                }
+              if (pendingHistoryItemRef) {
+                pendingHistoryItemRef.current = nextItem;
+              }
 
-                return nextItem;
-              });
-            }
+              return nextItem;
+            });
+          }
 
-            result
+          result
 
             .then((result: ShellExecutionResult) => {
               setPendingHistoryItem(null);

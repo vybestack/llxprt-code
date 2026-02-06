@@ -55,12 +55,12 @@ describe('generate-keybindings-doc', () => {
     ];
 
     const markdown = renderDocumentation(sections);
-    expect(markdown).toContain('#### Custom Controls');
+    expect(markdown).toContain('## Custom Controls');
     expect(markdown).toContain('Trigger custom action.');
     expect(markdown).toContain('`Ctrl + X`');
     expect(markdown).toContain('Submit with Enter if no modifiers are held.');
     expect(markdown).toContain('`Enter (no Ctrl, no Shift)`');
-    expect(markdown).toContain('#### Navigation');
+    expect(markdown).toContain('## Navigation');
     expect(markdown).toContain('Move up through results.');
     expect(markdown).toContain('`Up Arrow (no Shift)`');
     expect(markdown).toContain('`Ctrl + P (no Shift)`');

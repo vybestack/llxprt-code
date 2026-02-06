@@ -1135,6 +1135,28 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
+  describe('PTY terminal size configuration', () => {
+    it('should accept only positive finite PTY dimensions', () => {
+      const config = new Config(baseParams);
+
+      config.setPtyTerminalSize(120.9, 40.1);
+      expect(config.getPtyTerminalWidth()).toBe(120);
+      expect(config.getPtyTerminalHeight()).toBe(40);
+
+      config.setPtyTerminalSize(0, 25);
+      expect(config.getPtyTerminalWidth()).toBeUndefined();
+      expect(config.getPtyTerminalHeight()).toBe(25);
+
+      config.setPtyTerminalSize(-10, Number.NaN);
+      expect(config.getPtyTerminalWidth()).toBeUndefined();
+      expect(config.getPtyTerminalHeight()).toBeUndefined();
+
+      config.setPtyTerminalSize(Number.POSITIVE_INFINITY, -1);
+      expect(config.getPtyTerminalWidth()).toBeUndefined();
+      expect(config.getPtyTerminalHeight()).toBeUndefined();
+    });
+  });
+
   describe('createToolRegistry', () => {
     it('should register a tool if coreTools contains an argument-specific pattern', async () => {
       const params: ConfigParameters = {

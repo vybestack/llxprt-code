@@ -368,6 +368,48 @@ describe('useShellCommandProcessor', () => {
         }),
       );
     });
+    it('should update pending output without pendingHistoryItemRef fallback', async () => {
+      const { result } = renderHook(() =>
+        useShellCommandProcessor(
+          addItemToHistoryMock,
+          setPendingHistoryItemMock,
+          onExecMock,
+          onDebugMessageMock,
+          mockConfig,
+          mockGeminiClient,
+          () => {},
+          80,
+          24,
+          undefined,
+        ),
+      );
+
+      await act(async () => {
+        result.current.handleShellCommand(
+          'stream',
+          new AbortController().signal,
+        );
+        await Promise.resolve();
+      });
+
+      // Ensure we start from the hook-provided pending tool group state so the
+      // callId in fallback updates matches the active shell invocation.
+      expect(pendingHistoryItemState?.type).toBe('tool_group');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+
+      act(() => {
+        mockShellOutputCallback({ type: 'data', chunk: 'hello' });
+      });
+
+      expect(pendingHistoryItemState).toEqual(
+        expect.objectContaining({
+          tools: [expect.objectContaining({ resultDisplay: 'hello' })],
+        }),
+      );
+    });
   });
 
   it('should wrap the command on non-Windows systems to capture working directory', async () => {

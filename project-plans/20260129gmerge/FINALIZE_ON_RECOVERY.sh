@@ -2,9 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
-cd "$REPO_ROOT"
+cd "${REPO_ROOT}"
 
 echo "[1/9] Shell sanity check"
 echo shell-ok
@@ -44,11 +44,11 @@ PR_URL=$(gh pr create \
 echo "PR created: ${PR_URL}"
 
 # Extract PR number from URL like .../pull/123
-PR_NUMBER=$(echo "$PR_URL" | sed -E 's#.*/pull/([0-9]+).*#\1#')
+PR_NUMBER=$(echo "${PR_URL}" | sed -E 's#.*/pull/([0-9]+).*#\1#')
 
-if [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+if [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]]; then
   echo "[8/9] Watch PR checks for #${PR_NUMBER}"
-  gh pr checks "$PR_NUMBER" --repo vybestack/llxprt-code --watch --interval 300
+  gh pr checks "${PR_NUMBER}" --repo vybestack/llxprt-code --watch --interval 300
 else
   echo "Could not parse PR number from URL: ${PR_URL}"
   echo "Run manually: gh pr checks PR_NUMBER --repo vybestack/llxprt-code --watch --interval 300"

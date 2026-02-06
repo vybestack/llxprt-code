@@ -1774,14 +1774,17 @@ export class Config {
     return this.ptyTerminalHeight;
   }
 
-  setPtyTerminalSize(width: number | undefined, height: number | undefined): void {
-    if (typeof width === 'number' && Number.isFinite(width)) {
+  setPtyTerminalSize(
+    width: number | undefined,
+    height: number | undefined,
+  ): void {
+    if (typeof width === 'number' && Number.isFinite(width) && width > 0) {
       this.ptyTerminalWidth = Math.floor(width);
     } else {
       this.ptyTerminalWidth = undefined;
     }
 
-    if (typeof height === 'number' && Number.isFinite(height)) {
+    if (typeof height === 'number' && Number.isFinite(height) && height > 0) {
       this.ptyTerminalHeight = Math.floor(height);
     } else {
       this.ptyTerminalHeight = undefined;

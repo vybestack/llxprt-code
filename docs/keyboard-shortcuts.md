@@ -6,21 +6,21 @@ available combinations.
 
 <!-- KEYBINDINGS-AUTOGEN:START -->
 
-#### Basic Controls
+## Basic Controls
 
 | Action                                       | Keys    |
 | -------------------------------------------- | ------- |
 | Confirm the current selection or choice.     | `Enter` |
 | Dismiss dialogs or cancel the current focus. | `Esc`   |
 
-#### Cursor Movement
+## Cursor Movement
 
 | Action                                    | Keys                   |
 | ----------------------------------------- | ---------------------- |
 | Move the cursor to the start of the line. | `Ctrl + A`<br />`Home` |
 | Move the cursor to the end of the line.   | `Ctrl + E`<br />`End`  |
 
-#### Editing
+## Editing
 
 | Action                                           | Keys                                      |
 | ------------------------------------------------ | ----------------------------------------- |
@@ -29,13 +29,25 @@ available combinations.
 | Clear all text in the input field.               | `Ctrl + C`                                |
 | Delete the previous word.                        | `Ctrl + Backspace`<br />`Cmd + Backspace` |
 
-#### Screen Control
+## Screen Control
 
-| Action                                       | Keys       |
-| -------------------------------------------- | ---------- |
-| Clear the terminal screen and redraw the UI. | `Ctrl + L` |
+| Action                                       | Keys               |
+| -------------------------------------------- | ------------------ |
+| Clear the terminal screen and redraw the UI. | `Ctrl + L`         |
+| Refresh keypress handling.                   | `Ctrl + Shift + R` |
 
-#### History & Search
+## Scrolling
+
+| Action                   | Keys                 |
+| ------------------------ | -------------------- |
+| Scroll up one line.      | `Shift + Up Arrow`   |
+| Scroll down one line.    | `Shift + Down Arrow` |
+| Scroll to the beginning. | `Home`               |
+| Scroll to the end.       | `End`                |
+| Scroll up one page.      | `Page Up`            |
+| Scroll down one page.    | `Page Down`          |
+
+## History & Search
 
 | Action                                       | Keys                  |
 | -------------------------------------------- | --------------------- |
@@ -45,7 +57,7 @@ available combinations.
 | Insert the selected reverse-search match.    | `Enter (no Ctrl)`     |
 | Accept a suggestion while reverse searching. | `Tab`                 |
 
-#### Navigation
+## Navigation
 
 | Action                           | Keys                                        |
 | -------------------------------- | ------------------------------------------- |
@@ -54,7 +66,7 @@ available combinations.
 | Move up within dialog options.   | `Up Arrow (no Shift)`<br />`K (no Shift)`   |
 | Move down within dialog options. | `Down Arrow (no Shift)`<br />`J (no Shift)` |
 
-#### Suggestions & Completions
+## Suggestions & Completions
 
 | Action                                  | Keys                                               |
 | --------------------------------------- | -------------------------------------------------- |
@@ -64,38 +76,50 @@ available combinations.
 | Expand an inline suggestion.            | `Right Arrow`                                      |
 | Collapse an inline suggestion.          | `Left Arrow`                                       |
 
-#### Text Input
+## Text Input
 
 | Action                               | Keys                                                                                        |
 | ------------------------------------ | ------------------------------------------------------------------------------------------- |
 | Submit the current prompt.           | `Enter (no Ctrl, no Shift, no Cmd, not Paste)`                                              |
 | Insert a newline without submitting. | `Ctrl + Enter`<br />`Cmd + Enter`<br />`Paste + Enter`<br />`Shift + Enter`<br />`Ctrl + J` |
 
-#### External Tools
+## External Tools
 
 | Action                                         | Keys       |
 | ---------------------------------------------- | ---------- |
 | Open the current prompt in an external editor. | `Ctrl + X` |
 | Paste an image from the clipboard.             | `Ctrl + V` |
 
-#### App Controls
+## App Controls
 
 | Action                                                            | Keys       |
 | ----------------------------------------------------------------- | ---------- |
-| Toggle detailed error information.                                                     | `F12`      |
-| Toggle tool descriptions display.                                                      | `Ctrl + T` |
-| Toggle IDE context details.                                                            | `Ctrl + G` |
-| Toggle Markdown rendering.                                                             | `Cmd + M`  |
-| Toggle copy mode when the terminal is using the alternate buffer.                     | `Ctrl + Y` |
-| Expand a height-constrained response to show additional lines (outside alternate mode). | `Ctrl + S` |
-| Toggle focus between the shell and Gemini input.                                       | `Ctrl + F` |
+| Toggle detailed error information.                                | `Ctrl + O` |
+| Toggle IDE context details.                                       | `Ctrl + G` |
+| Toggle Markdown rendering.                                        | `Cmd + M`  |
+| Toggle copy mode when the terminal is using the alternate buffer. | `Ctrl + Y` |
+| Expand a height-constrained response to show additional lines.    | `Ctrl + S` |
+| Toggle focus between the shell and LLxprt input.                  | `Ctrl + F` |
 
-#### Session Control
+## Session Control
 
 | Action                                       | Keys       |
 | -------------------------------------------- | ---------- |
 | Cancel the current request or quit the CLI.  | `Ctrl + C` |
 | Exit the CLI when the input buffer is empty. | `Ctrl + D` |
+
+## Todo Dialog
+
+| Action                             | Keys       |
+| ---------------------------------- | ---------- |
+| Toggle the TODO dialog visibility. | `Ctrl + Q` |
+| Toggle tool descriptions display.  | `Ctrl + T` |
+
+## Mouse
+
+| Action                       | Keys                       |
+| ---------------------------- | -------------------------- |
+| Toggle mouse event tracking. | `Ctrl + \`<br />`"\u001c"` |
 
 <!-- KEYBINDINGS-AUTOGEN:END -->
 

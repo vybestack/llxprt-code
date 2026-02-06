@@ -125,6 +125,42 @@ describe('HookAggregator', () => {
       expect(aggregated.totalDuration).toBe(150);
     });
 
+    it('should report failure when a hook result has success=false without an explicit error', () => {
+      const results: HookExecutionResult[] = [
+        {
+          hookConfig: {
+            type: HookType.Command,
+            command: 'test-command',
+            timeout: 30000,
+          },
+          eventName: HookEventName.BeforeTool,
+          success: false,
+          duration: 75,
+        },
+        {
+          hookConfig: {
+            type: HookType.Command,
+            command: 'test-command',
+            timeout: 30000,
+          },
+          eventName: HookEventName.BeforeTool,
+          success: true,
+          output: { decision: 'allow' },
+          duration: 25,
+        },
+      ];
+
+      const aggregated = aggregator.aggregateResults(
+        results,
+        HookEventName.BeforeTool,
+      );
+
+      expect(aggregated.success).toBe(false);
+      expect(aggregated.errors).toHaveLength(0);
+      expect(aggregated.allOutputs).toHaveLength(1);
+      expect(aggregated.totalDuration).toBe(100);
+    });
+
     it('should handle blocking decisions with OR logic', () => {
       const results: HookExecutionResult[] = [
         {

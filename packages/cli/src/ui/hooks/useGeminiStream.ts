@@ -92,6 +92,71 @@ export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   return resultParts;
 }
 
+
+export function mergePendingToolGroupsForDisplay(
+  pendingHistoryItem: HistoryItemWithoutId | null | undefined,
+  pendingToolCallGroupDisplay: HistoryItemWithoutId | null | undefined,
+): HistoryItemWithoutId[] {
+  if (
+    pendingHistoryItem?.type === 'tool_group' &&
+    pendingToolCallGroupDisplay?.type === 'tool_group'
+  ) {
+    const schedulerToolCallIds = new Set(
+      pendingToolCallGroupDisplay.tools.map((tool) => tool.callId),
+    );
+
+    const overlappingCallIds = new Set(
+      pendingHistoryItem.tools
+        .filter((tool) => schedulerToolCallIds.has(tool.callId))
+        .map((tool) => tool.callId),
+    );
+
+    if (overlappingCallIds.size === 0) {
+      return [pendingHistoryItem, pendingToolCallGroupDisplay];
+    }
+
+    const filteredPendingTools = pendingHistoryItem.tools.filter(
+      (tool) =>
+        !overlappingCallIds.has(tool.callId) ||
+        tool.name !== SHELL_COMMAND_NAME,
+    );
+
+    const overlappingShellTools = pendingHistoryItem.tools.filter(
+      (tool) =>
+        overlappingCallIds.has(tool.callId) &&
+        (tool.name === SHELL_COMMAND_NAME || tool.name === SHELL_NAME),
+    );
+    const overlappingShellCallIds = new Set(
+      overlappingShellTools.map((tool) => tool.callId),
+    );
+    const filteredSchedulerTools = pendingToolCallGroupDisplay.tools.filter(
+      (tool) => !overlappingShellCallIds.has(tool.callId),
+    );
+
+    const mergedItems: HistoryItemWithoutId[] = [];
+
+    if (filteredPendingTools.length > 0 || overlappingShellTools.length > 0) {
+      mergedItems.push({
+        ...pendingHistoryItem,
+        tools: [...filteredPendingTools, ...overlappingShellTools],
+      });
+    }
+
+    if (filteredSchedulerTools.length > 0) {
+      mergedItems.push({
+        ...pendingToolCallGroupDisplay,
+        tools: filteredSchedulerTools,
+      });
+    }
+
+    return mergedItems;
+  }
+
+  return [pendingHistoryItem, pendingToolCallGroupDisplay].filter(
+    (i): i is HistoryItemWithoutId => i !== undefined && i !== null,
+  );
+}
+
 enum StreamProcessingStatus {
   Completed,
   UserCancelled,
@@ -1494,61 +1559,14 @@ export const useGeminiStream = (
     handleCompletedToolsRef.current = handleCompletedTools;
   }, [handleCompletedTools]);
 
-  const pendingHistoryItems = useMemo(() => {
-    if (
-      pendingHistoryItem?.type === 'tool_group' &&
-      pendingToolCallGroupDisplay?.type === 'tool_group'
-    ) {
-      const schedulerToolCallIds = new Set(
-        pendingToolCallGroupDisplay.tools.map((tool) => tool.callId),
-      );
-
-      const overlappingCallIds = new Set(
-        pendingHistoryItem.tools
-          .filter((tool) => schedulerToolCallIds.has(tool.callId))
-          .map((tool) => tool.callId),
-      );
-
-      if (overlappingCallIds.size === 0) {
-        return [pendingHistoryItem, pendingToolCallGroupDisplay];
-      }
-
-      const filteredPendingTools = pendingHistoryItem.tools.filter(
-        (tool) => !overlappingCallIds.has(tool.callId),
-      );
-      const filteredSchedulerTools = pendingToolCallGroupDisplay.tools.filter(
-        (tool) => !overlappingCallIds.has(tool.callId),
-      );
-
-      const overlappingShellTools = pendingHistoryItem.tools.filter(
-        (tool) =>
-          overlappingCallIds.has(tool.callId) &&
-          (tool.name === SHELL_COMMAND_NAME || tool.name === SHELL_NAME),
-      );
-
-      const mergedItems: HistoryItemWithoutId[] = [];
-
-      if (filteredPendingTools.length > 0 || overlappingShellTools.length > 0) {
-        mergedItems.push({
-          ...pendingHistoryItem,
-          tools: [...filteredPendingTools, ...overlappingShellTools],
-        });
-      }
-
-      if (filteredSchedulerTools.length > 0) {
-        mergedItems.push({
-          ...pendingToolCallGroupDisplay,
-          tools: filteredSchedulerTools,
-        });
-      }
-
-      return mergedItems;
-    }
-
-    return [pendingHistoryItem, pendingToolCallGroupDisplay].filter(
-      (i) => i !== undefined && i !== null,
-    );
-  }, [pendingHistoryItem, pendingToolCallGroupDisplay]);
+  const pendingHistoryItems = useMemo(
+    () =>
+      mergePendingToolGroupsForDisplay(
+        pendingHistoryItem,
+        pendingToolCallGroupDisplay,
+      ),
+    [pendingHistoryItem, pendingToolCallGroupDisplay],
+  );
 
   useEffect(() => {
     const saveRestorableToolCalls = async () => {

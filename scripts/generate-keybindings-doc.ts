@@ -22,7 +22,7 @@ import {
 
 const START_MARKER = '<!-- KEYBINDINGS-AUTOGEN:START -->';
 const END_MARKER = '<!-- KEYBINDINGS-AUTOGEN:END -->';
-const OUTPUT_RELATIVE_PATH = ['docs', 'cli', 'keyboard-shortcuts.md'];
+const OUTPUT_RELATIVE_PATH = ['docs', 'keyboard-shortcuts.md'];
 
 const KEY_NAME_OVERRIDES: Record<string, string> = {
   return: 'Enter',
@@ -126,7 +126,7 @@ export function renderDocumentation(
     });
 
     return [
-      `#### ${section.title}`,
+      `## ${section.title}`,
       '',
       '| Action | Keys |',
       '| --- | --- |',
