@@ -1274,10 +1274,41 @@ ${stderr}`),
   }
 
   async runInteractive(...args: string[]): Promise<InteractiveRun> {
-    const { command, initialArgs } = this._getCommandAndArgs([
-      '--yolo',
-      ...args,
-    ]);
+    const provider = env['LLXPRT_DEFAULT_PROVIDER'];
+    const model = env['LLXPRT_DEFAULT_MODEL'];
+    const baseUrl = env['OPENAI_BASE_URL'];
+    const apiKey = env['OPENAI_API_KEY'];
+    const keyFile =
+      env['OPENAI_API_KEYFILE'] ?? env['LLXPRT_TEST_PROFILE_KEYFILE'];
+
+    const commandArgs = ['--yolo'];
+
+    // Keep parity with non-interactive runs when provider env is available.
+    // If env is missing (e.g., local Ctrl+C tests), preserve legacy behavior
+    // and rely on the CLI defaults instead of failing early.
+    if (provider && model) {
+      commandArgs.push('--provider', provider);
+      commandArgs.push('--model', model);
+
+      if (provider === 'openai' && baseUrl) {
+        commandArgs.push('--baseurl', baseUrl);
+      }
+
+      if (apiKey) {
+        commandArgs.push('--key', apiKey);
+      } else if (keyFile) {
+        commandArgs.push('--keyfile', keyFile);
+      }
+    }
+
+    if (env['LLXPRT_TEST_PROFILE']?.trim()) {
+      const profileName = env['LLXPRT_TEST_PROFILE'].trim();
+      commandArgs.push('--profile-load', profileName);
+    }
+
+    commandArgs.push(...args);
+
+    const { command, initialArgs } = this._getCommandAndArgs(commandArgs);
     const isWindows = os.platform() === 'win32';
 
     const filteredEnv = Object.entries(process.env).reduce(
@@ -1308,12 +1339,12 @@ ${stderr}`),
         NO_BROWSER: 'true',
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
-        LLXPRT_DEFAULT_PROVIDER: env['LLXPRT_DEFAULT_PROVIDER'],
-        LLXPRT_DEFAULT_MODEL: env['LLXPRT_DEFAULT_MODEL'],
-        OPENAI_API_KEY: env['OPENAI_API_KEY'],
+        LLXPRT_DEFAULT_PROVIDER: provider,
+        LLXPRT_DEFAULT_MODEL: model,
+        OPENAI_API_KEY: apiKey,
         OPENAI_API_KEYFILE: env['OPENAI_API_KEYFILE'],
         LLXPRT_TEST_PROFILE_KEYFILE: env['LLXPRT_TEST_PROFILE_KEYFILE'],
-        OPENAI_BASE_URL: env['OPENAI_BASE_URL'],
+        OPENAI_BASE_URL: baseUrl,
         LLXPRT_SANDBOX: 'false',
       },
     };
