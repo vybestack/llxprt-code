@@ -1357,9 +1357,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return validatedMessages;
     }
 
-    // Track the most recent assistant's tool_call IDs and already consumed tool_call_ids
+    // Track the most recent assistant's tool_call IDs.
+    // NOTE: We intentionally do NOT deduplicate tool messages by tool_call_id.
+    // In real tool flows a provider can emit multiple tool_response blocks for the
+    // same tool call ID (e.g., split output/chunked formatting). Removing later
+    // responses can corrupt continuation payloads and trigger strict provider 400s.
     let lastAssistantToolCallIds: string[] = [];
-    const consumedToolCallIds = new Set<string>();
 
     // Iterate through messages to check tool message sequence
     for (let i = 0; i < validatedMessages.length; i++) {
@@ -1370,25 +1373,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         'tool_calls' in current &&
         Array.isArray(current.tool_calls)
       ) {
-        // Update lastAssistantToolCallIds and reset consumed set when we encounter a new assistant message with tool_calls
+        // Update the active tool-call context when we encounter assistant tool_calls.
         lastAssistantToolCallIds = current.tool_calls.map((tc) => tc.id);
-        consumedToolCallIds.clear();
       } else if (current.role === 'tool') {
-        // Validate tool message against the last assistant's tool_calls
+        // Validate tool message against the most recent assistant tool_calls.
         const isValidToolCall = lastAssistantToolCallIds.includes(
           current.tool_call_id || '',
         );
-        const isDuplicate = consumedToolCallIds.has(current.tool_call_id || '');
-
-        let removalReason: string | undefined;
 
         if (!isValidToolCall) {
-          removalReason = 'tool_call_id not found in last assistant tool_calls';
-        } else if (isDuplicate) {
-          removalReason = 'duplicate tool_call_id already consumed';
-        }
+          const removalReason =
+            'tool_call_id not found in last assistant tool_calls';
 
-        if (removalReason) {
           // Log the invalid sequence for debugging
           logger.warn(
             `[OpenAIProvider] Invalid tool message sequence detected - removing orphaned tool message: ${removalReason}`,
@@ -1396,7 +1392,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               currentIndex: i,
               toolCallId: current.tool_call_id,
               lastAssistantToolCallIds,
-              consumedToolCallIds: Array.from(consumedToolCallIds),
               removalReason,
             },
           );
@@ -1405,16 +1400,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           validatedMessages.splice(i, 1);
           i--; // Adjust index since we removed an element
           removedCount++;
-        } else {
-          // Mark this tool_call_id as consumed
-          if (current.tool_call_id) {
-            consumedToolCallIds.add(current.tool_call_id);
-          }
         }
       } else if (current.role !== 'assistant') {
-        // Clear lastAssistantToolCallIds when we encounter a non-assistant message
+        // Keep tool-call context across contiguous tool messages so multiple
+        // tool responses for the same call ID remain valid.
+        // Non-tool, non-assistant messages end that context.
         lastAssistantToolCallIds = [];
-        consumedToolCallIds.clear();
       }
     }
 
