@@ -4817,9 +4817,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         tool_calls: toolCalls,
       },
       // Add placeholder tool responses (tools have NOT been executed yet - only acknowledged)
+      // Include the tool name for strict OpenAI-compatible providers that validate
+      // tool message shape against the prior assistant tool_calls.
       ...toolCalls.map((tc) => ({
         role: 'tool' as const,
         tool_call_id: tc.id,
+        name: tc.function.name,
         content: '[Tool call acknowledged - awaiting execution]',
       })),
       // Add continuation prompt
