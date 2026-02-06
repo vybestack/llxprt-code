@@ -27,7 +27,12 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
-import type { HistoryItem, SlashCommandProcessorResult } from '../types.js';
+import {
+  ToolCallStatus,
+  type HistoryItem,
+  type HistoryItemWithoutId,
+  type SlashCommandProcessorResult,
+} from '../types.js';
 
 // Mock core dependencies
 vi.mock('@vybestack/llxprt-code-core', async () => {
@@ -319,15 +324,15 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
     const sharedNonShellCallId = 'shared-non-shell-call';
     const schedulerOnlyCallId = 'scheduler-only-call';
 
-    const pendingHistoryItem = {
-      type: 'tool_group' as const,
+    const pendingHistoryItem: HistoryItemWithoutId = {
+      type: 'tool_group',
       agentId: 'primary',
       tools: [
         {
           callId: sharedShellCallId,
           name: 'Shell Command',
           description: 'bash',
-          status: 'executing',
+          status: ToolCallStatus.Executing,
           resultDisplay: 'pending shell output',
           confirmationDetails: undefined,
           ptyId: 12345,
@@ -336,22 +341,22 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
           callId: sharedNonShellCallId,
           name: 'read_file',
           description: 'Read README.md',
-          status: 'executing',
+          status: ToolCallStatus.Executing,
           resultDisplay: 'pending read output',
           confirmationDetails: undefined,
         },
       ],
     };
 
-    const pendingToolCallGroupDisplay = {
-      type: 'tool_group' as const,
+    const pendingToolCallGroupDisplay: HistoryItemWithoutId = {
+      type: 'tool_group',
       agentId: 'primary',
       tools: [
         {
           callId: sharedShellCallId,
           name: 'Shell Command',
           description: 'bash',
-          status: 'executing',
+          status: ToolCallStatus.Executing,
           resultDisplay: 'scheduler shell output',
           confirmationDetails: undefined,
           ptyId: 12345,
@@ -360,7 +365,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
           callId: sharedNonShellCallId,
           name: 'read_file',
           description: 'Read README.md',
-          status: 'executing',
+          status: ToolCallStatus.Executing,
           resultDisplay: 'scheduler read_file output',
           confirmationDetails: undefined,
         },
@@ -368,7 +373,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
           callId: schedulerOnlyCallId,
           name: 'search_file_content',
           description: 'Search for TODO',
-          status: 'executing',
+          status: ToolCallStatus.Executing,
           resultDisplay: 'scheduler search output',
           confirmationDetails: undefined,
         },
