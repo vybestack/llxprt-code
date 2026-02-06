@@ -93,8 +93,14 @@ const DEFAULT_CODEX_USAGE_ENDPOINT = 'https://api.openai.com/api/codex/usage';
 
 function buildCodexUsageEndpoints(baseUrl?: string): string[] {
   const endpoints: string[] = [];
-  const normalizedBaseUrl =
-    typeof baseUrl === 'string' ? baseUrl.trim().replace(/\/+$/u, '') : '';
+
+  let normalizedBaseUrl = '';
+  if (typeof baseUrl === 'string') {
+    normalizedBaseUrl = baseUrl.trim();
+    while (normalizedBaseUrl.endsWith('/')) {
+      normalizedBaseUrl = normalizedBaseUrl.slice(0, -1);
+    }
+  }
 
   if (normalizedBaseUrl) {
     // Match Codex upstream path style behavior:
