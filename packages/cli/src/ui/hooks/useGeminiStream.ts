@@ -52,6 +52,7 @@ import { isAtCommand, isSlashCommand } from '../utils/commandUtils.js';
 import { useShellCommandProcessor } from './shellCommandProcessor.js';
 import { handleAtCommand } from './atCommandProcessor.js';
 import { findLastSafeSplitPoint } from '../utils/markdownUtilities.js';
+import { joinThinkingDelta } from '../../utils/thinkingTextJoiner.js';
 import { useStateAndRef } from './useStateAndRef.js';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { useLogger } from './useLogger.js';
@@ -638,7 +639,10 @@ export const useGeminiStream = (
         return '';
       }
 
-      const combined = currentGeminiMessageBuffer + eventValue;
+      const combined = joinThinkingDelta(
+        currentGeminiMessageBuffer,
+        eventValue,
+      );
       const {
         text: sanitizedCombined,
         feedback,
@@ -1019,7 +1023,10 @@ export const useGeminiStream = (
               const thoughtText = event.value.rawText;
 
               if (thoughtText) {
-                thinkingTextRef.current += thoughtText;
+                thinkingTextRef.current = joinThinkingDelta(
+                  thinkingTextRef.current,
+                  thoughtText,
+                );
 
                 // Update pending history item with accumulated thinking text
                 setPendingHistoryItem((item) => ({

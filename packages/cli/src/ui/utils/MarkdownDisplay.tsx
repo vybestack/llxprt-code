@@ -18,6 +18,7 @@ interface MarkdownDisplayProps {
   availableTerminalHeight?: number;
   terminalWidth: number;
   renderMarkdown?: boolean;
+  baseColor?: string;
 }
 
 // Constants for Markdown parsing and rendering
@@ -33,9 +34,10 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
   availableTerminalHeight,
   terminalWidth,
   renderMarkdown = true,
+  baseColor,
 }) => {
   const settings = useSettings();
-  const responseColor = theme.text.response ?? theme.text.primary;
+  const responseColor = baseColor ?? theme.text.response ?? theme.text.primary;
 
   if (!text) return <></>;
 
@@ -246,6 +248,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           type="ul"
           marker={marker}
           leadingWhitespace={leadingWhitespace}
+          baseColor={responseColor}
         />,
       );
     } else if (olMatch) {
@@ -259,6 +262,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           type="ol"
           marker={marker}
           leadingWhitespace={leadingWhitespace}
+          baseColor={responseColor}
         />,
       );
     } else {
@@ -394,6 +398,7 @@ interface RenderListItemProps {
   type: 'ul' | 'ol';
   marker: string;
   leadingWhitespace?: string;
+  baseColor?: string;
 }
 
 const RenderListItemInternal: React.FC<RenderListItemProps> = ({
@@ -401,11 +406,13 @@ const RenderListItemInternal: React.FC<RenderListItemProps> = ({
   type,
   marker,
   leadingWhitespace = '',
+  baseColor,
 }) => {
   const prefix = type === 'ol' ? `${marker}. ` : `${marker} `;
   const prefixWidth = prefix.length;
   const indentation = leadingWhitespace.length;
-  const listResponseColor = theme.text.response ?? theme.text.primary;
+  const listResponseColor =
+    baseColor ?? theme.text.response ?? theme.text.primary;
 
   return (
     <Box

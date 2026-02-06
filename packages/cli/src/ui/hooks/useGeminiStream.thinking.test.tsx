@@ -617,6 +617,63 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     );
   });
 
+  it('should insert spacing between fused streaming thought deltas in real time', async () => {
+    const resolvers: Array<() => void> = [];
+    mockSendMessageStream.mockReturnValue(
+      (async function* () {
+        yield {
+          type: ServerGeminiEventType.Thought,
+          value: {
+            subject: '',
+            description: '',
+            rawText: 'Now',
+          },
+        };
+        yield {
+          type: ServerGeminiEventType.Thought,
+          value: {
+            subject: '',
+            description: '',
+            rawText: 'Ihaveagoodunderstandingoftheissue',
+          },
+        };
+        await new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        });
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Done',
+        };
+        yield {
+          type: ServerGeminiEventType.Finished,
+          value: { reason: FinishReason.STOP },
+        };
+      })(),
+    );
+
+    const { result } = renderTestHook();
+
+    act(() => {
+      void result.current.submitQuery('test query');
+    });
+
+    await waitFor(() => {
+      const pending = result.current.pendingHistoryItems;
+      const thinkingText = pending
+        .flatMap((item) => item.thinkingBlocks ?? [])
+        .map((block) => block.thought)
+        .join('');
+      expect(thinkingText).toContain('Now Ihaveagoodunderstandingoftheissue');
+      expect(thinkingText).not.toContain(
+        'NowIhaveagoodunderstandingoftheissue',
+      );
+    });
+
+    act(() => {
+      resolvers[0]?.();
+    });
+  });
+
   it('should verify ThinkingBlock structure matches IContent specification', async () => {
     mockSendMessageStream.mockReturnValue(
       (async function* () {

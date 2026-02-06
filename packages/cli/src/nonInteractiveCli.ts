@@ -33,6 +33,7 @@ import type { LoadedSettings } from './config/settings.js';
 import { handleSlashCommand } from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
+import { joinThinkingDelta } from './utils/thinkingTextJoiner.js';
 
 interface RunNonInteractiveParams {
   config: Config;
@@ -296,7 +297,35 @@ export async function runNonInteractive({
           thoughtBuffer = '';
           return;
         }
-        process.stdout.write(`<think>${thoughtBuffer.trim()}</think>\n`);
+        // Apply emoji filter to the accumulated buffer at flush time, not
+        // per-delta. Per-delta filtering loses spaces between chunks.
+        // Issue #1272: Same approach as the interactive UI path.
+        let output = thoughtBuffer;
+
+        // Issue #1272: Kimi sends reasoning_content tokens separated by newlines
+        // (e.g., "I\nsee\nwe\nhave") instead of spaces. Collapse single newlines
+        // between short word tokens into spaces while preserving real paragraph
+        // breaks (double newlines). The interactive UI handles this via markdown
+        // rendering, but non-interactive outputs raw text.
+        // Normalize line endings first, then split on paragraph boundaries and
+        // collapse single newlines to spaces within each paragraph.
+        output = output
+          .replace(/\r\n/g, '\n')
+          .split('\n\n')
+          .map((para) => para.replace(/\n/g, ' ').replace(/ {2,}/g, ' '))
+          .join('\n\n');
+
+        if (emojiFilter) {
+          const filterResult = emojiFilter.filterText(output);
+          if (filterResult.blocked) {
+            thoughtBuffer = '';
+            return;
+          }
+          if (typeof filterResult.filtered === 'string') {
+            output = filterResult.filtered;
+          }
+        }
+        process.stdout.write(`<think>${output.trim()}</think>\n`);
         thoughtBuffer = '';
       };
 
@@ -315,20 +344,15 @@ export async function runNonInteractive({
         if (event.type === GeminiEventType.Thought) {
           if (includeThinking) {
             const thoughtEvent = event as ServerGeminiThoughtEvent;
-            let thoughtText = thoughtEvent.value.rawText;
+            const thoughtText = thoughtEvent.value.rawText;
 
-            if (thoughtText.trim()) {
-              // Apply emoji filter if enabled
-              if (emojiFilter) {
-                const filterResult = emojiFilter.filterText(thoughtText);
-                if (filterResult.blocked) {
-                  continue;
-                }
-                if (typeof filterResult.filtered === 'string') {
-                  thoughtText = filterResult.filtered;
-                }
-              }
-              thoughtBuffer += thoughtText;
+            // Accumulate all deltas including whitespace-only ones.
+            // Issue #1272: .trim() gate was dropping whitespace-only deltas,
+            // causing words to concatenate (e.g. "Letmelook" instead of
+            // "Let me look"). Match the interactive UI path which preserves
+            // all deltas.
+            if (thoughtText) {
+              thoughtBuffer = joinThinkingDelta(thoughtBuffer, thoughtText);
             }
           }
         } else if (event.type === GeminiEventType.Content) {

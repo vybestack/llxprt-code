@@ -57,9 +57,16 @@ export const ThinkingBlockDisplay: React.FC<ThinkingBlockDisplayProps> = ({
     return <Box />;
   }
 
-  // Split by newlines and render each line separately to preserve formatting
-  // This handles both \n and \r\n line endings
-  const lines = block.thought.split(/\r?\n/);
+  // Issue #1272: Kimi sends reasoning_content tokens separated by newlines
+  // instead of spaces. Collapse single newlines to spaces while preserving
+  // paragraph breaks (double newlines). Then split by remaining newlines
+  // to render paragraphs separately.
+  const normalized = block.thought.replace(/\r\n/g, '\n');
+  const paragraphs = normalized.split('\n\n');
+  const processedParagraphs = paragraphs.map((para) =>
+    para.replace(/\n/g, ' ').replace(/ {2,}/g, ' '),
+  );
+  const lines = processedParagraphs.join('\n\n').split(/\n/);
 
   return (
     <Box flexDirection="column" marginTop={0} marginBottom={1} paddingX={1}>

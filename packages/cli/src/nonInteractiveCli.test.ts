@@ -229,7 +229,8 @@ describe('runNonInteractive', () => {
 
     const writes = processStdoutSpy.mock.calls.map(([value]) => value);
     const output = writes.join('');
-    expect(output).toContain('<think>FirstSecond</think>');
+    // Issue #1272: joinThinkingDelta inserts a space between alnum boundaries
+    expect(output).toContain('<think>First Second</think>');
   });
 
   it('should handle a single tool call and respond', async () => {

@@ -55,19 +55,6 @@ vi.mock('../../utils/MarkdownDisplay.js', () => ({
   },
 }));
 
-vi.mock('./ThinkingBlockDisplay.js', () => ({
-  ThinkingBlockDisplay: function MockThinkingBlockDisplay({
-    block,
-    visible,
-  }: {
-    block: ThinkingBlock;
-    visible: boolean;
-  }) {
-    if (!visible) return null;
-    return <Text color={Colors.Foreground}>MockThinking:{block.thought}</Text>;
-  },
-}));
-
 describe('<GeminiMessage />', () => {
   const baseProps = {
     text: 'Hello, world!',
@@ -131,7 +118,7 @@ describe('<GeminiMessage />', () => {
         },
       );
 
-      expect(lastFrame()).not.toContain('MockThinking:First thought');
+      expect(lastFrame()).not.toContain('MockMarkdown:First thought');
     });
 
     it('should not render thinking blocks when thinkingBlocks is undefined', () => {
@@ -147,7 +134,7 @@ describe('<GeminiMessage />', () => {
         },
       );
 
-      expect(lastFrame()).not.toContain('MockThinking');
+      expect(lastFrame()).not.toContain('First thought');
     });
 
     it('should merge thinking blocks before rendering', () => {
@@ -175,7 +162,7 @@ describe('<GeminiMessage />', () => {
         },
       );
 
-      expect(lastFrame()).toContain('MockThinking:First Second');
+      expect(lastFrame()).toContain('MockMarkdown:First Second');
     });
   });
 });

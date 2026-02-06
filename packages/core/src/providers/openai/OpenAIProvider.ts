@@ -719,6 +719,31 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
+   * Join a streaming delta onto a buffer, inserting a space only when both
+   * boundaries are alphanumeric and no whitespace already exists.
+   *
+   * Some providers (notably Kimi) occasionally emit adjacent content deltas
+   * without boundary whitespace, producing fused words like "NowIhave…".
+   * @issue #1272
+   */
+  private joinStreamingDelta(buffer: string, delta: string): string {
+    if (buffer.length === 0 || delta.length === 0) {
+      return buffer + delta;
+    }
+    const prevChar = buffer[buffer.length - 1];
+    const nextChar = delta[0];
+    if (
+      !/\s/u.test(prevChar) &&
+      !/\s/u.test(nextChar) &&
+      /[A-Za-z0-9]/u.test(prevChar) &&
+      /[A-Za-z0-9]/u.test(nextChar)
+    ) {
+      return buffer + ' ' + delta;
+    }
+    return buffer + delta;
+  }
+
+  /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P09
    * @requirement:REQ-SP4-002
    * @requirement:REQ-LOCAL-001
@@ -2110,8 +2135,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 },
               );
 
-              // Buffer text to avoid stanza formatting
-              textBuffer += deltaContent;
+              // Buffer text to avoid stanza formatting (issue #1272)
+              textBuffer = this.joinStreamingDelta(textBuffer, deltaContent);
 
               const kimiBeginCount = (
                 textBuffer.match(/<\|tool_calls_section_begin\|>/g) || []
@@ -3731,8 +3756,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 },
               );
 
-              // Buffer text to avoid stanza formatting
-              textBuffer += deltaContent;
+              // Buffer text to avoid stanza formatting (issue #1272)
+              textBuffer = this.joinStreamingDelta(textBuffer, deltaContent);
 
               const kimiBeginCount = (
                 textBuffer.match(/<\|tool_calls_section_begin\|>/g) || []

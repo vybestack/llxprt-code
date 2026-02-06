@@ -9,7 +9,6 @@ import { Text, Box } from 'ink';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { Colors } from '../../colors.js';
 import { SCREEN_READER_MODEL_PREFIX } from '../../textConstants.js';
-import { ThinkingBlockDisplay } from './ThinkingBlockDisplay.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import { useRuntimeApi } from '../../contexts/RuntimeContext.js';
 import { useUIState } from '../../contexts/UIStateContext.js';
@@ -81,7 +80,15 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
         </Box>
       )}
       {shouldShowThinkingBlocks && mergedThinkingBlock && (
-        <ThinkingBlockDisplay block={mergedThinkingBlock} visible={true} />
+        <Box marginTop={0} marginBottom={1} paddingX={1}>
+          <MarkdownDisplay
+            text={mergedThinkingBlock.thought}
+            isPending={isPending}
+            terminalWidth={terminalWidth}
+            renderMarkdown={renderMarkdown}
+            baseColor={Colors.DimComment}
+          />
+        </Box>
       )}
       <Box flexDirection="row">
         <Box width={prefixWidth}>
