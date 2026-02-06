@@ -68,13 +68,13 @@ available combinations.
 
 ## Suggestions & Completions
 
-| Action                                  | Keys                                               |
-| --------------------------------------- | -------------------------------------------------- |
-| Accept the inline suggestion.           | `Tab`<br />`Enter (no Ctrl)`                       |
-| Move to the previous completion option. | `Up Arrow (no Shift)`<br />`Ctrl + P (no Shift)`   |
-| Move to the next completion option.     | `Down Arrow (no Shift)`<br />`Ctrl + N (no Shift)` |
-| Expand an inline suggestion.            | `Right Arrow`                                      |
-| Collapse an inline suggestion.          | `Left Arrow`                                       |
+| Action                                                           | Keys                                               |
+| ---------------------------------------------------------------- | -------------------------------------------------- |
+| Accept the inline suggestion.                                    | `Tab`<br />`Enter (no Ctrl)`                       |
+| Move to the previous completion option.                          | `Up Arrow (no Shift)`<br />`Ctrl + P (no Shift)`   |
+| Move to the next completion option.                              | `Down Arrow (no Shift)`<br />`Ctrl + N (no Shift)` |
+| Expand an inline suggestion when suggestion text is available.   | `Right Arrow`                                      |
+| Collapse an inline suggestion when suggestion text is available. | `Left Arrow`                                       |
 
 ## Text Input
 
@@ -92,14 +92,14 @@ available combinations.
 
 ## App Controls
 
-| Action                                                            | Keys       |
-| ----------------------------------------------------------------- | ---------- |
-| Toggle detailed error information.                                | `Ctrl + O` |
-| Toggle IDE context details.                                       | `Ctrl + G` |
-| Toggle Markdown rendering.                                        | `Cmd + M`  |
-| Toggle copy mode when the terminal is using the alternate buffer. | `Ctrl + Y` |
-| Expand a height-constrained response to show additional lines.    | `Ctrl + S` |
-| Toggle focus between the shell and LLxprt input.                  | `Ctrl + F` |
+| Action                                                                                 | Keys       |
+| -------------------------------------------------------------------------------------- | ---------- |
+| Toggle detailed error information.                                                     | `Ctrl + O` |
+| Toggle IDE context details.                                                            | `Ctrl + G` |
+| Toggle Markdown rendering.                                                             | `Cmd + M`  |
+| Toggle copy mode when the terminal is using the alternate buffer.                      | `Ctrl + Y` |
+| Expand a height-constrained response to show additional lines.                         | `Ctrl + S` |
+| Toggle focus between the shell and LLxprt input when an interactive shell is attached. | `Ctrl + F` |
 
 ## Session Control
 
@@ -117,15 +117,16 @@ available combinations.
 
 ## Mouse
 
-| Action                       | Keys                       |
-| ---------------------------- | -------------------------- |
-| Toggle mouse event tracking. | `Ctrl + \`<br />`"\u001c"` |
+| Action                       | Keys                        |
+| ---------------------------- | --------------------------- |
+| Toggle mouse event tracking. | `Ctrl + \`<br />`FS (0x1C)` |
 
 <!-- KEYBINDINGS-AUTOGEN:END -->
 
 ## Additional Context-Specific Shortcuts
 
-- `Ctrl+Y`: Toggle YOLO (auto-approval) mode for tool calls.
+- `Ctrl+Y`: Toggle YOLO (auto-approval) mode for tool calls during approval
+  workflows; this is context-specific and separate from alternate-buffer copy mode.
 - `Shift+Tab`: Toggle Auto Edit (auto-accept edits) mode.
 - `Option+M` (macOS): Entering `µ` with Option+M also toggles Markdown
   rendering, matching `Cmd+M`.

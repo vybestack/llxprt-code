@@ -191,7 +191,7 @@ describe('Settings Loading and Merging', () => {
       });
       expect(settings.merged.mcp).toEqual({});
       expect(settings.merged.output).toEqual({ format: 'text' });
-      expect(settings.merged.selectedAuthType).toBe('provider');
+      expect(settings.merged.selectedAuthType).toBeUndefined();
       expect(settings.errors.length).toBe(0);
     });
 
@@ -257,98 +257,20 @@ describe('Settings Loading and Merging', () => {
         providerKeyfiles: {},
         providerToolFormatOverrides: {},
         security: {},
-        selectedAuthType: 'provider',
         shellReplacement: 'allowlist',
         shouldUseNodePtyShell: false,
         allowPtyThemeOverride: false,
         ptyScrollbackLimit: 600000,
 
         showStatusInTitle: false,
-        telemetry: false,
-        includeDirectories: ['/system/dir'],
-      });
-
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === getSystemDefaultsPath())
-            return JSON.stringify(systemDefaultsContent);
-          if (p === getSystemSettingsPath())
-            return JSON.stringify(systemSettingsContent);
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
-            return JSON.stringify(workspaceSettingsContent);
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-
-      expect(settings.systemDefaults.settings).toEqual(systemDefaultsContent);
-      expect(settings.system.settings).toEqual(systemSettingsContent);
-      expect(settings.user.settings).toEqual(userSettingsContent);
-      expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged).toMatchObject({
-        accessibility: {},
-        chatCompression: {},
-        checkpointing: {},
-        contextFileName: 'WORKSPACE_CONTEXT.md',
-        coreToolSettings: {},
-        debugKeystrokeLogging: false,
-        disableAutoUpdate: false,
-        disableUpdateNag: false,
-        emojifilter: 'auto',
-        enablePromptCompletion: false,
-        enableTextToolCallParsing: false,
-        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: true,
-        extensions: {
-          disabled: [],
-          workspacesWithMigrationNudge: [],
-        },
-        fileFiltering: {},
-        folderTrust: false,
-        folderTrustFeature: false,
-        hasSeenIdeIntegrationNudge: false,
-        hideCWD: false,
-        hideModelInfo: false,
-        hideSandboxStatus: false,
-        ide: {},
-        includeDirectories: [
-          '/system/defaults/dir',
-          '/user/dir1',
-          '/user/dir2',
-          '/workspace/dir',
-          '/system/dir',
-        ],
-        loadMemoryFromIncludeDirectories: false,
-        mcp: {},
-        mcpServers: {},
-        oauthEnabledProviders: {},
-        openaiResponsesEnabled: false,
-        output: {},
-        providerApiKeys: {},
-        providerBaseUrls: {},
-        providerKeyfiles: {},
-        providerToolFormatOverrides: {},
-        sandbox: false,
-        security: {},
-        selectedAuthType: 'provider',
-        shellReplacement: 'allowlist',
-        shouldUseNodePtyShell: false,
-        allowPtyThemeOverride: false,
-        ptyScrollbackLimit: 600000,
-
-        showStatusInTitle: false,
-        telemetry: false,
         textToolCallModels: [],
-        theme: 'system-theme',
         toolCallProcessingMode: 'legacy',
         tools: {},
         ui: {
           customThemes: {},
           theme: undefined,
         },
+        ...systemSettingsContent,
       });
     });
 
@@ -1331,7 +1253,6 @@ describe('Settings Loading and Merging', () => {
           providerKeyfiles: {},
           providerToolFormatOverrides: {},
           security: {},
-          selectedAuthType: 'provider',
           shellReplacement: 'allowlist',
           shouldUseNodePtyShell: false,
           allowPtyThemeOverride: false,

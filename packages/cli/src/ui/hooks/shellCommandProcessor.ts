@@ -248,16 +248,7 @@ export const useShellCommandProcessor = (
             abortSignal,
             config.getShouldUseNodePtyShell(),
             {
-              ...(
-                config as Config & {
-                  getShellExecutionConfig?: () => {
-                    terminalWidth?: number;
-                    terminalHeight?: number;
-                    showColor?: boolean;
-                    scrollback?: number;
-                  };
-                }
-              ).getShellExecutionConfig?.(),
+              ...config.getShellExecutionConfig(),
               terminalWidth: effectiveTerminalWidth,
               terminalHeight: effectiveTerminalHeight,
             },

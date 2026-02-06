@@ -225,6 +225,9 @@ export const defaultKeyBindings: KeyBindingConfig = {
   ],
 
   // Additional commands from keyboard shortcuts autogen
+  // Context note: Ctrl+F intentionally toggles embedded shell input focus when
+  // an interactive shell is attached, even though Ctrl+F is otherwise commonly
+  // used for cursor-forward behavior in readline-style input editing.
   [Command.TOGGLE_SHELL_INPUT_FOCUS]: [{ key: 'f', ctrl: true }],
   [Command.EXPAND_SUGGESTION]: [{ key: 'right' }],
   [Command.COLLAPSE_SUGGESTION]: [{ key: 'left' }],
@@ -386,7 +389,9 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.REFRESH_KEYPRESS]: 'Refresh keypress handling.',
   [Command.TOGGLE_MOUSE_EVENTS]: 'Toggle mouse event tracking.',
   [Command.TOGGLE_SHELL_INPUT_FOCUS]:
-    'Toggle focus between the shell and LLxprt input.',
-  [Command.EXPAND_SUGGESTION]: 'Expand an inline suggestion.',
-  [Command.COLLAPSE_SUGGESTION]: 'Collapse an inline suggestion.',
+    'Toggle focus between the shell and LLxprt input when an interactive shell is attached.',
+  [Command.EXPAND_SUGGESTION]:
+    'Expand an inline suggestion when suggestion text is available.',
+  [Command.COLLAPSE_SUGGESTION]:
+    'Collapse an inline suggestion when suggestion text is available.',
 };

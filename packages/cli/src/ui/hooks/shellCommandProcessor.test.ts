@@ -67,6 +67,7 @@ describe('useShellCommandProcessor', () => {
   let setPendingHistoryItemMock: Mock;
   let onExecMock: Mock;
   let onDebugMessageMock: Mock;
+  let setShellInputFocusedMock: Mock;
   let mockConfig: Config;
   let mockGeminiClient: GeminiClient;
 
@@ -94,6 +95,7 @@ describe('useShellCommandProcessor', () => {
     });
     onExecMock = vi.fn();
     onDebugMessageMock = vi.fn();
+    setShellInputFocusedMock = vi.fn();
     mockConfig = {
       getTargetDir: () => '/test/dir',
       getShouldUseNodePtyShell: () => false,
@@ -140,7 +142,7 @@ describe('useShellCommandProcessor', () => {
         onDebugMessageMock,
         mockConfig,
         mockGeminiClient,
-        () => {},
+        setShellInputFocusedMock,
         80,
         24,
         pendingHistoryItemRef,
@@ -196,6 +198,21 @@ describe('useShellCommandProcessor', () => {
       }),
     );
     expect(onExecMock).toHaveBeenCalledWith(expect.any(Promise));
+    expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
+  });
+
+  it('should return false and not focus shell input for empty queries', () => {
+    const { result } = renderProcessorHook();
+
+    const handled = result.current.handleShellCommand(
+      '   ',
+      new AbortController().signal,
+    );
+
+    expect(handled).toBe(false);
+    expect(setShellInputFocusedMock).not.toHaveBeenCalled();
+    expect(addItemToHistoryMock).not.toHaveBeenCalled();
+    expect(onExecMock).not.toHaveBeenCalled();
   });
 
   it('should handle successful execution and update history correctly', async () => {
@@ -227,6 +244,26 @@ describe('useShellCommandProcessor', () => {
       }),
     );
     expect(mockGeminiClient.addHistory).toHaveBeenCalled();
+  });
+
+  it('should reset shell input focus to false after successful completion', async () => {
+    const { result } = renderProcessorHook();
+
+    act(() => {
+      result.current.handleShellCommand(
+        'echo "ok"',
+        new AbortController().signal,
+      );
+    });
+    const execPromise = onExecMock.mock.calls[0][0];
+
+    act(() => {
+      resolveExecutionPromise(createMockServiceResult({ output: 'ok' }));
+    });
+    await act(async () => await execPromise);
+
+    expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
+    expect(setShellInputFocusedMock).toHaveBeenCalledWith(false);
   });
 
   it('should handle command failure and display error status', async () => {
@@ -377,7 +414,7 @@ describe('useShellCommandProcessor', () => {
           onDebugMessageMock,
           mockConfig,
           mockGeminiClient,
-          () => {},
+          setShellInputFocusedMock,
           80,
           24,
           undefined,
@@ -456,6 +493,7 @@ describe('useShellCommandProcessor', () => {
     expect(finalHistoryItem.tools[0].resultDisplay).toContain(
       'Command was cancelled.',
     );
+    expect(setShellInputFocusedMock).toHaveBeenCalledWith(false);
   });
 
   it('should handle binary output result correctly', async () => {

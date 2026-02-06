@@ -38,6 +38,18 @@ describe('generate-keybindings-doc', () => {
             description: 'Submit with Enter if no modifiers are held.',
             bindings: [{ key: 'return', ctrl: false, shift: false }],
           },
+          {
+            description: 'Toggle mouse event tracking.',
+            bindings: [{ sequence: '\u001c', ctrl: true }],
+          },
+          {
+            description: 'Tab sequence renders as Tab.',
+            bindings: [{ sequence: '\x09' }],
+          },
+          {
+            description: 'CR sequence renders as Enter.',
+            bindings: [{ sequence: '\x0d' }],
+          },
         ],
       },
       {
@@ -60,6 +72,12 @@ describe('generate-keybindings-doc', () => {
     expect(markdown).toContain('`Ctrl + X`');
     expect(markdown).toContain('Submit with Enter if no modifiers are held.');
     expect(markdown).toContain('`Enter (no Ctrl, no Shift)`');
+    expect(markdown).toContain('Toggle mouse event tracking.');
+    expect(markdown).toContain('`Ctrl + FS (0x1C)`');
+    expect(markdown).toContain('`Tab`');
+    expect(markdown).toContain('`Enter`');
+    expect(markdown).not.toContain('`I`');
+    expect(markdown).not.toContain('`M`');
     expect(markdown).toContain('## Navigation');
     expect(markdown).toContain('Move up through results.');
     expect(markdown).toContain('`Up Arrow (no Shift)`');

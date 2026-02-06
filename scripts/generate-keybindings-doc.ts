@@ -199,14 +199,17 @@ function formatKeyName(key: string): string {
 function formatSequence(sequence: string): string {
   if (sequence.length === 1) {
     const code = sequence.charCodeAt(0);
-    if (code >= 1 && code <= 26) {
-      return String.fromCharCode(code + 64);
+    if (code === 9) {
+      return 'Tab';
     }
     if (code === 10 || code === 13) {
       return 'Enter';
     }
-    if (code === 9) {
-      return 'Tab';
+    if (code >= 1 && code <= 26) {
+      return String.fromCharCode(code + 64);
+    }
+    if (code === 28) {
+      return 'FS (0x1C)';
     }
   }
   return JSON.stringify(sequence);
