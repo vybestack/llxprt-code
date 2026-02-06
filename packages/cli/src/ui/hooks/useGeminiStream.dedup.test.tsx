@@ -419,5 +419,4 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
       schedulerTools.filter((tool) => tool.callId === schedulerOnlyCallId),
     ).toHaveLength(1);
   });
-
 });

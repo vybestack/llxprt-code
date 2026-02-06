@@ -186,10 +186,7 @@ export class FileOutput {
   private generateLogFileName(): string {
     const now = new Date();
     const datePart = now.toISOString().slice(0, LOG_FILE_DATE_LENGTH);
-    const timePart = now
-      .toTimeString()
-      .slice(0, 8)
-      .replace(/:/g, '-');
+    const timePart = now.toTimeString().slice(0, 8).replace(/:/g, '-');
     return join(
       this.debugDir,
       `llxprt-debug-${this.debugRunId}-${datePart}-${timePart}.jsonl`,

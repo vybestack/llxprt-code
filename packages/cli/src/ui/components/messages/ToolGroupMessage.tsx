@@ -228,11 +228,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
               availableTerminalHeight={availableTerminalHeightPerToolMessage}
               terminalWidth={innerWidth}
               emphasis={
-                isConfirming
-                  ? 'high'
-                  : toolAwaitingApproval
-                    ? 'low'
-                    : 'medium'
+                isConfirming ? 'high' : toolAwaitingApproval ? 'low' : 'medium'
               }
               renderOutputAsMarkdown={tool.renderOutputAsMarkdown}
               activeShellPtyId={activeShellPtyId}

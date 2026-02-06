@@ -1823,8 +1823,12 @@ export const AppContainer = (props: AppContainerProps) => {
         config.getEnableInteractiveShell()
       ) {
         const lastPtyId = ShellExecutionService.getLastActivePtyId();
-        debug.log('Ctrl+F: activeShellPtyId=%s, lastActivePtyId=%s, will toggle=%s',
-          activeShellPtyId, lastPtyId, !!(activeShellPtyId || lastPtyId));
+        debug.log(
+          'Ctrl+F: activeShellPtyId=%s, lastActivePtyId=%s, will toggle=%s',
+          activeShellPtyId,
+          lastPtyId,
+          !!(activeShellPtyId || lastPtyId),
+        );
         if (activeShellPtyId || lastPtyId) {
           // Toggle focus between shell and LLxprt input.
           setEmbeddedShellFocused((prev) => {
@@ -2031,7 +2035,6 @@ export const AppContainer = (props: AppContainerProps) => {
       clearTimeout(handler);
     };
   }, [terminalWidth, terminalHeight, refreshStatic, streamingState]);
-
 
   useEffect(() => {
     if (streamingState === StreamingState.Idle && _staticNeedsRefresh) {

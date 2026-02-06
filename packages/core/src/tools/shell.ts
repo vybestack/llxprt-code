@@ -335,8 +335,7 @@ class ShellToolInvocation extends BaseToolInvocation<
             }
             case 'binary_detected':
               isBinaryStream = true;
-              cumulativeOutput =
-                '[Binary output detected. Halting stream...]';
+              cumulativeOutput = '[Binary output detected. Halting stream...]';
               shouldUpdate = true;
               break;
             case 'binary_progress':
@@ -362,17 +361,20 @@ class ShellToolInvocation extends BaseToolInvocation<
         this.config.getShouldUseNodePtyShell(),
         {
           ...this.config.getShellExecutionConfig(),
-          terminalWidth:
-            terminalColumns ?? this.config.getPtyTerminalWidth(),
-          terminalHeight:
-            terminalRows ?? this.config.getPtyTerminalHeight(),
+          terminalWidth: terminalColumns ?? this.config.getPtyTerminalWidth(),
+          terminalHeight: terminalRows ?? this.config.getPtyTerminalHeight(),
         },
       );
 
       // Propagate PID immediately (before awaiting result) so the UI can
       // offer Ctrl+F interactive shell focus while the process is running.
       const pid = executionResult.pid;
-      if (pid && setPidCallback && this.config.getShouldUseNodePtyShell() && ShellExecutionService.isActivePty(pid)) {
+      if (
+        pid &&
+        setPidCallback &&
+        this.config.getShouldUseNodePtyShell() &&
+        ShellExecutionService.isActivePty(pid)
+      ) {
         setPidCallback(pid);
       }
 

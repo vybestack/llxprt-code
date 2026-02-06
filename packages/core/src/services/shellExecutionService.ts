@@ -169,7 +169,6 @@ export class ShellExecutionService {
     );
   }
 
-
   private static appendAndTruncate(
     currentBuffer: string,
     chunk: string,
@@ -481,208 +480,208 @@ export class ShellExecutionService {
         handleFlowControl: true,
       });
 
-        const result = new Promise<ShellExecutionResult>((resolve) => {
-          const headlessTerminal = new Terminal({
-            allowProposedApi: true,
-            cols,
-            rows,
-            scrollback: shellExecutionConfig.scrollback ?? SCROLLBACK_LIMIT,
-          });
-          headlessTerminal.scrollToTop();
+      const result = new Promise<ShellExecutionResult>((resolve) => {
+        const headlessTerminal = new Terminal({
+          allowProposedApi: true,
+          cols,
+          rows,
+          scrollback: shellExecutionConfig.scrollback ?? SCROLLBACK_LIMIT,
+        });
+        headlessTerminal.scrollToTop();
 
-          ShellExecutionService.activePtys.set(ptyProcess.pid, {
-            ptyProcess,
-            headlessTerminal,
-          });
-          ShellExecutionService.lastActivePtyId = ptyProcess.pid;
+        ShellExecutionService.activePtys.set(ptyProcess.pid, {
+          ptyProcess,
+          headlessTerminal,
+        });
+        ShellExecutionService.lastActivePtyId = ptyProcess.pid;
 
-          let processingChain = Promise.resolve();
-          let decoder: TextDecoder | null = null;
-          let output: string | AnsiOutput | null = null;
-          const outputChunks: Buffer[] = [];
-          const error: Error | null = null;
-          let exited = false;
-          let hasResolved = false;
-          let abortFinalizeTimeout: NodeJS.Timeout | null = null;
+        let processingChain = Promise.resolve();
+        let decoder: TextDecoder | null = null;
+        let output: string | AnsiOutput | null = null;
+        const outputChunks: Buffer[] = [];
+        const error: Error | null = null;
+        let exited = false;
+        let hasResolved = false;
+        let abortFinalizeTimeout: NodeJS.Timeout | null = null;
 
-          let isStreamingRawContent = true;
-          const MAX_SNIFF_SIZE = 4096;
-          let sniffedBytes = 0;
-          let isWriting = false;
-          let hasStartedOutput = false;
-          let renderTimeout: NodeJS.Timeout | null = null;
+        let isStreamingRawContent = true;
+        const MAX_SNIFF_SIZE = 4096;
+        let sniffedBytes = 0;
+        let isWriting = false;
+        let hasStartedOutput = false;
+        let renderTimeout: NodeJS.Timeout | null = null;
 
-          const cleanupActivePty = () => {
-            if (ShellExecutionService.activePtys.has(ptyProcess.pid)) {
-              ShellExecutionService.activePtys.delete(ptyProcess.pid);
-            }
-            if (ShellExecutionService.lastActivePtyId === ptyProcess.pid) {
-              ShellExecutionService.lastActivePtyId = null;
-            }
-            if (renderTimeout) {
-              clearTimeout(renderTimeout);
-              renderTimeout = null;
-            }
-            if (typeof headlessTerminal.dispose === 'function') {
-              headlessTerminal.dispose();
-            }
-          };
-
-          const resolveResult = (resultValue: ShellExecutionResult) => {
-            if (hasResolved) {
-              return;
-            }
-            hasResolved = true;
-            if (abortFinalizeTimeout) {
-              clearTimeout(abortFinalizeTimeout);
-              abortFinalizeTimeout = null;
-            }
-            cleanupActivePty();
-            resolve(resultValue);
-          };
-
-          const getFullBufferText = (terminal: pkg.Terminal): string => {
-            const buffer = terminal.buffer.active;
-            const lines: string[] = [];
-            for (let i = 0; i < buffer.length; i++) {
-              const line = buffer.getLine(i);
-              if (!line) {
-                continue;
-              }
-              // If the NEXT line is wrapped, it means it's a continuation of THIS line.
-              // We should not trim the right side of this line because trailing spaces
-              // might be significant parts of the wrapped content.
-              // If it's not wrapped, we trim normally.
-              let trimRight = true;
-              if (i + 1 < buffer.length) {
-                const nextLine = buffer.getLine(i + 1);
-                if (nextLine?.isWrapped) {
-                  trimRight = false;
-                }
-              }
-
-              const lineContent = line.translateToString(trimRight);
-
-              if (line.isWrapped && lines.length > 0) {
-                lines[lines.length - 1] += lineContent;
-              } else {
-                lines.push(lineContent);
-              }
-            }
-
-            // Remove trailing empty lines
-            while (lines.length > 0 && lines[lines.length - 1] === '') {
-              lines.pop();
-            }
-
-            return lines.join('\n');
-
-          };
-
-          const renderFn = () => {
+        const cleanupActivePty = () => {
+          if (ShellExecutionService.activePtys.has(ptyProcess.pid)) {
+            ShellExecutionService.activePtys.delete(ptyProcess.pid);
+          }
+          if (ShellExecutionService.lastActivePtyId === ptyProcess.pid) {
+            ShellExecutionService.lastActivePtyId = null;
+          }
+          if (renderTimeout) {
+            clearTimeout(renderTimeout);
             renderTimeout = null;
+          }
+          if (typeof headlessTerminal.dispose === 'function') {
+            headlessTerminal.dispose();
+          }
+        };
 
-            if (!isStreamingRawContent) {
-              shellDebug.log('renderFn: skipped (not streaming raw content)');
-              return;
+        const resolveResult = (resultValue: ShellExecutionResult) => {
+          if (hasResolved) {
+            return;
+          }
+          hasResolved = true;
+          if (abortFinalizeTimeout) {
+            clearTimeout(abortFinalizeTimeout);
+            abortFinalizeTimeout = null;
+          }
+          cleanupActivePty();
+          resolve(resultValue);
+        };
+
+        const getFullBufferText = (terminal: pkg.Terminal): string => {
+          const buffer = terminal.buffer.active;
+          const lines: string[] = [];
+          for (let i = 0; i < buffer.length; i++) {
+            const line = buffer.getLine(i);
+            if (!line) {
+              continue;
             }
-
-            if (!shellExecutionConfig.disableDynamicLineTrimming) {
-              if (!hasStartedOutput) {
-                const bufferText = getFullBufferText(headlessTerminal);
-                if (bufferText.trim().length === 0) {
-                  shellDebug.log('renderFn: skipped (no output yet)');
-                  return;
-                }
-                hasStartedOutput = true;
+            // If the NEXT line is wrapped, it means it's a continuation of THIS line.
+            // We should not trim the right side of this line because trailing spaces
+            // might be significant parts of the wrapped content.
+            // If it's not wrapped, we trim normally.
+            let trimRight = true;
+            if (i + 1 < buffer.length) {
+              const nextLine = buffer.getLine(i + 1);
+              if (nextLine?.isWrapped) {
+                trimRight = false;
               }
             }
 
-            const buffer = headlessTerminal.buffer.active;
-            let newOutput: AnsiOutput;
-            if (shellExecutionConfig.showColor) {
-              newOutput = serializeTerminalToObject(headlessTerminal);
+            const lineContent = line.translateToString(trimRight);
+
+            if (line.isWrapped && lines.length > 0) {
+              lines[lines.length - 1] += lineContent;
             } else {
-              newOutput = (serializeTerminalToObject(headlessTerminal) || []).map(
-                (line) =>
-                  line.map((token) => {
-                    token.fg = '';
-                    token.bg = '';
-                    return token;
-                  }),
-              );
+              lines.push(lineContent);
             }
+          }
 
-            let lastNonEmptyLine = -1;
-            for (let i = newOutput.length - 1; i >= 0; i--) {
-              const line = newOutput[i];
-              if (
-                line
-                  .map((segment) => segment.text)
-                  .join('')
-                  .trim().length > 0
-              ) {
-                lastNonEmptyLine = i;
-                break;
+          // Remove trailing empty lines
+          while (lines.length > 0 && lines[lines.length - 1] === '') {
+            lines.pop();
+          }
+
+          return lines.join('\n');
+        };
+
+        const renderFn = () => {
+          renderTimeout = null;
+
+          if (!isStreamingRawContent) {
+            shellDebug.log('renderFn: skipped (not streaming raw content)');
+            return;
+          }
+
+          if (!shellExecutionConfig.disableDynamicLineTrimming) {
+            if (!hasStartedOutput) {
+              const bufferText = getFullBufferText(headlessTerminal);
+              if (bufferText.trim().length === 0) {
+                shellDebug.log('renderFn: skipped (no output yet)');
+                return;
               }
+              hasStartedOutput = true;
             }
+          }
 
-            if (buffer.cursorY > lastNonEmptyLine) {
-              lastNonEmptyLine = buffer.cursorY;
+          const buffer = headlessTerminal.buffer.active;
+          let newOutput: AnsiOutput;
+          if (shellExecutionConfig.showColor) {
+            newOutput = serializeTerminalToObject(headlessTerminal);
+          } else {
+            newOutput = (serializeTerminalToObject(headlessTerminal) || []).map(
+              (line) =>
+                line.map((token) => {
+                  token.fg = '';
+                  token.bg = '';
+                  return token;
+                }),
+            );
+          }
+
+          let lastNonEmptyLine = -1;
+          for (let i = newOutput.length - 1; i >= 0; i--) {
+            const line = newOutput[i];
+            if (
+              line
+                .map((segment) => segment.text)
+                .join('')
+                .trim().length > 0
+            ) {
+              lastNonEmptyLine = i;
+              break;
             }
+          }
 
-            const trimmedOutput = newOutput.slice(0, lastNonEmptyLine + 1);
+          if (buffer.cursorY > lastNonEmptyLine) {
+            lastNonEmptyLine = buffer.cursorY;
+          }
 
-            const finalOutput = shellExecutionConfig.disableDynamicLineTrimming
-              ? newOutput
-              : trimmedOutput;
+          const trimmedOutput = newOutput.slice(0, lastNonEmptyLine + 1);
 
-            // Using stringify for a quick deep comparison.
-            const finalJson = JSON.stringify(finalOutput);
-            const outputJson = JSON.stringify(output);
-            if (outputJson !== finalJson) {
-              // Extract text from cursor line for debug
-              const cursorLine = finalOutput[buffer.cursorY];
-              const cursorLineText = cursorLine
+          const finalOutput = shellExecutionConfig.disableDynamicLineTrimming
+            ? newOutput
+            : trimmedOutput;
+
+          // Using stringify for a quick deep comparison.
+          const finalJson = JSON.stringify(finalOutput);
+          const outputJson = JSON.stringify(output);
+          if (outputJson !== finalJson) {
+            // Extract text from cursor line for debug
+            const cursorLine = finalOutput[buffer.cursorY];
+            const cursorLineText =
+              cursorLine
                 ?.map((t) => t.text)
                 .join('')
                 .trimEnd() ?? '(no line)';
-              shellDebug.log(
-                'renderFn: CHANGED cursorY=%d cursorX=%d lines=%d cursorLine=%s',
-                buffer.cursorY,
-                buffer.cursorX,
-                finalOutput.length,
-                JSON.stringify(cursorLineText),
-              );
-              output = finalOutput;
-              onOutputEvent({
-                type: 'data',
-                chunk: finalOutput,
-              });
-            } else {
-              shellDebug.log(
-                'renderFn: no change (cursorY=%d cursorX=%d)',
-                buffer.cursorY,
-                buffer.cursorX,
-              );
-            }
-          };
-
-          const finalizeResult = (exitCode: number, signal?: number | null) => {
-            render(true);
-            const finalBuffer = Buffer.concat(outputChunks);
-            const fullOutput = getFullBufferText(headlessTerminal);
-            resolveResult({
-              rawOutput: finalBuffer,
-              output: fullOutput,
-              exitCode,
-              signal: signal ?? null,
-              error,
-              aborted: abortSignal.aborted,
-              pid: ptyProcess.pid,
-              executionMethod: ptyInfo.name ?? 'node-pty',
+            shellDebug.log(
+              'renderFn: CHANGED cursorY=%d cursorX=%d lines=%d cursorLine=%s',
+              buffer.cursorY,
+              buffer.cursorX,
+              finalOutput.length,
+              JSON.stringify(cursorLineText),
+            );
+            output = finalOutput;
+            onOutputEvent({
+              type: 'data',
+              chunk: finalOutput,
             });
-          };
+          } else {
+            shellDebug.log(
+              'renderFn: no change (cursorY=%d cursorX=%d)',
+              buffer.cursorY,
+              buffer.cursorX,
+            );
+          }
+        };
+
+        const finalizeResult = (exitCode: number, signal?: number | null) => {
+          render(true);
+          const finalBuffer = Buffer.concat(outputChunks);
+          const fullOutput = getFullBufferText(headlessTerminal);
+          resolveResult({
+            rawOutput: finalBuffer,
+            output: fullOutput,
+            exitCode,
+            signal: signal ?? null,
+            error,
+            aborted: abortSignal.aborted,
+            pid: ptyProcess.pid,
+            executionMethod: ptyInfo.name ?? 'node-pty',
+          });
+        };
 
         const render = (finalRender = false) => {
           if (finalRender) {

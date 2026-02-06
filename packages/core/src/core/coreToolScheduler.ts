@@ -1708,7 +1708,13 @@ export class CoreToolScheduler {
         };
 
         invocation
-          .execute(signal, liveOutputCallback, undefined, undefined, setPidCallback)
+          .execute(
+            signal,
+            liveOutputCallback,
+            undefined,
+            undefined,
+            setPidCallback,
+          )
           .then(async (toolResult: ToolResult) => {
             if (signal.aborted) {
               this.setStatusInternal(

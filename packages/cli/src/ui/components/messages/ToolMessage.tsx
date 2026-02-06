@@ -71,7 +71,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   borderDimColor = false,
 }) => {
   const { renderMarkdown } = useUIState();
-  
+
   // Check if this shell is focused
   const isShellTool = name === SHELL_COMMAND_NAME || name === SHELL_NAME;
   // For LLM-invoked shells, activeShellPtyId is null but we can use lastActivePtyId
@@ -272,7 +272,8 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         {currentSubcommand && (
           <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
             <Text color={Colors.AccentCyan}>
-              Running: <Text color={Colors.Foreground}>{currentSubcommand}</Text>
+              Running:{' '}
+              <Text color={Colors.Foreground}>{currentSubcommand}</Text>
             </Text>
           </Box>
         )}
@@ -324,12 +325,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
                         <Box marginBottom={1}>
                           {astValidation.valid ? (
                             <Text color={Colors.AccentGreen}>
-                               AST Validation Passed
+                              AST Validation Passed
                             </Text>
                           ) : (
                             <Box flexDirection="column">
                               <Text color={Colors.AccentRed} bold>
-                                 AST Validation Failed
+                                AST Validation Failed
                               </Text>
                               {astValidation.errors.map(
                                 (err: string, i: number) => (
@@ -362,12 +363,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
                           <>
                             {typeof language === 'string' && (
                               <Text color={Colors.AccentGreen}>
-                                 Language: {language}
+                                Language: {language}
                               </Text>
                             )}
                             {typeof declarationsCount === 'number' && (
                               <Text color={Colors.AccentGreen}>
-                                 Declarations Found: {declarationsCount}
+                                Declarations Found: {declarationsCount}
                               </Text>
                             )}
                           </>

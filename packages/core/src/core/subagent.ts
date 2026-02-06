@@ -685,8 +685,6 @@ export class SubAgentScope {
       }
     };
 
-
-
     const handleCompletion = async (calls: CompletedToolCall[]) => {
       if (completionResolver) {
         completionResolver(calls);

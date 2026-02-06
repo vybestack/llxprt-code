@@ -32,7 +32,11 @@
       "contains": "shell mode enabled",
       "timeoutMs": 10000
     },
-    { "type": "capture", "label": "after-shell-mode-entered", "scope": "screen" },
+    {
+      "type": "capture",
+      "label": "after-shell-mode-entered",
+      "scope": "screen"
+    },
 
     {
       "type": "line",
@@ -42,7 +46,11 @@
     { "type": "wait", "ms": 1500 },
 
     { "type": "capture", "label": "while-command-running", "scope": "screen" },
-    { "type": "capture", "label": "while-command-running-scrollback", "scope": "scrollback" },
+    {
+      "type": "capture",
+      "label": "while-command-running-scrollback",
+      "scope": "scrollback"
+    },
     {
       "type": "waitFor",
       "scope": "screen",

@@ -92,7 +92,6 @@ export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   return resultParts;
 }
 
-
 export function mergePendingToolGroupsForDisplay(
   pendingHistoryItem: HistoryItemWithoutId | null | undefined,
   pendingToolCallGroupDisplay: HistoryItemWithoutId | null | undefined,

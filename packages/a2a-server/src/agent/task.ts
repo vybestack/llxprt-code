@@ -324,7 +324,6 @@ export class Task {
           kind: 'text',
           text: textOutput,
         } as Part,
-
       ],
     };
     const artifactEvent: TaskArtifactUpdateEvent = {
