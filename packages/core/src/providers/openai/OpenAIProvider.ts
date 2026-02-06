@@ -1243,15 +1243,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           };
 
           if (includeInContext && thinkingBlocks.length > 0) {
-            const messageWithReasoning = baseMessage as unknown as Record<
-              string,
-              unknown
-            >;
-            messageWithReasoning.reasoning_content =
-              thinkingToReasoningField(thinkingBlocks);
-            messages.push(
-              messageWithReasoning as unknown as OpenAI.Chat.ChatCompletionMessageParam,
-            );
+            const isStrictOpenAI = toolFormat === 'openai';
+            if (isStrictOpenAI) {
+              // Strict OpenAI-compatible gateways (e.g. Chutes/MiniMax) can reject
+              // assistant+tool_calls payloads that include extra non-standard fields.
+              messages.push(baseMessage);
+            } else {
+              const messageWithReasoning = baseMessage as unknown as Record<
+                string,
+                unknown
+              >;
+              messageWithReasoning.reasoning_content =
+                thinkingToReasoningField(thinkingBlocks);
+              messages.push(
+                messageWithReasoning as unknown as OpenAI.Chat.ChatCompletionMessageParam,
+              );
+            }
           } else {
             messages.push(baseMessage);
           }

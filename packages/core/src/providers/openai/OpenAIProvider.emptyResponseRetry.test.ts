@@ -41,6 +41,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       'model',
       'openai/gpt-oss-120b',
     );
+    settingsService.set('reasoning.includeInContext', false);
   });
 
   function createStreamingResponse(chunks: string[]): Response {
@@ -496,6 +497,97 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     const assistantToolCallId = continuationAssistant?.tool_calls?.[0]?.id;
     expect(assistantToolCallId).toBe('call_provider_999');
     expect(continuationTool?.tool_call_id).toBe(assistantToolCallId);
+  });
+
+  it('should not attach reasoning_content to assistant tool_call messages for strict OpenAI gateways', () => {
+    settingsService.set('reasoning.includeInContext', true);
+
+    const contentHistory: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: 'Read test.txt and tell me what is inside.',
+          },
+        ],
+      },
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: 'I should call read_file before answering.',
+            sourceField: 'reasoning_content',
+          },
+          {
+            type: 'tool_call',
+            id: 'call_abc123',
+            name: 'read_file',
+            parameters: {
+              absolute_path: '/tmp/test.txt',
+            },
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_abc123',
+            toolName: 'read_file',
+            result: 'hello world',
+          },
+        ],
+      },
+    ];
+
+    const options = {
+      settings: settingsService,
+      config: undefined,
+      invocation: {
+        modelParams: {},
+      },
+      metadata: {},
+      resolved: {
+        model: 'MiniMaxAI/MiniMax-M2.1-TEE',
+        authToken: 'test-key',
+      },
+    } as Parameters<OpenAIProvider['buildMessagesWithReasoning']>[1];
+
+    const buildMessagesWithReasoning = (
+      provider as unknown as {
+        buildMessagesWithReasoning: OpenAIProvider['buildMessagesWithReasoning'];
+      }
+    ).buildMessagesWithReasoning;
+
+    const messages = buildMessagesWithReasoning.call(
+      provider,
+      contentHistory,
+      options,
+      'openai',
+    );
+
+    const assistantToolCallMessage = messages.find(
+      (msg) =>
+        msg.role === 'assistant' &&
+        'tool_calls' in msg &&
+        Array.isArray(msg.tool_calls) &&
+        msg.tool_calls.length > 0,
+    ) as
+      | {
+          role: string;
+          tool_calls?: Array<{ id?: string }>;
+          reasoning_content?: unknown;
+        }
+      | undefined;
+
+    expect(assistantToolCallMessage).toBeDefined();
+    expect(assistantToolCallMessage?.tool_calls?.[0]?.id).toBe('call_abc123');
+    // Strict OpenAI-compatible endpoints (e.g. Chutes/MiniMax) can reject
+    // assistant+tool_calls messages that carry extra fields.
+    expect(assistantToolCallMessage).not.toHaveProperty('reasoning_content');
   });
 
   it('should not retry when text is already present with tool calls', async () => {
