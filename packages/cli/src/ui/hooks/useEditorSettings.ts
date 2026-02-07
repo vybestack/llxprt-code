@@ -15,6 +15,8 @@ import {
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
 
+import { SettingPaths } from '../../config/settingPaths.js';
+
 interface UseEditorSettingsReturn {
   isEditorDialogOpen: boolean;
   openEditorDialog: () => void;
@@ -48,7 +50,11 @@ export const useEditorSettings = (
       }
 
       try {
-        loadedSettings.setValue(scope, 'ui.preferredEditor', editorType);
+        loadedSettings.setValue(
+          scope,
+          SettingPaths.General.PreferredEditor,
+          editorType,
+        );
         addItem(
           {
             type: MessageType.INFO,

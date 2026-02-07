@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as glob from 'glob';
 import * as path from 'node:path';
 import { Config, Storage } from '@vybestack/llxprt-code-core';
 import mock from 'mock-fs';
@@ -69,11 +70,18 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
+vi.mock('glob', () => ({
+  glob: vi.fn(),
+}));
+
 describe('FileCommandLoader', () => {
   const signal: AbortSignal = new AbortController().signal;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { glob: actualGlob } =
+      await vi.importActual<typeof import('glob')>('glob');
+    vi.mocked(glob.glob).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
         const userArgsRaw = context?.invocation?.args || '';
@@ -1127,6 +1135,47 @@ describe('FileCommandLoader', () => {
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(0);
+    });
+  });
+
+  describe('Aborted signal', () => {
+    it('does not log errors if the signal is aborted', async () => {
+      const controller = new AbortController();
+      const abortSignal = controller.signal;
+
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      const mockConfig = {
+        getProjectRoot: vi.fn(() => '/path/to/project'),
+        getExtensions: vi.fn(() => []),
+        getFolderTrust: vi.fn(() => false),
+        isTrustedFolder: vi.fn(() => false),
+      } as unknown as Config;
+
+      // Set up mock-fs so that the loader attempts to read a directory.
+      const userCommandsDir = Storage.getUserCommandsDir();
+      mock({
+        [userCommandsDir]: {
+          'test1.toml': 'prompt = "Prompt 1"',
+        },
+      });
+
+      const loader = new FileCommandLoader(mockConfig);
+
+      // Mock glob to throw an AbortError
+      const abortError = new DOMException('Aborted', 'AbortError');
+      vi.mocked(glob.glob).mockImplementation(async () => {
+        controller.abort(); // Ensure the signal is aborted when the service checks
+        throw abortError;
+      });
+
+      await loader.loadCommands(abortSignal);
+
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
     });
   });
 });

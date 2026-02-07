@@ -9,7 +9,7 @@ import {
   IndividualToolCallDisplay,
   ToolCallStatus,
 } from '../types.js';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Config,
   GeminiClient,
@@ -17,6 +17,7 @@ import {
   ShellExecutionResult,
   ShellExecutionService,
   DEFAULT_AGENT_ID,
+  type AnsiOutput,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -27,7 +28,9 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 
-export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
+// Throttle interval for PTY output updates to avoid excessive re-renders.
+// Using 100ms provides smooth visual updates without overwhelming React.
+export const OUTPUT_UPDATE_INTERVAL_MS = 100;
 const MAX_OUTPUT_LENGTH = 10000;
 
 function addShellCommandToGeminiHistory(
@@ -73,12 +76,18 @@ export const useShellCommandProcessor = (
   onDebugMessage: (message: string) => void,
   config: Config,
   geminiClient: GeminiClient | undefined,
+  setShellInputFocused: (value: boolean) => void,
+  terminalWidth?: number,
+  terminalHeight?: number,
+  pendingHistoryItemRef?: React.MutableRefObject<HistoryItemWithoutId | null>,
 ) => {
+  const [activeShellPtyId, setActiveShellPtyId] = useState<number | null>(null);
   const handleShellCommand = useCallback(
     (rawQuery: PartListUnion, abortSignal: AbortSignal): boolean => {
       if (typeof rawQuery !== 'string' || rawQuery.trim() === '') {
         return false;
       }
+      setShellInputFocused(true);
 
       const userMessageTimestamp = Date.now();
       const callId = `shell-${userMessageTimestamp}`;
@@ -107,8 +116,10 @@ export const useShellCommandProcessor = (
       const executeCommand = async (
         resolve: (value: void | PromiseLike<void>) => void,
       ) => {
-        let lastUpdateTime = Date.now();
-        let cumulativeStdout = '';
+        // Initialize lastUpdateTime to ensure first update happens immediately
+        // Use -Infinity to guarantee first update passes throttle check
+        let lastUpdateTime = -Infinity;
+        let cumulativeStdout: string | AnsiOutput = '';
         let isBinaryStream = false;
         let binaryBytesReceived = 0;
 
@@ -121,11 +132,16 @@ export const useShellCommandProcessor = (
           confirmationDetails: undefined,
         };
 
-        setPendingHistoryItem({
+        const initialPendingItem: HistoryItemWithoutId = {
           type: 'tool_group',
           agentId: DEFAULT_AGENT_ID,
           tools: [initialToolDisplay],
-        });
+        };
+
+        if (pendingHistoryItemRef) {
+          pendingHistoryItemRef.current = initialPendingItem;
+        }
+        setPendingHistoryItem(initialPendingItem);
 
         let executionPid: number | undefined;
 
@@ -137,24 +153,42 @@ export const useShellCommandProcessor = (
         abortSignal.addEventListener('abort', abortHandler, { once: true });
 
         onDebugMessage(`Executing in ${targetDir}: ${commandToExecute}`);
+        const configuredPtyWidth = config.getPtyTerminalWidth();
+        const configuredPtyHeight = config.getPtyTerminalHeight();
+        const effectiveTerminalWidth = configuredPtyWidth ?? terminalWidth;
+        const effectiveTerminalHeight = configuredPtyHeight ?? terminalHeight;
 
         try {
           const { pid, result } = await ShellExecutionService.execute(
             commandToExecute,
             targetDir,
             (event) => {
+              let shouldUpdate = false;
               switch (event.type) {
                 case 'data':
                   // Do not process text data if we've already switched to binary mode.
                   if (isBinaryStream) break;
-                  cumulativeStdout += event.chunk;
+                  // PTY provides the full screen state, so we just replace.
+                  // Child process provides chunks, so we append.
+                  if (config.getShouldUseNodePtyShell()) {
+                    cumulativeStdout = event.chunk;
+                    shouldUpdate = true;
+                  } else if (
+                    typeof event.chunk === 'string' &&
+                    typeof cumulativeStdout === 'string'
+                  ) {
+                    cumulativeStdout += event.chunk;
+                    shouldUpdate = true;
+                  }
                   break;
                 case 'binary_detected':
                   isBinaryStream = true;
+                  shouldUpdate = true;
                   break;
                 case 'binary_progress':
                   isBinaryStream = true;
                   binaryBytesReceived = event.bytesReceived;
+                  shouldUpdate = true;
                   break;
                 default: {
                   throw new Error('An unhandled ShellOutputEvent was found.');
@@ -162,7 +196,7 @@ export const useShellCommandProcessor = (
               }
 
               // Compute the display string based on the *current* state.
-              let currentDisplayOutput: string;
+              let currentDisplayOutput: string | AnsiOutput;
               if (isBinaryStream) {
                 if (binaryBytesReceived > 0) {
                   currentDisplayOutput = `[Receiving binary output... ${formatMemoryUsage(
@@ -177,27 +211,77 @@ export const useShellCommandProcessor = (
               }
 
               // Throttle pending UI updates to avoid excessive re-renders.
-              if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
-                setPendingHistoryItem({
-                  type: 'tool_group',
-                  agentId: DEFAULT_AGENT_ID,
-                  tools: [
-                    {
-                      ...initialToolDisplay,
-                      resultDisplay: currentDisplayOutput,
-                    },
-                  ],
-                });
+              // PTY data events already provide debounced full-screen snapshots,
+              // so only throttle binary progress updates.
+              const pastThrottle =
+                Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS;
+              const isPtyData =
+                event.type === 'data' && config.getShouldUseNodePtyShell();
+              if (shouldUpdate && (isPtyData || pastThrottle)) {
+                const updateItem = (
+                  baseItem: HistoryItemWithoutId | null,
+                ): HistoryItemWithoutId | null =>
+                  baseItem?.type === 'tool_group'
+                    ? {
+                        ...baseItem,
+                        tools: baseItem.tools.map((tool) =>
+                          tool.callId === callId
+                            ? { ...tool, resultDisplay: currentDisplayOutput }
+                            : tool,
+                        ),
+                      }
+                    : baseItem;
+
+                if (pendingHistoryItemRef?.current?.type === 'tool_group') {
+                  const nextItem = updateItem(pendingHistoryItemRef.current);
+                  if (nextItem?.type === 'tool_group') {
+                    pendingHistoryItemRef.current = nextItem;
+                  }
+                  setPendingHistoryItem(nextItem);
+                } else {
+                  setPendingHistoryItem((prevItem) => updateItem(prevItem));
+                }
+
                 lastUpdateTime = Date.now();
               }
             },
             abortSignal,
             config.getShouldUseNodePtyShell(),
+            {
+              ...config.getShellExecutionConfig(),
+              terminalWidth: effectiveTerminalWidth,
+              terminalHeight: effectiveTerminalHeight,
+            },
           );
 
           executionPid = pid;
+          if (pid) {
+            setActiveShellPtyId(pid);
+            setPendingHistoryItem((prevItem) => {
+              const nextItem: HistoryItemWithoutId =
+                prevItem?.type === 'tool_group'
+                  ? {
+                      ...prevItem,
+                      tools: prevItem.tools.map((tool) =>
+                        tool.callId === callId ? { ...tool, ptyId: pid } : tool,
+                      ),
+                    }
+                  : {
+                      type: 'tool_group',
+                      agentId: DEFAULT_AGENT_ID,
+                      tools: [{ ...initialToolDisplay, ptyId: pid }],
+                    };
+
+              if (pendingHistoryItemRef) {
+                pendingHistoryItemRef.current = nextItem;
+              }
+
+              return nextItem;
+            });
+          }
 
           result
+
             .then((result: ShellExecutionResult) => {
               setPendingHistoryItem(null);
 
@@ -276,6 +360,8 @@ export const useShellCommandProcessor = (
               if (pwdFilePath && fs.existsSync(pwdFilePath)) {
                 fs.unlinkSync(pwdFilePath);
               }
+              setActiveShellPtyId(null);
+              setShellInputFocused(false);
               resolve();
             });
         } catch (err) {
@@ -294,7 +380,8 @@ export const useShellCommandProcessor = (
           if (pwdFilePath && fs.existsSync(pwdFilePath)) {
             fs.unlinkSync(pwdFilePath);
           }
-
+          setActiveShellPtyId(null);
+          setShellInputFocused(false);
           resolve(); // Resolve the promise to unblock `onExec`
         }
       };
@@ -313,8 +400,12 @@ export const useShellCommandProcessor = (
       setPendingHistoryItem,
       onExec,
       geminiClient,
+      setShellInputFocused,
+      terminalWidth,
+      terminalHeight,
+      pendingHistoryItemRef,
     ],
   );
 
-  return { handleShellCommand };
+  return { handleShellCommand, activeShellPtyId };
 };

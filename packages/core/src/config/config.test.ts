@@ -166,6 +166,7 @@ vi.mock('../ide/ide-client.js', () => ({
 
 const mockCoreEvents = vi.hoisted(() => ({
   emitFeedback: vi.fn(),
+  emitModelChanged: vi.fn(),
 }));
 
 const mockSetGlobalProxy = vi.hoisted(() => vi.fn());
@@ -1134,6 +1135,28 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
+  describe('PTY terminal size configuration', () => {
+    it('should accept only positive finite PTY dimensions', () => {
+      const config = new Config(baseParams);
+
+      config.setPtyTerminalSize(120.9, 40.1);
+      expect(config.getPtyTerminalWidth()).toBe(120);
+      expect(config.getPtyTerminalHeight()).toBe(40);
+
+      config.setPtyTerminalSize(0, 25);
+      expect(config.getPtyTerminalWidth()).toBeUndefined();
+      expect(config.getPtyTerminalHeight()).toBe(25);
+
+      config.setPtyTerminalSize(-10, Number.NaN);
+      expect(config.getPtyTerminalWidth()).toBeUndefined();
+      expect(config.getPtyTerminalHeight()).toBeUndefined();
+
+      config.setPtyTerminalSize(Number.POSITIVE_INFINITY, -1);
+      expect(config.getPtyTerminalWidth()).toBeUndefined();
+      expect(config.getPtyTerminalHeight()).toBeUndefined();
+    });
+  });
+
   describe('createToolRegistry', () => {
     it('should register a tool if coreTools contains an argument-specific pattern', async () => {
       const params: ConfigParameters = {
@@ -1375,5 +1398,60 @@ describe('Config getHooks', () => {
     const retrievedHooks = config.getHooks();
     expect(retrievedHooks).toEqual(allEventHooks);
     expect(Object.keys(retrievedHooks!)).toHaveLength(11); // All hook event types
+  });
+});
+
+describe('Config setModel', () => {
+  const baseParams: ConfigParameters = {
+    cwd: '/tmp',
+    targetDir: '/path/to/target',
+    debugMode: false,
+    sessionId: 'test-session-id',
+    model: 'gemini-pro',
+    usageStatisticsEnabled: false,
+  };
+
+  it('should allow setting a pro (any) model and disable fallback mode', () => {
+    const config = new Config(baseParams);
+    config.setFallbackMode(true);
+    expect(config.isInFallbackMode()).toBe(true);
+
+    const proModel = 'gemini-2.5-pro';
+    config.setModel(proModel);
+
+    expect(config.getModel()).toBe(proModel);
+    expect(config.isInFallbackMode()).toBe(false);
+    expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith(proModel);
+  });
+
+  it('should allow setting auto model from non-auto model and disable fallback mode', () => {
+    const config = new Config(baseParams);
+    config.setFallbackMode(true);
+    expect(config.isInFallbackMode()).toBe(true);
+
+    config.setModel('auto');
+
+    expect(config.getModel()).toBe('auto');
+    expect(config.isInFallbackMode()).toBe(false);
+    expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith('auto');
+  });
+
+  it('should allow setting auto model from auto model if it is in the fallback mode', () => {
+    const config = new Config({
+      cwd: '/tmp',
+      targetDir: '/path/to/target',
+      debugMode: false,
+      sessionId: 'test-session-id',
+      model: 'auto',
+      usageStatisticsEnabled: false,
+    });
+    config.setFallbackMode(true);
+    expect(config.isInFallbackMode()).toBe(true);
+
+    config.setModel('auto');
+
+    expect(config.getModel()).toBe('auto');
+    expect(config.isInFallbackMode()).toBe(false);
+    expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith('auto');
   });
 });

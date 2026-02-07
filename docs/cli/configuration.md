@@ -105,6 +105,20 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+#### `allowPtyThemeOverride`
+
+- **`allowPtyThemeOverride`** (boolean):
+  - **Description:** Allow ANSI colors from PTY output to override the UI theme. When disabled, PTY output uses the current theme colors.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `ptyScrollbackLimit`
+
+- **`ptyScrollbackLimit`** (number):
+  - **Description:** Maximum number of lines to keep in the PTY scrollback buffer for interactive shell output.
+  - **Default:** `600000`
+  - **Requires restart:** Yes
+
 #### `useExternalAuth`
 
 - **`useExternalAuth`** (boolean):

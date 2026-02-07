@@ -54,6 +54,7 @@ export interface IndividualToolCallDisplay {
   confirmationDetails: ToolCallConfirmationDetails | undefined;
   renderOutputAsMarkdown?: boolean;
   isFocused?: boolean;
+  ptyId?: number;
 }
 
 export interface CompressionProps {

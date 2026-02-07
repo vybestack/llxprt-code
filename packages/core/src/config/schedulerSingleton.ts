@@ -16,9 +16,13 @@ import type {
   ToolCall,
 } from '../core/coreToolScheduler.js';
 import type { EditorType } from '../utils/editor.js';
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
 
 export interface SchedulerCallbacks {
-  outputUpdateHandler?: (toolCallId: string, outputChunk: string) => void;
+  outputUpdateHandler?: (
+    toolCallId: string,
+    outputChunk: string | AnsiOutput,
+  ) => void;
   onAllToolCallsComplete?: (
     completedToolCalls: CompletedToolCall[],
   ) => Promise<void>;

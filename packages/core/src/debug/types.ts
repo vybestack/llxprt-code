@@ -22,4 +22,6 @@ export interface LogEntry {
   level: string;
   message: string;
   args?: unknown[];
+  runId: string;
+  pid: number;
 }

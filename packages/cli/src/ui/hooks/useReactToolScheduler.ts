@@ -21,6 +21,7 @@ import {
   EditorType,
   DEFAULT_AGENT_ID,
   DebugLogger,
+  type AnsiOutput,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import {
@@ -42,7 +43,7 @@ type ExternalSchedulerFactory = (args: {
   ): Promise<void> | void;
 };
 
-const logger = new DebugLogger('llxprt:cli:react-tool-scheduler');
+const logger = DebugLogger.getLogger('llxprt:cli:react-tool-scheduler');
 
 export type ScheduleFn = (
   request: ToolCallRequestInfo | ToolCallRequestInfo[],
@@ -98,7 +99,7 @@ export function useReactToolScheduler(
   >(new Map());
 
   const updatePendingHistoryItem = useCallback(
-    (toolCallId: string, outputChunk: string) => {
+    (toolCallId: string, outputChunk: string | AnsiOutput) => {
       setPendingHistoryItem((prevItem) => {
         if (prevItem?.type === 'tool_group') {
           return {
@@ -161,7 +162,11 @@ export function useReactToolScheduler(
   );
 
   const updateToolCallOutput = useCallback(
-    (schedulerId: symbol, toolCallId: string, outputChunk: string) => {
+    (
+      schedulerId: symbol,
+      toolCallId: string,
+      outputChunk: string | AnsiOutput,
+    ) => {
       updateToolCallsForScheduler(schedulerId, (prevCalls) => {
         let updated = false;
         const nextCalls = prevCalls.map((call) => {
@@ -524,6 +529,9 @@ export function mapToDisplay(
 
       switch (trackedCall.status) {
         case 'success':
+          logger.debug(
+            `mapToDisplay: success call ${trackedCall.request.callId}, toolName=${trackedCall.request.name}, resultDisplay type: ${typeof trackedCall.response.resultDisplay}, hasValue: ${!!trackedCall.response.resultDisplay}, preview: ${typeof trackedCall.response.resultDisplay === 'string' ? trackedCall.response.resultDisplay.slice(0, 100) : 'non-string'}`,
+          );
           return {
             ...baseDisplayProperties,
             status: mapCoreStatusToDisplayStatus(trackedCall.status),
@@ -551,14 +559,16 @@ export function mapToDisplay(
             resultDisplay: undefined,
             confirmationDetails: trackedCall.confirmationDetails,
           };
-        case 'executing':
+        case 'executing': {
+          const executingCall = trackedCall as TrackedExecutingToolCall;
           return {
             ...baseDisplayProperties,
             status: mapCoreStatusToDisplayStatus(trackedCall.status),
-            resultDisplay:
-              (trackedCall as TrackedExecutingToolCall).liveOutput ?? undefined,
+            resultDisplay: executingCall.liveOutput ?? undefined,
             confirmationDetails: undefined,
+            ptyId: executingCall.pid,
           };
+        }
         case 'validating': // Fallthrough
         case 'scheduled':
           return {

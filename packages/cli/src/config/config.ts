@@ -1398,6 +1398,8 @@ export async function loadCliConfig(
     ),
     useRipgrep: useRipgrepSetting,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
+    allowPtyThemeOverride: effectiveSettings.allowPtyThemeOverride,
+    ptyScrollbackLimit: effectiveSettings.ptyScrollbackLimit,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
     continueSession: argv.continue ?? false,

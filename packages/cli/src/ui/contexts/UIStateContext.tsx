@@ -226,6 +226,10 @@ export interface UIState {
 
   // Markdown rendering toggle (alt+m)
   renderMarkdown: boolean;
+
+  // Interactive shell focus state
+  activeShellPtyId: number | null;
+  embeddedShellFocused: boolean;
 }
 
 const UIStateContext = createContext<UIState | undefined>(undefined);

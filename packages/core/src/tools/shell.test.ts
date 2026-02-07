@@ -19,7 +19,11 @@ const mockOsHomedir = vi.hoisted(() => vi.fn(() => '/home/user'));
 const mockOsTmpdir = vi.hoisted(() => vi.fn(() => '/tmp'));
 const mockOsPlatform = vi.hoisted(() => vi.fn(() => 'linux'));
 vi.mock('../services/shellExecutionService.js', () => ({
-  ShellExecutionService: { execute: mockShellExecutionService },
+  ShellExecutionService: {
+    execute: mockShellExecutionService,
+    isActivePty: vi.fn().mockReturnValue(true),
+    getLastActivePtyId: vi.fn().mockReturnValue(null),
+  },
 }));
 vi.mock('fs');
 vi.mock('os', () => ({
@@ -87,6 +91,7 @@ describe('ShellTool', () => {
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
+      getAllowPtyThemeOverride: vi.fn().mockReturnValue(false),
       getContentGeneratorConfig: vi.fn().mockReturnValue({
         providerManager: {
           getServerToolsProvider: vi.fn().mockReturnValue({
@@ -97,6 +102,12 @@ describe('ShellTool', () => {
         },
       }),
       isInteractive: vi.fn().mockReturnValue(true),
+      getShellExecutionConfig: vi.fn().mockReturnValue({
+        showColor: false,
+        scrollback: 600000,
+      }),
+      getPtyTerminalWidth: vi.fn().mockReturnValue(80),
+      getPtyTerminalHeight: vi.fn().mockReturnValue(24),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);
@@ -225,8 +236,10 @@ describe('ShellTool', () => {
         expect.any(Function),
         expect.any(AbortSignal),
         false,
-        undefined,
-        undefined,
+        expect.objectContaining({
+          terminalWidth: 80,
+          terminalHeight: 24,
+        }),
       );
       // Check that it contains background PIDs but not the service PID
       const backgroundLine = result.llmContent
@@ -263,8 +276,10 @@ describe('ShellTool', () => {
         expect.any(Function),
         expect.any(AbortSignal),
         false,
-        undefined,
-        undefined,
+        expect.objectContaining({
+          terminalWidth: 80,
+          terminalHeight: 24,
+        }),
       );
     });
 
@@ -577,28 +592,35 @@ describe('ShellTool', () => {
         vi.useRealTimers();
       });
 
-      it('should throttle text output updates', async () => {
+      it('should update immediately on every data event', async () => {
+        // Data events represent full screen state (AnsiOutput in PTY mode or
+        // cumulative string in child_process mode), so each one is displayed
+        // immediately without throttling.
         const invocation = shellTool.build({ command: 'stream' });
         const promise = invocation.execute(mockAbortSignal, updateOutputMock);
 
-        // First chunk, should be throttled.
         mockShellOutputCallback({
           type: 'data',
           chunk: 'hello ',
         });
-        expect(updateOutputMock).not.toHaveBeenCalled();
+        expect(updateOutputMock).toHaveBeenCalledOnce();
+        expect(updateOutputMock).toHaveBeenCalledWith('hello ');
 
-        // Advance time past the throttle interval.
-        await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
-
-        // Send a second chunk. THIS event triggers the update with the CUMULATIVE content.
+        // Second chunk also updates immediately (no throttle for data events).
         mockShellOutputCallback({
           type: 'data',
           chunk: 'world',
         });
+        expect(updateOutputMock).toHaveBeenCalledTimes(2);
+        expect(updateOutputMock).toHaveBeenLastCalledWith('world');
 
-        // It should have been called once now with the combined output.
-        expect(updateOutputMock).toHaveBeenCalledExactlyOnceWith('hello world');
+        // Third chunk also updates immediately.
+        mockShellOutputCallback({
+          type: 'data',
+          chunk: '!',
+        });
+        expect(updateOutputMock).toHaveBeenCalledTimes(3);
+        expect(updateOutputMock).toHaveBeenLastCalledWith('!');
 
         resolveExecutionPromise({
           rawOutput: Buffer.from(''),
@@ -829,6 +851,7 @@ describe('Shell Tool Filtering Behavior', () => {
       getExcludeTools: vi.fn().mockReturnValue([]),
       getCoreTools: vi.fn().mockReturnValue([]),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
+      getAllowPtyThemeOverride: vi.fn().mockReturnValue(false),
       getDebugMode: vi.fn().mockReturnValue(false),
       getSummarizeToolOutputConfig: vi.fn().mockReturnValue(null),
       getContentGeneratorConfig: vi.fn().mockReturnValue(null),
@@ -836,6 +859,12 @@ describe('Shell Tool Filtering Behavior', () => {
       getWorkspaceContext: vi.fn().mockReturnValue({
         getWorkspaceDirectories: () => ['/test/dir'],
       }),
+      getShellExecutionConfig: vi.fn().mockReturnValue({
+        showColor: false,
+        scrollback: 600000,
+      }),
+      getPtyTerminalWidth: vi.fn().mockReturnValue(80),
+      getPtyTerminalHeight: vi.fn().mockReturnValue(24),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig as unknown as Config);
