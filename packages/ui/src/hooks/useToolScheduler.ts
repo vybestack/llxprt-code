@@ -10,6 +10,7 @@ import type {
   ExecutingToolCall,
   CancelledToolCall,
   ToolCallConfirmationDetails,
+  AnsiOutput,
 } from '@vybestack/llxprt-code-core';
 import type { ToolStatus } from '../types/events';
 import { getLogger } from '../lib/logger';
@@ -103,6 +104,16 @@ type OnCompleteCallback = (
   completedTools: CompletedToolCall[],
 ) => Promise<void> | void;
 type OnUpdateCallback = (tools: TrackedToolCall[]) => void;
+
+/**
+ * Convert AnsiOutput to plain text by extracting token text content.
+ */
+function ansiOutputToText(output: AnsiOutput): string {
+  const newline = '\n';
+  return output
+    .map((line) => line.map((token) => token.text).join(''))
+    .join(newline);
+}
 
 /**
  * Update a single tool call with live output
@@ -303,12 +314,16 @@ export function useToolScheduler(
 
     const handleOutputUpdate = (
       toolCallId: string,
-      outputChunk: string,
+      outputChunk: string | AnsiOutput,
     ): void => {
       if (!mounted) {
         return;
       }
-      setToolCalls((prev) => applyOutputUpdate(prev, toolCallId, outputChunk));
+      const text =
+        typeof outputChunk === 'string'
+          ? outputChunk
+          : ansiOutputToText(outputChunk);
+      setToolCalls((prev) => applyOutputUpdate(prev, toolCallId, text));
     };
 
     const handleToolCallsUpdate = (updatedCalls: CoreToolCall[]): void => {

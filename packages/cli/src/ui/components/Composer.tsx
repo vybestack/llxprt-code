@@ -43,6 +43,7 @@ export const Composer = ({
     inputHistory,
     streamingState,
     queueErrorMessage,
+    embeddedShellFocused,
   } = uiState;
 
   return (
@@ -68,6 +69,7 @@ export const Composer = ({
       setQueueErrorMessage={uiActions.setQueueErrorMessage}
       streamingState={streamingState}
       queueErrorMessage={queueErrorMessage}
+      isEmbeddedShellFocused={embeddedShellFocused}
     />
   );
 };

@@ -97,6 +97,10 @@ if (experimentalUi) {
     DEV: 'true',
     NODE_OPTIONS: prepareNodeOptionsForDev(process.env.NODE_OPTIONS),
   };
+
+  if (!uiEnv.LLXPRT_DEBUG_SESSION_ID && uiEnv.LLXPRT_DEBUG) {
+    uiEnv.LLXPRT_DEBUG_SESSION_ID = `${process.pid}`;
+  }
   const uiChild = spawn('bun', uiArgs, {
     stdio: 'inherit',
     env: uiEnv,
@@ -117,6 +121,10 @@ if (experimentalUi) {
     DEV: 'true',
     NODE_OPTIONS: prepareNodeOptionsForDev(process.env.NODE_OPTIONS),
   };
+
+  if (!env.LLXPRT_DEBUG_SESSION_ID && env.LLXPRT_DEBUG) {
+    env.LLXPRT_DEBUG_SESSION_ID = `${process.pid}`;
+  }
 
   if (bootstrapSnapshot.bootstrapArgs.profileName) {
     env.LLXPRT_BOOTSTRAP_PROFILE = bootstrapSnapshot.bootstrapArgs.profileName;

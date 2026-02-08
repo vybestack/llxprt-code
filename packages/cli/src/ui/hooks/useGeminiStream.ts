@@ -65,6 +65,7 @@ import {
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
+import { SHELL_COMMAND_NAME, SHELL_NAME } from '../constants.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { useKeypress, type Key } from './useKeypress.js';
 
@@ -89,6 +90,70 @@ export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
     }
   }
   return resultParts;
+}
+
+export function mergePendingToolGroupsForDisplay(
+  pendingHistoryItem: HistoryItemWithoutId | null | undefined,
+  pendingToolCallGroupDisplay: HistoryItemWithoutId | null | undefined,
+): HistoryItemWithoutId[] {
+  if (
+    pendingHistoryItem?.type === 'tool_group' &&
+    pendingToolCallGroupDisplay?.type === 'tool_group'
+  ) {
+    const schedulerToolCallIds = new Set(
+      pendingToolCallGroupDisplay.tools.map((tool) => tool.callId),
+    );
+
+    const overlappingCallIds = new Set(
+      pendingHistoryItem.tools
+        .filter((tool) => schedulerToolCallIds.has(tool.callId))
+        .map((tool) => tool.callId),
+    );
+
+    if (overlappingCallIds.size === 0) {
+      return [pendingHistoryItem, pendingToolCallGroupDisplay];
+    }
+
+    const filteredPendingTools = pendingHistoryItem.tools.filter(
+      (tool) =>
+        !overlappingCallIds.has(tool.callId) ||
+        tool.name !== SHELL_COMMAND_NAME,
+    );
+
+    const overlappingShellTools = pendingHistoryItem.tools.filter(
+      (tool) =>
+        overlappingCallIds.has(tool.callId) &&
+        (tool.name === SHELL_COMMAND_NAME || tool.name === SHELL_NAME),
+    );
+    const overlappingShellCallIds = new Set(
+      overlappingShellTools.map((tool) => tool.callId),
+    );
+    const filteredSchedulerTools = pendingToolCallGroupDisplay.tools.filter(
+      (tool) => !overlappingShellCallIds.has(tool.callId),
+    );
+
+    const mergedItems: HistoryItemWithoutId[] = [];
+
+    if (filteredPendingTools.length > 0 || overlappingShellTools.length > 0) {
+      mergedItems.push({
+        ...pendingHistoryItem,
+        tools: [...filteredPendingTools, ...overlappingShellTools],
+      });
+    }
+
+    if (filteredSchedulerTools.length > 0) {
+      mergedItems.push({
+        ...pendingToolCallGroupDisplay,
+        tools: filteredSchedulerTools,
+      });
+    }
+
+    return mergedItems;
+  }
+
+  return [pendingHistoryItem, pendingToolCallGroupDisplay].filter(
+    (i): i is HistoryItemWithoutId => i !== undefined && i !== null,
+  );
 }
 
 enum StreamProcessingStatus {
@@ -151,6 +216,9 @@ export const useGeminiStream = (
   performMemoryRefresh: () => Promise<void>,
   onEditorClose: () => void,
   onCancelSubmit: () => void,
+  setShellInputFocused: (value: boolean) => void,
+  terminalWidth?: number,
+  terminalHeight?: number,
   onTodoPause?: () => void,
   onEditorOpen: () => void = () => {},
 ) => {
@@ -372,13 +440,17 @@ export const useGeminiStream = (
     await done;
     setIsResponding(false);
   }, []);
-  const { handleShellCommand } = useShellCommandProcessor(
+  const { handleShellCommand, activeShellPtyId } = useShellCommandProcessor(
     addItem,
     setPendingHistoryItem,
     onExec,
     onDebugMessage,
     config,
     geminiClient,
+    setShellInputFocused,
+    terminalWidth,
+    terminalHeight,
+    pendingHistoryItemRef,
   );
 
   const streamingState = useMemo(() => {
@@ -1488,8 +1560,9 @@ export const useGeminiStream = (
 
   const pendingHistoryItems = useMemo(
     () =>
-      [pendingHistoryItem, pendingToolCallGroupDisplay].filter(
-        (i) => i !== undefined && i !== null,
+      mergePendingToolGroupsForDisplay(
+        pendingHistoryItem,
+        pendingToolCallGroupDisplay,
       ),
     [pendingHistoryItem, pendingToolCallGroupDisplay],
   );
@@ -1621,5 +1694,6 @@ export const useGeminiStream = (
     pendingHistoryItems,
     thought,
     cancelOngoingRequest,
+    activeShellPtyId,
   };
 };

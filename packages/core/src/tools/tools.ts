@@ -23,6 +23,7 @@ import {
   type ToolConfirmationPayload,
 } from './tool-confirmation-types.js';
 import { randomUUID } from 'node:crypto';
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
 
 export { ToolConfirmationOutcome } from './tool-confirmation-types.js';
 export type { ToolConfirmationPayload } from './tool-confirmation-types.js';
@@ -65,11 +66,17 @@ export interface ToolInvocation<
    * Executes the tool with the validated parameters.
    * @param signal AbortSignal for tool cancellation.
    * @param updateOutput Optional callback to stream output.
+   * @param terminalColumns Optional terminal width for PTY mode.
+   * @param terminalRows Optional terminal height for PTY mode.
+   * @param setPidCallback Optional callback to propagate PTY PID.
    * @returns Result of the tool execution.
    */
   execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (output: string | AnsiOutput) => void,
+    terminalColumns?: number,
+    terminalRows?: number,
+    setPidCallback?: (pid: number) => void,
   ): Promise<TResult>;
 }
 
@@ -238,7 +245,10 @@ export abstract class BaseToolInvocation<
 
   abstract execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (output: string | AnsiOutput) => void,
+    terminalColumns?: number,
+    terminalRows?: number,
+    setPidCallback?: (pid: number) => void,
   ): Promise<TResult>;
 }
 
@@ -382,7 +392,7 @@ export abstract class DeclarativeTool<
   async buildAndExecute(
     params: TParams,
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (output: string | AnsiOutput) => void,
   ): Promise<TResult> {
     const invocation = this.build(params);
     return invocation.execute(signal, updateOutput);
@@ -629,7 +639,7 @@ export interface FileRead {
   metadata?: Record<string, unknown>;
 }
 
-export type ToolResultDisplay = string | FileDiff | FileRead;
+export type ToolResultDisplay = string | FileDiff | FileRead | AnsiOutput;
 
 export interface FileDiff {
   fileDiff: string;
@@ -832,6 +842,9 @@ class BaseToolLegacyInvocation<
   async execute(
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
+    _terminalColumns?: number,
+    _terminalRows?: number,
+    _setPidCallback?: (pid: number) => void,
   ): Promise<TResult> {
     return this.tool.execute(this.params, signal, updateOutput);
   }

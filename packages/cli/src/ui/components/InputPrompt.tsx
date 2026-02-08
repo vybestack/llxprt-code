@@ -128,6 +128,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   vimHandleInput,
   setQueueErrorMessage,
   streamingState,
+  isEmbeddedShellFocused,
 }) => {
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
   const escPressCount = useRef(0);
@@ -369,6 +370,13 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     (key: Key) => {
       /// We want to handle paste even when not focused to support drag and drop.
       if (!focus && !key.paste) {
+        return;
+      }
+
+      if (isEmbeddedShellFocused) {
+        if (keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS](key)) {
+          return;
+        }
         return;
       }
 
@@ -722,6 +730,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       reverseSearchActive,
       textBeforeReverseSearch,
       cursorPosition,
+      isEmbeddedShellFocused,
     ],
   );
 

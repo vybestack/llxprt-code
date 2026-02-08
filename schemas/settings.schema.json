@@ -106,6 +106,20 @@
       "default": false,
       "type": "boolean"
     },
+    "allowPtyThemeOverride": {
+      "title": "Allow PTY to Override Theme",
+      "description": "Allow ANSI colors from PTY output to override the UI theme. When disabled, PTY output uses the current theme colors.",
+      "markdownDescription": "Allow ANSI colors from PTY output to override the UI theme. When disabled, PTY output uses the current theme colors.\n\n- Category: `Shell`\n- Requires restart: `yes`\n- Default: `false`",
+      "default": false,
+      "type": "boolean"
+    },
+    "ptyScrollbackLimit": {
+      "title": "PTY Scrollback Limit",
+      "description": "Maximum number of lines to keep in the PTY scrollback buffer for interactive shell output.",
+      "markdownDescription": "Maximum number of lines to keep in the PTY scrollback buffer for interactive shell output.\n\n- Category: `Shell`\n- Requires restart: `yes`\n- Default: `600000`",
+      "default": 600000,
+      "type": "number"
+    },
     "useExternalAuth": {
       "title": "Use External Auth",
       "description": "Whether to use an external authentication flow.",

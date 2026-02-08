@@ -92,6 +92,8 @@ describe('FileOutput', () => {
       namespace: 'test',
       level: 'log',
       message: 'test message',
+      runId: 'test-run',
+      pid: 12345,
     };
 
     await fileOutput.write(logEntry);
@@ -118,6 +120,8 @@ describe('FileOutput', () => {
       level: 'error',
       message: 'test error message',
       args: [{ data: 'value' }, 123],
+      runId: 'test-run',
+      pid: 12345,
     };
 
     await fileOutput.write(logEntry);
@@ -146,6 +150,8 @@ describe('FileOutput', () => {
       namespace: 'test',
       level: 'log',
       message: 'test message',
+      runId: 'test-run',
+      pid: 12345,
     };
 
     await fileOutput.write(logEntry);
@@ -174,6 +180,8 @@ describe('FileOutput', () => {
         namespace: 'test',
         level: 'log',
         message: `message ${i}`,
+        runId: 'test-run',
+        pid: 12345,
       });
     }
 
@@ -204,6 +212,8 @@ describe('FileOutput', () => {
         namespace: 'test',
         level: 'log',
         message: `batch message ${i}`,
+        runId: 'test-run',
+        pid: 12345,
       });
     }
 
@@ -246,7 +256,9 @@ describe('FileOutput', () => {
       timestamp: '2025-01-21T00:00:00.000Z',
       namespace: 'test',
       level: 'log',
-      message: 'test message after rotation',
+      message: 'test message',
+      runId: 'test-run',
+      pid: 12345,
     };
 
     await fileOutput.write(logEntry);
@@ -279,7 +291,9 @@ describe('FileOutput', () => {
       timestamp: '2025-01-21T00:00:00.000Z',
       namespace: 'test',
       level: 'log',
-      message: 'test message new day',
+      message: 'test message',
+      runId: 'test-run',
+      pid: 12345,
     };
 
     await fileOutput.write(logEntry);
@@ -304,6 +318,8 @@ describe('FileOutput', () => {
       namespace: 'test',
       level: 'log',
       message: 'dispose test message',
+      runId: 'test-run',
+      pid: 12345,
     };
 
     await fileOutput.write(logEntry);
@@ -335,6 +351,8 @@ describe('FileOutput', () => {
       namespace: 'test',
       level: 'log',
       message: 'test message',
+      runId: 'test-run',
+      pid: 12345,
     };
 
     // Should not throw
@@ -399,13 +417,15 @@ describe('FileOutput', () => {
       namespace: 'test',
       level: 'log',
       message: 'test message',
+      runId: 'test-run',
+      pid: 12345,
     };
 
     await fileOutput.write(logEntry);
 
     expect(fs.appendFile).toHaveBeenCalledWith(
       expect.stringMatching(
-        /llxprt-debug-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.jsonl$/,
+        /llxprt-debug-[^-]+-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.jsonl$/,
       ),
       expect.any(String),
       expect.any(Object),
@@ -457,6 +477,8 @@ describe('FileOutput', () => {
         namespace: 'concurrent',
         level: 'log',
         message: `concurrent message ${i}`,
+        runId: 'test-run',
+        pid: 12345,
       });
     }
 
@@ -485,7 +507,9 @@ describe('FileOutput', () => {
       timestamp: '2025-01-21T00:00:00.000Z',
       namespace: 'test',
       level: 'log',
-      message: 'post-dispose message',
+      message: 'test message',
+      runId: 'test-run',
+      pid: 12345,
     };
 
     // Write should be ignored

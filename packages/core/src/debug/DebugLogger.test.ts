@@ -490,6 +490,8 @@ describe('DebugLogger', () => {
         expect(logEntry).toHaveProperty('namespace', 'test');
         expect(logEntry).toHaveProperty('level');
         expect(logEntry).toHaveProperty('timestamp');
+        expect(logEntry).toHaveProperty('runId');
+        expect(logEntry).toHaveProperty('pid');
       }),
     );
   });
@@ -621,6 +623,8 @@ describe('DebugLogger', () => {
           const logEntry = writeSpy.mock.calls[0][0];
           expect(logEntry).toHaveProperty('level', level);
           expect(logEntry).toHaveProperty('message', message);
+          expect(logEntry).toHaveProperty('runId');
+          expect(logEntry).toHaveProperty('pid');
         },
       ),
     );

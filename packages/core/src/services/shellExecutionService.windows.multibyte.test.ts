@@ -24,6 +24,13 @@ vi.mock('../utils/systemEncoding.js', () => ({
 describe('ShellExecutionService Windows multibyte regression tests', () => {
   let mockChildProcess: EventEmitter & Partial<ChildProcess>;
 
+  const defaultShellConfig = {
+    showColor: false,
+    scrollback: 600000,
+    terminalWidth: 80,
+    terminalHeight: 24,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(os.platform).mockReturnValue('win32');
@@ -51,6 +58,8 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       '.',
       () => {},
       new AbortController().signal,
+      false, // shouldUseNodePty - false for child_process path
+      defaultShellConfig,
     );
 
     // Simulate Windows cmd.exe outputting Japanese text
@@ -75,7 +84,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       }),
     );
 
-    expect(result.stdout).toContain('こんにちは世界');
+    expect(result.output).toContain('こんにちは世界');
     expect(result.exitCode).toBe(0);
     expect(result.error).toBeNull();
   });
@@ -88,6 +97,8 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       '.',
       () => {},
       new AbortController().signal,
+      false,
+      defaultShellConfig,
     );
 
     setImmediate(() => {
@@ -100,7 +111,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
 
     const result = await promise.result;
 
-    expect(result.stdout).toContain('テストファイル.txt');
+    expect(result.output).toContain('テストファイル.txt');
     expect(result.exitCode).toBe(0);
   });
 
@@ -115,6 +126,8 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
         '.',
         () => {},
         new AbortController().signal,
+        false,
+        defaultShellConfig,
       );
 
       setImmediate(() => {
@@ -127,7 +140,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
 
       const result = await promise.result;
 
-      expect(result.stdout).toBe(mixedOutput);
+      expect(result.output).toContain('Hello 世界');
       expect(result.exitCode).toBe(0);
     },
   );
@@ -140,6 +153,8 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       '.',
       () => {},
       new AbortController().signal,
+      false,
+      defaultShellConfig,
     );
 
     // Should use powershell.exe with command as argument (no extra quote escaping)
@@ -168,6 +183,8 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       '.',
       () => {},
       new AbortController().signal,
+      false,
+      defaultShellConfig,
     );
 
     setImmediate(() => {
@@ -177,7 +194,9 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
 
     const result = await promise.result;
 
-    expect(result.stderr).toBe(errorMessage);
+    // ShellExecutionResult uses `output` which combines stdout+stderr
+    expect(result.output).toContain('badcommand');
+    expect(result.output).toContain('認識されていません');
     expect(result.exitCode).toBe(1);
   });
 });
