@@ -498,6 +498,164 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     expect(assistantToolCallId).toBe('call_provider_999');
     expect(continuationTool?.tool_call_id).toBe(assistantToolCallId);
   });
+  it('should include tool message name in continuation payload for mistral format', async () => {
+    const firstResponseChunks = [
+      JSON.stringify({
+        id: 'chatcmpl-mistral-1',
+        object: 'chat.completion.chunk',
+        created: 1234569000,
+        model: 'mistral-large-latest',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_mistral_1',
+                  type: 'function',
+                  function: {
+                    name: 'FindFiles',
+                    arguments: '{"pattern":"**/*.ts"}',
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      }),
+      JSON.stringify({
+        id: 'chatcmpl-mistral-1',
+        object: 'chat.completion.chunk',
+        created: 1234569000,
+        model: 'mistral-large-latest',
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+    ];
+
+    const secondResponseChunks = [
+      JSON.stringify({
+        id: 'chatcmpl-mistral-2',
+        object: 'chat.completion.chunk',
+        created: 1234569001,
+        model: 'mistral-large-latest',
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'Done.' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      JSON.stringify({
+        id: 'chatcmpl-mistral-2',
+        object: 'chat.completion.chunk',
+        created: 1234569001,
+        model: 'mistral-large-latest',
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+    ];
+
+    let callCount = 0;
+    vi.mocked(global.fetch).mockImplementation(async () => {
+      callCount++;
+      return createStreamingResponse(
+        callCount === 1 ? firstResponseChunks : secondResponseChunks,
+      );
+    });
+
+    settingsService.set('model', 'mistral-large-latest');
+    settingsService.setProviderSetting(
+      provider.name,
+      'model',
+      'mistral-large-latest',
+    );
+
+    const messages: IMessage[] = [
+      {
+        role: ContentGeneratorRole.USER,
+        content: 'find ts files',
+      },
+    ];
+
+    const tools: ITool[] = [
+      {
+        functionDeclarations: [
+          {
+            name: 'FindFiles',
+            description: 'Find files',
+            parameters: {
+              type: 'object',
+              properties: {
+                pattern: {
+                  type: 'string',
+                },
+              },
+              required: ['pattern'],
+            },
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(messages, tools, {
+      stream: true,
+    });
+
+    for await (const _content of generator) {
+      // Drain stream
+    }
+
+    expect(callCount).toBe(2);
+
+    const secondFetchCall = vi.mocked(global.fetch).mock.calls[1];
+    const secondRequestBody = JSON.parse(
+      secondFetchCall?.[1]?.body as string,
+    ) as {
+      messages: Array<{
+        role: string;
+        name?: string;
+        content?: string;
+        tool_call_id?: string;
+      }>;
+    };
+
+    const toolMessage = secondRequestBody.messages.find(
+      (msg) => msg.role === 'tool',
+    );
+
+    expect(toolMessage).toBeDefined();
+    expect(toolMessage).toMatchObject({
+      role: 'tool',
+      tool_call_id: 'call_mistral_1',
+      name: 'FindFiles',
+      content: '[Tool call acknowledged - awaiting execution]',
+    });
+  });
+
+  it('should keep private method test coupling explicit for buildMessagesWithReasoning', () => {
+    // This test intentionally exercises a private helper through type assertion.
+    // If the method signature changes, this test should fail loudly so we can
+    // update strict gateway payload assertions in lockstep.
+    const privateAccessor = provider as unknown as {
+      buildMessagesWithReasoning: OpenAIProvider['buildMessagesWithReasoning'];
+    };
+
+    expect(typeof privateAccessor.buildMessagesWithReasoning).toBe('function');
+  });
 
   it('should not attach reasoning_content to assistant tool_call messages for strict OpenAI gateways', () => {
     settingsService.set('reasoning.includeInContext', true);

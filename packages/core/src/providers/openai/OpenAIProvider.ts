@@ -1372,9 +1372,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Track the most recent assistant's tool_call IDs.
     // NOTE: We intentionally do NOT deduplicate tool messages by tool_call_id.
-    // In real tool flows a provider can emit multiple tool_response blocks for the
-    // same tool call ID (e.g., split output/chunked formatting). Removing later
-    // responses can corrupt continuation payloads and trigger strict provider 400s.
+    // Conversation history can legitimately contain contiguous tool messages with
+    // the same tool_call_id (for example replay artifacts or adapter-level
+    // splitting across message boundaries). This validator should only remove
+    // orphaned tool messages that are not attached to the active assistant
+    // tool-call context; eager deduplication here has caused strict-provider 400s.
     let lastAssistantToolCallIds: string[] = [];
 
     // Iterate through messages to check tool message sequence
@@ -2662,6 +2664,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           model,
           logger,
           mergedHeaders,
+          detectedFormat,
         );
       }
 
@@ -4317,6 +4320,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           model,
           logger,
           mergedHeaders,
+          detectedFormat,
         );
       }
 
@@ -4811,6 +4815,61 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return { thinking: thinkingBlock, toolCalls };
   }
 
+  private buildContinuationMessages(
+    toolCalls: Array<{
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
+    }>,
+    messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    toolFormat: ToolFormat,
+  ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+    // Keep message shape strict for OpenAI-compatible gateways:
+    // - Drop assistant reasoning_content from prior history turns
+    // - Keep assistant tool-call replay minimal (role + tool_calls only)
+    const sanitizedHistory = messagesWithSystem.map((message) => {
+      if (message.role !== 'assistant') {
+        return message;
+      }
+
+      const sanitizedAssistant = {
+        ...message,
+      } as OpenAI.Chat.ChatCompletionAssistantMessageParam & {
+        reasoning_content?: unknown;
+      };
+      delete sanitizedAssistant.reasoning_content;
+      return sanitizedAssistant;
+    });
+
+    return [
+      ...sanitizedHistory,
+      {
+        role: 'assistant' as const,
+        tool_calls: toolCalls,
+      },
+      ...toolCalls.map((tc) => {
+        const toolMessage: OpenAI.Chat.ChatCompletionToolMessageParam & {
+          name?: string;
+        } = {
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: '[Tool call acknowledged - awaiting execution]',
+        };
+
+        if (toolFormat === 'mistral') {
+          toolMessage.name = tc.function.name;
+        }
+
+        return toolMessage;
+      }),
+      {
+        role: 'user' as const,
+        content:
+          'The tool calls above have been registered. Please continue with your response.',
+      },
+    ];
+  }
+
   /**
    * Request continuation after tool calls when model returned no text.
    * This is a helper to avoid code duplication between legacy and pipeline paths.
@@ -4831,45 +4890,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     model: string,
     logger: DebugLogger,
     mergedHeaders: Record<string, string> | undefined,
+    toolFormat: ToolFormat,
   ): AsyncGenerator<IContent, void, unknown> {
-    // Build continuation messages.
-    // Keep message shape strict for OpenAI-compatible gateways:
-    // - Drop assistant reasoning_content from prior history turns
-    // - Keep assistant tool-call replay minimal (role + tool_calls only)
-    const sanitizedHistory = messagesWithSystem.map((message) => {
-      if (message.role !== 'assistant') {
-        return message;
-      }
-
-      const sanitizedAssistant = {
-        ...message,
-      } as OpenAI.Chat.ChatCompletionAssistantMessageParam & {
-        reasoning_content?: unknown;
-      };
-      delete sanitizedAssistant.reasoning_content;
-      return sanitizedAssistant;
-    });
-
-    const continuationMessages = [
-      ...sanitizedHistory,
-      // Add the assistant's tool calls
-      {
-        role: 'assistant' as const,
-        tool_calls: toolCalls,
-      },
-      // Add placeholder tool responses (tools have NOT been executed yet - only acknowledged)
-      ...toolCalls.map((tc) => ({
-        role: 'tool' as const,
-        tool_call_id: tc.id,
-        content: '[Tool call acknowledged - awaiting execution]',
-      })),
-      // Add continuation prompt
-      {
-        role: 'user' as const,
-        content:
-          'The tool calls above have been registered. Please continue with your response.',
-      },
-    ];
+    const continuationMessages = this.buildContinuationMessages(
+      toolCalls,
+      messagesWithSystem,
+      toolFormat,
+    );
 
     // Make a continuation request (wrap in try-catch since tools were already yielded)
     try {
