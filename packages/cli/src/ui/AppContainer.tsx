@@ -227,8 +227,17 @@ export const AppContainer = (props: AppContainerProps) => {
   useMemoryMonitor({ addItem });
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
+  const todoContinuationRef = useRef<{
+    handleTodoPause: (reason: string) => {
+      type: 'pause';
+      reason: string;
+      message: string;
+    };
+    clearPause: () => void;
+  } | null>(null);
   const registerTodoPause = useCallback(() => {
     todoPauseController.registerTodoPause();
+    todoContinuationRef.current?.handleTodoPause('paused by model');
   }, [todoPauseController]);
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
@@ -1640,6 +1649,7 @@ export const AppContainer = (props: AppContainerProps) => {
          * after user interaction.
          */
         hadToolCallsRef.current = false;
+        todoContinuationRef.current?.clearPause();
 
         // Add to independent input history
         inputHistoryStore.addInput(trimmedValue);
@@ -2065,6 +2075,8 @@ export const AppContainer = (props: AppContainerProps) => {
       streamingState === StreamingState.WaitingForConfirmation,
     setDebugMessage,
   );
+
+  todoContinuationRef.current = todoContinuation;
 
   // Track previous streaming state to detect turn completion
   const prevStreamingStateRef = useRef<StreamingState>(streamingState);
