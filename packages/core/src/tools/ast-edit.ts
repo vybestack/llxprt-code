@@ -37,6 +37,7 @@ import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { spawnSync } from 'child_process';
 import FastGlob from 'fast-glob';
 import { DebugLogger } from '../debug/index.js';
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
 
 const logger = new DebugLogger('llxprt:tools:ast-edit');
 import {
@@ -1914,7 +1915,13 @@ class ASTEditToolInvocation
     return `${forceIndicator}${shortenPath(relativePath)}: ${oldStringSnippet} => ${newStringSnippet}`;
   }
 
-  async execute(signal: AbortSignal): Promise<ToolResult> {
+  async execute(
+    signal: AbortSignal,
+    _updateOutput?: (output: string | AnsiOutput) => void,
+    _terminalColumns?: number,
+    _terminalRows?: number,
+    _setPidCallback?: (pid: number) => void,
+  ): Promise<ToolResult> {
     // Step 1: Preview mode (force: false or unset)
     if (!this.params.force) {
       return this.executePreview(signal);
@@ -2375,7 +2382,13 @@ class ASTReadFileToolInvocation
     return false; // Read operations don't need confirmation
   }
 
-  async execute(): Promise<ToolResult> {
+  async execute(
+    _signal?: AbortSignal,
+    _updateOutput?: (output: string | AnsiOutput) => void,
+    _terminalColumns?: number,
+    _terminalRows?: number,
+    _setPidCallback?: (pid: number) => void,
+  ): Promise<ToolResult> {
     try {
       // Read file content
       const content = await this.config

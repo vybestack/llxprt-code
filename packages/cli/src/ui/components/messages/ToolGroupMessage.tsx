@@ -10,6 +10,7 @@ import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { ToolMessage } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
+import { theme } from '../../semantic-colors.js';
 import {
   Config,
   DEFAULT_AGENT_ID,
@@ -28,6 +29,8 @@ interface ToolGroupMessageProps {
   config: Config;
   isFocused?: boolean;
   showTodoPanel?: boolean;
+  activeShellPtyId?: number | null;
+  embeddedShellFocused?: boolean;
 }
 
 const extractCountFromText = (text?: string): number | undefined => {
@@ -88,6 +91,8 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   config,
   isFocused = true,
   showTodoPanel = true,
+  activeShellPtyId,
+  embeddedShellFocused,
 }) => {
   const { todos } = useTodoContext();
   const { getExecutingToolCalls } = useToolCallContext();
@@ -160,15 +165,14 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
     (t) => t.name === SHELL_COMMAND_NAME || t.name === SHELL_NAME,
   );
   const borderColor = isShellCommand
-    ? Colors.Foreground
+    ? theme.ui.symbol
     : hasPending
-      ? Colors.AccentYellow
-      : Colors.Gray;
+      ? theme.status.warning
+      : theme.border.default;
+  const borderDimColor = hasPending && !isShellCommand;
 
   const staticHeight = /* border */ 2 + /* marginBottom */ 1;
-  // This is a bit of a magic number, but it accounts for the border and
-  // marginLeft.
-  const innerWidth = terminalWidth - 4;
+  const innerWidth = terminalWidth;
 
   let countToolCallsWithResults = 0;
   for (const tool of filteredToolCalls) {
@@ -200,7 +204,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
       */
       width="100%"
       marginLeft={1}
-      borderDimColor={hasPending}
+      borderDimColor={borderDimColor}
       borderColor={borderColor}
       gap={1}
     >
@@ -209,30 +213,32 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
           <Text color={Colors.AccentCyan}>{`Agent: ${agentId}`}</Text>
         </Box>
       )}
-      {filteredToolCalls.map((tool) => {
+      {filteredToolCalls.map((tool, index) => {
         const isConfirming = toolAwaitingApproval?.callId === tool.callId;
+        const isFirst = index === 0;
         return (
           <Box key={tool.callId} flexDirection="column" minHeight={1}>
-            <Box flexDirection="row" alignItems="center">
-              <ToolMessage
-                callId={tool.callId}
-                name={tool.name}
-                description={tool.description}
-                resultDisplay={tool.resultDisplay}
-                status={tool.status}
-                confirmationDetails={tool.confirmationDetails}
-                availableTerminalHeight={availableTerminalHeightPerToolMessage}
-                terminalWidth={innerWidth}
-                emphasis={
-                  isConfirming
-                    ? 'high'
-                    : toolAwaitingApproval
-                      ? 'low'
-                      : 'medium'
-                }
-                renderOutputAsMarkdown={tool.renderOutputAsMarkdown}
-              />
-            </Box>
+            <ToolMessage
+              callId={tool.callId}
+              name={tool.name}
+              description={tool.description}
+              resultDisplay={tool.resultDisplay}
+              status={tool.status}
+              confirmationDetails={tool.confirmationDetails}
+              availableTerminalHeight={availableTerminalHeightPerToolMessage}
+              terminalWidth={innerWidth}
+              emphasis={
+                isConfirming ? 'high' : toolAwaitingApproval ? 'low' : 'medium'
+              }
+              renderOutputAsMarkdown={tool.renderOutputAsMarkdown}
+              activeShellPtyId={activeShellPtyId}
+              embeddedShellFocused={embeddedShellFocused}
+              ptyId={tool.ptyId}
+              config={config}
+              isFirst={isFirst}
+              borderColor={borderColor}
+              borderDimColor={borderDimColor}
+            />
             {tool.status === ToolCallStatus.Confirming &&
               isConfirming &&
               tool.confirmationDetails && (

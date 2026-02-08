@@ -156,6 +156,8 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
           config={config}
           isFocused={isFocused}
           showTodoPanel={showTodoPanel}
+          activeShellPtyId={_activeShellPtyId}
+          embeddedShellFocused={_embeddedShellFocused}
         />
       )}
       {itemForDisplay.type === 'compression' && (

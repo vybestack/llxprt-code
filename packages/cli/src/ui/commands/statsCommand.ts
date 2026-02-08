@@ -13,6 +13,9 @@ import {
   CommandKind,
 } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:cli:stats');
 
 export const statsCommand: SlashCommand = {
   name: 'stats',
@@ -85,7 +88,7 @@ export const statsCommand: SlashCommand = {
     {
       name: 'quota',
       description:
-        'Show Anthropic OAuth usage quota information for all authenticated buckets.',
+        'Show Anthropic and Codex OAuth usage quota information for all authenticated buckets.',
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext) => {
         const oauthManager = getRuntimeApi().getCliOAuthManager();
@@ -102,61 +105,145 @@ export const statsCommand: SlashCommand = {
         }
 
         try {
-          // Get usage info for ALL authenticated buckets
-          const allUsageInfo = await oauthManager.getAllAnthropicUsageInfo();
+          // Fetch both providers in parallel; show whichever provider succeeds
+          const [anthropicResult, codexResult] = await Promise.allSettled([
+            oauthManager.getAllAnthropicUsageInfo(),
+            oauthManager.getAllCodexUsageInfo(),
+          ]);
 
-          if (allUsageInfo.size === 0) {
+          if (anthropicResult.status === 'rejected') {
+            logger.warn(
+              'Failed to fetch Anthropic usage info:',
+              anthropicResult.reason,
+            );
+          }
+          if (codexResult.status === 'rejected') {
+            logger.warn(
+              'Failed to fetch Codex usage info:',
+              codexResult.reason,
+            );
+          }
+
+          const anthropicUsageInfo =
+            anthropicResult.status === 'fulfilled'
+              ? anthropicResult.value
+              : new Map<string, Record<string, unknown>>();
+          const codexUsageInfo =
+            codexResult.status === 'fulfilled'
+              ? codexResult.value
+              : new Map<string, Record<string, unknown>>();
+
+          if (anthropicUsageInfo.size === 0 && codexUsageInfo.size === 0) {
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: 'No quota information available. This feature requires Anthropic OAuth authentication (not API keys).\n\nUse /auth anthropic to authenticate with OAuth.',
+                text: 'No quota information available. This feature requires OAuth authentication (not API keys).\n\nUse /auth anthropic or /auth codex to authenticate with OAuth.',
               },
               Date.now(),
             );
             return;
           }
 
-          const { formatAllUsagePeriods } = await import(
-            '@vybestack/llxprt-code-core'
-          );
+          const {
+            formatAllUsagePeriods,
+            formatCodexUsage,
+            CodexUsageInfoSchema,
+          } = await import('@vybestack/llxprt-code-core');
 
-          const output: string[] = ['## Anthropic Quota Information\n'];
+          const output: string[] = [];
 
-          // Sort buckets: 'default' first, then alphabetical
-          const sortedBuckets = Array.from(allUsageInfo.keys()).sort((a, b) => {
-            if (a === 'default') return -1;
-            if (b === 'default') return 1;
-            return a.localeCompare(b);
-          });
+          // Collect Anthropic lines first, only add header if non-empty
+          if (anthropicUsageInfo.size > 0) {
+            const anthropicLines: string[] = [];
 
-          // Format usage for each bucket
-          for (const bucket of sortedBuckets) {
-            const usageInfo = allUsageInfo.get(bucket)!;
-            const lines = formatAllUsagePeriods(
-              usageInfo as Record<string, unknown>,
+            const sortedBuckets = Array.from(anthropicUsageInfo.keys()).sort(
+              (a, b) => {
+                if (a === 'default') return -1;
+                if (b === 'default') return 1;
+                return a.localeCompare(b);
+              },
             );
 
-            if (lines.length > 0) {
-              // Only show bucket name if there are multiple buckets
-              if (allUsageInfo.size > 1) {
-                output.push(`### Bucket: ${bucket}\n`);
+            for (const bucket of sortedBuckets) {
+              const usageInfo = anthropicUsageInfo.get(bucket)!;
+              const lines = formatAllUsagePeriods(
+                usageInfo as Record<string, unknown>,
+              );
+
+              if (lines.length > 0) {
+                if (anthropicUsageInfo.size > 1) {
+                  anthropicLines.push(`### Bucket: ${bucket}\n`);
+                }
+                anthropicLines.push(...lines);
+                anthropicLines.push('');
               }
-              output.push(...lines);
-              output.push(''); // Add spacing between buckets
+            }
+
+            // Remove trailing empty line
+            if (anthropicLines[anthropicLines.length - 1] === '') {
+              anthropicLines.pop();
+            }
+
+            if (anthropicLines.length > 0) {
+              output.push('## Anthropic Quota Information\n');
+              output.push(...anthropicLines);
             }
           }
 
-          // Remove trailing empty line
-          if (output[output.length - 1] === '') {
-            output.pop();
+          // Collect Codex lines first, only add header if non-empty
+          if (codexUsageInfo.size > 0) {
+            const codexLines: string[] = [];
+
+            const sortedBuckets = Array.from(codexUsageInfo.keys()).sort(
+              (a, b) => {
+                if (a === 'default') return -1;
+                if (b === 'default') return 1;
+                return a.localeCompare(b);
+              },
+            );
+
+            for (const bucket of sortedBuckets) {
+              const usageInfo = codexUsageInfo.get(bucket)!;
+
+              const parsed = CodexUsageInfoSchema.safeParse(usageInfo);
+              if (!parsed.success) {
+                logger.warn(
+                  `Invalid Codex usage info for bucket ${bucket}:`,
+                  parsed.error,
+                );
+                continue;
+              }
+
+              const lines = formatCodexUsage(parsed.data);
+
+              if (lines.length > 0) {
+                if (codexUsageInfo.size > 1) {
+                  codexLines.push(`### Bucket: ${bucket}\n`);
+                }
+                codexLines.push(...lines);
+                codexLines.push('');
+              }
+            }
+
+            // Remove trailing empty line
+            if (codexLines[codexLines.length - 1] === '') {
+              codexLines.pop();
+            }
+
+            if (codexLines.length > 0) {
+              if (output.length > 0) {
+                output.push('');
+              }
+              output.push('## Codex Quota Information\n');
+              output.push(...codexLines);
+            }
           }
 
-          if (output.length === 1) {
-            // Only header, no actual quota data
+          if (output.length === 0) {
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: 'No quota information available from the usage endpoint.',
+                text: 'No quota information available from the usage endpoints.',
               },
               Date.now(),
             );

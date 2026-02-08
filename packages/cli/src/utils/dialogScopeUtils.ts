@@ -40,6 +40,17 @@ export function getScopeItems() {
 }
 
 /**
+ * Scopes that have persistent storage and can be queried via forScope().
+ * Session scope is ephemeral and not included.
+ */
+const PERSISTENT_SCOPES = [
+  SettingScope.User,
+  SettingScope.Workspace,
+  SettingScope.System,
+  SettingScope.SystemDefaults,
+] as const;
+
+/**
  * Generate scope message for a specific setting
  */
 export function getScopeMessageForSetting(
@@ -47,7 +58,8 @@ export function getScopeMessageForSetting(
   selectedScope: SettingScope,
   settings: LoadedSettings,
 ): string {
-  const otherScopes = Object.values(SettingScope).filter(
+  // Only check persistent scopes, not Session (which is ephemeral)
+  const otherScopes = PERSISTENT_SCOPES.filter(
     (scope) => scope !== selectedScope,
   );
 

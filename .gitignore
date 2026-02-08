@@ -80,6 +80,7 @@ test-*.sh
 debug-*.js
 temp-*
 tmp-*
+packages/core/.llxprt/debug/*.jsonl
 
 # GHA credentials
 gha-creds-*.json

@@ -277,6 +277,26 @@ export const SETTINGS_SCHEMA = {
       'Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty. Falls back to child_process when disabled.',
     showInDialog: true,
   },
+  allowPtyThemeOverride: {
+    type: 'boolean',
+    label: 'Allow PTY to Override Theme',
+    category: 'Shell',
+    requiresRestart: true,
+    default: false,
+    description:
+      'Allow ANSI colors from PTY output to override the UI theme. When disabled, PTY output uses the current theme colors.',
+    showInDialog: true,
+  },
+  ptyScrollbackLimit: {
+    type: 'number',
+    label: 'PTY Scrollback Limit',
+    category: 'Shell',
+    requiresRestart: true,
+    default: 600000,
+    description:
+      'Maximum number of lines to keep in the PTY scrollback buffer for interactive shell output.',
+    showInDialog: true,
+  },
 
   useExternalAuth: {
     type: 'boolean',

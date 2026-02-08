@@ -1814,6 +1814,77 @@ export class OAuthManager {
     return result;
   }
 
+  /**
+   * Get Codex usage information for all authenticated buckets
+   * Returns a map of bucket name to usage info for all buckets that have valid OAuth tokens with account_id
+   */
+  async getAllCodexUsageInfo(): Promise<Map<string, Record<string, unknown>>> {
+    const result = new Map<string, Record<string, unknown>>();
+
+    // Get all buckets for codex
+    const buckets = await this.tokenStore.listBuckets('codex');
+
+    // If no buckets, try 'default'
+    const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
+
+    // Import once before the loop
+    const { fetchCodexUsage } = await import('@vybestack/llxprt-code-core');
+
+    for (const bucket of bucketsToCheck) {
+      // Check if this bucket has a valid OAuth token
+      const token = await this.tokenStore.getToken('codex', bucket);
+      if (!token) {
+        continue;
+      }
+
+      // Check if token is expired
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      if (token.expiry <= nowInSeconds) {
+        continue;
+      }
+
+      // Extract account_id from token (Codex tokens have this field)
+      // Use runtime property access without narrowing type assertion
+      const tokenObj = token as Record<string, unknown>;
+      const accountId =
+        typeof tokenObj['account_id'] === 'string'
+          ? tokenObj['account_id']
+          : undefined;
+      if (!accountId) {
+        logger.debug(
+          `Codex token for bucket ${bucket} does not have account_id, skipping`,
+        );
+        continue;
+      }
+
+      // Fetch usage info for this bucket
+      try {
+        const config = this.getConfig?.();
+        const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
+        const codexBaseUrl =
+          typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
+            ? runtimeBaseUrl
+            : undefined;
+
+        const usageInfo = await fetchCodexUsage(
+          token.access_token,
+          accountId,
+          codexBaseUrl,
+        );
+        if (usageInfo) {
+          result.set(bucket, usageInfo);
+        }
+      } catch (error) {
+        logger.debug(
+          `Error fetching Codex usage info for bucket ${bucket}:`,
+          error,
+        );
+      }
+    }
+
+    return result;
+  }
+
   private async getProfileBuckets(providerName: string): Promise<string[]> {
     try {
       // Try to get profile from runtime settings
