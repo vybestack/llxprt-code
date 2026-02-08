@@ -296,7 +296,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         buildCallOptions(messages, {
           settingsOverrides: {
             global: {
-              model: 'claude-opus-4-6-20250129',
+              model: 'claude-opus-4-6',
             },
           },
         }),
@@ -330,7 +330,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         buildCallOptions(messages, {
           settingsOverrides: {
             global: {
-              model: 'claude-opus-4-6-20250129',
+              model: 'claude-opus-4-6',
             },
           },
         }),
@@ -364,7 +364,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         buildCallOptions(messages, {
           settingsOverrides: {
             global: {
-              model: 'claude-opus-4-6-20250129',
+              model: 'claude-opus-4-6',
             },
           },
         }),
@@ -398,7 +398,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         buildCallOptions(messages, {
           settingsOverrides: {
             global: {
-              model: 'claude-opus-4-6-20250129',
+              model: 'claude-opus-4-6',
             },
           },
         }),
@@ -433,7 +433,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         buildCallOptions(messages, {
           settingsOverrides: {
             global: {
-              model: 'claude-opus-4-6-20250129',
+              model: 'claude-opus-4-6',
             },
           },
         }),
@@ -529,7 +529,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
         buildCallOptions(messages, {
           settingsOverrides: {
             global: {
-              model: 'claude-opus-4-6-20250129',
+              model: 'claude-opus-4-6',
             },
           },
         }),

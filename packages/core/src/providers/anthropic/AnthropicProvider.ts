@@ -311,14 +311,6 @@ export class AnthropicProvider extends BaseProvider {
       );
       return [
         {
-          id: 'claude-opus-4-6-20250129',
-          name: 'Claude Opus 4.6',
-          provider: this.name,
-          supportedToolFormats: ['anthropic'],
-          contextWindow: 200000,
-          maxOutputTokens: 128000,
-        },
-        {
           id: 'claude-opus-4-6',
           name: 'Claude Opus 4.6',
           provider: this.name,
@@ -477,14 +469,6 @@ export class AnthropicProvider extends BaseProvider {
    */
   private getDefaultModels(): IModel[] {
     return [
-      {
-        id: 'claude-opus-4-6-20250129',
-        name: 'Claude Opus 4.6',
-        provider: this.name,
-        supportedToolFormats: ['anthropic'],
-        contextWindow: 200000,
-        maxOutputTokens: 128000,
-      },
       {
         id: 'claude-opus-4-6',
         name: 'Claude Opus 4.6',

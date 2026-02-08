@@ -198,6 +198,7 @@ export interface AgentRuntimeContext {
       stripFromContext(): 'all' | 'allButLast' | 'none';
       effort(): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined;
       maxTokens(): number | undefined;
+      adaptiveThinking(): boolean | undefined;
     };
   };
 
