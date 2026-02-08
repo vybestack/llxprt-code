@@ -295,10 +295,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
   override getDefaultModel(): string {
     // @plan PLAN-20251213-ISSUE160.P04
-    // Return gpt-5.2 as default when in Codex mode
+    // Return gpt-5.3-codex as default when in Codex mode (issue #1308)
     const baseURL = this.getBaseURL();
     if (this.isCodexMode(baseURL)) {
-      return 'gpt-5.2';
+      return 'gpt-5.3-codex';
     }
     // Return the default model for responses API
     return 'o3-mini';
