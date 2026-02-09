@@ -633,4 +633,3 @@ export class ModelNotFoundError extends Error {
     this.code = code ?? 404;
   }
 }
-

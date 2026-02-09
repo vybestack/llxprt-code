@@ -16,9 +16,10 @@ describe('classifyGoogleError 404 handling', () => {
     expect((result as ModelNotFoundError).message).toBe('model not found');
   });
 
-  it('returns ModelNotFoundError for error with httpStatus 404', () => {
+  it('returns ModelNotFoundError for error with response.status 404', () => {
+    // Test error with nested response.status (axios-style error)
     const error = Object.assign(new Error('not found'), {
-      httpStatus: 404,
+      response: { status: 404 },
     });
     const result = classifyGoogleError(error);
     expect(result).toBeInstanceOf(ModelNotFoundError);

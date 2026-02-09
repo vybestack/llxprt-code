@@ -10,7 +10,6 @@ export const DEFAULT_GEMINI_FLASH_LITE_MODEL = 'gemini-2.5-flash-lite';
 
 export const DEFAULT_GEMINI_EMBEDDING_MODEL = 'gemini-embedding-001';
 
-
 // Alias constants (user-facing short names)
 export const GEMINI_MODEL_ALIAS_PRO = 'gemini-pro';
 export const GEMINI_MODEL_ALIAS_FLASH = 'gemini-flash';

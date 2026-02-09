@@ -23,9 +23,7 @@ export interface IdeInfo {
 }
 
 export function isCloudShell(): boolean {
-  return !!(
-    process.env['EDITOR_IN_CLOUD_SHELL'] || process.env['CLOUD_SHELL']
-  );
+  return !!(process.env['EDITOR_IN_CLOUD_SHELL'] || process.env['CLOUD_SHELL']);
 }
 
 export function detectIdeFromEnv(): IdeInfo {
