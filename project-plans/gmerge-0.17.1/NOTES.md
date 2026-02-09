@@ -4,15 +4,49 @@ Notes appended after each batch during execution.
 
 ---
 
-## Batch 1 — PICK (5 commits)
+## Batch 1
 
-**Commits landed:**
-- `555e25e63` — SKIPPED (ModelMessage.tsx doesn't exist in LLxprt)
-- `d683e1c0d` — LANDED as `e288fe9e4` (exit on trust save fail)
-- `472e775a1` — NOT LANDED — 10+ conflict files, too divergent for PICK. Reclassified as REIMPLEMENT (new Batch 10).
-- `9786c4dcf` — NOT LANDED — depends on 472e775a1 changes, same divergence. Reclassified as REIMPLEMENT (new Batch 11).
-- `78a28bfc0` — LANDED as `f412ee16c` (NO_COLOR scrollbar fix, conflicts resolved by keeping LLxprt UI components)
+- `555e25e63` (model message formatting) SKIPPED — `ModelMessage.tsx` does not exist in LLxprt.
+- `d683e1c0d` (exit on trust save fail) picked cleanly as `e288fe9e4`.
+- `472e775a1` (/permissions modify trust) — massive conflicts across 10+ files. Reclassified to REIMPLEMENT (deferred, not completed in this sync).
+- `9786c4dcf` (folder trust /add) — depends on 472e775a1, also deferred.
+- `78a28bfc0` (NO_COLOR scrollbar) — conflict on Footer.tsx, Header.tsx, StatsDisplay.tsx, ThemedGradient.tsx. Resolved by keeping LLxprt versions; only color-utils.ts and useAnimatedScrollbar.ts changes applied.
+- Post-pick fix: GradientRegression.test.tsx had upstream types (FooterProps, nightly, sessionStats) that don't exist in LLxprt — adapted to use `updateHistoryTokenCount` and `historyTokenCount`. useFolderTrust.ts missing `addItem` in useCallback deps — fixed.
 
-**Fix commit:** `cbf986497` — adapted GradientRegression.test.tsx types for LLxprt (FooterProps, SessionStatsState, tokenTracking), fixed useFolderTrust.ts useCallback missing dep.
+## Batch 2
 
-**Deviation:** 2 of 5 commits reclassified from PICK to REIMPLEMENT due to massive conflict count. Added as Batch 10 and 11.
+- `8c78fe4f1` (MCP rework) picked with conflict resolution. All DebugLogger calls preserved. mcpToTool() import removed. McpCallableTool class added. Full verify passed.
+
+## Batch 3
+
+- `cc0eadffe` (setupGithubCommand) SKIPPED — command is intentionally disabled/stubbed in LLxprt. Cherry-pick produced 5 conflict markers across 166+ lines. Per PLAN.md: "only port bugfixes that apply to shared helper logic. Do NOT re-enable the command."
+
+## Batch 4
+
+- All 7 extractions from `86828bb56` (Gemini 3 launch) implemented and verified.
+- editorSettingsManager.ts needed antigravity entry in EDITOR_DISPLAY_NAMES (Record<EditorType, string>) — caught during build.
+
+## Batch 5
+
+- Multi-extension uninstall implemented cleanly. Tests cover single, multiple, dedup, partial failure, all-pass.
+
+## Batch 6
+
+- Terminal mode cleanup: added exit handler for bracketed paste + focus tracking. Mouse mock added to gemini.test.tsx. gemini.test.tsx enabled in vitest config.
+
+## Batch 7
+
+- Right-click paste: clipboardy dependency added. PASTE_CLIPBOARD_IMAGE renamed to PASTE_CLIPBOARD. Image-first / text-fallback pattern. useMouse hook wired up.
+
+## Batch 8
+
+- Profile name change: HistoryItemProfileChange type added. showProfileChangeInChat setting (default true). useGeminiStream tracks activeProfileName via ref. First turn initializes without emitting. Guards null/empty.
+
+## Batch 9
+
+- 4 new extension test files (disable, enable, link, list). install.test.ts refactored to use it.each.
+
+## Deferred Items
+
+- 472e775a1 (/permissions modify trust for other dirs) — needs REIMPLEMENT playbook
+- 9786c4dcf (check folder trust before allowing /add directory) — needs REIMPLEMENT playbook, depends on 472e775a1
