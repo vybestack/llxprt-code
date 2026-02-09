@@ -180,7 +180,9 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         <ChatList chats={itemForDisplay.chats} />
       )}
       {itemForDisplay.type === 'profile_change' && (
-        <InfoMessage text={`Switched to profile: ${itemForDisplay.profileName}`} />
+        <InfoMessage
+          text={`Switched to profile: ${itemForDisplay.profileName}`}
+        />
       )}
     </Box>
   );

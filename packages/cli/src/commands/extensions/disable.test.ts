@@ -41,26 +41,23 @@ describe('extensions disable command', () => {
       .command(disableCommand)
       .fail(false)
       .locale('en');
-    expect(() => validationParser.parse('disable --scope invalid test-ext')).toThrow(
-      /Invalid scope: invalid/,
-    );
+    expect(() =>
+      validationParser.parse('disable --scope invalid test-ext'),
+    ).toThrow(/Invalid scope: invalid/);
   });
 
   it.each([
     { scope: 'user', expectedScope: SettingScope.User },
     { scope: 'workspace', expectedScope: SettingScope.Workspace },
-  ])(
-    'should accept valid scope value: $scope',
-    ({ scope }) => {
-      const validationParser = yargs([])
-        .command(disableCommand)
-        .fail(false)
-        .locale('en');
-      expect(() =>
-        validationParser.parse(`disable --scope ${scope} test-ext`),
-      ).not.toThrow();
-    },
-  );
+  ])('should accept valid scope value: $scope', ({ scope }) => {
+    const validationParser = yargs([])
+      .command(disableCommand)
+      .fail(false)
+      .locale('en');
+    expect(() =>
+      validationParser.parse(`disable --scope ${scope} test-ext`),
+    ).not.toThrow();
+  });
 });
 
 describe('handleDisable', () => {

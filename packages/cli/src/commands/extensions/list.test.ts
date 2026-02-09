@@ -18,9 +18,8 @@ import { handleList } from './list.js';
 import type * as extensionModule from '../../config/extension.js';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 
-const mockLoadUserExtensions: Mock<
-  typeof extensionModule.loadUserExtensions
-> = vi.hoisted(() => vi.fn());
+const mockLoadUserExtensions: Mock<typeof extensionModule.loadUserExtensions> =
+  vi.hoisted(() => vi.fn());
 const mockToOutputString: Mock<typeof extensionModule.toOutputString> =
   vi.hoisted(() => vi.fn());
 

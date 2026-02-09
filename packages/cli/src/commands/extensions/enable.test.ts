@@ -41,26 +41,23 @@ describe('extensions enable command', () => {
       .command(enableCommand)
       .fail(false)
       .locale('en');
-    expect(() => validationParser.parse('enable --scope invalid test-ext')).toThrow(
-      /Invalid scope: invalid/,
-    );
+    expect(() =>
+      validationParser.parse('enable --scope invalid test-ext'),
+    ).toThrow(/Invalid scope: invalid/);
   });
 
   it.each([
     { scope: 'user', expectedScope: SettingScope.User },
     { scope: 'workspace', expectedScope: SettingScope.Workspace },
-  ])(
-    'should accept valid scope value: $scope',
-    ({ scope }) => {
-      const validationParser = yargs([])
-        .command(enableCommand)
-        .fail(false)
-        .locale('en');
-      expect(() =>
-        validationParser.parse(`enable --scope ${scope} test-ext`),
-      ).not.toThrow();
-    },
-  );
+  ])('should accept valid scope value: $scope', ({ scope }) => {
+    const validationParser = yargs([])
+      .command(enableCommand)
+      .fail(false)
+      .locale('en');
+    expect(() =>
+      validationParser.parse(`enable --scope ${scope} test-ext`),
+    ).not.toThrow();
+  });
 });
 
 describe('handleEnable', () => {
