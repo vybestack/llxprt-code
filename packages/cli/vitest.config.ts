@@ -66,7 +66,6 @@ const baseExcludePatterns = [
   '**/ui/hooks/useGeminiStream.integration.test.ts',
   '**/ui/hooks/useKeypress.test.ts',
   '**/ui/hooks/usePermissionsModifyTrust.test.ts',
-  '**/ui/hooks/**/*.spec.ts',
   // Block the command test that still imports the legacy runtime helpers
   '**/ui/commands/toolformatCommand.test.ts',
 ];
@@ -106,6 +105,8 @@ export default defineConfig({
       'src/ui/components/messages/OAuthUrlMessage.test.tsx',
       // Include useSlashCompletion extension filtering tests for fa93b56243 reimplementation
       'src/ui/hooks/useSlashCompletion.extensions.test.tsx',
+      // Include useTodoContinuation test for issue #1277
+      'src/ui/hooks/useTodoContinuation.spec.ts',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',
