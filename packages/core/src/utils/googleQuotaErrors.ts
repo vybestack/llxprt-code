@@ -11,6 +11,7 @@ import type {
   RetryInfo,
 } from './googleErrors.js';
 import { parseGoogleApiError } from './googleErrors.js';
+import { getErrorStatus, ModelNotFoundError } from './retry.js';
 
 /**
  * A non-retryable error indicating a hard quota limit has been reached (e.g., daily limit).
@@ -76,6 +77,12 @@ function parseDurationInSeconds(duration: string): number | null {
  * @returns A `TerminalQuotaError`, `RetryableQuotaError`, or the original `unknown` error.
  */
 export function classifyGoogleError(error: unknown): unknown {
+  const status = getErrorStatus(error);
+  if (status === 404) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new ModelNotFoundError(message);
+  }
+
   const googleApiError = parseGoogleApiError(error);
 
   if (!googleApiError || googleApiError.code !== 429) {

@@ -132,6 +132,7 @@ export * from './ide/ide-installer.js';
 export {
   IDE_DEFINITIONS,
   detectIdeFromEnv,
+  isCloudShell,
   type IdeInfo,
 } from './ide/detect-ide.js';
 export * from './ide/constants.js';

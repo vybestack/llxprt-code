@@ -1514,6 +1514,15 @@ export const SETTINGS_SCHEMA = {
       'Enable AI-powered prompt completion suggestions while typing.',
     showInDialog: true,
   },
+  previewFeatures: {
+    type: 'boolean',
+    label: 'Preview Features',
+    category: 'General',
+    requiresRestart: true,
+    default: false,
+    description: 'Enable preview features such as preview models.',
+    showInDialog: true,
+  },
   enableFuzzyFiltering: {
     type: 'boolean',
     label: 'Enable Fuzzy Filtering',
