@@ -48,11 +48,15 @@ describe('read_many_files', () => {
     ).toBeTruthy();
 
     // Validate model output - will throw if no output
-    validateModelOutput(
+    const validOutput = validateModelOutput(
       result,
       ['file 1 content', 'file 2 content'],
       'Read many files test',
     );
+    expect(
+      validOutput,
+      'Expected model output to contain file contents',
+    ).toBeTruthy();
     await rig.cleanup();
   });
 });
