@@ -706,6 +706,42 @@ export class OAuthManager {
           );
           return diskToken.access_token;
         }
+
+        // @fix issue1317: Expired disk token with refresh_token — attempt refresh
+        // before falling through to full OAuth re-authentication
+        if (
+          diskToken &&
+          typeof diskToken.refresh_token === 'string' &&
+          diskToken.refresh_token !== ''
+        ) {
+          const provider = this.providers.get(providerName);
+          if (provider) {
+            try {
+              const refreshedToken = await provider.refreshToken(diskToken);
+              if (refreshedToken) {
+                const mergedToken = mergeRefreshedToken(
+                  diskToken as OAuthTokenWithExtras,
+                  refreshedToken as OAuthTokenWithExtras,
+                );
+                await this.tokenStore.saveToken(
+                  providerName,
+                  mergedToken,
+                  bucketToCheck,
+                );
+                logger.debug(
+                  () =>
+                    `[issue1317] Refreshed expired disk token for ${providerName}, skipping OAuth`,
+                );
+                return mergedToken.access_token;
+              }
+            } catch (refreshError) {
+              logger.debug(
+                () =>
+                  `[issue1317] Disk token refresh failed for ${providerName}: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
+              );
+            }
+          }
+        }
       } finally {
         await this.tokenStore.releaseRefreshLock(providerName, bucketToCheck);
       }
@@ -727,7 +763,7 @@ export class OAuthManager {
       }
     }
 
-    // No valid token on disk, proceed with OAuth flow
+    // No valid token on disk (or refresh failed), proceed with OAuth flow
     try {
       const buckets = await this.getProfileBuckets(providerName);
 
