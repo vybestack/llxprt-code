@@ -407,7 +407,7 @@ describe('ToolKeyStorage', () => {
      * @plan PLAN-20260206-TOOLKEY.P04
      * @requirement REQ-003.7
      */
-    it('handles multiple tools in keyfiles.json independently', async () => {
+    it('overwrites keyfile path for same tool on repeated setKeyfilePath', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
         keytarLoader: async () => null,
@@ -637,6 +637,65 @@ describe('ToolKeyStorage', () => {
 
       const result = await storage.hasKey('exa');
       expect(result).toBe(false);
+    });
+  });
+
+  // ─── Invalid Tool Name Validation Tests ─────────────────────────────────
+
+  describe('invalid tool name validation', () => {
+    it('rejects path-traversal tool name in saveKey', async () => {
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keytarLoader: async () => null,
+      });
+
+      await expect(storage.saveKey('../etc/passwd', 'sk-bad')).rejects.toThrow(
+        /Invalid tool key name/,
+      );
+    });
+
+    it('rejects unregistered tool name in getKey', async () => {
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keytarLoader: async () => null,
+      });
+
+      await expect(storage.getKey('not-a-tool')).rejects.toThrow(
+        /Invalid tool key name/,
+      );
+    });
+
+    it('rejects invalid tool name in setKeyfilePath', async () => {
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keytarLoader: async () => null,
+      });
+
+      await expect(
+        storage.setKeyfilePath('../traversal', '/some/path'),
+      ).rejects.toThrow(/Invalid tool key name/);
+    });
+
+    it('rejects invalid tool name in getKeyfilePath', async () => {
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keytarLoader: async () => null,
+      });
+
+      await expect(storage.getKeyfilePath('../../etc/shadow')).rejects.toThrow(
+        /Invalid tool key name/,
+      );
+    });
+
+    it('rejects invalid tool name in resolveKey', async () => {
+      const storage = new ToolKeyStorage({
+        toolsDir: tempDir,
+        keytarLoader: async () => null,
+      });
+
+      await expect(storage.resolveKey('unknown')).rejects.toThrow(
+        /Invalid tool key name/,
+      );
     });
   });
 });

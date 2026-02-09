@@ -118,10 +118,10 @@ describe('ExaWebSearchTool', () => {
       // This follows the same pattern as the existing node-fetch mock in this file.
       // This is NOT mock theater — the behavioral output under test is the fetch URL.
       resolveKeyMock = vi.fn().mockResolvedValue(null);
+      const mockInstance = { resolveKey: resolveKeyMock };
       vi.doMock('./tool-key-storage.js', () => ({
-        ToolKeyStorage: vi.fn().mockImplementation(() => ({
-          resolveKey: resolveKeyMock,
-        })),
+        ToolKeyStorage: vi.fn().mockImplementation(() => mockInstance),
+        getToolKeyStorage: vi.fn().mockReturnValue(mockInstance),
       }));
 
       // Re-import to pick up the mock

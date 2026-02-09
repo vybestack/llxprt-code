@@ -109,6 +109,21 @@ export function maskKeyForDisplay(key: string): string {
   return `${first2}${middle}${last2}`;
 }
 
+// ─── Module-level Lazy Singleton ─────────────────────────────────────────────
+
+let _defaultInstance: ToolKeyStorage | null = null;
+
+/**
+ * Returns a lazily-created module-level ToolKeyStorage instance.
+ * Avoids constructing a new instance on every tool invocation.
+ */
+export function getToolKeyStorage(): ToolKeyStorage {
+  if (_defaultInstance === null) {
+    _defaultInstance = new ToolKeyStorage();
+  }
+  return _defaultInstance;
+}
+
 // ─── Storage Interfaces ──────────────────────────────────────────────────────
 // @pseudocode lines 027a-027j
 
@@ -158,6 +173,14 @@ export class ToolKeyStorage {
     this.keyfilesJsonPath = path.join(this.toolsDir, KEYFILES_JSON_NAME);
     this.keytarLoaderFn = options?.keytarLoader ?? defaultKeytarLoader;
     this.encryptionKey = this.deriveEncryptionKey();
+  }
+
+  private assertValidToolName(toolName: string): void {
+    if (!isValidToolKeyName(toolName)) {
+      throw new Error(
+        `Invalid tool key name: ${JSON.stringify(toolName)}. Supported names: ${getSupportedToolNames().join(', ')}`,
+      );
+    }
   }
 
   // ─── Keychain Adapter ───────────────────────────────────────────────────
@@ -312,6 +335,7 @@ export class ToolKeyStorage {
 
   // @pseudocode lines 135-137
   private getEncryptedFilePath(toolName: string): string {
+    this.assertValidToolName(toolName);
     return path.join(this.toolsDir, `${toolName}.key`);
   }
 
@@ -382,6 +406,7 @@ export class ToolKeyStorage {
 
   // @pseudocode lines 184-188
   async setKeyfilePath(toolName: string, filePath: string): Promise<void> {
+    this.assertValidToolName(toolName);
     const map = await this.loadKeyfilesMap();
     map[toolName] = filePath;
     await this.saveKeyfilesMap(map);
@@ -389,12 +414,14 @@ export class ToolKeyStorage {
 
   // @pseudocode lines 190-193
   async getKeyfilePath(toolName: string): Promise<string | null> {
+    this.assertValidToolName(toolName);
     const map = await this.loadKeyfilesMap();
     return map[toolName] ?? null;
   }
 
   // @pseudocode lines 195-199
   async clearKeyfilePath(toolName: string): Promise<void> {
+    this.assertValidToolName(toolName);
     const map = await this.loadKeyfilesMap();
     delete map[toolName];
     await this.saveKeyfilesMap(map);
@@ -423,6 +450,7 @@ export class ToolKeyStorage {
 
   // @pseudocode lines 217-225
   async saveKey(toolName: string, key: string): Promise<void> {
+    this.assertValidToolName(toolName);
     const savedToKeychain = await this.saveToKeychain(toolName, key);
     if (savedToKeychain) {
       try {
@@ -437,6 +465,7 @@ export class ToolKeyStorage {
 
   // @pseudocode lines 227-231
   async getKey(toolName: string): Promise<string | null> {
+    this.assertValidToolName(toolName);
     const key = await this.getFromKeychain(toolName);
     if (key !== null) return key;
     return await this.getFromFile(toolName);
@@ -444,18 +473,21 @@ export class ToolKeyStorage {
 
   // @pseudocode lines 233-236
   async deleteKey(toolName: string): Promise<void> {
+    this.assertValidToolName(toolName);
     await this.deleteFromKeychain(toolName);
     await this.deleteFile(toolName);
   }
 
   // @pseudocode lines 238-241
   async hasKey(toolName: string): Promise<boolean> {
+    this.assertValidToolName(toolName);
     const key = await this.getKey(toolName);
     return key !== null;
   }
 
   // @pseudocode lines 243-256
   async resolveKey(toolName: string): Promise<string | null> {
+    this.assertValidToolName(toolName);
     // Step 1: Try stored key (keychain or encrypted file)
     const storedKey = await this.getKey(toolName);
     if (storedKey !== null) return storedKey;

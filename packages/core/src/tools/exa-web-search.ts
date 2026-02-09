@@ -133,8 +133,8 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
    */
   private async buildEndpointUrl(): Promise<string> {
     const baseUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`;
-    const { ToolKeyStorage } = await import('./tool-key-storage.js');
-    const storage = new ToolKeyStorage();
+    const { getToolKeyStorage } = await import('./tool-key-storage.js');
+    const storage = getToolKeyStorage();
     const key = await storage.resolveKey('exa');
     if (key !== null) {
       return `${baseUrl}?exaApiKey=${encodeURIComponent(key)}`;
