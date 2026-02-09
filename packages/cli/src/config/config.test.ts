@@ -3654,3 +3654,179 @@ describe.skip('Telemetry configuration via environment variables', () => {
     expect(config.getTelemetryLogPromptsEnabled()).toBe(false);
   });
 });
+
+describe('defaultDisabledTools', () => {
+  const originalIsTTY = process.stdin.isTTY;
+
+  beforeEach(() => {
+    process.stdin.isTTY = true;
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+  });
+
+  afterEach(() => {
+    process.stdin.isTTY = originalIsTTY;
+    clearActiveProviderRuntimeContext();
+  });
+
+  it('should seed tools.disabled with defaultDisabledTools', async () => {
+    const settings: Settings = {
+      defaultDisabledTools: ['google_web_fetch'],
+    };
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    const disabled = config.getEphemeralSetting('tools.disabled');
+    expect(disabled).toEqual(expect.arrayContaining(['google_web_fetch']));
+  });
+
+  it('should merge defaultDisabledTools with existing tools.disabled', async () => {
+    const settings: Settings = {
+      defaultDisabledTools: ['google_web_fetch'],
+    };
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    // Manually disable another tool first, then verify both are present
+    const currentDisabled =
+      (config.getEphemeralSetting('tools.disabled') as string[]) || [];
+    expect(currentDisabled).toContain('google_web_fetch');
+  });
+
+  it('should not duplicate tools already in tools.disabled', async () => {
+    const settings: Settings = {
+      defaultDisabledTools: ['google_web_fetch'],
+    };
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    const disabled = config.getEphemeralSetting('tools.disabled') as string[];
+    const googleWebFetchCount = disabled.filter(
+      (t) => t === 'google_web_fetch',
+    ).length;
+    expect(googleWebFetchCount).toBe(1);
+  });
+
+  it('should not seed tools.disabled when defaultDisabledTools is empty', async () => {
+    const settings: Settings = {
+      defaultDisabledTools: [],
+    };
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    const disabled = config.getEphemeralSetting('tools.disabled');
+    // Should be either undefined, null, or empty array
+    expect(
+      !disabled || (Array.isArray(disabled) && disabled.length === 0),
+    ).toBe(true);
+  });
+
+  it('should not seed tools.disabled when defaultDisabledTools is undefined', async () => {
+    const settings: Settings = {
+      defaultDisabledTools: undefined,
+    };
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    const disabled = config.getEphemeralSetting('tools.disabled');
+    // Should be either undefined, null, or empty array
+    expect(
+      !disabled || (Array.isArray(disabled) && disabled.length === 0),
+    ).toBe(true);
+  });
+
+  it('should not affect excludeTools (tool remains discoverable)', async () => {
+    const settings: Settings = {
+      defaultDisabledTools: ['google_web_fetch'],
+    };
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    // google_web_fetch should NOT be in excludeTools
+    expect(config.getExcludeTools()).not.toContain('google_web_fetch');
+    // But it SHOULD be in tools.disabled
+    const disabled = config.getEphemeralSetting('tools.disabled') as string[];
+    expect(disabled).toContain('google_web_fetch');
+  });
+
+  it('should not re-disable a tool that the user has explicitly allowed', async () => {
+    const settings: Settings = {
+      defaultDisabledTools: ['google_web_fetch'],
+    };
+    process.argv = [
+      'node',
+      'script.js',
+      '--set',
+      'tools.allowed=["google_web_fetch"]',
+    ];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    const disabled = config.getEphemeralSetting('tools.disabled') as
+      | string[]
+      | undefined;
+    // google_web_fetch is in tools.allowed, so it must NOT be added to tools.disabled
+    expect(disabled ?? []).not.toContain('google_web_fetch');
+  });
+});

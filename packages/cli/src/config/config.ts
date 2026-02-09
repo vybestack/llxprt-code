@@ -1745,6 +1745,32 @@ export async function loadCliConfig(
     configWithProfile._profileModelParams = profileModelParams;
   }
 
+  // Seed tools.disabled with defaultDisabledTools from settings.
+  // These tools are registered (discoverable) but soft-blocked by default.
+  // Users can override via /tools enable, which persists to their profile.
+  // Tools explicitly in tools.allowed (e.g. from a saved profile) are not re-disabled.
+  const defaultDisabled = effectiveSettings.defaultDisabledTools;
+  if (Array.isArray(defaultDisabled) && defaultDisabled.length > 0) {
+    const currentDisabled = Array.isArray(
+      enhancedConfig.getEphemeralSetting('tools.disabled'),
+    )
+      ? (enhancedConfig.getEphemeralSetting('tools.disabled') as string[])
+      : [];
+    const currentAllowed = new Set(
+      Array.isArray(enhancedConfig.getEphemeralSetting('tools.allowed'))
+        ? (enhancedConfig.getEphemeralSetting('tools.allowed') as string[])
+        : [],
+    );
+    const disabledSet = new Set(currentDisabled);
+    for (const toolName of defaultDisabled) {
+      if (!currentAllowed.has(toolName)) {
+        disabledSet.add(toolName);
+      }
+    }
+    const mergedDisabled = Array.from(disabledSet);
+    enhancedConfig.setEphemeralSetting('tools.disabled', mergedDisabled);
+  }
+
   return enhancedConfig;
 }
 

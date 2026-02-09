@@ -27,6 +27,7 @@ describe('SettingsSchema', () => {
         'sandbox',
         'coreTools',
         'excludeTools',
+        'defaultDisabledTools',
         'toolDiscoveryCommand',
         'toolCallCommand',
         'mcpServerCommand',
@@ -262,6 +263,17 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.folderTrustFeature.category).toBe('General');
       expect(SETTINGS_SCHEMA.folderTrustFeature.default).toBe(false);
       expect(SETTINGS_SCHEMA.folderTrustFeature.showInDialog).toBe(true);
+    });
+
+    it('should have defaultDisabledTools setting in schema', () => {
+      expect(SETTINGS_SCHEMA.defaultDisabledTools).toBeDefined();
+      expect(SETTINGS_SCHEMA.defaultDisabledTools.type).toBe('array');
+      expect(SETTINGS_SCHEMA.defaultDisabledTools.category).toBe('Advanced');
+      expect(SETTINGS_SCHEMA.defaultDisabledTools.default).toEqual([
+        'google_web_fetch',
+      ]);
+      expect(SETTINGS_SCHEMA.defaultDisabledTools.showInDialog).toBe(false);
+      expect(SETTINGS_SCHEMA.defaultDisabledTools.requiresRestart).toBe(true);
     });
 
     it('should have debugKeystrokeLogging setting in schema', () => {
