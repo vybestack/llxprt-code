@@ -1578,6 +1578,7 @@ export const AppContainer = (props: AppContainerProps) => {
     stdout?.rows,
     registerTodoPause,
     handleExternalEditorOpen,
+    activeProfileName,
   );
 
   const pendingHistoryItems = useMemo(
