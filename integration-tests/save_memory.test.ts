@@ -5,12 +5,18 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { join } from 'node:path';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 
 describe('save_memory', () => {
   it('should be able to save to memory', async () => {
     const rig = new TestRig();
-    await rig.setup('should be able to save to memory');
+    await rig.setup('should be able to save to memory', {
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'save-memory.responses.jsonl',
+      ),
+    });
 
     const prompt = `remember that my favorite color is  blue.
 

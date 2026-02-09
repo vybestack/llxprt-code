@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_shell_list_1","name":"run_shell_command","parameters":{"command":"ls -1","description":"List files in current directory","directory":"{{CWD}}"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Yes — your file appears in the listing: test-file-abc123.txt"}],"metadata":{"usage":{"promptTokens":260,"completionTokens":20,"totalTokens":280}}}]}

@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { join } from 'node:path';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 import { getShellConfiguration } from '../packages/core/src/utils/shell-utils.js';
 
@@ -240,8 +241,13 @@ describe('run_shell_command', () => {
 
   it('should run a platform-specific file listing command', async () => {
     const rig = new TestRig();
-    await rig.setup('should run platform-specific file listing');
-    const fileName = `test-file-${Math.random().toString(36).substring(7)}.txt`;
+    await rig.setup('should run platform-specific file listing', {
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'run-shell-command.listing.responses.jsonl',
+      ),
+    });
+    const fileName = 'test-file-abc123.txt';
     rig.createFile(fileName, 'test content');
 
     const { command, tool } = getFileListingCommand();
