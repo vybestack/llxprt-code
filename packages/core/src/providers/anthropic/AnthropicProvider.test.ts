@@ -388,6 +388,48 @@ describe('AnthropicProvider', () => {
       expect(opus45Alias?.maxOutputTokens).toBe(32000);
     });
 
+    it('should include Claude Opus 4.6 model in OAuth model list', async () => {
+      const oauthProvider = new AnthropicProvider(
+        'sk-ant-oat-test-token',
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(oauthProvider, 'getAuthToken').mockResolvedValue(
+        'sk-ant-oat-test-token',
+      );
+
+      const models = await oauthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-opus-4-6');
+
+      const opus46 = models.find((m) => m.id === 'claude-opus-4-6');
+      expect(opus46).toBeDefined();
+      expect(opus46?.name).toBe('Claude Opus 4.6');
+      expect(opus46?.contextWindow).toBe(200000);
+      expect(opus46?.maxOutputTokens).toBe(128000);
+    });
+
+    it('should include Claude Opus 4.6 model in default list when auth is unavailable', async () => {
+      const noAuthProvider = new AnthropicProvider(
+        undefined,
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(noAuthProvider, 'getAuthToken').mockResolvedValue(undefined);
+
+      const models = await noAuthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-opus-4-6');
+
+      const opus46 = models.find((m) => m.id === 'claude-opus-4-6');
+      expect(opus46?.contextWindow).toBe(200000);
+      expect(opus46?.maxOutputTokens).toBe(128000);
+    });
+
     it('should return models with correct structure', async () => {
       const models = await provider.getModels();
 

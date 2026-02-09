@@ -311,6 +311,14 @@ export class AnthropicProvider extends BaseProvider {
       );
       return [
         {
+          id: 'claude-opus-4-6',
+          name: 'Claude Opus 4.6',
+          provider: this.name,
+          supportedToolFormats: ['anthropic'],
+          contextWindow: 200000,
+          maxOutputTokens: 128000,
+        },
+        {
           id: 'claude-opus-4-5-20251101',
           name: 'Claude Opus 4.5',
           provider: this.name,
@@ -462,6 +470,14 @@ export class AnthropicProvider extends BaseProvider {
   private getDefaultModels(): IModel[] {
     return [
       {
+        id: 'claude-opus-4-6',
+        name: 'Claude Opus 4.6',
+        provider: this.name,
+        supportedToolFormats: ['anthropic'],
+        contextWindow: 200000,
+        maxOutputTokens: 128000,
+      },
+      {
         id: 'claude-opus-4-5-20251101',
         name: 'Claude Opus 4.5',
         provider: this.name,
@@ -517,7 +533,11 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   private getMaxTokensForModel(modelId: string): number {
-    // Handle latest aliases explicitly
+    // Handle Opus 4.6 first - it has 128K max output (different from other opus-4 models)
+    if (modelId.includes('claude-opus-4-6')) {
+      return 128000;
+    }
+    // Handle latest aliases and other opus-4 models explicitly
     if (
       modelId === 'claude-opus-4-latest' ||
       modelId.includes('claude-opus-4')
@@ -544,7 +564,11 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   private getContextWindowForModel(modelId: string): number {
-    // Claude 4 models have larger context windows
+    // Claude Opus 4.6 has 200K context (different from other opus-4 models)
+    if (modelId.includes('claude-opus-4-6')) {
+      return 200000;
+    }
+    // Other Claude 4 opus models have larger context windows
     if (modelId.includes('claude-opus-4')) {
       return 500000;
     }
@@ -1805,6 +1829,84 @@ ${block.code}
       }
     }
 
+    // Read adaptive thinking and effort settings from invocation model-behavior, fallback to settings
+    // @issue #1307: Anthropic Opus 4.6 adaptive thinking support
+    const adaptiveThinking =
+      (typeof options.invocation?.getModelBehavior === 'function'
+        ? options.invocation.getModelBehavior('reasoning.adaptiveThinking')
+        : undefined) ??
+      (options.settings.get('reasoning.adaptiveThinking') as
+        | boolean
+        | undefined);
+
+    const rawEffort =
+      (typeof options.invocation?.getModelBehavior === 'function'
+        ? options.invocation.getModelBehavior('reasoning.effort')
+        : undefined) ??
+      (options.settings.get('reasoning.effort') as
+        | 'minimal'
+        | 'low'
+        | 'medium'
+        | 'high'
+        | 'xhigh'
+        | 'max'
+        | undefined);
+
+    // Map effort levels: minimal→low, low→low, medium→medium, high→high, xhigh/max→max
+    // Only allow max for Opus 4.6+; downgrade xhigh/max to high for older models
+    const isOpus46Plus = currentModel.includes('claude-opus-4-6');
+    let mappedEffort: 'low' | 'medium' | 'high' | 'max' | undefined;
+    if (rawEffort) {
+      if (rawEffort === 'minimal' || rawEffort === 'low') {
+        mappedEffort = 'low';
+      } else if (rawEffort === 'medium') {
+        mappedEffort = 'medium';
+      } else if (rawEffort === 'high') {
+        mappedEffort = 'high';
+      } else if (rawEffort === 'xhigh' || rawEffort === 'max') {
+        mappedEffort = isOpus46Plus ? 'max' : 'high';
+      }
+    }
+
+    // Build thinking configuration per Anthropic API semantics
+    // @issue #1307: Correct adaptive thinking support for Opus 4.6
+    // Adaptive mode: thinking.type='adaptive' (no budget_tokens)
+    // Manual mode: thinking.type='enabled' with budget_tokens
+    // Effort: sent in output_config.effort (not under thinking)
+    let thinkingConfig: {
+      thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
+      output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
+    } = {};
+    if (shouldIncludeThinking) {
+      // For Opus 4.6+ with reasoning enabled, use adaptive thinking by default unless explicit budgetTokens
+      if (
+        isOpus46Plus &&
+        !reasoningBudgetTokens &&
+        adaptiveThinking !== false
+      ) {
+        // Adaptive thinking mode: type='adaptive', no budget_tokens
+        thinkingConfig = {
+          thinking: {
+            type: 'adaptive' as const,
+          },
+        };
+      } else {
+        // Manual mode with budget_tokens (for backwards compatibility or when budgetTokens is set)
+        thinkingConfig = {
+          thinking: {
+            type: 'enabled' as const,
+            budget_tokens:
+              (reasoningBudgetTokens as number | undefined) ?? 10000,
+          },
+        };
+      }
+
+      // Add effort to output_config if specified (not under thinking)
+      if (mappedEffort) {
+        thinkingConfig.output_config = { effort: mappedEffort };
+      }
+    }
+
     const requestBody = {
       model: currentModel,
       messages: anthropicMessages,
@@ -1815,15 +1917,7 @@ ${block.code}
       ...(anthropicTools && anthropicTools.length > 0
         ? { tools: anthropicTools }
         : {}),
-      ...(shouldIncludeThinking
-        ? {
-            thinking: {
-              type: 'enabled' as const,
-              budget_tokens:
-                (reasoningBudgetTokens as number | undefined) ?? 10000,
-            },
-          }
-        : {}),
+      ...thinkingConfig,
     };
 
     // Debug log the tools being sent to Anthropic

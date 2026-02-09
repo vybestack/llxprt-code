@@ -552,13 +552,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         result.current.handleStreamCompleted(false);
       }).not.toThrow();
 
-      // Should either skip malformed todos or handle them safely
-      expect(
-        mockGeminiClient.sendMessageStream.mock.calls.length,
-      ).toBeGreaterThan(0);
-      const callArgs = mockGeminiClient.sendMessageStream.mock.calls[0];
-      expect(callArgs[0]).toBeTypeOf('string');
-      expect(callArgs[1]).toEqual({ ephemeral: true });
+      // Should skip malformed todos (no message sent)
+      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
     });
 
     it('@requirement REQ-005.4 should prevent continuation loops', () => {
@@ -650,6 +645,114 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         expect.stringContaining('Active task'),
         { ephemeral: true },
       );
+    });
+  });
+
+  describe('Todo Pause Behavior', () => {
+    it('@requirement REQ-007.1 should NOT trigger continuation after handleTodoPause is called', () => {
+      mockTodoContext.todos = [createTodo('1', 'Active task', 'in_progress')];
+      mockConfig.getEphemeralSettings.mockReturnValue({
+        'todo-continuation': true,
+      });
+
+      const { result } = renderHook(() =>
+        useTodoContinuation(
+          mockGeminiClient as unknown as GeminiClient,
+          mockConfig as unknown as Config,
+          false,
+          mockOnDebugMessage,
+        ),
+      );
+
+      act(() => {
+        result.current.handleTodoPause('paused by model');
+      });
+
+      act(() => {
+        result.current.handleStreamCompleted(false);
+      });
+
+      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+    });
+
+    it('@requirement REQ-007.2 should persist pause state across multiple stream completions', () => {
+      mockTodoContext.todos = [createTodo('1', 'Active task', 'in_progress')];
+      mockConfig.getEphemeralSettings.mockReturnValue({
+        'todo-continuation': true,
+      });
+
+      const { result } = renderHook(() =>
+        useTodoContinuation(
+          mockGeminiClient as unknown as GeminiClient,
+          mockConfig as unknown as Config,
+          false,
+          mockOnDebugMessage,
+        ),
+      );
+
+      act(() => {
+        result.current.handleTodoPause('paused by model');
+      });
+
+      act(() => {
+        result.current.handleStreamCompleted(false);
+        result.current.handleStreamCompleted(false);
+        result.current.handleStreamCompleted(false);
+      });
+
+      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+    });
+
+    it('@requirement REQ-007.3 should resume continuation after clearPause is called', () => {
+      mockTodoContext.todos = [createTodo('1', 'Active task', 'in_progress')];
+      mockConfig.getEphemeralSettings.mockReturnValue({
+        'todo-continuation': true,
+      });
+
+      const { result } = renderHook(() =>
+        useTodoContinuation(
+          mockGeminiClient as unknown as GeminiClient,
+          mockConfig as unknown as Config,
+          false,
+          mockOnDebugMessage,
+        ),
+      );
+
+      act(() => {
+        result.current.handleTodoPause('paused by model');
+      });
+
+      act(() => {
+        result.current.handleStreamCompleted(false);
+      });
+
+      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+
+      act(() => {
+        result.current.clearPause();
+      });
+
+      act(() => {
+        result.current.handleStreamCompleted(false);
+      });
+
+      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+        expect.stringContaining('Active task'),
+        { ephemeral: true },
+      );
+    });
+
+    it('@requirement REQ-007.4 should expose clearPause function', () => {
+      const { result } = renderHook(() =>
+        useTodoContinuation(
+          mockGeminiClient as unknown as GeminiClient,
+          mockConfig as unknown as Config,
+          false,
+          mockOnDebugMessage,
+        ),
+      );
+
+      expect(result.current.clearPause).toBeTypeOf('function');
     });
   });
 });

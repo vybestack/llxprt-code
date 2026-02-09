@@ -42,6 +42,7 @@ export interface TodoContinuationHook {
     reason: string;
     message: string;
   };
+  clearPause: () => void;
 }
 
 /**
@@ -207,7 +208,6 @@ export const useTodoContinuation = (
       }
 
       const todoPaused = todoPausedRef.current;
-      todoPausedRef.current = false;
 
       const conditions = _evaluateContinuationConditions(
         hadToolCalls,
@@ -258,6 +258,10 @@ export const useTodoContinuation = (
     },
     [],
   );
+
+  const clearPause = useCallback(() => {
+    todoPausedRef.current = false;
+  }, []);
   useEffect(
     () => () => {
       abortControllerRef.current?.abort();
@@ -266,5 +270,10 @@ export const useTodoContinuation = (
     [],
   );
 
-  return { handleStreamCompleted, continuationState, handleTodoPause };
+  return {
+    handleStreamCompleted,
+    continuationState,
+    handleTodoPause,
+    clearPause,
+  };
 };
