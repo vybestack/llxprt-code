@@ -38,6 +38,9 @@ import {
 } from '../utils/clipboardUtils.js';
 import * as path from 'path';
 import { SCREEN_READER_USER_PREFIX } from '../textConstants.js';
+import { useMouse } from '../hooks/useMouse.js';
+import type { MouseEvent } from '../hooks/useMouse.js';
+import clipboardy from 'clipboardy';
 
 const LARGE_PASTE_LINE_THRESHOLD = 4;
 const LARGE_PASTE_CHAR_THRESHOLD = 1000;
@@ -318,8 +321,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     }
   }, [buffer.text]);
 
-  // Handle clipboard image pasting with Ctrl+V
-  const handleClipboardImage = useCallback(async () => {
+  // Handle clipboard pasting with Ctrl+V or right-click
+  const handleClipboardPaste = useCallback(async () => {
     try {
       if (await clipboardHasImage()) {
         const imagePath = await saveClipboardImage(config.getTargetDir());
@@ -338,11 +341,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           const [row, col] = buffer.cursor;
 
           // Calculate offset from row/col
-          let offset = 0;
-          for (let i = 0; i < row; i++) {
-            offset += buffer.lines[i].length + 1; // +1 for newline
-          }
-          offset += col;
+          const offset = logicalPosToOffset(buffer.lines, row, col);
 
           // Add spaces around the path if needed
           let textToInsert = insertText;
@@ -360,9 +359,22 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           // Insert at cursor position
           buffer.replaceRangeByOffset(offset, offset, textToInsert);
         }
+        return;
+      }
+
+      // Fallback: try text paste
+      try {
+        const text = await clipboardy.read();
+        if (text) {
+          const [row, col] = buffer.cursor;
+          const offset = logicalPosToOffset(buffer.lines, row, col);
+          buffer.replaceRangeByOffset(offset, offset, text);
+        }
+      } catch {
+        // Silent no-op: clipboard read can fail on Wayland, SSH, headless, etc.
       }
     } catch (error) {
-      console.error('Error handling clipboard image:', error);
+      console.error('Error handling clipboard paste:', error);
     }
   }, [buffer, config]);
 
@@ -690,9 +702,9 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         return;
       }
 
-      // Ctrl+V for clipboard image paste
-      if (keyMatchers[Command.PASTE_CLIPBOARD_IMAGE](key)) {
-        handleClipboardImage();
+      // Ctrl+V for clipboard paste
+      if (keyMatchers[Command.PASTE_CLIPBOARD](key)) {
+        handleClipboardPaste();
         return;
       }
 
@@ -722,7 +734,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       handleSubmit,
       shellHistory,
       reverseSearchCompletion,
-      handleClipboardImage,
+      handleClipboardPaste,
       resetCompletionState,
       showEscapePrompt,
       resetEscapeState,
@@ -737,6 +749,18 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   useKeypress(handleInput, {
     isActive: true,
   });
+
+  const handleMousePaste = useCallback(
+    (event: MouseEvent) => {
+      if (!focus || isEmbeddedShellFocused) return;
+      if (event.name === 'right-release') {
+        handleClipboardPaste();
+      }
+    },
+    [focus, isEmbeddedShellFocused, handleClipboardPaste],
+  );
+
+  useMouse(handleMousePaste, { isActive: focus && !isEmbeddedShellFocused });
 
   const linesToRender = buffer.viewportVisualLines;
   const [cursorVisualRowAbsolute, cursorVisualColAbsolute] =

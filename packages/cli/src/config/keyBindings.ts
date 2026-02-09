@@ -54,7 +54,7 @@ export enum Command {
 
   // External tools
   OPEN_EXTERNAL_EDITOR = 'openExternalEditor',
-  PASTE_CLIPBOARD_IMAGE = 'pasteClipboardImage',
+  PASTE_CLIPBOARD = 'pasteClipboard',
 
   // App level bindings
   SHOW_ERROR_DETAILS = 'showErrorDetails',
@@ -197,7 +197,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
     { key: 'x', ctrl: true },
     { sequence: '\x18', ctrl: true },
   ],
-  [Command.PASTE_CLIPBOARD_IMAGE]: [{ key: 'v', ctrl: true }],
+  [Command.PASTE_CLIPBOARD]: [{ key: 'v', ctrl: true }],
 
   // App level bindings
   [Command.SHOW_ERROR_DETAILS]: [{ key: 'o', ctrl: true }],
@@ -309,7 +309,7 @@ export const commandCategories: readonly CommandCategory[] = [
   },
   {
     title: 'External Tools',
-    commands: [Command.OPEN_EXTERNAL_EDITOR, Command.PASTE_CLIPBOARD_IMAGE],
+    commands: [Command.OPEN_EXTERNAL_EDITOR, Command.PASTE_CLIPBOARD],
   },
   {
     title: 'App Controls',
@@ -369,7 +369,8 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.NEWLINE]: 'Insert a newline without submitting.',
   [Command.OPEN_EXTERNAL_EDITOR]:
     'Open the current prompt in an external editor.',
-  [Command.PASTE_CLIPBOARD_IMAGE]: 'Paste an image from the clipboard.',
+  [Command.PASTE_CLIPBOARD]:
+    'Paste from the clipboard (image preferred, falls back to text).',
   [Command.SHOW_ERROR_DETAILS]: 'Toggle detailed error information.',
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: 'Toggle tool descriptions display.',
   [Command.TOGGLE_TODO_DIALOG]: 'Toggle the TODO dialog visibility.',
