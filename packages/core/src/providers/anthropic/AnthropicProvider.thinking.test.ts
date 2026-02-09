@@ -1373,7 +1373,9 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
 
     it('should not attach orphaned thinking across intervening messages', async () => {
       // Simulate streaming scenario where thinking and tool calls are in separate IContent items
-      // with a human message in between. These should NOT be merged into later tool calls.
+      // with a human message in between. The thinking should NOT be merged into later tool calls
+      // because a human message intervenes. However, consecutive tool_call assistant messages
+      // WILL be merged by the role-alternation enforcement pass.
       const messages: IContent[] = [
         {
           speaker: 'human',
@@ -1467,30 +1469,29 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
 
+      // The two consecutive tool_call assistant messages get merged into one
+      // to maintain Anthropic's role alternation requirement
       const assistantMessages = request.messages.filter(
         (m) =>
           m.role === 'assistant' &&
           Array.isArray(m.content) &&
           m.content.some((block) => block.type === 'tool_use'),
       );
-      expect(assistantMessages).toHaveLength(2);
+      expect(assistantMessages).toHaveLength(1);
 
-      const firstContent = assistantMessages[0]
-        .content as AnthropicContentBlock[];
-      const secondContent = assistantMessages[1]
+      const mergedContent = assistantMessages[0]
         .content as AnthropicContentBlock[];
 
-      const firstHasThinking = firstContent.some(
+      // Both tool_use blocks should be in the merged message
+      const toolUseBlocks = mergedContent.filter((b) => b.type === 'tool_use');
+      expect(toolUseBlocks).toHaveLength(2);
+
+      // Orphaned thinking should NOT be attached (human message intervened)
+      const hasThinking = mergedContent.some(
         (block) =>
           block.type === 'thinking' || block.type === 'redacted_thinking',
       );
-      const secondHasThinking = secondContent.some(
-        (block) =>
-          block.type === 'thinking' || block.type === 'redacted_thinking',
-      );
-
-      expect(firstHasThinking).toBe(false);
-      expect(secondHasThinking).toBe(false);
+      expect(hasThinking).toBe(false);
     });
 
     it('should keep thinking enabled even when no thinking blocks exist for tool calls', async () => {
