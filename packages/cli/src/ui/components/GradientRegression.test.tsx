@@ -40,6 +40,7 @@ const mockSessionStats: SessionStatsState = {
   sessionId: 'test-session',
   sessionStartTime: new Date(),
   lastPromptTokenCount: 0,
+  historyTokenCount: 0,
   promptCount: 0,
   metrics: {
     models: {},
@@ -52,6 +53,18 @@ const mockSessionStats: SessionStatsState = {
       byName: {},
     },
     files: { totalLinesAdded: 0, totalLinesRemoved: 0 },
+    tokenTracking: {
+      tokensPerMinute: 0,
+      throttleWaitTimeMs: 0,
+      sessionTokenUsage: {
+        input: 0,
+        output: 0,
+        cache: 0,
+        tool: 0,
+        thought: 0,
+        total: 0,
+      },
+    },
   },
 };
 
@@ -60,17 +73,26 @@ useSessionStatsMock.mockReturnValue({
   stats: mockSessionStats,
   getPromptCount: () => 0,
   startNewPrompt: vi.fn(),
+  updateHistoryTokenCount: vi.fn(),
 });
+
+const defaultFooterProps = {
+  model: 'gemini-2.5-pro',
+  targetDir: '/home/user/project',
+  debugMode: false,
+  debugMessage: '',
+  errorCount: 0,
+  showErrorDetails: false,
+  historyTokenCount: 0,
+  nightly: true,
+  isPaidMode: false,
+};
 
 describe('Gradient Crash Regression Tests', () => {
   it('<Footer /> should not crash when theme.ui.gradient has only one color (or empty) and nightly is true', () => {
-    const { lastFrame } = renderWithProviders(<Footer />, {
-      width: 120,
-      uiState: {
-        nightly: true, // Enable nightly to trigger Gradient usage logic
-        sessionStats: mockSessionStats,
-      },
-    });
+    const { lastFrame } = renderWithProviders(
+      <Footer {...defaultFooterProps} />,
+    );
     // If it crashes, this line won't be reached or lastFrame() will throw
     expect(lastFrame()).toBeDefined();
     // It should fall back to rendering text without gradient
@@ -80,12 +102,6 @@ describe('Gradient Crash Regression Tests', () => {
   it('<StatsDisplay /> should not crash when theme.ui.gradient is empty', () => {
     const { lastFrame } = renderWithProviders(
       <StatsDisplay duration="1s" title="My Stats" />,
-      {
-        width: 120,
-        uiState: {
-          sessionStats: mockSessionStats,
-        },
-      },
     );
     expect(lastFrame()).toBeDefined();
     // Ensure title is rendered

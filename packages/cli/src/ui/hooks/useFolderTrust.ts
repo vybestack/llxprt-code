@@ -118,7 +118,7 @@ export const useFolderTrust = (
         setIsFolderTrustDialogOpen(false);
       }
     },
-    [isTrusted],
+    [isTrusted, addItem],
   );
 
   return {
