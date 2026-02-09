@@ -96,6 +96,10 @@ import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
 import { drainStdinBuffer } from './ui/utils/terminalContract.js';
+import {
+  DISABLE_BRACKETED_PASTE,
+  DISABLE_FOCUS_TRACKING,
+} from './ui/utils/terminalSequences.js';
 import { StdinRawModeManager } from './utils/stdinSafety.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
@@ -297,6 +301,9 @@ export async function startInteractiveUI(
     // The 'exit' event fires synchronously during process.exit(). (fixes #959)
     process.on('exit', () => {
       disableMouseEvents();
+      if (process.stdout.isTTY) {
+        process.stdout.write(DISABLE_BRACKETED_PASTE + DISABLE_FOCUS_TRACKING);
+      }
     });
   }
 

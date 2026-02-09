@@ -115,6 +115,17 @@ vi.mock('./utils/relaunch.js', () => ({
   relaunchAppInChildProcess: vi.fn().mockResolvedValue(0),
 }));
 
+vi.mock('./ui/utils/mouse.js', () => ({
+  enableMouseEvents: vi.fn(),
+  disableMouseEvents: vi.fn(),
+  parseMouseEvent: vi.fn(),
+  isIncompleteMouseSequence: vi.fn(),
+  isMouseEventsActive: vi.fn(() => false),
+  setMouseEventsActive: vi.fn(() => false),
+  ENABLE_MOUSE_EVENTS: '',
+  DISABLE_MOUSE_EVENTS: '',
+}));
+
 describe('gemini.tsx main function', () => {
   let loadSettingsMock: ReturnType<typeof vi.mocked<typeof loadSettings>>;
   let originalEnvGeminiSandbox: string | undefined;
@@ -617,5 +628,137 @@ describe('startInteractiveUI', () => {
     // We need a small delay to let it execute
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it('should register exit handler that disables bracketed paste and focus tracking', async () => {
+    const exitHandlers: Array<() => void> = [];
+    const processOnSpy = vi
+      .spyOn(process, 'on')
+      .mockImplementation(
+        (event: string | symbol, handler: (...args: unknown[]) => void) => {
+          if (event === 'exit') {
+            exitHandlers.push(handler as () => void);
+          }
+          return process;
+        },
+      );
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    // Ensure isTTY is true so the guard passes
+    const originalIsTTY = process.stdout.isTTY;
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+
+    const mouseEnabledConfig = {
+      ...mockConfig,
+      getScreenReader: () => false,
+    } as Config;
+    const mouseEnabledSettings = {
+      merged: {
+        ui: {
+          hideWindowTitle: true,
+          useAlternateBuffer: true,
+          enableMouseEvents: true,
+        },
+      },
+    } as unknown as LoadedSettings;
+
+    try {
+      await startInteractiveUI(
+        mouseEnabledConfig,
+        mouseEnabledSettings,
+        mockStartupWarnings,
+        mockWorkspaceRoot,
+      );
+
+      // Fire all exit handlers
+      for (const handler of exitHandlers) {
+        handler();
+      }
+
+      // Verify bracketed paste disabled
+      expect(writeSpy).toHaveBeenCalledWith(
+        expect.stringContaining('\x1b[?2004l'),
+      );
+      // Verify focus tracking disabled
+      expect(writeSpy).toHaveBeenCalledWith(
+        expect.stringContaining('\x1b[?1004l'),
+      );
+    } finally {
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: originalIsTTY,
+        configurable: true,
+      });
+      processOnSpy.mockRestore();
+      writeSpy.mockRestore();
+    }
+  });
+
+  it('should not write terminal escape sequences on exit when stdout is not a TTY', async () => {
+    const exitHandlers: Array<() => void> = [];
+    const processOnSpy = vi
+      .spyOn(process, 'on')
+      .mockImplementation(
+        (event: string | symbol, handler: (...args: unknown[]) => void) => {
+          if (event === 'exit') {
+            exitHandlers.push(handler as () => void);
+          }
+          return process;
+        },
+      );
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    const originalIsTTY = process.stdout.isTTY;
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: false,
+      configurable: true,
+    });
+
+    const mouseEnabledConfig = {
+      ...mockConfig,
+      getScreenReader: () => false,
+    } as Config;
+    const mouseEnabledSettings = {
+      merged: {
+        ui: {
+          hideWindowTitle: true,
+          useAlternateBuffer: true,
+          enableMouseEvents: true,
+        },
+      },
+    } as unknown as LoadedSettings;
+
+    try {
+      await startInteractiveUI(
+        mouseEnabledConfig,
+        mouseEnabledSettings,
+        mockStartupWarnings,
+        mockWorkspaceRoot,
+      );
+
+      // Clear any writes from render setup
+      writeSpy.mockClear();
+
+      // Fire all exit handlers
+      for (const handler of exitHandlers) {
+        handler();
+      }
+
+      // When not a TTY, should not write any escape sequences
+      const calls = writeSpy.mock.calls.map((c) => c[0]);
+      const hasEscapeSeq = calls.some(
+        (arg) => typeof arg === 'string' && arg.includes('\x1b['),
+      );
+      expect(hasEscapeSeq).toBe(false);
+    } finally {
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: originalIsTTY,
+        configurable: true,
+      });
+      processOnSpy.mockRestore();
+      writeSpy.mockRestore();
+    }
   });
 });

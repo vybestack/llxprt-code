@@ -55,7 +55,7 @@ const baseExcludePatterns = [
   '**/ui/hooks/usePermissionsModifyTrust.test.tsx',
   '**/ui/privacy/**/*.test.tsx',
   '**/ui/utils/**/*.test.tsx',
-  '**/gemini.test.tsx',
+  // '**/gemini.test.tsx', // Temporarily enabled for terminal mode cleanup (ba88707b1 reimplementation)
   // Exclude UI component tests that may directly import React DOM
   '**/ui/components/**/*.test.ts',
   // Temporarily suppress remaining React 19 regressions until the hooks are migrated
@@ -106,6 +106,8 @@ export default defineConfig({
       'src/ui/components/messages/OAuthUrlMessage.test.tsx',
       // Include useSlashCompletion extension filtering tests for fa93b56243 reimplementation
       'src/ui/hooks/useSlashCompletion.extensions.test.tsx',
+      // Include gemini test for terminal mode cleanup (ba88707b1 reimplementation)
+      'src/gemini.test.tsx',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',
