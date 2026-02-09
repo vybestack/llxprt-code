@@ -2,7 +2,7 @@
 
 | Batch | Type | Upstream SHA(s) | Status | LLxprt Commit | Notes |
 |------:|------|-----------------|--------|---------------|-------|
-| 1 | PICK (5) | 555e25e63, d683e1c0d, 472e775a1, 9786c4dcf, 78a28bfc0 | TODO | | Trust fixes + scrollbar NO_COLOR |
+| 1 | PICK (5) | 555e25e63, d683e1c0d, 472e775a1, 9786c4dcf, 78a28bfc0 | DONE | e288fe9e4, f412ee16c, cbf986497 | 555e25e63 SKIPPED (no ModelMessage.tsx). 472e775a1+9786c4dcf reclassified REIMPLEMENT (B10/B11). |
 | 2 | PICK WITH CONFLICTS (1) | 8c78fe4f1 | TODO | | MCP rework — solo due to conflict risk |
 | 3 | PICK (1) | cc0eadffe | TODO | | setupGithubCommand patch |
 | 4 | REIMPLEMENT | 86828bb56 | TODO | | Gemini 3 extracts (7 sub-changes) |
