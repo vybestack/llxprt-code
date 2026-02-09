@@ -54,12 +54,12 @@ import levenshtein from 'fast-levenshtein';
 import { doesToolInvocationMatch } from '../utils/tool-utils.js';
 import {
   limitOutputTokens,
+  DEFAULT_MAX_TOKENS,
   type ToolOutputSettingsProvider,
 } from '../utils/toolOutputLimiter.js';
 import { DebugLogger } from '../debug/index.js';
 import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
-
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
 export type ValidatingToolCall = {
@@ -422,6 +422,9 @@ export class CoreToolScheduler {
   private processedConfirmations: Set<string> = new Set();
   // Track all callIds seen at the scheduler boundary to prevent duplicate execution
   private seenCallIds: Set<string> = new Set();
+  // When a parallel batch would exceed the context budget, this is set to a
+  // tighter per-tool output config so each result is truncated to fit.
+  private batchOutputConfig?: ToolOutputSettingsProvider;
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -1564,6 +1567,7 @@ export class CoreToolScheduler {
           this.nextPublishIndex = 0;
           this.currentBatchSize = 0;
           this.pendingResults.clear();
+          this.batchOutputConfig = undefined;
         }
       } while (this.pendingPublishRequest);
     } finally {
@@ -1611,12 +1615,14 @@ export class CoreToolScheduler {
     const { result, callId, toolName, scheduledCall } = buffered;
 
     if (result.error === undefined) {
-      // Success case
+      // Success case — use tighter per-tool limits when the batch risked
+      // exceeding the context window (#1301)
+      const outputConfig = this.batchOutputConfig ?? this.config;
       const response = convertToFunctionResponse(
         toolName,
         callId,
         result.llmContent,
-        this.config,
+        outputConfig,
       );
       const metadataAgentId = extractAgentIdFromMetadata(
         result.metadata as Record<string, unknown> | undefined,
@@ -1654,6 +1660,167 @@ export class CoreToolScheduler {
     }
   }
 
+  /**
+   * Apply batch-level output limits for parallel tool batches. (#1301)
+   *
+   * `tool-output-max-tokens` is treated as a budget for the entire batch of
+   * tool outputs combined, not per-tool.  For batches of 2+ tools this method
+   * divides the budget equally and stores the reduced per-tool limit in
+   * {@link batchOutputConfig}, which {@link publishResult} picks up when
+   * building function response parts.
+   */
+  private applyBatchOutputLimits(batchSize: number): void {
+    if (batchSize <= 1) {
+      this.batchOutputConfig = undefined;
+      return;
+    }
+
+    try {
+      const ephemeral =
+        typeof this.config.getEphemeralSettings === 'function'
+          ? this.config.getEphemeralSettings()
+          : {};
+
+      const maxBatchTokens =
+        (ephemeral['tool-output-max-tokens'] as number | undefined) ??
+        DEFAULT_MAX_TOKENS;
+
+      const perToolBudget = Math.max(
+        1000,
+        Math.floor(maxBatchTokens / batchSize),
+      );
+
+      if (toolSchedulerLogger.enabled) {
+        toolSchedulerLogger.debug(
+          () =>
+            `Batch of ${batchSize} tools: applying per-tool output limit ` +
+            `of ${perToolBudget} tokens (batch budget: ${maxBatchTokens}).`,
+        );
+      }
+
+      this.batchOutputConfig = {
+        getEphemeralSettings: () => ({
+          ...ephemeral,
+          'tool-output-max-tokens': perToolBudget,
+          'tool-output-truncate-mode': 'truncate',
+        }),
+      };
+    } catch {
+      this.batchOutputConfig = undefined;
+    }
+  }
+
+  /**
+   * Launch a single scheduled tool call and wire up result buffering / error handling.
+   */
+  private launchToolExecution(
+    scheduledCall: ScheduledToolCall,
+    executionIndex: number,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const { callId, name: toolName } = scheduledCall.request;
+    const invocation = scheduledCall.invocation;
+
+    this.setStatusInternal(callId, 'executing');
+
+    const liveOutputCallback = scheduledCall.tool.canUpdateOutput
+      ? (outputChunk: string | AnsiOutput) => {
+          if (this.outputUpdateHandler) {
+            this.outputUpdateHandler(callId, outputChunk);
+          }
+          this.toolCalls = this.toolCalls.map((tc) =>
+            tc.request.callId === callId && tc.status === 'executing'
+              ? { ...tc, liveOutput: outputChunk }
+              : tc,
+          );
+          this.notifyToolCallsUpdate();
+        }
+      : undefined;
+
+    const setPidCallback = (pid: number) => {
+      this.setPidInternal(callId, pid);
+    };
+
+    return invocation
+      .execute(
+        signal,
+        liveOutputCallback,
+        undefined,
+        undefined,
+        setPidCallback,
+      )
+      .then(async (toolResult: ToolResult) => {
+        if (signal.aborted) {
+          this.setStatusInternal(
+            callId,
+            'cancelled',
+            'User cancelled tool execution.',
+          );
+          this.bufferCancelled(callId, scheduledCall, executionIndex);
+          await this.publishBufferedResults(signal);
+          return;
+        }
+
+        this.bufferResult(
+          callId,
+          toolName,
+          toolResult,
+          scheduledCall,
+          executionIndex,
+        );
+
+        await this.publishBufferedResults(signal);
+      })
+      .catch(async (executionError: Error) => {
+        if (signal.aborted) {
+          this.setStatusInternal(
+            callId,
+            'cancelled',
+            'User cancelled tool execution.',
+          );
+          this.bufferCancelled(callId, scheduledCall, executionIndex);
+          await this.publishBufferedResults(signal);
+        } else {
+          this.bufferError(
+            callId,
+            executionError,
+            scheduledCall,
+            executionIndex,
+          );
+          await this.publishBufferedResults(signal);
+        }
+      })
+      // Issue #957: Final catch handler to ensure tool always reaches
+      // terminal state even if publishBufferedResults throws.
+      .catch((publishError: Error) => {
+        if (toolSchedulerLogger.enabled) {
+          toolSchedulerLogger.debug(
+            () =>
+              `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
+          );
+        }
+
+        const toolCall = this.toolCalls.find(
+          (tc) => tc.request.callId === callId,
+        );
+        if (
+          toolCall &&
+          toolCall.status !== 'success' &&
+          toolCall.status !== 'error' &&
+          toolCall.status !== 'cancelled'
+        ) {
+          const errorResponse = createErrorResponse(
+            scheduledCall.request,
+            new Error(
+              `Failed to publish tool result: ${publishError.message}`,
+            ),
+            ToolErrorType.UNHANDLED_EXCEPTION,
+          );
+          this.setStatusInternal(callId, 'error', errorResponse);
+        }
+      });
+  }
+
   private attemptExecutionOfScheduledCalls(signal: AbortSignal): void {
     const allCallsFinalOrScheduled = this.toolCalls.every(
       (call) =>
@@ -1678,122 +1845,18 @@ export class CoreToolScheduler {
         executionIndices.set(call.request.callId, index);
       });
 
+      // Apply batch-level output limits: tool-output-max-tokens is a budget
+      // for all tool outputs combined, divided equally among them. (#1301)
+      this.applyBatchOutputLimits(callsToExecute.length);
+
       // Execute all tools in parallel (PRESERVE EXISTING PATTERN)
       callsToExecute.forEach((toolCall) => {
         if (toolCall.status !== 'scheduled') return;
-
         const scheduledCall = toolCall;
-        const { callId, name: toolName } = scheduledCall.request;
-        const invocation = scheduledCall.invocation;
-        const executionIndex = executionIndices.get(callId)!;
-
-        this.setStatusInternal(callId, 'executing');
-
-        const liveOutputCallback = scheduledCall.tool.canUpdateOutput
-          ? (outputChunk: string | AnsiOutput) => {
-              if (this.outputUpdateHandler) {
-                this.outputUpdateHandler(callId, outputChunk);
-              }
-              this.toolCalls = this.toolCalls.map((tc) =>
-                tc.request.callId === callId && tc.status === 'executing'
-                  ? { ...tc, liveOutput: outputChunk }
-                  : tc,
-              );
-              this.notifyToolCallsUpdate();
-            }
-          : undefined;
-
-        const setPidCallback = (pid: number) => {
-          this.setPidInternal(callId, pid);
-        };
-
-        invocation
-          .execute(
-            signal,
-            liveOutputCallback,
-            undefined,
-            undefined,
-            setPidCallback,
-          )
-          .then(async (toolResult: ToolResult) => {
-            if (signal.aborted) {
-              this.setStatusInternal(
-                callId,
-                'cancelled',
-                'User cancelled tool execution.',
-              );
-              // Buffer a cancelled placeholder so ordered publishing can continue
-              // This prevents later tools from getting stuck waiting for this index
-              this.bufferCancelled(callId, scheduledCall, executionIndex);
-              await this.publishBufferedResults(signal);
-              return;
-            }
-
-            // Buffer the result instead of publishing immediately
-            this.bufferResult(
-              callId,
-              toolName,
-              toolResult,
-              scheduledCall,
-              executionIndex,
-            );
-
-            // Try to publish buffered results in order
-            await this.publishBufferedResults(signal);
-          })
-          .catch(async (executionError: Error) => {
-            if (signal.aborted) {
-              this.setStatusInternal(
-                callId,
-                'cancelled',
-                'User cancelled tool execution.',
-              );
-              // Buffer a cancelled placeholder so ordered publishing can continue
-              this.bufferCancelled(callId, scheduledCall, executionIndex);
-              await this.publishBufferedResults(signal);
-            } else {
-              this.bufferError(
-                callId,
-                executionError,
-                scheduledCall,
-                executionIndex,
-              );
-              await this.publishBufferedResults(signal);
-            }
-          })
-          // Issue #957: Final catch handler to ensure tool always reaches
-          // terminal state even if publishBufferedResults throws. This prevents
-          // tools from getting stuck in 'executing' state and blocking the
-          // scheduler indefinitely.
-          .catch((publishError: Error) => {
-            if (toolSchedulerLogger.enabled) {
-              toolSchedulerLogger.debug(
-                () =>
-                  `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
-              );
-            }
-
-            // Check if the tool is still in a non-terminal state
-            const toolCall = this.toolCalls.find(
-              (tc) => tc.request.callId === callId,
-            );
-            if (
-              toolCall &&
-              toolCall.status !== 'success' &&
-              toolCall.status !== 'error' &&
-              toolCall.status !== 'cancelled'
-            ) {
-              // Force transition to error state to unblock the scheduler
-              const errorResponse = createErrorResponse(
-                scheduledCall.request,
-                new Error(
-                  `Failed to publish tool result: ${publishError.message}`,
-                ),
-                ToolErrorType.UNHANDLED_EXCEPTION,
-              );
-              this.setStatusInternal(callId, 'error', errorResponse);
-            }
-          });
+        const executionIndex = executionIndices.get(
+          scheduledCall.request.callId,
+        )!;
+        void this.launchToolExecution(scheduledCall, executionIndex, signal);
       });
     }
   }
@@ -1900,6 +1963,7 @@ export class CoreToolScheduler {
     this.pendingPublishRequest = false;
     this.processedConfirmations.clear();
     this.seenCallIds.clear();
+    this.batchOutputConfig = undefined;
 
     // 3. Cancel all active tool calls
     this.toolCalls = this.toolCalls.map((call) => {
