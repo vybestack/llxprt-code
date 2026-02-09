@@ -90,6 +90,7 @@ export interface SubagentManagerDialogProps {
 export interface CreateWizardState {
   currentStep: CreateStep;
   name: string;
+  mode: 'auto' | 'manual';
   systemPrompt: string;
   selectedProfile: string;
   validationErrors: Record<string, string>;

@@ -216,13 +216,37 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
 
   // Handle create
   const handleCreate = useCallback(
-    async (name: string, systemPrompt: string, profile: string) => {
+    async (
+      name: string,
+      systemPrompt: string,
+      profile: string,
+      mode: 'auto' | 'manual' = 'manual',
+    ) => {
       if (!subagentManager) return;
 
       try {
-        await subagentManager.saveSubagent(name, profile, systemPrompt);
+        let finalPrompt = systemPrompt;
+
+        if (mode === 'auto') {
+          const config = commandContext?.services?.config;
+          if (!config) {
+            setState((prev) => ({
+              ...prev,
+              error:
+                'Configuration service unavailable. Set up the CLI before using auto mode.',
+            }));
+            return;
+          }
+
+          const { generateAutoPrompt } = await import(
+            '../../utils/autoPromptGenerator.js'
+          );
+          finalPrompt = await generateAutoPrompt(config, systemPrompt);
+        }
+
+        await subagentManager.saveSubagent(name, profile, finalPrompt);
         await loadData();
-        navigateTo(SubagentView.LIST);
+        onClose();
       } catch (err) {
         setState((prev) => ({
           ...prev,
@@ -231,7 +255,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         }));
       }
     },
-    [subagentManager, loadData, navigateTo],
+    [subagentManager, loadData, onClose, commandContext],
   );
 
   // Handle profile attachment - check if we came from EDIT view

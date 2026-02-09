@@ -14,6 +14,7 @@ import {
   SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
+import { MessageType } from '../types.js';
 import { Colors } from '../colors.js';
 import {
   Config,
@@ -431,23 +432,56 @@ const saveCommand: SlashCommand = {
 };
 
 /**
- * /subagent list command - Opens interactive list view
+ * /subagent list command - Displays non-interactive text list
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
  * @requirement:REQ-005
  */
 const listCommand: SlashCommand = {
   name: 'list',
-  description: 'List all saved subagents (interactive)',
+  description: 'List all saved subagents',
   kind: CommandKind.BUILT_IN,
-  action: async (
-    _context: CommandContext,
-    _args: string,
-  ): Promise<SlashCommandActionReturn> => ({
-    type: 'dialog',
-    dialog: 'subagent',
-    dialogData: { initialView: SubagentView.LIST },
-  }),
+  action: async (context: CommandContext, _args: string): Promise<void> => {
+    const manager = context.services.subagentManager;
+    if (!manager) {
+      context.ui.addItem(
+        {
+          type: MessageType.ERROR,
+          text: 'SubagentManager service is unavailable.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+
+    const names = await manager.listSubagents();
+
+    if (names.length === 0) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: 'No subagents configured. Use /subagent create to create one.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+
+    const lines: string[] = ['Subagents:'];
+    for (const name of names) {
+      try {
+        const config = await manager.loadSubagent(name);
+        lines.push(`  • ${name} (profile: ${config.profile})`);
+      } catch {
+        lines.push(`  • ${name}`);
+      }
+    }
+
+    context.ui.addItem(
+      { type: MessageType.INFO, text: lines.join('\n') },
+      Date.now(),
+    );
+  },
 };
 
 /**
@@ -637,6 +671,14 @@ export const subagentCommand: SlashCommand = {
   name: 'subagent',
   description: 'Manage subagent configurations.',
   kind: CommandKind.BUILT_IN,
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<SlashCommandActionReturn> => ({
+    type: 'dialog',
+    dialog: 'subagent',
+    dialogData: { initialView: SubagentView.MENU },
+  }),
   subCommands: [
     saveCommand,
     createCommand,
@@ -645,7 +687,6 @@ export const subagentCommand: SlashCommand = {
     editCommand,
     deleteCommand,
   ],
-  // No default action - shows subcommand help
 };
 
 function createDetachedGeminiClientForAutoPrompt(config: Config): GeminiClient {

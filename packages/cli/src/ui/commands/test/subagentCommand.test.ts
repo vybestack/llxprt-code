@@ -43,6 +43,7 @@ import {
   SessionMetrics,
 } from '@vybestack/llxprt-code-core';
 import { SubagentView } from '../../components/SubagentManagement/types.js';
+import { MessageType } from '../../types.js';
 import { FunctionCallingConfigMode } from '@google/genai';
 import {
   CommandContext,
@@ -362,19 +363,54 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
   });
 
   describe('listCommand @requirement:REQ-005 @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
-    it('should open list dialog', async () => {
-      // listCommand now opens interactive dialog instead of returning message
-      context = createTestContext({
+    it('should display subagent list as text output', async () => {
+      await subagentManager.saveSubagent('agent1', 'testprofile', 'Prompt 1');
+      await subagentManager.saveSubagent('agent2', 'testprofile', 'Prompt 2');
+
+      const result = await subagentCommand.subCommands![2].action!(context, '');
+
+      expect(result).toBeUndefined();
+      expect(context.ui.addItem).toHaveBeenCalled();
+      const call = (context.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0];
+      const item = call[0] as { type: string; text: string };
+      expect(item.type).toBe(MessageType.INFO);
+      expect(item.text).toContain('agent1');
+      expect(item.text).toContain('agent2');
+      expect(item.text).toContain('testprofile');
+    });
+
+    it('should display message when no subagents exist', async () => {
+      const result = await subagentCommand.subCommands![2].action!(context, '');
+
+      expect(result).toBeUndefined();
+      expect(context.ui.addItem).toHaveBeenCalled();
+      const call = (context.ui.addItem as ReturnType<typeof vi.fn>).mock
+        .calls[0];
+      const item = call[0] as { type: string; text: string };
+      expect(item.type).toBe(MessageType.INFO);
+      expect(item.text).toMatch(/no subagents/i);
+    });
+
+    it('should display error when subagentManager is unavailable', async () => {
+      const contextWithoutManager = createTestContext({
         profileManager,
-        subagentManager,
+        subagentManager: undefined,
       });
 
-      const result = ensureDialog(
-        await subagentCommand.subCommands![2].action!(context, ''),
+      const result = await subagentCommand.subCommands![2].action!(
+        contextWithoutManager,
+        '',
       );
 
-      expect(result.dialog).toBe('subagent');
-      expect(result.dialogData?.initialView).toBe(SubagentView.LIST);
+      expect(result).toBeUndefined();
+      expect(contextWithoutManager.ui.addItem).toHaveBeenCalled();
+      const call = (
+        contextWithoutManager.ui.addItem as ReturnType<typeof vi.fn>
+      ).mock.calls[0];
+      const item = call[0] as { type: string; text: string };
+      expect(item.type).toBe(MessageType.ERROR);
+      expect(item.text).toMatch(/unavailable/i);
     });
   });
 
@@ -448,6 +484,15 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
       expect(result.messageType).toBe('error');
       expect(result.content).toMatch(/usage/i);
+    });
+  });
+
+  describe('base subagent command (no subcommand)', () => {
+    it('should open menu dialog when called without subcommand', async () => {
+      const result = ensureDialog(await subagentCommand.action!(context, ''));
+
+      expect(result.dialog).toBe('subagent');
+      expect(result.dialogData?.initialView).toBe(SubagentView.MENU);
     });
   });
 });
