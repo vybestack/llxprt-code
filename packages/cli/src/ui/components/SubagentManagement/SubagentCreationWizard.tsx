@@ -250,6 +250,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
           items={modeItems}
           onSelect={handleModeSelect}
           isFocused={true}
+          initialIndex={state.mode === 'auto' ? 1 : 0}
           maxItemsToShow={10}
         />
         <Box marginTop={1}>

@@ -17,6 +17,24 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeBridge: getRuntimeBridgeMock,
 }));
 
+let generateAutoPromptOverride: ((...args: unknown[]) => unknown) | null = null;
+
+vi.mock('../../utils/autoPromptGenerator.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../utils/autoPromptGenerator.js')>();
+  return {
+    ...actual,
+    generateAutoPrompt: (...args: unknown[]) => {
+      if (generateAutoPromptOverride) {
+        return generateAutoPromptOverride(...args);
+      }
+      return actual.generateAutoPrompt(
+        ...(args as Parameters<typeof actual.generateAutoPrompt>),
+      );
+    },
+  };
+});
+
 /**
  * COMPLETION SYSTEM REQUIREMENTS
  *
@@ -55,7 +73,6 @@ import { LoadedSettings } from '../../../config/settings.js';
 import { SessionStatsState } from '../../contexts/SessionContext.js';
 
 let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
-let subagentCommandModule: typeof import('../subagentCommand.js');
 
 beforeAll(async () => {
   // Reset modules to ensure fresh import with mocks
@@ -64,7 +81,6 @@ beforeAll(async () => {
   // Import module
   const mod = await import('../subagentCommand.js?t=' + Date.now());
   subagentCommand = mod.subagentCommand;
-  subagentCommandModule = mod;
 });
 
 type TestContextOptions = {
@@ -755,35 +771,19 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     );
   });
 
-  it('falls back to a detached Gemini client when the primary client fails and provider is gemini', async () => {
-    const primaryClient = {
-      generateDirectMessage: vi.fn(),
-    };
-
-    const fallbackResponseText = 'Fallback prompt from detached Gemini client.';
-    const fallbackClient = {
-      generateDirectMessage: vi.fn().mockResolvedValue({
-        text: fallbackResponseText,
-      }),
-      dispose: vi.fn(),
-    };
-
-    const helperSpy = vi
-      .spyOn(
-        subagentCommandModule.subagentAutoPromptHelpers,
-        'createDetachedGeminiClientForAutoPrompt',
-      )
-      .mockReturnValue(fallbackClient as never);
+  it('saves auto-generated prompt via generateAutoPrompt utility', async () => {
+    const generatedText =
+      'You are an expert prompt engineer specializing in prompt creation.';
 
     (context as unknown as { services: { config: unknown } }).services.config =
       {
-        getGeminiClient: vi.fn(() => primaryClient),
+        getGeminiClient: vi.fn(() => null),
         getProvider: vi.fn(() => 'gemini'),
       };
 
-    const saveSpy = vi.spyOn(subagentManager, 'saveSubagent');
+    generateAutoPromptOverride = vi.fn().mockResolvedValue(generatedText);
 
-    runWithScopeMock.mockClear();
+    const saveSpy = vi.spyOn(subagentManager, 'saveSubagent');
 
     const args = 'testagent testprofile auto "expert prompt"';
     const actionResult = await subagentCommand.subCommands![0].action!(
@@ -791,19 +791,17 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
       args,
     );
 
-    expect(primaryClient.generateDirectMessage).not.toHaveBeenCalled();
-    expect(helperSpy).toHaveBeenCalledWith(
+    expect(generateAutoPromptOverride).toHaveBeenCalledWith(
       expect.objectContaining({
         getProvider: expect.any(Function),
       }),
+      'expert prompt',
     );
-    expect(fallbackClient.generateDirectMessage).toHaveBeenCalled();
     expect(saveSpy).toHaveBeenCalledWith(
       'testagent',
       'testprofile',
-      fallbackResponseText,
+      generatedText,
     );
-    expect(runWithScopeMock).not.toHaveBeenCalled();
     expect(actionResult).toBeDefined();
     expect(actionResult?.type).toBe('message');
     if (!actionResult || actionResult.type !== 'message') {
@@ -811,7 +809,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     }
     expect(actionResult.messageType).toBe('info');
     expect(actionResult.content).toContain('Subagent');
-    helperSpy.mockRestore();
+    generateAutoPromptOverride = null;
   });
 
   it('should use correct prompt template for LLM', async () => {
