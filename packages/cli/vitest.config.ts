@@ -28,7 +28,7 @@ const baseExcludePatterns = [
   '**/test-utils/**/*.test.tsx',
   '**/ui/App.e2e.test.tsx',
   '**/ui/App.test.tsx',
-  '**/ui/commands/directoryCommand.test.tsx',
+  // '**/ui/commands/directoryCommand.test.tsx', // Temporarily enabled for trust gating implementation (9786c4dcf)
   '**/ui/components/*.test.tsx',
   '**/ui/components/__tests__/*.test.tsx',
   '**/ui/components/messages/DiffRenderer.test.tsx',
@@ -108,6 +108,8 @@ export default defineConfig({
       'src/ui/hooks/useSlashCompletion.extensions.test.tsx',
       // Include gemini test for terminal mode cleanup (ba88707b1 reimplementation)
       'src/gemini.test.tsx',
+      // Include directoryCommand test for trust gating implementation (9786c4dcf reimplementation)
+      'src/ui/commands/directoryCommand.test.tsx',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',

@@ -11,6 +11,13 @@ import { CommandContext } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
 import * as path from 'path';
+import * as trustedFoldersModule from '../../config/trustedFolders.js';
+import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
+
+// Mock the trustedFolders module
+vi.mock('../../config/trustedFolders.js', () => ({
+  loadTrustedFolders: vi.fn(),
+}));
 
 describe('directoryCommand', () => {
   let mockContext: CommandContext;
@@ -48,6 +55,7 @@ describe('directoryCommand', () => {
       getFileFilteringOptions: () => ({ ignore: [], include: [] }),
       setUserMemory: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
+      getFolderTrust: vi.fn().mockReturnValue(false), // Default: folder trust disabled
     } as unknown as Config;
 
     mockContext = {
@@ -181,5 +189,186 @@ describe('directoryCommand', () => {
     expect(path.win32.normalize(result)).toBe(
       path.win32.normalize(expectedPath),
     );
+  });
+
+  describe('trust gating', () => {
+    it('should reject untrusted target directory before addDirectory call', async () => {
+      const untrustedPath = path.normalize('/home/user/untrusted-project');
+      const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
+        isPathTrusted: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
+        mockLoadedTrustedFolders as LoadedTrustedFolders,
+      );
+      mockConfig = {
+        ...mockConfig,
+        getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
+        isTrustedFolder: vi.fn().mockReturnValue(false),
+      } as unknown as Config;
+      mockContext = {
+        ...mockContext,
+        services: {
+          ...mockContext.services,
+          config: mockConfig,
+        },
+      };
+
+      if (!addCommand?.action) throw new Error('No action');
+      await addCommand.action(mockContext, untrustedPath);
+
+      // Should NOT have called addDirectory
+      expect(mockWorkspaceContext.addDirectory).not.toHaveBeenCalled();
+
+      // Should show error with guidance to /permissions command
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.ERROR,
+          text: expect.stringContaining('not trusted'),
+        }),
+        expect.any(Number),
+      );
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.ERROR,
+          text: expect.stringContaining('/permissions'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should allow trusted directory and keep existing success flow', async () => {
+      const trustedPath = path.normalize('/home/user/trusted-project');
+      const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
+        isPathTrusted: vi.fn().mockReturnValue(true),
+      };
+      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
+        mockLoadedTrustedFolders as LoadedTrustedFolders,
+      );
+      mockConfig = {
+        ...mockConfig,
+        getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
+        isTrustedFolder: vi.fn().mockReturnValue(true),
+      } as unknown as Config;
+      mockContext = {
+        ...mockContext,
+        services: {
+          ...mockContext.services,
+          config: mockConfig,
+        },
+      };
+
+      if (!addCommand?.action) throw new Error('No action');
+      await addCommand.action(mockContext, trustedPath);
+
+      // Should have called addDirectory
+      expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(
+        trustedPath,
+      );
+
+      // Should show success message
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: `Successfully added directories:\n- ${trustedPath}`,
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should handle mixed trusted/untrusted list with both info and error outputs', async () => {
+      const trustedPath = path.normalize('/home/user/trusted-project');
+      const untrustedPath = path.normalize('/home/user/untrusted-project');
+      const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
+        isPathTrusted: vi.fn((p: string) => p === trustedPath),
+      };
+      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
+        mockLoadedTrustedFolders as LoadedTrustedFolders,
+      );
+      mockConfig = {
+        ...mockConfig,
+        getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
+        isTrustedFolder: vi.fn().mockReturnValue(true),
+      } as unknown as Config;
+      mockContext = {
+        ...mockContext,
+        services: {
+          ...mockContext.services,
+          config: mockConfig,
+        },
+      };
+
+      if (!addCommand?.action) throw new Error('No action');
+      await addCommand.action(mockContext, `${trustedPath},${untrustedPath}`);
+
+      // Should have called addDirectory only for trusted path
+      expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(
+        trustedPath,
+      );
+      expect(mockWorkspaceContext.addDirectory).not.toHaveBeenCalledWith(
+        untrustedPath,
+      );
+
+      // Should show success message for trusted path
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: `Successfully added directories:\n- ${trustedPath}`,
+        }),
+        expect.any(Number),
+      );
+
+      // Should show error for untrusted path
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.ERROR,
+          text: expect.stringContaining(untrustedPath),
+        }),
+        expect.any(Number),
+      );
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.ERROR,
+          text: expect.stringContaining('not trusted'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should preserve restrictive sandbox early-return behavior', async () => {
+      const trustedPath = path.normalize('/home/user/trusted-project');
+      const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
+        isPathTrusted: vi.fn().mockReturnValue(true),
+      };
+      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
+        mockLoadedTrustedFolders as LoadedTrustedFolders,
+      );
+      mockConfig = {
+        ...mockConfig,
+        getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
+        isTrustedFolder: vi.fn().mockReturnValue(true),
+        isRestrictiveSandbox: vi.fn().mockReturnValue(true),
+      } as unknown as Config;
+      mockContext = {
+        ...mockContext,
+        services: {
+          ...mockContext.services,
+          config: mockConfig,
+        },
+      };
+
+      if (!addCommand?.action) throw new Error('No action');
+      const result = await addCommand.action(mockContext, trustedPath);
+
+      // Should return early with restrictive sandbox message
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content:
+          'The /directory add command is not supported in restrictive sandbox profiles. Please use --include-directories when starting the session instead.',
+      });
+
+      // Should NOT have called addDirectory even for trusted path
+      expect(mockWorkspaceContext.addDirectory).not.toHaveBeenCalled();
+    });
   });
 });
