@@ -42,8 +42,11 @@ function createMockPolicyEngine() {
 }
 
 // Track execution order for verifying parallel execution
-const executionLog: Array<{ name: string; startTime: number; endTime?: number }> =
-  [];
+const executionLog: Array<{
+  name: string;
+  startTime: number;
+  endTime?: number;
+}> = [];
 
 class OrderTrackingInvocation extends BaseToolInvocation<
   Record<string, unknown>,
