@@ -1702,10 +1702,19 @@ export class CoreToolScheduler {
         getEphemeralSettings: () => ({
           ...ephemeral,
           'tool-output-max-tokens': perToolBudget,
-          'tool-output-truncate-mode': 'truncate',
+          // Preserve user's truncate-mode preference; default to 'truncate' if unset
+          ...(!ephemeral['tool-output-truncate-mode']
+            ? { 'tool-output-truncate-mode': 'truncate' }
+            : {}),
         }),
       };
-    } catch {
+    } catch (error) {
+      if (toolSchedulerLogger.enabled) {
+        toolSchedulerLogger.debug(
+          () =>
+            `Failed to compute batch output limits; skipping budget guard: ${error}`,
+        );
+      }
       this.batchOutputConfig = undefined;
     }
   }
@@ -1741,84 +1750,86 @@ export class CoreToolScheduler {
       this.setPidInternal(callId, pid);
     };
 
-    return invocation
-      .execute(
-        signal,
-        liveOutputCallback,
-        undefined,
-        undefined,
-        setPidCallback,
-      )
-      .then(async (toolResult: ToolResult) => {
-        if (signal.aborted) {
-          this.setStatusInternal(
-            callId,
-            'cancelled',
-            'User cancelled tool execution.',
-          );
-          this.bufferCancelled(callId, scheduledCall, executionIndex);
-          await this.publishBufferedResults(signal);
-          return;
-        }
+    return (
+      invocation
+        .execute(
+          signal,
+          liveOutputCallback,
+          undefined,
+          undefined,
+          setPidCallback,
+        )
+        .then(async (toolResult: ToolResult) => {
+          if (signal.aborted) {
+            this.setStatusInternal(
+              callId,
+              'cancelled',
+              'User cancelled tool execution.',
+            );
+            this.bufferCancelled(callId, scheduledCall, executionIndex);
+            await this.publishBufferedResults(signal);
+            return;
+          }
 
-        this.bufferResult(
-          callId,
-          toolName,
-          toolResult,
-          scheduledCall,
-          executionIndex,
-        );
-
-        await this.publishBufferedResults(signal);
-      })
-      .catch(async (executionError: Error) => {
-        if (signal.aborted) {
-          this.setStatusInternal(
+          this.bufferResult(
             callId,
-            'cancelled',
-            'User cancelled tool execution.',
-          );
-          this.bufferCancelled(callId, scheduledCall, executionIndex);
-          await this.publishBufferedResults(signal);
-        } else {
-          this.bufferError(
-            callId,
-            executionError,
+            toolName,
+            toolResult,
             scheduledCall,
             executionIndex,
           );
-          await this.publishBufferedResults(signal);
-        }
-      })
-      // Issue #957: Final catch handler to ensure tool always reaches
-      // terminal state even if publishBufferedResults throws.
-      .catch((publishError: Error) => {
-        if (toolSchedulerLogger.enabled) {
-          toolSchedulerLogger.debug(
-            () =>
-              `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
-          );
-        }
 
-        const toolCall = this.toolCalls.find(
-          (tc) => tc.request.callId === callId,
-        );
-        if (
-          toolCall &&
-          toolCall.status !== 'success' &&
-          toolCall.status !== 'error' &&
-          toolCall.status !== 'cancelled'
-        ) {
-          const errorResponse = createErrorResponse(
-            scheduledCall.request,
-            new Error(
-              `Failed to publish tool result: ${publishError.message}`,
-            ),
-            ToolErrorType.UNHANDLED_EXCEPTION,
+          await this.publishBufferedResults(signal);
+        })
+        .catch(async (executionError: Error) => {
+          if (signal.aborted) {
+            this.setStatusInternal(
+              callId,
+              'cancelled',
+              'User cancelled tool execution.',
+            );
+            this.bufferCancelled(callId, scheduledCall, executionIndex);
+            await this.publishBufferedResults(signal);
+          } else {
+            this.bufferError(
+              callId,
+              executionError,
+              scheduledCall,
+              executionIndex,
+            );
+            await this.publishBufferedResults(signal);
+          }
+        })
+        // Issue #957: Final catch handler to ensure tool always reaches
+        // terminal state even if publishBufferedResults throws.
+        .catch((publishError: Error) => {
+          if (toolSchedulerLogger.enabled) {
+            toolSchedulerLogger.debug(
+              () =>
+                `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
+            );
+          }
+
+          const toolCall = this.toolCalls.find(
+            (tc) => tc.request.callId === callId,
           );
-          this.setStatusInternal(callId, 'error', errorResponse);
-        }
-      });
+          if (
+            toolCall &&
+            toolCall.status !== 'success' &&
+            toolCall.status !== 'error' &&
+            toolCall.status !== 'cancelled'
+          ) {
+            const errorResponse = createErrorResponse(
+              scheduledCall.request,
+              new Error(
+                `Failed to publish tool result: ${publishError.message}`,
+              ),
+              ToolErrorType.UNHANDLED_EXCEPTION,
+            );
+            this.setStatusInternal(callId, 'error', errorResponse);
+          }
+        })
+    );
   }
 
   private attemptExecutionOfScheduledCalls(signal: AbortSignal): void {
