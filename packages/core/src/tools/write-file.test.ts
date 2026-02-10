@@ -389,6 +389,30 @@ describe('WriteFileTool', () => {
       expect(writtenContent).toBe(`${proposedContent}\n`);
     });
 
+    it('should handle file paths with spaces', async () => {
+      const dirPath = path.join(rootDir, 'some dir');
+      const filePath = path.join(dirPath, 'my file.txt');
+      const content = 'hello';
+
+      const params = { file_path: filePath, content };
+      const invocation = tool.build(params);
+      const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
+      if (
+        typeof confirmDetails === 'object' &&
+        'onConfirm' in confirmDetails &&
+        confirmDetails.onConfirm
+      ) {
+        await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
+      }
+
+      const result = await invocation.execute(abortSignal);
+
+      expect(result.llmContent).toMatch(/Successfully created and wrote/);
+      expect(fs.existsSync(filePath)).toBe(true);
+      const writtenContent = await fsService.readTextFile(filePath);
+      expect(writtenContent).toBe(content);
+    });
+
     it('should create directory if it does not exist', async () => {
       const dirPath = path.join(rootDir, 'new_dir_for_write');
       const filePath = path.join(dirPath, 'file_in_new_dir.txt');

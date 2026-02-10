@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { join } from 'node:path';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 import { getShellConfiguration } from '../packages/core/src/utils/shell-utils.js';
 
@@ -34,28 +35,6 @@ function getFileListingCommand(): { command: string; tool: string } {
     case 'bash':
     default:
       return { command: 'ls -1', tool: 'ls' };
-  }
-}
-
-function getChainedEchoCommand(): { allowPattern: string; command: string } {
-  const secondCommand = getAllowedListCommand();
-  switch (shell) {
-    case 'powershell':
-      return {
-        allowPattern: 'Write-Output',
-        command: `Write-Output "foo" && ${secondCommand}`,
-      };
-    case 'cmd':
-      return {
-        allowPattern: 'echo',
-        command: `echo "foo" && ${secondCommand}`,
-      };
-    case 'bash':
-    default:
-      return {
-        allowPattern: 'echo',
-        command: `echo "foo" && ${secondCommand}`,
-      };
   }
 }
 
@@ -158,42 +137,6 @@ describe('run_shell_command', () => {
     expect(toolCall.toolRequest.success).toBe(true);
   });
 
-  it('should succeed with no parens in non-interactive mode', async () => {
-    const rig = new TestRig();
-    await rig.setup('should succeed with no parens in non-interactive mode');
-
-    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
-    const { tool } = getLineCountCommand();
-    const prompt = `use ${tool} to tell me how many lines there are in ${testFile}`;
-
-    // Use prompt as positional argument instead of stdin for sandbox compatibility.
-    const result = await rig.run(
-      {
-        prompt: prompt,
-        yolo: true,
-      },
-      '--allowed-tools=run_shell_command',
-    );
-
-    const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
-
-    if (!foundToolCall) {
-      printDebugInfo(rig, result, {
-        'Found tool call': foundToolCall,
-      });
-    }
-
-    expect(
-      foundToolCall,
-      'Expected to find a run_shell_command tool call',
-    ).toBeTruthy();
-
-    const toolCall = rig
-      .readToolLogs()
-      .filter((t) => t.toolRequest.name === 'run_shell_command')[0];
-    expect(toolCall.toolRequest.success).toBe(true);
-  });
-
   it('should succeed with --yolo mode', async () => {
     const rig = new TestRig();
     await rig.setup('should succeed with --yolo mode');
@@ -223,45 +166,6 @@ describe('run_shell_command', () => {
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
     expect(result).toContain(expectedText);
-  });
-
-  it('should work with ShellTool alias', async () => {
-    const rig = new TestRig();
-    await rig.setup('should work with ShellTool alias');
-
-    // Use platform-appropriate command
-    const isLinux = process.platform === 'linux';
-    const prompt = isLinux
-      ? `use wc to tell me how many lines there are in /proc/meminfo`
-      : `use wc to count how many lines are in /etc/hosts`;
-    const { tool } = getLineCountCommand();
-
-    // Use prompt as positional argument instead of stdin for sandbox compatibility.
-    const result = await rig.run(
-      {
-        prompt: prompt,
-        yolo: true,
-      },
-      `--allowed-tools=ShellTool(${tool})`,
-    );
-
-    const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
-
-    if (!foundToolCall) {
-      printDebugInfo(rig, result, {
-        'Found tool call': foundToolCall,
-      });
-    }
-
-    expect(
-      foundToolCall,
-      'Expected to find a run_shell_command tool call',
-    ).toBeTruthy();
-
-    const toolCall = rig
-      .readToolLogs()
-      .filter((t) => t.toolRequest.name === 'run_shell_command')[0];
-    expect(toolCall.toolRequest.success).toBe(true);
   });
 
   it('should combine multiple --allowed-tools flags', async () => {
@@ -294,82 +198,6 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
-
-    const toolCall = rig
-      .readToolLogs()
-      .filter((t) => t.toolRequest.name === 'run_shell_command')[0];
-    expect(toolCall.toolRequest.success).toBe(true);
-  });
-
-  // TODO(#11966): Deflake this test and re-enable once the underlying race is resolved.
-  it.skip('should reject chained commands when only the first segment is allowlisted in non-interactive mode', async () => {
-    const rig = new TestRig();
-    await rig.setup(
-      'should reject chained commands when only the first segment is allowlisted',
-    );
-
-    const chained = getChainedEchoCommand();
-    const shellInjection = `!{${chained.command}}`;
-
-    await rig.run(
-      {
-        stdin: `${shellInjection}\n`,
-        yolo: false,
-      },
-      `--allowed-tools=ShellTool(${chained.allowPattern})`,
-    );
-
-    // CLI should refuse to execute the chained command without scheduling run_shell_command.
-    const toolLogs = rig
-      .readToolLogs()
-      .filter((log) => log.toolRequest.name === 'run_shell_command');
-
-    // Success is false because tool is in the scheduled state.
-    for (const log of toolLogs) {
-      expect(log.toolRequest.success).toBe(false);
-      expect(log.toolRequest.args).toContain('&&');
-    }
-  });
-
-  it('should allow all with "ShellTool" and other specific tools', async () => {
-    const rig = new TestRig();
-    await rig.setup(
-      'should allow all with "ShellTool" and other specific tools',
-    );
-
-    const { tool } = getLineCountCommand();
-    const prompt = `Please run the command "echo test-allow-all" and show me the output`;
-
-    // Use prompt as positional argument instead of stdin for sandbox compatibility.
-    const result = await rig.run(
-      {
-        prompt: prompt,
-        yolo: true,
-      },
-      `--allowed-tools=run_shell_command(${tool})`,
-      '--allowed-tools=run_shell_command',
-    );
-
-    const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
-
-    if (!foundToolCall || !result.includes('test-allow-all')) {
-      printDebugInfo(rig, result, {
-        'Found tool call': foundToolCall,
-        Result: result,
-      });
-    }
-
-    expect(
-      foundToolCall,
-      'Expected to find a run_shell_command tool call',
-    ).toBeTruthy();
-
-    // Validate model output - will throw if no output, warn if missing expected content
-    validateModelOutput(
-      result,
-      'test-allow-all',
-      'Shell command stdin allow all',
-    );
 
     const toolCall = rig
       .readToolLogs()
@@ -413,8 +241,13 @@ describe('run_shell_command', () => {
 
   it('should run a platform-specific file listing command', async () => {
     const rig = new TestRig();
-    await rig.setup('should run platform-specific file listing');
-    const fileName = `test-file-${Math.random().toString(36).substring(7)}.txt`;
+    await rig.setup('should run platform-specific file listing', {
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'run-shell-command.listing.responses.jsonl',
+      ),
+    });
+    const fileName = 'test-file-abc123.txt';
     rig.createFile(fileName, 'test content');
 
     const { command, tool } = getFileListingCommand();

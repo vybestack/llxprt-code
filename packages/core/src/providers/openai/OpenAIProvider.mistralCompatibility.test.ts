@@ -229,14 +229,15 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
           buildMessagesWithReasoning: (
             contents: IContent[],
             options: NormalizedGenerateChatOptions,
+            toolFormat?: 'openai' | 'qwen' | 'kimi' | 'mistral',
           ) => OpenAI.Chat.ChatCompletionMessageParam[];
         }
-      ).buildMessagesWithReasoning(contents, options);
+      ).buildMessagesWithReasoning(contents, options, 'mistral');
 
       expect(messages).toHaveLength(1);
       const toolMsg = messages[0] as OpenAI.Chat.ChatCompletionToolMessageParam;
       expect(toolMsg.role).toBe('tool');
-      expect(toolMsg.tool_call_id).toBe('call_123');
+      expect(toolMsg.tool_call_id).toMatch(/^[A-Za-z0-9]{9}$/);
 
       // CRITICAL: name field must be present
       expect(toolMsg.name).toBe('test_tool');
@@ -273,23 +274,129 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
           buildMessagesWithReasoning: (
             contents: IContent[],
             options: NormalizedGenerateChatOptions,
+            toolFormat?: 'openai' | 'qwen' | 'kimi' | 'mistral',
           ) => OpenAI.Chat.ChatCompletionMessageParam[];
         }
-      ).buildMessagesWithReasoning(contents, options);
+      ).buildMessagesWithReasoning(contents, options, 'mistral');
 
       expect(messages).toHaveLength(2);
 
       const toolMsg1 =
         messages[0] as OpenAI.Chat.ChatCompletionToolMessageParam;
       expect(toolMsg1.role).toBe('tool');
-      expect(toolMsg1.tool_call_id).toBe('call_456');
+      expect(toolMsg1.tool_call_id).toMatch(/^[A-Za-z0-9]{9}$/);
       expect(toolMsg1.name).toBe('read_file');
 
       const toolMsg2 =
         messages[1] as OpenAI.Chat.ChatCompletionToolMessageParam;
       expect(toolMsg2.role).toBe('tool');
-      expect(toolMsg2.tool_call_id).toBe('call_789');
+      expect(toolMsg2.tool_call_id).toMatch(/^[A-Za-z0-9]{9}$/);
       expect(toolMsg2.name).toBe('write_file');
+    });
+
+    it('should omit name field for standard openai-format tool responses', () => {
+      const openaiProvider = new OpenAIProvider(
+        'test-api-key',
+        'https://api.openai.com/v1',
+      );
+
+      const contents: IContent[] = [
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_123',
+              toolName: 'read_file',
+              result: 'file contents',
+            } as ToolResponseBlock,
+          ],
+        },
+      ];
+
+      const options = createMockOptions({
+        'reasoning.includeInContext': false,
+        'reasoning.stripFromContext': 'none',
+      });
+
+      const messages = (
+        openaiProvider as unknown as {
+          buildMessagesWithReasoning: (
+            contents: IContent[],
+            options: NormalizedGenerateChatOptions,
+            toolFormat?: 'openai' | 'qwen' | 'kimi' | 'mistral',
+          ) => OpenAI.Chat.ChatCompletionMessageParam[];
+        }
+      ).buildMessagesWithReasoning(contents, options, 'openai');
+
+      expect(messages).toHaveLength(1);
+      const toolMsg = messages[0] as Record<string, unknown>;
+      expect(toolMsg.role).toBe('tool');
+      expect(toolMsg.tool_call_id).toBe('call_123');
+      expect(toolMsg).not.toHaveProperty('name');
+    });
+
+    it('should preserve contiguous tool responses after an assistant tool_call', () => {
+      const messages = [
+        {
+          role: 'user',
+          content: 'Read test file',
+        },
+        {
+          role: 'assistant',
+          tool_calls: [
+            {
+              id: 'call_glob_1',
+              type: 'function',
+              function: {
+                name: 'glob',
+                arguments: JSON.stringify({ pattern: '**/*' }),
+              },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_glob_1',
+          name: 'glob',
+          content: 'Result for glob: ["/tmp/test.txt"]',
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_glob_1',
+          name: 'glob',
+          content: '/tmp/test.txt',
+        },
+      ] as OpenAI.Chat.ChatCompletionMessageParam[];
+
+      const validated = (
+        provider as unknown as {
+          validateToolMessageSequence: (
+            messages: OpenAI.Chat.ChatCompletionMessageParam[],
+          ) => OpenAI.Chat.ChatCompletionMessageParam[];
+        }
+      ).validateToolMessageSequence(messages);
+
+      // Regression guard: both tool responses must remain in sequence.
+      // A tool response should not clear the active assistant tool_call context.
+      expect(validated).toHaveLength(4);
+
+      const assistantMsg =
+        validated[1] as OpenAI.Chat.ChatCompletionAssistantMessageParam;
+      expect(assistantMsg.role).toBe('assistant');
+      expect(assistantMsg.tool_calls).toHaveLength(1);
+      expect(assistantMsg.tool_calls?.[0]?.id).toBe('call_glob_1');
+
+      const toolMsg1 =
+        validated[2] as OpenAI.Chat.ChatCompletionToolMessageParam;
+      const toolMsg2 =
+        validated[3] as OpenAI.Chat.ChatCompletionToolMessageParam;
+      expect(toolMsg1.role).toBe('tool');
+      expect(toolMsg2.role).toBe('tool');
+      expect(toolMsg1.tool_call_id).toBe('call_glob_1');
+      expect(toolMsg2.tool_call_id).toBe('call_glob_1');
+      expect(toolMsg1.name).toBe('glob');
+      expect(toolMsg2.name).toBe('glob');
     });
   });
 
@@ -339,9 +446,10 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
           buildMessagesWithReasoning: (
             contents: IContent[],
             options: NormalizedGenerateChatOptions,
+            toolFormat?: 'openai' | 'qwen' | 'kimi' | 'mistral',
           ) => OpenAI.Chat.ChatCompletionMessageParam[];
         }
-      ).buildMessagesWithReasoning(contents, options);
+      ).buildMessagesWithReasoning(contents, options, 'mistral');
 
       expect(messages).toHaveLength(3);
 
@@ -361,7 +469,7 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
       // Tool response
       const toolMsg = messages[2] as OpenAI.Chat.ChatCompletionToolMessageParam;
       expect(toolMsg.role).toBe('tool');
-      expect(toolMsg.tool_call_id).toBe('call_ls_123');
+      expect(toolMsg.tool_call_id).toMatch(/^[A-Za-z0-9]{9}$/);
       // MUST have name field
       expect(toolMsg.name).toBe('bash');
     });

@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_save_1","name":"save_memory","parameters":{"fact":"My favorite color is blue"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"$blue$"}],"metadata":{"usage":{"promptTokens":220,"completionTokens":8,"totalTokens":228}}}]}
