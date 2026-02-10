@@ -154,6 +154,14 @@
       "type": "array",
       "items": {}
     },
+    "defaultDisabledTools": {
+      "title": "Default Disabled Tools",
+      "description": "Tool names disabled by default. Users can re-enable them with /tools enable.",
+      "markdownDescription": "Tool names disabled by default. Users can re-enable them with /tools enable.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `[\"google_web_fetch\"]`",
+      "default": ["google_web_fetch"],
+      "type": "array",
+      "items": {}
+    },
     "coreToolSettings": {
       "title": "Tool Management",
       "description": "Manage core tool availability",
