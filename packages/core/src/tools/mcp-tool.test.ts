@@ -24,7 +24,6 @@ import { ToolResult, ToolConfirmationOutcome } from './tools.js'; // Added ToolC
 import { CallableTool, Part } from '@google/genai';
 import { ToolErrorType } from './tool-error.js';
 
-// Mock @google/genai mcpToTool and CallableTool
 // We only need to mock the parts of CallableTool that DiscoveredMCPTool uses.
 const mockCallTool = vi.fn();
 const mockToolMethod = vi.fn();

@@ -99,6 +99,7 @@ import { drainStdinBuffer } from './ui/utils/terminalContract.js';
 import {
   DISABLE_BRACKETED_PASTE,
   DISABLE_FOCUS_TRACKING,
+  SHOW_CURSOR,
 } from './ui/utils/terminalSequences.js';
 import { StdinRawModeManager } from './utils/stdinSafety.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
@@ -302,7 +303,9 @@ export async function startInteractiveUI(
     process.on('exit', () => {
       disableMouseEvents();
       if (process.stdout.isTTY) {
-        process.stdout.write(DISABLE_BRACKETED_PASTE + DISABLE_FOCUS_TRACKING);
+        process.stdout.write(
+          DISABLE_BRACKETED_PASTE + DISABLE_FOCUS_TRACKING + SHOW_CURSOR,
+        );
       }
     });
   }
