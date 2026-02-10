@@ -124,8 +124,8 @@ Create `.llxprt/config.json` in your project root:
 
 Debug logs are written to `~/.llxprt/debug/` in JSONL format:
 
-- Files are named: `debug-YYYY-MM-DD.jsonl`
-- Automatic rotation at midnight
+- **One file per run**, named by process id: `llxprt-debug-<PID>.jsonl`
+- Child processes inherit the same file when `LLXPRT_DEBUG` is set
 - Each line is a JSON object with timestamp, namespace, level, and message
 
 Example log entry:
@@ -136,7 +136,9 @@ Example log entry:
   "namespace": "llxprt:openai:provider",
   "level": "debug",
   "message": "Sending request to OpenAI API",
-  "args": ["gpt-4"]
+  "args": ["gpt-4"],
+  "runId": "12345",
+  "pid": 12345
 }
 ```
 
@@ -192,17 +194,17 @@ Debug output appears in the debug console (Ctrl+O) when using stderr output.
 ### File Logs
 
 ```bash
-# View today's debug log
-cat ~/.llxprt/debug/debug-$(date +%Y-%m-%d).jsonl
+# View the current run log
+cat ~/.llxprt/debug/llxprt-debug-<PID>.jsonl
 
 # Pretty print with jq
-cat ~/.llxprt/debug/debug-*.jsonl | jq '.'
+cat ~/.llxprt/debug/llxprt-debug-*.jsonl | jq '.'
 
 # Filter by namespace
-cat ~/.llxprt/debug/debug-*.jsonl | jq 'select(.namespace | startswith("llxprt:openai"))'
+cat ~/.llxprt/debug/llxprt-debug-*.jsonl | jq 'select(.namespace | startswith("llxprt:openai"))'
 
 # Follow log in real-time
-tail -f ~/.llxprt/debug/debug-$(date +%Y-%m-%d).jsonl | jq '.'
+tail -f ~/.llxprt/debug/llxprt-debug-<PID>.jsonl | jq '.'
 ```
 
 ## Examples

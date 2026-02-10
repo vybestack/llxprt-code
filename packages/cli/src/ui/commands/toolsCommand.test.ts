@@ -160,4 +160,80 @@ describe('toolsCommand', () => {
     expect(output.type).toBe(MessageType.ERROR);
     expect(output.text).toContain('Tool "missing" not found');
   });
+
+  it('enabling a tool does not create an allowed whitelist when none exists', async () => {
+    const settings = new SettingsService();
+    settings.set('tools.disabled', ['code-editor']);
+
+    const mockContext = createMockCommandContext({
+      services: {
+        config: {
+          getToolRegistry: () => ({ getAllTools: () => mockTools }),
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({ 'tools.disabled': ['code-editor'] }),
+        },
+      },
+      ui: { addItem: vi.fn() },
+    });
+
+    if (!toolsCommand.action) throw new Error('Action not defined');
+    await toolsCommand.action(mockContext, 'enable code-editor');
+
+    expect(settings.get('tools.disabled')).toEqual([]);
+    expect(settings.get('tools.allowed')).toEqual([]);
+  });
+
+  it('enabling a tool preserves existing allowed whitelist', async () => {
+    const settings = new SettingsService();
+    settings.set('tools.disabled', ['code-editor']);
+    settings.set('tools.allowed', ['file-reader']);
+
+    const mockContext = createMockCommandContext({
+      services: {
+        config: {
+          getToolRegistry: () => ({ getAllTools: () => mockTools }),
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({
+            'tools.disabled': ['code-editor'],
+            'tools.allowed': ['file-reader'],
+          }),
+        },
+      },
+      ui: { addItem: vi.fn() },
+    });
+
+    if (!toolsCommand.action) throw new Error('Action not defined');
+    await toolsCommand.action(mockContext, 'enable code-editor');
+
+    expect(settings.get('tools.disabled')).toEqual([]);
+    expect(settings.get('tools.allowed')).toEqual(
+      expect.arrayContaining(['file-reader', 'code-editor']),
+    );
+  });
+
+  it('enabling a default-disabled tool keeps other tools enabled', async () => {
+    const settings = new SettingsService();
+    settings.set('tools.disabled', ['file-reader']);
+
+    const mockContext = createMockCommandContext({
+      services: {
+        config: {
+          getToolRegistry: () => ({ getAllTools: () => mockTools }),
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({ 'tools.disabled': ['file-reader'] }),
+        },
+      },
+      ui: { addItem: vi.fn() },
+    });
+
+    if (!toolsCommand.action) throw new Error('Action not defined');
+    await toolsCommand.action(mockContext, 'enable file-reader');
+
+    (mockContext.ui.addItem as vi.Mock).mockClear();
+    await toolsCommand.action(mockContext, 'list');
+
+    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    expect(output).toContain('File Reader [enabled]');
+    expect(output).toContain('Code Editor [enabled]');
+  });
 });

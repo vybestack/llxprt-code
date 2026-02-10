@@ -36,7 +36,10 @@ jobs:
       PR_NUMBER: '${{ github.event.pull_request.number }}'
       GH_TOKEN: '${{ github.token }}'
       GITHUB_TOKEN: '${{ github.token }}'
+      # OPENAI_API_KEY is set via GITHUB_ENV by quota check step below
+      # Initial value from secrets will be overridden if quota check succeeds
       OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+      OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
       OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
       LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
       LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
@@ -180,6 +183,14 @@ jobs:
       - name: 'Install LLxprt CLI nightly'
         if: steps.issue_gate.outputs.should_review == 'true'
         run: npm install -g @vybestack/llxprt-code@nightly
+
+      - name: 'Check API quota and select optimal key'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: node scripts/ci-quota-check.js
+        env:
+          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
 
       - name: 'Capture LLxprt Code CI status'
         if: steps.issue_gate.outputs.should_review == 'true'

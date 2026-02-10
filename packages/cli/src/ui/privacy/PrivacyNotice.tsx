@@ -5,10 +5,8 @@
  */
 
 import { Box } from 'ink';
-import { type Config, AuthType } from '@vybestack/llxprt-code-core';
+import { type Config } from '@vybestack/llxprt-code-core';
 import { GeminiPrivacyNotice } from './GeminiPrivacyNotice.js';
-import { CloudPaidPrivacyNotice } from './CloudPaidPrivacyNotice.js';
-import { CloudFreePrivacyNotice } from './CloudFreePrivacyNotice.js';
 import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
 
 interface PrivacyNoticeProps {
@@ -16,6 +14,9 @@ interface PrivacyNoticeProps {
   config: Config;
 }
 
+/**
+ * Privacy notice component that shows appropriate notice based on active provider.
+ */
 const PrivacyNoticeText = ({
   config,
   onExit,
@@ -23,39 +24,22 @@ const PrivacyNoticeText = ({
   config: Config;
   onExit: () => void;
 }) => {
-  const authType = config.getContentGeneratorConfig()?.authType;
-
-  // Check if we're using a non-Gemini provider or llxprt multi-provider
+  // Check active provider to determine which privacy notice to show
   const providerManager = config.getProviderManager?.();
   const activeProvider = providerManager?.getActiveProvider?.();
-  const isNonGeminiProvider =
-    activeProvider && activeProvider.name !== 'gemini';
 
-  // For llxprt multi-provider or when content generator is not initialized,
-  // show the basic Gemini privacy notice
-  if (!authType || authType === AuthType.USE_PROVIDER || isNonGeminiProvider) {
-    // If we have a specific non-Gemini provider, show its notice
-    if (isNonGeminiProvider) {
-      return (
-        <MultiProviderPrivacyNotice
-          providerName={activeProvider.name}
-          onExit={onExit}
-        />
-      );
-    }
-    // Otherwise show basic Gemini API terms
-    return <GeminiPrivacyNotice onExit={onExit} />;
+  // If we have a non-Gemini provider active, show its specific notice
+  if (activeProvider && activeProvider.name !== 'gemini') {
+    return (
+      <MultiProviderPrivacyNotice
+        providerName={activeProvider.name}
+        onExit={onExit}
+      />
+    );
   }
 
-  switch (authType) {
-    case AuthType.USE_GEMINI:
-      return <GeminiPrivacyNotice onExit={onExit} />;
-    case AuthType.USE_VERTEX_AI:
-      return <CloudPaidPrivacyNotice onExit={onExit} />;
-    case AuthType.LOGIN_WITH_GOOGLE:
-    default:
-      return <CloudFreePrivacyNotice config={config} onExit={onExit} />;
-  }
+  // Default to Gemini privacy notice (covers OAuth, API key, Vertex AI)
+  return <GeminiPrivacyNotice onExit={onExit} />;
 };
 
 export const PrivacyNotice = ({ onExit, config }: PrivacyNoticeProps) => (

@@ -54,6 +54,7 @@ export interface IndividualToolCallDisplay {
   confirmationDetails: ToolCallConfirmationDetails | undefined;
   renderOutputAsMarkdown?: boolean;
   isFocused?: boolean;
+  ptyId?: number;
 }
 
 export interface CompressionProps {
@@ -115,7 +116,6 @@ export type HistoryItemAbout = HistoryItemBase & {
   osVersion: string;
   sandboxEnv: string;
   modelVersion: string;
-  selectedAuthType: string;
   gcpProject: string;
   /**
    * Path to the configured keyfile for the active provider. Empty string if none.
@@ -288,7 +288,6 @@ export type Message =
       osVersion: string;
       sandboxEnv: string;
       modelVersion: string;
-      selectedAuthType: string;
       gcpProject: string;
       keyfile: string;
       key: string;

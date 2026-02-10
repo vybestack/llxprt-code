@@ -196,6 +196,14 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'reasoning.adaptiveThinking',
+    category: 'model-behavior',
+    description:
+      'Enable adaptive thinking for Anthropic Opus 4.6+ (true/false)',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
     key: 'reasoning.includeInResponse',
     category: 'cli-behavior',
     description: 'Show thinking blocks in UI output',
@@ -409,9 +417,79 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
   {
     key: 'maxTurnsPerPrompt',
     category: 'cli-behavior',
-    description: 'Maximum number of turns allowed per prompt before stopping',
+    description:
+      'Maximum number of turns allowed per prompt before stopping (default: -1 for unlimited)',
     type: 'number',
     persistToProfile: true,
+    default: -1,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        (value === -1 || value > 0)
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'maxTurnsPerPrompt must be a positive integer or -1 for unlimited',
+      };
+    },
+  },
+  {
+    key: 'loopDetectionEnabled',
+    category: 'cli-behavior',
+    description: 'Enable/disable all loop detection mechanisms (true/false)',
+    type: 'boolean',
+    persistToProfile: true,
+    default: true,
+  },
+  {
+    key: 'toolCallLoopThreshold',
+    category: 'cli-behavior',
+    description:
+      'Number of consecutive identical tool calls before triggering loop detection (default: 50, -1 = unlimited)',
+    type: 'number',
+    persistToProfile: true,
+    default: 50,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        (value === -1 || value > 0)
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'toolCallLoopThreshold must be a positive integer or -1 for unlimited',
+      };
+    },
+  },
+  {
+    key: 'contentLoopThreshold',
+    category: 'cli-behavior',
+    description:
+      'Number of content chunk repetitions before triggering loop detection (default: 50, -1 = unlimited)',
+    type: 'number',
+    persistToProfile: true,
+    default: 50,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        (value === -1 || value > 0)
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'contentLoopThreshold must be a positive integer or -1 for unlimited',
+      };
+    },
   },
   {
     key: 'retries',
@@ -635,9 +713,17 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
   },
   {
     key: 'max_output_tokens',
-    aliases: ['max-output-tokens', 'maxOutputTokens'],
+    aliases: ['max-output-tokens'],
     category: 'model-param',
-    description: 'Maximum output tokens (Gemini)',
+    description: 'Maximum output tokens (Gemini native param)',
+    type: 'number',
+    persistToProfile: true,
+  },
+  {
+    key: 'maxOutputTokens',
+    aliases: ['max-output'],
+    category: 'cli-behavior',
+    description: 'Maximum output tokens (generic, translated by provider)',
     type: 'number',
     persistToProfile: true,
   },

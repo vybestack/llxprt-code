@@ -246,6 +246,7 @@ export class TestRig {
   testName?: string;
   _lastRunStdout?: string;
   _interactiveOutput: string = '';
+  fakeResponsesPath?: string;
 
   constructor() {
     this.bundlePath = join(__dirname, '..', 'bundle/llxprt.js');
@@ -256,12 +257,21 @@ export class TestRig {
 
   setup(
     testName: string,
-    options: { settings?: Record<string, unknown> } = {},
+    options: {
+      settings?: Record<string, unknown>;
+      fakeResponsesPath?: string;
+    } = {},
   ) {
+    this.fakeResponsesPath = undefined;
     this.testName = testName;
     const sanitizedName = sanitizeTestName(testName);
     this.testDir = join(env['INTEGRATION_TEST_FILE_DIR']!, sanitizedName);
     mkdirSync(this.testDir, { recursive: true });
+
+    if (options.fakeResponsesPath) {
+      this.fakeResponsesPath = join(this.testDir, 'fake-responses.jsonl');
+      fs.copyFileSync(options.fakeResponsesPath, this.fakeResponsesPath);
+    }
 
     // Create a settings file to point the CLI to the local collector
     const llxprtDir = join(this.testDir, '.llxprt');
@@ -313,14 +323,8 @@ export class TestRig {
       },
       sandbox:
         env['LLXPRT_SANDBOX'] !== 'false' ? env['LLXPRT_SANDBOX'] : false,
-      selectedAuthType: 'provider', // Use provider-based auth (API keys)
       provider: env['LLXPRT_DEFAULT_PROVIDER'], // No default - must be set explicitly
       debug: true, // Enable debug logging
-      security: {
-        auth: {
-          selectedType: 'provider',
-        },
-      },
       // Don't show the IDE connection dialog when running from VsCode
       ide: { enabled: false, hasSeenNudge: true },
       ...settingsOverridesWithoutUi, // Allow tests to override/add settings
@@ -429,21 +433,23 @@ export class TestRig {
       });
     }
 
-    // Fail fast if required configuration is missing
-    if (!provider) {
-      throw new Error(
-        'LLXPRT_DEFAULT_PROVIDER environment variable is required but not set',
-      );
-    }
-    if (!model) {
-      throw new Error(
-        'LLXPRT_DEFAULT_MODEL environment variable is required but not set',
-      );
-    }
-    if (!apiKey && !keyFile) {
-      throw new Error(
-        'Either OPENAI_API_KEY or OPENAI_API_KEYFILE/LLXPRT_TEST_PROFILE_KEYFILE environment variable is required but not set',
-      );
+    // Fail fast if required configuration is missing (unless using fake responses)
+    if (!this.fakeResponsesPath) {
+      if (!provider) {
+        throw new Error(
+          'LLXPRT_DEFAULT_PROVIDER environment variable is required but not set',
+        );
+      }
+      if (!model) {
+        throw new Error(
+          'LLXPRT_DEFAULT_MODEL environment variable is required but not set',
+        );
+      }
+      if (!apiKey && !keyFile) {
+        throw new Error(
+          'Either OPENAI_API_KEY or OPENAI_API_KEYFILE/LLXPRT_TEST_PROFILE_KEYFILE environment variable is required but not set',
+        );
+      }
     }
 
     // Determine yolo mode: default true unless explicitly set to false
@@ -458,25 +464,32 @@ export class TestRig {
       ...(yolo ? ['--yolo'] : []),
       '--ide-mode',
       'disable',
-      '--provider',
-      provider,
-      '--model',
-      model,
     ];
 
+    // When using fake responses, FakeProvider is activated via LLXPRT_FAKE_RESPONSES
+    // env var in the child process.  Pass --provider fake so the bootstrap's
+    // switchActiveProvider('fake') is a no-op (provider already active).
+    // No --key is needed since FakeProvider doesn't require authentication.
+    if (this.fakeResponsesPath) {
+      commandArgs.push('--provider', 'fake', '--model', 'fake-model');
+    } else {
+      commandArgs.push('--provider', provider!);
+      commandArgs.push('--model', model!);
+
+      // Add baseurl if using openai provider
+      if (provider === 'openai' && baseUrl) {
+        commandArgs.push('--baseurl', baseUrl);
+      }
+
+      // Add API key if available
+      if (apiKey) {
+        commandArgs.push('--key', apiKey);
+      } else if (keyFile) {
+        commandArgs.push('--keyfile', keyFile);
+      }
+    }
+
     const prompts: string[] = [];
-
-    // Add baseurl if using openai provider
-    if (provider === 'openai' && baseUrl) {
-      commandArgs.push('--baseurl', baseUrl);
-    }
-
-    // Add API key if available
-    if (apiKey) {
-      commandArgs.push('--key', apiKey);
-    } else if (keyFile) {
-      commandArgs.push('--keyfile', keyFile);
-    }
 
     // Filter out TERM_PROGRAM to prevent IDE detection
     const filteredEnv = Object.entries(process.env).reduce(
@@ -504,6 +517,10 @@ export class TestRig {
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
         LLXPRT_SANDBOX: 'false',
+        // When fakeResponsesPath is set, tell CLI to use FakeProvider
+        ...(this.fakeResponsesPath
+          ? { LLXPRT_FAKE_RESPONSES: this.fakeResponsesPath }
+          : {}),
       },
     };
 
@@ -1257,10 +1274,41 @@ ${stderr}`),
   }
 
   async runInteractive(...args: string[]): Promise<InteractiveRun> {
-    const { command, initialArgs } = this._getCommandAndArgs([
-      '--yolo',
-      ...args,
-    ]);
+    const provider = env['LLXPRT_DEFAULT_PROVIDER'];
+    const model = env['LLXPRT_DEFAULT_MODEL'];
+    const baseUrl = env['OPENAI_BASE_URL'];
+    const apiKey = env['OPENAI_API_KEY'];
+    const keyFile =
+      env['OPENAI_API_KEYFILE'] ?? env['LLXPRT_TEST_PROFILE_KEYFILE'];
+
+    const commandArgs = ['--yolo'];
+
+    // Keep parity with non-interactive runs when provider env is available.
+    // If env is missing (e.g., local Ctrl+C tests), preserve legacy behavior
+    // and rely on the CLI defaults instead of failing early.
+    if (provider && model) {
+      commandArgs.push('--provider', provider);
+      commandArgs.push('--model', model);
+
+      if (provider === 'openai' && baseUrl) {
+        commandArgs.push('--baseurl', baseUrl);
+      }
+
+      if (apiKey) {
+        commandArgs.push('--key', apiKey);
+      } else if (keyFile) {
+        commandArgs.push('--keyfile', keyFile);
+      }
+    }
+
+    if (env['LLXPRT_TEST_PROFILE']?.trim()) {
+      const profileName = env['LLXPRT_TEST_PROFILE'].trim();
+      commandArgs.push('--profile-load', profileName);
+    }
+
+    commandArgs.push(...args);
+
+    const { command, initialArgs } = this._getCommandAndArgs(commandArgs);
     const isWindows = os.platform() === 'win32';
 
     const filteredEnv = Object.entries(process.env).reduce(
@@ -1291,12 +1339,12 @@ ${stderr}`),
         NO_BROWSER: 'true',
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
-        LLXPRT_DEFAULT_PROVIDER: env['LLXPRT_DEFAULT_PROVIDER'],
-        LLXPRT_DEFAULT_MODEL: env['LLXPRT_DEFAULT_MODEL'],
-        OPENAI_API_KEY: env['OPENAI_API_KEY'],
+        LLXPRT_DEFAULT_PROVIDER: provider,
+        LLXPRT_DEFAULT_MODEL: model,
+        OPENAI_API_KEY: apiKey,
         OPENAI_API_KEYFILE: env['OPENAI_API_KEYFILE'],
         LLXPRT_TEST_PROFILE_KEYFILE: env['LLXPRT_TEST_PROFILE_KEYFILE'],
-        OPENAI_BASE_URL: env['OPENAI_BASE_URL'],
+        OPENAI_BASE_URL: baseUrl,
         LLXPRT_SANDBOX: 'false',
       },
     };

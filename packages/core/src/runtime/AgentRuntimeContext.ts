@@ -50,6 +50,8 @@ export interface ReadonlySettingsSnapshot {
   'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.7 */
   'reasoning.maxTokens'?: number;
+  /** @issue #1307 - Anthropic adaptive thinking toggle for Opus 4.6+ */
+  'reasoning.adaptiveThinking'?: boolean;
 }
 
 /**
@@ -115,7 +117,6 @@ export interface ApiRequestEvent {
   sessionId?: string;
   runtimeId?: string;
   provider?: string;
-  authType?: string;
   timestamp?: number;
 }
 
@@ -129,7 +130,6 @@ export interface ApiResponseEvent {
   model: string;
   promptId?: string;
   durationMs: number;
-  authType?: string;
   sessionId?: string;
   runtimeId?: string;
   provider?: string;
@@ -155,7 +155,6 @@ export interface ApiErrorEvent {
   promptId?: string;
   durationMs: number;
   error: string;
-  authType?: string;
   errorType?: string;
   statusCode?: number | string;
   sessionId?: string;
@@ -199,6 +198,7 @@ export interface AgentRuntimeContext {
       stripFromContext(): 'all' | 'allButLast' | 'none';
       effort(): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined;
       maxTokens(): number | undefined;
+      adaptiveThinking(): boolean | undefined;
     };
   };
 

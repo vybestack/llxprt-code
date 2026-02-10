@@ -15,8 +15,8 @@ import {
   isNodeError,
   parseAndFormatApiError,
   createAgentRuntimeState,
-  AuthType,
   DEFAULT_AGENT_ID,
+  type AnsiOutput,
 } from '@vybestack/llxprt-code-core';
 import type {
   ToolConfirmationPayload,
@@ -93,10 +93,6 @@ export class Task {
       runtimeId: `${this.contextId}-task-runtime`,
       provider: this.config.getProvider?.() ?? 'gemini',
       model: this.config.getModel?.() ?? contentConfig?.model ?? 'gemini-pro',
-      authType: contentConfig?.authType ?? AuthType.USE_NONE,
-      authPayload: contentConfig?.apiKey
-        ? { apiKey: contentConfig.apiKey }
-        : undefined,
       proxyUrl: this.config.getProxy?.(),
       sessionId: this.config.getSessionId?.(),
     });
@@ -306,20 +302,27 @@ export class Task {
 
   private _schedulerOutputUpdate(
     toolCallId: string,
-    outputChunk: string,
+    outputChunk: string | AnsiOutput,
   ): void {
+    // Convert AnsiOutput to string for A2A protocol
+    const textOutput =
+      typeof outputChunk === 'string'
+        ? outputChunk
+        : outputChunk
+            .map((line) => line.map((token) => token.text).join(''))
+            .join('\n');
     logger.info(
       '[Task] Scheduler output update for tool call ' +
         toolCallId +
         ': ' +
-        outputChunk,
+        textOutput,
     );
     const artifact: Artifact = {
       artifactId: `tool-${toolCallId}-output`,
       parts: [
         {
           kind: 'text',
-          text: outputChunk,
+          text: textOutput,
         } as Part,
       ],
     };

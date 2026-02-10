@@ -37,6 +37,7 @@ import {
   type ToolResponseBlock,
   type TextBlock,
   type ThinkingBlock,
+  type CodeBlock,
 } from '../../services/history/IContent.js';
 import {
   processToolParameters,
@@ -60,6 +61,25 @@ import {
   dumpSDKContext,
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
+
+type AnthropicMessageBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | {
+      type: 'tool_result';
+      tool_use_id: string;
+      content: string;
+      is_error?: boolean;
+    }
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string };
+
+type AnthropicMessageContent = string | AnthropicMessageBlock[];
+
+type AnthropicMessage = {
+  role: 'user' | 'assistant';
+  content: AnthropicMessageContent;
+};
 
 /**
  * Rate limit information from Anthropic API response headers
@@ -291,6 +311,14 @@ export class AnthropicProvider extends BaseProvider {
       );
       return [
         {
+          id: 'claude-opus-4-6',
+          name: 'Claude Opus 4.6',
+          provider: this.name,
+          supportedToolFormats: ['anthropic'],
+          contextWindow: 200000,
+          maxOutputTokens: 128000,
+        },
+        {
           id: 'claude-opus-4-5-20251101',
           name: 'Claude Opus 4.5',
           provider: this.name,
@@ -442,6 +470,14 @@ export class AnthropicProvider extends BaseProvider {
   private getDefaultModels(): IModel[] {
     return [
       {
+        id: 'claude-opus-4-6',
+        name: 'Claude Opus 4.6',
+        provider: this.name,
+        supportedToolFormats: ['anthropic'],
+        contextWindow: 200000,
+        maxOutputTokens: 128000,
+      },
+      {
         id: 'claude-opus-4-5-20251101',
         name: 'Claude Opus 4.5',
         provider: this.name,
@@ -497,7 +533,11 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   private getMaxTokensForModel(modelId: string): number {
-    // Handle latest aliases explicitly
+    // Handle Opus 4.6 first - it has 128K max output (different from other opus-4 models)
+    if (modelId.includes('claude-opus-4-6')) {
+      return 128000;
+    }
+    // Handle latest aliases and other opus-4 models explicitly
     if (
       modelId === 'claude-opus-4-latest' ||
       modelId.includes('claude-opus-4')
@@ -524,7 +564,11 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   private getContextWindowForModel(modelId: string): number {
-    // Claude 4 models have larger context windows
+    // Claude Opus 4.6 has 200K context (different from other opus-4 models)
+    if (modelId.includes('claude-opus-4-6')) {
+      return 200000;
+    }
+    // Other Claude 4 opus models have larger context windows
     if (modelId.includes('claude-opus-4')) {
       return 500000;
     }
@@ -828,23 +872,7 @@ export class AnthropicProvider extends BaseProvider {
     );
 
     // Convert IContent directly to Anthropic API format (no IMessage!)
-    const anthropicMessages: Array<{
-      role: 'user' | 'assistant';
-      content:
-        | string
-        | Array<
-            | { type: 'text'; text: string }
-            | { type: 'tool_use'; id: string; name: string; input: unknown }
-            | {
-                type: 'tool_result';
-                tool_use_id: string;
-                content: string;
-                is_error?: boolean;
-              }
-            | { type: 'thinking'; thinking: string; signature?: string }
-            | { type: 'redacted_thinking'; data: string }
-          >;
-    }> = [];
+    const anthropicMessages: AnthropicMessage[] = [];
 
     // Extract system message if present
     // let systemMessage: string | undefined;
@@ -865,27 +893,17 @@ export class AnthropicProvider extends BaseProvider {
     }
     const filteredContentRaw = content.slice(startIndex);
 
-    // Pre-process content to merge consecutive AI messages where one has only thinking
-    // and the next has tool calls. This handles the case where thinking and tool calls
-    // are streamed and stored separately during Anthropic Extended Thinking.
     const filteredContent: IContent[] = [];
-    const consumedOrphanedThinkingIndices = new Set<number>();
+    const consumedIndices = new Set<number>();
+
     for (let i = 0; i < filteredContentRaw.length; i++) {
-      if (consumedOrphanedThinkingIndices.has(i)) {
+      if (consumedIndices.has(i)) {
         continue;
       }
 
       const current = filteredContentRaw[i];
-      const next =
-        i + 1 < filteredContentRaw.length ? filteredContentRaw[i + 1] : null;
 
-      if (
-        reasoningEnabled &&
-        current.speaker === 'ai' &&
-        next &&
-        next.speaker === 'ai'
-      ) {
-        // Check if current has ONLY thinking blocks and next is any AI message.
+      if (reasoningEnabled && current.speaker === 'ai') {
         const currentThinking = current.blocks.filter(
           (b) =>
             b.type === 'thinking' &&
@@ -898,18 +916,60 @@ export class AnthropicProvider extends BaseProvider {
         );
 
         if (currentThinking.length > 0 && currentOther.length === 0) {
-          // Merge: combine thinking from current with all blocks from next
-          this.getLogger().debug(
-            () =>
-              `[AnthropicProvider] Merging orphaned thinking block with subsequent assistant message`,
-          );
-          filteredContent.push({
-            ...next,
-            blocks: [...currentThinking, ...next.blocks],
-          });
-          consumedOrphanedThinkingIndices.add(i);
-          i++; // Skip the next item since we merged it
-          continue;
+          let endIndex = i;
+          while (
+            endIndex + 1 < filteredContentRaw.length &&
+            filteredContentRaw[endIndex + 1].speaker === 'ai'
+          ) {
+            endIndex++;
+          }
+
+          if (endIndex > i) {
+            const thinkingBlocks: ThinkingBlock[] = [
+              ...(currentThinking as ThinkingBlock[]),
+            ];
+            const textBlocks: Array<TextBlock | CodeBlock> = [];
+            const toolCallBlocks: ToolCallBlock[] = [];
+
+            const otherBlocks: ContentBlock[] = [];
+
+            for (let j = i + 1; j <= endIndex; j++) {
+              for (const block of filteredContentRaw[j].blocks) {
+                if (
+                  block.type === 'thinking' &&
+                  (block as ThinkingBlock).sourceField === 'thinking'
+                ) {
+                  thinkingBlocks.push(block as ThinkingBlock);
+                } else if (block.type === 'text' || block.type === 'code') {
+                  textBlocks.push(block);
+                } else if (block.type === 'tool_call') {
+                  toolCallBlocks.push(block as ToolCallBlock);
+                } else {
+                  // Catch-all for unknown block types to prevent silent data loss
+                  otherBlocks.push(block);
+                }
+              }
+              consumedIndices.add(j);
+            }
+
+            this.getLogger().debug(
+              () =>
+                `[AnthropicProvider] Merging ${endIndex - i + 1} consecutive AI messages (thinking-only followed by ${endIndex - i} message(s))`,
+            );
+
+            filteredContent.push({
+              ...filteredContentRaw[endIndex],
+              blocks: [
+                ...thinkingBlocks,
+                ...textBlocks,
+                ...otherBlocks,
+                ...toolCallBlocks,
+              ],
+            });
+            consumedIndices.add(i);
+            i = endIndex;
+            continue;
+          }
         }
       }
 
@@ -1264,6 +1324,168 @@ ${block.code}
       anthropicMessages.push(...filteredMessages);
     }
 
+    for (let i = 0; i < anthropicMessages.length; i++) {
+      const msg = anthropicMessages[i];
+      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        const toolUseBlocks = msg.content.filter(
+          (block) => block.type === 'tool_use',
+        );
+
+        if (toolUseBlocks.length > 0) {
+          const toolUseIdsInMessage = toolUseBlocks.map(
+            (b) => (b as { id: string }).id,
+          );
+          const nextMsgIndex = i + 1;
+
+          if (
+            nextMsgIndex < anthropicMessages.length &&
+            anthropicMessages[nextMsgIndex].role === 'user'
+          ) {
+            const nextMsg = anthropicMessages[nextMsgIndex];
+            const nextMsgToolResults = Array.isArray(nextMsg.content)
+              ? nextMsg.content.filter((b) => b.type === 'tool_result')
+              : [];
+            const nextMsgToolResultIds = nextMsgToolResults.map(
+              (b) => (b as { tool_use_id: string }).tool_use_id,
+            );
+
+            const missingToolResultIds = toolUseIdsInMessage.filter(
+              (id) => !nextMsgToolResultIds.includes(id),
+            );
+
+            if (missingToolResultIds.length > 0) {
+              const collectedResults: Array<{
+                type: 'tool_result';
+                tool_use_id: string;
+                content: string;
+                is_error?: boolean;
+              }> = [];
+
+              const pendingRemovals: Array<{
+                msgIndex: number;
+                blockIndex: number;
+              }> = [];
+
+              for (const missingId of missingToolResultIds) {
+                let foundResult: {
+                  type: 'tool_result';
+                  tool_use_id: string;
+                  content: string;
+                  is_error?: boolean;
+                } | null = null;
+
+                for (
+                  let j = nextMsgIndex + 1;
+                  j < anthropicMessages.length;
+                  j++
+                ) {
+                  const laterMsg = anthropicMessages[j];
+                  if (
+                    laterMsg.role === 'user' &&
+                    Array.isArray(laterMsg.content)
+                  ) {
+                    const resultIdx = laterMsg.content.findIndex(
+                      (b) =>
+                        b.type === 'tool_result' &&
+                        (b as { tool_use_id: string }).tool_use_id ===
+                          missingId,
+                    );
+
+                    if (resultIdx >= 0) {
+                      foundResult = laterMsg.content[resultIdx] as {
+                        type: 'tool_result';
+                        tool_use_id: string;
+                        content: string;
+                        is_error?: boolean;
+                      };
+                      pendingRemovals.push({
+                        msgIndex: j,
+                        blockIndex: resultIdx,
+                      });
+                      break;
+                    }
+                  }
+                }
+
+                if (foundResult) {
+                  collectedResults.push(foundResult);
+                } else {
+                  collectedResults.push({
+                    type: 'tool_result',
+                    tool_use_id: missingId,
+                    content: '[tool execution interrupted]',
+                    is_error: true,
+                  });
+                }
+              }
+
+              for (const removal of pendingRemovals.sort(
+                (a, b) =>
+                  b.msgIndex - a.msgIndex || b.blockIndex - a.blockIndex,
+              )) {
+                const laterMsg = anthropicMessages[removal.msgIndex];
+                if (Array.isArray(laterMsg.content)) {
+                  laterMsg.content.splice(removal.blockIndex, 1);
+                  if (laterMsg.content.length === 0) {
+                    anthropicMessages.splice(removal.msgIndex, 1);
+                  }
+                }
+              }
+
+              if (collectedResults.length > 0) {
+                this.getToolsLogger().debug(
+                  () =>
+                    `Reordering ${collectedResults.length} tool_result(s) to immediately follow tool_use`,
+                );
+
+                if (Array.isArray(nextMsg.content)) {
+                  nextMsg.content.unshift(...collectedResults);
+                } else {
+                  const textBlock: { type: 'text'; text: string } = {
+                    type: 'text',
+                    text: nextMsg.content,
+                  };
+                  nextMsg.content = [...collectedResults, textBlock];
+                }
+              }
+            }
+          } else {
+            // Next message is not a user message - need to check if tool_result exists ANYWHERE
+            // Recompute the set of all tool_result IDs after adjacency enforcement mutations
+            const currentToolResultIds = new Set<string>();
+            for (const msg of anthropicMessages) {
+              if (msg.role === 'user' && Array.isArray(msg.content)) {
+                for (const block of msg.content) {
+                  if (block.type === 'tool_result') {
+                    currentToolResultIds.add(block.tool_use_id);
+                  }
+                }
+              }
+            }
+
+            const missingToolUseIds = toolUseIdsInMessage.filter(
+              (toolUseId) => !currentToolResultIds.has(toolUseId),
+            );
+            if (missingToolUseIds.length > 0) {
+              this.getToolsLogger().debug(
+                () =>
+                  `Synthesizing ${missingToolUseIds.length} missing tool_result(s) for orphaned tool_use`,
+              );
+              anthropicMessages.splice(nextMsgIndex, 0, {
+                role: 'user',
+                content: missingToolUseIds.map((toolUseId) => ({
+                  type: 'tool_result' as const,
+                  tool_use_id: toolUseId,
+                  content: '[tool execution interrupted]',
+                  is_error: true,
+                })),
+              });
+            }
+          }
+        }
+      }
+    }
+
     // Ensure the conversation starts with a valid message type
     // Anthropic requires the first message to be from the user
     if (anthropicMessages.length > 0 && anthropicMessages[0].role !== 'user') {
@@ -1284,6 +1506,49 @@ ${block.code}
         content: 'Hello',
       });
     }
+
+    const isEmptyAnthropicContent = (
+      content: AnthropicMessageContent,
+    ): boolean => {
+      if (typeof content === 'string') {
+        return content.trim() === '';
+      }
+      if (content.length === 0) {
+        return true;
+      }
+      if (content.some((block) => block.type !== 'text')) {
+        return false;
+      }
+      return content.every(
+        (block) => block.type === 'text' && block.text.trim() === '',
+      );
+    };
+
+    const sanitizeEmptyAnthropicMessages = (
+      messages: AnthropicMessage[],
+    ): AnthropicMessage[] =>
+      messages.map((message, index) => {
+        const isLast = index === messages.length - 1;
+        const isEmpty = isEmptyAnthropicContent(message.content);
+        if (isLast) {
+          return message;
+        }
+        if (!isEmpty) {
+          return message;
+        }
+        const placeholder =
+          message.role === 'assistant'
+            ? '[No content generated]'
+            : '[Empty message]';
+        return {
+          ...message,
+          content: placeholder,
+        };
+      });
+
+    const sanitizedMessages = sanitizeEmptyAnthropicMessages(anthropicMessages);
+    anthropicMessages.length = 0;
+    anthropicMessages.push(...sanitizedMessages);
 
     // Convert Gemini format tools to Anthropic format using provider-specific converter
     let anthropicTools = convertToolsToAnthropic(tools, isOAuth);
@@ -1339,8 +1604,24 @@ ${block.code}
 
     // Get pre-separated model parameters from invocation context
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
-    const requestOverrides: Record<string, unknown> =
-      options.invocation?.modelParams ?? {};
+    const requestOverrides: Record<string, unknown> = {
+      ...(options.invocation?.modelParams ?? {}),
+    };
+
+    // Translate generic maxOutputTokens ephemeral to Anthropic's max_tokens
+    const rawMaxOutput = options.settings.get('maxOutputTokens');
+    const genericMaxOutput =
+      typeof rawMaxOutput === 'number' &&
+      Number.isFinite(rawMaxOutput) &&
+      rawMaxOutput > 0
+        ? rawMaxOutput
+        : undefined;
+    if (
+      genericMaxOutput !== undefined &&
+      requestOverrides['max_tokens'] === undefined
+    ) {
+      requestOverrides['max_tokens'] = genericMaxOutput;
+    }
 
     const configEphemeralSettings = options.invocation?.ephemerals ?? {};
 
@@ -1548,6 +1829,84 @@ ${block.code}
       }
     }
 
+    // Read adaptive thinking and effort settings from invocation model-behavior, fallback to settings
+    // @issue #1307: Anthropic Opus 4.6 adaptive thinking support
+    const adaptiveThinking =
+      (typeof options.invocation?.getModelBehavior === 'function'
+        ? options.invocation.getModelBehavior('reasoning.adaptiveThinking')
+        : undefined) ??
+      (options.settings.get('reasoning.adaptiveThinking') as
+        | boolean
+        | undefined);
+
+    const rawEffort =
+      (typeof options.invocation?.getModelBehavior === 'function'
+        ? options.invocation.getModelBehavior('reasoning.effort')
+        : undefined) ??
+      (options.settings.get('reasoning.effort') as
+        | 'minimal'
+        | 'low'
+        | 'medium'
+        | 'high'
+        | 'xhigh'
+        | 'max'
+        | undefined);
+
+    // Map effort levels: minimal→low, low→low, medium→medium, high→high, xhigh/max→max
+    // Only allow max for Opus 4.6+; downgrade xhigh/max to high for older models
+    const isOpus46Plus = currentModel.includes('claude-opus-4-6');
+    let mappedEffort: 'low' | 'medium' | 'high' | 'max' | undefined;
+    if (rawEffort) {
+      if (rawEffort === 'minimal' || rawEffort === 'low') {
+        mappedEffort = 'low';
+      } else if (rawEffort === 'medium') {
+        mappedEffort = 'medium';
+      } else if (rawEffort === 'high') {
+        mappedEffort = 'high';
+      } else if (rawEffort === 'xhigh' || rawEffort === 'max') {
+        mappedEffort = isOpus46Plus ? 'max' : 'high';
+      }
+    }
+
+    // Build thinking configuration per Anthropic API semantics
+    // @issue #1307: Correct adaptive thinking support for Opus 4.6
+    // Adaptive mode: thinking.type='adaptive' (no budget_tokens)
+    // Manual mode: thinking.type='enabled' with budget_tokens
+    // Effort: sent in output_config.effort (not under thinking)
+    let thinkingConfig: {
+      thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
+      output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
+    } = {};
+    if (shouldIncludeThinking) {
+      // For Opus 4.6+ with reasoning enabled, use adaptive thinking by default unless explicit budgetTokens
+      if (
+        isOpus46Plus &&
+        !reasoningBudgetTokens &&
+        adaptiveThinking !== false
+      ) {
+        // Adaptive thinking mode: type='adaptive', no budget_tokens
+        thinkingConfig = {
+          thinking: {
+            type: 'adaptive' as const,
+          },
+        };
+      } else {
+        // Manual mode with budget_tokens (for backwards compatibility or when budgetTokens is set)
+        thinkingConfig = {
+          thinking: {
+            type: 'enabled' as const,
+            budget_tokens:
+              (reasoningBudgetTokens as number | undefined) ?? 10000,
+          },
+        };
+      }
+
+      // Add effort to output_config if specified (not under thinking)
+      if (mappedEffort) {
+        thinkingConfig.output_config = { effort: mappedEffort };
+      }
+    }
+
     const requestBody = {
       model: currentModel,
       messages: anthropicMessages,
@@ -1558,15 +1917,7 @@ ${block.code}
       ...(anthropicTools && anthropicTools.length > 0
         ? { tools: anthropicTools }
         : {}),
-      ...(shouldIncludeThinking
-        ? {
-            thinking: {
-              type: 'enabled' as const,
-              budget_tokens:
-                (reasoningBudgetTokens as number | undefined) ?? 10000,
-            },
-          }
-        : {}),
+      ...thinkingConfig,
     };
 
     // Debug log the tools being sent to Anthropic

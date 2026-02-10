@@ -13,6 +13,7 @@ import {
   GeminiEventType,
   ServerGeminiStreamEvent,
   OutputFormat,
+  type IContent,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
@@ -124,6 +125,9 @@ describe('runNonInteractive', () => {
       getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
       getSessionId: vi.fn().mockReturnValue('test-session'),
       getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+      getSettingsService: vi
+        .fn()
+        .mockReturnValue({ get: vi.fn(), set: vi.fn() }),
       storage: {
         getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
       },
@@ -232,6 +236,111 @@ describe('runNonInteractive', () => {
     expect(output).toContain('<think>First Second</think>');
   });
 
+  it('should stream provider responses via provider manager', async () => {
+    const providerStream: IContent[] = [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Hello' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: ' World' }] },
+    ];
+    const provider = {
+      name: 'openai',
+      generateChatCompletion: vi.fn(async function* () {
+        for (const chunk of providerStream) {
+          yield chunk;
+        }
+      }),
+    };
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue(provider),
+    };
+    (mockConfig.getToolRegistry as unknown as vi.Mock).mockReturnValue({
+      getFunctionDeclarations: vi.fn().mockReturnValue([]),
+    });
+    (mockConfig.getProviderManager as unknown as vi.Mock).mockReturnValue(
+      providerManager,
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Provider input',
+      prompt_id: 'prompt-id-provider-stream',
+    });
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: expect.arrayContaining([
+          expect.objectContaining({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Provider input' }],
+          }),
+        ]),
+        config: mockConfig,
+      }),
+    );
+    expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+    const meaningfulWrites = processStdoutSpy.mock.calls
+      .map(([value]) => value)
+      .filter((value) => value !== '');
+    expect(meaningfulWrites.join('')).toBe('Hello World\n');
+  });
+
+  it('should coerce non-text parts before provider runs', async () => {
+    const providerStream: IContent[] = [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Done' }] },
+    ];
+    const provider = {
+      name: 'openai',
+      generateChatCompletion: vi.fn(async function* () {
+        for (const chunk of providerStream) {
+          yield chunk;
+        }
+      }),
+    };
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue(provider),
+    };
+    (mockConfig.getToolRegistry as unknown as vi.Mock).mockReturnValue({
+      getFunctionDeclarations: vi.fn().mockReturnValue([]),
+    });
+    (mockConfig.getProviderManager as unknown as vi.Mock).mockReturnValue(
+      providerManager,
+    );
+
+    const { handleAtCommand } = await import(
+      './ui/hooks/atCommandProcessor.js'
+    );
+    vi.mocked(handleAtCommand).mockResolvedValue({
+      processedQuery: [
+        { inlineData: { mimeType: 'image/png', data: '' } },
+        { text: 'Follow-up' },
+      ],
+      shouldProceed: true,
+    });
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Provider input',
+      prompt_id: 'prompt-id-provider-nontext',
+    });
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: expect.arrayContaining([
+          expect.objectContaining({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: '<image/png>' }],
+          }),
+          expect.objectContaining({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Follow-up' }],
+          }),
+        ]),
+        config: mockConfig,
+      }),
+    );
+  });
+
   it('should handle a single tool call and respond', async () => {
     const toolCallEvent: ServerGeminiStreamEvent = {
       type: GeminiEventType.ToolCallRequest,
@@ -284,30 +393,40 @@ describe('runNonInteractive', () => {
   });
 
   it('should execute tool calls when using a non-gemini provider', async () => {
-    const toolCallEvent: ServerGeminiStreamEvent = {
-      type: GeminiEventType.ToolCallRequest,
-      value: {
-        callId: 'call-1',
-        name: 'testTool',
-        args: { arg: 'value' },
-        isClientInitiated: false,
-        prompt_id: 'prompt-provider',
-      },
+    let providerCallCount = 0;
+    const provider = {
+      name: 'openai',
+      generateChatCompletion: vi.fn(async function* () {
+        if (providerCallCount === 0) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call-1',
+                name: 'testTool',
+                parameters: { arg: 'value' },
+              },
+            ],
+          } as IContent;
+          providerCallCount += 1;
+          return;
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'All done' }],
+        } as IContent;
+      }),
     };
-    const finalResponse: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'All done' },
-    ];
-
-    mockGeminiClient.sendMessageStream
-      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
-      .mockReturnValueOnce(createStreamFromEvents(finalResponse));
-
     const providerManager = {
-      getActiveProvider: vi.fn().mockReturnValue({ name: 'openai' }),
+      getActiveProvider: vi.fn().mockReturnValue(provider),
     };
     (mockConfig.getProviderManager as unknown as vi.Mock).mockReturnValue(
       providerManager,
     );
+    (mockConfig.getToolRegistry as unknown as vi.Mock).mockReturnValue({
+      getFunctionDeclarations: vi.fn().mockReturnValue([{ name: 'testTool' }]),
+    });
 
     mockCoreExecuteToolCall.mockResolvedValue({
       response: {
@@ -335,13 +454,7 @@ describe('runNonInteractive', () => {
       prompt_id: 'prompt-provider',
     });
 
-    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
-    expect(mockGeminiClient.sendMessageStream).toHaveBeenNthCalledWith(
-      1,
-      [{ text: 'Use the non-gemini provider' }],
-      expect.any(AbortSignal),
-      'prompt-provider',
-    );
+    expect(provider.generateChatCompletion).toHaveBeenCalled();
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
       expect.objectContaining({
@@ -353,6 +466,76 @@ describe('runNonInteractive', () => {
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('All done');
     expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('should count provider tool calls toward max session turns', async () => {
+    vi.mocked(mockConfig.getMaxSessionTurns).mockReturnValue(1);
+    let providerCallCount = 0;
+    const provider = {
+      name: 'openai',
+      generateChatCompletion: vi.fn(async function* () {
+        if (providerCallCount === 0) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call-1',
+                name: 'testTool',
+                parameters: { arg: 'value' },
+              },
+            ],
+          } as IContent;
+          providerCallCount += 1;
+          return;
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'All done' }],
+        } as IContent;
+      }),
+    };
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue(provider),
+    };
+    (mockConfig.getProviderManager as unknown as vi.Mock).mockReturnValue(
+      providerManager,
+    );
+    (mockConfig.getToolRegistry as unknown as vi.Mock).mockReturnValue({
+      getFunctionDeclarations: vi.fn().mockReturnValue([{ name: 'testTool' }]),
+    });
+
+    mockCoreExecuteToolCall.mockResolvedValue({
+      response: {
+        callId: 'call-1',
+        responseParts: [
+          {
+            functionResponse: {
+              id: 'call-1',
+              name: 'testTool',
+              response: { output: 'tool result' },
+            },
+          },
+        ],
+        resultDisplay: undefined,
+        error: undefined,
+        errorType: undefined,
+        agentId: 'primary',
+      },
+    });
+
+    await expect(
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: 'Use the non-gemini provider',
+        prompt_id: 'prompt-provider',
+      }),
+    ).rejects.toThrow(
+      'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
+    );
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(1);
   });
 
   it('should handle error during tool execution and should send error back to the model', async () => {

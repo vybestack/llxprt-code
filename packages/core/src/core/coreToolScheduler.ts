@@ -58,6 +58,7 @@ import {
 } from '../utils/toolOutputLimiter.js';
 import { DebugLogger } from '../debug/index.js';
 import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
 
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
@@ -103,9 +104,10 @@ export type ExecutingToolCall = {
   request: ToolCallRequestInfo;
   tool: AnyDeclarativeTool;
   invocation: AnyToolInvocation;
-  liveOutput?: string;
+  liveOutput?: string | AnsiOutput;
   startTime?: number;
   outcome?: ToolConfirmationOutcome;
+  pid?: number;
 };
 
 export type CancelledToolCall = {
@@ -156,7 +158,7 @@ export type ConfirmHandler = (
 
 export type OutputUpdateHandler = (
   toolCallId: string,
-  outputChunk: string,
+  outputChunk: string | AnsiOutput,
 ) => void;
 
 export type AllToolCallsCompleteHandler = (
@@ -385,6 +387,7 @@ export interface CoreToolSchedulerOptions {
 }
 
 export class CoreToolScheduler {
+  private readonly logger = DebugLogger.getLogger('llxprt:scheduler');
   private toolRegistry: ToolRegistry;
   private toolCalls: ToolCall[] = [];
   private outputUpdateHandler?: OutputUpdateHandler;
@@ -468,7 +471,7 @@ export class CoreToolScheduler {
             `Received TOOL_CONFIRMATION_RESPONSE for unknown correlationId=${response.correlationId}`,
         );
       }
-      return; // Not our confirmation request
+      return;
     }
 
     const waitingToolCall = this.toolCalls.find(
@@ -484,6 +487,7 @@ export class CoreToolScheduler {
         );
       }
       this.pendingConfirmations.delete(response.correlationId);
+
       return;
     }
 
@@ -777,6 +781,19 @@ export class CoreToolScheduler {
         invocation: invocationOrError,
       };
     });
+  }
+
+  private setPidInternal(targetCallId: string, pid: number): void {
+    this.toolCalls = this.toolCalls.map((call) => {
+      if (call.request.callId !== targetCallId || call.status !== 'executing') {
+        return call;
+      }
+      return {
+        ...call,
+        pid,
+      } as ExecutingToolCall;
+    });
+    this.notifyToolCallsUpdate();
   }
 
   private isRunning(): boolean {
@@ -1620,6 +1637,10 @@ export class CoreToolScheduler {
           metadataAgentId ?? scheduledCall.request.agentId ?? DEFAULT_AGENT_ID,
       };
 
+      this.logger.debug(
+        `callId=${callId}, toolName=${toolName}, returnDisplay type=${typeof result.returnDisplay}, hasValue=${!!result.returnDisplay}`,
+      );
+
       this.setStatusInternal(callId, 'success', successResponse);
     } else {
       // Error case
@@ -1668,23 +1689,32 @@ export class CoreToolScheduler {
 
         this.setStatusInternal(callId, 'executing');
 
-        const liveOutputCallback =
-          scheduledCall.tool.canUpdateOutput && this.outputUpdateHandler
-            ? (outputChunk: string) => {
-                if (this.outputUpdateHandler) {
-                  this.outputUpdateHandler(callId, outputChunk);
-                }
-                this.toolCalls = this.toolCalls.map((tc) =>
-                  tc.request.callId === callId && tc.status === 'executing'
-                    ? { ...tc, liveOutput: outputChunk }
-                    : tc,
-                );
-                this.notifyToolCallsUpdate();
+        const liveOutputCallback = scheduledCall.tool.canUpdateOutput
+          ? (outputChunk: string | AnsiOutput) => {
+              if (this.outputUpdateHandler) {
+                this.outputUpdateHandler(callId, outputChunk);
               }
-            : undefined;
+              this.toolCalls = this.toolCalls.map((tc) =>
+                tc.request.callId === callId && tc.status === 'executing'
+                  ? { ...tc, liveOutput: outputChunk }
+                  : tc,
+              );
+              this.notifyToolCallsUpdate();
+            }
+          : undefined;
+
+        const setPidCallback = (pid: number) => {
+          this.setPidInternal(callId, pid);
+        };
 
         invocation
-          .execute(signal, liveOutputCallback)
+          .execute(
+            signal,
+            liveOutputCallback,
+            undefined,
+            undefined,
+            setPidCallback,
+          )
           .then(async (toolResult: ToolResult) => {
             if (signal.aborted) {
               this.setStatusInternal(

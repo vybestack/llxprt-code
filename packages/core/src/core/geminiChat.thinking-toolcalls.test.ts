@@ -48,7 +48,6 @@ import {
 } from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import type { ContentGenerator } from './contentGenerator.js';
-import { AuthType } from './contentGenerator.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import {
@@ -194,7 +193,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       runtimeId: 'runtime-issue1150',
       provider: provider.name,
       model: 'claude-sonnet-4-5-20250929',
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
 
@@ -314,7 +312,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       runtimeId: 'runtime-issue1150-sig',
       provider: provider.name,
       model: 'claude-sonnet-4-5-20250929',
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
 
@@ -426,7 +423,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       runtimeId: 'runtime-issue1150-multiturn',
       provider: provider.name,
       model: 'claude-sonnet-4-5-20250929',
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
 
@@ -549,7 +545,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       runtimeId: 'runtime-issue1150-separate',
       provider: provider.name,
       model: 'claude-sonnet-4-5-20250929',
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
 
@@ -765,7 +760,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       runtimeId: 'runtime-issue1150-multiturn-repro',
       provider: provider.name,
       model: 'claude-sonnet-4-5-20250929',
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
 
@@ -1032,7 +1026,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       runtimeId: 'runtime-actual-bug',
       provider: provider.name,
       model: 'claude-sonnet-4-5-20250929',
-      authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
 

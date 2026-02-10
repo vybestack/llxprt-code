@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const { aliasEntries } = vi.hoisted(() => ({
   aliasEntries: [] as Array<Record<string, unknown>>,
@@ -57,7 +58,7 @@ const {
     private ephemeral: Record<string, unknown> = {};
     private providerManager: unknown;
     private settingsService: InstanceType<typeof StubSettingsService>;
-    private lastRefreshedAuthType: string | undefined;
+    initializeContentGeneratorConfig = vi.fn(async () => {});
 
     constructor(settingsService: InstanceType<typeof StubSettingsService>) {
       this.settingsService = settingsService;
@@ -106,14 +107,6 @@ const {
     getProviderManager(): unknown {
       return this.providerManager;
     }
-
-    getContentGeneratorConfig(): { authType?: string } | undefined {
-      return { authType: this.lastRefreshedAuthType };
-    }
-
-    async refreshAuth(authType: string): Promise<void> {
-      this.lastRefreshedAuthType = authType;
-    }
   }
 
   class StubProvider {
@@ -146,6 +139,7 @@ const StubProvider = StubProviderClass;
 const providers: Record<string, StubProviderInstance> = {
   openai: new StubProvider('openai'),
   qwenvercel: new StubProvider('qwenvercel'),
+  gemini: new StubProvider('gemini'),
 };
 
 let activeProviderName = 'openai';
@@ -227,6 +221,10 @@ const mockOAuthManager = {
   setConfigGetter: vi.fn(),
 } as never;
 
+const debugLoggerWarnSpy = vi
+  .spyOn(DebugLogger.prototype, 'warn')
+  .mockImplementation(() => {});
+
 describe('Provider alias defaults (model + ephemerals)', () => {
   beforeEach(() => {
     stubSettingsService = new StubSettingsService();
@@ -266,6 +264,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
   });
 
   afterEach(() => {
+    debugLoggerWarnSpy.mockReset();
     vi.clearAllMocks();
   });
 
@@ -279,6 +278,21 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     expect(stubSettingsService.getProviderSettings('qwenvercel').model).toBe(
       'qwen3-coder-plus',
     );
+  });
+
+  it('warns if content generator config initialization fails when switching providers', async () => {
+    stubConfig.setEphemeralSetting('auth-key', 'test-key');
+    const initError = new Error('init failed');
+    stubConfig.initializeContentGeneratorConfig = vi.fn(async () => {
+      throw initError;
+    });
+
+    await switchActiveProvider('gemini');
+
+    expect(stubConfig.initializeContentGeneratorConfig).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(debugLoggerWarnSpy).toHaveBeenCalledWith(expect.any(Function));
   });
 
   it('does not override preserved ephemerals', async () => {
@@ -305,6 +319,26 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
     expect(stubConfig.getEphemeralSetting('api-key')).toBeUndefined();
     expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+  });
+
+  it('uses gemini alias default model and provider auth on switch', async () => {
+    aliasEntries.push({
+      alias: 'gemini',
+      source: 'builtin',
+      filePath: '/fake/gemini.config',
+      config: {
+        baseProvider: 'gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        defaultModel: 'gemini-2.5-pro',
+      },
+    });
+
+    await switchActiveProvider('gemini');
+
+    expect(stubConfig.getModel()).toBe('gemini-2.5-pro');
+    expect(stubSettingsService.getProviderSettings('gemini').model).toBe(
+      'gemini-2.5-pro',
+    );
   });
 
   it('ignores non-scalar alias ephemeral values', async () => {

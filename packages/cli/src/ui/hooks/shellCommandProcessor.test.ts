@@ -60,29 +60,56 @@ import * as fs from 'fs';
 // import * as path from 'path';
 import * as crypto from 'crypto';
 import { ToolCallStatus } from '../types.js';
+import type { HistoryItemWithoutId } from '../types.js';
 
 describe('useShellCommandProcessor', () => {
   let addItemToHistoryMock: Mock;
   let setPendingHistoryItemMock: Mock;
   let onExecMock: Mock;
   let onDebugMessageMock: Mock;
+  let setShellInputFocusedMock: Mock;
   let mockConfig: Config;
   let mockGeminiClient: GeminiClient;
 
   let mockShellOutputCallback: (event: ShellOutputEvent) => void;
   let resolveExecutionPromise: (result: ShellExecutionResult) => void;
 
+  let pendingHistoryItemState: HistoryItemWithoutId | null = null;
+  let pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    pendingHistoryItemState = null;
+    pendingHistoryItemRef = { current: null };
 
     addItemToHistoryMock = vi.fn();
-    setPendingHistoryItemMock = vi.fn();
+    // Mock that tracks state and handles both direct values and updater functions
+    setPendingHistoryItemMock = vi.fn((updaterOrValue) => {
+      if (typeof updaterOrValue === 'function') {
+        pendingHistoryItemState = updaterOrValue(pendingHistoryItemState);
+      } else {
+        pendingHistoryItemState = updaterOrValue;
+      }
+      // Keep ref in sync with state for tests
+      pendingHistoryItemRef.current = pendingHistoryItemState;
+    });
     onExecMock = vi.fn();
     onDebugMessageMock = vi.fn();
+    setShellInputFocusedMock = vi.fn();
     mockConfig = {
       getTargetDir: () => '/test/dir',
       getShouldUseNodePtyShell: () => false,
-    } as Config;
+      getAllowPtyThemeOverride: () => false,
+      getPtyScrollbackLimit: () => 600000,
+      getPtyTerminalWidth: () => undefined,
+      getPtyTerminalHeight: () => undefined,
+      getShellExecutionConfig: () => ({
+        showColor: false,
+        scrollback: 600000,
+        terminalWidth: 80,
+        terminalHeight: 24,
+      }),
+    } as unknown as Config;
     mockGeminiClient = { addHistory: vi.fn() } as unknown as GeminiClient;
 
     // os functions are already mocked in the vi.mock call above
@@ -94,7 +121,7 @@ describe('useShellCommandProcessor', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
     mockShellExecutionService.mockImplementation(
-      (_cmd, _cwd, callback, _signal, _usePty) => {
+      (_cmd, _cwd, callback, _signal, _usePty, _config) => {
         mockShellOutputCallback = callback;
         return {
           pid: 12345,
@@ -115,6 +142,10 @@ describe('useShellCommandProcessor', () => {
         onDebugMessageMock,
         mockConfig,
         mockGeminiClient,
+        setShellInputFocusedMock,
+        80,
+        24,
+        pendingHistoryItemRef,
       ),
     );
 
@@ -123,8 +154,6 @@ describe('useShellCommandProcessor', () => {
   ): ShellExecutionResult => ({
     rawOutput: Buffer.from(overrides.output || ''),
     output: 'Success',
-    stdout: 'Success',
-    stderr: '',
     exitCode: 0,
     signal: null,
     error: null,
@@ -163,8 +192,27 @@ describe('useShellCommandProcessor', () => {
       expect.any(Function),
       expect.any(Object),
       false,
+      expect.objectContaining({
+        showColor: false,
+        scrollback: 600000,
+      }),
     );
     expect(onExecMock).toHaveBeenCalledWith(expect.any(Promise));
+    expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
+  });
+
+  it('should return false and not focus shell input for empty queries', () => {
+    const { result } = renderProcessorHook();
+
+    const handled = result.current.handleShellCommand(
+      '   ',
+      new AbortController().signal,
+    );
+
+    expect(handled).toBe(false);
+    expect(setShellInputFocusedMock).not.toHaveBeenCalled();
+    expect(addItemToHistoryMock).not.toHaveBeenCalled();
+    expect(onExecMock).not.toHaveBeenCalled();
   });
 
   it('should handle successful execution and update history correctly', async () => {
@@ -196,6 +244,26 @@ describe('useShellCommandProcessor', () => {
       }),
     );
     expect(mockGeminiClient.addHistory).toHaveBeenCalled();
+  });
+
+  it('should reset shell input focus to false after successful completion', async () => {
+    const { result } = renderProcessorHook();
+
+    act(() => {
+      result.current.handleShellCommand(
+        'echo "ok"',
+        new AbortController().signal,
+      );
+    });
+    const execPromise = onExecMock.mock.calls[0][0];
+
+    act(() => {
+      resolveExecutionPromise(createMockServiceResult({ output: 'ok' }));
+    });
+    await act(async () => await execPromise);
+
+    expect(setShellInputFocusedMock).toHaveBeenCalledWith(true);
+    expect(setShellInputFocusedMock).toHaveBeenCalledWith(false);
   });
 
   it('should handle command failure and display error status', async () => {
@@ -234,14 +302,23 @@ describe('useShellCommandProcessor', () => {
 
     it('should throttle pending UI updates for text streams', async () => {
       const { result } = renderProcessorHook();
-      act(() => {
+      await act(async () => {
         result.current.handleShellCommand(
           'stream',
           new AbortController().signal,
         );
+        // Allow microtasks to run for the async execute() to complete
+        await Promise.resolve();
       });
 
-      // Simulate rapid output
+      // After handleShellCommand starts: initial tool display + ptyId update
+      const callsAfterInit = setPendingHistoryItemMock.mock.calls.length;
+      expect(callsAfterInit).toBeGreaterThanOrEqual(1);
+
+      // Simulate first output with time advancement
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
       act(() => {
         mockShellOutputCallback({
           type: 'data',
@@ -249,10 +326,15 @@ describe('useShellCommandProcessor', () => {
         });
       });
 
-      // Should not have updated the UI yet
-      expect(setPendingHistoryItemMock).toHaveBeenCalledTimes(1); // Only the initial call
+      // With -Infinity initialization, first output triggers immediately
+      // Verify the first output was captured in state
+      expect(
+        pendingHistoryItemState &&
+          pendingHistoryItemState.type === 'tool_group' &&
+          pendingHistoryItemState.tools[0].resultDisplay,
+      ).toBe('hello');
 
-      // Advance time and send another event to trigger the throttled update
+      // Advance time past throttle window and send second output
       await act(async () => {
         await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
       });
@@ -263,9 +345,8 @@ describe('useShellCommandProcessor', () => {
         });
       });
 
-      // Should now have been called with the cumulative output
-      expect(setPendingHistoryItemMock).toHaveBeenCalledTimes(2);
-      expect(setPendingHistoryItemMock).toHaveBeenLastCalledWith(
+      // Verify second output was cumulative
+      expect(pendingHistoryItemState).toEqual(
         expect.objectContaining({
           tools: [expect.objectContaining({ resultDisplay: 'hello world' })],
         }),
@@ -274,26 +355,25 @@ describe('useShellCommandProcessor', () => {
 
     it('should show binary progress messages correctly', async () => {
       const { result } = renderProcessorHook();
-      act(() => {
+      await act(async () => {
         result.current.handleShellCommand(
           'cat img',
           new AbortController().signal,
         );
+        // Allow microtasks to run for the async execute() to complete
+        await Promise.resolve();
       });
 
-      // Should immediately show the detection message
+      // Binary detection should show immediately (lastUpdateTime is -Infinity)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
       act(() => {
         mockShellOutputCallback({ type: 'binary_detected' });
       });
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
-      });
-      // Send another event to trigger the update
-      act(() => {
-        mockShellOutputCallback({ type: 'binary_progress', bytesReceived: 0 });
-      });
 
-      expect(setPendingHistoryItemMock).toHaveBeenLastCalledWith(
+      // The implementation now uses an updater function, so check the resulting state
+      expect(pendingHistoryItemState).toEqual(
         expect.objectContaining({
           tools: [
             expect.objectContaining({
@@ -314,13 +394,56 @@ describe('useShellCommandProcessor', () => {
         });
       });
 
-      expect(setPendingHistoryItemMock).toHaveBeenLastCalledWith(
+      // The implementation now uses an updater function, so check the resulting state
+      expect(pendingHistoryItemState).toEqual(
         expect.objectContaining({
           tools: [
             expect.objectContaining({
               resultDisplay: '[Receiving binary output... 2.0 KB received]',
             }),
           ],
+        }),
+      );
+    });
+    it('should update pending output without pendingHistoryItemRef fallback', async () => {
+      const { result } = renderHook(() =>
+        useShellCommandProcessor(
+          addItemToHistoryMock,
+          setPendingHistoryItemMock,
+          onExecMock,
+          onDebugMessageMock,
+          mockConfig,
+          mockGeminiClient,
+          setShellInputFocusedMock,
+          80,
+          24,
+          undefined,
+        ),
+      );
+
+      await act(async () => {
+        result.current.handleShellCommand(
+          'stream',
+          new AbortController().signal,
+        );
+        await Promise.resolve();
+      });
+
+      // Ensure we start from the hook-provided pending tool group state so the
+      // callId in fallback updates matches the active shell invocation.
+      expect(pendingHistoryItemState?.type).toBe('tool_group');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+
+      act(() => {
+        mockShellOutputCallback({ type: 'data', chunk: 'hello' });
+      });
+
+      expect(pendingHistoryItemState).toEqual(
+        expect.objectContaining({
+          tools: [expect.objectContaining({ resultDisplay: 'hello' })],
         }),
       );
     });
@@ -341,6 +464,10 @@ describe('useShellCommandProcessor', () => {
       expect.any(Function),
       expect.any(Object),
       false,
+      expect.objectContaining({
+        showColor: false,
+        scrollback: 600000,
+      }),
     );
   });
 
@@ -366,6 +493,7 @@ describe('useShellCommandProcessor', () => {
     expect(finalHistoryItem.tools[0].resultDisplay).toContain(
       'Command was cancelled.',
     );
+    expect(setShellInputFocusedMock).toHaveBeenCalledWith(false);
   });
 
   it('should handle binary output result correctly', async () => {

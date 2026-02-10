@@ -388,6 +388,48 @@ describe('AnthropicProvider', () => {
       expect(opus45Alias?.maxOutputTokens).toBe(32000);
     });
 
+    it('should include Claude Opus 4.6 model in OAuth model list', async () => {
+      const oauthProvider = new AnthropicProvider(
+        'sk-ant-oat-test-token',
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(oauthProvider, 'getAuthToken').mockResolvedValue(
+        'sk-ant-oat-test-token',
+      );
+
+      const models = await oauthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-opus-4-6');
+
+      const opus46 = models.find((m) => m.id === 'claude-opus-4-6');
+      expect(opus46).toBeDefined();
+      expect(opus46?.name).toBe('Claude Opus 4.6');
+      expect(opus46?.contextWindow).toBe(200000);
+      expect(opus46?.maxOutputTokens).toBe(128000);
+    });
+
+    it('should include Claude Opus 4.6 model in default list when auth is unavailable', async () => {
+      const noAuthProvider = new AnthropicProvider(
+        undefined,
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(noAuthProvider, 'getAuthToken').mockResolvedValue(undefined);
+
+      const models = await noAuthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-opus-4-6');
+
+      const opus46 = models.find((m) => m.id === 'claude-opus-4-6');
+      expect(opus46?.contextWindow).toBe(200000);
+      expect(opus46?.maxOutputTokens).toBe(128000);
+    });
+
     it('should return models with correct structure', async () => {
       const models = await provider.getModels();
 
@@ -1270,6 +1312,376 @@ describe('AnthropicProvider', () => {
         expect(anthropicMessages).toHaveLength(3);
       },
     );
+
+    it('should replace empty intermediate messages with placeholders', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'ok' },
+          };
+        },
+      };
+
+      mockMessagesCreate.mockResolvedValueOnce(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: '' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: '',
+              sourceField: 'thinking',
+            },
+            { type: 'text', text: '' },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'next' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            provider: {
+              streaming: 'disabled',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      expect(anthropicMessages).toEqual([
+        { role: 'user', content: '[Empty message]' },
+        { role: 'assistant', content: '[No content generated]' },
+        { role: 'user', content: 'next' },
+      ]);
+    });
+
+    it('should allow empty final assistant messages', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'ok' },
+          };
+        },
+      };
+
+      mockMessagesCreate.mockResolvedValueOnce(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: '' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            provider: {
+              streaming: 'disabled',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      expect(anthropicMessages).toEqual([
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: '' },
+      ]);
+    });
+
+    it('should sanitize empty text blocks in intermediate assistant messages', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'ok' },
+          };
+        },
+      };
+
+      mockMessagesCreate.mockResolvedValueOnce(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'start' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: '' }],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'next' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            provider: {
+              streaming: 'disabled',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      expect(anthropicMessages).toEqual([
+        { role: 'user', content: 'start' },
+        { role: 'assistant', content: '[No content generated]' },
+        { role: 'user', content: 'next' },
+      ]);
+    });
+
+    it('should sanitize empty text blocks in intermediate user messages', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'ok' },
+          };
+        },
+      };
+
+      mockMessagesCreate.mockResolvedValueOnce(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'start' }],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: '' }],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'next' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            provider: {
+              streaming: 'disabled',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      expect(anthropicMessages).toEqual([
+        { role: 'user', content: 'start' },
+        { role: 'user', content: '[Empty message]' },
+        { role: 'user', content: 'next' },
+      ]);
+    });
+
+    it('should sanitize empty assistant content arrays in intermediate messages', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'ok' },
+          };
+        },
+      };
+
+      mockMessagesCreate.mockResolvedValueOnce(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'start' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: '',
+              sourceField: 'thinking',
+            },
+            { type: 'text', text: '' },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'next' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            provider: {
+              streaming: 'disabled',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      expect(anthropicMessages).toEqual([
+        { role: 'user', content: 'start' },
+        { role: 'assistant', content: '[No content generated]' },
+        { role: 'user', content: 'next' },
+      ]);
+    });
+
+    it('should sanitize empty assistant content arrays with text blocks', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'ok' },
+          };
+        },
+      };
+
+      mockMessagesCreate.mockResolvedValueOnce(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'start' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            { type: 'text', text: '' },
+            { type: 'text', text: ' ' },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'next' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            provider: {
+              streaming: 'disabled',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      expect(anthropicMessages).toEqual([
+        { role: 'user', content: 'start' },
+        { role: 'assistant', content: '[No content generated]' },
+        { role: 'user', content: 'next' },
+      ]);
+    });
+
+    it('should keep non-text assistant content arrays intact', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'ok' },
+          };
+        },
+      };
+
+      mockMessagesCreate.mockResolvedValueOnce(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'start' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'tool-1',
+              name: 'test_tool',
+              parameters: {},
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            provider: {
+              streaming: 'disabled',
+            },
+          },
+        }),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      const assistantMessage = anthropicMessages[1];
+      expect(assistantMessage.role).toBe('assistant');
+      expect(assistantMessage.content).toEqual([
+        {
+          type: 'tool_use',
+          id: 'toolu_tool-1',
+          name: 'test_tool',
+          input: {},
+        },
+      ]);
+    });
   });
 
   describe('Prompt Caching', () => {

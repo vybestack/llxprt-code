@@ -183,7 +183,6 @@ describe('CoreToolScheduler', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -251,7 +250,6 @@ describe('CoreToolScheduler', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,
@@ -326,7 +324,6 @@ describe('CoreToolScheduler', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,
@@ -413,7 +410,6 @@ describe('CoreToolScheduler', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,
@@ -511,7 +507,6 @@ describe('CoreToolScheduler', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getShellExecutionConfig: () => ({
         terminalWidth: 90,
@@ -596,7 +591,6 @@ describe('CoreToolScheduler', () => {
       getToolRegistry: () => toolRegistry,
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
@@ -665,7 +659,6 @@ describe('CoreToolScheduler', () => {
       getToolRegistry: () => toolRegistry,
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
       getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
@@ -739,7 +732,6 @@ describe('CoreToolScheduler', () => {
       getToolRegistry: () => toolRegistry,
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
@@ -849,7 +841,6 @@ describe('CoreToolScheduler with payload', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -1214,7 +1205,6 @@ describe('CoreToolScheduler edit cancellation', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -1532,7 +1522,6 @@ describe('CoreToolScheduler YOLO mode', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -1630,7 +1619,6 @@ describe.skip('CoreToolScheduler request queueing', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
     } as unknown as Config;
@@ -1754,7 +1742,6 @@ describe.skip('CoreToolScheduler request queueing', () => {
       getToolRegistry: () => toolRegistry,
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
     } as unknown as Config;
 
@@ -1864,7 +1851,6 @@ describe.skip('CoreToolScheduler request queueing', () => {
       getAllowedTools: () => ['run_shell_command(git)'],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getShellExecutionConfig: () => ({
         terminalWidth: 80,
@@ -1942,7 +1928,6 @@ describe.skip('CoreToolScheduler request queueing', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
     } as unknown as Config;
@@ -2182,7 +2167,6 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -2302,7 +2286,6 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -2425,7 +2408,6 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -2555,7 +2537,6 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -2650,7 +2631,6 @@ it('injects agentId into ContextAwareTool context', async () => {
     getToolRegistry: () => toolRegistry,
     getContentGeneratorConfig: () => ({
       model: 'test-model',
-      authType: 'oauth-personal',
     }),
     getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
     getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
@@ -2719,7 +2699,6 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -2827,7 +2806,6 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
@@ -2930,7 +2908,6 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       getAllowedTools: () => [],
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,

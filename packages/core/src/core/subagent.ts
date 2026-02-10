@@ -675,7 +675,14 @@ export class SubAgentScope {
 
     const outputUpdateHandler: OutputUpdateHandler = (_toolCallId, output) => {
       if (output && this.onMessage) {
-        this.onMessage(output);
+        // For subagents, we convert AnsiOutput to string for simple text display
+        const textOutput =
+          typeof output === 'string'
+            ? output
+            : output
+                .map((line) => line.map((token) => token.text).join(''))
+                .join('\n');
+        this.onMessage(textOutput);
       }
     };
 

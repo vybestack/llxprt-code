@@ -193,7 +193,6 @@ export const useSlashCommandProcessor = (
           osVersion: message.osVersion,
           sandboxEnv: message.sandboxEnv,
           modelVersion: message.modelVersion,
-          selectedAuthType: message.selectedAuthType,
           gcpProject: message.gcpProject,
           keyfile: message.keyfile || '',
           key: message.key || '',

@@ -13,7 +13,6 @@ import {
   clearOauthClientCache,
 } from './oauth2.js';
 import { Config } from '../config/config.js';
-import { AuthType } from '../core/contentGenerator.js';
 import readline from 'node:readline';
 import open from 'open';
 import { FatalAuthenticationError } from '../utils/errors.js';
@@ -156,10 +155,7 @@ describe('OAuth2', () => {
     };
     (readline.createInterface as unknown as Mock).mockReturnValue(mockReadline);
 
-    const result = await performLogin(
-      AuthType.LOGIN_WITH_GOOGLE,
-      mockConfigWithNoBrowser,
-    );
+    const result = await performLogin(mockConfigWithNoBrowser);
     expect(result).toBe(true);
 
     expect(mockGenerateAuthUrl).toHaveBeenCalledWith(
@@ -231,10 +227,7 @@ describe('OAuth2', () => {
     (global as Record<string, unknown>).__oauth_wait_for_code = waitForCode;
     (global as Record<string, unknown>).__oauth_provider = 'previous-provider';
 
-    const result = await performLogin(
-      AuthType.LOGIN_WITH_GOOGLE,
-      mockConfigWithNoBrowser,
-    );
+    const result = await performLogin(mockConfigWithNoBrowser);
 
     expect(result).toBe(true);
     expect(waitForCode).toHaveBeenCalledTimes(1);
@@ -289,7 +282,7 @@ describe('OAuth2', () => {
 
     (open as unknown as Mock).mockResolvedValue({ on: vi.fn() });
 
-    const loginPromise = performLogin(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
+    const loginPromise = performLogin(mockConfig);
 
     await vi.waitFor(() => {
       expect(mockGenerateAuthUrl).toHaveBeenCalled();
@@ -336,12 +329,12 @@ describe('OAuth2', () => {
     const mockError = new Error('Browser failed to open');
     (open as unknown as Mock).mockRejectedValue(mockError);
 
-    await expect(
-      performLogin(AuthType.LOGIN_WITH_GOOGLE, mockConfig),
-    ).rejects.toThrow(FatalAuthenticationError);
-    await expect(
-      performLogin(AuthType.LOGIN_WITH_GOOGLE, mockConfig),
-    ).rejects.toThrow('Failed to open browser: Browser failed to open');
+    await expect(performLogin(mockConfig)).rejects.toThrow(
+      FatalAuthenticationError,
+    );
+    await expect(performLogin(mockConfig)).rejects.toThrow(
+      'Failed to open browser: Browser failed to open',
+    );
 
     expect(console.error).toHaveBeenCalledWith(
       'An unexpected error occurred while trying to open the browser:',
@@ -384,9 +377,9 @@ describe('OAuth2', () => {
       });
 
     try {
-      await expect(
-        performLogin(AuthType.LOGIN_WITH_GOOGLE, mockConfig),
-      ).rejects.toThrow('Authentication timed out after 5 minutes');
+      await expect(performLogin(mockConfig)).rejects.toThrow(
+        'Authentication timed out after 5 minutes',
+      );
     } finally {
       setTimeoutSpy.mockRestore();
     }
@@ -463,12 +456,6 @@ describe('OAuth2', () => {
     expect(mockSetCredentials).toHaveBeenCalledWith(mockTokens);
   });
 
-  it('should handle USE_NONE auth type', async () => {
-    await expect(
-      getOauthClient(AuthType.USE_NONE, {} as Config),
-    ).rejects.toThrow('OAuth not required for USE_NONE auth type');
-  });
-
   it('should handle GCA environment with access token', async () => {
     process.env.GOOGLE_GENAI_USE_GCA = 'true';
     process.env.GOOGLE_CLOUD_ACCESS_TOKEN = 'test-gca-token';
@@ -490,7 +477,7 @@ describe('OAuth2', () => {
       () => mockOAuth2Client,
     );
 
-    const client = await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
+    const client = await getOauthClient(mockConfig);
 
     expect(client).toBe(mockOAuth2Client);
     expect(mockSetCredentials).toHaveBeenCalledWith({
@@ -526,7 +513,7 @@ describe('OAuth2', () => {
       () => mockOAuth2Client,
     );
 
-    await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
+    await getOauthClient(mockConfig);
 
     expect(mockSetCredentials).toHaveBeenCalledWith(mockCachedCredentials);
   });
@@ -559,7 +546,7 @@ describe('OAuth2', () => {
     const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 
     try {
-      await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
+      await getOauthClient(mockConfig);
     } catch {
       // The auth flow will fail because we're in test mode, but that's okay
     }
@@ -596,17 +583,17 @@ describe('OAuth2', () => {
       );
 
       // First call, should create a client
-      await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
+      await getOauthClient(mockConfig);
       expect(OAuth2Client).toHaveBeenCalledTimes(1);
 
       // Second call, should use cached client
-      await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
+      await getOauthClient(mockConfig);
       expect(OAuth2Client).toHaveBeenCalledTimes(1);
 
       clearOauthClientCache();
 
       // Third call, after clearing cache, should create a new client
-      await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
+      await getOauthClient(mockConfig);
       expect(OAuth2Client).toHaveBeenCalledTimes(2);
     });
   });
@@ -656,10 +643,7 @@ describe('OAuth2', () => {
       const createInterfaceSpy = vi.spyOn(readline, 'createInterface');
 
       try {
-        const result = await performLogin(
-          AuthType.LOGIN_WITH_GOOGLE,
-          mockConfigWithNoBrowser,
-        );
+        const result = await performLogin(mockConfigWithNoBrowser);
 
         expect(result).toBe(true);
         // The UI hook should have been called
@@ -715,9 +699,9 @@ describe('OAuth2', () => {
 
       try {
         // The login should fail with FatalAuthenticationError, NOT fall back to readline
-        await expect(
-          performLogin(AuthType.LOGIN_WITH_GOOGLE, mockConfigWithNoBrowser),
-        ).rejects.toThrow(FatalAuthenticationError);
+        await expect(performLogin(mockConfigWithNoBrowser)).rejects.toThrow(
+          FatalAuthenticationError,
+        );
 
         // readline.createInterface should NEVER be called when hook is available
         expect(createInterfaceSpy).not.toHaveBeenCalled();

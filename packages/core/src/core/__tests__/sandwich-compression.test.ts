@@ -8,7 +8,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat } from '../geminiChat.js';
 import { HistoryService } from '../../services/history/HistoryService.js';
 import type { IContent } from '../../services/history/IContent.js';
-import { AuthType } from '../contentGenerator.js';
 import { createAgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '../../runtime/createAgentRuntimeContext.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
@@ -67,7 +66,6 @@ describe('Sandwich Compression (Issue #1011)', () => {
       runtimeId: 'test-runtime',
       provider: 'test-provider',
       model: 'test-model',
-      authType: AuthType.USE_NONE,
       sessionId: 'test-session',
     });
 
@@ -125,7 +123,6 @@ describe('Sandwich Compression (Issue #1011)', () => {
         runtimeId: 'test-runtime-2',
         provider: 'test-provider',
         model: 'test-model',
-        authType: AuthType.USE_NONE,
         sessionId: 'test-session',
       });
 

@@ -5,6 +5,7 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -21,9 +22,38 @@ import {
   SubagentManager,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
+import { LoadedSettings, USER_SETTINGS_PATH } from '../config/settings.js';
+import type { Settings } from '../config/settings.js';
+import stripJsonComments from 'strip-json-comments';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
+
+/**
+ * @fix issue1317
+ * Load user settings from disk so isolated runtimes can resolve oauthEnabledProviders.
+ * Follows the same pattern as resolveLoadedSettings() in providerManagerInstance.ts.
+ */
+function loadSettingsForIsolatedRuntime(): LoadedSettings | undefined {
+  try {
+    if (fs.existsSync(USER_SETTINGS_PATH)) {
+      const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
+      const userSettings = JSON.parse(
+        stripJsonComments(userContent),
+      ) as Settings;
+      return new LoadedSettings(
+        { path: '', settings: {} as Settings },
+        { path: '', settings: {} as Settings },
+        { path: USER_SETTINGS_PATH, settings: userSettings },
+        { path: '', settings: {} as Settings },
+        true,
+      );
+    }
+  } catch {
+    // Failed to load user settings; fall back to no settings.
+  }
+  return undefined;
+}
 
 let sharedTokenStore: MultiProviderTokenStore | null = null;
 let activationBindings: RuntimeActivationBindings | null = null;
@@ -231,7 +261,9 @@ export function createIsolatedRuntimeContext(
     config.getSettingsService() ?? settingsService;
   const tokenStore =
     sharedTokenStore ?? (sharedTokenStore = new MultiProviderTokenStore()); // Step 1 (multi-runtime-baseline.md line 2) keeps token storage shared.
-  const oauthManager = options.oauthManager ?? new OAuthManager(tokenStore);
+  const oauthManager =
+    options.oauthManager ??
+    new OAuthManager(tokenStore, loadSettingsForIsolatedRuntime());
 
   const initialRuntimeContext = createProviderRuntimeContext({
     settingsService: resolvedSettingsService,

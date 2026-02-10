@@ -34,7 +34,6 @@ import {
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
 } from '../../runtime/runtimeAdapters.js';
-import { AuthType } from '../contentGenerator.js';
 import { HistoryService } from '../../services/history/HistoryService.js';
 import type { ContentGenerator } from '../contentGenerator.js';
 import { createProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
@@ -62,8 +61,6 @@ function createTestRuntimeState(
     runtimeId: 'test-runtime-001',
     provider: 'gemini',
     model: 'gemini-2.0-flash',
-    authType: AuthType.USE_GEMINI,
-    authPayload: { apiKey: 'runtime-api-key' },
     sessionId: 'test-session-001',
     ...overrides,
   });
@@ -266,16 +263,14 @@ describe('GeminiChat - Runtime State Integration', () => {
       expect(chat['runtimeState']?.model).toBe('gemini-2.0-flash');
     });
 
-    it('should use auth from runtime state not Config', async () => {
+    it('should use runtime state over Config defaults', async () => {
       // @plan PLAN-20251027-STATELESS5.P09
       // @requirement REQ-STAT5-004.1
 
       const runtimeState = createTestRuntimeState({
-        authType: AuthType.USE_GEMINI,
-        authPayload: { apiKey: 'runtime-key' }, // Runtime state auth
+        model: 'runtime-model',
       });
       const config = createTestConfig();
-      // Config has different auth (via constructor defaults)
 
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
@@ -292,12 +287,9 @@ describe('GeminiChat - Runtime State Integration', () => {
         [],
       );
 
-      // Should use auth from runtime state
+      // Should use values from runtime state
       expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState']?.authType).toBe(AuthType.USE_GEMINI);
-      expect(chat['runtimeState']?.authPayload).toEqual({
-        apiKey: 'runtime-key',
-      });
+      expect(chat['runtimeState']?.model).toBe('runtime-model');
     });
 
     it('should use baseUrl from runtime state not Config', async () => {

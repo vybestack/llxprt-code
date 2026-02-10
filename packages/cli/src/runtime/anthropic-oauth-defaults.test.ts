@@ -71,7 +71,6 @@ const {
     private ephemeral: Record<string, unknown> = {};
     private providerManager: unknown;
     private settingsService: InstanceType<typeof StubSettingsService>;
-    private lastRefreshedAuthType: string | undefined;
 
     constructor(settingsService: InstanceType<typeof StubSettingsService>) {
       this.settingsService = settingsService;
@@ -119,14 +118,6 @@ const {
 
     getProviderManager(): unknown {
       return this.providerManager;
-    }
-
-    getContentGeneratorConfig(): { authType?: string } | undefined {
-      return { authType: this.lastRefreshedAuthType };
-    }
-
-    async refreshAuth(authType: string): Promise<void> {
-      this.lastRefreshedAuthType = authType;
     }
   }
 

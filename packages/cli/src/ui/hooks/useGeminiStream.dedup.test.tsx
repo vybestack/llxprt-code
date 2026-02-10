@@ -27,7 +27,12 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
-import type { HistoryItem, SlashCommandProcessorResult } from '../types.js';
+import {
+  ToolCallStatus,
+  type HistoryItem,
+  type HistoryItemWithoutId,
+  type SlashCommandProcessorResult,
+} from '../types.js';
 
 // Mock core dependencies
 vi.mock('@vybestack/llxprt-code-core', async () => {
@@ -124,7 +129,6 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
       getMaxSessionTurns: () => 100,
       getContentGeneratorConfig: () => ({
         model: 'test-model',
-        authType: 'oauth-personal',
       }),
       getGeminiClient: () => mockGeminiClient,
       getSettingsService: () => undefined,
@@ -226,6 +230,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
         mockPerformMemoryRefresh,
         mockOnEditorClose,
         mockOnCancelSubmit,
+        () => {}, // setShellInputFocused
       ),
     );
 
@@ -294,6 +299,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
         mockPerformMemoryRefresh,
         mockOnEditorClose,
         mockOnCancelSubmit,
+        () => {}, // setShellInputFocused
       ),
     );
 
@@ -307,5 +313,110 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
     expect(scheduledToolCalls[0].length).toBe(2);
     expect(scheduledToolCalls[0][0].callId).toBe('call-1');
     expect(scheduledToolCalls[0][1].callId).toBe('call-2');
+  });
+
+  it('should keep overlapping non-shell scheduler tools while deduplicating overlapping shell tools in pending display merge', async () => {
+    const { mergePendingToolGroupsForDisplay } = await import(
+      './useGeminiStream.js'
+    );
+
+    const sharedShellCallId = 'shared-shell-call';
+    const sharedNonShellCallId = 'shared-non-shell-call';
+    const schedulerOnlyCallId = 'scheduler-only-call';
+
+    const pendingHistoryItem: HistoryItemWithoutId = {
+      type: 'tool_group',
+      agentId: 'primary',
+      tools: [
+        {
+          callId: sharedShellCallId,
+          name: 'Shell Command',
+          description: 'bash',
+          status: ToolCallStatus.Executing,
+          resultDisplay: 'pending shell output',
+          confirmationDetails: undefined,
+          ptyId: 12345,
+        },
+        {
+          callId: sharedNonShellCallId,
+          name: 'read_file',
+          description: 'Read README.md',
+          status: ToolCallStatus.Executing,
+          resultDisplay: 'pending read output',
+          confirmationDetails: undefined,
+        },
+      ],
+    };
+
+    const pendingToolCallGroupDisplay: HistoryItemWithoutId = {
+      type: 'tool_group',
+      agentId: 'primary',
+      tools: [
+        {
+          callId: sharedShellCallId,
+          name: 'Shell Command',
+          description: 'bash',
+          status: ToolCallStatus.Executing,
+          resultDisplay: 'scheduler shell output',
+          confirmationDetails: undefined,
+          ptyId: 12345,
+        },
+        {
+          callId: sharedNonShellCallId,
+          name: 'read_file',
+          description: 'Read README.md',
+          status: ToolCallStatus.Executing,
+          resultDisplay: 'scheduler read_file output',
+          confirmationDetails: undefined,
+        },
+        {
+          callId: schedulerOnlyCallId,
+          name: 'search_file_content',
+          description: 'Search for TODO',
+          status: ToolCallStatus.Executing,
+          resultDisplay: 'scheduler search output',
+          confirmationDetails: undefined,
+        },
+      ],
+    };
+
+    const mergedItems = mergePendingToolGroupsForDisplay(
+      pendingHistoryItem,
+      pendingToolCallGroupDisplay,
+    );
+    const pendingToolGroups = mergedItems.filter(
+      (item) => item.type === 'tool_group',
+    );
+    expect(pendingToolGroups).toHaveLength(2);
+
+    const pendingGroup = pendingToolGroups.find((group) =>
+      group.tools.some((tool) => tool.callId === sharedShellCallId),
+    );
+    const schedulerGroup = pendingToolGroups.find((group) =>
+      group.tools.some((tool) => tool.callId === schedulerOnlyCallId),
+    );
+
+    expect(pendingGroup).toBeDefined();
+    expect(schedulerGroup).toBeDefined();
+
+    const pendingTools = pendingGroup?.tools ?? [];
+    const schedulerTools = schedulerGroup?.tools ?? [];
+
+    expect(
+      pendingTools.filter((tool) => tool.callId === sharedShellCallId),
+    ).toHaveLength(1);
+    expect(
+      pendingTools.filter((tool) => tool.callId === sharedNonShellCallId),
+    ).toHaveLength(1);
+
+    expect(
+      schedulerTools.filter((tool) => tool.callId === sharedShellCallId),
+    ).toHaveLength(0);
+    expect(
+      schedulerTools.filter((tool) => tool.callId === sharedNonShellCallId),
+    ).toHaveLength(1);
+    expect(
+      schedulerTools.filter((tool) => tool.callId === schedulerOnlyCallId),
+    ).toHaveLength(1);
   });
 });

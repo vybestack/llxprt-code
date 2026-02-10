@@ -66,7 +66,9 @@ describe('errors', () => {
 
     // Create mock config
     mockConfig = {
-      getContentGeneratorConfig: vi.fn().mockReturnValue({ authType: 'test' }),
+      getGeminiClient: vi.fn(() => ({
+        getContentGenerator: vi.fn(() => ({})),
+      })),
     } as unknown as Config;
   });
 

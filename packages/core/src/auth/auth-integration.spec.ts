@@ -41,7 +41,6 @@ interface MockOAuthManager {
     Array<{
       provider: string;
       authenticated: boolean;
-      authType: string;
       oauthEnabled?: boolean;
       expiresIn?: number;
     }>
@@ -265,13 +264,11 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         {
           provider: 'qwen',
           authenticated: false,
-          authType: 'none',
           oauthEnabled: true,
         },
         {
           provider: 'gemini',
           authenticated: false,
-          authType: 'none',
           oauthEnabled: false,
         },
       ]);
@@ -439,14 +436,12 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         {
           provider: 'qwen',
           authenticated: true,
-          authType: 'oauth',
           oauthEnabled: true,
           expiresIn: 3600,
         },
         {
           provider: 'gemini',
           authenticated: false,
-          authType: 'none',
           oauthEnabled: false,
         },
       ]);
@@ -463,7 +458,6 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       expect(qwenStatus).toEqual({
         provider: 'qwen',
         authenticated: true,
-        authType: 'oauth',
         oauthEnabled: true,
         expiresIn: 3600,
       });
@@ -471,7 +465,6 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       expect(geminiStatus).toEqual({
         provider: 'gemini',
         authenticated: false,
-        authType: 'none',
         oauthEnabled: false,
       });
     });
@@ -511,7 +504,6 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         {
           provider: 'qwen',
           authenticated: true,
-          authType: 'oauth',
           oauthEnabled: true,
           expiresIn: 3600,
         },
@@ -521,7 +513,6 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       expect(finalStatus[0]).toMatchObject({
         provider: 'qwen',
         authenticated: true,
-        authType: 'oauth',
         oauthEnabled: true,
       });
     });

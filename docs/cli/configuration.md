@@ -105,11 +105,18 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
-#### `selectedAuthType`
+#### `allowPtyThemeOverride`
 
-- **`selectedAuthType`** (string):
-  - **Description:** The currently selected authentication type.
-  - **Default:** `"provider"`
+- **`allowPtyThemeOverride`** (boolean):
+  - **Description:** Allow ANSI colors from PTY output to override the UI theme. When disabled, PTY output uses the current theme colors.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+#### `ptyScrollbackLimit`
+
+- **`ptyScrollbackLimit`** (number):
+  - **Description:** Maximum number of lines to keep in the PTY scrollback buffer for interactive shell output.
+  - **Default:** `600000`
   - **Requires restart:** Yes
 
 #### `useExternalAuth`
@@ -145,6 +152,13 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`excludeTools`** (array):
   - **Description:** Tool names to exclude from discovery.
   - **Default:** `undefined`
+  - **Requires restart:** Yes
+
+#### `defaultDisabledTools`
+
+- **`defaultDisabledTools`** (array):
+  - **Description:** Tool names disabled by default. Users can re-enable them with /tools enable.
+  - **Default:** `["google_web_fetch"]`
   - **Requires restart:** Yes
 
 #### `coreToolSettings`

@@ -518,9 +518,9 @@ describe.skipIf(skipInCI)(
         const qwenStatus = statuses.find((s) => s.provider === 'qwen');
         const geminiStatus = statuses.find((s) => s.provider === 'gemini');
 
-        expect(qwenStatus?.authType).toBe('oauth');
+        expect(qwenStatus?.authenticated).toBe(true);
         expect(qwenStatus?.oauthEnabled).toBe(true);
-        expect(geminiStatus?.authType).toBe('none');
+        expect(geminiStatus?.authenticated).toBe(false);
         expect(geminiStatus?.oauthEnabled).toBe(false);
       });
     });

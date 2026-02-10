@@ -21,7 +21,10 @@ export interface AnthropicRequestBody {
   max_tokens: number;
   stream?: boolean;
   thinking?: {
-    type: 'enabled';
-    budget_tokens: number;
+    type: 'adaptive' | 'enabled';
+    budget_tokens?: number;
+  };
+  output_config?: {
+    effort?: 'low' | 'medium' | 'high' | 'max';
   };
 }

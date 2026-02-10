@@ -106,12 +106,19 @@
       "default": false,
       "type": "boolean"
     },
-    "selectedAuthType": {
-      "title": "Selected Auth Type",
-      "description": "The currently selected authentication type.",
-      "markdownDescription": "The currently selected authentication type.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `provider`",
-      "default": "provider",
-      "type": "string"
+    "allowPtyThemeOverride": {
+      "title": "Allow PTY to Override Theme",
+      "description": "Allow ANSI colors from PTY output to override the UI theme. When disabled, PTY output uses the current theme colors.",
+      "markdownDescription": "Allow ANSI colors from PTY output to override the UI theme. When disabled, PTY output uses the current theme colors.\n\n- Category: `Shell`\n- Requires restart: `yes`\n- Default: `false`",
+      "default": false,
+      "type": "boolean"
+    },
+    "ptyScrollbackLimit": {
+      "title": "PTY Scrollback Limit",
+      "description": "Maximum number of lines to keep in the PTY scrollback buffer for interactive shell output.",
+      "markdownDescription": "Maximum number of lines to keep in the PTY scrollback buffer for interactive shell output.\n\n- Category: `Shell`\n- Requires restart: `yes`\n- Default: `600000`",
+      "default": 600000,
+      "type": "number"
     },
     "useExternalAuth": {
       "title": "Use External Auth",
@@ -144,6 +151,14 @@
       "title": "Exclude Tools",
       "description": "Tool names to exclude from discovery.",
       "markdownDescription": "Tool names to exclude from discovery.\n\n- Category: `Advanced`\n- Requires restart: `yes`",
+      "type": "array",
+      "items": {}
+    },
+    "defaultDisabledTools": {
+      "title": "Default Disabled Tools",
+      "description": "Tool names disabled by default. Users can re-enable them with /tools enable.",
+      "markdownDescription": "Tool names disabled by default. Users can re-enable them with /tools enable.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `[\"google_web_fetch\"]`",
+      "default": ["google_web_fetch"],
       "type": "array",
       "items": {}
     },

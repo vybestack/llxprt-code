@@ -37,7 +37,10 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
-import { useTodoContinuation } from './hooks/useTodoContinuation.js';
+import {
+  useTodoContinuation,
+  type TodoContinuationHook,
+} from './hooks/useTodoContinuation.js';
 import {
   isMouseEventsActive,
   setMouseEventsActive,
@@ -49,6 +52,7 @@ import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../constants/historyLimits.js';
+import { SHELL_COMMAND_NAME, SHELL_NAME } from './constants.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
 import { registerCleanup } from '../utils/cleanup.js';
@@ -80,9 +84,9 @@ import {
   coreEvents,
   CoreEvent,
   type UserFeedbackPayload,
+  ShellExecutionService,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
-import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useSessionStats } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
@@ -226,8 +230,13 @@ export const AppContainer = (props: AppContainerProps) => {
   useMemoryMonitor({ addItem });
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
+  const todoContinuationRef = useRef<Pick<
+    TodoContinuationHook,
+    'handleTodoPause' | 'clearPause'
+  > | null>(null);
   const registerTodoPause = useCallback(() => {
     todoPauseController.registerTodoPause();
+    todoContinuationRef.current?.handleTodoPause('paused by model');
   }, [todoPauseController]);
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
@@ -886,6 +895,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
+  const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
 
   const openPermissionsDialog = useCallback(() => {
     setIsPermissionsDialogOpen(true);
@@ -1108,27 +1118,10 @@ export const AppContainer = (props: AppContainerProps) => {
     { isActive: showIdeRestartPrompt },
   );
 
-  const {
-    isAuthDialogOpen,
-    openAuthDialog,
-    handleAuthSelect,
-    isAuthenticating,
-    cancelAuthentication,
-  } = useAuthCommand(settings, appState, config);
-
-  useEffect(() => {
-    if (settings.merged.selectedAuthType && !settings.merged.useExternalAuth) {
-      const error = validateAuthMethod(settings.merged.selectedAuthType);
-      if (error) {
-        setAuthError(error);
-        // Don't automatically open auth dialog - user must use /auth command
-      }
-    }
-  }, [
-    settings.merged.selectedAuthType,
-    settings.merged.useExternalAuth,
-    setAuthError,
-  ]);
+  const { isAuthDialogOpen, openAuthDialog, handleAuthSelect } = useAuthCommand(
+    settings,
+    appState,
+  );
 
   // Check for OAuth code needed flag
   useEffect(() => {
@@ -1419,9 +1412,8 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
-    cancelAuthentication();
     // NEVER automatically open auth dialog - user must use /auth
-  }, [setAuthError, cancelAuthentication]);
+  }, [setAuthError]);
 
   const handlePrivacyNoticeExit = useCallback(() => {
     setShowPrivacyNotice(false);
@@ -1574,6 +1566,7 @@ export const AppContainer = (props: AppContainerProps) => {
     pendingHistoryItems: pendingGeminiHistoryItems,
     thought,
     cancelOngoingRequest,
+    activeShellPtyId: geminiActiveShellPtyId,
   } = useGeminiStream(
     config.getGeminiClient(),
     history,
@@ -1588,6 +1581,9 @@ export const AppContainer = (props: AppContainerProps) => {
     performMemoryRefresh,
     refreshStatic,
     handleUserCancel,
+    setEmbeddedShellFocused,
+    stdout?.columns,
+    stdout?.rows,
     registerTodoPause,
     handleExternalEditorOpen,
   );
@@ -1596,6 +1592,33 @@ export const AppContainer = (props: AppContainerProps) => {
     () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
     [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
   );
+
+  // Use the activeShellPtyId from useGeminiStream (which gets it from useShellCommandProcessor)
+  const activeShellPtyId = geminiActiveShellPtyId;
+
+  // Auto-reset embeddedShellFocused when no shell tool is executing.
+  // Without this, cancelling a shell while focused (embeddedShellFocused=true)
+  // leaves the input prompt permanently disabled.
+  const anyShellExecuting = useMemo(
+    () =>
+      pendingHistoryItems.some(
+        (item) =>
+          item?.type === 'tool_group' &&
+          item.tools.some(
+            (tool) =>
+              (tool.name === SHELL_COMMAND_NAME || tool.name === SHELL_NAME) &&
+              tool.status === ToolCallStatus.Executing,
+          ),
+      ),
+    [pendingHistoryItems],
+  );
+
+  useEffect(() => {
+    if (embeddedShellFocused && !anyShellExecuting) {
+      debug.log('Auto-resetting embeddedShellFocused: no shell executing');
+      setEmbeddedShellFocused(false);
+    }
+  }, [embeddedShellFocused, anyShellExecuting]);
 
   // Update the cancel handler with message queue support
   const cancelHandlerRef = useRef<(() => void) | null>(null);
@@ -1625,6 +1648,7 @@ export const AppContainer = (props: AppContainerProps) => {
          * after user interaction.
          */
         hadToolCallsRef.current = false;
+        todoContinuationRef.current?.clearPause();
 
         // Add to independent input history
         inputHistoryStore.addInput(trimmedValue);
@@ -1730,10 +1754,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
       // Handle exit keys BEFORE dialog visibility check so exit prompts work even when dialogs are open
       if (keyMatchers[Command.QUIT](key)) {
-        // When authenticating, let AuthInProgress component handle Ctrl+C.
-        if (isAuthenticating) {
-          return;
-        }
         if (!ctrlCPressedOnce) {
           cancelOngoingRequest?.();
         }
@@ -1807,6 +1827,24 @@ export const AppContainer = (props: AppContainerProps) => {
         !enteringConstrainHeightMode
       ) {
         setConstrainHeight(false);
+      } else if (
+        keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS](key) &&
+        config.getEnableInteractiveShell()
+      ) {
+        const lastPtyId = ShellExecutionService.getLastActivePtyId();
+        debug.log(
+          'Ctrl+F: activeShellPtyId=%s, lastActivePtyId=%s, will toggle=%s',
+          activeShellPtyId,
+          lastPtyId,
+          !!(activeShellPtyId || lastPtyId),
+        );
+        if (activeShellPtyId || lastPtyId) {
+          // Toggle focus between shell and LLxprt input.
+          setEmbeddedShellFocused((prev) => {
+            debug.log('Ctrl+F: embeddedShellFocused %s -> %s', prev, !prev);
+            return !prev;
+          });
+        }
       }
     },
     [
@@ -1826,7 +1864,6 @@ export const AppContainer = (props: AppContainerProps) => {
       setCtrlDPressedOnce,
       ctrlDTimerRef,
       handleSlashCommand,
-      isAuthenticating,
       cancelOngoingRequest,
       addItem,
       settings.merged.debugKeystrokeLogging,
@@ -1834,6 +1871,7 @@ export const AppContainer = (props: AppContainerProps) => {
       setCopyModeEnabled,
       copyModeEnabled,
       settings.merged.ui?.useAlternateBuffer,
+      activeShellPtyId,
     ],
   );
 
@@ -1924,7 +1962,27 @@ export const AppContainer = (props: AppContainerProps) => {
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
 
-  useMouseSelection({ enabled: true, rootRef: rootUiRef });
+  const { copySelectionToClipboard } = useMouseSelection({
+    enabled: true,
+    rootRef: rootUiRef,
+    onCopiedText: (text) => {
+      if (selectionLogger.enabled) {
+        selectionLogger.debug(
+          () => `Copied ${text.length} characters to clipboard`,
+        );
+      }
+    },
+  });
+
+  // Fix for issue #1284: Add keyboard shortcut for Cmd+C/Ctrl+C to copy selection
+  useKeypress(
+    (key) => {
+      if (key.name === 'c' && (key.ctrl || key.meta)) {
+        void copySelectionToClipboard();
+      }
+    },
+    { isActive: true },
+  );
 
   useLayoutEffect(() => {
     if (mainControlsRef.current) {
@@ -2016,6 +2074,8 @@ export const AppContainer = (props: AppContainerProps) => {
       streamingState === StreamingState.WaitingForConfirmation,
     setDebugMessage,
   );
+
+  todoContinuationRef.current = todoContinuation;
 
   // Track previous streaming state to detect turn completion
   const prevStreamingStateRef = useRef<StreamingState>(streamingState);
@@ -2118,7 +2178,6 @@ export const AppContainer = (props: AppContainerProps) => {
     if (
       initialPrompt &&
       !initialPromptSubmitted.current &&
-      !isAuthenticating &&
       !isAuthDialogOpen &&
       !isThemeDialogOpen &&
       !isEditorDialogOpen &&
@@ -2135,11 +2194,11 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [
     initialPrompt,
     submitQuery,
-    isAuthenticating,
     isAuthDialogOpen,
     isThemeDialogOpen,
     isEditorDialogOpen,
     isProviderDialogOpen,
+
     isToolsDialogOpen,
     isCreateProfileDialogOpen,
     showPrivacyNotice,
@@ -2159,6 +2218,10 @@ export const AppContainer = (props: AppContainerProps) => {
     : isPowerShell
       ? '  Type your message, @path/to/file or +path/to/file'
       : '  Type your message or @path/to/file';
+
+  useEffect(() => {
+    config.setPtyTerminalSize(mainAreaWidth, terminalHeight);
+  }, [config, mainAreaWidth, terminalHeight]);
 
   // Build UIState object
   const uiState: UIState = {
@@ -2187,7 +2250,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isThemeDialogOpen,
     isSettingsDialogOpen,
     isAuthDialogOpen,
-    isAuthenticating,
     isEditorDialogOpen,
     isProviderDialogOpen,
     isLoadProfileDialogOpen,
@@ -2329,6 +2391,10 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Markdown rendering toggle
     renderMarkdown,
+
+    // Interactive shell focus state
+    activeShellPtyId,
+    embeddedShellFocused,
   };
 
   // Build UIActions object - memoized to avoid unnecessary re-renders (upstream optimization)
@@ -2357,7 +2423,6 @@ export const AppContainer = (props: AppContainerProps) => {
       // Auth dialog
       openAuthDialog,
       handleAuthSelect,
-      cancelAuthentication,
       handleAuthTimeout,
 
       // Editor dialog
@@ -2479,7 +2544,6 @@ export const AppContainer = (props: AppContainerProps) => {
       handleSettingsRestart,
       openAuthDialog,
       handleAuthSelect,
-      cancelAuthentication,
       handleAuthTimeout,
       openEditorDialog,
       handleEditorSelect,

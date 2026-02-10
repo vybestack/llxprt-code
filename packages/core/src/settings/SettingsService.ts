@@ -25,6 +25,11 @@ interface EphemeralSettings {
   tools?: {
     allowed?: string[];
     disabled?: string[];
+    // @plan PLAN-20260206-TOOLKEY.P11
+    // @requirement REQ-005.2
+    // Type-only: tool API keys are NOT persisted here; storage is via keychain/encrypted files
+    apiKeys?: Record<string, string>;
+    apiKeyFiles?: Record<string, string>;
   };
   // Required properties for correct TypeScript handling in tests
   n?: unknown;

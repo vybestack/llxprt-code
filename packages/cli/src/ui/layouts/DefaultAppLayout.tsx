@@ -124,6 +124,8 @@ export const DefaultAppLayout = ({
     tokenMetrics,
     currentModel,
     availableTerminalHeight: uiAvailableTerminalHeight,
+    activeShellPtyId,
+    embeddedShellFocused,
   } = uiState;
 
   // Use the UI state's availableTerminalHeight if constrainHeight is true
@@ -155,7 +157,6 @@ export const DefaultAppLayout = ({
     uiState.confirmationRequest ||
     uiState.isThemeDialogOpen ||
     uiState.isSettingsDialogOpen ||
-    uiState.isAuthenticating ||
     uiState.isAuthDialogOpen ||
     uiState.isOAuthCodeDialogOpen ||
     uiState.isEditorDialogOpen ||
@@ -224,6 +225,8 @@ export const DefaultAppLayout = ({
               isFocused={!uiState.isEditorDialogOpen}
               slashCommands={slashCommands}
               showTodoPanel={showTodoPanelSetting}
+              activeShellPtyId={activeShellPtyId}
+              embeddedShellFocused={embeddedShellFocused}
             />
           ))}
           <ShowMoreLines constrainHeight={constrainHeight} />
@@ -249,6 +252,8 @@ export const DefaultAppLayout = ({
             config={config}
             slashCommands={slashCommands}
             showTodoPanel={showTodoPanelSetting}
+            activeShellPtyId={activeShellPtyId}
+            embeddedShellFocused={embeddedShellFocused}
           />
         ),
       })),
@@ -465,6 +470,8 @@ export const DefaultAppLayout = ({
                 config={config}
                 slashCommands={slashCommands}
                 showTodoPanel={showTodoPanelSetting}
+                activeShellPtyId={activeShellPtyId}
+                embeddedShellFocused={embeddedShellFocused}
               />
             )),
           ]}
@@ -486,6 +493,8 @@ export const DefaultAppLayout = ({
                 isFocused={!uiState.isEditorDialogOpen}
                 slashCommands={slashCommands}
                 showTodoPanel={showTodoPanelSetting}
+                activeShellPtyId={activeShellPtyId}
+                embeddedShellFocused={embeddedShellFocused}
               />
             ))}
             <ShowMoreLines constrainHeight={constrainHeight} />

@@ -157,8 +157,14 @@ export interface EphemeralSettings {
   // Additional settings from registry
   /** OpenAI stream options */
   'stream-options'?: Record<string, unknown>;
-  /** Maximum number of turns allowed per prompt before stopping */
+  /** Maximum number of turns allowed per prompt before stopping (default: -1 for unlimited) */
   maxTurnsPerPrompt?: number;
+  /** Enable/disable all loop detection (default: true) */
+  loopDetectionEnabled?: boolean;
+  /** Number of identical tool calls before triggering loop detection (default: 50, -1 = unlimited) */
+  toolCallLoopThreshold?: number;
+  /** Number of content chunk repetitions before triggering loop detection (default: 50, -1 = unlimited) */
+  contentLoopThreshold?: number;
   /** Control context dumping (now/status/on/error/off) */
   dumpcontext?: 'now' | 'status' | 'on' | 'error' | 'off';
   /** Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled) */
@@ -175,6 +181,8 @@ export interface EphemeralSettings {
   'reasoning.maxTokens'?: number;
   /** Token budget for reasoning (Anthropic-specific) */
   'reasoning.budgetTokens'?: number;
+  /** Enable adaptive thinking for Anthropic Opus 4.6+ */
+  'reasoning.adaptiveThinking'?: boolean;
   /** Show thinking blocks in UI output */
   'reasoning.includeInResponse'?: boolean;
   /** Keep thinking in conversation history */

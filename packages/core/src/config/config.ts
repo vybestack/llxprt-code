@@ -8,7 +8,6 @@ import * as path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
 import {
-  AuthType,
   type ContentGeneratorConfig,
   createContentGeneratorConfig,
 } from '../core/contentGenerator.js';
@@ -115,6 +114,8 @@ import {
   SimpleExtensionLoader,
 } from '../utils/extensionLoader.js';
 import { McpClientManager } from '../tools/mcp-client-manager.js';
+
+import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
 // Import privacy-related types
 export interface RedactionConfig {
@@ -402,6 +403,10 @@ export interface ConfigParameters {
   trustedFolder?: boolean;
   useRipgrep?: boolean;
   shouldUseNodePtyShell?: boolean;
+  allowPtyThemeOverride?: boolean;
+  ptyScrollbackLimit?: number;
+  ptyTerminalWidth?: number;
+  ptyTerminalHeight?: number;
   skipNextSpeakerCheck?: boolean;
   extensionManagement?: boolean;
   enablePromptCompletion?: boolean;
@@ -570,6 +575,10 @@ export class Config {
   private readonly trustedFolder: boolean | undefined;
   private readonly useRipgrep: boolean;
   private readonly shouldUseNodePtyShell: boolean;
+  private readonly allowPtyThemeOverride: boolean;
+  private readonly ptyScrollbackLimit: number;
+  private ptyTerminalWidth?: number;
+  private ptyTerminalHeight?: number;
   private readonly skipNextSpeakerCheck: boolean;
   private readonly extensionManagement: boolean;
   private readonly enablePromptCompletion: boolean = false;
@@ -721,6 +730,10 @@ export class Config {
     this.trustedFolder = params.trustedFolder;
     this.useRipgrep = params.useRipgrep ?? false;
     this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
+    this.allowPtyThemeOverride = params.allowPtyThemeOverride ?? false;
+    this.ptyScrollbackLimit = params.ptyScrollbackLimit ?? 600000;
+    this.ptyTerminalWidth = params.ptyTerminalWidth;
+    this.ptyTerminalHeight = params.ptyTerminalHeight;
     this.skipNextSpeakerCheck = params.skipNextSpeakerCheck ?? false;
     this.truncateToolOutputThreshold =
       params.truncateToolOutputThreshold ??
@@ -839,8 +852,10 @@ export class Config {
     void this._modelSwitchedDuringSession;
   }
 
-  async refreshAuth(authMethod: AuthType) {
-    const logger = new DebugLogger('llxprt:config:refreshAuth');
+  initializeContentGeneratorConfig: () => Promise<void> = async () => {
+    const logger = new DebugLogger(
+      'llxprt:config:initializeContentGeneratorConfig',
+    );
 
     // Save the current conversation history AND HistoryService before creating a new client
     const previousGeminiClient = this.geminiClient;
@@ -853,15 +868,11 @@ export class Config {
       logger.debug('Retrieved existing state', {
         historyLength: existingHistory.length,
         hasHistoryService: !!existingHistoryService,
-        authMethod,
       });
     }
 
     // Create new content generator config
-    const newContentGeneratorConfig = createContentGeneratorConfig(
-      this,
-      authMethod,
-    );
+    const newContentGeneratorConfig = createContentGeneratorConfig(this);
 
     // Add provider manager to the config if available (llxprt multi-provider support)
     if (this.providerManager) {
@@ -872,11 +883,6 @@ export class Config {
       runtimeId: this.runtimeState.runtimeId,
       overrides: {
         model: newContentGeneratorConfig.model,
-        authType:
-          newContentGeneratorConfig.authType ?? this.runtimeState.authType,
-        authPayload: newContentGeneratorConfig.apiKey
-          ? { apiKey: newContentGeneratorConfig.apiKey }
-          : undefined,
         proxyUrl: newContentGeneratorConfig.proxy ?? this.runtimeState.proxyUrl,
       },
     });
@@ -898,8 +904,8 @@ export class Config {
       // Vertex and Genai have incompatible encryption and sending history with
       // throughtSignature from Genai to Vertex will fail, we need to strip them
       const fromGenaiToVertex =
-        this.contentGeneratorConfig?.authType === AuthType.USE_GEMINI &&
-        authMethod === AuthType.LOGIN_WITH_GOOGLE;
+        this.contentGeneratorConfig?.vertexai === false &&
+        newContentGeneratorConfig.vertexai === true;
 
       logger.debug('Storing history for later use', {
         historyLength: existingHistory.length,
@@ -971,6 +977,14 @@ export class Config {
 
     // Reset the session flag since we're explicitly changing auth and using default model
     this.inFallbackMode = false;
+  };
+
+  async refreshAuth(authMethod?: string) {
+    const logger = new DebugLogger('llxprt:config:refreshAuth');
+    logger.debug(
+      () => `refreshAuth invoked (authMethod=${authMethod ?? 'default'})`,
+    );
+    await this.initializeContentGeneratorConfig();
   }
 
   getSessionId(): string {
@@ -1020,7 +1034,11 @@ export class Config {
       this.contentGeneratorConfig.model = newModel;
     }
     // Also update the base model so it persists across refreshAuth
-    this.model = newModel;
+    if (this.model !== newModel || this.inFallbackMode) {
+      this.model = newModel;
+      coreEvents.emitModelChanged(newModel);
+    }
+    this.setFallbackMode(false);
   }
 
   isInFallbackMode(): boolean {
@@ -1776,6 +1794,48 @@ export class Config {
     return this.shouldUseNodePtyShell;
   }
 
+  getAllowPtyThemeOverride(): boolean {
+    return this.allowPtyThemeOverride;
+  }
+
+  getPtyScrollbackLimit(): number {
+    return this.ptyScrollbackLimit;
+  }
+
+  getPtyTerminalWidth(): number | undefined {
+    return this.ptyTerminalWidth;
+  }
+
+  getPtyTerminalHeight(): number | undefined {
+    return this.ptyTerminalHeight;
+  }
+
+  setPtyTerminalSize(
+    width: number | undefined,
+    height: number | undefined,
+  ): void {
+    if (typeof width === 'number' && Number.isFinite(width) && width > 0) {
+      this.ptyTerminalWidth = Math.floor(width);
+    } else {
+      this.ptyTerminalWidth = undefined;
+    }
+
+    if (typeof height === 'number' && Number.isFinite(height) && height > 0) {
+      this.ptyTerminalHeight = Math.floor(height);
+    } else {
+      this.ptyTerminalHeight = undefined;
+    }
+  }
+
+  getShellExecutionConfig(): ShellExecutionConfig {
+    return {
+      terminalWidth: this.getPtyTerminalWidth(),
+      terminalHeight: this.getPtyTerminalHeight(),
+      showColor: this.getAllowPtyThemeOverride(),
+      scrollback: this.getPtyScrollbackLimit(),
+    };
+  }
+
   getSkipNextSpeakerCheck(): boolean {
     return this.skipNextSpeakerCheck;
   }
@@ -2134,6 +2194,14 @@ export class Config {
    */
   getHooks(): { [K in HookEventName]?: HookDefinition[] } | undefined {
     return this.hooks;
+  }
+
+  /**
+   * Check if interactive shell is enabled.
+   * Returns true if the shouldUseNodePtyShell setting is enabled.
+   */
+  getEnableInteractiveShell(): boolean {
+    return this.shouldUseNodePtyShell;
   }
 }
 

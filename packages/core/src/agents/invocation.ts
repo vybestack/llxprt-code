@@ -133,7 +133,11 @@ ${output.result}
         error instanceof Error ? error.message : String(error);
 
       return {
-        llmContent: `Subagent '${this.definition.name}' failed. Error: ${errorMessage}`,
+        llmContent: [
+          {
+            text: `Subagent '${this.definition.name}' failed. Error: ${errorMessage}`,
+          },
+        ],
         returnDisplay: `Subagent Failed: ${this.definition.name}\nError: ${errorMessage}`,
         error: {
           message: errorMessage,

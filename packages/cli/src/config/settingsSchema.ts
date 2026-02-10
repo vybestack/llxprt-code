@@ -8,7 +8,6 @@ import {
   MCPServerConfig,
   BugCommandSettings,
   TelemetrySettings,
-  AuthType,
   ChatCompressionSettings,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
@@ -278,16 +277,27 @@ export const SETTINGS_SCHEMA = {
       'Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty. Falls back to child_process when disabled.',
     showInDialog: true,
   },
-
-  selectedAuthType: {
-    type: 'string',
-    label: 'Selected Auth Type',
-    category: 'Advanced',
+  allowPtyThemeOverride: {
+    type: 'boolean',
+    label: 'Allow PTY to Override Theme',
+    category: 'Shell',
     requiresRestart: true,
-    default: 'provider' as AuthType,
-    description: 'The currently selected authentication type.',
-    showInDialog: false,
+    default: false,
+    description:
+      'Allow ANSI colors from PTY output to override the UI theme. When disabled, PTY output uses the current theme colors.',
+    showInDialog: true,
   },
+  ptyScrollbackLimit: {
+    type: 'number',
+    label: 'PTY Scrollback Limit',
+    category: 'Shell',
+    requiresRestart: true,
+    default: 600000,
+    description:
+      'Maximum number of lines to keep in the PTY scrollback buffer for interactive shell output.',
+    showInDialog: true,
+  },
+
   useExternalAuth: {
     type: 'boolean',
     label: 'Use External Auth',
@@ -333,6 +343,16 @@ export const SETTINGS_SCHEMA = {
     requiresRestart: true,
     default: undefined as string[] | undefined,
     description: 'Tool names to exclude from discovery.',
+    showInDialog: false,
+  },
+  defaultDisabledTools: {
+    type: 'array',
+    label: 'Default Disabled Tools',
+    category: 'Advanced',
+    requiresRestart: true,
+    default: ['google_web_fetch'] as string[] | undefined,
+    description:
+      'Tool names disabled by default. Users can re-enable them with /tools enable.',
     showInDialog: false,
   },
   coreToolSettings: {
@@ -1140,7 +1160,7 @@ export const SETTINGS_SCHEMA = {
             label: 'Selected Auth Type',
             category: 'Security',
             requiresRestart: true,
-            default: undefined as AuthType | undefined,
+            default: undefined as string | undefined,
             description: 'The currently selected authentication type.',
             showInDialog: false,
           },

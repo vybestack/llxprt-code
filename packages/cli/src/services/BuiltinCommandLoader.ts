@@ -40,6 +40,8 @@ import { providerCommand } from '../ui/commands/providerCommand.js';
 import { modelCommand } from '../ui/commands/modelCommand.js';
 import { keyCommand } from '../ui/commands/keyCommand.js';
 import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
+import { toolkeyCommand } from '../ui/commands/toolkeyCommand.js';
+import { toolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
 import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
 import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
@@ -49,7 +51,6 @@ import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
 import { debugCommand } from '../ui/commands/debugCommands.js';
 import { logoutCommand } from '../ui/commands/logoutCommand.js';
-import { statusCommand } from '../ui/commands/statusCommand.js';
 import { subagentCommand } from '../ui/commands/subagentCommand.js';
 import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
 import { policiesCommand } from '../ui/commands/policiesCommand.js';
@@ -149,6 +150,8 @@ export class BuiltinCommandLoader implements ICommandLoader {
       modelCommand,
       keyCommand,
       keyfileCommand,
+      toolkeyCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-002
+      toolkeyfileCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-003
       baseurlCommand,
       toolformatCommand,
       setupGithubCommand,
@@ -158,7 +161,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
       terminalSetupCommand,
       debugCommand,
       logoutCommand,
-      statusCommand,
       subagentCommand,
       permissionsCommand,
       policiesCommand,

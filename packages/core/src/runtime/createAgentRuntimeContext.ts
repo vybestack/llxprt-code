@@ -60,26 +60,45 @@ export function createAgentRuntimeContext(
 
   const history = options.history ?? new HistoryService();
 
-  const getReasoningSetting = <T>(
+  const getLiveSetting = <T>(
     key: string,
     snapshotValue: T | undefined,
   ): T | undefined => {
-    if (snapshotValue !== undefined) {
-      return snapshotValue;
+    // First check the live settings service for runtime changes
+    const settingsService = options.providerRuntime?.settingsService;
+    if (settingsService) {
+      const liveValue = settingsService.get(key) as T | undefined;
+      if (liveValue !== undefined) {
+        return liveValue;
+      }
     }
-    return options.providerRuntime.settingsService.get(key) as T | undefined;
+    // Fall back to snapshot value if no live override
+    return snapshotValue;
   };
 
   const ephemerals = {
-    compressionThreshold: (): number =>
-      options.settings.compressionThreshold ??
-      EPHEMERAL_DEFAULTS.compressionThreshold,
+    compressionThreshold: (): number => {
+      const liveThreshold = getLiveSetting<number>(
+        'compression-threshold',
+        options.settings.compressionThreshold,
+      );
+      const normalized =
+        typeof liveThreshold === 'number' && Number.isFinite(liveThreshold)
+          ? Math.min(Math.max(liveThreshold, 0), 1)
+          : undefined;
+      return normalized ?? EPHEMERAL_DEFAULTS.compressionThreshold;
+    },
     contextLimit: (): number => {
+      // Check live settings first, then snapshot
+      const liveLimit = getLiveSetting<number>(
+        'context-limit',
+        options.settings.contextLimit,
+      );
       const liveOverride =
-        typeof options.settings.contextLimit === 'number' &&
-        Number.isFinite(options.settings.contextLimit) &&
-        options.settings.contextLimit > 0
-          ? options.settings.contextLimit
+        typeof liveLimit === 'number' &&
+        Number.isFinite(liveLimit) &&
+        liveLimit > 0
+          ? liveLimit
           : undefined;
       return tokenLimit(options.state.model, liveOverride);
     },
@@ -97,43 +116,52 @@ export function createAgentRuntimeContext(
      */
     reasoning: {
       enabled: (): boolean =>
-        getReasoningSetting(
+        getLiveSetting(
           'reasoning.enabled',
           options.settings['reasoning.enabled'],
         ) ?? EPHEMERAL_DEFAULTS.reasoning.enabled,
       includeInContext: (): boolean =>
-        getReasoningSetting(
+        getLiveSetting(
           'reasoning.includeInContext',
           options.settings['reasoning.includeInContext'],
         ) ?? EPHEMERAL_DEFAULTS.reasoning.includeInContext,
       includeInResponse: (): boolean =>
-        getReasoningSetting(
+        getLiveSetting(
           'reasoning.includeInResponse',
           options.settings['reasoning.includeInResponse'],
         ) ?? EPHEMERAL_DEFAULTS.reasoning.includeInResponse,
       format: (): 'native' | 'field' =>
-        (getReasoningSetting(
+        (getLiveSetting(
           'reasoning.format',
           options.settings['reasoning.format'],
         ) as 'native' | 'field' | undefined) ??
         EPHEMERAL_DEFAULTS.reasoning.format,
       stripFromContext: (): 'all' | 'allButLast' | 'none' =>
-        (getReasoningSetting(
+        (getLiveSetting(
           'reasoning.stripFromContext',
           options.settings['reasoning.stripFromContext'],
         ) as 'all' | 'allButLast' | 'none' | undefined) ??
         EPHEMERAL_DEFAULTS.reasoning.stripFromContext,
       effort: (): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined =>
-        getReasoningSetting(
+        getLiveSetting(
           'reasoning.effort',
           options.settings['reasoning.effort'],
         ) as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined,
       maxTokens: (): number | undefined => {
-        const maxTokensValue = getReasoningSetting(
+        const maxTokensValue = getLiveSetting(
           'reasoning.maxTokens',
           options.settings['reasoning.maxTokens'],
         );
         return typeof maxTokensValue === 'number' ? maxTokensValue : undefined;
+      },
+      adaptiveThinking: (): boolean | undefined => {
+        const adaptiveThinkingValue = getLiveSetting(
+          'reasoning.adaptiveThinking',
+          options.settings['reasoning.adaptiveThinking'],
+        );
+        return typeof adaptiveThinkingValue === 'boolean'
+          ? adaptiveThinkingValue
+          : undefined;
       },
     },
   };

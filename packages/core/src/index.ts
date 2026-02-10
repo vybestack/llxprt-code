@@ -112,6 +112,7 @@ export * from './utils/thoughtUtils.js';
 export * from './utils/events.js';
 export * from './utils/package.js';
 export * from './utils/extensionLoader.js';
+export * from './utils/terminalSerializer.js';
 
 // Export auth system
 export {
@@ -191,6 +192,7 @@ export * from './tools/todo-store.js';
 export * from './tools/todo-events.js';
 export * from './tools/list-subagents.js';
 export * from './tools/task.js';
+export * from './tools/tool-key-storage.js';
 export * from './todo/todoFormatter.js';
 
 // MCP OAuth
@@ -247,7 +249,10 @@ export { ConversationCache } from './providers/openai/ConversationCache.js';
 export { getOpenAIProviderInfo } from './providers/openai/getOpenAIProviderInfo.js';
 export { OpenAIVercelProvider } from './providers/openai-vercel/index.js';
 export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';
+export * from './providers/anthropic/usageInfo.js';
+export * from './providers/openai/codexUsageInfo.js';
 export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
+export { FakeProvider } from './providers/fake/FakeProvider.js';
 export * from './providers/ProviderManager.js';
 export * from './providers/errors.js';
 export {
@@ -319,10 +324,9 @@ export type {
   RuntimeStateChangedEvent,
   RuntimeStateChangeCallback,
   UnsubscribeFunction,
-  AuthPayload,
-  ModelParams,
-  SanitizedAuthPayload,
-  RuntimeStateErrorCode,
+  getBaseUrl,
+  getSessionId,
+  getModelParams,
 } from './runtime/AgentRuntimeState.js';
 export {
   createAgentRuntimeState,
@@ -330,14 +334,6 @@ export {
   updateAgentRuntimeStateBatch,
   getAgentRuntimeStateSnapshot,
   subscribeToAgentRuntimeState,
-  RuntimeStateError,
-  getProvider,
-  getModel,
-  getAuthType,
-  getAuthPayload,
-  getBaseUrl,
-  getSessionId,
-  getModelParams,
 } from './runtime/AgentRuntimeState.js';
 export type { RuntimeStateFromConfigOptions } from './runtime/runtimeStateFactory.js';
 export { createAgentRuntimeStateFromConfig as createRuntimeStateFromConfig } from './runtime/runtimeStateFactory.js';

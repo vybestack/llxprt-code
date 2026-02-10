@@ -13,6 +13,8 @@ interface QueuedEntry {
   timestamp: number;
 }
 
+const LOG_FILE_DATE_LENGTH = 10;
+
 export class FileOutput {
   private static instance: FileOutput;
   private debugDir: string;
@@ -25,6 +27,7 @@ export class FileOutput {
   private maxQueueSize = 1000;
   private batchSize = 50;
   private flushInterval = 1000; // 1 second
+  private debugRunId: string;
 
   private constructor() {
     const home = homedir();
@@ -32,7 +35,15 @@ export class FileOutput {
     this.debugDir = home
       ? join(home, LLXPRT_DIR, 'debug')
       : join(process.cwd(), LLXPRT_DIR, 'debug');
+    this.debugRunId =
+      process.env.LLXPRT_DEBUG_RUN_ID ||
+      process.env.LLXPRT_DEBUG_SESSION_ID ||
+      String(process.pid);
     this.currentLogFile = this.generateLogFileName();
+  }
+
+  get runId(): string {
+    return this.debugRunId;
   }
 
   static getInstance(): FileOutput {
@@ -174,11 +185,11 @@ export class FileOutput {
 
   private generateLogFileName(): string {
     const now = new Date();
-    const dateString = now.toISOString().split('T')[0]; // YYYY-MM-DD
-    const timeString = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+    const datePart = now.toISOString().slice(0, LOG_FILE_DATE_LENGTH);
+    const timePart = now.toTimeString().slice(0, 8).replace(/:/g, '-');
     return join(
       this.debugDir,
-      `llxprt-debug-${dateString}-${timeString}.jsonl`,
+      `llxprt-debug-${this.debugRunId}-${datePart}-${timePart}.jsonl`,
     );
   }
 }

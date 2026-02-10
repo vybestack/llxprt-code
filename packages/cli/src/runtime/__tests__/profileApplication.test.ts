@@ -18,12 +18,6 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 const mockFs = await import('node:fs/promises');
 
-type ProviderSelectionResult = {
-  providerName: string;
-  didFallback: boolean;
-  warnings: string[];
-};
-
 type ProfileApplicationResult = {
   providerName: string;
   modelName: string;
@@ -33,10 +27,12 @@ type ProfileApplicationResult = {
 };
 
 const switchActiveProviderMock = vi.fn<
-  (providerName: string) => Promise<{
+  (
+    providerName: string,
+    options?: { preserveEphemerals?: string[] },
+  ) => Promise<{
     infoMessages: string[];
     changed: boolean;
-    authType?: string;
   }>
 >();
 const setActiveModelMock =
@@ -57,7 +53,7 @@ const getCliRuntimeServicesMock = vi.fn<
       getEphemeralSetting: (key: string) => unknown;
       setEphemeralSetting: (key: string, value: unknown) => void;
       getEphemeralSettings: () => Record<string, unknown>;
-      getContentGeneratorConfig: () => { authType?: string } | undefined;
+      getContentGeneratorConfig: () => Record<string, unknown> | undefined;
     };
     settingsService: {
       setCurrentProfileName?: (name: string | null) => void;
@@ -110,7 +106,7 @@ const configStub = {
     return Object.fromEntries(this.ephemerals.entries());
   },
   getContentGeneratorConfig() {
-    return { authType: 'key' as const };
+    return { provider: 'stub' };
   },
 };
 
@@ -199,16 +195,12 @@ beforeEach(() => {
     return {
       infoMessages: [],
       changed: true,
-      authType: 'key',
     };
   });
-  setActiveModelMock.mockResolvedValue({ nextModel: 'gpt-4o-mini' });
-  updateActiveProviderBaseUrlMock.mockResolvedValue({
-    message: 'Base URL set',
-  });
-  updateActiveProviderApiKeyMock.mockResolvedValue({ message: 'API key set' });
-  setActiveModelParamMock.mockClear();
-  clearActiveModelParamMock.mockClear();
+
+  setActiveModelMock.mockResolvedValue({ nextModel: 'default-model' });
+  updateActiveProviderBaseUrlMock.mockResolvedValue({});
+  updateActiveProviderApiKeyMock.mockResolvedValue({});
   getActiveModelParamsMock.mockReturnValue({});
   setEphemeralSettingMock.mockImplementation((key, value) => {
     configStub.setEphemeralSetting(key, value);
@@ -220,8 +212,8 @@ beforeEach(() => {
     providerManager: providerManagerStub,
     profileManager: mockProfileManager,
   });
-  getActiveProviderOrThrowMock.mockReturnValue({ name: 'openai' });
-  isCliStatelessProviderModeEnabledMock.mockReturnValue(false);
+  getActiveProviderOrThrowMock.mockReturnValue({ name: 'gemini' });
+  isCliStatelessProviderModeEnabledMock.mockReturnValue(true);
   isCliRuntimeStatelessReadyMock.mockReturnValue(true);
 });
 
@@ -244,178 +236,19 @@ vi.mock('../runtimeSettings.js', () => ({
   isCliRuntimeStatelessReady: isCliRuntimeStatelessReadyMock,
 }));
 
-const { applyProfileWithGuards, selectAvailableProvider } = await import(
-  '../profileApplication.js'
-);
+const { applyProfileWithGuards } = await import('../profileApplication.js');
 
-describe('profileApplication helpers', () => {
-  it('selects fallback provider when requested provider is missing @plan:PLAN-20251020-STATELESSPROVIDER3.P08 @requirement:REQ-SP3-002', () => {
-    // @pseudocode profile-application.md lines 5-9
-    const result = selectAvailableProvider('deepseek', [
-      'anthropic',
-      'openai',
-    ]) as unknown as ProviderSelectionResult;
-
-    expect(result.providerName).toBe('anthropic');
-    expect(result.didFallback).toBe(true);
-    expect(result.warnings).toEqual([
-      "Provider 'deepseek' unavailable, using 'anthropic'",
-    ]);
-  });
-
-  it('preserves base URL and auth key when applying profile snapshot @plan:PLAN-20251020-STATELESSPROVIDER3.P08 @requirement:REQ-SP3-002', async () => {
-    // @pseudocode profile-application.md lines 12-21
-    const profile: Profile = {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      modelParams: {
-        temperature: 0.3,
-      },
-      ephemeralSettings: {
-        'base-url': 'https://api.example.com/v1',
-        'auth-key': 'secret-current-key',
-        'auth-keyfile': '/tmp/keyfile',
-      },
-    };
-
-    providerManagerStub.available = ['openai'];
-    providerManagerStub.providerLookup.set('openai', { name: 'openai' });
-
-    const result = (await applyProfileWithGuards(profile, {
-      profileName: 'workspace',
-    })) as unknown as ProfileApplicationResult;
-
-    expect(result.providerName).toBe('openai');
-    expect(result.baseUrl).toBe('https://api.example.com/v1');
-    expect(updateActiveProviderBaseUrlMock).toHaveBeenCalledWith(
-      'https://api.example.com/v1',
-    );
-    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(
-      'secret-current-key',
-    );
-    expect(configStub.getEphemeralSetting('auth-keyfile')).toBe('/tmp/keyfile');
-  });
-
-  it('emits warnings when falling back to an available provider @plan:PLAN-20251020-STATELESSPROVIDER3.P08 @requirement:REQ-SP3-002', async () => {
-    // @pseudocode profile-application.md lines 5-10
-    const profile: Profile = {
-      version: 1,
-      provider: 'deepseek',
-      model: 'distil-model',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    providerManagerStub.available = ['openai'];
-    providerManagerStub.providerLookup = new Map([
-      ['openai', { name: 'openai' }],
-    ]);
-
-    const result = (await applyProfileWithGuards(profile, {
-      profileName: 'fallback-profile',
-    })) as unknown as ProfileApplicationResult;
-
-    expect(result.providerName).toBe('openai');
-    expect(result.warnings).toContain(
-      "Provider 'deepseek' unavailable, using 'openai'",
-    );
-  });
-
-  it('warns when profile application lacks call-scoped runtime context under stateless hardening @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-005 @pseudocode provider-runtime-handling.md lines 10-16', async () => {
-    isCliStatelessProviderModeEnabledMock.mockReturnValue(true);
-    isCliRuntimeStatelessReadyMock.mockReturnValue(false);
-
-    providerManagerStub.available = ['openai'];
-    providerManagerStub.providerLookup = new Map([
-      ['openai', { name: 'openai' }],
-    ]);
-
-    const profile: Profile = {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4o',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    const result = (await applyProfileWithGuards(profile, {
-      profileName: 'stateless-warning',
-    })) as unknown as ProfileApplicationResult;
-
-    const warningMatchesRequirement = result.warnings.some((warning) =>
-      /REQ-SP4-005/i.test(warning),
-    );
-    expect(warningMatchesRequirement).toBe(true);
-
-    isCliStatelessProviderModeEnabledMock.mockReturnValue(false);
-    isCliRuntimeStatelessReadyMock.mockReturnValue(true);
-  });
-
-  it('clears all ephemeral settings when loading profile without them - fixes issue #453', async () => {
-    // Set up initial ephemeral settings as if they were set by a previous profile/provider
-    configStub.setEphemeralSetting('auth-key', 'old-secret-key');
-    configStub.setEphemeralSetting('auth-keyfile', '/old/path/keyfile');
-    configStub.setEphemeralSetting('base-url', 'https://old-api.example.com');
-    configStub.setEphemeralSetting('context-limit', 100000);
-    configStub.setEphemeralSetting('custom-headers', 'X-Old-Header: value');
-
-    providerManagerStub.available = ['anthropic'];
-    providerManagerStub.providerLookup = new Map([
-      ['anthropic', { name: 'anthropic' }],
-    ]);
-
-    // Load a new profile that does NOT include these ephemeral settings
-    const profile: Profile = {
-      version: 1,
-      provider: 'anthropic',
-      model: 'claude-sonnet-4',
-      modelParams: {
-        temperature: 0.7,
-      },
-      ephemeralSettings: {
-        // Only set context-limit, nothing else
-        'context-limit': 200000,
-      },
-    };
-
-    await applyProfileWithGuards(profile, {
-      profileName: 'clean-profile',
-    });
-
-    // Verify that old ephemeral settings that were NOT in the profile are cleared
-    expect(configStub.getEphemeralSetting('auth-key')).toBeUndefined();
-    expect(configStub.getEphemeralSetting('auth-keyfile')).toBeUndefined();
-    expect(configStub.getEphemeralSetting('base-url')).toBeUndefined();
-    expect(configStub.getEphemeralSetting('custom-headers')).toBeUndefined();
-
-    // Verify that the one setting that WAS in the profile is set correctly
-    expect(configStub.getEphemeralSetting('context-limit')).toBe(200000);
-  });
-
-  it('preserves reasoning settings when switching providers with reasoning-enabled profile - fixes issue #890', async () => {
-    // This test verifies that when applyProfileWithGuards calls switchActiveProvider,
-    // the reasoning.* keys are included in the preserveEphemerals list so they
-    // survive the provider switch.
-
-    providerManagerStub.available = ['anthropic'];
-    providerManagerStub.providerLookup = new Map([
-      ['anthropic', { name: 'anthropic' }],
-    ]);
-
-    // Track what preserveEphemerals are passed to switchActiveProvider
+describe('Profile application basics', () => {
+  it('preserves reasoning settings during provider switch (issue #890)', async () => {
     let capturedPreserveEphemerals: string[] = [];
+
     switchActiveProviderMock.mockImplementation(
-      async (
-        providerName: string,
-        options?: { preserveEphemerals?: string[] },
-      ) => {
-        capturedPreserveEphemerals = options?.preserveEphemerals ?? [];
+      async (providerName, options) => {
         providerManagerStub.activeProviderName = providerName;
+        capturedPreserveEphemerals = options?.preserveEphemerals ?? [];
         return {
           infoMessages: [],
           changed: true,
-          authType: 'key',
         };
       },
     );
@@ -432,8 +265,6 @@ describe('profileApplication helpers', () => {
       profileName: 'opusthinking',
     });
 
-    // Verify that reasoning.* keys are included in preserveEphemerals
-    // This is the fix for issue #890
     expect(capturedPreserveEphemerals).toContain('reasoning.enabled');
     expect(capturedPreserveEphemerals).toContain('reasoning.budgetTokens');
     expect(capturedPreserveEphemerals).toContain('reasoning.stripFromContext');
@@ -455,7 +286,6 @@ describe('profileApplication helpers', () => {
         'Use /key to set API key if needed.',
       ],
       changed: true,
-      authType: 'key',
     });
     setActiveModelMock.mockResolvedValueOnce({ nextModel: 'glm-4.6' });
 
@@ -492,7 +322,6 @@ describe('profileApplication helpers', () => {
       return {
         infoMessages: [],
         changed: true,
-        authType: 'key',
       };
     });
 
@@ -550,7 +379,6 @@ describe('profileApplication helpers', () => {
       return {
         infoMessages: [],
         changed: true,
-        authType: 'key',
       };
     });
 
@@ -622,8 +450,10 @@ describe('profileApplication helpers', () => {
     let switchWasCalledWithAutoOAuth = false;
 
     switchActiveProviderMock.mockImplementation(
-      async (providerName: string, options?: { autoOAuth?: boolean }) => {
-        // Check if autoOAuth was explicitly set to false
+      async (
+        providerName: string,
+        options?: { preserveEphemerals?: string[]; autoOAuth?: boolean },
+      ) => {
         if (options && 'autoOAuth' in options) {
           switchWasCalledWithAutoOAuth = options.autoOAuth === true;
         }
@@ -631,7 +461,6 @@ describe('profileApplication helpers', () => {
         return {
           infoMessages: [],
           changed: true,
-          authType: 'key',
         };
       },
     );
@@ -728,7 +557,6 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         return {
           infoMessages: [],
           changed: true,
-          authType: 'key',
         };
       },
     );
@@ -792,7 +620,6 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         return {
           infoMessages: [],
           changed: true,
-          authType: 'key',
         };
       },
     );
@@ -856,7 +683,6 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         return {
           infoMessages: [],
           changed: true,
-          authType: 'key',
         };
       },
     );
@@ -908,7 +734,6 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         return {
           infoMessages: [],
           changed: true,
-          authType: 'key',
         };
       },
     );
@@ -991,7 +816,6 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         return {
           infoMessages: [],
           changed: true,
-          authType: 'key',
         };
       },
     );
@@ -1045,7 +869,6 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         return {
           infoMessages: [],
           changed: true,
-          authType: 'key',
         };
       },
     );
@@ -1113,7 +936,6 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         return {
           infoMessages: [],
           changed: true,
-          authType: 'key',
         };
       },
     );

@@ -18,7 +18,6 @@ import {
   updateAgentRuntimeState,
   getAgentRuntimeStateSnapshot,
 } from '../AgentRuntimeState.js';
-import { AuthType } from '../../core/contentGenerator.js';
 
 describe('Runtime State Regression Guards', () => {
   /**
@@ -33,8 +32,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -54,8 +51,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -73,8 +68,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -102,8 +95,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -124,8 +115,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -162,8 +151,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -188,15 +175,12 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
-      // Runtime state provides provider/model/auth
+      // Runtime state provides provider/model
       expect(state.provider).toBeDefined();
       expect(state.model).toBeDefined();
-      expect(state.authType).toBeDefined();
 
       // Config should NOT be queried for these values in production code
       // (Verified through code review and integration tests)
@@ -227,8 +211,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -250,8 +232,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -293,8 +273,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -309,8 +287,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 
@@ -329,8 +305,6 @@ describe('Runtime State Regression Guards', () => {
         runtimeId: 'test-runtime',
         provider: 'gemini',
         model: 'gemini-2.0-flash',
-        authType: AuthType.API_KEY,
-        authPayload: { apiKey: 'test-key' },
         sessionId: 'test-session',
       });
 

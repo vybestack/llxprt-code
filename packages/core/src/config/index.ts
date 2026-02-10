@@ -27,6 +27,8 @@ export {
   DEFAULT_GEMINI_FLASH_MODEL,
 } from './config.js';
 
+export type { Config as ConfigInstance } from './config.js';
+
 export { DEFAULT_GEMINI_FLASH_MODEL as DEFAULT_FLASH_MODEL } from './models.js';
 
 /**

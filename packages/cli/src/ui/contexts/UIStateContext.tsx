@@ -60,7 +60,6 @@ export interface UIState {
   isThemeDialogOpen: boolean;
   isSettingsDialogOpen: boolean;
   isAuthDialogOpen: boolean;
-  isAuthenticating: boolean;
   isEditorDialogOpen: boolean;
   isProviderDialogOpen: boolean;
   isLoadProfileDialogOpen: boolean;
@@ -227,6 +226,10 @@ export interface UIState {
 
   // Markdown rendering toggle (alt+m)
   renderMarkdown: boolean;
+
+  // Interactive shell focus state
+  activeShellPtyId: number | null;
+  embeddedShellFocused: boolean;
 }
 
 const UIStateContext = createContext<UIState | undefined>(undefined);

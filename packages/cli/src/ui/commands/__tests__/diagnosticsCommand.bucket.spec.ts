@@ -129,7 +129,6 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
               theme: 'default',
               usageStatisticsEnabled: false,
             },
-            selectedAuthType: 'oauth',
             defaultProfile: 'test-profile',
             sandbox: 'disabled',
           },

@@ -27,7 +27,7 @@ describe('Footer Responsive Behavior', () => {
   let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
 
   const defaultProps = {
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-pro',
     targetDir: '/home/user/projects/long-project-name',
     branchName: 'feature/very-long-branch-name-that-needs-truncation',
     debugMode: false,
@@ -138,7 +138,7 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show model name
-      expect(output).toContain('gemini-2.0-flash');
+      expect(output).toContain('gemini-2.5-pro');
       // Model name shows without 'Model:' prefix now
     });
 
@@ -178,7 +178,7 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show model name
-      expect(output).toContain('gemini-2.0-flash');
+      expect(output).toContain('gemini-2.5-pro');
       // Model name shows without 'Model:' prefix now
     });
 
@@ -213,7 +213,7 @@ describe('Footer Responsive Behavior', () => {
 
       // At exactly 80, should be STANDARD behavior
       expect(output).toMatch(/Memory:/); // Not abbreviated
-      expect(output).toContain('gemini-2.0-flash'); // Model shown
+      expect(output).toContain('gemini-2.5-pro'); // Model shown
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // No timestamp
     });
 
@@ -226,7 +226,7 @@ describe('Footer Responsive Behavior', () => {
 
       // At exactly 120, should be STANDARD behavior (not WIDE)
       expect(output).toMatch(/Memory:/);
-      expect(output).toContain('gemini-2.0-flash');
+      expect(output).toContain('gemini-2.5-pro');
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // Still no timestamp
     });
   });
@@ -283,7 +283,7 @@ describe('Footer Responsive Behavior', () => {
         // Path check - should contain path elements (may be truncated)
         expect(output).toMatch(/(home|user|projects|project-name)/); // Path (may be truncated)
         // Model only shown at standard+ widths
-        expect(width < 80 || output.includes('gemini-2.0-flash')).toBe(true);
+        expect(width < 80 || output.includes('gemini-2.5-pro')).toBe(true);
       });
     });
 
@@ -300,7 +300,7 @@ describe('Footer Responsive Behavior', () => {
 
       // Should also have path and model displayed
       expect(output).toMatch(/home.*user.*projects|long-project-name/);
-      expect(output).toContain('gemini-2.0-flash');
+      expect(output).toContain('gemini-2.5-pro');
     });
 
     it('should organize Path and Model information appropriately', () => {
@@ -311,7 +311,7 @@ describe('Footer Responsive Behavior', () => {
 
       // Should contain path and model information
       expect(output).toMatch(/home.*user.*projects|long-project-name/);
-      expect(output).toContain('gemini-2.0-flash');
+      expect(output).toContain('gemini-2.5-pro');
       expect(output).toContain('feature'); // Branch name (from defaultProps)
 
       // Should also have memory and context (they can be on separate logical lines)

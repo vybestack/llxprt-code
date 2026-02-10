@@ -39,7 +39,6 @@ import {
 import {
   Config,
   EditorType,
-  AuthType,
   GeminiEventType as ServerGeminiEventType,
   Todo,
   ApprovalMode,
@@ -234,7 +233,6 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       model: 'test-model',
       apiKey: 'test-key',
       vertexai: false,
-      authType: AuthType.USE_GEMINI,
     };
 
     mockConfig = {

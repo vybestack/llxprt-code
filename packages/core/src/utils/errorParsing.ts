@@ -15,7 +15,6 @@ import {
   DEFAULT_GEMINI_FLASH_MODEL,
 } from '../config/models.js';
 import { UserTierId } from '../code_assist/types.js';
-import { AuthType } from '../core/contentGenerator.js';
 import { getErrorStatus, STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
 
 // Free Tier message functions
@@ -49,14 +48,6 @@ const getRateLimitErrorMessageGoogleGenericQuotaPaid = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
 ) =>
   `\nYou have reached your daily quota limit. We appreciate you for choosing Gemini Code Assist and the Gemini CLI. To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
-const RATE_LIMIT_ERROR_MESSAGE_USE_GEMINI =
-  '\nPlease wait and try again later. To increase your limits, request a quota increase through AI Studio, or switch to another /auth method';
-const RATE_LIMIT_ERROR_MESSAGE_VERTEX =
-  '\nPlease wait and try again later. To increase your limits, request a quota increase through Vertex, or switch to another /auth method';
-const getRateLimitErrorMessageDefault = (
-  fallbackModel: string = DEFAULT_GEMINI_FLASH_MODEL,
-) =>
-  `\nPossible quota limitations in place or slow response times detected. Switching to the ${fallbackModel} model for the rest of this session.`;
 
 function buildStatusSuffix(status?: number, statusLabel?: string): string {
   const parts: string[] = [];
@@ -127,52 +118,42 @@ function getErrorCodeFromUnknown(error: unknown): string | undefined {
 }
 
 function getRateLimitMessage(
-  authType?: AuthType,
   error?: unknown,
   userTier?: UserTierId,
   currentModel?: string,
   fallbackModel?: string,
 ): string {
-  switch (authType) {
-    case AuthType.LOGIN_WITH_GOOGLE: {
-      // Determine if user is on a paid tier (Legacy or Standard) - default to FREE if not specified
-      const isPaidTier =
-        userTier === UserTierId.LEGACY || userTier === UserTierId.STANDARD;
+  // Determine if user is on a paid tier (Legacy or Standard) - default to FREE if not specified
+  const isPaidTier =
+    userTier === UserTierId.LEGACY || userTier === UserTierId.STANDARD;
 
-      if (isProQuotaExceededError(error)) {
-        return isPaidTier
-          ? getRateLimitErrorMessageGoogleProQuotaPaid(
-              currentModel || DEFAULT_GEMINI_MODEL,
-              fallbackModel,
-            )
-          : getRateLimitErrorMessageGoogleProQuotaFree(
-              currentModel || DEFAULT_GEMINI_MODEL,
-              fallbackModel,
-            );
-      } else if (isGenericQuotaExceededError(error)) {
-        return isPaidTier
-          ? getRateLimitErrorMessageGoogleGenericQuotaPaid(
-              currentModel || DEFAULT_GEMINI_MODEL,
-            )
-          : getRateLimitErrorMessageGoogleGenericQuotaFree();
-      } else {
-        return isPaidTier
-          ? getRateLimitErrorMessageGooglePaid(fallbackModel)
-          : getRateLimitErrorMessageGoogleFree(fallbackModel);
-      }
-    }
-    case AuthType.USE_GEMINI:
-      return RATE_LIMIT_ERROR_MESSAGE_USE_GEMINI;
-    case AuthType.USE_VERTEX_AI:
-      return RATE_LIMIT_ERROR_MESSAGE_VERTEX;
-    default:
-      return getRateLimitErrorMessageDefault(fallbackModel);
+  if (isProQuotaExceededError(error)) {
+    return isPaidTier
+      ? getRateLimitErrorMessageGoogleProQuotaPaid(
+          currentModel || DEFAULT_GEMINI_MODEL,
+          fallbackModel,
+        )
+      : getRateLimitErrorMessageGoogleProQuotaFree(
+          currentModel || DEFAULT_GEMINI_MODEL,
+          fallbackModel,
+        );
   }
+
+  if (isGenericQuotaExceededError(error)) {
+    return isPaidTier
+      ? getRateLimitErrorMessageGoogleGenericQuotaPaid(
+          currentModel || DEFAULT_GEMINI_MODEL,
+        )
+      : getRateLimitErrorMessageGoogleGenericQuotaFree();
+  }
+
+  return isPaidTier
+    ? getRateLimitErrorMessageGooglePaid(fallbackModel)
+    : getRateLimitErrorMessageGoogleFree(fallbackModel);
 }
 
 export function parseAndFormatApiError(
   error: unknown,
-  authType?: AuthType,
   userTier?: UserTierId,
   currentModel?: string,
   fallbackModel?: string,
@@ -194,29 +175,11 @@ export function parseAndFormatApiError(
     return `[API Error: ${formattedMessage}]\nStreaming data from the provider became invalid before the response completed. Please retry.`;
   }
 
-  // For provider auth type, don't add Gemini-specific rate limit messages
-  if (authType === AuthType.USE_PROVIDER) {
-    if (isStructuredError(error)) {
-      const status = getErrorStatus(error);
-      let text = `[API Error: ${formatErrorMessageWithStatus(error.message, status)}]`;
-      if (status === 429) {
-        text += '\nRate limit exceeded. Please wait and try again later.';
-      }
-      return text;
-    }
-  }
-
   if (isStructuredError(error)) {
     const status = getErrorStatus(error);
     let text = `[API Error: ${formatErrorMessageWithStatus(error.message, status)}]`;
     if (status === 429) {
-      text += getRateLimitMessage(
-        authType,
-        error,
-        userTier,
-        currentModel,
-        fallbackModel,
-      );
+      text += getRateLimitMessage(error, userTier, currentModel, fallbackModel);
     }
     return text;
   }
@@ -253,18 +216,12 @@ export function parseAndFormatApiError(
         );
         let text = `[API Error: ${finalMessage}${statusSuffix}]`;
         if (parsedError.error.code === 429) {
-          // For provider auth type, use generic rate limit message
-          if (authType === AuthType.USE_PROVIDER) {
-            text += '\nRate limit exceeded. Please wait and try again later.';
-          } else {
-            text += getRateLimitMessage(
-              authType,
-              parsedError,
-              userTier,
-              currentModel,
-              fallbackModel,
-            );
-          }
+          text += getRateLimitMessage(
+            parsedError,
+            userTier,
+            currentModel,
+            fallbackModel,
+          );
         }
         return text;
       }

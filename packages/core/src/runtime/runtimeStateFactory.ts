@@ -16,15 +16,10 @@
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
 import type {
   AgentRuntimeState,
-  AuthPayload,
   RuntimeStateParams,
 } from './AgentRuntimeState.js';
 import type { Config } from '../config/config.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
-import {
-  AuthType,
-  type ContentGeneratorConfig,
-} from '../core/contentGenerator.js';
 
 /**
  * Options when deriving runtime state from Config.
@@ -32,24 +27,6 @@ import {
 export interface RuntimeStateFromConfigOptions {
   runtimeId?: string;
   overrides?: Partial<Omit<RuntimeStateParams, 'runtimeId'>>;
-}
-
-function buildAuthPayload(
-  authType: AuthType,
-  contentConfig: ContentGeneratorConfig | undefined,
-): AuthPayload | undefined {
-  if (!contentConfig) {
-    return undefined;
-  }
-
-  if (authType === AuthType.API_KEY || authType === AuthType.USE_GEMINI) {
-    if (contentConfig.apiKey) {
-      return { apiKey: contentConfig.apiKey };
-    }
-  }
-
-  // OAuth tokens are managed elsewhere; Phase 5 runtime state stores the type.
-  return undefined;
 }
 
 function isValidUrl(candidate: unknown): candidate is string {
@@ -110,12 +87,6 @@ export function createAgentRuntimeStateFromConfig(
       : undefined) ??
     DEFAULT_GEMINI_MODEL;
 
-  const authType =
-    overrides.authType ?? contentConfig?.authType ?? AuthType.USE_NONE;
-
-  const authPayload =
-    overrides.authPayload ?? buildAuthPayload(authType, contentConfig);
-
   const baseUrlCandidate =
     overrides.baseUrl ??
     (typeof config.getEphemeralSetting === 'function'
@@ -141,8 +112,6 @@ export function createAgentRuntimeStateFromConfig(
     runtimeId,
     provider,
     model,
-    authType,
-    authPayload,
     baseUrl,
     proxyUrl,
     modelParams,

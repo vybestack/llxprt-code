@@ -1398,6 +1398,8 @@ export async function loadCliConfig(
     ),
     useRipgrep: useRipgrepSetting,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
+    allowPtyThemeOverride: effectiveSettings.allowPtyThemeOverride,
+    ptyScrollbackLimit: effectiveSettings.ptyScrollbackLimit,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
     continueSession: argv.continue ?? false,
@@ -1741,6 +1743,30 @@ export async function loadCliConfig(
       _profileModelParams?: Record<string, unknown>;
     };
     configWithProfile._profileModelParams = profileModelParams;
+  }
+
+  // Seed tools.disabled with defaultDisabledTools from settings.
+  // These tools are registered (discoverable) but soft-blocked by default.
+  // Users can override via /tools enable, which persists to their profile.
+  // Tools explicitly in tools.allowed (e.g. from a saved profile) are not re-disabled.
+  const defaultDisabled = effectiveSettings.defaultDisabledTools;
+  if (Array.isArray(defaultDisabled) && defaultDisabled.length > 0) {
+    const currentDisabled = Array.isArray(
+      enhancedConfig.getEphemeralSetting('tools.disabled'),
+    )
+      ? (enhancedConfig.getEphemeralSetting('tools.disabled') as string[])
+      : [];
+    const currentAllowed = buildNormalizedToolSet(
+      enhancedConfig.getEphemeralSetting('tools.allowed'),
+    );
+    const disabledSet = new Set(currentDisabled);
+    for (const toolName of defaultDisabled) {
+      if (!currentAllowed.has(normalizeToolNameForPolicy(toolName))) {
+        disabledSet.add(toolName);
+      }
+    }
+    const mergedDisabled = Array.from(disabledSet);
+    enhancedConfig.setEphemeralSetting('tools.disabled', mergedDisabled);
   }
 
   return enhancedConfig;

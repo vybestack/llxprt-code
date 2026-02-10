@@ -127,7 +127,6 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
           osVersion={itemForDisplay.osVersion}
           sandboxEnv={itemForDisplay.sandboxEnv}
           modelVersion={itemForDisplay.modelVersion}
-          selectedAuthType={itemForDisplay.selectedAuthType}
           gcpProject={itemForDisplay.gcpProject}
           ideClient={itemForDisplay.ideClient}
           provider={itemForDisplay.provider}
@@ -157,6 +156,8 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
           config={config}
           isFocused={isFocused}
           showTodoPanel={showTodoPanel}
+          activeShellPtyId={_activeShellPtyId}
+          embeddedShellFocused={_embeddedShellFocused}
         />
       )}
       {itemForDisplay.type === 'compression' && (

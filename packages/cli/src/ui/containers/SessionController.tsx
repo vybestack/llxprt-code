@@ -67,13 +67,11 @@ export const SessionContext = createContext<SessionContextType | undefined>(
 interface SessionControllerProps {
   children: React.ReactNode;
   config: Config;
-  isAuthenticating?: boolean;
 }
 
 export const SessionController: React.FC<SessionControllerProps> = ({
   children,
   config,
-  isAuthenticating = false,
 }) => {
   const runtime = useRuntimeApi();
   const statusSnapshot = runtime.getActiveProviderStatus();
@@ -91,7 +89,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
 
   return (
     <SessionStateProvider initialState={initialState}>
-      <SessionControllerInner {...{ children, config, isAuthenticating }} />
+      <SessionControllerInner {...{ children, config }} />
     </SessionStateProvider>
   );
 };

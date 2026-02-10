@@ -18,6 +18,7 @@ import {
   type Tool,
   type PartListUnion,
   ApiError,
+  FinishReason,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
 import { flushRuntimeAuthScope } from '../auth/precedence.js';
@@ -344,11 +345,16 @@ export class InvalidStreamError extends Error {
   readonly type:
     | 'NO_FINISH_REASON'
     | 'NO_RESPONSE_TEXT'
-    | 'NO_FINISH_REASON_NO_TEXT';
+    | 'NO_FINISH_REASON_NO_TEXT'
+    | 'MALFORMED_FUNCTION_CALL';
 
   constructor(
     message: string,
-    type: 'NO_FINISH_REASON' | 'NO_RESPONSE_TEXT' | 'NO_FINISH_REASON_NO_TEXT',
+    type:
+      | 'NO_FINISH_REASON'
+      | 'NO_RESPONSE_TEXT'
+      | 'NO_FINISH_REASON_NO_TEXT'
+      | 'MALFORMED_FUNCTION_CALL',
   ) {
     super(message);
     this.name = 'InvalidStreamError';
@@ -382,8 +388,6 @@ export class GeminiChat {
   // A promise to represent any ongoing compression operation
   private compressionPromise: Promise<void> | null = null;
   private logger = new DebugLogger('llxprt:gemini:chat');
-  // Cache the compression threshold to avoid recalculating
-  private cachedCompressionThreshold: number | null = null;
   private lastPromptTokenCount: number | null = null;
   private readonly generationConfig: GenerateContentConfig;
 
@@ -548,7 +552,6 @@ export class GeminiChat {
       sessionId: this.runtimeState.sessionId,
       runtimeId: this.runtimeState.runtimeId,
       provider: this.runtimeState.provider,
-      authType: this.runtimeState.authType,
       timestamp: Date.now(),
     });
   }
@@ -569,7 +572,6 @@ export class GeminiChat {
       model: this.runtimeState.model,
       promptId,
       durationMs,
-      authType: this.runtimeState.authType,
       sessionId: this.runtimeState.sessionId,
       runtimeId: this.runtimeState.runtimeId,
       provider: this.runtimeState.provider,
@@ -598,7 +600,6 @@ export class GeminiChat {
       durationMs,
       error: errorMessage,
       errorType,
-      authType: this.runtimeState.authType,
       sessionId: this.runtimeState.sessionId,
       runtimeId: this.runtimeState.runtimeId,
       provider: this.runtimeState.provider,
@@ -694,7 +695,6 @@ export class GeminiChat {
 
     const provider = this.resolveProviderForRuntime('sendMessage');
 
-    const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     // @plan PLAN-20251027-STATELESS5.P10
@@ -706,7 +706,6 @@ export class GeminiChat {
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeState.model,
         baseUrl: providerBaseUrl,
-        authType: activeAuthType,
       },
     );
 
@@ -812,7 +811,6 @@ export class GeminiChat {
             model: this.runtimeState.model,
             toolCount: tools?.length ?? 0,
             baseUrl: this.resolveProviderBaseUrl(provider),
-            authType: this.runtimeState.authType,
           },
         );
         const runtimeContext = this.buildProviderRuntime(
@@ -1287,7 +1285,6 @@ export class GeminiChat {
           );
 
           const baseUrlForCall = this.resolveProviderBaseUrl(provider);
-          const activeAuthType = this.runtimeState.authType;
 
           // @plan PLAN-20251027-STATELESS5.P10
           // @requirement REQ-STAT5-004.1
@@ -1299,7 +1296,6 @@ export class GeminiChat {
               model: this.runtimeState.model,
               toolCount: toolsFromConfig?.length ?? 0,
               baseUrl: baseUrlForCall,
-              authType: activeAuthType,
             },
           );
 
@@ -1410,7 +1406,6 @@ export class GeminiChat {
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const provider = this.resolveProviderForRuntime('stream');
 
-    const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     this.logger.debug(
@@ -1420,7 +1415,6 @@ export class GeminiChat {
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeState.model,
         baseUrl: providerBaseUrl,
-        authType: activeAuthType,
       },
     );
 
@@ -1492,9 +1486,9 @@ export class GeminiChat {
           historyLength: requestContents.length,
           toolCount: tools?.length ?? 0,
           baseUrl: providerBaseUrl,
-          authType: activeAuthType,
         },
       );
+
       // Create a runtime context that incorporates the config from params
       const baseRuntimeContext = this.buildProviderRuntime(
         'GeminiChat.generateRequest',
@@ -1584,7 +1578,6 @@ export class GeminiChat {
 
     const streamResponse = await retryWithBackoff(apiCall, {
       onPersistent429: onPersistent429Callback,
-      authType: activeAuthType,
       signal: params.config?.abortSignal,
     });
 
@@ -1741,19 +1734,17 @@ export class GeminiChat {
    * @pseudocode agent-runtime-context.md line 86 (step 006.3)
    */
   private shouldCompress(pendingTokens: number = 0): boolean {
-    // Calculate compression threshold only if not cached
-    if (this.cachedCompressionThreshold === null) {
-      // Step 006.3: Replace config.getEphemeralSetting with view.ephemerals
-      const threshold = this.runtimeContext.ephemerals.compressionThreshold();
-      const contextLimit = this.runtimeContext.ephemerals.contextLimit();
+    // Step 006.3: Replace config.getEphemeralSetting with view.ephemerals
+    // Calculate fresh each time to respect runtime setting changes
+    const threshold = this.runtimeContext.ephemerals.compressionThreshold();
+    const contextLimit = this.runtimeContext.ephemerals.contextLimit();
+    const compressionThreshold = threshold * contextLimit;
 
-      this.cachedCompressionThreshold = threshold * contextLimit;
-      this.logger.debug('Calculated compression threshold:', {
-        threshold,
-        contextLimit,
-        compressionThreshold: this.cachedCompressionThreshold,
-      });
-    }
+    this.logger.debug('Compression threshold:', {
+      threshold,
+      contextLimit,
+      compressionThreshold,
+    });
 
     // Use lastPromptTokenCount (actual API data) when available, else fall back to estimate
     const baseTokenCount =
@@ -1762,12 +1753,12 @@ export class GeminiChat {
         : this.getEffectiveTokenCount();
 
     const currentTokens = baseTokenCount + Math.max(0, pendingTokens);
-    const shouldCompress = currentTokens >= this.cachedCompressionThreshold;
+    const shouldCompress = currentTokens >= compressionThreshold;
 
     if (shouldCompress) {
       this.logger.debug('Compression needed:', {
         currentTokens,
-        threshold: this.cachedCompressionThreshold,
+        threshold: compressionThreshold,
         usingActualApiCount:
           this.lastPromptTokenCount !== null && this.lastPromptTokenCount > 0,
       });
@@ -1919,6 +1910,16 @@ export class GeminiChat {
   }
 
   private getCompletionBudget(provider?: IProvider): number {
+    // Check global ephemeral setting for maxOutputTokens (set via /set maxOutputTokens)
+    // This is a generic setting that providers should translate to their native param
+    const settingsService =
+      this.runtimeContext.providerRuntime?.settingsService;
+    const liveMaxOutputTokens = settingsService?.get('maxOutputTokens');
+    const liveBudget = this.asNumber(liveMaxOutputTokens);
+    if (liveBudget !== undefined && liveBudget > 0) {
+      return liveBudget;
+    }
+
     const generationBudget = this.asNumber(
       (this.generationConfig as { maxOutputTokens?: unknown }).maxOutputTokens,
     );
@@ -1927,11 +1928,6 @@ export class GeminiChat {
     const providerBudget = this.extractCompletionBudgetFromParams(
       providerParams as Record<string, unknown> | undefined,
     );
-
-    // @plan PLAN-20251028-STATELESS6.P10
-    // @requirement REQ-STAT6-002.2
-    // @pseudocode agent-runtime-context.md line 86 (step 006.3)
-    // Note: maxOutputTokens is not part of core ephemerals; removed config dependency
 
     return (
       generationBudget ?? providerBudget ?? GeminiChat.DEFAULT_COMPLETION_BUDGET
@@ -2004,8 +2000,6 @@ export class GeminiChat {
    */
   async performCompression(prompt_id: string): Promise<void> {
     this.logger.debug('Starting compression');
-    // Reset cached threshold after compression in case settings changed
-    this.cachedCompressionThreshold = null;
 
     // Lock history service
     this.historyService.startCompression();
@@ -2219,7 +2213,6 @@ export class GeminiChat {
       throw new Error('Provider does not support compression');
     }
 
-    const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     // Build compression request with system prompt and user history
@@ -2257,7 +2250,6 @@ export class GeminiChat {
         model: this.runtimeState.model,
         historyLength: compressionRequest.length,
         baseUrl: providerBaseUrl,
-        authType: activeAuthType,
       },
     );
     const runtimeContext = this.buildProviderRuntime(
@@ -2357,17 +2349,19 @@ export class GeminiChat {
   ): AsyncGenerator<GenerateContentResponse> {
     const modelResponseParts: Part[] = [];
     let hasToolCall = false;
-    let hasFinishReason = false;
+    let finishReason: FinishReason | undefined;
     let hasTextResponse = false;
     const allChunks: GenerateContentResponse[] = [];
 
     for await (const chunk of streamResponse) {
-      // Accumulate hasFinishReason - once we see a finishReason, it stays true
-      // Bug fix: Previously this was overwritten on each iteration, causing
-      // the final thinking block (with no finishReason) to reset it to false
+      // Capture the finishReason if present - we track the actual reason for MALFORMED_FUNCTION_CALL handling
+      // Once we see a finishReason, it stays set
       // @plan PLAN-20251202-THINKING.P16
-      if (chunk?.candidates?.some((candidate) => candidate.finishReason)) {
-        hasFinishReason = true;
+      const candidateWithReason = chunk?.candidates?.find(
+        (candidate) => candidate.finishReason,
+      );
+      if (candidateWithReason) {
+        finishReason = candidateWithReason.finishReason as FinishReason;
       }
       if (isValidResponse(chunk)) {
         const content = chunk.candidates?.[0]?.content;
@@ -2448,12 +2442,13 @@ export class GeminiChat {
     // tool-result continuation AND:
     // - No finish reason AND no text response during streaming, OR
     // - Empty response text after consolidation (e.g., only thoughts with no actual content)
+    // - MALFORMED_FUNCTION_CALL finish reason (should trigger retry)
     if (
       !hasToolCall &&
       !isToolContinuationInput &&
-      ((!hasFinishReason && !hasTextResponse) || !responseText)
+      ((!finishReason && !hasTextResponse) || !responseText)
     ) {
-      if (!hasFinishReason && !hasTextResponse) {
+      if (!finishReason && !hasTextResponse) {
         throw new InvalidStreamError(
           'Model stream ended without a finish reason and no text response.',
           'NO_FINISH_REASON_NO_TEXT',
@@ -2464,6 +2459,14 @@ export class GeminiChat {
           'NO_RESPONSE_TEXT',
         );
       }
+    }
+
+    // Handle MALFORMED_FUNCTION_CALL finish reason - should trigger retry
+    if (finishReason === FinishReason.MALFORMED_FUNCTION_CALL) {
+      throw new InvalidStreamError(
+        'Model stream ended with malformed function call.',
+        'MALFORMED_FUNCTION_CALL',
+      );
     }
 
     // Use recordHistory to correctly save the conversation turn.

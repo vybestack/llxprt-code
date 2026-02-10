@@ -1,0 +1,78 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 35,
+    "historyLimit": 50000,
+    "scrollbackLines": 6000,
+    "initialWaitMs": 6000
+  },
+  "yolo": true,
+  "startCommand": [
+    "env",
+    "LLXPRT_CODE_SYSTEM_SETTINGS_PATH=scripts/oldui-system-settings.use-pty.json",
+    "LLXPRT_DEBUG=llxprt:*",
+    "LLXPRT_DEBUG_SESSION_ID=shell-harness",
+    "node",
+    "scripts/start.js",
+    "--profile-load",
+    "synthetic",
+    "--yolo"
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    { "type": "key", "key": "!" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "shell mode enabled",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "capture",
+      "label": "after-shell-mode-entered",
+      "scope": "screen"
+    },
+
+    {
+      "type": "line",
+      "text": "node scripts/oldui-scrollback-load.js --total 40 --interval-ms 200 --prefix LIVE",
+      "submitKeys": ["Enter"]
+    },
+    { "type": "wait", "ms": 1500 },
+
+    { "type": "capture", "label": "while-command-running", "scope": "screen" },
+    {
+      "type": "capture",
+      "label": "while-command-running-scrollback",
+      "scope": "scrollback"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "LIVE",
+      "timeoutMs": 10000
+    },
+
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "LIVE 0040",
+      "timeoutMs": 15000
+    },
+
+    { "type": "key", "key": "!" },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "shell mode enabled",
+      "timeoutMs": 10000
+    },
+    { "type": "line", "text": "/quit", "submitKeys": ["Escape", "Enter"] },
+    { "type": "waitForExit", "timeoutMs": 30000 }
+  ]
+}

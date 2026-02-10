@@ -56,7 +56,6 @@ describe('createAgentRuntimeContext', () => {
     mockProviderRuntime = {
       provider: 'test-provider',
       model: 'gemini-2.0-flash',
-      authType: 'api-key',
       sessionId: 'test-session',
       runtimeId: 'test-runtime',
     };
@@ -65,7 +64,6 @@ describe('createAgentRuntimeContext', () => {
     mockState = {
       provider: 'test-provider',
       model: 'gemini-2.0-flash',
-      authType: 'api-key',
       sessionId: 'test-session',
       runtimeId: 'test-runtime',
     };

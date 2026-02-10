@@ -71,7 +71,6 @@ export class LoggingContentGenerator implements ContentGenerator {
         model,
         durationMs,
         prompt_id,
-        this.config.getContentGeneratorConfig()?.authType,
         usageMetadata,
         responseText,
       ),
@@ -94,7 +93,6 @@ export class LoggingContentGenerator implements ContentGenerator {
         errorMessage,
         durationMs,
         prompt_id,
-        this.config.getContentGeneratorConfig()?.authType,
         errorType,
         isStructuredError(error)
           ? (error as StructuredError).status

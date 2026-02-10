@@ -132,12 +132,9 @@ export function clipMiddle(
 
   const head = content.slice(0, adjustedHeadPortion);
   const tail = content.slice(length - adjustedTailPortion);
-  const omitted = length - (adjustedHeadPortion + adjustedTailPortion);
 
   const marker = `
-... [middle ${omitted} chars omitted; showing ${
-    adjustedHeadPortion + adjustedTailPortion
-  } of ${length}] ...
+...[middle clipped due to token limits]...
 `;
 
   return {

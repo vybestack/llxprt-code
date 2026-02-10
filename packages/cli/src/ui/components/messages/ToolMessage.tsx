@@ -18,8 +18,16 @@ import {
   TOOL_STATUS,
 } from '../../constants.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
-import { stripShellMarkers } from '@vybestack/llxprt-code-core';
+import {
+  stripShellMarkers,
+  ShellExecutionService,
+  type Config,
+  type AnsiOutput,
+} from '@vybestack/llxprt-code-core';
 import { useUIState } from '../../contexts/UIStateContext.js';
+import { AnsiOutputText } from '../AnsiOutput.js';
+import { ShellInputPrompt } from '../ShellInputPrompt.js';
+import { StickyHeader } from '../StickyHeader.js';
 
 const STATIC_HEIGHT = 1;
 const RESERVED_LINE_COUNT = 5; // for tool name, status, padding etc.
@@ -36,6 +44,12 @@ export interface ToolMessageProps extends IndividualToolCallDisplay {
   terminalWidth: number;
   emphasis?: TextEmphasis;
   renderOutputAsMarkdown?: boolean;
+  activeShellPtyId?: number | null;
+  embeddedShellFocused?: boolean;
+  config?: Config;
+  isFirst?: boolean;
+  borderColor?: string;
+  borderDimColor?: boolean;
 }
 
 export const ToolMessage: React.FC<ToolMessageProps> = ({
@@ -48,8 +62,34 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   emphasis = 'medium',
   renderOutputAsMarkdown = true,
   isFocused = true,
+  activeShellPtyId,
+  embeddedShellFocused,
+  ptyId,
+  config,
+  isFirst = false,
+  borderColor = Colors.Gray,
+  borderDimColor = false,
 }) => {
   const { renderMarkdown } = useUIState();
+
+  // Check if this shell is focused
+  const isShellTool = name === SHELL_COMMAND_NAME || name === SHELL_NAME;
+  // For LLM-invoked shells, activeShellPtyId is null but we can use lastActivePtyId
+  const lastActivePtyId = ShellExecutionService.getLastActivePtyId();
+  const isThisShellTargeted =
+    ptyId === activeShellPtyId ||
+    (activeShellPtyId == null && ptyId === lastActivePtyId);
+  const isThisShellFocused =
+    isShellTool &&
+    status === ToolCallStatus.Executing &&
+    isThisShellTargeted &&
+    embeddedShellFocused;
+
+  const isThisShellFocusable =
+    isShellTool &&
+    status === ToolCallStatus.Executing &&
+    config?.getEnableInteractiveShell() &&
+    isThisShellTargeted;
   const availableHeight = availableTerminalHeight
     ? Math.max(
         availableTerminalHeight - STATIC_HEIGHT - RESERVED_LINE_COUNT,
@@ -78,7 +118,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     { isActive: isFocused },
   );
 
-  const childWidth = terminalWidth - 3; // account for padding.
+  const childWidth = terminalWidth;
   if (typeof resultDisplay === 'string') {
     if (resultDisplay.length > MAXIMUM_RESULT_DISPLAY_CHARACTERS) {
       // Truncate the result display to fit within the available width.
@@ -176,9 +216,21 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     isDetailsVisible && status === ToolCallStatus.Executing
       ? deriveCurrentSubcommand()
       : null;
+
+  // Check if resultDisplay is AnsiOutput (array of arrays)
+  const isAnsiOutput =
+    Array.isArray(resultDisplay) &&
+    resultDisplay.length > 0 &&
+    Array.isArray(resultDisplay[0]);
+
   return (
-    <Box paddingX={1} paddingY={0} flexDirection="column">
-      <Box minHeight={1}>
+    <>
+      <StickyHeader
+        width={terminalWidth}
+        isFirst={isFirst}
+        borderColor={borderColor}
+        borderDimColor={borderDimColor}
+      >
         <ToolStatusIndicator status={status} name={name} />
         <ToolInfo
           name={name}
@@ -186,31 +238,64 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
           description={description}
           emphasis={emphasis}
         />
+        {isThisShellFocusable && (
+          <Box marginLeft={1} flexShrink={0}>
+            <Text color={Colors.AccentCyan}>
+              {isThisShellFocused
+                ? '(Ctrl+F to return to prompt)'
+                : '(Ctrl+F to send keys to shell)'}
+            </Text>
+          </Box>
+        )}
         {emphasis === 'high' && <TrailingIndicator />}
-      </Box>
-      {status === ToolCallStatus.Executing && !isDetailsVisible && (
-        <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
-          <Text color={Colors.DimComment}>
-            Press &apos;ctrl+r&apos; to show running command
-          </Text>
-        </Box>
-      )}
-      {currentSubcommand && (
-        <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
-          <Text color={Colors.AccentCyan}>
-            Running: <Text color={Colors.Foreground}>{currentSubcommand}</Text>
-          </Text>
-        </Box>
-      )}
-      {resultDisplay && (
-        <Box paddingLeft={STATUS_INDICATOR_WIDTH} width="100%" marginTop={1}>
-          <Box flexDirection="column">
+      </StickyHeader>
+      <Box
+        width={terminalWidth}
+        borderStyle="round"
+        borderColor={borderColor}
+        borderDimColor={borderDimColor}
+        borderTop={false}
+        borderBottom={false}
+        borderLeft={true}
+        borderRight={true}
+        paddingX={1}
+        flexDirection="column"
+        overflowX="hidden"
+      >
+        {status === ToolCallStatus.Executing && !isDetailsVisible && (
+          <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
+            <Text color={Colors.DimComment}>
+              Press &apos;ctrl+r&apos; to show running command
+            </Text>
+          </Box>
+        )}
+        {currentSubcommand && (
+          <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
+            <Text color={Colors.AccentCyan}>
+              Running:{' '}
+              <Text color={Colors.Foreground}>{currentSubcommand}</Text>
+            </Text>
+          </Box>
+        )}
+        {resultDisplay && (
+          <Box
+            paddingLeft={STATUS_INDICATOR_WIDTH}
+            width="100%"
+            marginTop={1}
+            flexDirection="column"
+          >
+            {isAnsiOutput && (
+              <AnsiOutputText
+                data={resultDisplay as unknown as AnsiOutput}
+                availableTerminalHeight={availableHeight}
+                width={childWidth}
+              />
+            )}
             {typeof resultDisplay === 'string' && renderOutputAsMarkdown && (
               <Box flexDirection="column">
                 <MarkdownDisplay
                   text={visualResultDisplay as string}
                   isPending={false}
-                  availableTerminalHeight={availableHeight}
                   terminalWidth={childWidth}
                   renderMarkdown={renderMarkdown}
                 />
@@ -225,7 +310,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
                 </Box>
               </MaxSizedBox>
             )}
-            {typeof resultDisplay !== 'string' && (
+            {!isAnsiOutput && typeof resultDisplay !== 'string' && (
               <Box flexDirection="column">
                 {'fileDiff' in resultDisplay && (
                   <>
@@ -240,12 +325,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
                         <Box marginBottom={1}>
                           {astValidation.valid ? (
                             <Text color={Colors.AccentGreen}>
-                              ✦ AST Validation Passed
+                              AST Validation Passed
                             </Text>
                           ) : (
                             <Box flexDirection="column">
                               <Text color={Colors.AccentRed} bold>
-                                ⚠ AST Validation Failed
+                                AST Validation Failed
                               </Text>
                               {astValidation.errors.map(
                                 (err: string, i: number) => (
@@ -278,12 +363,12 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
                           <>
                             {typeof language === 'string' && (
                               <Text color={Colors.AccentGreen}>
-                                ✦ Language: {language}
+                                Language: {language}
                               </Text>
                             )}
                             {typeof declarationsCount === 'number' && (
                               <Text color={Colors.AccentGreen}>
-                                ✦ Declarations Found: {declarationsCount}
+                                Declarations Found: {declarationsCount}
                               </Text>
                             )}
                           </>
@@ -302,9 +387,17 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
               </Box>
             )}
           </Box>
-        </Box>
-      )}
-    </Box>
+        )}
+        {isThisShellFocused && config && (
+          <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1}>
+            <ShellInputPrompt
+              activeShellPtyId={activeShellPtyId ?? null}
+              focus={embeddedShellFocused ?? false}
+            />
+          </Box>
+        )}
+      </Box>
+    </>
   );
 };
 

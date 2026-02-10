@@ -13,6 +13,7 @@ import {
   ToolResult,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
 
 class TestToolInvocation implements ToolInvocation<object, ToolResult> {
   constructor(
@@ -32,7 +33,13 @@ class TestToolInvocation implements ToolInvocation<object, ToolResult> {
     return Promise.resolve(false);
   }
 
-  execute(): Promise<ToolResult> {
+  execute(
+    _signal?: AbortSignal,
+    _updateOutput?: (output: string | AnsiOutput) => void,
+    _terminalColumns?: number,
+    _terminalRows?: number,
+    _setPidCallback?: (pid: number) => void,
+  ): Promise<ToolResult> {
     return this.executeFn();
   }
 }

@@ -35,7 +35,10 @@
     "bun": ">=1.2.0"
   },
   "overrides": {
-    "diff": "8.0.3"
+    "diff": "8.0.3",
+    "@typescript-eslint/eslint-plugin": "8.54.0",
+    "@typescript-eslint/parser": "8.54.0",
+    "@typescript-eslint/utils": "8.54.0"
   },
   "dependencies": {
     "@vybestack/opentui-core": "^0.1.62",

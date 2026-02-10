@@ -9,7 +9,6 @@ import { diagnosticsCommand } from './diagnosticsCommand.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import {
-  AuthType,
   MCPOAuthTokenStorage,
   type MCPOAuthCredentials,
 } from '@vybestack/llxprt-code-core';
@@ -135,7 +134,6 @@ describe('diagnosticsCommand OAuth token display', () => {
               theme: 'default',
               usageStatisticsEnabled: false,
             },
-            selectedAuthType: AuthType.USE_NONE,
             defaultProfile: 'none',
             sandbox: 'disabled',
           },

@@ -364,4 +364,82 @@ describe('SecureInputHandler', () => {
       });
     });
   });
+
+  /**
+   * Integration tests for /toolkey input masking.
+   * Tests that the SecureInputHandler recognizes /toolkey as a secure command,
+   * masks the PAT value portion, sanitizes history, and does NOT mask /toolkeyfile.
+   *
+   * @plan PLAN-20260206-TOOLKEY.P10
+   */
+  describe('/toolkey input masking', () => {
+    /** @plan PLAN-20260206-TOOLKEY.P10 @requirement REQ-006.1, REQ-002.5 */
+    describe('shouldUseSecureMode', () => {
+      it('should detect /toolkey command', () => {
+        expect(handler.shouldUseSecureMode('/toolkey')).toBe(true);
+        expect(handler.shouldUseSecureMode('/toolkey ')).toBe(true);
+        expect(handler.shouldUseSecureMode('/toolkey exa')).toBe(true);
+        expect(handler.shouldUseSecureMode('/toolkey exa sk-key')).toBe(true);
+      });
+
+      it('should NOT detect /toolkeyfile command as secure (paths are not sensitive)', () => {
+        expect(handler.shouldUseSecureMode('/toolkeyfile')).toBe(false);
+        expect(handler.shouldUseSecureMode('/toolkeyfile exa ~/key')).toBe(
+          false,
+        );
+      });
+    });
+
+    /** @plan PLAN-20260206-TOOLKEY.P10 @requirement REQ-006.1 */
+    describe('processInput', () => {
+      it('should mask PAT in /toolkey command', () => {
+        handler.reset();
+        const input = '/toolkey exa sk-secret-key-12345678';
+        const processed = handler.processInput(input);
+        // The PAT portion 'sk-secret-key-12345678' should be masked
+        expect(processed).toContain('/toolkey exa');
+        expect(processed).not.toContain('secret-key-12345678');
+        // First 2 and last 2 of PAT visible
+        expect(processed).toContain('sk');
+        expect(processed).toContain('78');
+      });
+
+      it('should NOT mask tool name in /toolkey command', () => {
+        handler.reset();
+        const input = '/toolkey exa sk-key123456789';
+        const processed = handler.processInput(input);
+        expect(processed).toContain('/toolkey exa');
+      });
+
+      it('should not mask when only /toolkey exa typed (no PAT yet)', () => {
+        handler.reset();
+        expect(handler.processInput('/toolkey exa')).toBe('/toolkey exa');
+        handler.reset();
+        expect(handler.processInput('/toolkey exa ')).toBe('/toolkey exa ');
+      });
+
+      it('should mask short PATs completely', () => {
+        handler.reset();
+        const input = '/toolkey exa abc';
+        const processed = handler.processInput(input);
+        expect(processed).toBe('/toolkey exa ***');
+      });
+    });
+
+    /** @plan PLAN-20260206-TOOLKEY.P10 @requirement REQ-006.2 */
+    describe('sanitizeForHistory', () => {
+      it('should sanitize /toolkey commands for history', () => {
+        const command = '/toolkey exa sk-secret-key-12345678';
+        const sanitized = handler.sanitizeForHistory(command);
+        expect(sanitized).not.toContain('secret-key');
+        expect(sanitized).toContain('/toolkey exa');
+      });
+
+      it('should not sanitize /toolkeyfile commands', () => {
+        const command = '/toolkeyfile exa ~/.ssh/exa-key';
+        const sanitized = handler.sanitizeForHistory(command);
+        expect(sanitized).toBe(command);
+      });
+    });
+  });
 });

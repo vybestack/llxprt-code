@@ -696,7 +696,6 @@ export function KeypressProvider({
     }
 
     stdin.on('data', dataListener);
-
     return () => {
       stdin.removeListener('data', dataListener);
       if (wasRaw === false) {
