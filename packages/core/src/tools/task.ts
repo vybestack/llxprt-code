@@ -696,6 +696,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     let launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>;
     let agentId: string | undefined;
     let scope: SubAgentScope;
+    let contextState: ContextState;
     let dispose: (() => Promise<void>) | undefined;
     const asyncAbortController = new AbortController();
     let timeoutId: NodeJS.Timeout | null = null;
@@ -710,9 +711,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       agentId = launchResult.agentId;
       scope = launchResult.scope;
       dispose = launchResult.dispose;
-      // Build context state but don't use it here - it's used in executeInBackground
-      // but we still need to build it for the background execution
-      const _contextState = this.buildContextState();
+      contextState = this.buildContextState();
 
       // Set up timeout for async task (but don't wire to parent signal)
       const settings = this.config.getEphemeralSettings?.() ?? {};

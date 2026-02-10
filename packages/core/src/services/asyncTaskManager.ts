@@ -72,9 +72,18 @@ export class AsyncTaskManager {
   }
 
   /**
+   * @pseudocode lines 054-056
+   */
+  getAllTasks(): AsyncTaskInfo[] {
+    return Array.from(this.tasks.values());
+  }
+
+  /**
    * @pseudocode lines 058-078
    */
   canLaunchAsync(): { allowed: boolean; reason?: string } {
+    this.cleanupExpiredReservations();
+
     // Line 060-062: Unlimited mode
     if (this.maxAsyncTasks === -1) {
       return { allowed: true };
@@ -102,6 +111,8 @@ export class AsyncTaskManager {
    * Returns a unique booking ID if successful, or null if limit reached
    */
   tryReserveAsyncSlot(): string | null {
+    this.cleanupExpiredReservations();
+
     // Check if we can launch
     const canLaunch = this.canLaunchAsync();
     if (!canLaunch.allowed) {
