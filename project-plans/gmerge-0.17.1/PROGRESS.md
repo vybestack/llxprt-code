@@ -13,3 +13,12 @@
 | 9 | REIMPLEMENT | 638dd2f6c + N/A | DONE | e40324c76 | Extension tests + it.each refactoring |
 
 Final formatting commit: 75fedd320
+
+## Follow-Up Plans (Post Batch 1–9)
+
+| Plan | Upstream SHA | Status | LLxprt Commit | Notes |
+|------|-------------|--------|---------------|-------|
+| P1 | 472e775a1 | DONE | 97fc400ea | /permissions modify trust for other dirs — REIMPLEMENTED |
+| P2 | 9786c4dcf | DONE | 4018472a9 | Folder trust gate before /add directory — REIMPLEMENTED |
+| P3 | ab11b2c27 (cleanup) | DONE | ece33125e | Componentize ProfileChangeMessage + upstream formatting parity |
+| P4 | — (schema gap) | DONE | d95d006eb | Regenerate settings.schema.json (previewFeatures + showProfileChangeInChat) |

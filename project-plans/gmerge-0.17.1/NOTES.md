@@ -46,7 +46,42 @@ Notes appended after each batch during execution.
 
 - 4 new extension test files (disable, enable, link, list). install.test.ts refactored to use it.each.
 
-## Deferred Items
+## Deferred Items (RESOLVED)
 
-- 472e775a1 (/permissions modify trust for other dirs) — needs REIMPLEMENT playbook
-- 9786c4dcf (check folder trust before allowing /add directory) — needs REIMPLEMENT playbook, depends on 472e775a1
+- 472e775a1 (/permissions modify trust for other dirs) — REIMPLEMENTED as 97fc400ea
+- 9786c4dcf (check folder trust before allowing /add directory) — REIMPLEMENTED as 4018472a9
+
+## Follow-Up Plan P1 — 472e775a1
+
+- Added non-interactive trust modification to /permissions command.
+- `parsePermissionsArgs()` parses trust level + target path from command args.
+- Supports TRUST_FOLDER, TRUST_PARENT, DO_NOT_TRUST.
+- Preserves existing dialog behavior when no args given.
+- Path normalization via `path.resolve()`.
+- 12 behavioral tests added.
+- No conflicts; clean implementation against existing permissionsCommand.ts.
+
+## Follow-Up Plan P2 — 9786c4dcf
+
+- Trust gate in directoryCommand.tsx before addDirectory().
+- Uses `loadTrustedFolders().isPathTrusted()` when `config.getFolderTrust()` is enabled.
+- Untrusted paths blocked with guidance to /permissions.
+- Mixed input: trusted succeed, untrusted rejected per-path.
+- Sandbox early-return preserved at highest priority.
+- vitest.config.ts updated to include directoryCommand.test.tsx.
+- 4 behavioral tests added (reject untrusted, allow trusted, mixed list, sandbox preservation).
+
+## Follow-Up Plan P3 — ab11b2c27 Cleanup
+
+- Extracted ProfileChangeMessage.tsx from inline InfoMessage in HistoryItemDisplay.
+- Compact left margin (marginLeft=2), theme.ui.comment color, sentence-case.
+- No warning icon semantics.
+- 4 behavioral tests.
+- vitest.config.ts updated to include ProfileChangeMessage.test.tsx.
+
+## Follow-Up Plan P4 — Schema Regeneration
+
+- `npm run schema:settings` regenerated settings.schema.json.
+- Added previewFeatures (Batch 4) and showProfileChangeInChat (Batch 8).
+- `npm run schema:settings -- --check` passes (schema now in sync).
+- Single file change, no code modifications.

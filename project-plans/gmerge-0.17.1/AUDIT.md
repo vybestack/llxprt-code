@@ -5,7 +5,7 @@ Upstream SHA -> final disposition + LLxprt commit hash(es).
 | Upstream SHA | Decision | LLxprt Commit(s) | Notes |
 |-------------|----------|-------------------|-------|
 | `0fcbff506` | SKIPPED | — | Release automation |
-| `ab11b2c27` | REIMPLEMENTED | a89f8f8d1 | Show profile name on change (not model) |
+| `ab11b2c27` | REIMPLEMENTED | a89f8f8d1, ece33125e | Show profile name on change (not model) + cleanup: ProfileChangeMessage component |
 | `2c5e09e1c` | SKIPPED | — | ClearcutLogger |
 | `3174573b6` | SKIPPED | — | Release automation |
 | `555e25e63` | SKIPPED (NO_OP) | — | ModelMessage.tsx does not exist in LLxprt |
@@ -17,10 +17,10 @@ Upstream SHA -> final disposition + LLxprt commit hash(es).
 | `d683e1c0d` | PICKED | e288fe9e4 | Exit on trust save fail |
 | `ba15eeb55` | SKIPPED | — | Selection mode (LLxprt uses /mouse off) |
 | `ce56b4ee1` | SKIPPED | — | Experiments flag |
-| `472e775a1` | DEFERRED | — | /permissions modify trust — massive conflicts, needs REIMPLEMENT playbook |
+| `472e775a1` | REIMPLEMENTED | 97fc400ea | /permissions modify trust for other dirs (follow-up P1) |
 | `ab6b22930` | SKIPPED | — | Mouse warning (no SelectionWarning in LLxprt) |
 | `d03496b71` | SKIPPED | — | Paste timeout warning (no warning UI) |
-| `9786c4dcf` | DEFERRED | — | Folder trust /add — depends on 472e775a1 |
+| `9786c4dcf` | REIMPLEMENTED | 4018472a9 | Folder trust gate before /add directory (follow-up P2) |
 | `c6b6dcbe9` | SKIPPED | — | Upstream docs |
 | `e650a4ee5` | SKIPPED | — | Core test refactor (diverged) |
 | `cf8de02c6` | SKIPPED | — | Release automation |
@@ -55,7 +55,6 @@ Upstream SHA -> final disposition + LLxprt commit hash(es).
 - **PICKED:** 3 (d683e1c0d, 78a28bfc0, 8c78fe4f1)
 - **REIMPLEMENTED:** 6 (86828bb56, 7d33baabe, ba88707b1, 8877c8527, ab11b2c27, 638dd2f6c)
 - **SKIPPED:** 34 (includes release tags, docs, diverged code, Google-only features)
-- **DEFERRED:** 2 (472e775a1, 9786c4dcf — need separate REIMPLEMENT playbooks)
 - **NO_OP:** 1 (555e25e63 — file doesn't exist in LLxprt)
 
 ## Fix/Formatting Commits
@@ -63,3 +62,10 @@ Upstream SHA -> final disposition + LLxprt commit hash(es).
 - cbf986497 — post-batch 1 verification fixes
 - f2a7a3fdb — progress docs update
 - 75fedd320 — prettier formatting
+
+## Follow-Up Commits (Post Batch 1–9)
+
+- 97fc400ea — reimplement: /permissions modify trust for other dirs (472e775a1)
+- 4018472a9 — reimplement: folder trust gate before /add directory (9786c4dcf)
+- ece33125e — refactor: componentize ProfileChangeMessage + upstream formatting parity (ab11b2c27 cleanup)
+- d95d006eb — chore: regenerate settings.schema.json (previewFeatures + showProfileChangeInChat)
