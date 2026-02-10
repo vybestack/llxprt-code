@@ -276,4 +276,85 @@ describe('CodeSearchTool', () => {
     expect(result.error).toBeDefined();
     expect(result.error?.message).toContain('Code search error (500)');
   });
+
+  /**
+   * Integration tests for tool key URL parameter injection.
+   * Uses vi.doMock on tool-key-storage to control resolveKey() return values.
+   * Behavioral assertions are on the fetch URL (with or without ?exaApiKey=).
+   *
+   * @plan PLAN-20260206-TOOLKEY.P10
+   */
+  describe('API key integration', () => {
+    let resolveKeyMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      vi.clearAllMocks();
+
+      // Mock tool-key-storage module — same pattern as exa-web-search tests.
+      // The behavioral output under test is the fetch URL.
+      resolveKeyMock = vi.fn().mockResolvedValue(null);
+      const mockInstance = { resolveKey: resolveKeyMock };
+      vi.doMock('./tool-key-storage.js', () => ({
+        ToolKeyStorage: vi.fn().mockImplementation(() => mockInstance),
+        getToolKeyStorage: vi.fn().mockReturnValue(mockInstance),
+      }));
+
+      // Re-import to pick up the mock
+      const mod = await import('./codesearch.js');
+      const CodeSearchToolFresh = mod.CodeSearchTool;
+
+      config = {
+        getTargetDir: () => '/mock/target/dir',
+        getSettingsService: () => mockSettingsService,
+      } as unknown as Config;
+
+      tool = new CodeSearchToolFresh(config);
+    });
+
+    /** @plan PLAN-20260206-TOOLKEY.P10 @requirement REQ-004.1, REQ-004.2 */
+    it('should append exaApiKey query parameter when key is available', async () => {
+      resolveKeyMock.mockResolvedValue('sk-test-key');
+
+      const mockResponseData = {
+        jsonrpc: '2.0',
+        result: {
+          content: [{ type: 'text', text: 'Code results' }],
+        },
+      };
+      const mockResponseText = `data: ${JSON.stringify(mockResponseData)}\n\n`;
+
+      mockedFetch.mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(mockResponseText),
+      });
+
+      const invocation = tool.build({ query: 'test query' }) as ToolInvocation<
+        CodeSearchToolParams,
+        ToolResult
+      >;
+      await invocation.execute(new AbortController().signal);
+
+      const fetchCall = mockedFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('https://mcp.exa.ai/mcp?exaApiKey=sk-test-key');
+    });
+
+    /** @plan PLAN-20260206-TOOLKEY.P10 @requirement REQ-004.3 */
+    it('should use base URL without query parameter when no key configured', async () => {
+      resolveKeyMock.mockResolvedValue(null);
+
+      mockedFetch.mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(''),
+      });
+
+      const invocation = tool.build({ query: 'test query' }) as ToolInvocation<
+        CodeSearchToolParams,
+        ToolResult
+      >;
+      await invocation.execute(new AbortController().signal);
+
+      const fetchCall = mockedFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('https://mcp.exa.ai/mcp');
+    });
+  });
 });

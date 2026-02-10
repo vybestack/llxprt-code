@@ -126,6 +126,22 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
     return `Search web for: ${this.params.query}`;
   }
 
+  /**
+   * @plan PLAN-20260206-TOOLKEY.P11
+   * @requirement REQ-004.1, REQ-004.3, REQ-004.4
+   * @pseudocode lines 384-392
+   */
+  private async buildEndpointUrl(): Promise<string> {
+    const baseUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`;
+    const { getToolKeyStorage } = await import('./tool-key-storage.js');
+    const storage = getToolKeyStorage();
+    const key = await storage.resolveKey('exa');
+    if (key !== null) {
+      return `${baseUrl}?exaApiKey=${encodeURIComponent(key)}`;
+    }
+    return baseUrl;
+  }
+
   async execute(
     signal: AbortSignal,
     _updateOutput?: (output: string) => void,
@@ -152,15 +168,14 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
         'content-type': 'application/json',
       };
 
-      const response = await fetch(
-        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(searchRequest),
-          signal,
-        },
-      );
+      // @plan PLAN-20260206-TOOLKEY.P11 @pseudocode lines 394-396
+      const endpointUrl = await this.buildEndpointUrl();
+      const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(searchRequest),
+        signal,
+      });
 
       if (!response.ok) {
         const errorText = await response.text();

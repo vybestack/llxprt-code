@@ -179,6 +179,7 @@ export * from './tools/todo-store.js';
 export * from './tools/todo-events.js';
 export * from './tools/list-subagents.js';
 export * from './tools/task.js';
+export * from './tools/tool-key-storage.js';
 export * from './todo/todoFormatter.js';
 
 // MCP OAuth
