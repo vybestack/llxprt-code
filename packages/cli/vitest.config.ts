@@ -110,6 +110,10 @@ export default defineConfig({
       'src/gemini.test.tsx',
       // Include directoryCommand test for trust gating implementation (9786c4dcf reimplementation)
       'src/ui/commands/directoryCommand.test.tsx',
+      // Include ProfileChangeMessage test for cleanup-plan ab11b2c27
+      'src/ui/components/messages/ProfileChangeMessage.test.tsx',
+      // Include HistoryItemDisplay test for cleanup-plan ab11b2c27
+      'src/ui/components/HistoryItemDisplay.test.tsx',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',
