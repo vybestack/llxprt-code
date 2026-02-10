@@ -157,6 +157,20 @@ jobs:
           OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
           OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
 
+      - name: 'Validate E2E provider environment (Linux)'
+        shell: 'bash'
+        env:
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+        run: |
+          set -euo pipefail
+          [[ -n "${OPENAI_API_KEY:-}" ]] || { echo "OPENAI_API_KEY missing after quota selection"; exit 1; }
+          [[ -n "${OPENAI_BASE_URL:-}" ]] || { echo "OPENAI_BASE_URL is required"; exit 1; }
+          [[ -n "${LLXPRT_DEFAULT_PROVIDER:-}" ]] || { echo "LLXPRT_DEFAULT_PROVIDER is required"; exit 1; }
+          [[ -n "${LLXPRT_DEFAULT_MODEL:-}" ]] || { echo "LLXPRT_DEFAULT_MODEL is required"; exit 1; }
+          echo "E2E env summary: provider=${LLXPRT_DEFAULT_PROVIDER}, model=${LLXPRT_DEFAULT_MODEL}, baseurl=${OPENAI_BASE_URL}"
+
       - name: 'Run E2E tests'
         env:
           # Provider configuration from repository secrets/variables
@@ -246,6 +260,20 @@ jobs:
           KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
           OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
           OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+
+      - name: 'Validate E2E provider environment (macOS)'
+        shell: 'bash'
+        env:
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+        run: |
+          set -euo pipefail
+          [[ -n "${OPENAI_API_KEY:-}" ]] || { echo "OPENAI_API_KEY missing after quota selection"; exit 1; }
+          [[ -n "${OPENAI_BASE_URL:-}" ]] || { echo "OPENAI_BASE_URL is required"; exit 1; }
+          [[ -n "${LLXPRT_DEFAULT_PROVIDER:-}" ]] || { echo "LLXPRT_DEFAULT_PROVIDER is required"; exit 1; }
+          [[ -n "${LLXPRT_DEFAULT_MODEL:-}" ]] || { echo "LLXPRT_DEFAULT_MODEL is required"; exit 1; }
+          echo "E2E env summary: provider=${LLXPRT_DEFAULT_PROVIDER}, model=${LLXPRT_DEFAULT_MODEL}, baseurl=${OPENAI_BASE_URL}"
 
       - name: 'Run E2E tests (non-Windows)'
         if: "runner.os != 'Windows'"

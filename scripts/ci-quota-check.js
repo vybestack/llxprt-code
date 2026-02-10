@@ -111,6 +111,11 @@ async function selectOptimalKey() {
 
   console.log(`Selected: ${reason}`);
 
+  if (!selectedKey || selectedKey.trim() === '') {
+    console.error('Selected API key is empty after quota selection');
+    process.exit(1);
+  }
+
   // Export to GITHUB_ENV
   const githubEnvPath = process.env.GITHUB_ENV;
   if (!githubEnvPath) {
@@ -137,7 +142,7 @@ async function main() {
     console.log('Not using Synthetic provider, using primary key');
     // For non-Synthetic providers, just write the primary key to GITHUB_ENV
     const primaryKey = process.env.OPENAI_API_KEY;
-    if (!primaryKey) {
+    if (!primaryKey || primaryKey.trim() === '') {
       console.error('No primary API key configured');
       process.exit(1);
     }

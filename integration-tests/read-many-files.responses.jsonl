@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_read_many_1","name":"read_many_files","parameters":{"paths":["file1.txt","file2.txt"]}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Here are the contents:\n\nfile1.txt: file 1 content\nfile2.txt: file 2 content"}],"metadata":{"usage":{"promptTokens":280,"completionTokens":28,"totalTokens":308}}}]}

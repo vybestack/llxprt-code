@@ -5,6 +5,7 @@
  */
 
 import { test, expect } from 'vitest';
+import { join } from 'node:path';
 import { TestRig, printDebugInfo } from './test-helper.js';
 
 const skipTodoTests =
@@ -26,6 +27,10 @@ conditionalTest('hidden todo reminders stay out of transcript', async () => {
     settings: {
       'todo-continuation': true,
     },
+    fakeResponsesPath: join(
+      import.meta.dirname,
+      'todo-reminder.hidden.responses.jsonl',
+    ),
   });
 
   const result = await rig.run(

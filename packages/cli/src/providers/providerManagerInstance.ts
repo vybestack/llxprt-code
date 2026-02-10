@@ -12,6 +12,7 @@ import {
   OpenAIVercelProvider,
   AnthropicProvider,
   GeminiProvider,
+  FakeProvider,
   sanitizeForByteString,
   needsSanitization,
   SettingsService,
@@ -242,6 +243,27 @@ export function createProviderManager(
   const oauthManager = new OAuthManager(tokenStore, loadedSettings);
 
   const { config, allowBrowserEnvironment = false, addItem } = options;
+
+  // Short-circuit: when LLXPRT_FAKE_RESPONSES is set, register only FakeProvider
+  // and return immediately. This avoids real provider registration (which may
+  // require valid API keys) and ensures FakeProvider stays active even after the
+  // bootstrap calls switchActiveProvider().
+  const fakeResponsesPath = process.env.LLXPRT_FAKE_RESPONSES;
+  if (fakeResponsesPath) {
+    if (config) {
+      manager.setConfig(config);
+      config.setProviderManager(manager);
+      oauthManager.setMessageBus(() => config.getMessageBus());
+      oauthManager.setConfigGetter(() => config);
+    }
+    const fakeProvider = new FakeProvider(fakeResponsesPath, process.cwd());
+    manager.registerProvider(fakeProvider);
+    manager.setActiveProvider('fake');
+    logger.debug(
+      () => `FakeProvider active — replaying from ${fakeResponsesPath}`,
+    );
+    return { manager, oauthManager };
+  }
 
   logger.debug('createProviderManager config check', {
     hasConfig: !!config,

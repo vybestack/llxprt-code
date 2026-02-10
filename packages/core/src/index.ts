@@ -238,6 +238,7 @@ export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';
 export * from './providers/anthropic/usageInfo.js';
 export * from './providers/openai/codexUsageInfo.js';
 export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
+export { FakeProvider } from './providers/fake/FakeProvider.js';
 export * from './providers/ProviderManager.js';
 export * from './providers/errors.js';
 export {
