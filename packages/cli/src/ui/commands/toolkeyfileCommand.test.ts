@@ -13,6 +13,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { toolkeyfileCommand } from './toolkeyfileCommand.js';
+import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { promises as fs } from 'node:fs';
@@ -65,6 +66,63 @@ describe('toolkeyfileCommand', () => {
         'manage API key file for a built-in tool',
       );
       expect(toolkeyfileCommand.kind).toBe('built-in');
+    });
+
+    it('defines schema for autocomplete and argument hints', () => {
+      expect(toolkeyfileCommand.schema).toBeDefined();
+      expect(Array.isArray(toolkeyfileCommand.schema)).toBe(true);
+    });
+  });
+
+  describe('schema completion', () => {
+    it('suggests tool names for first argument with descriptions', async () => {
+      const schema = toolkeyfileCommand.schema;
+      if (!schema) {
+        throw new Error('toolkeyfile schema missing');
+      }
+
+      const handler = createCompletionHandler(schema);
+      const result = await handler(
+        context,
+        {
+          args: 'ex',
+          completedArgs: [],
+          partialArg: 'ex',
+          commandPathLength: 1,
+        },
+        '/toolkeyfile ex',
+      );
+
+      expect(result.suggestions).toEqual(
+        expect.arrayContaining([expect.objectContaining({ value: 'exa' })]),
+      );
+      expect(result.hint).toBe('Select built-in tool');
+    });
+
+    it('suggests none and shows filepath hint after selecting tool', async () => {
+      const schema = toolkeyfileCommand.schema;
+      if (!schema) {
+        throw new Error('toolkeyfile schema missing');
+      }
+
+      const handler = createCompletionHandler(schema);
+      const result = await handler(
+        context,
+        {
+          args: 'exa ',
+          completedArgs: ['exa'],
+          partialArg: '',
+          commandPathLength: 1,
+        },
+        '/toolkeyfile exa ',
+      );
+
+      expect(result.suggestions).toEqual(
+        expect.arrayContaining([expect.objectContaining({ value: 'none' })]),
+      );
+      expect(result.hint).toBe(
+        'Provide key file path to use, or none to clear keyfile mapping',
+      );
     });
   });
 

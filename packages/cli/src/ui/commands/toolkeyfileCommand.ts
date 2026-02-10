@@ -16,6 +16,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
+import type { CommandArgumentSchema } from './schema/types.js';
 import {
   ToolKeyStorage,
   isValidToolKeyName,
@@ -26,10 +27,41 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
 
+const toolNameOptions = getSupportedToolNames().map((toolName) => {
+  const entry = getToolKeyEntry(toolName);
+  return {
+    value: toolName,
+    description: entry
+      ? `${entry.displayName}: ${entry.description}`
+      : `Tool ${toolName}`,
+  };
+});
+
+const toolkeyfileSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'tool',
+    description: 'Select built-in tool',
+    options: toolNameOptions,
+    next: [
+      {
+        kind: 'value',
+        name: 'filepath-or-none',
+        description: 'Path to plaintext key file or none',
+        hint: 'Provide key file path to use, or none to clear keyfile mapping',
+        options: [
+          { value: 'none', description: 'Clear configured keyfile path' },
+        ],
+      },
+    ],
+  },
+];
+
 export const toolkeyfileCommand: SlashCommand = {
   name: 'toolkeyfile',
   description: 'manage API key file for a built-in tool',
   kind: CommandKind.BUILT_IN,
+  schema: toolkeyfileSchema,
   action: async (
     context: CommandContext,
     args: string,

@@ -13,6 +13,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toolkeyCommand } from './toolkeyCommand.js';
+import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 
@@ -59,6 +60,63 @@ describe('toolkeyCommand', () => {
         'set, show, or clear API key for a built-in tool',
       );
       expect(toolkeyCommand.kind).toBe('built-in');
+    });
+
+    it('defines schema for autocomplete and argument hints', () => {
+      expect(toolkeyCommand.schema).toBeDefined();
+      expect(Array.isArray(toolkeyCommand.schema)).toBe(true);
+    });
+  });
+
+  describe('schema completion', () => {
+    it('suggests tool names for first argument with descriptions', async () => {
+      const schema = toolkeyCommand.schema;
+      if (!schema) {
+        throw new Error('toolkey schema missing');
+      }
+
+      const handler = createCompletionHandler(schema);
+      const result = await handler(
+        context,
+        {
+          args: 'ex',
+          completedArgs: [],
+          partialArg: 'ex',
+          commandPathLength: 1,
+        },
+        '/toolkey ex',
+      );
+
+      expect(result.suggestions).toEqual(
+        expect.arrayContaining([expect.objectContaining({ value: 'exa' })]),
+      );
+      expect(result.hint).toBe('Select built-in tool');
+    });
+
+    it('suggests none and shows key hint after selecting tool', async () => {
+      const schema = toolkeyCommand.schema;
+      if (!schema) {
+        throw new Error('toolkey schema missing');
+      }
+
+      const handler = createCompletionHandler(schema);
+      const result = await handler(
+        context,
+        {
+          args: 'exa ',
+          completedArgs: ['exa'],
+          partialArg: '',
+          commandPathLength: 1,
+        },
+        '/toolkey exa ',
+      );
+
+      expect(result.suggestions).toEqual(
+        expect.arrayContaining([expect.objectContaining({ value: 'none' })]),
+      );
+      expect(result.hint).toBe(
+        'Paste API key for the tool, or use none to clear stored key',
+      );
     });
   });
 

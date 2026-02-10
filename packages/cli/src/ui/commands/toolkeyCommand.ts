@@ -16,6 +16,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
+import type { CommandArgumentSchema } from './schema/types.js';
 import {
   ToolKeyStorage,
   isValidToolKeyName,
@@ -24,10 +25,39 @@ import {
   maskKeyForDisplay,
 } from '@vybestack/llxprt-code-core';
 
+const toolNameOptions = getSupportedToolNames().map((toolName) => {
+  const entry = getToolKeyEntry(toolName);
+  return {
+    value: toolName,
+    description: entry
+      ? `${entry.displayName}: ${entry.description}`
+      : `Tool ${toolName}`,
+  };
+});
+
+const toolkeySchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'tool',
+    description: 'Select built-in tool',
+    options: toolNameOptions,
+    next: [
+      {
+        kind: 'value',
+        name: 'key-or-none',
+        description: 'API key value or none',
+        hint: 'Paste API key for the tool, or use none to clear stored key',
+        options: [{ value: 'none', description: 'Clear stored API key' }],
+      },
+    ],
+  },
+];
+
 export const toolkeyCommand: SlashCommand = {
   name: 'toolkey',
   description: 'set, show, or clear API key for a built-in tool',
   kind: CommandKind.BUILT_IN,
+  schema: toolkeySchema,
   action: async (
     context: CommandContext,
     args: string,
