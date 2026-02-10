@@ -3692,7 +3692,12 @@ describe('defaultDisabledTools', () => {
     const settings: Settings = {
       defaultDisabledTools: ['google_web_fetch'],
     };
-    process.argv = ['node', 'script.js'];
+    process.argv = [
+      'node',
+      'script.js',
+      '--set',
+      'tools.disabled=["read_file"]',
+    ];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
       settings,
@@ -3704,17 +3709,23 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    // Manually disable another tool first, then verify both are present
     const currentDisabled =
       (config.getEphemeralSetting('tools.disabled') as string[]) || [];
-    expect(currentDisabled).toContain('google_web_fetch');
+    expect(currentDisabled).toEqual(
+      expect.arrayContaining(['read_file', 'google_web_fetch']),
+    );
   });
 
   it('should not duplicate tools already in tools.disabled', async () => {
     const settings: Settings = {
       defaultDisabledTools: ['google_web_fetch'],
     };
-    process.argv = ['node', 'script.js'];
+    process.argv = [
+      'node',
+      'script.js',
+      '--set',
+      'tools.disabled=["google_web_fetch"]',
+    ];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
       settings,

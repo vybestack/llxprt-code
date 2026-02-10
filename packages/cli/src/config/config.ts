@@ -1756,14 +1756,12 @@ export async function loadCliConfig(
     )
       ? (enhancedConfig.getEphemeralSetting('tools.disabled') as string[])
       : [];
-    const currentAllowed = new Set(
-      Array.isArray(enhancedConfig.getEphemeralSetting('tools.allowed'))
-        ? (enhancedConfig.getEphemeralSetting('tools.allowed') as string[])
-        : [],
+    const currentAllowed = buildNormalizedToolSet(
+      enhancedConfig.getEphemeralSetting('tools.allowed'),
     );
     const disabledSet = new Set(currentDisabled);
     for (const toolName of defaultDisabled) {
-      if (!currentAllowed.has(toolName)) {
+      if (!currentAllowed.has(normalizeToolNameForPolicy(toolName))) {
         disabledSet.add(toolName);
       }
     }
