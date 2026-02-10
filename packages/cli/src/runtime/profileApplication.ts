@@ -208,10 +208,7 @@ async function wireAuthBeforeSwitch(
             `[profile] applied auth to SettingsService before switch (keyfile)`,
         );
 
-        const maybeExtended = settingsService as {
-          setProviderKeyfile?: (provider: string, keyfilePath: string) => void;
-        };
-        maybeExtended.setProviderKeyfile?.(targetProviderName, filePath);
+        settingsService.setProviderKeyfile?.(targetProviderName, filePath);
       } else {
         warnings.push(
           `Keyfile '${authKeyfile}' was empty; falling back to existing credentials.`,
@@ -338,7 +335,7 @@ async function applyModelAndParams(
 
   if (!isLB && !requestedModel && !fallbackModel) {
     throw new Error(
-      `Profile '${sanitizedProfile.provider}' does not specify a model and no default is available.`,
+      `Provider '${sanitizedProfile.provider}' profile does not specify a model and no default is available.`,
     );
   }
 

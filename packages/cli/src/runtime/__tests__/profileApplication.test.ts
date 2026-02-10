@@ -178,7 +178,12 @@ const mockProfileManager = {
   loadProfile: vi.fn<(profileName: string) => Promise<Profile>>(),
 };
 
+let savedGcpProject: string | undefined;
+let savedGcpLocation: string | undefined;
+
 beforeEach(() => {
+  savedGcpProject = process.env.GOOGLE_CLOUD_PROJECT;
+  savedGcpLocation = process.env.GOOGLE_CLOUD_LOCATION;
   configStub.model = undefined;
   configStub.ephemerals.clear();
   settingsServiceStub.currentProfile = null;
@@ -218,6 +223,18 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (savedGcpProject === undefined) {
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+  } else {
+    process.env.GOOGLE_CLOUD_PROJECT = savedGcpProject;
+  }
+
+  if (savedGcpLocation === undefined) {
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+  } else {
+    process.env.GOOGLE_CLOUD_LOCATION = savedGcpLocation;
+  }
+
   vi.clearAllMocks();
 });
 
