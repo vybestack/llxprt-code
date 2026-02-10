@@ -1015,13 +1015,6 @@
       "default": false,
       "type": "boolean"
     },
-    "previewFeatures": {
-      "title": "Preview Features",
-      "description": "Enable preview features such as preview models.",
-      "markdownDescription": "Enable preview features such as preview models.\n\n- Category: `General`\n- Requires restart: `yes`\n- Default: `false`",
-      "default": false,
-      "type": "boolean"
-    },
     "showProfileChangeInChat": {
       "title": "Show Profile Change in Chat",
       "description": "Show a message in chat when the active profile changes.",

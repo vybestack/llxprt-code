@@ -403,7 +403,6 @@ export interface ConfigParameters {
   skipNextSpeakerCheck?: boolean;
   extensionManagement?: boolean;
   enablePromptCompletion?: boolean;
-  previewFeatures?: boolean;
   eventEmitter?: EventEmitter;
   settingsService?: SettingsService;
   policyEngineConfig?: PolicyEngineConfig;
@@ -571,8 +570,6 @@ export class Config {
   private readonly skipNextSpeakerCheck: boolean;
   private readonly extensionManagement: boolean;
   private readonly enablePromptCompletion: boolean = false;
-  private readonly previewFeatures: boolean = false;
-  private initialized: boolean = false;
   private readonly shellReplacement: 'allowlist' | 'all' | 'none' = 'allowlist';
   readonly storage: Storage;
   private readonly fileExclusions: FileExclusions;
@@ -590,6 +587,7 @@ export class Config {
   private readonly hooks:
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
+  private initialized = false;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -738,9 +736,8 @@ export class Config {
     this.extensionManagement = params.extensionManagement ?? false;
     this.enableExtensionReloading = params.enableExtensionReloading ?? false;
     this.storage = new Storage(this.targetDir);
-    this.enablePromptCompletion = params.enablePromptCompletion ?? false;
-    this.previewFeatures = params.previewFeatures ?? false;
     this.fileExclusions = new FileExclusions(this);
+    this.enablePromptCompletion = params.enablePromptCompletion ?? false;
     this.eventEmitter = params.eventEmitter;
 
     // Initialize policy engine and message bus
@@ -1712,6 +1709,10 @@ export class Config {
     return this.interactive;
   }
 
+  getNonInteractive(): boolean {
+    return !this.interactive;
+  }
+
   /**
    * Get the current FileSystemService
    */
@@ -1821,14 +1822,6 @@ export class Config {
 
   getEnablePromptCompletion(): boolean {
     return this.enablePromptCompletion;
-  }
-
-  getPreviewFeatures(): boolean {
-    return this.previewFeatures;
-  }
-
-  getNonInteractive(): boolean {
-    return !this.interactive;
   }
 
   async getGitService(): Promise<GitService> {
