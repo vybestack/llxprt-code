@@ -244,6 +244,13 @@ export class ToolKeyStorage {
   // @pseudocode lines 072-098
 
   // @pseudocode lines 072-075
+  /**
+   * Threat model note for encrypted-file fallback:
+   * This key derivation is deterministic for a given host/user, so another process running
+   * as the same OS user can reproduce it. This protects against casual plaintext disclosure
+   * but is not equivalent to keychain-backed secrecy. File permissions (0o600) are the
+   * primary local access control for fallback files.
+   */
   private deriveEncryptionKey(): Buffer {
     const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
     return crypto.scryptSync('llxprt-cli-tool-keys', salt, 32);
