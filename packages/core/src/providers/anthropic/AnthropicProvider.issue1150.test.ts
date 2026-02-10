@@ -572,7 +572,7 @@ describe('AnthropicProvider Issue #1150: Thinking blocks disappear after tool ca
     expect(hasFullThinking).toBe(true);
   });
 
-  it('should NOT merge thinking blocks that have other content besides thinking', async () => {
+  it('should merge consecutive assistant messages to maintain Anthropic role alternation', async () => {
     mockMessagesCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'Response' }],
       usage: { input_tokens: 100, output_tokens: 50 },
@@ -634,17 +634,18 @@ describe('AnthropicProvider Issue #1150: Thinking blocks disappear after tool ca
       (m) => m.role === 'assistant',
     );
 
-    const firstMsg = assistantMessages[0].content as AnthropicContentBlock[];
-    const hasThinking = firstMsg.some(
+    expect(assistantMessages).toHaveLength(1);
+
+    const merged = assistantMessages[0].content as AnthropicContentBlock[];
+    const hasThinking = merged.some(
       (b) => b.type === 'thinking' || b.type === 'redacted_thinking',
     );
     expect(hasThinking).toBe(true);
 
-    const hasText = firstMsg.some((b) => b.type === 'text');
+    const hasText = merged.some((b) => b.type === 'text');
     expect(hasText).toBe(true);
 
-    const secondMsg = assistantMessages[1].content as AnthropicContentBlock[];
-    const hasToolUse = secondMsg.some((b) => b.type === 'tool_use');
+    const hasToolUse = merged.some((b) => b.type === 'tool_use');
     expect(hasToolUse).toBe(true);
   });
 });
