@@ -13,6 +13,7 @@ import { CreateStep, type CreateWizardState } from './types.js';
 
 interface SubagentCreationWizardProps {
   profiles: string[];
+  activeProfileName?: string | null;
   onSave: (
     name: string,
     systemPrompt: string,
@@ -27,6 +28,7 @@ type FieldName = 'name' | 'mode' | 'systemPrompt' | 'profile';
 
 export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   profiles,
+  activeProfileName,
   onSave,
   onCancel,
   isFocused = true,
@@ -34,9 +36,12 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   const [state, setState] = useState<CreateWizardState>({
     currentStep: CreateStep.FORM,
     name: '',
-    mode: 'manual',
+    mode: 'auto',
     systemPrompt: '',
-    selectedProfile: profiles[0] || '',
+    selectedProfile:
+      (activeProfileName && profiles.includes(activeProfileName)
+        ? activeProfileName
+        : profiles[0]) || '',
     validationErrors: {},
   });
 
@@ -64,6 +69,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
     (char: string) => {
       setState((prev) => {
         if (focusedField === 'profile' || focusedField === 'mode') return prev;
+        if (focusedField === 'name' && char === ' ') return prev;
 
         const field = focusedField;
         if (char === '\n' && field === 'systemPrompt') {
@@ -380,7 +386,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
           Step 1: Name
         </Text>
       </Box>
-      {renderField('name', 'Name', 1, state.name)}
+      {renderField('name', 'Name (a-z, 0-9, -, _)', 1, state.name)}
 
       {/* Step 2: Mode */}
       <Box marginTop={1}>

@@ -546,6 +546,23 @@ const createCommand: SlashCommand = {
 };
 
 /**
+ * /subagent menu command - Opens the subagent manager menu
+ */
+const menuCommand: SlashCommand = {
+  name: 'menu',
+  description: 'Open the subagent manager menu',
+  kind: CommandKind.BUILT_IN,
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<SlashCommandActionReturn> => ({
+    type: 'dialog',
+    dialog: 'subagent',
+    dialogData: { initialView: SubagentView.MENU },
+  }),
+};
+
+/**
  * /subagent parent command with schema-based completion
  *
  * @plan:PLAN-20251013-AUTOCOMPLETE.P08
@@ -567,6 +584,7 @@ export const subagentCommand: SlashCommand = {
     dialogData: { initialView: SubagentView.MENU },
   }),
   subCommands: [
+    menuCommand,
     saveCommand,
     createCommand,
     listCommand,

@@ -7,18 +7,30 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
+import { useKeypress } from '../../hooks/useKeypress.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { SubagentView, MENU_ACTIONS } from './types.js';
 
 interface SubagentMainMenuProps {
   onSelect: (view: SubagentView) => void;
+  onCancel?: () => void;
   isFocused?: boolean;
 }
 
 export const SubagentMainMenu: React.FC<SubagentMainMenuProps> = ({
   onSelect,
+  onCancel,
   isFocused = true,
 }) => {
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        onCancel?.();
+      }
+    },
+    { isActive: isFocused },
+  );
+
   const menuItems = MENU_ACTIONS.map((action) => ({
     label: `${action.label.padEnd(20)} - ${action.description}`,
     value: action.value,

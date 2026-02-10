@@ -31,6 +31,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
   const { commandContext } = uiState;
   const subagentManager = commandContext?.services?.subagentManager;
   const profileManager = commandContext?.services?.profileManager;
+  const activeProfileName = uiState.activeProfileName;
 
   const [state, setState] = useState<SubagentManagerState>({
     currentView: initialView,
@@ -77,24 +78,29 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         }),
       );
 
-      setState((prev) => ({
-        ...prev,
-        subagents,
-        profiles: profileNames,
-        isLoading: false,
-      }));
+      setState((prev) => {
+        let selectedSubagent = prev.selectedSubagent;
 
-      // If initial subagent specified, select it
-      if (initialSubagentName) {
-        const found = subagents.find((s) => s.name === initialSubagentName);
-        if (found) {
-          setState((prev) => ({
-            ...prev,
-            selectedSubagent: found,
-            currentView: initialView,
-          }));
+        if (initialSubagentName && !selectedSubagent) {
+          selectedSubagent =
+            subagents.find((s) => s.name === initialSubagentName) ?? null;
+        } else if (selectedSubagent) {
+          selectedSubagent =
+            subagents.find((s) => s.name === selectedSubagent?.name) ?? null;
         }
-      }
+
+        return {
+          ...prev,
+          subagents,
+          profiles: profileNames,
+          selectedSubagent,
+          currentView:
+            selectedSubagent || prev.currentView !== initialView
+              ? prev.currentView
+              : initialView,
+          isLoading: false,
+        };
+      });
     } catch (err) {
       setState((prev) => ({
         ...prev,
@@ -220,7 +226,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
       name: string,
       systemPrompt: string,
       profile: string,
-      mode: 'auto' | 'manual' = 'manual',
+      mode: 'auto' | 'manual' = 'auto',
     ) => {
       if (!subagentManager) return;
 
@@ -385,6 +391,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         return (
           <SubagentCreationWizard
             profiles={state.profiles}
+            activeProfileName={activeProfileName}
             onSave={handleCreate}
             onCancel={goBack}
             isFocused={true}
@@ -419,7 +426,13 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         );
 
       case SubagentView.MENU:
-        return <SubagentMainMenu onSelect={navigateTo} isFocused={true} />;
+        return (
+          <SubagentMainMenu
+            onSelect={navigateTo}
+            onCancel={onClose}
+            isFocused={true}
+          />
+        );
 
       default:
         return <Text color={Colors.Gray}>Unknown view</Text>;
