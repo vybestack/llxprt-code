@@ -346,7 +346,9 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
             <Text color={Colors.Gray}>
               {value
                 ? multiline
-                  ? `[${value.slice(0, 40)}...]`
+                  ? value.length > 40
+                    ? `[${value.slice(0, 40)}...]`
+                    : value
                   : value
                 : '(empty)'}
             </Text>

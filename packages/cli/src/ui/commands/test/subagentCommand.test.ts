@@ -74,6 +74,9 @@ import { SessionStatsState } from '../../contexts/SessionContext.js';
 
 let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
 
+const findSubCommand = (name: string) =>
+  subagentCommand.subCommands!.find((cmd) => cmd.name === name)!;
+
 beforeAll(async () => {
   // Reset modules to ensure fresh import with mocks
   vi.resetModules();
@@ -274,7 +277,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
     it('should save new subagent with manual mode', async () => {
       const args = 'testagent testprofile manual "You are a test agent"';
       const result = ensureMessage(
-        await subagentCommand.subCommands![0].action!(context, args),
+        await findSubCommand('save').action!(context, args),
       );
 
       expect(result.messageType).toBe('info');
@@ -299,7 +302,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
       for (const args of invalidArgs) {
         const result = ensureMessage(
-          await subagentCommand.subCommands![0].action!(context, args),
+          await findSubCommand('save').action!(context, args),
         );
         expect(result.messageType).toBe('error');
         expect(result.content).toMatch(/usage|syntax/i);
@@ -313,7 +316,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       });
 
       const result = ensureMessage(
-        await subagentCommand.subCommands![0].action!(
+        await findSubCommand('save').action!(
           contextWithoutManager,
           'testagent testprofile manual "Prompt"',
         ),
@@ -326,7 +329,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
     it('should reject non-existent profile @requirement:REQ-013', async () => {
       const args = 'testagent nonexistent manual "prompt"';
       const result = ensureMessage(
-        await subagentCommand.subCommands![0].action!(context, args),
+        await findSubCommand('save').action!(context, args),
       );
 
       expect(result.messageType).toBe('error');
@@ -344,7 +347,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       // Try to overwrite without confirmation
       const args = 'testagent testprofile manual "New prompt"';
       const result = ensureConfirm(
-        await subagentCommand.subCommands![0].action!(context, args),
+        await findSubCommand('save').action!(context, args),
       );
 
       // Check that prompt is a React element
@@ -366,7 +369,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
       const args = 'testagent testprofile manual "New prompt"';
       const result = ensureMessage(
-        await subagentCommand.subCommands![0].action!(context, args),
+        await findSubCommand('save').action!(context, args),
       );
 
       expect(result.messageType).toBe('info');
@@ -383,7 +386,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       await subagentManager.saveSubagent('agent1', 'testprofile', 'Prompt 1');
       await subagentManager.saveSubagent('agent2', 'testprofile', 'Prompt 2');
 
-      const result = await subagentCommand.subCommands![2].action!(context, '');
+      const result = await findSubCommand('list').action!(context, '');
 
       expect(result).toBeUndefined();
       expect(context.ui.addItem).toHaveBeenCalled();
@@ -397,7 +400,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
     });
 
     it('should display message when no subagents exist', async () => {
-      const result = await subagentCommand.subCommands![2].action!(context, '');
+      const result = await findSubCommand('list').action!(context, '');
 
       expect(result).toBeUndefined();
       expect(context.ui.addItem).toHaveBeenCalled();
@@ -414,7 +417,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
         subagentManager: undefined,
       });
 
-      const result = await subagentCommand.subCommands![2].action!(
+      const result = await findSubCommand('list').action!(
         contextWithoutManager,
         '',
       );
@@ -439,7 +442,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       );
 
       const result = ensureDialog(
-        await subagentCommand.subCommands![3].action!(context, 'testagent'),
+        await findSubCommand('show').action!(context, 'testagent'),
       );
 
       expect(result.dialog).toBe('subagent');
@@ -449,7 +452,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
     it('should error for non-existent subagent', async () => {
       const result = ensureMessage(
-        await subagentCommand.subCommands![3].action!(context, 'nonexistent'),
+        await findSubCommand('show').action!(context, 'nonexistent'),
       );
 
       expect(result.messageType).toBe('error');
@@ -458,7 +461,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
     it('should error when name not provided', async () => {
       const result = ensureMessage(
-        await subagentCommand.subCommands![3].action!(context, ''),
+        await findSubCommand('show').action!(context, ''),
       );
 
       expect(result.messageType).toBe('error');
@@ -476,7 +479,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
       // deleteCommand now opens interactive dialog for confirmation
       const result = ensureDialog(
-        await subagentCommand.subCommands![5].action!(context, 'testagent'),
+        await findSubCommand('delete').action!(context, 'testagent'),
       );
 
       expect(result.dialog).toBe('subagent');
@@ -486,7 +489,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
     it('should error for non-existent subagent', async () => {
       const result = ensureMessage(
-        await subagentCommand.subCommands![5].action!(context, 'nonexistent'),
+        await findSubCommand('delete').action!(context, 'nonexistent'),
       );
 
       expect(result.messageType).toBe('error');
@@ -495,7 +498,7 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
     it('should error when name not provided', async () => {
       const result = ensureMessage(
-        await subagentCommand.subCommands![5].action!(context, ''),
+        await findSubCommand('delete').action!(context, ''),
       );
 
       expect(result.messageType).toBe('error');
@@ -561,7 +564,7 @@ describe('editCommand @requirement:REQ-008', () => {
 
   it('should error when name not provided', async () => {
     const result = ensureMessage(
-      await subagentCommand.subCommands![4].action!(context, ''),
+      await findSubCommand('edit').action!(context, ''),
     );
 
     expect(result.messageType).toBe('error');
@@ -570,7 +573,7 @@ describe('editCommand @requirement:REQ-008', () => {
 
   it('should error for non-existent subagent', async () => {
     const result = ensureMessage(
-      await subagentCommand.subCommands![4].action!(context, 'nonexistent'),
+      await findSubCommand('edit').action!(context, 'nonexistent'),
     );
 
     expect(result.messageType).toBe('error');
@@ -585,7 +588,7 @@ describe('editCommand @requirement:REQ-008', () => {
     );
 
     const result = ensureDialog(
-      await subagentCommand.subCommands![4].action!(context, 'testagent'),
+      await findSubCommand('edit').action!(context, 'testagent'),
     );
 
     expect(result.dialog).toBe('subagent');
@@ -667,6 +670,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
+    generateAutoPromptOverride = null;
   });
 
   it('should generate system prompt using LLM', async () => {
@@ -677,7 +681,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     const args = 'testagent testprofile auto "expert Python debugger"';
     // Access the save subcommand directly from the imported module
-    const result = await subagentCommand.subCommands![0].action!(context, args);
+    const result = await findSubCommand('save').action!(context, args);
 
     // Verify LLM was called
     expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledTimes(1);
@@ -716,7 +720,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     );
 
     const args = 'testagent testprofile auto "expert debugger"';
-    const result = await subagentCommand.subCommands![0].action!(context, args);
+    const result = await findSubCommand('save').action!(context, args);
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
@@ -747,7 +751,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     });
 
     const args = 'testagent testprofile auto "expert debugger"';
-    const result = await subagentCommand.subCommands![0].action!(context, args);
+    const result = await findSubCommand('save').action!(context, args);
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
@@ -786,10 +790,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     const saveSpy = vi.spyOn(subagentManager, 'saveSubagent');
 
     const args = 'testagent testprofile auto "expert prompt"';
-    const actionResult = await subagentCommand.subCommands![0].action!(
-      context,
-      args,
-    );
+    const actionResult = await findSubCommand('save').action!(context, args);
 
     expect(generateAutoPromptOverride).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -809,7 +810,6 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     }
     expect(actionResult.messageType).toBe('info');
     expect(actionResult.content).toContain('Subagent');
-    generateAutoPromptOverride = null;
   });
 
   it('should use correct prompt template for LLM', async () => {
@@ -819,7 +819,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     const description = 'expert code reviewer';
     const args = `testagent testprofile auto "${description}"`;
-    await subagentCommand.subCommands![0].action!(context, args);
+    await findSubCommand('save').action!(context, args);
 
     const callArgs = mockGeminiClient.generateDirectMessage.mock.calls[0][0];
 

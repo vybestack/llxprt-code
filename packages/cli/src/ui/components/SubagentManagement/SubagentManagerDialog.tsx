@@ -245,7 +245,6 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         }
 
         await subagentManager.saveSubagent(name, profile, finalPrompt);
-        await loadData();
         onClose();
       } catch (err) {
         setState((prev) => ({
@@ -255,7 +254,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         }));
       }
     },
-    [subagentManager, loadData, onClose, commandContext],
+    [subagentManager, onClose, commandContext],
   );
 
   // Handle profile attachment - check if we came from EDIT view

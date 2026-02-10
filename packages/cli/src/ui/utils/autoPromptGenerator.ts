@@ -47,9 +47,9 @@ export async function generateAutoPrompt(
           mode: FunctionCallingConfigMode.NONE,
         },
       },
-    },
+      serverTools: [],
+    } as SendMessageParameters['config'] & { serverTools: unknown[] },
   };
-  (requestPayload.config as Record<string, unknown>).serverTools = [];
 
   const providerName =
     typeof config.getProvider === 'function'
