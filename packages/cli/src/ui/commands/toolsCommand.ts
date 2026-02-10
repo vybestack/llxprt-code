@@ -267,7 +267,9 @@ export const toolsCommand: SlashCommand = {
         feedback = `Disabled tool '${target.displayName}'.`;
       } else {
         disabled.delete(canonical);
-        allowed.add(canonical);
+        if (allowed.size > 0) {
+          allowed.add(canonical);
+        }
         feedback = `Enabled tool '${target.displayName}'.`;
       }
 
