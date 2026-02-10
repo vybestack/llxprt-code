@@ -256,10 +256,6 @@ export const DialogManager = ({
       </Box>
     );
   }
-  // TODO: ModelDialog not yet ported from upstream
-  // if (uiState.isModelDialogOpen) {
-  //   return <ModelDialog onClose={uiActions.closeModelDialog} />;
-  // }
   if (uiState.isAuthDialogOpen) {
     return (
       <Box flexDirection="column">
