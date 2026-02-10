@@ -44,7 +44,7 @@ describe('JSON output', () => {
     rig.setup('json-output-error', {
       fakeResponsesPath: join(
         import.meta.dirname,
-        'json-output.error.responses',
+        'json-output.error.responses.jsonl',
       ),
     });
     const result = await rig.run(

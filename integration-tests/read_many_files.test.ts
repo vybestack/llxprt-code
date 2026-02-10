@@ -5,12 +5,18 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { join } from 'node:path';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 
 describe('read_many_files', () => {
   it('should be able to read multiple files', async () => {
     const rig = new TestRig();
-    await rig.setup('should be able to read multiple files');
+    await rig.setup('should be able to read multiple files', {
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'read-many-files.responses.jsonl',
+      ),
+    });
     rig.createFile('file1.txt', 'file 1 content');
     rig.createFile('file2.txt', 'file 2 content');
 
@@ -42,7 +48,15 @@ describe('read_many_files', () => {
     ).toBeTruthy();
 
     // Validate model output - will throw if no output
-    validateModelOutput(result, null, 'Read many files test');
+    const validOutput = validateModelOutput(
+      result,
+      ['file 1 content', 'file 2 content'],
+      'Read many files test',
+    );
+    expect(
+      validOutput,
+      'Expected model output to contain file contents',
+    ).toBeTruthy();
     await rig.cleanup();
   });
 });
