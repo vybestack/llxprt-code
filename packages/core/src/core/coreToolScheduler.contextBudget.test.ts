@@ -42,7 +42,7 @@ function createMockPolicyEngine() {
 }
 
 // Track execution order for verifying parallel execution
-const executionLog: { name: string; startTime: number; endTime?: number }[] =
+const executionLog: Array<{ name: string; startTime: number; endTime?: number }> =
   [];
 
 class OrderTrackingInvocation extends BaseToolInvocation<
@@ -72,7 +72,8 @@ class OrderTrackingInvocation extends BaseToolInvocation<
     // tiktoken doesn't compress repeated chars into few tokens.
     let content: string;
     if (this.outputSize > 0) {
-      const words = 'The quick brown fox jumps over the lazy dog and returns some data. ';
+      const words =
+        'The quick brown fox jumps over the lazy dog and returns some data. ';
       const repeats = Math.ceil(this.outputSize / words.length);
       content = words.repeat(repeats).slice(0, this.outputSize);
     } else {
@@ -185,7 +186,13 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     await scheduler.schedule(
       [
-        { callId: 'solo-1', name: 'solo_tool', args: {}, isClientInitiated: false, prompt_id: 'p1' },
+        {
+          callId: 'solo-1',
+          name: 'solo_tool',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'p1',
+        },
       ],
       new AbortController().signal,
     );
@@ -194,7 +201,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
-    const calls = onAllToolCallsComplete.mock.calls[0][0] as CompletedToolCall[];
+    const calls = onAllToolCallsComplete.mock
+      .calls[0][0] as CompletedToolCall[];
     expect(calls).toHaveLength(1);
     expect(calls[0].status).toBe('success');
 
@@ -219,8 +227,20 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     await scheduler.schedule(
       [
-        { callId: 'a1', name: 'tool_a', args: {}, isClientInitiated: false, prompt_id: 'p1' },
-        { callId: 'b1', name: 'tool_b', args: {}, isClientInitiated: false, prompt_id: 'p1' },
+        {
+          callId: 'a1',
+          name: 'tool_a',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'p1',
+        },
+        {
+          callId: 'b1',
+          name: 'tool_b',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'p1',
+        },
       ],
       new AbortController().signal,
     );
@@ -229,14 +249,16 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
-    const calls = onAllToolCallsComplete.mock.calls[0][0] as CompletedToolCall[];
+    const calls = onAllToolCallsComplete.mock
+      .calls[0][0] as CompletedToolCall[];
     expect(calls).toHaveLength(2);
     expect(calls.every((c) => c.status === 'success')).toBe(true);
 
-    // Both tools should have started at roughly the same time (still parallel)
+    // Both tools should have started before either finished (parallel execution)
     expect(executionLog).toHaveLength(2);
-    const timeDiff = Math.abs(executionLog[0].startTime - executionLog[1].startTime);
-    expect(timeDiff).toBeLessThan(20);
+    const earliestEnd = Math.min(...executionLog.map((e) => e.endTime!));
+    const latestStart = Math.max(...executionLog.map((e) => e.startTime));
+    expect(latestStart).toBeLessThan(earliestEnd);
 
     scheduler.dispose();
   });
@@ -267,10 +289,34 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     await scheduler.schedule(
       [
-        { callId: 'big-1', name: 'big_tool_1', args: {}, isClientInitiated: false, prompt_id: 'p1' },
-        { callId: 'big-2', name: 'big_tool_2', args: {}, isClientInitiated: false, prompt_id: 'p1' },
-        { callId: 'big-3', name: 'big_tool_3', args: {}, isClientInitiated: false, prompt_id: 'p1' },
-        { callId: 'big-4', name: 'big_tool_4', args: {}, isClientInitiated: false, prompt_id: 'p1' },
+        {
+          callId: 'big-1',
+          name: 'big_tool_1',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'p1',
+        },
+        {
+          callId: 'big-2',
+          name: 'big_tool_2',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'p1',
+        },
+        {
+          callId: 'big-3',
+          name: 'big_tool_3',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'p1',
+        },
+        {
+          callId: 'big-4',
+          name: 'big_tool_4',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'p1',
+        },
       ],
       new AbortController().signal,
     );
@@ -279,7 +325,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
-    const calls = onAllToolCallsComplete.mock.calls[0][0] as CompletedToolCall[];
+    const calls = onAllToolCallsComplete.mock
+      .calls[0][0] as CompletedToolCall[];
     expect(calls).toHaveLength(4);
     expect(calls.every((c) => c.status === 'success')).toBe(true);
 
@@ -289,11 +336,15 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       const responseParts = call.response.responseParts;
 
       const frPart = responseParts.find(
-        (p) => typeof p === 'object' && 'functionResponse' in p && p.functionResponse?.response,
+        (p) =>
+          typeof p === 'object' &&
+          'functionResponse' in p &&
+          p.functionResponse?.response,
       );
       expect(frPart).toBeDefined();
-      const output = (frPart as { functionResponse: { response: { output: string } } })
-        .functionResponse.response.output;
+      const output = (
+        frPart as { functionResponse: { response: { output: string } } }
+      ).functionResponse.response.output;
 
       // Original was 30k chars. With per-tool budget of 2.5k tokens (2k effective),
       // the output must be significantly smaller.
@@ -338,7 +389,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
-    const calls = onAllToolCallsComplete.mock.calls[0][0] as CompletedToolCall[];
+    const calls = onAllToolCallsComplete.mock
+      .calls[0][0] as CompletedToolCall[];
     expect(calls).toHaveLength(10);
     expect(calls.every((c) => c.status === 'success')).toBe(true);
 
@@ -385,7 +437,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
-    const calls = onAllToolCallsComplete.mock.calls[0][0] as CompletedToolCall[];
+    const calls = onAllToolCallsComplete.mock
+      .calls[0][0] as CompletedToolCall[];
     expect(calls).toHaveLength(10);
     // All tools should complete (with clamped budget), not error
     expect(calls.every((c) => c.status === 'success')).toBe(true);
