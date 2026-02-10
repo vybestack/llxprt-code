@@ -37,7 +37,10 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
-import { useTodoContinuation } from './hooks/useTodoContinuation.js';
+import {
+  useTodoContinuation,
+  type TodoContinuationHook,
+} from './hooks/useTodoContinuation.js';
 import {
   isMouseEventsActive,
   setMouseEventsActive,
@@ -227,8 +230,13 @@ export const AppContainer = (props: AppContainerProps) => {
   useMemoryMonitor({ addItem });
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
+  const todoContinuationRef = useRef<Pick<
+    TodoContinuationHook,
+    'handleTodoPause' | 'clearPause'
+  > | null>(null);
   const registerTodoPause = useCallback(() => {
     todoPauseController.registerTodoPause();
+    todoContinuationRef.current?.handleTodoPause('paused by model');
   }, [todoPauseController]);
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
@@ -1641,6 +1649,7 @@ export const AppContainer = (props: AppContainerProps) => {
          * after user interaction.
          */
         hadToolCallsRef.current = false;
+        todoContinuationRef.current?.clearPause();
 
         // Add to independent input history
         inputHistoryStore.addInput(trimmedValue);
@@ -2066,6 +2075,8 @@ export const AppContainer = (props: AppContainerProps) => {
       streamingState === StreamingState.WaitingForConfirmation,
     setDebugMessage,
   );
+
+  todoContinuationRef.current = todoContinuation;
 
   // Track previous streaming state to detect turn completion
   const prevStreamingStateRef = useRef<StreamingState>(streamingState);

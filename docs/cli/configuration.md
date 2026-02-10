@@ -154,6 +154,13 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `undefined`
   - **Requires restart:** Yes
 
+#### `defaultDisabledTools`
+
+- **`defaultDisabledTools`** (array):
+  - **Description:** Tool names disabled by default. Users can re-enable them with /tools enable.
+  - **Default:** `["google_web_fetch"]`
+  - **Requires restart:** Yes
+
 #### `coreToolSettings`
 
 - **`coreToolSettings`** (object):

@@ -345,6 +345,16 @@ export const SETTINGS_SCHEMA = {
     description: 'Tool names to exclude from discovery.',
     showInDialog: false,
   },
+  defaultDisabledTools: {
+    type: 'array',
+    label: 'Default Disabled Tools',
+    category: 'Advanced',
+    requiresRestart: true,
+    default: ['google_web_fetch'] as string[] | undefined,
+    description:
+      'Tool names disabled by default. Users can re-enable them with /tools enable.',
+    showInDialog: false,
+  },
   coreToolSettings: {
     type: 'object',
     label: 'Tool Management',

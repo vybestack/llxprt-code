@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_read1","name":"read_file","parameters":{"file_path":"{{CWD}}/path/to/nonexistent/file.txt"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"File not found"}],"metadata":{"usage":{"promptTokens":200,"completionTokens":10,"totalTokens":210}}}]}

@@ -180,6 +180,7 @@ export * from './tools/todo-store.js';
 export * from './tools/todo-events.js';
 export * from './tools/list-subagents.js';
 export * from './tools/task.js';
+export * from './tools/tool-key-storage.js';
 export * from './todo/todoFormatter.js';
 
 // MCP OAuth
@@ -239,6 +240,7 @@ export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';
 export * from './providers/anthropic/usageInfo.js';
 export * from './providers/openai/codexUsageInfo.js';
 export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
+export { FakeProvider } from './providers/fake/FakeProvider.js';
 export * from './providers/ProviderManager.js';
 export * from './providers/errors.js';
 export {

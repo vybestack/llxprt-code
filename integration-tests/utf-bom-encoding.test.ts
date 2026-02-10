@@ -50,7 +50,13 @@ const utf32BE = (s: string) => {
 let rig: TestRig;
 let dir: string;
 
-describe('BOM end-to-end integration', () => {
+const skipBomE2ETests =
+  process.env.SKIP_BOM_E2E_TESTS !== 'false' &&
+  (process.env.CI || process.env.GITHUB_ACTIONS);
+
+const conditionalDescribe = skipBomE2ETests ? describe.skip : describe;
+
+conditionalDescribe('BOM end-to-end integration', () => {
   beforeAll(async () => {
     rig = new TestRig();
     await rig.setup('bom-integration');

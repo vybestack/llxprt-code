@@ -66,7 +66,6 @@ const baseExcludePatterns = [
   '**/ui/hooks/useGeminiStream.integration.test.ts',
   '**/ui/hooks/useKeypress.test.ts',
   '**/ui/hooks/usePermissionsModifyTrust.test.ts',
-  '**/ui/hooks/**/*.spec.ts',
   // Block the command test that still imports the legacy runtime helpers
   '**/ui/commands/toolformatCommand.test.ts',
 ];
@@ -114,6 +113,8 @@ export default defineConfig({
       'src/ui/components/messages/ProfileChangeMessage.test.tsx',
       // Include HistoryItemDisplay test for cleanup-plan ab11b2c27
       'src/ui/components/HistoryItemDisplay.test.tsx',
+      // Include useTodoContinuation test for issue #1277
+      'src/ui/hooks/useTodoContinuation.spec.ts',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',

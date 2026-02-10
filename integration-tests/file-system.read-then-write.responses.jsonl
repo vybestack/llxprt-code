@@ -1,0 +1,3 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_read1","name":"read_file","parameters":{"file_path":"{{CWD}}/version.txt"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_write1","name":"write_file","parameters":{"file_path":"{{CWD}}/version.txt","content":"1.0.1"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"I've updated version.txt from 1.0.0 to 1.0.1."}],"metadata":{"usage":{"promptTokens":300,"completionTokens":20,"totalTokens":320}}}]}

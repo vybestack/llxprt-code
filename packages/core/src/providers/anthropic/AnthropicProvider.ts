@@ -1486,8 +1486,52 @@ ${block.code}
       }
     }
 
-    // Ensure the conversation starts with a valid message type
-    // Anthropic requires the first message to be from the user
+    const toBlocks = (
+      content: AnthropicMessageContent,
+    ): AnthropicMessageBlock[] =>
+      typeof content === 'string'
+        ? [{ type: 'text' as const, text: content }]
+        : content;
+
+    const mergedMessages: AnthropicMessage[] = [];
+    for (const msg of anthropicMessages) {
+      const prev =
+        mergedMessages.length > 0
+          ? mergedMessages[mergedMessages.length - 1]
+          : undefined;
+      if (prev && prev.role === msg.role) {
+        const prevBlocks = toBlocks(prev.content);
+        const curBlocks = toBlocks(msg.content);
+
+        if (prev.role === 'user') {
+          const toolResultBlocks = [
+            ...prevBlocks.filter((b) => b.type === 'tool_result'),
+            ...curBlocks.filter((b) => b.type === 'tool_result'),
+          ];
+          const otherBlocks = [
+            ...prevBlocks.filter((b) => b.type !== 'tool_result'),
+            ...curBlocks.filter((b) => b.type !== 'tool_result'),
+          ];
+          prev.content = [...toolResultBlocks, ...otherBlocks];
+        } else {
+          const thinkingTypes = new Set(['thinking', 'redacted_thinking']);
+          const thinkingBlocks = [
+            ...prevBlocks.filter((b) => thinkingTypes.has(b.type)),
+            ...curBlocks.filter((b) => thinkingTypes.has(b.type)),
+          ];
+          const nonThinkingBlocks = [
+            ...prevBlocks.filter((b) => !thinkingTypes.has(b.type)),
+            ...curBlocks.filter((b) => !thinkingTypes.has(b.type)),
+          ];
+          prev.content = [...thinkingBlocks, ...nonThinkingBlocks];
+        }
+      } else {
+        mergedMessages.push({ ...msg, content: msg.content });
+      }
+    }
+    anthropicMessages.length = 0;
+    anthropicMessages.push(...mergedMessages);
+
     if (anthropicMessages.length > 0 && anthropicMessages[0].role !== 'user') {
       // If the first message is not from the user, add a minimal user message
       this.getLogger().debug(
