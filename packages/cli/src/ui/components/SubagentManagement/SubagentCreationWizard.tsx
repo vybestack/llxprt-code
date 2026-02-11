@@ -125,8 +125,8 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
     }
   }, [state, validateName, onSave]);
 
-  const handleModeSelect = useCallback((mode: string) => {
-    setState((prev) => ({ ...prev, mode: mode as 'auto' | 'manual' }));
+  const handleModeSelect = useCallback((mode: 'auto' | 'manual') => {
+    setState((prev) => ({ ...prev, mode }));
     setShowModeSelect(false);
     setFocusedField('mode');
   }, []);
@@ -252,7 +252,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
         <Text color={Colors.Gray}>
           ──────────────────────────────────────────────────────
         </Text>
-        <RadioButtonSelect<string>
+        <RadioButtonSelect<'auto' | 'manual'>
           items={modeItems}
           onSelect={handleModeSelect}
           isFocused={true}
@@ -302,15 +302,15 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
     value: string,
     multiline = false,
   ) => {
-    const isFocused = focusedField === field;
-    const isCurrentlyEditing = isFocused && isEditing;
+    const isFieldFocused = focusedField === field;
+    const isCurrentlyEditing = isFieldFocused && isEditing;
     const isSelectionField = field === 'profile' || field === 'mode';
 
     return (
       <Box flexDirection="column" marginY={1} key={field}>
         <Box>
-          <Text color={isFocused ? '#00ff00' : Colors.Foreground}>
-            {isFocused ? '→ ' : '  '}
+          <Text color={isFieldFocused ? '#00ff00' : Colors.Foreground}>
+            {isFieldFocused ? '→ ' : '  '}
             {step} {label}
           </Text>
         </Box>
@@ -318,7 +318,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
           <Box marginLeft={4}>
             <Text color={Colors.Gray}>Current: </Text>
             <Text color={Colors.Foreground}>{value || '(none)'}</Text>
-            {isFocused && <Text color={Colors.Gray}> [Enter] Select</Text>}
+            {isFieldFocused && <Text color={Colors.Gray}> [Enter] Select</Text>}
           </Box>
         ) : isCurrentlyEditing ? (
           <Box
@@ -358,7 +358,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
                   : value
                 : '(empty)'}
             </Text>
-            {isFocused && <Text color={Colors.Gray}> [Enter] Edit</Text>}
+            {isFieldFocused && <Text color={Colors.Gray}> [Enter] Edit</Text>}
           </Box>
         )}
       </Box>

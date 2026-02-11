@@ -16,15 +16,12 @@ import {
 } from './types.js';
 import { MessageType } from '../types.js';
 import { Colors } from '../colors.js';
-import { Config, DebugLogger, GeminiClient } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:ui:subagent');
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import { SubagentView } from '../components/SubagentManagement/types.js';
-import {
-  generateAutoPrompt,
-  createDetachedGeminiClient,
-} from '../utils/autoPromptGenerator.js';
+import { generateAutoPrompt } from '../utils/autoPromptGenerator.js';
 
 /**
  * Parse save command arguments
@@ -592,12 +589,4 @@ export const subagentCommand: SlashCommand = {
     editCommand,
     deleteCommand,
   ],
-};
-
-function createDetachedGeminiClientForAutoPrompt(config: Config): GeminiClient {
-  return createDetachedGeminiClient(config);
-}
-
-export const subagentAutoPromptHelpers = {
-  createDetachedGeminiClientForAutoPrompt,
 };

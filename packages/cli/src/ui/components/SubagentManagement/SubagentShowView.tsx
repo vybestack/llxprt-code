@@ -6,7 +6,11 @@
 
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
-import { useTextBuffer } from '../shared/text-buffer.js';
+import {
+  type Direction,
+  logicalPosToOffset,
+  useTextBuffer,
+} from '../shared/text-buffer.js';
 import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
@@ -50,12 +54,56 @@ export const SubagentShowView: React.FC<SubagentShowViewProps> = ({
   }, [setText, moveToOffset, subagent.name, subagent.systemPrompt]);
 
   const movePrompt = useCallback(
-    (dir: 'up' | 'down', amount: number) => {
-      for (let i = 0; i < amount; i++) {
+    (dir: Direction, amount: number) => {
+      const lineCount = Math.max(1, Math.floor(amount));
+
+      if (lineCount === 1 || (dir !== 'up' && dir !== 'down')) {
         move(dir);
+        return;
       }
+
+      if (promptBuffer.allVisualLines.length === 0) {
+        return;
+      }
+
+      const [currentVisualRow, currentVisualCol] = promptBuffer.visualCursor;
+      const targetVisualRow =
+        dir === 'down'
+          ? Math.min(
+              promptBuffer.allVisualLines.length - 1,
+              currentVisualRow + lineCount,
+            )
+          : Math.max(0, currentVisualRow - lineCount);
+
+      const targetVisualMap = promptBuffer.visualToLogicalMap[targetVisualRow];
+      if (!targetVisualMap) {
+        return;
+      }
+
+      const [targetLogicalRow, targetLogicalStartCol] = targetVisualMap;
+      const targetVisualLine =
+        promptBuffer.allVisualLines[targetVisualRow] ?? '';
+      const targetVisualLineLength = Array.from(targetVisualLine).length;
+      const targetLogicalCol =
+        targetLogicalStartCol +
+        Math.min(currentVisualCol, targetVisualLineLength);
+
+      moveToOffset(
+        logicalPosToOffset(
+          promptBuffer.lines,
+          targetLogicalRow,
+          targetLogicalCol,
+        ),
+      );
     },
-    [move],
+    [
+      move,
+      moveToOffset,
+      promptBuffer.allVisualLines,
+      promptBuffer.lines,
+      promptBuffer.visualCursor,
+      promptBuffer.visualToLogicalMap,
+    ],
   );
 
   useKeypress(
