@@ -573,7 +573,7 @@ export async function connectAndDiscover(
     toolRegistry.sortTools();
   } catch (error) {
     if (mcpClient) {
-      mcpClient.close();
+      mcpClient.close().catch(() => {});
     }
     console.error(
       `Error connecting to MCP server '${mcpServerName}': ${getErrorMessage(
