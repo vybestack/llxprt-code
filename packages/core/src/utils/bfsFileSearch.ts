@@ -16,6 +16,7 @@ interface BfsFileSearchOptions {
   fileName: string;
   ignoreDirs?: string[];
   maxDirs?: number;
+  maxDepth?: number;
   debug?: boolean;
   fileService?: FileDiscoveryService;
   fileFilteringOptions?: FileFilteringOptions;
@@ -36,11 +37,13 @@ export async function bfsFileSearch(
     fileName,
     ignoreDirs = [],
     maxDirs = Infinity,
+    maxDepth,
     debug = false,
     fileService,
   } = options;
   const foundFiles: string[] = [];
   const queue: string[] = [rootDir];
+  const depthQueue: number[] = [0];
   const visited = new Set<string>();
   let scannedDirCount = 0;
   let queueHead = 0; // Pointer-based queue head to avoid expensive splice operations
@@ -54,13 +57,14 @@ export async function bfsFileSearch(
   while (queueHead < queue.length && scannedDirCount < maxDirs) {
     // Fill batch with unvisited directories up to the desired size
     const batchSize = Math.min(PARALLEL_BATCH_SIZE, maxDirs - scannedDirCount);
-    const currentBatch = [];
+    const currentBatch: Array<{ dir: string; depth: number }> = [];
     while (currentBatch.length < batchSize && queueHead < queue.length) {
       const currentDir = queue[queueHead];
+      const currentDepth = depthQueue[queueHead];
       queueHead++;
       if (!visited.has(currentDir)) {
         visited.add(currentDir);
-        currentBatch.push(currentDir);
+        currentBatch.push({ dir: currentDir, depth: currentDepth });
       }
     }
     scannedDirCount += currentBatch.length;
@@ -74,26 +78,26 @@ export async function bfsFileSearch(
     }
 
     // Read directories in parallel instead of one by one
-    const readPromises = currentBatch.map(async (currentDir) => {
+    const readPromises = currentBatch.map(async ({ dir, depth }) => {
       try {
-        const entries = await fs.readdir(currentDir, { withFileTypes: true });
-        return { currentDir, entries };
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        return { currentDir: dir, depth, entries };
       } catch (error) {
         // Warn user that a directory could not be read, as this affects search results.
         const message = (error as Error)?.message ?? 'Unknown error';
         console.warn(
-          `[WARN] Skipping unreadable directory: ${currentDir} (${message})`,
+          `[WARN] Skipping unreadable directory: ${dir} (${message})`,
         );
         if (debug) {
-          logger.debug(`Full error for ${currentDir}:`, error);
+          logger.debug(`Full error for ${dir}:`, error);
         }
-        return { currentDir, entries: [] };
+        return { currentDir: dir, depth, entries: [] };
       }
     });
 
     const results = await Promise.all(readPromises);
 
-    for (const { currentDir, entries } of results) {
+    for (const { currentDir, depth, entries } of results) {
       for (const entry of entries) {
         const fullPath = path.join(currentDir, entry.name);
         if (
@@ -108,7 +112,11 @@ export async function bfsFileSearch(
 
         if (entry.isDirectory()) {
           if (!ignoreDirsSet.has(entry.name)) {
-            queue.push(fullPath);
+            const childDepth = depth + 1;
+            if (maxDepth === undefined || childDepth <= maxDepth) {
+              queue.push(fullPath);
+              depthQueue.push(childDepth);
+            }
           }
         } else if (entry.isFile() && entry.name === fileName) {
           foundFiles.push(fullPath);
