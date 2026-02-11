@@ -353,6 +353,78 @@ describe('createAgentRuntimeContext', () => {
     });
   });
 
+  describe('reasoning defaults', () => {
+    it('should default reasoning.includeInContext to true when not set', () => {
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: {},
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.reasoning.includeInContext()).toBe(true);
+    });
+
+    it('should default reasoning.enabled to true when not set', () => {
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: {},
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.reasoning.enabled()).toBe(true);
+    });
+
+    it('should default reasoning.includeInResponse to true when not set', () => {
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: {},
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.reasoning.includeInResponse()).toBe(true);
+    });
+
+    it('should default reasoning.format to "field" when not set', () => {
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: {},
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.reasoning.format()).toBe('field');
+    });
+
+    it('should default reasoning.stripFromContext to "none" when not set', () => {
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: {},
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.reasoning.stripFromContext()).toBe('none');
+    });
+  });
+
   describe('context immutability', () => {
     it('should freeze the returned context', () => {
       const options: AgentRuntimeContextFactoryOptions = {

@@ -27,7 +27,7 @@ const EPHEMERAL_DEFAULTS = {
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */
   reasoning: {
     enabled: true, // REQ-THINK-006.1
-    includeInContext: false, // REQ-THINK-006.2
+    includeInContext: true, // REQ-THINK-006.2
     includeInResponse: true, // REQ-THINK-006.3
     format: 'field' as const, // REQ-THINK-006.4
     stripFromContext: 'none' as const, // REQ-THINK-006.5
