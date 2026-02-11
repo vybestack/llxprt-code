@@ -675,6 +675,9 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     keyfile: result.keyfile as string | undefined,
     baseurl: result.baseurl as string | undefined,
     proxy: result.proxy as string | undefined,
+    resume: result.resume as string | typeof RESUME_LATEST | undefined,
+    listSessions: result.listSessions as boolean | undefined,
+    deleteSession: result.deleteSession as string | undefined,
     includeDirectories: result.includeDirectories as string[] | undefined,
     profileLoad: result.profileLoad as string | undefined,
     loadMemoryFromIncludeDirectories:

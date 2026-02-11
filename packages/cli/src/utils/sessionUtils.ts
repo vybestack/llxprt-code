@@ -1,12 +1,13 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import {
   SESSION_FILE_PREFIX,
   type ConversationRecord,
+  type Config,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -23,12 +24,30 @@ export const RESUME_LATEST = 'latest';
 export interface SessionInfo {
   /** Unique session identifier (filename without .json) */
   id: string;
+  /** Session file stem (without .json extension) */
+  file?: string;
   /** Full filename including .json extension */
   fileName: string;
+  /** ISO timestamp when session started */
+  startTime?: string;
   /** ISO timestamp when session was last updated */
   lastUpdated: string;
+  /** First user message in the session */
+  firstUserMessage?: string;
   /** Whether this is the currently active session */
   isCurrentSession: boolean;
+  /** 1-based index for display/selection */
+  index?: number;
+}
+
+/**
+ * Result of selecting a session to resume.
+ */
+export interface SessionSelectionResult {
+  /** Path to the session file */
+  sessionPath: string;
+  /** Parsed session data */
+  sessionData: ConversationRecord;
 }
 
 /**
@@ -79,11 +98,24 @@ export const getAllSessionFiles = async (
             ? file.includes(currentSessionId.slice(0, 8))
             : false;
 
+          const userMsg = content.messages.find(
+            (m) => m.role === 'user',
+          ) as unknown as Record<string, unknown> | undefined;
+          // Session files may have extended message records with parts/text
+          const firstUserMessage =
+            (userMsg?.text as string) ??
+            (userMsg?.parts as Array<{ text?: string }> | undefined)?.[0]?.text ??
+            '(no message)';
+
           const sessionInfo: SessionInfo = {
             id: content.sessionId,
+            file: file.replace(/\.json$/, ''),
             fileName: file,
+            startTime: content.startTime,
             lastUpdated: content.lastUpdated,
+            firstUserMessage,
             isCurrentSession,
+            index: 0, // Will be assigned after sorting
           };
 
           return { fileName: file, sessionInfo };
@@ -160,7 +192,8 @@ export class SessionSelector {
     // Sort by startTime (oldest first, so newest sessions get highest numbers)
     const sortedSessions = sessions.sort(
       (a, b) =>
-        new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+        new Date(a.startTime ?? a.lastUpdated).getTime() -
+        new Date(b.startTime ?? b.lastUpdated).getTime(),
     );
 
     // Try to find by UUID first
@@ -206,7 +239,8 @@ export class SessionSelector {
       // Sort by startTime (oldest first, so newest sessions get highest numbers)
       sessions.sort(
         (a, b) =>
-          new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+          new Date(a.startTime ?? a.lastUpdated).getTime() -
+          new Date(b.startTime ?? b.lastUpdated).getTime(),
       );
 
       selectedSession = sessions[sessions.length - 1];

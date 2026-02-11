@@ -6,11 +6,38 @@
 
 import { McpPromptLoader } from './McpPromptLoader.js';
 import { Config } from '@vybestack/llxprt-code-core';
+import * as cliCore from '@vybestack/llxprt-code-core';
 import { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { CommandKind, type CommandContext } from '../ui/commands/types.js';
+
+const mockPrompt = {
+  name: 'test-prompt',
+  description: 'A test prompt.',
+  serverName: 'test-server',
+  arguments: [
+    { name: 'name', required: true, description: "The animal's name." },
+    { name: 'age', required: true, description: "The animal's age." },
+    { name: 'species', required: true, description: "The animal's species." },
+    {
+      name: 'enclosure',
+      required: false,
+      description: "The animal's enclosure.",
+    },
+    { name: 'trail', required: false, description: "The animal's trail." },
+  ],
+  invoke: vi.fn().mockResolvedValue({
+    messages: [{ content: { text: 'Hello, world!' } }],
+  }),
+};
 
 describe('McpPromptLoader', () => {
   const mockConfig = {} as Config;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(cliCore, 'getMCPServerPrompts').mockReturnValue([mockPrompt]);
+  });
 
   describe('parseArgs', () => {
     it('should handle multi-word positional arguments', () => {

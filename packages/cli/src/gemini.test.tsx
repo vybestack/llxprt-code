@@ -311,6 +311,9 @@ describe('gemini.tsx main function', () => {
       promptWords: [],
       query: undefined,
       set: undefined,
+      resume: undefined,
+      listSessions: undefined,
+      deleteSession: undefined,
       continue: undefined,
     });
 

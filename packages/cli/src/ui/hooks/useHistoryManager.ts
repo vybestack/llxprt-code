@@ -86,7 +86,7 @@ export function useHistory(
     (
       itemData: Omit<HistoryItem, 'id'>,
       baseTimestamp: number,
-      isResuming: boolean = false,
+      _isResuming: boolean = false,
     ): number => {
       const id = getNextMessageId(baseTimestamp);
       const newItem: HistoryItem = { ...itemData, id } as HistoryItem;
@@ -106,46 +106,9 @@ export function useHistory(
         return trimHistory([...prevHistory, newItem], limitsRef.current);
       });
 
-      // Record UI-specific messages, but don't do it if we're actually loading
-      // an existing session.
-      if (!isResuming && chatRecordingService) {
-        switch (itemData.type) {
-          case 'compression':
-          case 'info':
-            chatRecordingService?.recordMessage({
-              model: undefined,
-              type: 'info',
-              content: itemData.text ?? '',
-            });
-            break;
-          case 'warning':
-            chatRecordingService?.recordMessage({
-              model: undefined,
-              type: 'warning',
-              content: itemData.text ?? '',
-            });
-            break;
-          case 'error':
-            chatRecordingService?.recordMessage({
-              model: undefined,
-              type: 'error',
-              content: itemData.text ?? '',
-            });
-            break;
-          case 'user':
-          case 'gemini':
-          case 'gemini_content':
-            // Core conversation recording handled by GeminiChat.
-            break;
-          default:
-            // Ignore the rest.
-            break;
-        }
-      }
-
       return id; // Return the generated ID (even if not added, to keep signature)
     },
-    [getNextMessageId, chatRecordingService],
+    [getNextMessageId],
   );
 
   /**
