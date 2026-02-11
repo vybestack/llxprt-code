@@ -5,9 +5,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import * as child_process from 'child_process';
+import * as child_process from 'node:child_process';
+import fs from 'node:fs';
 
-vi.mock('child_process');
+vi.mock('node:child_process');
 
 import {
   setupSshAgentForwarding,
@@ -202,6 +203,20 @@ describe('setupSshAgentForwarding', () => {
     const result = await setupSshAgentForwarding({ command: 'docker' }, args);
     expect(result).toEqual({});
   });
+
+  it('warns and skips when SSH_AUTH_SOCK path does not exist on disk (R4.3)', async () => {
+    process.env.LLXPRT_SANDBOX_SSH_AGENT = 'on';
+    process.env.SSH_AUTH_SOCK = '/nonexistent/ssh-agent.sock';
+    const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const args: string[] = [];
+    const result = await setupSshAgentForwarding({ command: 'docker' }, args);
+    expect(result).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('SSH_AUTH_SOCK path not found'),
+    );
+    existsSpy.mockRestore();
+  });
 });
 
 describe('setupSshAgentPodmanMacOS', () => {
@@ -335,5 +350,74 @@ describe('setupSshAgentPodmanMacOS', () => {
     await expect(
       setupSshAgentPodmanMacOS([], '/tmp/auth.sock'),
     ).rejects.toThrow(/SSH tunnel process failed to start/);
+  }, 10000);
+
+  it('throws when poll timeout expires and socket never appears (R7.4)', async () => {
+    // Mock connection parsing
+    vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('connection list')) {
+        return Buffer.from(
+          JSON.stringify([
+            {
+              Name: 'default',
+              URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
+              Identity: '/Users/test/.ssh/key',
+              Default: true,
+            },
+          ]),
+        );
+      }
+      if (cmdStr.includes('rm -f')) {
+        return Buffer.from('');
+      }
+      // test -S always fails: socket never appears
+      if (cmdStr.includes('test -S')) {
+        throw new Error('socket not found');
+      }
+      return Buffer.from('');
+    });
+    mockTunnelProcess();
+
+    // Use a very short poll timeout so test runs quickly
+    await expect(
+      setupSshAgentPodmanMacOS([], '/tmp/auth.sock', 800),
+    ).rejects.toThrow(/SSH agent forwarding timed out/);
+  }, 10000);
+
+  it('kills tunnel process when poll timeout expires (R7.8)', async () => {
+    vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('connection list')) {
+        return Buffer.from(
+          JSON.stringify([
+            {
+              Name: 'default',
+              URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
+              Identity: '/Users/test/.ssh/key',
+              Default: true,
+            },
+          ]),
+        );
+      }
+      if (cmdStr.includes('rm -f')) {
+        return Buffer.from('');
+      }
+      // test -S always fails
+      if (cmdStr.includes('test -S')) {
+        throw new Error('socket not found');
+      }
+      return Buffer.from('');
+    });
+    const fakeProc = mockTunnelProcess();
+
+    try {
+      await setupSshAgentPodmanMacOS([], '/tmp/auth.sock', 800);
+    } catch {
+      // Expected to throw
+    }
+
+    // Tunnel process should have been killed on timeout
+    expect(fakeProc.kill).toHaveBeenCalledWith('SIGTERM');
   }, 10000);
 });

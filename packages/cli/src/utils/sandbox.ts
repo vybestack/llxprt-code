@@ -161,6 +161,14 @@ export async function setupSshAgentForwarding(
     return {};
   }
 
+  // R4.3: Verify socket exists on disk before attempting mount
+  if (!fs.existsSync(sshAuthSock)) {
+    console.warn(
+      `SSH_AUTH_SOCK path not found at ${sshAuthSock}. Skipping SSH agent forwarding.`,
+    );
+    return {};
+  }
+
   const platform = os.platform();
 
   if (platform === 'linux') {
@@ -180,10 +188,8 @@ export async function setupSshAgentForwarding(
   }
 
   // Unsupported platform/command combo: attempt direct mount as fallback
-  if (fs.existsSync(sshAuthSock)) {
-    args.push('--volume', `${sshAuthSock}:${CONTAINER_SSH_AGENT_SOCK}`);
-    args.push('--env', `SSH_AUTH_SOCK=${CONTAINER_SSH_AGENT_SOCK}`);
-  }
+  args.push('--volume', `${sshAuthSock}:${CONTAINER_SSH_AGENT_SOCK}`);
+  args.push('--env', `SSH_AUTH_SOCK=${CONTAINER_SSH_AGENT_SOCK}`);
 
   return {};
 }
@@ -331,6 +337,7 @@ const SSH_TUNNEL_POLL_TIMEOUT_MS = 10000;
 export async function setupSshAgentPodmanMacOS(
   args: string[],
   sshAuthSock: string,
+  pollTimeoutMs: number = SSH_TUNNEL_POLL_TIMEOUT_MS,
 ): Promise<SshAgentResult> {
   const conn = getPodmanMachineConnection();
 
@@ -394,7 +401,7 @@ export async function setupSshAgentPodmanMacOS(
   // R7.4: Poll for socket existence with timeout
   const pollStart = Date.now();
   let socketReady = false;
-  while (Date.now() - pollStart < SSH_TUNNEL_POLL_TIMEOUT_MS) {
+  while (Date.now() - pollStart < pollTimeoutMs) {
     try {
       const result = execSync(
         `podman machine ssh -- test -S ${PODMAN_VM_SSH_AGENT_SOCK} && echo ok`,
