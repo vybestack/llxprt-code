@@ -18,6 +18,7 @@ import { ToolGroupMessage } from './messages/ToolGroupMessage.js';
 import { GeminiMessageContent } from './messages/GeminiMessageContent.js';
 import { CompressionMessage } from './messages/CompressionMessage.js';
 import { WarningMessage } from './messages/WarningMessage.js';
+import { ProfileChangeMessage } from './messages/ProfileChangeMessage.js';
 import { Box, Text } from 'ink';
 import { AboutBox } from './AboutBox.js';
 import { StatsDisplay } from './StatsDisplay.js';
@@ -178,6 +179,9 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
       )}
       {itemForDisplay.type === 'chat_list' && (
         <ChatList chats={itemForDisplay.chats} />
+      )}
+      {itemForDisplay.type === 'profile_change' && (
+        <ProfileChangeMessage profileName={itemForDisplay.profileName} />
       )}
     </Box>
   );

@@ -335,4 +335,19 @@ describe('<HistoryItemDisplay />', () => {
 
     expect(lastFrame()).toMatchSnapshot();
   });
+
+  it('renders ProfileChangeMessage for profile_change type', () => {
+    const item: HistoryItem = {
+      ...baseItem,
+      type: 'profile_change',
+      profileName: 'production',
+    };
+    const { lastFrame } = renderWithProviders(
+      <HistoryItemDisplay {...baseItem} item={item} />,
+    );
+    const output = lastFrame();
+    expect(output).toContain('Switched to profile: production');
+    // Should not use warning icon semantics
+    expect(output).not.toContain('ℹ');
+  });
 });

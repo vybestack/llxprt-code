@@ -11,6 +11,7 @@ export type EditorType =
   | 'vscodium'
   | 'windsurf'
   | 'cursor'
+  | 'antigravity'
   | 'vim'
   | 'neovim'
   | 'zed'
@@ -22,6 +23,7 @@ function isValidEditorType(editor: string): editor is EditorType {
     'vscodium',
     'windsurf',
     'cursor',
+    'antigravity',
     'vim',
     'neovim',
     'zed',
@@ -60,6 +62,7 @@ const editorCommands: Record<
   cursor: { win32: ['cursor'], default: ['cursor'] },
   vim: { win32: ['vim'], default: ['vim'] },
   neovim: { win32: ['nvim'], default: ['nvim'] },
+  antigravity: { win32: ['agy.cmd'], default: ['agy'] },
   zed: { win32: ['zed'], default: ['zed', 'zeditor'] },
   emacs: { win32: ['emacs.exe'], default: ['emacs'] },
 };
@@ -73,7 +76,11 @@ export function checkHasEditorType(editor: EditorType): boolean {
 
 export function allowEditorTypeInSandbox(editor: EditorType): boolean {
   const notUsingSandbox = !process.env.SANDBOX;
-  if (['vscode', 'vscodium', 'windsurf', 'cursor', 'zed'].includes(editor)) {
+  if (
+    ['vscode', 'vscodium', 'windsurf', 'cursor', 'antigravity', 'zed'].includes(
+      editor,
+    )
+  ) {
     return notUsingSandbox;
   }
   // For terminal-based editors like vim and emacs, allow in sandbox.
@@ -114,6 +121,7 @@ export function getDiffCommand(
     case 'vscodium':
     case 'windsurf':
     case 'cursor':
+    case 'antigravity':
     case 'zed':
       return { command, args: ['--wait', '--diff', oldPath, newPath] };
     case 'vim':
@@ -183,6 +191,7 @@ export async function openDiff(
       case 'vscodium':
       case 'windsurf':
       case 'cursor':
+      case 'antigravity':
       case 'zed':
         // Use spawn for GUI-based editors to avoid blocking the entire process
         // Use shell: true on Windows to handle paths with spaces correctly

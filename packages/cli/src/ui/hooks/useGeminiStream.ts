@@ -221,11 +221,13 @@ export const useGeminiStream = (
   terminalHeight?: number,
   onTodoPause?: () => void,
   onEditorOpen: () => void = () => {},
+  activeProfileName: string | null = null,
 ) => {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const turnCancelledRef = useRef(false);
   const [isResponding, setIsResponding] = useState<boolean>(false);
+  const lastProfileNameRef = useRef<string | undefined>(undefined);
   // Issue #1113: Track tool completions that happened while isResponding was true
   // This handles the race condition where fast tools complete before the stream ends
   // We store the actual completed tools because useReactToolScheduler clears toolCalls
@@ -284,7 +286,7 @@ export const useGeminiStream = (
       }
 
       const sanitized =
-        typeof result.filtered === 'string' ? (result.filtered as string) : '';
+        typeof result.filtered === 'string' ? result.filtered : '';
 
       return {
         text: sanitized,
@@ -1193,6 +1195,30 @@ export const useGeminiStream = (
           { type: MessageType.USER, text: trimmedQuery },
           userMessageTimestamp,
         );
+
+        // Profile change detection
+        // Read the showProfileChangeInChat setting
+        const showProfileChangeInChat =
+          settings?.merged?.showProfileChangeInChat ?? true;
+
+        if (
+          showProfileChangeInChat &&
+          activeProfileName &&
+          lastProfileNameRef.current !== undefined &&
+          activeProfileName !== lastProfileNameRef.current
+        ) {
+          // Profile changed since last turn
+          addItem(
+            {
+              type: 'profile_change',
+              profileName: activeProfileName,
+            } as Omit<HistoryItem, 'id'>,
+            userMessageTimestamp,
+          );
+        }
+
+        // Always update lastProfileNameRef on new turns
+        lastProfileNameRef.current = activeProfileName ?? undefined;
       }
 
       const { queryToSend, shouldProceed } = await prepareQueryForGemini(
@@ -1278,6 +1304,8 @@ export const useGeminiStream = (
       handleLoopDetectedEvent,
       flushPendingHistoryItem,
       scheduleNextQueuedSubmission,
+      activeProfileName,
+      settings?.merged?.showProfileChangeInChat,
     ],
   );
 

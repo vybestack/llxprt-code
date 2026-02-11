@@ -17,6 +17,7 @@ export interface EditorDisplay {
 }
 
 export const EDITOR_DISPLAY_NAMES: Record<EditorType, string> = {
+  antigravity: 'Antigravity',
   zed: 'Zed',
   vscode: 'VS Code',
   vscodium: 'VSCodium',
@@ -32,6 +33,7 @@ class EditorSettingsManager {
 
   constructor() {
     const editorTypes: EditorType[] = [
+      'antigravity',
       'zed',
       'vscode',
       'vscodium',

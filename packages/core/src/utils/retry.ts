@@ -620,3 +620,16 @@ function logRetryAttempt(
 }
 
 // @plan marker: PLAN-20250909-TOKTRACK.P05
+
+/**
+ * Error indicating a model was not found (HTTP 404).
+ * Used by googleQuotaErrors to classify 404 responses.
+ */
+export class ModelNotFoundError extends Error {
+  code: number;
+  constructor(message: string, code?: number) {
+    super(message);
+    this.name = 'ModelNotFoundError';
+    this.code = code ?? 404;
+  }
+}

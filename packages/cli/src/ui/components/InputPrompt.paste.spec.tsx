@@ -29,6 +29,13 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
+// Mock clipboardy
+vi.mock('clipboardy', () => ({
+  default: {
+    read: vi.fn(),
+  },
+}));
+
 // Mock the required hooks
 vi.mock('../hooks/useShellHistory.js', () => ({
   useShellHistory: () => ({
@@ -69,6 +76,7 @@ vi.mock('../hooks/useInputHistory.js', () => ({
 
 vi.mock('../utils/clipboardUtils.js', () => ({
   pasteClipboardImage: vi.fn(),
+  clipboardHasImage: vi.fn(),
 }));
 
 vi.mock('../hooks/usePromptEnhancement.js', () => ({
@@ -104,6 +112,11 @@ vi.mock('../hooks/useKeypress.ts', () => ({
   Key: {},
 }));
 
+// Mock useMouse hook
+vi.mock('../hooks/useMouse.js', () => ({
+  useMouse: vi.fn(),
+}));
+
 // Now import components after all mocks are set up
 import { render } from 'ink-testing-library';
 import { act } from 'react-dom/test-utils';
@@ -112,6 +125,9 @@ import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import { TextBuffer } from './shared/text-buffer.js';
 import { CommandContext } from '../commands/types.js';
 import { Config } from '@vybestack/llxprt-code-core';
+import clipboardy from 'clipboardy';
+import * as clipboardUtils from '../utils/clipboardUtils.js';
+import { useMouse, type MouseEvent } from '../hooks/useMouse.js';
 
 // Mock Config
 const mockConfig = {
@@ -468,5 +484,79 @@ describe('InputPrompt paste functionality', () => {
     });
 
     expect(mockOnSubmit).toHaveBeenCalledWith(firstPaste + secondPaste);
+  });
+
+  it('should paste clipboard text on right-click release (mouse event)', async () => {
+    const mockDispatch = vi.fn();
+
+    // Mock clipboardUtils to return false for image check
+    vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(false);
+    // Mock clipboardy to return test text
+    vi.mocked(clipboardy.read).mockResolvedValue('pasted text from mouse');
+
+    // Set up useMouse to capture the handler and allow us to trigger it
+    let mouseHandler: ((event: MouseEvent) => void) | null = null;
+    vi.mocked(useMouse).mockImplementation((handler) => {
+      mouseHandler = handler;
+    });
+
+    mockBuffer.text = 'hello';
+    mockBuffer.lines = ['hello'];
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    // Wait for component to mount and useMouse to be called
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Clear any initial calls
+    (mockBuffer.replaceRangeByOffset as Mock).mockClear();
+
+    // Verify useMouse was set up
+    expect(mouseHandler).not.toBeNull();
+
+    // Simulate right mouse release event
+    await act(async () => {
+      mouseHandler!({
+        name: 'right-release',
+        col: 5,
+        row: 2,
+        shift: false,
+        meta: false,
+        ctrl: false,
+        button: 'right',
+      });
+    });
+
+    // Wait for async clipboard operations
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Verify clipboard functions were called
+    expect(clipboardUtils.clipboardHasImage).toHaveBeenCalled();
+    expect(clipboardy.read).toHaveBeenCalled();
+
+    // Verify paste was inserted into buffer
+    expect(mockBuffer.replaceRangeByOffset).toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.any(Number),
+      'pasted text from mouse',
+    );
   });
 });

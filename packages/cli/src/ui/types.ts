@@ -222,6 +222,11 @@ export type HistoryItemMcpStatus = HistoryItemBase & {
   servers: McpServer[];
 };
 
+export type HistoryItemProfileChange = HistoryItemBase & {
+  type: 'profile_change';
+  profileName: string;
+};
+
 // Union type for all history item types
 export type HistoryItemWithoutId =
   | HistoryItemUser
@@ -245,7 +250,8 @@ export type HistoryItemWithoutId =
   | HistoryItemExtensionsList
   | HistoryItemToolsList
   | HistoryItemMcpStatus
-  | HistoryItemChatList;
+  | HistoryItemChatList
+  | HistoryItemProfileChange;
 
 export type HistoryItem = HistoryItemWithoutId & { id: number };
 
@@ -269,9 +275,8 @@ export enum MessageType {
   GEMINI = 'gemini',
   COMPRESSION = 'compression',
   EXTENSIONS_LIST = 'extensions_list',
-  TOOLS_LIST = 'tools_list',
-  MCP_STATUS = 'mcp_status',
   CHAT_LIST = 'chat_list',
+  PROFILE_CHANGE = 'profile_change',
 }
 
 // Simplified message structure for internal feedback
