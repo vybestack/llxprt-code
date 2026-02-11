@@ -108,20 +108,22 @@ export class AsyncTaskAutoTrigger {
     this.isTriggering = true;
 
     try {
-      // Generate the notification message
-      const reminder = this.reminderService.generateReminder();
+      // Generate the notification message — captures the exact task IDs
+      // included so we only mark those as notified (not tasks that complete
+      // between now and delivery).
+      const result = this.reminderService.generateReminder();
 
-      if (!reminder) {
+      if (!result) {
         // Nothing to notify (race condition - already delivered)
         return;
       }
 
       // Attempt delivery
-      await this.triggerAgentTurn(reminder);
+      await this.triggerAgentTurn(result.text);
 
-      // SUCCESS: Mark as notified AFTER delivery
+      // SUCCESS: Mark only the tasks whose content was delivered
       // @requirement REQ-ASYNC-011
-      this.reminderService.markAllNotified();
+      this.reminderService.markNotified(result.notifiedTaskIds);
     } catch (error) {
       // FAILURE: Do NOT mark as notified
       // @requirement REQ-ASYNC-011

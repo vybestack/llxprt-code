@@ -53,24 +53,30 @@ export class AsyncTaskReminderService {
 
   /**
    * Generates a reminder string for the next turn.
-   * Returns empty string if no async tasks exist.
+   * Returns null if no async tasks need reporting.
+   * The returned object includes the task IDs that were included in the
+   * reminder so that only those specific tasks are marked as notified,
+   * avoiding a TOCTOU race where a task completing between generation
+   * and marking would be silently skipped.
    * @pseudocode lines 044-071
    */
-  generateReminder(): string {
+  generateReminder(): { text: string; notifiedTaskIds: string[] } | null {
     const pending = this.taskManager.getPendingNotifications();
     const running = this.taskManager.getRunningTasks();
 
     if (pending.length === 0 && running.length === 0) {
-      return '';
+      return null;
     }
 
     const parts: string[] = [];
+    const notifiedTaskIds: string[] = [];
 
     // Pending completions - include full output
     if (pending.length > 0) {
       parts.push(`${pending.length} async task(s) completed:`);
       for (const task of pending) {
         parts.push(this.formatCompletionNotification(task));
+        notifiedTaskIds.push(task.id);
       }
     }
 
@@ -81,7 +87,8 @@ export class AsyncTaskReminderService {
 
     // Format MUST match TodoReminderService exactly
     // See: packages/core/src/services/todo-reminder-service.ts line 98-100
-    return `---\nSystem Note: Async Task Status\n\n${parts.join('\n\n')}\n---`;
+    const text = `---\nSystem Note: Async Task Status\n\n${parts.join('\n\n')}\n---`;
+    return { text, notifiedTaskIds };
   }
 
   /**
@@ -137,14 +144,15 @@ export class AsyncTaskReminderService {
   }
 
   /**
-   * Marks all pending notifications as delivered.
-   * Call AFTER successfully injecting into model context.
+   * Marks specific tasks as notified.
+   * Pass the IDs returned by generateReminder() so only the tasks whose
+   * content was actually delivered get marked — avoids a TOCTOU race with
+   * tasks that complete between generation and delivery.
    * @pseudocode lines 120-127
    */
-  markAllNotified(): void {
-    const pending = this.taskManager.getPendingNotifications();
-    for (const task of pending) {
-      this.taskManager.markNotified(task.id);
+  markNotified(taskIds: string[]): void {
+    for (const id of taskIds) {
+      this.taskManager.markNotified(id);
     }
   }
 

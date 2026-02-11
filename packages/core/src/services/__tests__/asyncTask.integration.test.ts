@@ -276,8 +276,9 @@ describe('Async Task Integration', () => {
       expect(deliveredMessages.length).toBe(0);
 
       // Verify reminder is available (for next-turn inclusion)
-      const reminder = reminderService.generateReminder();
-      expect(reminder).toContain('busy-test');
+      const result = reminderService.generateReminder();
+      expect(result).not.toBeNull();
+      expect(result!.text).toContain('busy-test');
 
       // When agent becomes idle and another task completes, it triggers
       isAgentBusyFlag = false;
@@ -320,13 +321,14 @@ describe('Async Task Integration', () => {
         terminate_reason: 'GOAL',
       });
 
-      const reminder = reminderService.generateReminder();
+      const result = reminderService.generateReminder();
 
-      expect(reminder).toBeDefined();
-      expect(reminder).toContain('reminder-test');
+      expect(result).not.toBeNull();
+      expect(result!.text).toContain('reminder-test');
       // Note: subagentName is NOT included in reminder (only agent_id, emitted_vars, etc.)
-      expect(reminder).toContain('important data');
-      expect(reminder).toContain('42');
+      expect(result!.text).toContain('important data');
+      expect(result!.text).toContain('42');
+      expect(result!.notifiedTaskIds).toEqual(['reminder-test']);
     });
 
     /**
@@ -349,12 +351,17 @@ describe('Async Task Integration', () => {
         });
       }
 
-      const reminder = reminderService.generateReminder();
+      const result = reminderService.generateReminder();
 
-      expect(reminder).toBeDefined();
-      expect(reminder).toContain('multi-0');
-      expect(reminder).toContain('multi-1');
-      expect(reminder).toContain('multi-2');
+      expect(result).not.toBeNull();
+      expect(result!.text).toContain('multi-0');
+      expect(result!.text).toContain('multi-1');
+      expect(result!.text).toContain('multi-2');
+      expect(result!.notifiedTaskIds).toEqual([
+        'multi-0',
+        'multi-1',
+        'multi-2',
+      ]);
     });
 
     /**
@@ -363,7 +370,7 @@ describe('Async Task Integration', () => {
      * @when Reminder requested
      * @then Returns empty string
      */
-    it('should return empty string when no unnotified tasks', () => {
+    it('should return null when no unnotified tasks', () => {
       manager.registerTask({
         id: 'notified-test',
         subagentName: 'test',
@@ -376,10 +383,9 @@ describe('Async Task Integration', () => {
       });
       manager.markNotified('notified-test');
 
-      const reminder = reminderService.generateReminder();
+      const result = reminderService.generateReminder();
 
-      // AsyncTaskReminderService returns empty string (not undefined) when no pending
-      expect(reminder).toBe('');
+      expect(result).toBeNull();
     });
   });
 
@@ -454,10 +460,12 @@ describe('Async Task Integration', () => {
       expect(task?.status).toBe('failed');
       expect(task?.error).toBe('Something went wrong');
 
-      const reminder = reminderService.generateReminder();
-      expect(reminder).toContain('error-test');
-      expect(reminder).toContain('failed');
-      expect(reminder).toContain('Something went wrong');
+      const result = reminderService.generateReminder();
+      expect(result).not.toBeNull();
+      expect(result!.text).toContain('error-test');
+      expect(result!.text).toContain('failed');
+      expect(result!.text).toContain('Something went wrong');
+      expect(result!.notifiedTaskIds).toEqual(['error-test']);
     });
 
     /**

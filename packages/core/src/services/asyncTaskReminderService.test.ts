@@ -105,12 +105,12 @@ describe('AsyncTaskReminderService', () => {
   });
 
   describe('generateReminder', () => {
-    it('returns empty string when no pending notifications and no running tasks', () => {
-      const reminder = reminderService.generateReminder();
-      expect(reminder).toBe('');
+    it('returns null when no pending notifications and no running tasks', () => {
+      const result = reminderService.generateReminder();
+      expect(result).toBeNull();
     });
 
-    it('returns formatted reminder with pending completions', () => {
+    it('returns formatted reminder with pending completions and their IDs', () => {
       const task = taskManager.registerTask({
         id: 'task-complete-001',
         subagentName: 'worker',
@@ -126,15 +126,19 @@ describe('AsyncTaskReminderService', () => {
 
       taskManager.completeTask(task.id, output);
 
-      const reminder = reminderService.generateReminder();
+      const result = reminderService.generateReminder();
+      expect(result).not.toBeNull();
 
       // Verify format matches TodoReminderService
-      expect(reminder).toMatch(
+      expect(result!.text).toMatch(
         /^---\nSystem Note: Async Task Status\n\n[\s\S]*\n---$/,
       );
-      expect(reminder).toContain('1 async task(s) completed:');
-      expect(reminder).toContain('"agent_id"');
-      expect(reminder).toContain('"terminate_reason": "success"');
+      expect(result!.text).toContain('1 async task(s) completed:');
+      expect(result!.text).toContain('"agent_id"');
+      expect(result!.text).toContain('"terminate_reason": "success"');
+
+      // Verify the returned IDs match the tasks included
+      expect(result!.notifiedTaskIds).toEqual(['task-complete-001']);
     });
 
     it('includes running tasks summary in reminder', () => {
@@ -152,9 +156,11 @@ describe('AsyncTaskReminderService', () => {
         abortController: new AbortController(),
       });
 
-      const reminder = reminderService.generateReminder();
-
-      expect(reminder).toContain('2 async task(s) still running.');
+      const result = reminderService.generateReminder();
+      expect(result).not.toBeNull();
+      expect(result!.text).toContain('2 async task(s) still running.');
+      // No completed tasks, so no IDs to notify
+      expect(result!.notifiedTaskIds).toEqual([]);
     });
 
     it('includes both pending completions and running tasks', () => {
@@ -177,10 +183,42 @@ describe('AsyncTaskReminderService', () => {
         emitted_vars: {},
       });
 
-      const reminder = reminderService.generateReminder();
+      const result = reminderService.generateReminder();
+      expect(result).not.toBeNull();
+      expect(result!.text).toContain('1 async task(s) completed:');
+      expect(result!.text).toContain('1 async task(s) still running.');
+      expect(result!.notifiedTaskIds).toEqual(['task-complete-001']);
+    });
 
-      expect(reminder).toContain('1 async task(s) completed:');
-      expect(reminder).toContain('1 async task(s) still running.');
+    it('only includes completed/failed task IDs, not running ones', () => {
+      const task1 = taskManager.registerTask({
+        id: 'task-a',
+        subagentName: 'a',
+        goalPrompt: 'goal',
+        abortController: new AbortController(),
+      });
+      const task2 = taskManager.registerTask({
+        id: 'task-b',
+        subagentName: 'b',
+        goalPrompt: 'goal',
+        abortController: new AbortController(),
+      });
+      taskManager.registerTask({
+        id: 'task-c',
+        subagentName: 'c',
+        goalPrompt: 'goal',
+        abortController: new AbortController(),
+      });
+
+      taskManager.completeTask(task1.id, {
+        terminate_reason: 'success',
+        emitted_vars: {},
+      });
+      taskManager.failTask(task2.id, 'oops');
+
+      const result = reminderService.generateReminder();
+      expect(result).not.toBeNull();
+      expect(result!.notifiedTaskIds).toEqual(['task-a', 'task-b']);
     });
   });
 
@@ -329,14 +367,14 @@ describe('AsyncTaskReminderService', () => {
 
       expect(reminderService.hasPendingNotifications()).toBe(true);
 
-      reminderService.markAllNotified();
+      reminderService.markNotified([task.id]);
 
       expect(reminderService.hasPendingNotifications()).toBe(false);
     });
   });
 
-  describe('markAllNotified', () => {
-    it('calls taskManager.markNotified for each pending task', () => {
+  describe('markNotified', () => {
+    it('marks only the specified task IDs as notified', () => {
       const task1 = taskManager.registerTask({
         id: 'task-mark-001',
         subagentName: 'marker1',
@@ -364,17 +402,29 @@ describe('AsyncTaskReminderService', () => {
       // Verify both are pending
       expect(taskManager.getPendingNotifications()).toHaveLength(2);
 
-      reminderService.markAllNotified();
+      // Mark only task1
+      reminderService.markNotified([task1.id]);
 
-      // Verify both are marked notified
-      expect(taskManager.getPendingNotifications()).toHaveLength(0);
+      // Only task1 is notified; task2 remains pending
+      expect(taskManager.getPendingNotifications()).toHaveLength(1);
       expect(taskManager.getTask(task1.id)?.notifiedAt).toBeDefined();
+      expect(taskManager.getTask(task2.id)?.notifiedAt).toBeUndefined();
+
+      // Mark task2
+      reminderService.markNotified([task2.id]);
+      expect(taskManager.getPendingNotifications()).toHaveLength(0);
       expect(taskManager.getTask(task2.id)?.notifiedAt).toBeDefined();
     });
 
-    it('does nothing when no pending notifications', () => {
+    it('does nothing for empty array', () => {
       // Should not throw
-      reminderService.markAllNotified();
+      reminderService.markNotified([]);
+      expect(taskManager.getPendingNotifications()).toHaveLength(0);
+    });
+
+    it('ignores unknown IDs gracefully', () => {
+      // Should not throw
+      reminderService.markNotified(['nonexistent-id']);
       expect(taskManager.getPendingNotifications()).toHaveLength(0);
     });
   });
