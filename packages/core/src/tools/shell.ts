@@ -794,7 +794,7 @@ export class ShellTool extends BaseDeclarativeTool<
           dir_path: {
             type: 'string',
             description:
-              '(OPTIONAL) Directory to run the command in. Provide a workspace directory name (e.g., "packages") or an absolute path within the workspace.',
+              '(OPTIONAL) Directory to run the command in. Provide a workspace directory name (e.g., "packages"), a relative path (e.g., "src/utils"), or an absolute path within the workspace.',
           },
           directory: {
             type: 'string',
@@ -844,18 +844,38 @@ export class ShellTool extends BaseDeclarativeTool<
         }
         return null;
       }
+
+      // Multi-segment relative paths (e.g., "src/utils") resolve against targetDir
+      if (dirPath.includes(path.sep) || dirPath.includes('/')) {
+        const resolvedPath = path.resolve(this.config.getTargetDir(), dirPath);
+        if (!workspaceContext.isPathWithinWorkspace(resolvedPath)) {
+          const directories = workspaceContext.getDirectories();
+          return `Directory must be within one of the workspace directories: ${directories.join(', ')}`;
+        }
+        return null;
+      }
+
+      // Single-segment: try workspace basename matching first for backward compat
       const workspaceDirs = workspaceContext.getDirectories();
       const matchingDirs = workspaceDirs.filter(
         (dir) => path.basename(dir) === dirPath,
       );
 
-      if (matchingDirs.length === 0) {
-        return `Directory '${dirPath}' is not a registered workspace directory.`;
+      if (matchingDirs.length === 1) {
+        return null;
       }
 
       if (matchingDirs.length > 1) {
         return `Directory name '${dirPath}' is ambiguous as it matches multiple workspace directories.`;
       }
+
+      // No basename match — try resolving as relative path within workspace
+      const resolvedPath = path.resolve(this.config.getTargetDir(), dirPath);
+      if (workspaceContext.isPathWithinWorkspace(resolvedPath)) {
+        return null;
+      }
+
+      return `Directory '${dirPath}' is not a registered workspace directory. Provide a workspace directory name, a relative path, or an absolute path within the workspace.`;
     }
     return null;
   }

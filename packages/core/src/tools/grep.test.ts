@@ -109,19 +109,16 @@ describe('GrepTool', () => {
 
     it('should return error if path does not exist', () => {
       const params: GrepToolParams = { pattern: 'hello', path: 'nonexistent' };
-      // Check for the core error message, as the full path might vary
       expect(grepTool.validateToolParams(params)).toContain(
-        'Failed to access path stats for',
+        'Path does not exist',
       );
       expect(grepTool.validateToolParams(params)).toContain('nonexistent');
     });
 
-    it('should return error if path is a file, not a directory', async () => {
+    it('should accept a file path and pass validation', async () => {
       const filePath = path.join(tempRootDir, 'fileA.txt');
       const params: GrepToolParams = { pattern: 'hello', path: filePath };
-      expect(grepTool.validateToolParams(params)).toContain(
-        `Path is not a directory: ${filePath}`,
-      );
+      expect(grepTool.validateToolParams(params)).toBeNull();
     });
   });
 
@@ -240,6 +237,65 @@ describe('GrepTool', () => {
       const result = await invocation.execute(abortSignal);
       expect(result.error?.type).toBe(ToolErrorType.GREP_EXECUTION_ERROR);
       vi.mocked(glob.globStream).mockReset();
+    });
+  });
+
+  describe('file-path search', () => {
+    it('should search within a specific file and return only matches from that file', async () => {
+      const params: GrepToolParams = { pattern: 'hello', path: 'fileA.txt' };
+      const invocation = grepTool.build(params);
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toContain('Found 1 match');
+      expect(result.llmContent).toContain('File: fileA.txt');
+      expect(result.llmContent).toContain('L1: hello world');
+      expect(result.llmContent).not.toContain('fileB.js');
+    });
+
+    it('should emit note when file path provided alongside explicit include', async () => {
+      const params: GrepToolParams = {
+        pattern: 'hello',
+        path: 'fileA.txt',
+        include: '*.txt',
+      };
+      const invocation = grepTool.build(params);
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toContain(
+        'Note: include filter ignored because a specific file path was provided.',
+      );
+    });
+
+    it('should handle file path in subdirectory correctly', async () => {
+      const params: GrepToolParams = {
+        pattern: 'world',
+        path: path.join('sub', 'fileC.txt'),
+      };
+      const invocation = grepTool.build(params);
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toContain('Found 1 match');
+      expect(result.llmContent).toContain('File: fileC.txt');
+      expect(result.llmContent).toContain('L1: another world in sub dir');
+    });
+
+    it('should return no matches for file with no matching content', async () => {
+      const params: GrepToolParams = {
+        pattern: 'nonexistent',
+        path: 'fileA.txt',
+      };
+      const invocation = grepTool.build(params);
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toContain('No matches found');
+      expect(result.llmContent).toContain('in file');
+    });
+
+    it('should display description with filename when file path provided', () => {
+      const params: GrepToolParams = {
+        pattern: 'testPattern',
+        path: 'fileA.txt',
+      };
+      const invocation = grepTool.build(params);
+      const description = invocation.getDescription();
+      expect(description).toContain("'testPattern'");
+      expect(description).toContain('fileA.txt');
     });
   });
 
