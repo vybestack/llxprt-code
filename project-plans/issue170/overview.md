@@ -109,16 +109,31 @@ Extracted from `geminiChat.ts`:
 
 Both strategies use these. The boundary logic is not strategy-specific — it's a constraint of the message format that all models expect.
 
-### Refactored `geminiChat.ts`
+### Refactoring: Extract Middle-Out from `geminiChat.ts`
+
+This is a refactor of existing behavior, not a rewrite. The following methods are **extracted** from `geminiChat.ts` and relocated:
+
+**Moved to `MiddleOutStrategy.ts`:**
+- `getCompressionSplit()` — the sandwich split logic (top/middle/bottom)
+- `directCompressionCall()` — the LLM call that produces the XML state_snapshot
+- `applyCompression()` — the history rebuild (toKeepTop + summary + ack + toKeepBottom)
+- The compression prompt (currently imported from `prompts.ts` via `getCompressionPrompt()`) — moves to a `.md` file loaded via PromptResolver
+
+**Moved to `compression/utils.ts`:**
+- `adjustForToolCallBoundary()`
+- `findForwardValidSplitPoint()`
+- `findBackwardValidSplitPoint()`
+
+**What remains in `geminiChat.ts`:**
 
 `performCompression()` becomes a thin dispatcher:
 
-1. Get strategy name from ephemerals (with fallback to persistent settings, then hardcoded default).
+1. Read strategy name from settings (ephemeral → persistent, no hardcoded fallback — see Configuration below).
 2. Look up strategy via factory.
 3. Call `strategy.compress(context)`.
 4. Apply result: `historyService.clear()` + `historyService.add()` for each entry in `newHistory`.
 
-All the extracted logic (`getCompressionSplit`, `directCompressionCall`, `applyCompression`, tool-call boundary methods, `getCompressionPrompt` import) is removed from `geminiChat.ts`.
+All extracted logic is removed from `geminiChat.ts`. The `getCompressionPrompt` import from `prompts.ts` is also removed.
 
 ### Prompt Loading
 
@@ -140,15 +155,14 @@ The `MiddleOutStrategy` receives the `PromptService` (or `PromptResolver` direct
 
 ### Configuration & Settings
 
-#### Three-Tier Resolution
+#### Two-Tier Resolution (No Scattered Hardcoded Defaults)
 
 ```
 1. Ephemeral (/set or profile-loaded)     → highest priority, per-session
 2. Persistent (/settings dialog)          → user's global default
-3. Hardcoded default ('middle-out')       → last resort
 ```
 
-This matches the existing pattern for `compression-threshold` which lives in both `chatCompression` (persistent) and as an ephemeral.
+The default value (`'middle-out'`) is defined **once** in the settings schema as the setting's default. It is not repeated as a fallback anywhere in runtime code. If the settings system fails to provide a value, that is a bug and should fail fast — not silently degrade to some hardcoded string buried in a runtime accessor. This avoids the anti-pattern of scattering `?? 'middle-out'` throughout the codebase where it becomes impossible to trace what's actually driving behavior.
 
 #### New Ephemeral Settings
 
@@ -187,14 +201,16 @@ In `createAgentRuntimeContext.ts`:
 ```typescript
 compressionStrategy: (): 'middle-out' | 'top-down-truncation' =>
   options.settings['compression.strategy'] ??       // ephemeral first
-  options.chatCompression?.strategy ??               // persistent fallback
-  'middle-out',                                      // hardcoded default
+  options.chatCompression?.strategy,                 // persistent (has schema default)
+  // NO hardcoded fallback here — the default lives in the settings schema
 
 compressionProfile: (): string | undefined =>
   options.settings['compression.profile'] ??         // ephemeral first
-  options.chatCompression?.profile ??                // persistent fallback
-  undefined,                                         // undefined = use active model
+  options.chatCompression?.profile,                  // persistent
+  // undefined = use active model
 ```
+
+The settings schema defines `'middle-out'` as the default for `compression.strategy`. That single definition is the source of truth. Runtime code never repeats it.
 
 #### `/set` Command UX
 
