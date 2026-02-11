@@ -19,14 +19,23 @@ vi.mock('../../utils/retry.js', () => ({
     }
     return undefined;
   }),
-  isNetworkTransientError: vi.fn((error: unknown) =>
-    Boolean(
-      error &&
-        typeof error === 'object' &&
-        'message' in error &&
-        String((error as { message?: unknown }).message).includes('terminated'),
-    ),
-  ),
+  isNetworkTransientError: vi.fn((error: unknown) => {
+    if (!error || typeof error !== 'object') return false;
+    if (
+      'message' in error &&
+      String((error as { message?: unknown }).message).includes('terminated')
+    )
+      return true;
+    if (
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string' &&
+      ['ECONNRESET', 'ETIMEDOUT'].includes(
+        (error as { code: string }).code.toUpperCase(),
+      )
+    )
+      return true;
+    return false;
+  }),
 }));
 
 const mockSettingsService = vi.hoisted(() => ({
@@ -51,7 +60,11 @@ const parseResponsesStreamMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../openai/parseResponsesStream.js', () => ({
   parseResponsesStream: parseResponsesStreamMock,
-  parseErrorResponse: vi.fn((_status: number, body: string) => new Error(body)),
+  parseErrorResponse: vi.fn((status: number, body: string) => {
+    const e = new Error(body);
+    (e as Error & { status: number }).status = status;
+    return e;
+  }),
 }));
 
 const delayMock = vi.hoisted(() => vi.fn());
@@ -174,8 +187,12 @@ describe('OpenAIResponsesProvider stream retry behavior', () => {
     expect(firstDelay).toBeLessThan(2600);
   });
 
-  it('uses higher maxStreamingAttempts for Codex mode when ephemerals not set', async () => {
+  it('uses unified default maxStreamingAttempts for Codex mode', async () => {
     parseResponsesStreamMock
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
       .mockImplementationOnce(async function* () {
         yield;
         throw new Error('terminated');
@@ -235,12 +252,20 @@ describe('OpenAIResponsesProvider stream retry behavior', () => {
       chunks.push(chunk);
     }
 
-    // Codex defaults to 5 attempts when no ephemeral retries setting
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    // Codex now uses same default of 6 attempts (unified with other providers)
+    expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 
   it('fails after maxStreamingAttempts for regular mode', async () => {
     parseResponsesStreamMock
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
       .mockImplementationOnce(async function* () {
         yield;
         throw new Error('terminated');
@@ -284,8 +309,8 @@ describe('OpenAIResponsesProvider stream retry behavior', () => {
       }
     }).rejects.toThrow('terminated');
 
-    // Regular mode defaults to 4 attempts
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    // Default is now 6 attempts (unified across all modes)
+    expect(fetchMock).toHaveBeenCalledTimes(6);
   });
 
   it('respects retries ephemeral setting', async () => {
@@ -329,6 +354,229 @@ describe('OpenAIResponsesProvider stream retry behavior', () => {
     }).rejects.toThrow('terminated');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries when server responds with 429 rate limit', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => 'Rate limit exceeded',
+      })
+      .mockResolvedValue({ ok: true, body: {} });
+
+    parseResponsesStreamMock.mockImplementationOnce(async function* () {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+    });
+
+    retryWithBackoffMock.mockImplementation(
+      async (fn: () => Promise<unknown>) => fn(),
+    );
+
+    const provider = new OpenAIResponsesProvider('test-key');
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello' }],
+          },
+        ] as IContent[],
+      }),
+    );
+
+    const chunks: IContent[] = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const texts = chunks.map((c) =>
+      c.blocks.map((b) => ('text' in b ? b.text : '')).join(''),
+    );
+    expect(texts).toContain('ok');
+  });
+
+  it('retries when server responds with 5xx server error', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        text: async () => 'Service Unavailable',
+      })
+      .mockResolvedValue({ ok: true, body: {} });
+
+    parseResponsesStreamMock.mockImplementationOnce(async function* () {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+    });
+
+    retryWithBackoffMock.mockImplementation(
+      async (fn: () => Promise<unknown>) => fn(),
+    );
+
+    const provider = new OpenAIResponsesProvider('test-key');
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello' }],
+          },
+        ] as IContent[],
+      }),
+    );
+
+    const chunks: IContent[] = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const texts = chunks.map((c) =>
+      c.blocks.map((b) => ('text' in b ? b.text : '')).join(''),
+    );
+    expect(texts).toContain('ok');
+  });
+
+  it('does not retry when server responds with 400 bad request', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () => 'Bad Request',
+    });
+
+    retryWithBackoffMock.mockImplementation(
+      async (fn: () => Promise<unknown>) => fn(),
+    );
+
+    const provider = new OpenAIResponsesProvider('test-key');
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello' }],
+          },
+        ] as IContent[],
+      }),
+    );
+
+    await expect(async () => {
+      for await (const _chunk of generator) {
+        // Should throw immediately
+      }
+    }).rejects.toThrow('Bad Request');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses default retries of 6', async () => {
+    parseResponsesStreamMock
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
+      .mockImplementationOnce(async function* () {
+        yield;
+        throw new Error('terminated');
+      })
+      .mockImplementationOnce(async function* () {
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
+      });
+
+    fetchMock.mockResolvedValue({ ok: true, body: {} });
+
+    retryWithBackoffMock.mockImplementation(
+      async (fn: () => Promise<unknown>) => fn(),
+    );
+
+    const provider = new OpenAIResponsesProvider('test-key');
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello' }],
+          },
+        ] as IContent[],
+      }),
+    );
+
+    const chunks: IContent[] = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+
+    // 5 failures + 1 success = 6 total attempts (default)
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    const texts = chunks
+      .filter((c) => c?.blocks)
+      .map((c) => c.blocks.map((b) => ('text' in b ? b.text : '')).join(''));
+    expect(texts).toContain('success');
+  });
+
+  it('retries on network transient error with ECONNRESET code', async () => {
+    parseResponsesStreamMock
+      .mockImplementationOnce(async function* () {
+        yield;
+        const err = new Error('socket error');
+        (err as Error & { code: string }).code = 'ECONNRESET';
+        throw err;
+      })
+      .mockImplementationOnce(async function* () {
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+      });
+
+    fetchMock.mockResolvedValue({ ok: true, body: {} });
+
+    retryWithBackoffMock.mockImplementation(
+      async (fn: () => Promise<unknown>) => fn(),
+    );
+
+    const provider = new OpenAIResponsesProvider('test-key');
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello' }],
+          },
+        ] as IContent[],
+      }),
+    );
+
+    const chunks: IContent[] = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const texts = chunks
+      .filter((c) => c?.blocks)
+      .map((c) => c.blocks.map((b) => ('text' in b ? b.text : '')).join(''));
+    expect(texts).toContain('ok');
   });
 
   it('respects retrywait ephemeral setting', async () => {
