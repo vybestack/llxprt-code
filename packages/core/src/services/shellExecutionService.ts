@@ -118,6 +118,10 @@ export type ShellOutputEvent =
 interface ActivePty {
   ptyProcess: IPty;
   headlessTerminal: pkg.Terminal;
+  onDataDisposable?: { dispose(): void };
+  onExitDisposable?: { dispose(): void };
+  onScrollDisposable?: { dispose(): void };
+  terminationTimeout?: NodeJS.Timeout;
 }
 
 export class ShellExecutionService {
@@ -489,10 +493,11 @@ export class ShellExecutionService {
         });
         headlessTerminal.scrollToTop();
 
-        ShellExecutionService.activePtys.set(ptyProcess.pid, {
+        const activePtyEntry: ActivePty = {
           ptyProcess,
           headlessTerminal,
-        });
+        };
+        ShellExecutionService.activePtys.set(ptyProcess.pid, activePtyEntry);
         ShellExecutionService.lastActivePtyId = ptyProcess.pid;
 
         let processingChain = Promise.resolve();
@@ -512,7 +517,26 @@ export class ShellExecutionService {
         let renderTimeout: NodeJS.Timeout | null = null;
 
         const cleanupActivePty = () => {
-          if (ShellExecutionService.activePtys.has(ptyProcess.pid)) {
+          const entry = ShellExecutionService.activePtys.get(ptyProcess.pid);
+          if (entry) {
+            try {
+              entry.onDataDisposable?.dispose();
+            } catch (_) {
+              /* ignore */
+            }
+            try {
+              entry.onExitDisposable?.dispose();
+            } catch (_) {
+              /* ignore */
+            }
+            try {
+              entry.onScrollDisposable?.dispose();
+            } catch (_) {
+              /* ignore */
+            }
+            if (entry.terminationTimeout) {
+              clearTimeout(entry.terminationTimeout);
+            }
             ShellExecutionService.activePtys.delete(ptyProcess.pid);
           }
           if (ShellExecutionService.lastActivePtyId === ptyProcess.pid) {
@@ -705,7 +729,7 @@ export class ShellExecutionService {
           }, 16);
         };
 
-        headlessTerminal.onScroll(() => {
+        activePtyEntry.onScrollDisposable = headlessTerminal.onScroll(() => {
           if (!isWriting) {
             render();
           }
@@ -763,12 +787,12 @@ export class ShellExecutionService {
           );
         };
 
-        ptyProcess.onData((data: string) => {
+        activePtyEntry.onDataDisposable = ptyProcess.onData((data: string) => {
           const bufferData = Buffer.from(data, 'utf-8');
           handleOutput(bufferData);
         });
 
-        ptyProcess.onExit(
+        activePtyEntry.onExitDisposable = ptyProcess.onExit(
           ({ exitCode, signal }: { exitCode: number; signal?: number }) => {
             exited = true;
             abortSignal.removeEventListener('abort', abortHandler);
@@ -976,7 +1000,7 @@ export class ShellExecutionService {
       // ignore
     }
 
-    setTimeout(() => {
+    activePty.terminationTimeout = setTimeout(() => {
       if (!this.activePtys.has(pid)) {
         return;
       }
