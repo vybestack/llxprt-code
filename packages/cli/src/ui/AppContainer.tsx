@@ -1759,7 +1759,7 @@ export const AppContainer = (props: AppContainerProps) => {
       }
 
       if (
-        settings.merged.ui?.useAlternateBuffer &&
+        settings.merged.ui?.useAlternateBuffer === true &&
         keyMatchers[Command.TOGGLE_COPY_MODE](key)
       ) {
         setCopyModeEnabled(true);

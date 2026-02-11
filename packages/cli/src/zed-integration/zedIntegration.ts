@@ -569,7 +569,6 @@ class Session {
       const functionCalls: FunctionCall[] = [];
 
       try {
-
         const responseStream = await chat.sendMessageStream(
           {
             message: nextMessage?.parts ?? [],
