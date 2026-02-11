@@ -215,7 +215,7 @@ export const useGeminiStream = (
   onAuthError: () => void,
   performMemoryRefresh: () => Promise<void>,
   onEditorClose: () => void,
-  onCancelSubmit: () => void,
+  onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,
   terminalHeight?: number,
@@ -964,7 +964,7 @@ export const useGeminiStream = (
 
   const handleContextWindowWillOverflowEvent = useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
-      onCancelSubmit();
+      onCancelSubmit(true);
 
       const limit = tokenLimit(config.getModel());
 

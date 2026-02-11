@@ -1533,12 +1533,19 @@ export const AppContainer = (props: AppContainerProps) => {
   // Independent input history management (unaffected by /clear)
   const inputHistoryStore = useInputHistoryStore();
 
-  const handleUserCancel = useCallback(() => {
-    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
-    if (lastUserMessage) {
-      buffer.setText(lastUserMessage);
-    }
-  }, [buffer, inputHistoryStore.inputHistory]);
+  const handleUserCancel = useCallback(
+    (shouldRestorePrompt?: boolean) => {
+      if (shouldRestorePrompt) {
+        const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
+        if (lastUserMessage) {
+          buffer.setText(lastUserMessage);
+        }
+      } else {
+        buffer.setText('');
+      }
+    },
+    [buffer, inputHistoryStore.inputHistory],
+  );
 
   const handleOAuthCodeDialogClose = useCallback(() => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
@@ -1622,20 +1629,27 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [embeddedShellFocused, anyShellExecuting]);
 
   // Update the cancel handler with message queue support
-  const cancelHandlerRef = useRef<(() => void) | null>(null);
-  cancelHandlerRef.current = useCallback(() => {
-    if (isToolExecuting(pendingHistoryItems)) {
-      buffer.setText(''); // Just clear the prompt
-      return;
-    }
+  const cancelHandlerRef = useRef<
+    ((shouldRestorePrompt?: boolean) => void) | null
+  >(null);
+  cancelHandlerRef.current = useCallback(
+    (shouldRestorePrompt?: boolean) => {
+      if (isToolExecuting(pendingHistoryItems)) {
+        buffer.setText('');
+        return;
+      }
 
-    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
-    const textToSet = lastUserMessage || '';
-
-    if (textToSet) {
-      buffer.setText(textToSet);
-    }
-  }, [buffer, inputHistoryStore.inputHistory, pendingHistoryItems]);
+      if (shouldRestorePrompt) {
+        const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
+        if (lastUserMessage) {
+          buffer.setText(lastUserMessage);
+        }
+      } else {
+        buffer.setText('');
+      }
+    },
+    [buffer, inputHistoryStore.inputHistory, pendingHistoryItems],
+  );
 
   // Input handling - queue messages for processing
   const handleFinalSubmit = useCallback(

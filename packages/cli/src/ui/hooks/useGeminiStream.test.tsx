@@ -408,7 +408,7 @@ describe('useGeminiStream', () => {
   const renderHookWithDefaults = (
     options: {
       shellModeActive?: boolean;
-      onCancelSubmit?: () => void;
+      onCancelSubmit?: (shouldRestorePrompt?: boolean) => void;
       setShellInputFocused?: (focused: boolean) => void;
       performMemoryRefresh?: () => Promise<void>;
       onAuthError?: () => void;
@@ -1146,6 +1146,8 @@ describe('useGeminiStream', () => {
       simulateEscapeKeyPress();
 
       expect(cancelSubmitSpy).toHaveBeenCalled();
+      // Normal cancel should NOT request prompt restoration
+      expect(cancelSubmitSpy).not.toHaveBeenCalledWith(true);
     });
 
     it('should call setShellInputFocused(false) when escape is pressed', async () => {
@@ -2055,9 +2057,9 @@ describe('useGeminiStream', () => {
         await result.current.submitQuery('Test overflow');
       });
 
-      // Check that onCancelSubmit was called
+      // Check that onCancelSubmit was called with shouldRestorePrompt=true
       await waitFor(() => {
-        expect(onCancelSubmitSpy).toHaveBeenCalled();
+        expect(onCancelSubmitSpy).toHaveBeenCalledWith(true);
       });
     });
 
