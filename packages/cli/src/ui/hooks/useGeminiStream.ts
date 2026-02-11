@@ -445,17 +445,17 @@ export const useGeminiStream = (
   }, []);
   const { handleShellCommand, activeShellPtyId, lastShellOutputTime } =
     useShellCommandProcessor(
-    addItem,
-    setPendingHistoryItem,
-    onExec,
-    onDebugMessage,
-    config,
-    geminiClient,
-    setShellInputFocused,
-    terminalWidth,
-    terminalHeight,
-    pendingHistoryItemRef,
-  );
+      addItem,
+      setPendingHistoryItem,
+      onExec,
+      onDebugMessage,
+      config,
+      geminiClient,
+      setShellInputFocused,
+      terminalWidth,
+      terminalHeight,
+      pendingHistoryItemRef,
+    );
 
   const streamingState = useMemo(() => {
     if (toolCalls.some((tc) => tc.status === 'awaiting_approval')) {
