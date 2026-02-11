@@ -81,6 +81,7 @@ export * from './code_assist/types.js';
 
 // Export utilities
 export * from './utils/paths.js';
+export * from './utils/shellPathCompletion.js';
 export * from './utils/ripgrepPathResolver.js';
 export * from './utils/schemaValidator.js';
 export * from './utils/errors.js';
