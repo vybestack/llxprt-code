@@ -20,13 +20,29 @@ import type { AsyncTaskReminderService } from './asyncTaskReminderService.js';
  */
 export class AsyncTaskAutoTrigger {
   private isTriggering = false;
+  private isAgentBusy: () => boolean;
+  private triggerAgentTurn: (message: string) => Promise<void>;
 
   constructor(
     private readonly taskManager: AsyncTaskManager,
     private readonly reminderService: AsyncTaskReminderService,
-    private readonly isAgentBusy: () => boolean,
-    private readonly triggerAgentTurn: (message: string) => Promise<void>,
-  ) {}
+    isAgentBusy: () => boolean,
+    triggerAgentTurn: (message: string) => Promise<void>,
+  ) {
+    this.isAgentBusy = isAgentBusy;
+    this.triggerAgentTurn = triggerAgentTurn;
+  }
+
+  /**
+   * Replace the callbacks with fresh closures (called on React re-renders).
+   */
+  updateCallbacks(
+    isAgentBusy: () => boolean,
+    triggerAgentTurn: (message: string) => Promise<void>,
+  ): void {
+    this.isAgentBusy = isAgentBusy;
+    this.triggerAgentTurn = triggerAgentTurn;
+  }
 
   /**
    * Called when an async task completes.

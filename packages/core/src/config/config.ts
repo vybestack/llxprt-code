@@ -1925,6 +1925,9 @@ export class Config {
         isAgentBusy,
         triggerAgentTurn,
       );
+    } else {
+      // Refresh callbacks with the latest closures from React re-renders
+      this.asyncTaskAutoTrigger.updateCallbacks(isAgentBusy, triggerAgentTurn);
     }
 
     return this.asyncTaskAutoTrigger.subscribe();

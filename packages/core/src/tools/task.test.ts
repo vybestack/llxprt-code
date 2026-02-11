@@ -880,6 +880,48 @@ describe('TaskTool', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
+    it('passes undefined (not foreground signal) to orchestrator.launch for async tasks', async () => {
+      const mockAsyncTaskManager = {
+        canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
+        registerTask: vi.fn(),
+        completeTask: vi.fn(),
+        failTask: vi.fn(),
+      };
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-agent-sig',
+        scope: {
+          runNonInteractive: vi.fn().mockResolvedValue(undefined),
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () =>
+          mockAsyncTaskManager as unknown as AsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Async work',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // Async tasks must NOT pass the foreground signal to launch
+      // so the scope has no parent abort signal dependency
+      expect(launchMock).toHaveBeenCalledWith(expect.anything(), undefined);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
     it('returns immediately with launch status when async=true (does not block)', async () => {
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),
@@ -1032,6 +1074,90 @@ describe('TaskTool', () => {
         'async-agent-error',
         'Subagent crashed',
       );
+    });
+
+    it('calls failTask when timeout fires and scope returns normally', async () => {
+      vi.useFakeTimers();
+      let resolveExecution: (() => void) | undefined;
+      const executionPromise = new Promise<void>(
+        (resolve) => (resolveExecution = resolve),
+      );
+      const failTaskMock = vi.fn(() => {
+        resolveExecution?.();
+      });
+      const completeTaskMock = vi.fn();
+      // getTask returns a task still in 'running' status (timeout, not cancelTask)
+      const getTaskMock = vi.fn(() => ({ status: 'running' }));
+      const mockAsyncTaskManager = {
+        canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
+        registerTask: vi.fn(),
+        completeTask: completeTaskMock,
+        failTask: failTaskMock,
+        getTask: getTaskMock,
+      };
+
+      // runNonInteractive resolves normally AFTER the signal is aborted (timeout)
+      let resolveRun: (() => void) | undefined;
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-agent-timeout',
+        scope: {
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+          runNonInteractive: vi.fn(
+            () =>
+              new Promise<void>((resolve) => {
+                resolveRun = resolve;
+              }),
+          ),
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const configWithSettings = {
+        ...config,
+        getEphemeralSettings: () => ({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithSettings, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () =>
+          mockAsyncTaskManager as unknown as AsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Slow task',
+        async: true,
+        timeout_seconds: 0.05, // 50ms
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // Advance past the timeout so the abort fires
+      await vi.advanceTimersByTimeAsync(60);
+
+      // Now let the scope return normally (simulating scope completing after timeout)
+      resolveRun?.();
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Wait for the background execution to finish
+      await executionPromise;
+
+      // failTask should have been called because the task was still 'running'
+      // when the timeout-caused abort was detected
+      expect(failTaskMock).toHaveBeenCalledWith(
+        'async-agent-timeout',
+        'Async task timed out',
+      );
+      expect(completeTaskMock).not.toHaveBeenCalled();
+
+      vi.useRealTimers();
     });
   });
 });

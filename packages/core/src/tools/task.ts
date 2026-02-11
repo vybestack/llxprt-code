@@ -706,8 +706,10 @@ class TaskToolInvocation extends BaseToolInvocation<
       // Create launch request (no timeout for launch itself)
       const launchRequest = this.createLaunchRequest(undefined);
 
-      // Launch subagent
-      launchResult = await orchestrator.launch(launchRequest, signal);
+      // Launch subagent — pass undefined instead of the foreground signal so
+      // the scope is NOT wired to the foreground lifecycle (Ctrl+C, turn end).
+      // Async tasks manage their own lifecycle via asyncAbortController.
+      launchResult = await orchestrator.launch(launchRequest, undefined);
       agentId = launchResult.agentId;
       scope = launchResult.scope;
       dispose = launchResult.dispose;
@@ -851,9 +853,15 @@ class TaskToolInvocation extends BaseToolInvocation<
           await scope.runNonInteractive(contextState);
         }
 
-        // Check if cancelled
+        // Check if aborted (by cancelTask or timeout)
         if (signal.aborted) {
-          // Already cancelled via cancelTask - don't override
+          // If cancelTask was called, status is already 'cancelled'.
+          // If timeout fired, status is still 'running' — record as failed
+          // so the task doesn't permanently occupy a concurrency slot.
+          const task = asyncTaskManager.getTask(agentId);
+          if (task?.status === 'running') {
+            asyncTaskManager.failTask(agentId, 'Async task timed out');
+          }
           return;
         }
 

@@ -261,6 +261,63 @@ describe('AsyncTaskAutoTrigger', () => {
     });
   });
 
+  describe('updateCallbacks', () => {
+    /**
+     * @requirement REQ-ASYNC-010
+     * @scenario Callbacks refreshed after React re-render
+     * @given AutoTrigger created with isAgentBusy returning true (busy)
+     * @when updateCallbacks replaces with isAgentBusy returning false (idle)
+     * @then Next task completion uses the updated callback and triggers
+     */
+    it('should use updated isAgentBusy after updateCallbacks', async () => {
+      const triggerAgentTurn = vi.fn().mockResolvedValue(undefined);
+      const manager = new AsyncTaskManager(5);
+      const reminderService = new AsyncTaskReminderService(manager);
+
+      const autoTrigger = new AsyncTaskAutoTrigger(
+        manager,
+        reminderService,
+        () => true, // Initially busy — won't trigger
+        triggerAgentTurn,
+      );
+      autoTrigger.subscribe();
+
+      // Complete a task while busy — should NOT trigger
+      manager.registerTask({
+        id: 'task-1',
+        subagentName: 'r1',
+        goalPrompt: 'R1',
+        abortController: new AbortController(),
+      });
+      manager.completeTask('task-1', {
+        emitted_vars: {},
+        terminate_reason: 'GOAL',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(triggerAgentTurn).not.toHaveBeenCalled();
+
+      // Mark notified manually so it doesn't interfere
+      manager.markNotified('task-1');
+
+      // Update callback to not busy
+      autoTrigger.updateCallbacks(() => false, triggerAgentTurn);
+
+      // Complete another task — should NOW trigger
+      manager.registerTask({
+        id: 'task-2',
+        subagentName: 'r2',
+        goalPrompt: 'R2',
+        abortController: new AbortController(),
+      });
+      manager.completeTask('task-2', {
+        emitted_vars: {},
+        terminate_reason: 'GOAL',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(triggerAgentTurn).toHaveBeenCalled();
+    });
+  });
+
   describe('unsubscribe', () => {
     /**
      * @requirement REQ-ASYNC-010
