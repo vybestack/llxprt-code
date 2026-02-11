@@ -482,7 +482,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
       entry.config.modelDefaults!,
     );
     expect(defaults['reasoning.enabled']).toBe(true);
-    expect(defaults).not.toHaveProperty('reasoning.effort');
+    expect(defaults).not.toHaveProperty(['reasoning.effort']);
   });
 
   it('claude-haiku-4-5-20251001 matches reasoning.enabled', () => {
