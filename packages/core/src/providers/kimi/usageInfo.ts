@@ -48,8 +48,9 @@ function buildKimiBalanceEndpoint(baseUrl?: string): string {
 
   try {
     const url = new URL(baseUrl.trim());
+    const hostname = url.hostname.toLowerCase();
     // For kimi.com coding endpoint, use the moonshot.ai balance endpoint
-    if (url.hostname.includes('kimi.com')) {
+    if (hostname === 'kimi.com' || hostname.endsWith('.kimi.com')) {
       return DEFAULT_KIMI_BALANCE_ENDPOINT;
     }
     // For moonshot domains, derive from the base URL

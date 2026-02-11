@@ -311,8 +311,36 @@ describe('statsCommand', () => {
     };
 
     getCliOAuthManagerMock.mockReturnValue(oauthManager);
-    // No API key provider (unknown base URL)
-    getEphemeralSettingMock.mockReturnValue(undefined);
+
+    // Also set up an API-key provider (Z.ai)
+    getEphemeralSettingMock.mockImplementation((key: string) => {
+      if (key === 'base-url') return 'https://api.z.ai/v1';
+      if (key === 'auth-key') return 'test-zai-key';
+      return undefined;
+    });
+
+    // Mock fetch for Z.ai quota
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 200,
+        msg: 'OK',
+        data: {
+          limits: [
+            {
+              type: 'TOKENS_LIMIT',
+              unit: 3,
+              number: 5,
+              percentage: 10,
+              nextResetTime: Date.now() + 3600000,
+            },
+          ],
+          level: 'pro',
+        },
+        success: true,
+      }),
+    } as Response);
+    global.fetch = fetchMock;
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -328,7 +356,11 @@ describe('statsCommand', () => {
     };
 
     expect(lastItem.type).toBe(MessageType.INFO);
+    // Should contain both OAuth and API-key provider quotas
     expect(lastItem.text).toContain('Anthropic Quota Information');
+    expect(lastItem.text).toContain('Z.ai Quota Information');
+
+    vi.restoreAllMocks();
   });
 
   it('should show Synthetic quota when base-url matches synthetic.new', async () => {

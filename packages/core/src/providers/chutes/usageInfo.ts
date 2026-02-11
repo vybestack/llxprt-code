@@ -174,9 +174,6 @@ export async function fetchChutesUsage(
 }
 
 /**
- * Format all available Chutes usage information for display
- */
-/**
  * Format quota value for display.
  * Handles both numeric quotas and object quotas (with rate limits).
  */
@@ -201,6 +198,9 @@ function formatQuotaValue(quota: unknown): string {
   return String(quota);
 }
 
+/**
+ * Format all available Chutes usage information for display
+ */
 export function formatChutesUsage(usage: ChutesUsageInfo): string[] {
   const lines: string[] = [];
 
