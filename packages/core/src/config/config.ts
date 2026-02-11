@@ -143,6 +143,10 @@ export interface BugCommandSettings {
 
 export interface ChatCompressionSettings {
   contextPercentageThreshold?: number;
+  /** @plan PLAN-20260211-COMPRESSION.P12 */
+  strategy?: string;
+  /** @plan PLAN-20260211-COMPRESSION.P12 */
+  profile?: string;
 }
 
 export interface SummarizeToolOutputSettings {

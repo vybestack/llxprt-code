@@ -1,4 +1,6 @@
 export const PLAN_MARKER = '@plan:PLAN-20260126-SETTINGS-SEPARATION.P05';
+/** @plan PLAN-20260211-COMPRESSION.P12 */
+import { COMPRESSION_STRATEGIES } from '../core/compression/types.js';
 
 export type SettingCategory =
   | 'model-behavior'
@@ -928,6 +930,24 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
           'circuit_breaker_recovery_timeout_ms must be a positive integer',
       };
     },
+  },
+  /** @plan PLAN-20260211-COMPRESSION.P12 */
+  {
+    key: 'compression.strategy',
+    category: 'cli-behavior',
+    description: 'Compression strategy to use (middle-out or top-down-truncation)',
+    type: 'enum',
+    enumValues: [...COMPRESSION_STRATEGIES],
+    default: 'middle-out',
+    persistToProfile: true,
+  },
+  /** @plan PLAN-20260211-COMPRESSION.P12 */
+  {
+    key: 'compression.profile',
+    category: 'cli-behavior',
+    description: 'Profile name for compression LLM calls',
+    type: 'string',
+    persistToProfile: true,
   },
 ];
 

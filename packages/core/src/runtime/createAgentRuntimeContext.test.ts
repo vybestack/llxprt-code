@@ -424,4 +424,81 @@ describe('createAgentRuntimeContext', () => {
       expect(context.history).toBeDefined();
     });
   });
+
+  /**
+   * @plan PLAN-20260211-COMPRESSION.P11
+   * @requirement REQ-CS-008.1, REQ-CS-008.2, REQ-CS-010.1
+   *
+   * RED phase: Tests for compressionStrategy() and compressionProfile() ephemeral accessors.
+   * These FAIL until Phase 12 adds the accessors to createAgentRuntimeContext.
+   */
+  describe('ephemerals.compressionStrategy()', () => {
+    it('should return ephemeral compression strategy when set', () => {
+      const mutableSettings: ReadonlySettingsSnapshot = {
+        compressionStrategy: 'top-down-truncation',
+      } as ReadonlySettingsSnapshot;
+
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: mutableSettings,
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.compressionStrategy()).toBe(
+        'top-down-truncation',
+      );
+    });
+
+    it('should fall back to persistent default when ephemeral not set', () => {
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: {},
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.compressionStrategy()).toBe('middle-out');
+    });
+  });
+
+  describe('ephemerals.compressionProfile()', () => {
+    it('should return ephemeral compression profile when set', () => {
+      const mutableSettings: ReadonlySettingsSnapshot = {
+        compressionProfile: 'my-profile',
+      } as ReadonlySettingsSnapshot;
+
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: mutableSettings,
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.compressionProfile()).toBe('my-profile');
+    });
+
+    it('should return undefined when neither ephemeral nor persistent set', () => {
+      const options: AgentRuntimeContextFactoryOptions = {
+        state: mockState,
+        settings: {},
+        provider: mockProviderAdapter,
+        telemetry: mockTelemetryAdapter,
+        tools: mockToolsView,
+        providerRuntime: mockProviderRuntime,
+      };
+
+      const context = createAgentRuntimeContext(options);
+      expect(context.ephemerals.compressionProfile()).toBeUndefined();
+    });
+  });
 });
