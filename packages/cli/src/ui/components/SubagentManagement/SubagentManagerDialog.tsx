@@ -228,37 +228,28 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
       profile: string,
       mode: 'auto' | 'manual' = 'auto',
     ) => {
-      if (!subagentManager) return;
+      if (!subagentManager) {
+        throw new Error('SubagentManager not available');
+      }
 
-      try {
-        let finalPrompt = systemPrompt;
+      let finalPrompt = systemPrompt;
 
-        if (mode === 'auto') {
-          const config = commandContext?.services?.config;
-          if (!config) {
-            setState((prev) => ({
-              ...prev,
-              error:
-                'Configuration service unavailable. Set up the CLI before using auto mode.',
-            }));
-            return;
-          }
-
-          const { generateAutoPrompt } = await import(
-            '../../utils/autoPromptGenerator.js'
+      if (mode === 'auto') {
+        const config = commandContext?.services?.config;
+        if (!config) {
+          throw new Error(
+            'Configuration service unavailable. Set up the CLI before using auto mode.',
           );
-          finalPrompt = await generateAutoPrompt(config, systemPrompt);
         }
 
-        await subagentManager.saveSubagent(name, profile, finalPrompt);
-        onClose();
-      } catch (err) {
-        setState((prev) => ({
-          ...prev,
-          error:
-            err instanceof Error ? err.message : 'Failed to create subagent',
-        }));
+        const { generateAutoPrompt } = await import(
+          '../../utils/autoPromptGenerator.js'
+        );
+        finalPrompt = await generateAutoPrompt(config, systemPrompt);
       }
+
+      await subagentManager.saveSubagent(name, profile, finalPrompt);
+      onClose();
     },
     [subagentManager, onClose, commandContext],
   );
