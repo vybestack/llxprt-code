@@ -224,6 +224,25 @@ describe('KeypressContext - Kitty Protocol', () => {
     );
   });
 
+  describe('Ctrl+Backslash handling', () => {
+    it('should normalize Ctrl+Backslash from CSI-u sequences', () => {
+      const { keyHandler } = setupKeypressTest();
+
+      // Backslash keycode is 92. Modifier 5 is Ctrl.
+      act(() => {
+        stdin.write('\x1b[92;5u');
+      });
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: '\\',
+          ctrl: true,
+          meta: false,
+        }),
+      );
+    });
+  });
+
   describe('paste mode', () => {
     it.each([
       {
