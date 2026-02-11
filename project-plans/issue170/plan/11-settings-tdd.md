@@ -79,6 +79,24 @@
 - WHEN: Looking for `compression.profile`
 - THEN: Found with type `'string'`, `persistToProfile: true`
 
+### REQ-CS-007.2: Profile Setting
+
+**Full Text**: The system shall accept `/set compression.profile <value>` where value is a saved profile name.
+**Behavior**:
+- GIVEN: A runtime settings service
+- WHEN: User sets `compression.profile` to `'myflashprofile'` via ephemeral
+- THEN: The value is stored and retrievable via `ephemerals.compressionProfile()`
+**Why This Matters**: Users need to be able to direct compression to use a specific (cheaper/faster) model profile.
+
+### REQ-CS-007.3: Unset
+
+**Full Text**: The system shall accept `/set unset compression.strategy` and `/set unset compression.profile` to clear the ephemeral override and revert to the persistent setting.
+**Behavior**:
+- GIVEN: Ephemeral `compression.strategy` is set to `'top-down-truncation'`
+- WHEN: User executes `/set unset compression.strategy`
+- THEN: The ephemeral override is cleared and the persistent value is used
+**Why This Matters**: Users need to be able to revert to their default settings after temporarily overriding.
+
 ### REQ-CS-006A.1: Unknown Compression Profile
 
 **Full Text**: If `compression.profile` names a profile that does not exist, the system shall throw.
@@ -98,6 +116,8 @@
     - `getSettingSpec('compression.profile')` returns a spec with type `'string'`, `persistToProfile: true`
     - `getDirectSettingSpecs()` includes both `compression.strategy` and `compression.profile`
     - `compression.strategy` spec's `enumValues` derive from the `COMPRESSION_STRATEGIES` constant (import and compare)
+    - `compression.strategy` can be unset (ephemeral cleared, falls back to persistent value) `@requirement REQ-CS-007.3`
+    - `compression.profile` can be unset (ephemeral cleared, falls back to persistent or undefined) `@requirement REQ-CS-007.3`
 
 - `packages/core/src/runtime/createAgentRuntimeContext.test.ts` (MODIFY or CREATE — add tests for new accessors)
   - MUST include: `@plan PLAN-20260211-COMPRESSION.P11`
@@ -106,8 +126,11 @@
     - `ephemerals.compressionStrategy()` returns persistent value when ephemeral is unset
     - `ephemerals.compressionStrategy()` throws when both are undefined (invariant)
     - `ephemerals.compressionProfile()` returns ephemeral value when set
+    - `ephemerals.compressionProfile()` returns ephemeral value `'myflashprofile'` when set to that value (verify exact retrieval) `@requirement REQ-CS-007.2`
     - `ephemerals.compressionProfile()` returns persistent value when ephemeral is unset
     - `ephemerals.compressionProfile()` returns undefined when neither is set (no profile is valid — means use active model)
+    - `ephemerals.compressionStrategy()` falls back to persistent after ephemeral is unset `@requirement REQ-CS-007.3`
+    - `ephemerals.compressionProfile()` falls back to persistent (or undefined) after ephemeral is unset `@requirement REQ-CS-007.3`
 
 ### Required Code Markers
 
@@ -146,4 +169,17 @@ npx vitest run packages/core/src/runtime/ 2>&1 | tail -20
 git stash  # preserve test additions
 # or
 git checkout -- packages/core/src/settings/settingsRegistry.test.ts packages/core/src/runtime/
+```
+
+## Phase Completion Marker
+
+Create: `project-plans/issue170/.completed/P11.md`
+Contents:
+```
+Phase: P11
+Completed: [timestamp]
+Files Created: [list]
+Files Modified: [list]
+Tests Added: [count]
+Verification: [paste verification command outputs]
 ```

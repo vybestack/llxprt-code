@@ -80,7 +80,7 @@ REQ-CS-006.1–006.4, REQ-CS-002.9, REQ-CS-005.5, REQ-CS-006A.2–006A.4 (making
    - `estimateTokens`: `(contents) => this.historyService.estimateTokensForContents(contents)`
    - `currentTokenCount`: `this.historyService.getTotalTokens()`
    - `logger`: `this.logger`
-   - `resolveProvider`: `(profileName?) => this.resolveProviderForRuntime(profileName || 'compression')`
+   - `resolveProvider`: `(profileName?) => this.resolveProviderForRuntime(profileName)` — when `profileName` is `undefined`, the provider uses the active model/provider; when it's a non-empty string, it resolves the named profile
    - `promptResolver`: Needs `PromptResolver` access — thread through constructor or AgentRuntimeContext
    - `promptContext`: `{ provider: this.runtimeState.provider, model: this.runtimeState.model }`
    - `promptId`: from the parameter
@@ -111,6 +111,27 @@ REQ-CS-006.1–006.4, REQ-CS-002.9, REQ-CS-005.5, REQ-CS-006A.2–006A.4 (making
    - Wire `promptResolver` into the context construction
    - MUST include: `@plan PLAN-20260211-COMPRESSION.P14`
 
+### Required Code Markers
+
+```typescript
+// In geminiChat.ts:
+/**
+ * @plan PLAN-20260211-COMPRESSION.P14
+ * @requirement REQ-CS-006.1, REQ-CS-002.9
+ */
+async performCompression(prompt_id: string): Promise<void> {
+  // ...
+}
+
+/**
+ * @plan PLAN-20260211-COMPRESSION.P14
+ * @requirement REQ-CS-006.1
+ */
+private buildCompressionContext(prompt_id: string): CompressionContext {
+  // ...
+}
+```
+
 ## Verification Commands
 
 ```bash
@@ -130,8 +151,16 @@ grep -n "getCompressionSplit\|directCompressionCall\b\|applyCompression\b\|adjus
 grep "getCompressionPrompt" packages/core/src/core/geminiChat.ts
 # Expected: 0 matches
 
-# No deferred implementation
-grep -rn -E "(TODO|FIXME|HACK|STUB)" packages/core/src/core/geminiChat.ts | grep -i compress
+# Check for TODO/FIXME/HACK markers
+grep -rn -E "(TODO|FIXME|HACK|STUB|XXX|TEMPORARY|WIP)" packages/core/src/core/geminiChat.ts | grep -v ".test.ts"
+# Expected: 0 matches
+
+# Check for cop-out comments
+grep -rn -E "(in a real|in production|ideally|for now|placeholder|not yet|will be|should be)" packages/core/src/core/geminiChat.ts | grep -v ".test.ts"
+# Expected: 0 matches
+
+# Check for empty/trivial implementations
+grep -rn -E "return \[\]|return \{\}|return null|return undefined" packages/core/src/core/geminiChat.ts | grep -v ".test.ts"
 # Expected: 0 matches
 
 # TypeScript compiles
@@ -147,6 +176,44 @@ npm run test
 npm run build
 ```
 
+## Semantic Verification Checklist
+
+### Behavioral Verification Questions
+
+1. **Does the code DO what the requirement says?**
+   - [ ] Read the requirement text (REQ-CS-006.1–006.4, REQ-CS-002.9, REQ-CS-005.5)
+   - [ ] Read the implementation code in `geminiChat.ts`
+   - [ ] Can explain HOW the dispatcher delegates, applies results, and handles errors
+
+2. **Is this REAL implementation, not placeholder?**
+   - [ ] Deferred implementation detection passed
+   - [ ] No empty returns in implementation
+   - [ ] No "will be implemented" comments
+
+3. **Would the test FAIL if implementation was removed?**
+   - [ ] Tests verify actual strategy delegation, history rebuild, and error propagation
+   - [ ] Tests would catch a dispatcher that doesn't delegate or doesn't apply results
+
+4. **Is the feature REACHABLE by users?**
+   - [ ] `performCompression()` is called during normal chat when context exceeds threshold
+   - [ ] Strategy selection is driven by `/set compression.strategy` setting
+   - [ ] Code path is fully wired: setting → factory → strategy → result → history rebuild
+
+### Integration Points Verified
+
+- [ ] `buildCompressionContext()` assembles correct fields from runtime (verified by reading both files)
+- [ ] `CompressionContext` does NOT include `historyService` (REQ-CS-001.6)
+- [ ] Strategy `compress()` return value applied correctly (clear + add each entry)
+- [ ] `PromptResolver` correctly threaded to `CompressionContext`
+- [ ] `endCompression()` always called (even on error — finally block)
+- [ ] Error handling works at component boundaries (strategy throw → propagate after unlock)
+
+### Edge Cases Verified
+
+- [ ] Empty/null input handled
+- [ ] Invalid input rejected with clear error (unknown strategy → factory throws)
+- [ ] Boundary values work correctly
+
 ## Success Criteria
 
 - All tests pass (Phase 13 dispatcher tests + all existing tests + all compression module tests)
@@ -160,4 +227,17 @@ npm run build
 
 ```bash
 git checkout -- packages/core/src/core/geminiChat.ts packages/core/src/runtime/
+```
+
+## Phase Completion Marker
+
+Create: `project-plans/issue170/.completed/P14.md`
+Contents:
+```
+Phase: P14
+Completed: [timestamp]
+Files Created: [list]
+Files Modified: [list]
+Tests Added: [count]
+Verification: [paste verification command outputs]
 ```

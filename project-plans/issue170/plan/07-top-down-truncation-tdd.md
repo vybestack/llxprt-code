@@ -115,3 +115,16 @@ grep -r "toHaveBeenCalled\b" packages/core/src/core/compression/TopDownTruncatio
 ```bash
 git checkout -- packages/core/src/core/compression/TopDownTruncationStrategy.test.ts
 ```
+
+## Phase Completion Marker
+
+Create: `project-plans/issue170/.completed/P07.md`
+Contents:
+```
+Phase: P07
+Completed: [timestamp]
+Files Created: [list]
+Files Modified: [list]
+Tests Added: [count]
+Verification: [paste verification command outputs]
+```

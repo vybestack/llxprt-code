@@ -78,7 +78,20 @@
     - History rebuild happens inside compression lock (between `startCompression` / `endCompression`)
     - Context passed to strategy does NOT include `historyService` (REQ-CS-001.6)
     - Context includes `estimateTokens` function, `currentTokenCount`, `promptResolver`, `resolveProvider`
-  - NOTE: These tests may need to work with the existing `client.test.ts` test infrastructure. Read the file to understand the mocking patterns already in use.
+   - NOTE: These tests may need to work with the existing `client.test.ts` test infrastructure. Read the file to understand the mocking patterns already in use.
+
+### Required Code Markers
+
+```typescript
+// In client.test.ts, new describe block:
+/**
+ * @plan PLAN-20260211-COMPRESSION.P13
+ * @requirement REQ-CS-006.1, REQ-CS-006.2, REQ-CS-006.3, REQ-CS-006.4
+ */
+describe('performCompression dispatcher', () => {
+  // ...
+});
+```
 
 ## Verification Commands
 
@@ -101,4 +114,17 @@ npx vitest run packages/core/src/core/client.test.ts 2>&1 | tail -30
 
 ```bash
 git checkout -- packages/core/src/core/client.test.ts
+```
+
+## Phase Completion Marker
+
+Create: `project-plans/issue170/.completed/P13.md`
+Contents:
+```
+Phase: P13
+Completed: [timestamp]
+Files Created: [list]
+Files Modified: [list]
+Tests Added: [count]
+Verification: [paste verification command outputs]
 ```

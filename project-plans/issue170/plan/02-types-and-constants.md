@@ -68,8 +68,23 @@
     - `COMPRESSION_STRATEGIES` const tuple
     - `CompressionStrategyName` derived type
     - `CompressionStrategy` interface
-    - `CompressionContext` interface (NO `historyService`)
+    - `CompressionContext` interface (NO `historyService`) — all fields MUST use `readonly` modifiers:
+      ```typescript
+      export interface CompressionContext {
+        readonly history: readonly IContent[];
+        readonly runtimeContext: AgentRuntimeContext;
+        readonly runtimeState: AgentRuntimeState;
+        readonly estimateTokens: (contents: readonly IContent[]) => Promise<number>;
+        readonly currentTokenCount: number;
+        readonly logger: Logger;
+        readonly resolveProvider: (profileName?: string) => IProvider;
+        readonly promptResolver: PromptResolver;
+        readonly promptContext: Readonly<Partial<PromptContext>>;
+        readonly promptId: string;
+      }
+      ```
     - `CompressionResult` interface with `metadata`
+    - Typed error classes: `CompressionStrategyError` (base), with subclasses or specific constructors for unknown strategy, prompt resolution failure, and execution failure. Each should include actionable context (strategy name, profile name, etc.)
 
 - `packages/core/src/core/compression/index.ts`
   - Barrel export file for the compression module
@@ -113,11 +128,26 @@ grep "historyService" packages/core/src/core/compression/types.ts
 - `types.ts` compiles with strict TypeScript
 - `CompressionStrategyName` is derived from `COMPRESSION_STRATEGIES` tuple
 - `CompressionContext` has `estimateTokens` and `currentTokenCount` but NOT `historyService`
+- All `CompressionContext` fields are `readonly`; `history` uses `readonly IContent[]`
 - `CompressionResult.metadata` has all required fields
+- `CompressionStrategyError` base class and specific subclasses are defined with actionable context fields
 - Barrel export works: `import { CompressionStrategy, COMPRESSION_STRATEGIES } from './compression/index.js'`
 
 ## Failure Recovery
 
 ```bash
 git checkout -- packages/core/src/core/compression/
+```
+
+## Phase Completion Marker
+
+Create: `project-plans/issue170/.completed/P02.md`
+Contents:
+```
+Phase: P02
+Completed: [timestamp]
+Files Created: [list]
+Files Modified: [list]
+Tests Added: [count]
+Verification: [paste verification command outputs]
 ```

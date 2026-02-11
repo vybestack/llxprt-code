@@ -71,26 +71,16 @@ export interface CompressionStrategy {
 }
 
 export interface CompressionContext {
-  /** The curated history to compress (read-only input) */
-  history: IContent[];
-  /** Runtime context for reading settings/thresholds */
-  runtimeContext: AgentRuntimeContext;
-  /** Current model/provider state */
-  runtimeState: AgentRuntimeState;
-  /** Token estimation for the history (read-only — strategies do NOT add/clear/lock history) */
-  estimateTokens: (contents: IContent[]) => Promise<number>;
-  /** Current total token count */
-  currentTokenCount: number;
-  /** Logger */
-  logger: Logger;
-  /** Resolve a provider for LLM calls (optional profile override) */
-  resolveProvider: (profileName?: string) => IProvider;
-  /** Prompt resolver for loading strategy-specific prompts */
-  promptResolver: PromptResolver;
-  /** Provider/model context for prompt resolution hierarchy */
-  promptContext: Partial<PromptContext>;
-  /** Prompt ID for telemetry */
-  promptId: string;
+  readonly history: readonly IContent[];
+  readonly runtimeContext: AgentRuntimeContext;
+  readonly runtimeState: AgentRuntimeState;
+  readonly estimateTokens: (contents: readonly IContent[]) => Promise<number>;
+  readonly currentTokenCount: number;
+  readonly logger: Logger;
+  readonly resolveProvider: (profileName?: string) => IProvider;
+  readonly promptResolver: PromptResolver;
+  readonly promptContext: Readonly<Partial<PromptContext>>;
+  readonly promptId: string;
 }
 
 export interface CompressionResult {

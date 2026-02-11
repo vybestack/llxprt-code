@@ -42,9 +42,12 @@
     - Returns `MiddleOutStrategy` instance for `'middle-out'`
     - Returns `TopDownTruncationStrategy` instance for `'top-down-truncation'`
     - Returned instances have correct `name` and `requiresLLM` values
-    - Throws error for unknown strategy name `'nonexistent'`
+    - `parseCompressionStrategyName('middle-out')` returns `'middle-out'` (typed)
+    - `parseCompressionStrategyName('top-down-truncation')` returns `'top-down-truncation'` (typed)
+    - `parseCompressionStrategyName('nonexistent')` throws `CompressionStrategyError`
     - Error message includes the unknown name (actionable)
     - Supports all names from `COMPRESSION_STRATEGIES` tuple (loop test)
+    - **Interface contract test**: Loop over all `COMPRESSION_STRATEGIES`, get each from factory, verify `name` matches the requested name, `requiresLLM` is a boolean, and `compress` is a function — this ensures all strategies satisfy the `CompressionStrategy` contract
     - Factory returns fresh instances (not shared singletons, unless intentional)
 
 ### Required Code Markers
@@ -81,4 +84,17 @@ npx vitest run packages/core/src/core/compression/compressionStrategyFactory.tes
 
 ```bash
 git checkout -- packages/core/src/core/compression/compressionStrategyFactory.test.ts
+```
+
+## Phase Completion Marker
+
+Create: `project-plans/issue170/.completed/P09.md`
+Contents:
+```
+Phase: P09
+Completed: [timestamp]
+Files Created: [list]
+Files Modified: [list]
+Tests Added: [count]
+Verification: [paste verification command outputs]
 ```

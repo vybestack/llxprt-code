@@ -64,6 +64,21 @@ No new external dependencies required for this feature.
 3. `geminiChat.ts` does NOT currently have `PromptService` or `PromptResolver` access — need to thread it through `AgentRuntimeContext` or constructor
 4. Existing `CORE_DEFAULTS` already loads `compression.md` — verify this is accessible at runtime or just for prompt installation
 
+## Required Decisions (Must Be Resolved Before P02)
+
+### Decision 1: Prompt File Path
+The requirements specify `compression/middle-out.md` but `compression.md` already exists in defaults.
+
+**Resolution required**: Determine whether PromptResolver supports subdirectory paths (e.g., `compression/middle-out.md`). If yes, rename. If no, use `compression.md` and update requirements accordingly.
+
+**Verification command**:
+```bash
+# Check if PromptResolver handles subdirectory paths
+grep -rn "resolveFile\|resolve.*path" packages/core/src/prompt-config/prompt-resolver.ts | head -20
+```
+
+This decision MUST be documented before proceeding to Phase 02.
+
 ## Blocking Issues Found
 
 [To be filled by preflight worker]
@@ -78,3 +93,16 @@ No new external dependencies required for this feature.
 - [ ] Prompt access path from `performCompression()` identified
 
 IF ANY CHECKBOX IS UNCHECKED: STOP and update plan before proceeding.
+
+## Phase Completion Marker
+
+Create: `project-plans/issue170/.completed/P01.md`
+Contents:
+```
+Phase: P01
+Completed: [timestamp]
+Files Created: [list]
+Files Modified: [list]
+Tests Added: [count]
+Verification: [paste verification command outputs]
+```

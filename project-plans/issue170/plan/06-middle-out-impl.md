@@ -103,8 +103,16 @@ npx vitest run packages/core/src/core/compression/MiddleOutStrategy.test.ts
 grep -r "@plan PLAN-20260211-COMPRESSION.P06" packages/core/src/core/compression/ | wc -l
 # Expected: 3+ occurrences
 
-# No deferred implementation
-grep -rn -E "(TODO|FIXME|HACK|STUB)" packages/core/src/core/compression/MiddleOutStrategy.ts
+# Check for TODO/FIXME/HACK markers
+grep -rn -E "(TODO|FIXME|HACK|STUB|XXX|TEMPORARY|WIP)" packages/core/src/core/compression/MiddleOutStrategy.ts | grep -v ".test.ts"
+# Expected: 0 matches
+
+# Check for cop-out comments
+grep -rn -E "(in a real|in production|ideally|for now|placeholder|not yet|will be|should be)" packages/core/src/core/compression/MiddleOutStrategy.ts | grep -v ".test.ts"
+# Expected: 0 matches
+
+# Check for empty/trivial implementations
+grep -rn -E "return \[\]|return \{\}|return null|return undefined" packages/core/src/core/compression/MiddleOutStrategy.ts | grep -v ".test.ts"
 # Expected: 0 matches
 
 # TypeScript compiles
@@ -113,6 +121,42 @@ npm run typecheck
 # Full suite still passes
 npm run test
 ```
+
+## Semantic Verification Checklist
+
+### Behavioral Verification Questions
+
+1. **Does the code DO what the requirement says?**
+   - [ ] Read the requirement text (REQ-CS-002.1–002.8, REQ-CS-005.1–005.4)
+   - [ ] Read the implementation code in `MiddleOutStrategy.ts`
+   - [ ] Can explain HOW the sandwich split, LLM call, and result assembly fulfill requirements
+
+2. **Is this REAL implementation, not placeholder?**
+   - [ ] Deferred implementation detection passed
+   - [ ] No empty returns in implementation
+   - [ ] No "will be implemented" comments
+
+3. **Would the test FAIL if implementation was removed?**
+   - [ ] Tests verify actual compressed history output, not just that code ran
+   - [ ] Tests would catch a broken split, missing summary, or wrong metadata
+
+4. **Is the feature REACHABLE by users?**
+   - [ ] Code is called from existing code paths (or will be once dispatcher is wired in P14)
+   - [ ] There is a path from runtime to this code (factory returns this strategy)
+
+### Integration Points Verified
+
+- [ ] `CompressionContext` fields used correctly by strategy (verified by reading both files)
+- [ ] `CompressionResult` returned correctly (verified by checking dispatcher usage in P14)
+- [ ] `PromptResolver.resolveFile()` called with correct arguments
+- [ ] `resolveProvider()` called with profile name or undefined
+- [ ] Error handling works at component boundaries (prompt not found, LLM failure)
+
+### Edge Cases Verified
+
+- [ ] Empty/null input handled (empty history)
+- [ ] Invalid input rejected with clear error
+- [ ] Boundary values work correctly (minimum compressible messages, tool-call boundaries at edges)
 
 ## Success Criteria
 
@@ -127,4 +171,17 @@ npm run test
 
 ```bash
 git checkout -- packages/core/src/core/compression/MiddleOutStrategy.ts packages/core/src/core/compression/index.ts
+```
+
+## Phase Completion Marker
+
+Create: `project-plans/issue170/.completed/P06.md`
+Contents:
+```
+Phase: P06
+Completed: [timestamp]
+Files Created: [list]
+Files Modified: [list]
+Tests Added: [count]
+Verification: [paste verification command outputs]
 ```
