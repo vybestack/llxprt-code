@@ -706,6 +706,7 @@ export async function loadHierarchicalLlxprtMemory(
     memoryImportFormat,
     fileFilteringOptions,
     settings.ui?.memoryDiscoveryMaxDirs,
+    settings.ui?.memoryDiscoveryMaxDepth,
   );
 }
 

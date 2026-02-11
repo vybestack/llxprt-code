@@ -483,6 +483,133 @@ My code memory
     },
   );
 
+  it('should respect the maxDepth parameter during downward scan', async () => {
+    // Create files at multiple depths from CWD
+    const cwdFile = await createTestFile(
+      path.join(cwd, DEFAULT_CONTEXT_FILENAME),
+      'CWD memory',
+    );
+    const level1File = await createTestFile(
+      path.join(cwd, 'level1', DEFAULT_CONTEXT_FILENAME),
+      'Level 1 memory',
+    );
+    await createTestFile(
+      path.join(cwd, 'level1', 'level2', DEFAULT_CONTEXT_FILENAME),
+      'Level 2 memory',
+    );
+    await createTestFile(
+      path.join(cwd, 'level1', 'level2', 'level3', DEFAULT_CONTEXT_FILENAME),
+      'Level 3 memory',
+    );
+
+    const result = await loadServerHierarchicalMemory(
+      cwd,
+      [],
+      false,
+      new FileDiscoveryService(projectRoot),
+      [],
+      DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      1, // maxDepth = 1, only CWD (depth 0) and level1 (depth 1)
+    );
+
+    // Should find cwdFile (depth 0) and level1File (depth 1) from downward scan
+    // Should NOT find level2 or level3 files
+    expect(result.filePaths).toContain(cwdFile);
+    expect(result.filePaths).toContain(level1File);
+    expect(result.memoryContent).toContain('CWD memory');
+    expect(result.memoryContent).toContain('Level 1 memory');
+    expect(result.memoryContent).not.toContain('Level 2 memory');
+    expect(result.memoryContent).not.toContain('Level 3 memory');
+  });
+
+  it('should not affect upward traversal when maxDepth is 0', async () => {
+    // Create global file
+    const globalFile = await createTestFile(
+      path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+      'Global memory',
+    );
+    // Create project root file (found via upward traversal)
+    const projectRootFile = await createTestFile(
+      path.join(projectRoot, DEFAULT_CONTEXT_FILENAME),
+      'Project root memory',
+    );
+    // Create CWD file (found via both upward and downward)
+    const cwdFile = await createTestFile(
+      path.join(cwd, DEFAULT_CONTEXT_FILENAME),
+      'CWD memory',
+    );
+    // Create subdirectory file (found only via downward traversal)
+    await createTestFile(
+      path.join(cwd, 'subdir', DEFAULT_CONTEXT_FILENAME),
+      'Subdir memory',
+    );
+
+    const result = await loadServerHierarchicalMemory(
+      cwd,
+      [],
+      false,
+      new FileDiscoveryService(projectRoot),
+      [],
+      DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      0, // maxDepth = 0, downward scan only finds CWD level
+    );
+
+    // Global and upward-found files should still be present
+    expect(result.filePaths).toContain(globalFile);
+    expect(result.filePaths).toContain(projectRootFile);
+    expect(result.filePaths).toContain(cwdFile);
+    expect(result.memoryContent).toContain('Global memory');
+    expect(result.memoryContent).toContain('Project root memory');
+    expect(result.memoryContent).toContain('CWD memory');
+    // Subdirectory file should NOT be present (maxDepth=0 prevents downward beyond CWD)
+    expect(result.memoryContent).not.toContain('Subdir memory');
+  });
+
+  it('should not affect .llxprt/LLXPRT.md files during upward traversal when maxDepth is 0', async () => {
+    // Create .llxprt/LLXPRT.md at project root (found via upward scan)
+    const projectLlxprtFile = await createTestFile(
+      path.join(projectRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+      'Project scoped memory',
+    );
+    // Create .llxprt/LLXPRT.md at CWD (found via upward scan)
+    const cwdLlxprtFile = await createTestFile(
+      path.join(cwd, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+      'CWD scoped memory',
+    );
+    // Create a subdirectory file (found only via downward traversal)
+    await createTestFile(
+      path.join(cwd, 'deep', DEFAULT_CONTEXT_FILENAME),
+      'Deep memory',
+    );
+
+    const result = await loadServerHierarchicalMemory(
+      cwd,
+      [],
+      false,
+      new FileDiscoveryService(projectRoot),
+      [],
+      DEFAULT_FOLDER_TRUST,
+      'tree',
+      undefined,
+      200,
+      0, // maxDepth = 0
+    );
+
+    // .llxprt/LLXPRT.md files from upward scan should still be present
+    expect(result.filePaths).toContain(projectLlxprtFile);
+    expect(result.filePaths).toContain(cwdLlxprtFile);
+    expect(result.memoryContent).toContain('Project scoped memory');
+    expect(result.memoryContent).toContain('CWD scoped memory');
+    // Downward-only file should NOT be present
+    expect(result.memoryContent).not.toContain('Deep memory');
+  });
+
   it('should load extension context file paths', async () => {
     const extensionFilePath = await createTestFile(
       path.join(testRootDir, 'extensions/ext1/LLXPRT.md'),
