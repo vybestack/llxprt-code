@@ -17,10 +17,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import type {
-  IContent,
-  ContentBlock,
-} from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type {
   CompressionContext,
@@ -29,7 +26,7 @@ import type {
   CompressionStrategy,
 } from './types.js';
 import { CompressionExecutionError, PromptResolutionError } from './types.js';
-import { adjustForToolCallBoundary } from './utils.js';
+import { adjustForToolCallBoundary, aggregateTextFromBlocks } from './utils.js';
 import { getCompressionPrompt } from '../prompts.js';
 
 const MINIMUM_MIDDLE_MESSAGES = 4;
@@ -37,33 +34,6 @@ const MINIMUM_MIDDLE_MESSAGES = 4;
 const ACK_TEXT = 'Got it. Thanks for the additional context!';
 const TRIGGER_INSTRUCTION =
   'First, reason in your scratchpad. Then, generate the <state_snapshot>.';
-
-// ---------------------------------------------------------------------------
-// Text aggregation (mirrors aggregateTextWithSpacing from geminiChat.ts)
-// ---------------------------------------------------------------------------
-
-function aggregateTextFromBlocks(
-  blocks: ContentBlock[],
-  currentText: string,
-  lastBlockWasNonText: boolean,
-): { text: string; lastBlockWasNonText: boolean } {
-  let aggregatedText = currentText;
-  let wasNonText = lastBlockWasNonText;
-
-  for (const block of blocks) {
-    if (block.type === 'text') {
-      if (wasNonText && aggregatedText.length > 0) {
-        aggregatedText += ' ';
-      }
-      aggregatedText += block.text;
-      wasNonText = false;
-    } else {
-      wasNonText = true;
-    }
-  }
-
-  return { text: aggregatedText, lastBlockWasNonText: wasNonText };
-}
 
 // ---------------------------------------------------------------------------
 // MiddleOutStrategy
