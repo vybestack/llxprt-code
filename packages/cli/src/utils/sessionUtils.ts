@@ -104,7 +104,8 @@ export const getAllSessionFiles = async (
           // Session files may have extended message records with parts/text
           const firstUserMessage =
             (userMsg?.text as string) ??
-            (userMsg?.parts as Array<{ text?: string }> | undefined)?.[0]?.text ??
+            (userMsg?.parts as Array<{ text?: string }> | undefined)?.[0]
+              ?.text ??
             '(no message)';
 
           const sessionInfo: SessionInfo = {
@@ -156,7 +157,6 @@ export const getSessionFiles = async (
 
   return validSessions;
 };
-
 
 /**
  * Utility class for session discovery and selection.
@@ -286,4 +286,3 @@ export class SessionSelector {
     }
   }
 }
-

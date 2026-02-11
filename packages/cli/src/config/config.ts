@@ -361,8 +361,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .option('delete-session', {
           type: 'string',
-          description:
-            'Delete a session by index and exit.',
+          description: 'Delete a session by index and exit.',
         })
         .option('include-directories', {
           type: 'array',

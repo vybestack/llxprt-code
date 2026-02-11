@@ -17,7 +17,6 @@ import {
   stripUnsafeCharacters,
   getCachedStringWidth,
 } from '../../utils/textUtils.js';
-import type { Key } from '../../contexts/KeypressContext.js';
 import { handleVimAction, VimAction } from './vim-buffer-actions.js';
 import { enableSupportedProtocol } from '../../utils/kittyProtocolDetector.js';
 

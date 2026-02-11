@@ -153,7 +153,6 @@ describe('McpPromptLoader', () => {
     });
   });
 
-
   describe('loadCommands', () => {
     const mockConfigWithPrompts = {
       getMcpClientManager: () => ({
@@ -429,5 +428,4 @@ describe('McpPromptLoader', () => {
       });
     });
   });
-
 });
