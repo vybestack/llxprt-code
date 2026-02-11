@@ -52,6 +52,7 @@ import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-regis
 import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,
+  type ModelDefaultRule,
 } from '../providers/providerAliases.js';
 
 type ProfileApplicationResult = Awaited<
@@ -96,27 +97,25 @@ export {
 const logger = new DebugLogger('llxprt:runtime:settings');
 
 /**
- * Model-aware ephemeral defaults applied when switching to a provider
- * whose resolved model matches one of the patterns below.
- * Settings are only applied when the ephemeral key is not already set,
- * so explicit profile or alias values always win.
- *
- * @requirement Issue #1323 – reasoning defaults should only apply to
- * models that actually support extended thinking (e.g. Opus).
+ * Compute merged ephemeral settings from modelDefaults rules that match a model name.
+ * Rules are applied in order — later rules override earlier for the same key.
+ * Returns a flat Record of the merged settings.
  */
-export const MODEL_EPHEMERAL_DEFAULTS: ReadonlyArray<{
-  pattern: RegExp;
-  settings: Record<string, unknown>;
-}> = [
-  {
-    pattern: /claude.*opus|claude-opus/,
-    settings: {
-      'reasoning.enabled': true,
-      'reasoning.adaptiveThinking': true,
-      'reasoning.effort': 'high',
-    },
-  },
-];
+function computeModelDefaults(
+  modelName: string,
+  modelDefaultRules: ModelDefaultRule[],
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = {};
+  for (const rule of modelDefaultRules) {
+    const regex = new RegExp(rule.pattern, 'i');
+    if (regex.test(modelName)) {
+      for (const [key, value] of Object.entries(rule.ephemeralSettings)) {
+        merged[key] = value;
+      }
+    }
+  }
+  return merged;
+}
 
 const STATELESS_METADATA_KEYS = [
   'statelessHardening',
@@ -1603,6 +1602,13 @@ export async function switchActiveProvider(
     config.setEphemeralSetting(key, undefined);
   }
 
+  // Snapshot of keys that survived the ephemeral clear.
+  // These are exactly the preserveEphemerals-listed keys that had values.
+  // Model defaults must NOT override these — they represent user/profile intent.
+  const preAliasEphemeralKeys = new Set(
+    Object.keys(config.getEphemeralSettings()),
+  );
+
   await providerManager.setActiveProvider(name);
 
   config.setProviderManager(providerManager);
@@ -1955,17 +1961,17 @@ export async function switchActiveProvider(
     }
   }
 
-  // Apply model-aware ephemeral defaults (e.g. reasoning for Opus models).
-  // Skipped when the caller is a profile application (skipModelDefaults),
-  // and only applied when the ephemeral key is not already set.
-  if (!skipModelDefaults && modelToApply) {
-    for (const rule of MODEL_EPHEMERAL_DEFAULTS) {
-      if (rule.pattern.test(modelToApply)) {
-        for (const [key, value] of Object.entries(rule.settings)) {
-          if (config.getEphemeralSetting(key) === undefined) {
-            config.setEphemeralSetting(key, value);
-          }
-        }
+  // Apply model-aware ephemeral defaults from alias config modelDefaults.
+  // Skipped when the caller is a profile application (skipModelDefaults).
+  // Model defaults override alias-level ephemeralSettings but NOT preserved keys.
+  if (!skipModelDefaults && modelToApply && aliasConfig?.modelDefaults) {
+    const modelDefaults = computeModelDefaults(
+      modelToApply,
+      aliasConfig.modelDefaults,
+    );
+    for (const [key, value] of Object.entries(modelDefaults)) {
+      if (!preAliasEphemeralKeys.has(key)) {
+        config.setEphemeralSetting(key, value);
       }
     }
   }
@@ -2210,6 +2216,52 @@ export async function setActiveModel(
   }
 
   config.setModel(modelName);
+
+  // Load alias config for the current provider to apply model defaults
+  let aliasConfig: ProviderAliasConfig | undefined;
+  try {
+    aliasConfig = loadProviderAliasEntries().find(
+      (entry) => entry.alias === activeProvider.name,
+    )?.config;
+  } catch {
+    aliasConfig = undefined;
+  }
+
+  // Stateless recomputation of model defaults.
+  // Compare old model's defaults against new model's defaults to determine
+  // which keys to clear (no longer applicable) and which to apply (newly applicable),
+  // while protecting user-set values (current value differs from old default).
+  if (aliasConfig?.modelDefaults) {
+    const oldDefaults = previousModel
+      ? computeModelDefaults(previousModel, aliasConfig.modelDefaults)
+      : {};
+
+    const newDefaults = computeModelDefaults(
+      modelName,
+      aliasConfig.modelDefaults,
+    );
+
+    // Clear keys in old defaults but NOT in new defaults,
+    // only if current value matches the old default (model-defaulted, not user-set).
+    for (const [key, oldValue] of Object.entries(oldDefaults)) {
+      if (!(key in newDefaults)) {
+        const currentValue = config.getEphemeralSetting(key);
+        if (currentValue === oldValue) {
+          config.setEphemeralSetting(key, undefined);
+        }
+      }
+    }
+
+    // Apply new defaults: only if key is undefined or current value matches old default.
+    for (const [key, newValue] of Object.entries(newDefaults)) {
+      const currentValue = config.getEphemeralSetting(key);
+      if (currentValue === undefined) {
+        config.setEphemeralSetting(key, newValue);
+      } else if (key in oldDefaults && currentValue === oldDefaults[key]) {
+        config.setEphemeralSetting(key, newValue);
+      }
+    }
+  }
 
   return {
     providerName: activeProvider.name,
