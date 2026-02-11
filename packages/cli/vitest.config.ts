@@ -28,7 +28,7 @@ const baseExcludePatterns = [
   '**/test-utils/**/*.test.tsx',
   '**/ui/App.e2e.test.tsx',
   '**/ui/App.test.tsx',
-  '**/ui/commands/directoryCommand.test.tsx',
+  // '**/ui/commands/directoryCommand.test.tsx', // Temporarily enabled for trust gating implementation (9786c4dcf)
   '**/ui/components/*.test.tsx',
   '**/ui/components/__tests__/*.test.tsx',
   '**/ui/components/messages/DiffRenderer.test.tsx',
@@ -55,7 +55,7 @@ const baseExcludePatterns = [
   '**/ui/hooks/usePermissionsModifyTrust.test.tsx',
   '**/ui/privacy/**/*.test.tsx',
   '**/ui/utils/**/*.test.tsx',
-  '**/gemini.test.tsx',
+  // '**/gemini.test.tsx', // Temporarily enabled for terminal mode cleanup (ba88707b1 reimplementation)
   // Exclude UI component tests that may directly import React DOM
   '**/ui/components/**/*.test.ts',
   // Temporarily suppress remaining React 19 regressions until the hooks are migrated
@@ -105,6 +105,14 @@ export default defineConfig({
       'src/ui/components/messages/OAuthUrlMessage.test.tsx',
       // Include useSlashCompletion extension filtering tests for fa93b56243 reimplementation
       'src/ui/hooks/useSlashCompletion.extensions.test.tsx',
+      // Include gemini test for terminal mode cleanup (ba88707b1 reimplementation)
+      'src/gemini.test.tsx',
+      // Include directoryCommand test for trust gating implementation (9786c4dcf reimplementation)
+      'src/ui/commands/directoryCommand.test.tsx',
+      // Include ProfileChangeMessage test for cleanup-plan ab11b2c27
+      'src/ui/components/messages/ProfileChangeMessage.test.tsx',
+      // Include HistoryItemDisplay test for cleanup-plan ab11b2c27
+      'src/ui/components/HistoryItemDisplay.test.tsx',
       // Include useTodoContinuation test for issue #1277
       'src/ui/hooks/useTodoContinuation.spec.ts',
     ],

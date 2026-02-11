@@ -75,50 +75,43 @@ describe('handleInstall', () => {
     vi.clearAllMocks();
   });
 
-  it('should install an extension from a http source', async () => {
-    mockInstallOrUpdateExtension.mockResolvedValue('http-extension');
-    mockLoadExtensionByName.mockReturnValue({
-      name: 'http-extension',
-    } as unknown as GeminiCLIExtension);
-
-    await handleInstall({
+  it.each([
+    {
       source: 'http://google.com',
-    });
-
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Extension "http-extension" installed successfully and enabled.',
-    );
-  });
-
-  it('should install an extension from a https source', async () => {
-    mockInstallOrUpdateExtension.mockResolvedValue('https-extension');
-    mockLoadExtensionByName.mockReturnValue({
-      name: 'https-extension',
-    } as unknown as GeminiCLIExtension);
-
-    await handleInstall({
+      name: 'http-extension',
+      type: 'http source',
+    },
+    {
       source: 'https://google.com',
-    });
+      name: 'https-extension',
+      type: 'https source',
+    },
+    { source: 'git@some-url', name: 'git-extension', type: 'git source' },
+    { source: 'sso://google.com', name: 'sso-extension', type: 'sso source' },
+    {
+      source: '/some/path',
+      name: 'local-extension',
+      type: 'local path',
+      needsStat: true,
+    },
+  ])(
+    'should install an extension from a $type',
+    async ({ source, name, needsStat }) => {
+      if (needsStat) {
+        mockStat.mockResolvedValue({} as Stats);
+      }
+      mockInstallOrUpdateExtension.mockResolvedValue(name);
+      mockLoadExtensionByName.mockReturnValue({
+        name,
+      } as unknown as GeminiCLIExtension);
 
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Extension "https-extension" installed successfully and enabled.',
-    );
-  });
+      await handleInstall({ source });
 
-  it('should install an extension from a git source', async () => {
-    mockInstallOrUpdateExtension.mockResolvedValue('git-extension');
-    mockLoadExtensionByName.mockReturnValue({
-      name: 'git-extension',
-    } as unknown as GeminiCLIExtension);
-
-    await handleInstall({
-      source: 'git@some-url',
-    });
-
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Extension "git-extension" installed successfully and enabled.',
-    );
-  });
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        `Extension "${name}" installed successfully and enabled.`,
+      );
+    },
+  );
 
   it('throws an error from an unknown source', async () => {
     mockStat.mockRejectedValue(new Error('ENOENT: no such file or directory'));
@@ -128,36 +121,6 @@ describe('handleInstall', () => {
 
     expect(consoleErrorSpy).toHaveBeenCalledWith('Install source not found.');
     expect(processSpy).toHaveBeenCalledWith(1);
-  });
-
-  it('should install an extension from a sso source', async () => {
-    mockInstallOrUpdateExtension.mockResolvedValue('sso-extension');
-    mockLoadExtensionByName.mockReturnValue({
-      name: 'sso-extension',
-    } as unknown as GeminiCLIExtension);
-
-    await handleInstall({
-      source: 'sso://google.com',
-    });
-
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Extension "sso-extension" installed successfully and enabled.',
-    );
-  });
-
-  it('should install an extension from a local path', async () => {
-    mockInstallOrUpdateExtension.mockResolvedValue('local-extension');
-    mockLoadExtensionByName.mockReturnValue({
-      name: 'local-extension',
-    } as unknown as GeminiCLIExtension);
-    mockStat.mockResolvedValue({} as Stats);
-    await handleInstall({
-      source: '/some/path',
-    });
-
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Extension "local-extension" installed successfully and enabled.',
-    );
   });
 
   it('should throw an error if install extension fails', async () => {

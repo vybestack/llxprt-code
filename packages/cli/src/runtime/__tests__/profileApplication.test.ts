@@ -178,7 +178,12 @@ const mockProfileManager = {
   loadProfile: vi.fn<(profileName: string) => Promise<Profile>>(),
 };
 
+let savedGcpProject: string | undefined;
+let savedGcpLocation: string | undefined;
+
 beforeEach(() => {
+  savedGcpProject = process.env.GOOGLE_CLOUD_PROJECT;
+  savedGcpLocation = process.env.GOOGLE_CLOUD_LOCATION;
   configStub.model = undefined;
   configStub.ephemerals.clear();
   settingsServiceStub.currentProfile = null;
@@ -218,6 +223,18 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (savedGcpProject === undefined) {
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+  } else {
+    process.env.GOOGLE_CLOUD_PROJECT = savedGcpProject;
+  }
+
+  if (savedGcpLocation === undefined) {
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+  } else {
+    process.env.GOOGLE_CLOUD_LOCATION = savedGcpLocation;
+  }
+
   vi.clearAllMocks();
 });
 
@@ -1066,5 +1083,376 @@ describe('LoadBalancer profile integration', () => {
     expect(mockProfileManager.loadProfile).not.toHaveBeenCalled();
     expect(result.providerName).toBe('openai');
     expect(result.modelName).toBe('gpt-4o');
+  });
+});
+
+describe('STEP 2 workflow: pre-switch auth wiring', () => {
+  it('sets auth-keyfile ephemeral and provider setting from keyfile before switch', async () => {
+    vi.mocked(mockFs.readFile).mockResolvedValue('keyfile-api-key');
+
+    providerManagerStub.available = ['anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-keyfile': '~/.my-key',
+      },
+    };
+
+    await applyProfileWithGuards(profile);
+
+    expect(settingsServiceStub.getProviderSettings('anthropic')['apiKey']).toBe(
+      'keyfile-api-key',
+    );
+    expect(
+      settingsServiceStub.getProviderSettings('anthropic')['apiKeyfile'],
+    ).toBeDefined();
+  });
+
+  it('sets base-url in both ephemeral and provider settings before switch', async () => {
+    providerManagerStub.available = ['anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4',
+      modelParams: {},
+      ephemeralSettings: {
+        'base-url': 'https://custom.api.com/v1',
+        'auth-key': 'some-key',
+      },
+    };
+
+    await applyProfileWithGuards(profile);
+
+    const provSettings = settingsServiceStub.getProviderSettings('anthropic');
+    expect(provSettings['baseUrl']).toBe('https://custom.api.com/v1');
+    expect(provSettings['baseURL']).toBe('https://custom.api.com/v1');
+  });
+
+  it('sets GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION as ephemerals and env vars', async () => {
+    providerManagerStub.available = ['gemini'];
+    providerManagerStub.providerLookup = new Map([
+      ['gemini', { name: 'gemini' }],
+    ]);
+    providerManagerStub.activeProviderName = 'gemini';
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'gemini',
+      model: 'gemini-2.0-flash',
+      modelParams: {},
+      ephemeralSettings: {
+        GOOGLE_CLOUD_PROJECT: 'my-project',
+        GOOGLE_CLOUD_LOCATION: 'us-central1',
+      },
+    };
+
+    await applyProfileWithGuards(profile);
+
+    expect(configStub.getEphemeralSetting('GOOGLE_CLOUD_PROJECT')).toBe(
+      'my-project',
+    );
+    expect(configStub.getEphemeralSetting('GOOGLE_CLOUD_LOCATION')).toBe(
+      'us-central1',
+    );
+    expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('my-project');
+    expect(process.env.GOOGLE_CLOUD_LOCATION).toBe('us-central1');
+  });
+
+  it('falls back to direct auth-key when keyfile read returns empty content', async () => {
+    vi.mocked(mockFs.readFile).mockResolvedValue('   ');
+
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-keyfile': '/some/keyfile',
+        'auth-key': 'direct-fallback-key',
+      },
+    };
+
+    await applyProfileWithGuards(profile);
+
+    expect(configStub.getEphemeralSetting('auth-key')).toBe(
+      'direct-fallback-key',
+    );
+  });
+});
+
+describe('STEP 5 workflow: non-auth ephemerals', () => {
+  it('applies non-auth ephemeral settings after provider switch', async () => {
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    const profile = {
+      version: 1 as const,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: {
+        'context-limit': 200000,
+        streaming: 'enabled' as const,
+        'custom-setting': 'value',
+      },
+    } as unknown as Profile;
+
+    await applyProfileWithGuards(profile);
+
+    expect(configStub.getEphemeralSetting('context-limit')).toBe(200000);
+    expect(configStub.getEphemeralSetting('streaming')).toBe('enabled');
+    expect(configStub.getEphemeralSetting('custom-setting')).toBe('value');
+  });
+
+  it('does not re-apply auth-key, auth-keyfile, base-url, or GCP settings in non-auth step', async () => {
+    const ephemeralSetCalls: Array<{ key: string; value: unknown }> = [];
+    setEphemeralSettingMock.mockImplementation((key, value) => {
+      ephemeralSetCalls.push({ key, value });
+      configStub.setEphemeralSetting(key, value);
+    });
+
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key': 'my-key',
+        'base-url': 'https://example.com',
+        GOOGLE_CLOUD_PROJECT: 'proj',
+        GOOGLE_CLOUD_LOCATION: 'loc',
+        'context-limit': 100000,
+      },
+    };
+
+    await applyProfileWithGuards(profile);
+
+    const nonClearCalls = ephemeralSetCalls.filter(
+      (c) => c.value !== undefined,
+    );
+    const contextLimitSets = nonClearCalls.filter(
+      (c) => c.key === 'context-limit',
+    );
+    expect(contextLimitSets.length).toBe(1);
+    expect(contextLimitSets[0].value).toBe(100000);
+
+    const authKeyNonClearSets = nonClearCalls.filter(
+      (c) => c.key === 'auth-key',
+    );
+    const baseUrlNonClearSets = nonClearCalls.filter(
+      (c) => c.key === 'base-url',
+    );
+    const gcpProjectNonClearSets = nonClearCalls.filter(
+      (c) => c.key === 'GOOGLE_CLOUD_PROJECT',
+    );
+    const gcpLocationNonClearSets = nonClearCalls.filter(
+      (c) => c.key === 'GOOGLE_CLOUD_LOCATION',
+    );
+    expect(authKeyNonClearSets.length).toBe(1);
+    expect(baseUrlNonClearSets.length).toBe(1);
+    expect(gcpProjectNonClearSets.length).toBe(1);
+    expect(gcpLocationNonClearSets.length).toBe(1);
+  });
+
+  it('clears previously-set ephemerals that are not in the new profile', async () => {
+    configStub.setEphemeralSetting('old-custom-setting', 'old-value');
+    configStub.setEphemeralSetting('context-limit', 50000);
+
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: {
+        streaming: 'enabled',
+      },
+    };
+
+    await applyProfileWithGuards(profile);
+
+    expect(
+      configStub.getEphemeralSetting('old-custom-setting'),
+    ).toBeUndefined();
+    expect(configStub.getEphemeralSetting('context-limit')).toBeUndefined();
+    expect(configStub.getEphemeralSetting('streaming')).toBe('enabled');
+  });
+});
+
+describe('STEP 6 workflow: model and modelParams application', () => {
+  it('sets the requested model and returns it in result', async () => {
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+    setActiveModelMock.mockResolvedValueOnce({ nextModel: 'gpt-4o-mini' });
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const result = await applyProfileWithGuards(profile);
+
+    expect(setActiveModelMock).toHaveBeenCalledWith('gpt-4o-mini');
+    expect(result.modelName).toBe('gpt-4o-mini');
+  });
+
+  it('falls back to provider default model when profile model is empty', async () => {
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      [
+        'openai',
+        {
+          name: 'openai',
+          getDefaultModel: () => 'gpt-4o',
+        },
+      ],
+    ]);
+    setActiveModelMock.mockResolvedValueOnce({ nextModel: 'gpt-4o' });
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const result = await applyProfileWithGuards(profile);
+
+    expect(setActiveModelMock).toHaveBeenCalledWith('gpt-4o');
+    expect(result.modelName).toBe('gpt-4o');
+  });
+
+  it('throws when no model is available and profile has no model', async () => {
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+    configStub.model = undefined;
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    await expect(applyProfileWithGuards(profile)).rejects.toThrow(
+      /does not specify a model/,
+    );
+  });
+
+  it('applies profile modelParams and clears stale params', async () => {
+    getActiveModelParamsMock.mockReturnValue({
+      temperature: 0.5,
+      'max-tokens': 1000,
+      'old-param': 'stale',
+    });
+
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {
+        temperature: 0.9,
+        'top-p': 0.95,
+      },
+      ephemeralSettings: {},
+    };
+
+    await applyProfileWithGuards(profile);
+
+    expect(setActiveModelParamMock).toHaveBeenCalledWith('temperature', 0.9);
+    expect(setActiveModelParamMock).toHaveBeenCalledWith('top-p', 0.95);
+    expect(clearActiveModelParamMock).toHaveBeenCalledWith('max-tokens');
+    expect(clearActiveModelParamMock).toHaveBeenCalledWith('old-param');
+  });
+
+  it('includes model info message in result', async () => {
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+    setActiveModelMock.mockResolvedValueOnce({ nextModel: 'gpt-4o-mini' });
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const result = await applyProfileWithGuards(profile);
+
+    expect(result.infoMessages).toContain(
+      "Model set to 'gpt-4o-mini' for provider 'openai'.",
+    );
+  });
+
+  it('throws when active provider is not registered after model set', async () => {
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    const origGetActiveProvider = providerManagerStub.getActiveProvider;
+    switchActiveProviderMock.mockImplementation(async (providerName) => {
+      providerManagerStub.activeProviderName = providerName;
+      providerManagerStub.providerLookup.delete(providerName);
+      providerManagerStub.getActiveProvider = () => null as never;
+      return { infoMessages: [], changed: true };
+    });
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    await expect(applyProfileWithGuards(profile)).rejects.toThrow(
+      /Active provider.*is not registered/,
+    );
+    providerManagerStub.getActiveProvider = origGetActiveProvider;
   });
 });

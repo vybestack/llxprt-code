@@ -1023,6 +1023,13 @@
       "default": false,
       "type": "boolean"
     },
+    "showProfileChangeInChat": {
+      "title": "Show Profile Change in Chat",
+      "description": "Show a message in chat when the active profile changes.",
+      "markdownDescription": "Show a message in chat when the active profile changes.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `true`",
+      "default": true,
+      "type": "boolean"
+    },
     "enableFuzzyFiltering": {
       "title": "Enable Fuzzy Filtering",
       "description": "Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., \"prd\" to match \"production\"). When disabled, only exact prefix matches are shown.",

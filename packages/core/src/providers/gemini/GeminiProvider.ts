@@ -49,7 +49,7 @@ import {
   isNetworkTransientError,
 } from '../../utils/retry.js';
 import { ApiError } from '@google/genai';
-// ThinkingLevel is not directly exported, use string literals
+import { isGemini3Model } from '../../config/models.js';
 
 /**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -91,6 +91,32 @@ type CodeAssistGeneratorFactory =
 type CodeAssistContentGenerator = Awaited<
   ReturnType<CodeAssistGeneratorFactory>
 >;
+
+type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
+/**
+ * Maps a reasoning effort level to the corresponding Gemini 3.x thinkingLevel string.
+ * Returns undefined when no effort is specified, allowing the API to use its default.
+ */
+function mapReasoningEffortToThinkingLevel(
+  effort: ReasoningEffort | undefined,
+): string | undefined {
+  if (effort === undefined) {
+    return undefined;
+  }
+  switch (effort) {
+    case 'minimal':
+    case 'low':
+      return 'LOW';
+    case 'medium':
+      return 'MEDIUM';
+    case 'high':
+    case 'xhigh':
+      return 'HIGH';
+    default:
+      return undefined;
+  }
+}
 
 export class GeminiProvider extends BaseProvider {
   /**
@@ -1224,7 +1250,6 @@ export class GeminiProvider extends BaseProvider {
         | 'high'
         | 'xhigh'
         | undefined);
-    void reasoningEffort;
     const reasoningMaxTokens =
       (options.invocation?.getModelBehavior('reasoning.maxTokens') as
         | number
@@ -1344,14 +1369,25 @@ export class GeminiProvider extends BaseProvider {
 
     // Configure thinkingConfig for Gemini models when reasoning is enabled
     // @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006
-    // ThinkingConfig uses:
-    //   - includeThoughts: boolean - whether to include thoughts in response
-    //   - thinkingBudget: number - token budget (0=DISABLED, -1=AUTOMATIC, or specific number)
+    // Gemini 2.x: uses thinkingBudget (number: 0=DISABLED, -1=AUTOMATIC, or specific token count)
+    // Gemini 3.x: uses thinkingLevel (string: LOW/MEDIUM/HIGH) instead of thinkingBudget
     if (reasoningEnabled) {
-      requestConfig.thinkingConfig = {
-        includeThoughts: true,
-        thinkingBudget: reasoningMaxTokens ?? -1, // -1 = AUTOMATIC
-      };
+      if (isGemini3Model(currentModel)) {
+        const thinkingLevel =
+          mapReasoningEffortToThinkingLevel(reasoningEffort);
+        const thinkingConfig: Record<string, unknown> = {
+          includeThoughts: true,
+        };
+        if (thinkingLevel !== undefined) {
+          thinkingConfig.thinkingLevel = thinkingLevel;
+        }
+        requestConfig.thinkingConfig = thinkingConfig;
+      } else {
+        requestConfig.thinkingConfig = {
+          includeThoughts: true,
+          thinkingBudget: reasoningMaxTokens ?? -1, // -1 = AUTOMATIC
+        };
+      }
     }
 
     const requestLogger = new DebugLogger('llxprt:provider:gemini:logging');
@@ -1367,9 +1403,11 @@ export class GeminiProvider extends BaseProvider {
     );
     thinkingConfigLogger.log(() => '[GeminiProvider] Thinking configuration', {
       reasoningEnabled,
+      reasoningEffort,
       reasoningIncludeInResponse,
       reasoningStripFromContext,
       model: currentModel,
+      isGemini3: isGemini3Model(currentModel),
       thinkingConfig: requestConfig.thinkingConfig,
     });
 

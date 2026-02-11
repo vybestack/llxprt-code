@@ -14,22 +14,14 @@ import {
   SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
+import { MessageType } from '../types.js';
 import { Colors } from '../colors.js';
-import {
-  Config,
-  DebugLogger,
-  GeminiClient,
-  createRuntimeStateFromConfig,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:ui:subagent');
-import {
-  FunctionCallingConfigMode,
-  SendMessageParameters,
-} from '@google/genai';
-import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import { SubagentView } from '../components/SubagentManagement/types.js';
+import { generateAutoPrompt } from '../utils/autoPromptGenerator.js';
 
 /**
  * Parse save command arguments
@@ -55,8 +47,6 @@ function parseSaveArgs(args: string): {
   const [, name, profile, mode, input] = match;
   return { name, profile, mode: mode as 'auto' | 'manual', input };
 }
-
-const autoPromptLogger = new DebugLogger('llxprt:subagent:auto');
 
 /**
  * Handle manual mode subagent save
@@ -309,145 +299,73 @@ const saveCommand: SlashCommand = {
         };
       }
 
-      // Construct prompt
-      const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${input}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
-
-      const requestPayload: SendMessageParameters = {
-        message: autoModePrompt,
-        config: {
-          toolConfig: {
-            functionCallingConfig: {
-              mode: FunctionCallingConfigMode.NONE,
-            },
-          },
-        },
-      };
-      (requestPayload.config as Record<string, unknown>).serverTools = [];
-      const preparedServerTools = (
-        requestPayload.config as {
-          serverTools?: unknown;
-        }
-      ).serverTools;
-      autoPromptLogger.log(
-        () => '[subagent:auto] prepared Gemini auto payload',
-        {
-          provider:
-            typeof configService.getProvider === 'function'
-              ? configService.getProvider()
-              : undefined,
-          serverTools: preparedServerTools,
-          functionCallingMode:
-            (
-              requestPayload.config?.toolConfig?.functionCallingConfig as
-                | { mode?: unknown }
-                | undefined
-            )?.mode ?? 'unset',
-        },
-      );
-
       try {
-        let client = configService.getGeminiClient();
-
-        const requestFromClient = async (
-          targetClient: GeminiClient,
-          options?: { useRuntimeScope?: boolean },
-        ): Promise<{ text?: string }> => {
-          const executeRequest = () =>
-            targetClient.generateDirectMessage(
-              requestPayload,
-              'subagent-auto-prompt',
-            );
-          if (options?.useRuntimeScope === false) {
-            return executeRequest();
-          }
-          try {
-            const runtimeBridge = getRuntimeBridge();
-            return await runtimeBridge.runWithScope(executeRequest);
-          } catch (_runtimeError) {
-            return executeRequest();
-          }
-        };
-
-        const providerName =
-          typeof configService.getProvider === 'function'
-            ? configService.getProvider()?.toLowerCase()
-            : undefined;
-        let cleanupDetached: GeminiClient | undefined;
-        let useRuntimeScope = true;
-        if (!client || providerName === 'gemini') {
-          cleanupDetached =
-            subagentAutoPromptHelpers.createDetachedGeminiClientForAutoPrompt(
-              configService,
-            );
-          client = cleanupDetached;
-          useRuntimeScope = false;
-        }
-
-        if (!client) {
-          return {
-            type: 'message',
-            messageType: 'error',
-            content:
-              'Unable to access Gemini client. Run /auth login or try manual mode.',
-          };
-        }
-
-        let response: { text?: string };
-        try {
-          response = await requestFromClient(client, { useRuntimeScope });
-        } finally {
-          cleanupDetached?.dispose?.();
-        }
-
-        finalSystemPrompt = response.text || '';
-
-        if (finalSystemPrompt.trim() === '') {
-          return {
-            type: 'message',
-            messageType: 'error',
-            content:
-              'Error: Model returned empty response. Try manual mode or rephrase your description.',
-          };
-        }
+        finalSystemPrompt = await generateAutoPrompt(configService, input);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        console.warn(
-          '[subagent:auto] Gemini prompt generation failed:',
-          errorMessage,
-          'config=',
-          JSON.stringify(requestPayload.config),
-        );
         return {
           type: 'message',
           messageType: 'error',
           content: `Error: Failed to generate system prompt (${errorMessage}). Try manual mode or check your connection.`,
         };
       }
-      // Dispatch to shared save logic for auto mode
       return saveSubagent(context, name, profile, finalSystemPrompt, exists);
     }
   },
 };
 
 /**
- * /subagent list command - Opens interactive list view
+ * /subagent list command - Displays non-interactive text list
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
  * @requirement:REQ-005
  */
 const listCommand: SlashCommand = {
   name: 'list',
-  description: 'List all saved subagents (interactive)',
+  description: 'List all saved subagents',
   kind: CommandKind.BUILT_IN,
-  action: async (
-    _context: CommandContext,
-    _args: string,
-  ): Promise<SlashCommandActionReturn> => ({
-    type: 'dialog',
-    dialog: 'subagent',
-    dialogData: { initialView: SubagentView.LIST },
-  }),
+  action: async (context: CommandContext, _args: string): Promise<void> => {
+    const manager = context.services.subagentManager;
+    if (!manager) {
+      context.ui.addItem(
+        {
+          type: MessageType.ERROR,
+          text: 'SubagentManager service is unavailable.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+
+    const names = await manager.listSubagents();
+
+    if (names.length === 0) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: 'No subagents configured. Use /subagent create to create one.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+
+    const lines: string[] = ['Subagents:'];
+    for (const name of names) {
+      try {
+        const config = await manager.loadSubagent(name);
+        lines.push(`  • ${name} (profile: ${config.profile})`);
+      } catch {
+        lines.push(`  • ${name}`);
+      }
+    }
+
+    context.ui.addItem(
+      { type: MessageType.INFO, text: lines.join('\n') },
+      Date.now(),
+    );
+  },
 };
 
 /**
@@ -625,6 +543,23 @@ const createCommand: SlashCommand = {
 };
 
 /**
+ * /subagent menu command - Opens the subagent manager menu
+ */
+const menuCommand: SlashCommand = {
+  name: 'menu',
+  description: 'Open the subagent manager menu',
+  kind: CommandKind.BUILT_IN,
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<SlashCommandActionReturn> => ({
+    type: 'dialog',
+    dialog: 'subagent',
+    dialogData: { initialView: SubagentView.MENU },
+  }),
+};
+
+/**
  * /subagent parent command with schema-based completion
  *
  * @plan:PLAN-20251013-AUTOCOMPLETE.P08
@@ -637,7 +572,16 @@ export const subagentCommand: SlashCommand = {
   name: 'subagent',
   description: 'Manage subagent configurations.',
   kind: CommandKind.BUILT_IN,
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<SlashCommandActionReturn> => ({
+    type: 'dialog',
+    dialog: 'subagent',
+    dialogData: { initialView: SubagentView.MENU },
+  }),
   subCommands: [
+    menuCommand,
     saveCommand,
     createCommand,
     listCommand,
@@ -645,24 +589,4 @@ export const subagentCommand: SlashCommand = {
     editCommand,
     deleteCommand,
   ],
-  // No default action - shows subcommand help
-};
-
-function createDetachedGeminiClientForAutoPrompt(config: Config): GeminiClient {
-  const baseRuntimeId =
-    typeof config.getSessionId === 'function'
-      ? config.getSessionId()
-      : undefined;
-  const runtimeState = createRuntimeStateFromConfig(config, {
-    runtimeId: `${baseRuntimeId ?? 'llxprt-session'}#subagent-auto#${Date.now().toString(36)}`,
-  });
-  const client = new GeminiClient(config, runtimeState);
-  if (typeof client.clearTools === 'function') {
-    client.clearTools();
-  }
-  return client;
-}
-
-export const subagentAutoPromptHelpers = {
-  createDetachedGeminiClientForAutoPrompt,
 };

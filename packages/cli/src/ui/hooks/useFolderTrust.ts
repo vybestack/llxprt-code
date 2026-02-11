@@ -85,7 +85,24 @@ export const useFolderTrust = (
           return;
       }
 
-      trustedFolders.setValue(cwd, trustLevel);
+      try {
+        trustedFolders.setValue(cwd, trustLevel);
+      } catch (_e) {
+        if (addItem) {
+          addItem(
+            {
+              type: MessageType.ERROR,
+              text: 'Failed to save trust settings. Exiting LLxprt Code.',
+            },
+            Date.now(),
+          );
+        }
+        setTimeout(() => {
+          process.exit(1);
+        }, 100);
+        return;
+      }
+
       const newIsTrusted =
         trustLevel === TrustLevel.TRUST_FOLDER ||
         trustLevel === TrustLevel.TRUST_PARENT;
@@ -101,7 +118,7 @@ export const useFolderTrust = (
         setIsFolderTrustDialogOpen(false);
       }
     },
-    [isTrusted],
+    [isTrusted, addItem],
   );
 
   return {

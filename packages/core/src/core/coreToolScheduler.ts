@@ -353,15 +353,9 @@ const createErrorResponse = (
   callId: request.callId,
   error,
   responseParts: [
-    // First, the tool call
-    {
-      functionCall: {
-        id: request.callId,
-        name: request.name,
-        args: request.args,
-      },
-    },
-    // Then, the error response
+    // Only functionResponse — the functionCall is already recorded in history
+    // from the model's assistant message. Re-emitting it here would create
+    // orphan tool_use blocks for Anthropic (Issue #244).
     {
       functionResponse: {
         id: request.callId,
@@ -686,15 +680,8 @@ export class CoreToolScheduler {
             response: {
               callId: currentCall.request.callId,
               responseParts: [
-                // First, the tool call
-                {
-                  functionCall: {
-                    id: currentCall.request.callId,
-                    name: currentCall.request.name,
-                    args: currentCall.request.args,
-                  },
-                },
-                // Then, the cancellation response
+                // Only functionResponse — the functionCall is already in history
+                // from the model's assistant message (Issue #244).
                 {
                   functionResponse: {
                     id: currentCall.request.callId,
@@ -2003,13 +1990,8 @@ export class CoreToolScheduler {
         response: {
           callId: call.request.callId,
           responseParts: [
-            {
-              functionCall: {
-                id: call.request.callId,
-                name: call.request.name,
-                args: call.request.args,
-              },
-            },
+            // Only functionResponse — the functionCall is already in history
+            // from the model's assistant message (Issue #244).
             {
               functionResponse: {
                 id: call.request.callId,

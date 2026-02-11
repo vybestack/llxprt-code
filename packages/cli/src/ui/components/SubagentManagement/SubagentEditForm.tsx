@@ -4,11 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Box, Text } from 'ink';
+import { useTextBuffer } from '../shared/text-buffer.js';
 import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
-import { EditField, type SubagentInfo } from './types.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import type { SubagentInfo } from './types.js';
 
 interface SubagentEditFormProps {
   subagent: SubagentInfo;
@@ -20,6 +22,11 @@ interface SubagentEditFormProps {
   isFocused?: boolean;
 }
 
+type FocusTarget = 'prompt' | 'profile' | 'actions';
+type ActionTarget = 'save' | 'cancel';
+
+const FOCUS_ORDER: FocusTarget[] = ['prompt', 'profile', 'actions'];
+
 export const SubagentEditForm: React.FC<SubagentEditFormProps> = ({
   subagent,
   profiles: _profiles,
@@ -29,18 +36,32 @@ export const SubagentEditForm: React.FC<SubagentEditFormProps> = ({
   onSelectProfile,
   isFocused = true,
 }) => {
-  const [systemPrompt, setSystemPrompt] = useState(subagent.systemPrompt);
-  // Use pendingProfile from parent (set after profile wizard) or fall back to original
-  const selectedProfile = pendingProfile ?? subagent.profile;
-  const [focusedField, setFocusedField] = useState<EditField>(
-    EditField.SYSTEM_PROMPT,
-  );
-  const [isEditing, setIsEditing] = useState(false);
+  const [focusTarget, setFocusTarget] = useState<FocusTarget>('prompt');
+  const [isEditingPrompt, setIsEditingPrompt] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<ActionTarget>('save');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { rows: terminalRows, columns: terminalColumns } = useTerminalSize();
+
+  const selectedProfile = pendingProfile ?? subagent.profile;
+
+  // Keep conservative to avoid rendering off-screen.
+  const NON_EDITOR_HEIGHT = 17;
+  const editorHeight = Math.max(
+    4,
+    Math.min(10, terminalRows - NON_EDITOR_HEIGHT),
+  );
+  const editorWidth = Math.max(20, terminalColumns - 24);
+
+  const promptBuffer = useTextBuffer({
+    initialText: subagent.systemPrompt,
+    viewport: { width: editorWidth, height: editorHeight },
+    isValidPath: () => false,
+  });
+
   const hasChanges =
-    systemPrompt !== subagent.systemPrompt ||
+    promptBuffer.text !== subagent.systemPrompt ||
     selectedProfile !== subagent.profile;
 
   const handleSave = useCallback(async () => {
@@ -48,97 +69,174 @@ export const SubagentEditForm: React.FC<SubagentEditFormProps> = ({
       onCancel();
       return;
     }
+
     setIsSaving(true);
     setError(null);
+
     try {
-      await onSave(systemPrompt, selectedProfile);
+      await onSave(promptBuffer.text, selectedProfile);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
       setIsSaving(false);
     }
-  }, [hasChanges, systemPrompt, selectedProfile, onSave, onCancel]);
+  }, [hasChanges, onCancel, onSave, promptBuffer.text, selectedProfile]);
 
-  const handleInput = useCallback((char: string) => {
-    if (char === '\n') {
-      setSystemPrompt((prev) => prev + '\n');
-    } else {
-      setSystemPrompt((prev) => prev + char);
-    }
-  }, []);
+  const visibleLines = promptBuffer.viewportVisualLines;
+  const totalVisualLines = promptBuffer.allVisualLines.length;
+  const startLine = totalVisualLines > 0 ? promptBuffer.visualScrollRow + 1 : 0;
+  const endLine =
+    totalVisualLines > 0
+      ? Math.min(startLine + visibleLines.length - 1, totalVisualLines)
+      : 0;
 
-  const handleBackspace = useCallback(() => {
-    setSystemPrompt((prev) => prev.slice(0, -1));
-  }, []);
+  const moveFocus = useCallback(
+    (direction: 'up' | 'down') => {
+      const currentIndex = FOCUS_ORDER.indexOf(focusTarget);
+      const nextIndex =
+        direction === 'up'
+          ? Math.max(0, currentIndex - 1)
+          : Math.min(FOCUS_ORDER.length - 1, currentIndex + 1);
+      setFocusTarget(FOCUS_ORDER[nextIndex]);
+    },
+    [focusTarget],
+  );
 
   useKeypress(
     (key) => {
-      const input = key.sequence;
-      if (isSaving) return;
-
-      // Editing mode - capture text
-      if (isEditing && focusedField === EditField.SYSTEM_PROMPT) {
-        if (key.name === 'escape') {
-          setIsEditing(false);
-          return;
-        }
-        if (key.name === 'backspace' || key.name === 'delete') {
-          handleBackspace();
-          return;
-        }
-        if (key.name === 'return') {
-          handleInput('\n');
-          return;
-        }
-        if (input && !key.ctrl && !key.meta) {
-          handleInput(input);
-        }
+      if (isSaving) {
         return;
       }
 
-      // Navigation mode
+      if (isEditingPrompt) {
+        if (key.name === 'escape') {
+          setIsEditingPrompt(false);
+          return;
+        }
+
+        promptBuffer.handleInput(key);
+        return;
+      }
+
       if (key.name === 'escape') {
         onCancel();
         return;
       }
 
-      if (key.name === 'up' || key.name === 'down') {
-        setFocusedField((prev) =>
-          prev === EditField.SYSTEM_PROMPT
-            ? EditField.PROFILE
-            : EditField.SYSTEM_PROMPT,
-        );
+      const isUp = key.name === 'up' || key.sequence === 'k';
+      const isDown = key.name === 'down' || key.sequence === 'j';
+      const isLeft = key.name === 'left' || key.sequence === 'h';
+      const isRight = key.name === 'right' || key.sequence === 'l';
+      const isActivate = key.name === 'return' || key.name === 'space';
+
+      if (isUp) {
+        moveFocus('up');
         return;
       }
 
-      if (key.name === 'return') {
-        if (focusedField === EditField.SYSTEM_PROMPT) {
-          setIsEditing(true);
-        } else if (focusedField === EditField.PROFILE) {
-          onSelectProfile();
+      if (isDown) {
+        moveFocus('down');
+        return;
+      }
+
+      if (focusTarget === 'actions') {
+        if (isLeft) {
+          setSelectedAction('save');
+          return;
         }
+
+        if (isRight) {
+          setSelectedAction('cancel');
+          return;
+        }
+      }
+
+      if (!isActivate) {
         return;
       }
 
-      // Quick save with 's'
-      if (input === 's') {
-        handleSave();
+      if (focusTarget === 'prompt') {
+        setIsEditingPrompt(true);
         return;
       }
 
-      // Cancel with 'c'
-      if (input === 'c') {
-        onCancel();
+      if (focusTarget === 'profile') {
+        onSelectProfile();
         return;
+      }
+
+      if (focusTarget === 'actions') {
+        if (selectedAction === 'save') {
+          handleSave();
+        } else {
+          onCancel();
+        }
       }
     },
     { isActive: isFocused && !isSaving },
   );
 
-  // Display prompt preview
-  const promptLines = systemPrompt.split('\n');
-  const maxLines = 5;
-  const displayLines = promptLines.slice(0, maxLines);
-  const truncated = `[${systemPrompt.slice(0, 45)}...]`;
+  const renderLineWithCursor = useCallback(
+    (line: string, idx: number) => {
+      const relativeCursorRow =
+        promptBuffer.visualCursor[0] - promptBuffer.visualScrollRow;
+      const isCursorLine = idx === relativeCursorRow;
+
+      if (!isCursorLine || !isEditingPrompt) {
+        return (
+          <Text key={idx} color={Colors.Foreground} wrap="truncate-end">
+            {line || ' '}
+          </Text>
+        );
+      }
+
+      const col = promptBuffer.visualCursor[1];
+      const safeCol = Math.max(0, Math.min(col, line.length));
+      const before = line.slice(0, safeCol);
+      const at = line[safeCol] ?? ' ';
+      const after = line.slice(safeCol + 1);
+
+      return (
+        <Text key={idx} color={Colors.Foreground} wrap="truncate-end">
+          {before}
+          <Text color="#00ff00">{at}</Text>
+          {after}
+        </Text>
+      );
+    },
+    [isEditingPrompt, promptBuffer.visualCursor, promptBuffer.visualScrollRow],
+  );
+
+  const promptHint = useMemo(() => {
+    if (isEditingPrompt) {
+      return '[ESC] Stop editing (changes kept, not saved)';
+    }
+
+    if (focusTarget === 'prompt') {
+      return '[Enter] Edit prompt';
+    }
+
+    return null;
+  }, [focusTarget, isEditingPrompt]);
+
+  const profileHint = useMemo(
+    () => (focusTarget === 'profile' ? ' [Enter] Change Profile' : ''),
+    [focusTarget],
+  );
+
+  const actionsHint = useMemo(
+    () =>
+      focusTarget === 'actions' ? '[←/→] Choose  [Enter/Space] Activate' : '',
+    [focusTarget],
+  );
+
+  const saveColor =
+    focusTarget === 'actions' && selectedAction === 'save'
+      ? '#00ff00'
+      : Colors.Foreground;
+  const cancelColor =
+    focusTarget === 'actions' && selectedAction === 'cancel'
+      ? '#00ff00'
+      : Colors.Foreground;
 
   return (
     <Box flexDirection="column">
@@ -157,63 +255,51 @@ export const SubagentEditForm: React.FC<SubagentEditFormProps> = ({
         </Box>
       )}
 
-      {/* System Prompt Field */}
       <Box flexDirection="column" marginY={1}>
         <Box>
           <Text
-            color={
-              focusedField === EditField.SYSTEM_PROMPT
-                ? '#00ff00'
-                : Colors.Foreground
-            }
+            color={focusTarget === 'prompt' ? '#00ff00' : Colors.Foreground}
           >
-            {focusedField === EditField.SYSTEM_PROMPT ? '→ ' : '  '}1 System
-            Prompt
+            {focusTarget === 'prompt' ? '→ ' : '  '}1 System Prompt
+          </Text>
+          {isEditingPrompt && <Text color="#00ff00"> (editing)</Text>}
+        </Box>
+
+        <Box marginLeft={4} marginBottom={1}>
+          <Text color={Colors.Gray}>
+            Lines {startLine}-{endLine} of {totalVisualLines}
           </Text>
         </Box>
-        <Box marginLeft={4}>
-          <Text color={Colors.Gray}>Current: </Text>
-          <Text color={Colors.Foreground}>{truncated}</Text>
+
+        <Box
+          marginLeft={4}
+          flexDirection="column"
+          borderStyle="single"
+          borderColor={focusTarget === 'prompt' ? '#00ff00' : Colors.Gray}
+          paddingX={1}
+          height={editorHeight + 2}
+          overflow="hidden"
+        >
+          {visibleLines.length > 0 ? (
+            visibleLines.map(renderLineWithCursor)
+          ) : (
+            <Text color={Colors.Foreground}> </Text>
+          )}
         </Box>
-        {isEditing && focusedField === EditField.SYSTEM_PROMPT && (
-          <Box
-            flexDirection="column"
-            borderStyle="single"
-            borderColor="#00ff00"
-            marginLeft={4}
-            paddingX={1}
-          >
-            {displayLines.map((line, idx) => (
-              <Text key={idx} color={Colors.Foreground}>
-                {line || ' '}
-              </Text>
-            ))}
-            {promptLines.length > maxLines && (
-              <Text color={Colors.Gray}>
-                ... ({promptLines.length - maxLines} more lines)
-              </Text>
-            )}
-            <Text color="#00ff00">|</Text>
-            <Text color={Colors.Gray}>[ESC] Done Editing</Text>
-          </Box>
-        )}
-        {!isEditing && focusedField === EditField.SYSTEM_PROMPT && (
-          <Box marginLeft={4}>
-            <Text color={Colors.Gray}>[Enter] Edit Full Prompt</Text>
+
+        {promptHint && (
+          <Box marginLeft={4} marginTop={1}>
+            <Text color={Colors.Gray}>{promptHint}</Text>
           </Box>
         )}
       </Box>
 
-      {/* Profile Field */}
       <Box flexDirection="column" marginY={1}>
         <Box>
           <Text
-            color={
-              focusedField === EditField.PROFILE ? '#00ff00' : Colors.Foreground
-            }
+            color={focusTarget === 'profile' ? '#00ff00' : Colors.Foreground}
           >
-            {focusedField === EditField.PROFILE ? '→ ' : '  '}2 Profile
-            Assignment
+            {focusTarget === 'profile' ? '→ ' : '  '}2 Profile Assignment
           </Text>
         </Box>
         <Box marginLeft={4}>
@@ -222,20 +308,33 @@ export const SubagentEditForm: React.FC<SubagentEditFormProps> = ({
           {selectedProfile !== subagent.profile && (
             <Text color="#ffff00"> (changed)</Text>
           )}
+          <Text color={Colors.Gray}>{profileHint}</Text>
         </Box>
-        {focusedField === EditField.PROFILE && (
+      </Box>
+
+      <Box flexDirection="column" marginY={1}>
+        <Box>
+          <Text
+            color={focusTarget === 'actions' ? '#00ff00' : Colors.Foreground}
+          >
+            {focusTarget === 'actions' ? '→ ' : '  '}3 Actions
+          </Text>
+        </Box>
+        <Box marginLeft={4}>
+          <Text color={saveColor}>[ Save ]</Text>
+          <Text color={Colors.Gray}> </Text>
+          <Text color={cancelColor}>[ Cancel ]</Text>
+        </Box>
+        {actionsHint && (
           <Box marginLeft={4}>
-            <Text color={Colors.Gray}>[Enter] Change Profile</Text>
+            <Text color={Colors.Gray}>{actionsHint}</Text>
           </Box>
         )}
       </Box>
 
-      {/* Controls */}
       <Box flexDirection="column" marginTop={1}>
-        <Text color={Colors.Gray}>
-          Controls: ↑↓ Navigate Fields [Enter] Toggle Edit
-        </Text>
-        <Text color={Colors.Gray}> [s] Save [c] Cancel [ESC] Back to list</Text>
+        <Text color={Colors.Gray}>Controls: ↑↓ move focus, Enter activate</Text>
+        <Text color={Colors.Gray}>ESC closes without saving</Text>
         {hasChanges && <Text color="#ffff00">* Unsaved changes</Text>}
       </Box>
 

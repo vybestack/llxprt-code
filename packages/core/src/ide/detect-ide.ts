@@ -13,12 +13,17 @@ export const IDE_DEFINITIONS = {
   firebasestudio: { name: 'firebasestudio', displayName: 'Firebase Studio' },
   trae: { name: 'trae', displayName: 'Trae' },
   vscode: { name: 'vscode', displayName: 'VS Code' },
+  antigravity: { name: 'antigravity', displayName: 'Antigravity' },
   vscodefork: { name: 'vscodefork', displayName: 'IDE' },
 } as const;
 
 export interface IdeInfo {
   name: string;
   displayName: string;
+}
+
+export function isCloudShell(): boolean {
+  return !!(process.env['EDITOR_IN_CLOUD_SHELL'] || process.env['CLOUD_SHELL']);
 }
 
 export function detectIdeFromEnv(): IdeInfo {
@@ -34,7 +39,10 @@ export function detectIdeFromEnv(): IdeInfo {
   if (process.env['CODESPACES']) {
     return IDE_DEFINITIONS.codespaces;
   }
-  if (process.env['EDITOR_IN_CLOUD_SHELL'] || process.env['CLOUD_SHELL']) {
+  if (process.env['ANTIGRAVITY_CLI_ALIAS']) {
+    return IDE_DEFINITIONS.antigravity;
+  }
+  if (isCloudShell()) {
     return IDE_DEFINITIONS.cloudshell;
   }
   if (process.env['TERM_PRODUCT'] === 'Trae') {

@@ -678,6 +678,12 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+#### `showProfileChangeInChat`
+
+- **`showProfileChangeInChat`** (boolean):
+  - **Description:** Show a message in chat when the active profile changes.
+  - **Default:** `true`
+
 #### `enableFuzzyFiltering`
 
 - **`enableFuzzyFiltering`** (boolean):

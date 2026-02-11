@@ -45,7 +45,6 @@ interface RunNonInteractiveParams {
   settings: LoadedSettings;
   input: string;
   prompt_id: string;
-  hasDeprecatedPromptArg?: boolean;
 }
 
 export async function runNonInteractive({
@@ -53,7 +52,6 @@ export async function runNonInteractive({
   settings,
   input,
   prompt_id,
-  hasDeprecatedPromptArg,
 }: RunNonInteractiveParams): Promise<void> {
   const outputFormat =
     typeof config.getOutputFormat === 'function'
@@ -413,21 +411,6 @@ export async function runNonInteractive({
     let jsonResponseText = '';
 
     let turnCount = 0;
-    const deprecateText =
-      'The --prompt (-p) flag has been deprecated and will be removed in a future version. Please use a positional argument for your prompt. See gemini --help for more information.\n';
-    if (hasDeprecatedPromptArg) {
-      if (streamFormatter) {
-        streamFormatter.emitEvent({
-          type: JsonStreamEventType.MESSAGE,
-          timestamp: new Date().toISOString(),
-          role: 'assistant',
-          content: deprecateText,
-          delta: true,
-        });
-      } else {
-        process.stderr.write(deprecateText);
-      }
-    }
     while (true) {
       turnCount++;
       if (

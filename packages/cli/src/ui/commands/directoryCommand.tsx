@@ -9,6 +9,7 @@ import { MessageType } from '../types.js';
 import * as os from 'os';
 import * as path from 'path';
 import { loadServerHierarchicalMemory } from '@vybestack/llxprt-code-core';
+import { loadTrustedFolders } from '../../config/trustedFolders.js';
 
 export function expandHomeDir(p: string): string {
   if (!p) {
@@ -81,10 +82,27 @@ export const directoryCommand: SlashCommand = {
         const added: string[] = [];
         const errors: string[] = [];
 
+        // Check folder trust before adding directories (only if folder trust is enabled)
+        const folderTrustEnabled = config.getFolderTrust();
+        const trustedFolders = folderTrustEnabled ? loadTrustedFolders() : null;
+
         for (const pathToAdd of pathsToAdd) {
+          const expandedPath = expandHomeDir(pathToAdd.trim());
+
+          // Check if path is trusted (only if folder trust is enabled)
+          if (trustedFolders) {
+            const isTrusted = trustedFolders.isPathTrusted(expandedPath);
+            if (isTrusted === false) {
+              errors.push(
+                `Directory '${pathToAdd.trim()}' is not trusted. Use the '/permissions' command to change the trust level.`,
+              );
+              continue;
+            }
+          }
+
           try {
-            workspaceContext.addDirectory(expandHomeDir(pathToAdd.trim()));
-            added.push(pathToAdd.trim());
+            workspaceContext.addDirectory(expandedPath);
+            added.push(expandedPath);
           } catch (e) {
             const error = e as Error;
             errors.push(`Error adding '${pathToAdd.trim()}': ${error.message}`);
@@ -96,10 +114,7 @@ export const directoryCommand: SlashCommand = {
             const { memoryContent, fileCount } =
               await loadServerHierarchicalMemory(
                 config.getWorkingDir(),
-                [
-                  ...config.getWorkspaceContext().getDirectories(),
-                  ...pathsToAdd,
-                ],
+                [...config.getWorkspaceContext().getDirectories(), ...added],
                 config.getDebugMode(),
                 config.getFileService(),
                 config.getExtensions(),

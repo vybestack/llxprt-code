@@ -32,9 +32,7 @@ import { ProfileInlineEditor } from './ProfileInlineEditor.js';
 import { ToolsDialog } from './ToolsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
 import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
-// import { ProQuotaDialog } from './ProQuotaDialog.js'; // TODO: Not yet ported from upstream
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
-// import { ModelDialog } from './ModelDialog.js'; // TODO: Not yet ported from upstream
 import { LoggingDialog } from './LoggingDialog.js';
 import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
@@ -167,16 +165,6 @@ export const DialogManager = ({
       />
     );
   }
-  // TODO: ProQuotaDialog not yet ported from upstream
-  // if (uiState.proQuotaRequest) {
-  //   return (
-  //     <ProQuotaDialog
-  //       failedModel={uiState.proQuotaRequest.failedModel}
-  //       fallbackModel={uiState.proQuotaRequest.fallbackModel}
-  //       onChoice={uiActions.handleProQuotaChoice}
-  //     />
-  //   );
-  // }
   if (uiState.shouldShowIdePrompt) {
     return (
       <IdeIntegrationNudge
@@ -268,10 +256,6 @@ export const DialogManager = ({
       </Box>
     );
   }
-  // TODO: ModelDialog not yet ported from upstream
-  // if (uiState.isModelDialogOpen) {
-  //   return <ModelDialog onClose={uiActions.closeModelDialog} />;
-  // }
   if (uiState.isAuthDialogOpen) {
     return (
       <Box flexDirection="column">

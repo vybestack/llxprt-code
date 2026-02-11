@@ -257,6 +257,7 @@ describe('subagent.ts', () => {
         getCuratedForProvider: vi.fn(() => []),
         getIdGeneratorCallback: vi.fn(() => vi.fn()),
         findUnmatchedToolCalls: vi.fn(() => []),
+        generateTurnKey: vi.fn(() => `turn-${Date.now()}`),
       } as unknown as HistoryService;
 
       const toolRegistry =
@@ -1221,10 +1222,17 @@ describe('subagent.ts', () => {
         expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
 
         // Check the tool response sent back in the second call
+        // The response now includes a full functionResponse object for proper
+        // Anthropic tool_use/tool_result pairing
         const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
-        expect(secondCallArgs.message).toEqual([
-          { text: 'Emitted variable result successfully' },
-        ]);
+        expect(secondCallArgs.message).toHaveLength(1);
+        expect(secondCallArgs.message[0]).toHaveProperty('functionResponse');
+        expect(secondCallArgs.message[0].functionResponse.name).toBe(
+          'self_emitvalue',
+        );
+        expect(
+          secondCallArgs.message[0].functionResponse.response.message,
+        ).toBe('Emitted variable result successfully');
       });
 
       it('should execute external tools and provide the response to the model', async () => {
@@ -1281,6 +1289,7 @@ describe('subagent.ts', () => {
             }),
           },
         });
+        const historyAddSpy = vi.spyOn(runtimeBundle.history, 'add');
         const { overrides } = createRuntimeOverrides({
           runtimeBundle,
           toolRegistry: config.getToolRegistry(),
@@ -1315,6 +1324,7 @@ describe('subagent.ts', () => {
           { text: 'file1.txt\nfile2.ts' },
         ]);
 
+        expect(historyAddSpy).not.toHaveBeenCalled();
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
       });
 
@@ -1387,6 +1397,97 @@ describe('subagent.ts', () => {
         ]);
       });
 
+      /**
+       * @scenario Non-interactive error tool response must not include functionCall in user message
+       * @given A tool call that produces error responseParts with functionCall+functionResponse
+       * @when processFunctionCalls handles the error tool response
+       * @then The user message parts sent to model contain only functionResponse (no functionCall)
+       */
+      it('should filter functionCall from error responseParts in non-interactive flow (Anthropic boundary)', async () => {
+        const { config } = await createMockConfig();
+        const toolConfig: ToolConfig = { tools: ['erroring_tool'] };
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [
+              {
+                id: 'call_err',
+                name: 'erroring_tool',
+                args: {},
+              },
+            ],
+            'stop',
+          ]),
+        );
+
+        // Mock tool execution to return error with functionCall in responseParts
+        vi.mocked(executeToolCall).mockResolvedValue({
+          ...createCompletedToolCallResponse({
+            callId: 'call_err',
+            responseParts: [
+              {
+                functionCall: {
+                  id: 'call_err',
+                  name: 'erroring_tool',
+                  args: {},
+                },
+              },
+              {
+                functionResponse: {
+                  id: 'call_err',
+                  name: 'erroring_tool',
+                  response: { error: 'Tool crashed' },
+                },
+              },
+            ],
+            resultDisplay: 'Tool crashed',
+            error: new Error('Tool crashed'),
+            errorType: ToolErrorType.UNHANDLED_EXCEPTION,
+          }),
+        });
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry: config.getToolRegistry(),
+          toolsView: {
+            listToolNames: () => ['erroring_tool'],
+            getToolMetadata: () => ({
+              name: 'erroring_tool',
+              description: 'Tool that errors',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry: config.getToolRegistry(),
+        });
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          toolConfig,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        // Check that the message sent back to the model on turn 2
+        // does NOT contain any functionCall parts
+        const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
+        for (const part of secondCallArgs.message) {
+          expect(part).not.toHaveProperty('functionCall');
+        }
+        // But should have functionResponse
+        const hasFR = secondCallArgs.message.some(
+          (p: Part) => 'functionResponse' in p,
+        );
+        expect(hasFR).toBe(true);
+      });
+
       it('fails fast when a tool is disabled in the current profile', async () => {
         const listToolNames = () => ['write_file'];
         const getToolMetadata = () => ({
@@ -1450,16 +1551,6 @@ describe('subagent.ts', () => {
           ...createCompletedToolCallResponse({
             callId: 'call_write',
             responseParts: [
-              {
-                functionCall: {
-                  id: 'call_write',
-                  name: 'write_file',
-                  args: {
-                    path: 'reports/joetest.md',
-                    content: 'hello',
-                  },
-                },
-              },
               {
                 functionResponse: {
                   id: 'call_write',
@@ -1830,7 +1921,9 @@ describe('subagent.ts', () => {
 
       it('should not call onMessage for tools with canUpdateOutput=true (fixes #898)', async () => {
         const { config } = await createMockConfig();
-        const { overrides } = createRuntimeOverrides();
+        const runtimeBundle = createStatelessRuntimeBundle();
+        const historyAddSpy = vi.spyOn(runtimeBundle.history, 'add');
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
         const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
         mockSendMessageStream.mockImplementation(createMockStream(['stop']));
@@ -1895,6 +1988,7 @@ describe('subagent.ts', () => {
         // For tools with canUpdateOutput=true, onMessage should NOT be called
         // because the output was already streamed live
         expect(onMessageCalls).toHaveLength(0);
+        expect(historyAddSpy).not.toHaveBeenCalled();
       });
 
       it('should call onMessage for tools with canUpdateOutput=false', async () => {
@@ -2033,6 +2127,191 @@ describe('subagent.ts', () => {
         // For error status, onMessage SHOULD be called to show the error
         expect(onMessageCalls).toHaveLength(1);
         expect(onMessageCalls[0]).toBe('Error: command not found');
+      });
+
+      /**
+       * @scenario Error responseParts must not contain functionCall parts
+       * @given A completed tool call with error status whose responseParts include a functionCall
+       * @when buildPartsFromCompletedCalls processes the completed calls
+       * @then The resulting parts must contain ONLY functionResponse (no functionCall)
+       *       because the functionCall is already in history from the model's assistant message.
+       *       Including functionCall in user-role tool results causes Anthropic invalid_request_error.
+       */
+      it('should produce functionResponse-only parts for error tool calls (Anthropic boundary)', async () => {
+        const { config } = await createMockConfig();
+        const { overrides } = createRuntimeOverrides();
+        const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        // Simulate error completed calls with functionCall in responseParts
+        // (this is what coreToolScheduler's createErrorResponse produces)
+        const completedCalls = [
+          {
+            status: 'error' as const,
+            request: {
+              callId: 'call-err',
+              name: 'failing_tool',
+              args: { path: '/test' },
+            },
+            response: {
+              callId: 'call-err',
+              responseParts: [
+                {
+                  functionCall: {
+                    id: 'call-err',
+                    name: 'failing_tool',
+                    args: { path: '/test' },
+                  },
+                },
+                {
+                  functionResponse: {
+                    id: 'call-err',
+                    name: 'failing_tool',
+                    response: { error: 'Tool execution failed' },
+                  },
+                },
+              ],
+              resultDisplay: 'Tool execution failed',
+              error: new Error('Tool execution failed'),
+            },
+          },
+        ];
+
+        const buildParts = (
+          scope as unknown as {
+            buildPartsFromCompletedCalls: (
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              calls: any[],
+            ) => Part[];
+          }
+        ).buildPartsFromCompletedCalls.bind(scope);
+
+        const parts = buildParts(completedCalls);
+
+        // CRITICAL: No part should contain functionCall - only functionResponse
+        // functionCall in user-role message causes Anthropic invalid_request_error
+        for (const part of parts) {
+          expect(part).not.toHaveProperty('functionCall');
+        }
+        // Should still have a functionResponse
+        const hasFunctionResponse = parts.some(
+          (p: Part) => 'functionResponse' in p,
+        );
+        expect(hasFunctionResponse).toBe(true);
+      });
+
+      /**
+       * @scenario Mixed success+error tool calls in same turn produce valid continuation
+       * @given A batch with one successful tool and one errored tool
+       * @when buildPartsFromCompletedCalls processes both
+       * @then All resulting parts are functionResponse-only (no functionCall),
+       *       and each tool_use from the model has exactly one matching tool_result
+       */
+      it('should produce valid paired parts for mixed success+error calls (Anthropic boundary)', async () => {
+        const { config } = await createMockConfig();
+        const { overrides } = createRuntimeOverrides();
+        const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        const completedCalls = [
+          {
+            status: 'success' as const,
+            request: {
+              callId: 'call-ok',
+              name: 'read_file',
+              args: { path: '/test.txt' },
+            },
+            tool: { canUpdateOutput: false },
+            response: {
+              callId: 'call-ok',
+              responseParts: [
+                {
+                  functionResponse: {
+                    id: 'call-ok',
+                    name: 'read_file',
+                    response: { output: 'file contents' },
+                  },
+                },
+              ],
+              resultDisplay: 'file contents',
+            },
+          },
+          {
+            status: 'error' as const,
+            request: {
+              callId: 'call-err',
+              name: 'write_file',
+              args: { path: '/out.txt', content: 'data' },
+            },
+            response: {
+              callId: 'call-err',
+              responseParts: [
+                {
+                  functionCall: {
+                    id: 'call-err',
+                    name: 'write_file',
+                    args: { path: '/out.txt', content: 'data' },
+                  },
+                },
+                {
+                  functionResponse: {
+                    id: 'call-err',
+                    name: 'write_file',
+                    response: { error: 'Permission denied' },
+                  },
+                },
+              ],
+              resultDisplay: 'Permission denied',
+              error: new Error('Permission denied'),
+            },
+          },
+        ];
+
+        const buildParts = (
+          scope as unknown as {
+            buildPartsFromCompletedCalls: (
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              calls: any[],
+            ) => Part[];
+          }
+        ).buildPartsFromCompletedCalls.bind(scope);
+
+        const parts = buildParts(completedCalls);
+
+        // No part should contain functionCall
+        for (const part of parts) {
+          expect(part).not.toHaveProperty('functionCall');
+        }
+
+        // Should have functionResponse for both tool calls
+        const functionResponses = parts.filter(
+          (p: Part) => 'functionResponse' in p,
+        );
+        expect(functionResponses.length).toBe(2);
       });
 
       it('should handle calls where tool is undefined gracefully', async () => {

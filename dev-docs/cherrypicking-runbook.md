@@ -14,17 +14,21 @@ For selection criteria, non-negotiables (privacy/multi-provider/tool batching), 
 
 ## Naming Convention (Required)
 
-- **Branch name:** `YYYYMMDDgmerge` (no hyphen), e.g. `20251215gmerge`
-- **Plan folder:** `project-plans/YYYYMMDDgmerge/` (matches branch name)
+- **Branch name:** `gmerge/VERSION` — where VERSION is the **upstream gemini-cli release version** being synced to, e.g. `gmerge/0.17.1`
+- **Plan folder:** `project-plans/gmerge-VERSION/` — e.g. `project-plans/gmerge-0.17.1/`
 
-Do not create “marker-only merge commits” to record sync points. Tracking is done via the plan folder artifacts and commit messages (see `dev-docs/cherrypicking.md`).
+The version refers to the **upstream gemini-cli tag**, not the LLxprt version (which is independent).
+
+Do not create "marker-only merge commits" to record sync points. Tracking is done via the plan folder artifacts and commit messages (see `dev-docs/cherrypicking.md`).
+
+> **Historical note:** Prior syncs used date-based names (`YYYYMMDDgmerge` / `project-plans/YYYYMMDDgmerge/`). Those folders remain in the repo as-is; new syncs use the version-based convention described here.
 
 ---
 
 ## Inputs (You Must Ask For / Confirm)
 
-1. **Upstream range**: `vX.Y.Z..vA.B.C` (or commit range)
-2. **Current parity** (what we already match): e.g. “already at v0.10.0”
+1. **Target upstream version**: the gemini-cli release tag to sync to, e.g. `0.17.1`
+2. **Current parity** (what we already match): e.g. "already at v0.16.0"
 3. **Tracking issue**: e.g. `vybestack/llxprt-code#708`
 4. **Special constraints** (often stable, but confirm):
    - A2A server stays **private** (do not make publishable).
@@ -37,24 +41,24 @@ Do not create “marker-only merge commits” to record sync points. Tracking is
 
 ## Required Artifacts (Write These Files)
 
-Create `project-plans/YYYYMMDDgmerge/` and write:
+Create `project-plans/gmerge-VERSION/` and write:
 
-- `project-plans/YYYYMMDDgmerge/CHERRIES.md`  
+- `project-plans/gmerge-VERSION/CHERRIES.md`  
   Decision tables for every upstream commit in the range.
-- `project-plans/YYYYMMDDgmerge/SUMMARY.md`  
-  Short “what’s happening” overview + counts + any high-risk items.
-- `project-plans/YYYYMMDDgmerge/PLAN.md`  
+- `project-plans/gmerge-VERSION/SUMMARY.md`  
+  Short "what's happening" overview + counts + any high-risk items.
+- `project-plans/gmerge-VERSION/PLAN.md`  
   Executable batch schedule (chronological), verification cadence, and links to reimplementation playbooks.
-- `project-plans/YYYYMMDDgmerge/PROGRESS.md`  
+- `project-plans/gmerge-VERSION/PROGRESS.md`  
   A checklist to track batch completion (and record the LLxprt commit hash per batch).
-- `project-plans/YYYYMMDDgmerge/NOTES.md`  
+- `project-plans/gmerge-VERSION/NOTES.md`  
   Running notes while executing batches (conflicts, decisions, deviations, follow-ups).
-- `project-plans/YYYYMMDDgmerge/AUDIT.md`  
-  Post-implementation reconciliation: upstream SHA → “PICKED/REIMPLEMENTED/SKIPPED/NO_OP” + LLxprt commit hash(es) + notes.
+- `project-plans/gmerge-VERSION/AUDIT.md`  
+  Post-implementation reconciliation: upstream SHA → "PICKED/REIMPLEMENTED/SKIPPED/NO_OP" + LLxprt commit hash(es) + notes.
 
 For every **REIMPLEMENT** upstream commit, add a per-commit playbook:
 
-- `project-plans/YYYYMMDDgmerge/<upstream-sha>-plan.md`
+- `project-plans/gmerge-VERSION/<upstream-sha>-plan.md`
 
 You may generate these with subagents, but they must be specific enough that a context-wiped agent can execute them safely and deterministically.
 
@@ -70,14 +74,14 @@ From repo root:
 git fetch origin
 git checkout main
 git pull --ff-only
-git checkout -b YYYYMMDDgmerge
+git checkout -b gmerge/VERSION   # e.g. gmerge/0.17.1
 
 # Ensure upstream remote exists (use upstream = gemini-cli)
 git remote add upstream https://github.com/google-gemini/gemini-cli.git 2>/dev/null || true
 git remote set-url upstream https://github.com/google-gemini/gemini-cli.git
 git fetch upstream --tags
 
-mkdir -p project-plans/YYYYMMDDgmerge
+mkdir -p project-plans/gmerge-VERSION   # e.g. project-plans/gmerge-0.17.1
 ```
 
 ---
@@ -118,7 +122,7 @@ For every upstream commit in the range, choose exactly one:
 
 ### Required table order
 
-In `project-plans/YYYYMMDDgmerge/CHERRIES.md`, include three separate tables in this exact order:
+In `project-plans/gmerge-VERSION/CHERRIES.md`, include three separate tables in this exact order:
 
 1. **PICK table** (chronological)
 2. **SKIP table** (chronological)
@@ -160,7 +164,7 @@ Goal: turn the decisions into an executable, deterministic batch schedule.
      - typical signals: touches tool scheduling/execution, policy/approvals, core tool naming, multi-provider routing, or other LLxprt “non-negotiables”
 3. **REIMPLEMENT** commits:
    - **solo batch** (batch size 1)
-   - `PLAN.md` must link to `project-plans/YYYYMMDDgmerge/<sha>-plan.md`
+   - `PLAN.md` must link to `project-plans/gmerge-VERSION/<sha>-plan.md`
 4. **SKIP** commits:
    - do not batch (they are not executed)
 
@@ -198,7 +202,7 @@ Recommended commit message templates:
 
 ### Required PLAN.md contents
 
-`project-plans/YYYYMMDDgmerge/PLAN.md` must include:
+`project-plans/gmerge-VERSION/PLAN.md` must include:
 
 1. A short "non-negotiables" section pointing to `dev-docs/cherrypicking.md` (privacy/multi-provider/tool batching/branding).
 2. A "file existence pre-check" section (files referenced by reimplement plans that might not exist in LLxprt).
@@ -317,12 +321,12 @@ Example:
 ````markdown
 ## START HERE (If you were told to "DO this plan")
 
-If you're reading this because someone said "DO @project-plans/YYYYMMDDgmerge/PLAN.md", follow these steps:
+If you're reading this because someone said "DO @project-plans/gmerge-VERSION/PLAN.md", follow these steps:
 
 ### Step 1: Check current state
 
 ```bash
-git branch --show-current  # Should be YYYYMMDDgmerge
+git branch --show-current  # Should be gmerge/VERSION
 git status                 # Check for uncommitted changes
 ```
 ````
@@ -412,7 +416,7 @@ Update continuously as you execute:
 Open a PR against `main` that:
 
 - References the tracking issue (e.g. `Fixes #708`)
-- Links to `project-plans/YYYYMMDDgmerge/CHERRIES.md` and `project-plans/YYYYMMDDgmerge/AUDIT.md`
+- Links to `project-plans/gmerge-VERSION/CHERRIES.md` and `project-plans/gmerge-VERSION/AUDIT.md`
 - Summarizes major functional changes and any intentional SKIPs/NO_OPs
 
 ---

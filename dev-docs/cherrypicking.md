@@ -21,8 +21,10 @@ git fetch upstream
 
 # Create a new branch from main
 git checkout main
-git checkout -b YYYYMMDDgmerge  # e.g., 20251215gmerge
+git checkout -b gmerge/VERSION  # e.g., gmerge/0.17.1
 ```
+
+Where `VERSION` is the **upstream gemini-cli release version** you are syncing to (e.g., `0.17.1`). This is _not_ the LLxprt version.
 
 ### 2. Identify Commits to Cherry-pick
 
@@ -214,7 +216,7 @@ Instead:
 ### 8. Push the Branch
 
 ```bash
-git push origin YYYYMMDDgmerge  # e.g., 20251215gmerge
+git push origin gmerge/VERSION  # e.g., gmerge/0.17.1
 ```
 
 ### 9. Create Pull Request

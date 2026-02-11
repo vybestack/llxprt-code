@@ -31,6 +31,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
   const { commandContext } = uiState;
   const subagentManager = commandContext?.services?.subagentManager;
   const profileManager = commandContext?.services?.profileManager;
+  const activeProfileName = uiState.activeProfileName;
 
   const [state, setState] = useState<SubagentManagerState>({
     currentView: initialView,
@@ -77,24 +78,29 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         }),
       );
 
-      setState((prev) => ({
-        ...prev,
-        subagents,
-        profiles: profileNames,
-        isLoading: false,
-      }));
+      setState((prev) => {
+        let selectedSubagent = prev.selectedSubagent;
 
-      // If initial subagent specified, select it
-      if (initialSubagentName) {
-        const found = subagents.find((s) => s.name === initialSubagentName);
-        if (found) {
-          setState((prev) => ({
-            ...prev,
-            selectedSubagent: found,
-            currentView: initialView,
-          }));
+        if (initialSubagentName && !selectedSubagent) {
+          selectedSubagent =
+            subagents.find((s) => s.name === initialSubagentName) ?? null;
+        } else if (selectedSubagent) {
+          selectedSubagent =
+            subagents.find((s) => s.name === selectedSubagent?.name) ?? null;
         }
-      }
+
+        return {
+          ...prev,
+          subagents,
+          profiles: profileNames,
+          selectedSubagent,
+          currentView:
+            selectedSubagent || prev.currentView !== initialView
+              ? prev.currentView
+              : initialView,
+          isLoading: false,
+        };
+      });
     } catch (err) {
       setState((prev) => ({
         ...prev,
@@ -216,22 +222,36 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
 
   // Handle create
   const handleCreate = useCallback(
-    async (name: string, systemPrompt: string, profile: string) => {
-      if (!subagentManager) return;
-
-      try {
-        await subagentManager.saveSubagent(name, profile, systemPrompt);
-        await loadData();
-        navigateTo(SubagentView.LIST);
-      } catch (err) {
-        setState((prev) => ({
-          ...prev,
-          error:
-            err instanceof Error ? err.message : 'Failed to create subagent',
-        }));
+    async (
+      name: string,
+      systemPrompt: string,
+      profile: string,
+      mode: 'auto' | 'manual' = 'auto',
+    ) => {
+      if (!subagentManager) {
+        throw new Error('SubagentManager not available');
       }
+
+      let finalPrompt = systemPrompt;
+
+      if (mode === 'auto') {
+        const config = commandContext?.services?.config;
+        if (!config) {
+          throw new Error(
+            'Configuration service unavailable. Set up the CLI before using auto mode.',
+          );
+        }
+
+        const { generateAutoPrompt } = await import(
+          '../../utils/autoPromptGenerator.js'
+        );
+        finalPrompt = await generateAutoPrompt(config, systemPrompt);
+      }
+
+      await subagentManager.saveSubagent(name, profile, finalPrompt);
+      onClose();
     },
-    [subagentManager, loadData, navigateTo],
+    [subagentManager, onClose, commandContext],
   );
 
   // Handle profile attachment - check if we came from EDIT view
@@ -362,6 +382,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         return (
           <SubagentCreationWizard
             profiles={state.profiles}
+            activeProfileName={activeProfileName}
             onSave={handleCreate}
             onCancel={goBack}
             isFocused={true}
@@ -396,7 +417,13 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         );
 
       case SubagentView.MENU:
-        return <SubagentMainMenu onSelect={navigateTo} isFocused={true} />;
+        return (
+          <SubagentMainMenu
+            onSelect={navigateTo}
+            onCancel={onClose}
+            isFocused={true}
+          />
+        );
 
       default:
         return <Text color={Colors.Gray}>Unknown view</Text>;

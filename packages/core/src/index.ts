@@ -40,6 +40,19 @@ export * from './confirmation-bus/message-bus.js';
 // Export services
 export * from './services/git-stats-service.js';
 
+// @plan PLAN-20260130-ASYNCTASK.P09
+// Export async task management types and services
+export {
+  AsyncTaskManager,
+  AsyncTaskInfo,
+  AsyncTaskStatus,
+  RegisterTaskInput,
+} from './services/asyncTaskManager.js';
+export { AsyncTaskReminderService } from './services/asyncTaskReminderService.js';
+export { AsyncTaskAutoTrigger } from './services/asyncTaskAutoTrigger.js';
+// Export SubagentTerminateMode for OutputObject types
+export { SubagentTerminateMode } from './core/subagent.js';
+
 // Export types
 export * from './types/modelParams.js';
 
@@ -132,6 +145,7 @@ export * from './ide/ide-installer.js';
 export {
   IDE_DEFINITIONS,
   detectIdeFromEnv,
+  isCloudShell,
   type IdeInfo,
 } from './ide/detect-ide.js';
 export * from './ide/constants.js';

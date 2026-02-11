@@ -5,19 +5,11 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  Mocked,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Config, ConfigParameters, ApprovalMode } from '../config/config.js';
 import { ToolRegistry, DiscoveredTool } from './tool-registry.js';
 import { DiscoveredMCPTool, generateMcpToolName } from './mcp-tool.js';
-import { FunctionDeclaration, CallableTool, mcpToTool } from '@google/genai';
+import { FunctionDeclaration, CallableTool } from '@google/genai';
 import { spawn } from 'node:child_process';
 import { IdeClient } from '../ide/ide-client.js';
 import fs from 'node:fs';
@@ -84,25 +76,12 @@ vi.mock('@modelcontextprotocol/sdk/client/sse.js', () => {
   return { SSEClientTransport: MockSSEClientTransport };
 });
 
-// Mock @google/genai mcpToTool
 vi.mock('@google/genai', async () => {
   const actualGenai =
     await vi.importActual<typeof import('@google/genai')>('@google/genai');
   return {
     ...actualGenai,
-    mcpToTool: vi.fn().mockImplementation(() => ({
-      tool: vi.fn().mockResolvedValue({ functionDeclarations: [] }),
-      callTool: vi.fn(),
-    })),
   };
-});
-
-// Helper to create a mock CallableTool for specific test needs
-const createMockCallableTool = (
-  toolDeclarations: FunctionDeclaration[],
-): Mocked<CallableTool> => ({
-  tool: vi.fn().mockResolvedValue({ functionDeclarations: toolDeclarations }),
-  callTool: vi.fn(),
 });
 
 const baseConfigParams: ConfigParameters = {
@@ -140,8 +119,6 @@ describe('ToolRegistry', () => {
     mockMcpClientConnect.mockReset().mockResolvedValue(undefined);
     mockStdioTransportClose.mockReset();
     mockSseTransportClose.mockReset();
-    vi.mocked(mcpToTool).mockClear();
-    vi.mocked(mcpToTool).mockReturnValue(createMockCallableTool([]));
 
     mockConfigGetToolDiscoveryCommand = vi.spyOn(
       config,

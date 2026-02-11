@@ -1524,6 +1524,15 @@ export const SETTINGS_SCHEMA = {
       'Enable AI-powered prompt completion suggestions while typing.',
     showInDialog: true,
   },
+  showProfileChangeInChat: {
+    type: 'boolean',
+    label: 'Show Profile Change in Chat',
+    category: 'General',
+    requiresRestart: false,
+    default: true,
+    description: 'Show a message in chat when the active profile changes.',
+    showInDialog: true,
+  },
   enableFuzzyFiltering: {
     type: 'boolean',
     label: 'Enable Fuzzy Filtering',
