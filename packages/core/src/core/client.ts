@@ -554,6 +554,52 @@ export class GeminiClient {
     this.getChat().addHistory(content);
   }
 
+  async updateSystemInstruction(): Promise<void> {
+    if (!this.isInitialized()) {
+      return;
+    }
+
+    const userMemory = this.config.getUserMemory();
+    const model = this.runtimeState.model;
+    const enabledToolNames = this.getEnabledToolNamesForPrompt();
+    const includeSubagentDelegation =
+      await this.shouldIncludeSubagentDelegation(enabledToolNames);
+
+    let systemInstruction = await getCoreSystemPromptAsync({
+      userMemory,
+      model,
+      tools: enabledToolNames,
+      includeSubagentDelegation,
+    });
+
+    const envParts = await getEnvironmentContext(this.config);
+    const envContextText = envParts
+      .map((part) => ('text' in part ? part.text : ''))
+      .join('\n');
+    if (envContextText) {
+      systemInstruction = `${envContextText}
+
+${systemInstruction}`;
+    }
+
+    this.getChat().setSystemInstruction(systemInstruction);
+
+    const historyService = this.getHistoryService();
+    if (historyService) {
+      try {
+        const systemPromptTokens = await historyService.estimateTokensForText(
+          systemInstruction,
+          model,
+        );
+        historyService.setBaseTokenOffset(systemPromptTokens);
+      } catch (_error) {
+        historyService.setBaseTokenOffset(
+          estimateTextTokens(systemInstruction),
+        );
+      }
+    }
+  }
+
   getChat(): GeminiChat {
     if (!this.chat) {
       throw new Error('Chat not initialized');

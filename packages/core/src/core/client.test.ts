@@ -557,6 +557,78 @@ describe('Gemini Client (client.ts)', () => {
       await expect(client.generateEmbedding(texts)).rejects.toThrow(
         'API Failure',
       );
+
+      describe('updateSystemInstruction', () => {
+        it('updates chat system instruction and history token offset', async () => {
+          const setSystemInstruction = vi.fn();
+          const estimateTokensForText = vi.fn().mockResolvedValue(321);
+          const setBaseTokenOffset = vi.fn();
+          const getHistoryService = vi.fn().mockReturnValue({
+            estimateTokensForText,
+            setBaseTokenOffset,
+          });
+
+          const mockChat = {
+            setSystemInstruction,
+            getHistoryService,
+          };
+
+          client['chat'] = mockChat as unknown as GeminiChat;
+          client['contentGenerator'] = {
+            countTokens: vi.fn(),
+          } as unknown as ContentGenerator;
+
+          const config = client['config'] as unknown as {
+            getUserMemory: () => string;
+          };
+          vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
+
+          const toolNamesSpy = vi
+            .spyOn(
+              client as unknown as {
+                getEnabledToolNamesForPrompt: () => string[];
+              },
+              'getEnabledToolNamesForPrompt',
+            )
+            .mockReturnValue(['tool_a']);
+
+          const subagentSpy = vi
+            .spyOn(
+              client as unknown as {
+                shouldIncludeSubagentDelegation: (
+                  tools: string[],
+                ) => Promise<boolean>;
+              },
+              'shouldIncludeSubagentDelegation',
+            )
+            .mockResolvedValue(true);
+
+          vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
+            'prompt body with new memory',
+          );
+
+          await client.updateSystemInstruction();
+
+          expect(toolNamesSpy).toHaveBeenCalled();
+          expect(subagentSpy).toHaveBeenCalledWith(['tool_a']);
+          expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+            expect.objectContaining({
+              userMemory: 'new memory',
+              model: 'test-model',
+              tools: ['tool_a'],
+              includeSubagentDelegation: true,
+            }),
+          );
+          expect(setSystemInstruction).toHaveBeenCalledWith(
+            expect.stringContaining('prompt body with new memory'),
+          );
+          expect(estimateTokensForText).toHaveBeenCalledWith(
+            expect.any(String),
+            'test-model',
+          );
+          expect(setBaseTokenOffset).toHaveBeenCalledWith(321);
+        });
+      });
     });
   });
 

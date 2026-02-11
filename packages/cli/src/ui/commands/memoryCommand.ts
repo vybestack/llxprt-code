@@ -161,6 +161,7 @@ export const memoryCommand: SlashCommand = {
                 config.getFileFilteringOptions(),
               );
             config.setUserMemory(memoryContent);
+            await config.updateSystemInstructionIfInitialized();
             config.setLlxprtMdFileCount(fileCount);
             config.setLlxprtMdFilePaths(filePaths);
             context.ui.setGeminiMdFileCount(fileCount);

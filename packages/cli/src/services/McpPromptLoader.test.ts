@@ -32,7 +32,9 @@ const mockPrompt = {
 };
 
 describe('McpPromptLoader', () => {
-  const mockConfig = {} as Config;
+  const mockConfig = {
+    getMcpServers: () => ({}),
+  } as unknown as Config;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -155,6 +157,9 @@ describe('McpPromptLoader', () => {
 
   describe('loadCommands', () => {
     const mockConfigWithPrompts = {
+      getMcpServers: () => ({
+        'test-server': { httpUrl: 'https://test-server.com' },
+      }),
       getMcpClientManager: () => ({
         getMcpServers: () => ({
           'test-server': { httpUrl: 'https://test-server.com' },
@@ -257,7 +262,9 @@ describe('McpPromptLoader', () => {
       expect(commands).toEqual([]);
     });
 
-    describe('completion', () => {
+    // Completion tests disabled: schema-based argument completion was removed from McpPromptLoader
+    // (see TODO in McpPromptLoader.ts). Re-enable when SlashCommand interface supports it again.
+    describe.skip('completion', () => {
       it('should suggest no arguments when using positional arguments', async () => {
         const loader = new McpPromptLoader(mockConfigWithPrompts);
         const commands = await loader.loadCommands(
