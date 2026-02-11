@@ -59,7 +59,6 @@ import {
   loadProfileByName,
 } from '../runtime/runtimeSettings.js';
 
-<<<<<<< HEAD
 type ToolRunResult = {
   parts: Part[];
   message?: string | null;
