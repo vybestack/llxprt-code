@@ -374,30 +374,34 @@ File: ${resolved.basename}
       description += ` in ${this.params.include}`;
     }
     if (this.params.path) {
-      const resolved = this.resolveTarget(this.params.path);
-      if (resolved.kind === 'file') {
-        const relativePath = makeRelative(
-          resolved.filePath,
-          this.config.getTargetDir(),
-        );
-        description += ` in file ${shortenPath(relativePath)}`;
-      } else {
-        const resolvedPath = path.resolve(
-          this.config.getTargetDir(),
-          this.params.path,
-        );
-        if (
-          resolvedPath === this.config.getTargetDir() ||
-          this.params.path === '.'
-        ) {
-          description += ` within ./`;
-        } else {
+      try {
+        const resolved = this.resolveTarget(this.params.path);
+        if (resolved.kind === 'file') {
           const relativePath = makeRelative(
-            resolvedPath,
+            resolved.filePath,
             this.config.getTargetDir(),
           );
-          description += ` within ${shortenPath(relativePath)}`;
+          description += ` in file ${shortenPath(relativePath)}`;
+          return description;
         }
+      } catch {
+        // Fall through to default path display on validation errors
+      }
+      const resolvedPath = path.resolve(
+        this.config.getTargetDir(),
+        this.params.path,
+      );
+      if (
+        resolvedPath === this.config.getTargetDir() ||
+        this.params.path === '.'
+      ) {
+        description += ` within ./`;
+      } else {
+        const relativePath = makeRelative(
+          resolvedPath,
+          this.config.getTargetDir(),
+        );
+        description += ` within ${shortenPath(relativePath)}`;
       }
     } else {
       const workspaceContext = this.config.getWorkspaceContext();
