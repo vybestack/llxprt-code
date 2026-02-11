@@ -52,6 +52,10 @@ export interface ReadonlySettingsSnapshot {
   'reasoning.maxTokens'?: number;
   /** @issue #1307 - Anthropic adaptive thinking toggle for Opus 4.6+ */
   'reasoning.adaptiveThinking'?: boolean;
+  /** @plan PLAN-20260211-COMPRESSION.P12 */
+  compressionStrategy?: string;
+  /** @plan PLAN-20260211-COMPRESSION.P12 */
+  compressionProfile?: string;
 }
 
 /**
@@ -186,6 +190,10 @@ export interface AgentRuntimeContext {
     preserveThreshold(): number;
     topPreserveThreshold(): number;
     toolFormatOverride(): string | undefined;
+    /** @plan PLAN-20260211-COMPRESSION.P12 */
+    compressionStrategy(): string;
+    /** @plan PLAN-20260211-COMPRESSION.P12 */
+    compressionProfile(): string | undefined;
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006

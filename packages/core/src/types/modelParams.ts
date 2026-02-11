@@ -191,6 +191,11 @@ export interface EphemeralSettings {
   'reasoning.stripFromContext'?: 'all' | 'allButLast' | 'none';
   /** API format for reasoning (native/field) */
   'reasoning.format'?: 'native' | 'field';
+
+  /** @plan PLAN-20260211-COMPRESSION.P12 - Compression strategy override */
+  'compression.strategy'?: string;
+  /** @plan PLAN-20260211-COMPRESSION.P12 - Compression profile name for LLM calls */
+  'compression.profile'?: string;
 }
 
 /**
