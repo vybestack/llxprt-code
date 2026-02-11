@@ -13,19 +13,22 @@ import { CreateStep, type CreateWizardState } from './types.js';
 
 interface SubagentCreationWizardProps {
   profiles: string[];
+  activeProfileName?: string | null;
   onSave: (
     name: string,
     systemPrompt: string,
     profile: string,
+    mode: 'auto' | 'manual',
   ) => Promise<void>;
   onCancel: () => void;
   isFocused?: boolean;
 }
 
-type FieldName = 'name' | 'systemPrompt' | 'profile';
+type FieldName = 'name' | 'mode' | 'systemPrompt' | 'profile';
 
 export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   profiles,
+  activeProfileName,
   onSave,
   onCancel,
   isFocused = true,
@@ -33,8 +36,12 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   const [state, setState] = useState<CreateWizardState>({
     currentStep: CreateStep.FORM,
     name: '',
+    mode: 'auto',
     systemPrompt: '',
-    selectedProfile: profiles[0] || '',
+    selectedProfile:
+      (activeProfileName && profiles.includes(activeProfileName)
+        ? activeProfileName
+        : profiles[0]) || '',
     validationErrors: {},
   });
 
@@ -42,10 +49,11 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showModeSelect, setShowModeSelect] = useState(false);
   const [showProfileSelect, setShowProfileSelect] = useState(false);
 
   const fields = useMemo<FieldName[]>(
-    () => ['name', 'systemPrompt', 'profile'],
+    () => ['name', 'mode', 'systemPrompt', 'profile'],
     [],
   );
 
@@ -60,8 +68,8 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   const handleInput = useCallback(
     (char: string) => {
       setState((prev) => {
-        // Skip input for profile field
-        if (focusedField === 'profile') return prev;
+        if (focusedField === 'profile' || focusedField === 'mode') return prev;
+        if (focusedField === 'name' && char === ' ') return prev;
 
         const field = focusedField;
         if (char === '\n' && field === 'systemPrompt') {
@@ -75,8 +83,7 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
 
   const handleBackspace = useCallback(() => {
     setState((prev) => {
-      // Skip backspace for profile field
-      if (focusedField === 'profile') return prev;
+      if (focusedField === 'profile' || focusedField === 'mode') return prev;
 
       const field = focusedField;
       return { ...prev, [field]: prev[field].slice(0, -1) };
@@ -84,14 +91,17 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
   }, [focusedField]);
 
   const handleSave = useCallback(async () => {
-    // Validate
     const nameError = validateName(state.name);
     if (nameError) {
       setError(nameError);
       return;
     }
     if (!state.systemPrompt.trim()) {
-      setError('System prompt is required');
+      setError(
+        state.mode === 'auto'
+          ? 'Description is required'
+          : 'System prompt is required',
+      );
       return;
     }
     if (!state.selectedProfile) {
@@ -102,13 +112,24 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
     setIsSaving(true);
     setError(null);
     try {
-      await onSave(state.name, state.systemPrompt, state.selectedProfile);
+      await onSave(
+        state.name,
+        state.systemPrompt,
+        state.selectedProfile,
+        state.mode,
+      );
       setIsSaving(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create');
       setIsSaving(false);
     }
   }, [state, validateName, onSave]);
+
+  const handleModeSelect = useCallback((mode: 'auto' | 'manual') => {
+    setState((prev) => ({ ...prev, mode }));
+    setShowModeSelect(false);
+    setFocusedField('mode');
+  }, []);
 
   const handleProfileSelect = useCallback((profile: string) => {
     setState((prev) => ({ ...prev, selectedProfile: profile }));
@@ -131,6 +152,14 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
     (key) => {
       const input = key.sequence;
       if (isSaving) return;
+
+      // Mode selection mode
+      if (showModeSelect) {
+        if (key.name === 'escape') {
+          setShowModeSelect(false);
+        }
+        return;
+      }
 
       // Profile selection mode
       if (showProfileSelect) {
@@ -181,7 +210,9 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
       }
 
       if (key.name === 'return') {
-        if (focusedField === 'profile') {
+        if (focusedField === 'mode') {
+          setShowModeSelect(true);
+        } else if (focusedField === 'profile') {
           setShowProfileSelect(true);
         } else {
           setIsEditing(true);
@@ -197,6 +228,43 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
     },
     { isActive: isFocused && !isSaving },
   );
+
+  // Mode selection modal
+  if (showModeSelect) {
+    const modeItems = [
+      {
+        label: 'Manual (enter full system prompt)',
+        value: 'manual' as const,
+        key: 'manual',
+      },
+      {
+        label: 'Auto (LLM expands your description)',
+        value: 'auto' as const,
+        key: 'auto',
+      },
+    ];
+
+    return (
+      <Box flexDirection="column">
+        <Text bold color={Colors.Foreground}>
+          Select Mode
+        </Text>
+        <Text color={Colors.Gray}>
+          ──────────────────────────────────────────────────────
+        </Text>
+        <RadioButtonSelect<'auto' | 'manual'>
+          items={modeItems}
+          onSelect={handleModeSelect}
+          isFocused={true}
+          initialIndex={state.mode === 'auto' ? 1 : 0}
+          maxItemsToShow={10}
+        />
+        <Box marginTop={1}>
+          <Text color={Colors.Gray}>[ESC] Cancel</Text>
+        </Box>
+      </Box>
+    );
+  }
 
   // Profile selection modal
   if (showProfileSelect) {
@@ -234,22 +302,23 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
     value: string,
     multiline = false,
   ) => {
-    const isFocused = focusedField === field;
-    const isCurrentlyEditing = isFocused && isEditing;
+    const isFieldFocused = focusedField === field;
+    const isCurrentlyEditing = isFieldFocused && isEditing;
+    const isSelectionField = field === 'profile' || field === 'mode';
 
     return (
       <Box flexDirection="column" marginY={1} key={field}>
         <Box>
-          <Text color={isFocused ? '#00ff00' : Colors.Foreground}>
-            {isFocused ? '→ ' : '  '}
+          <Text color={isFieldFocused ? '#00ff00' : Colors.Foreground}>
+            {isFieldFocused ? '→ ' : '  '}
             {step} {label}
           </Text>
         </Box>
-        {field === 'profile' ? (
+        {isSelectionField ? (
           <Box marginLeft={4}>
             <Text color={Colors.Gray}>Current: </Text>
             <Text color={Colors.Foreground}>{value || '(none)'}</Text>
-            {isFocused && <Text color={Colors.Gray}> [Enter] Select</Text>}
+            {isFieldFocused && <Text color={Colors.Gray}> [Enter] Select</Text>}
           </Box>
         ) : isCurrentlyEditing ? (
           <Box
@@ -283,11 +352,13 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
             <Text color={Colors.Gray}>
               {value
                 ? multiline
-                  ? `[${value.slice(0, 40)}...]`
+                  ? value.length > 40
+                    ? `[${value.slice(0, 40)}...]`
+                    : value
                   : value
                 : '(empty)'}
             </Text>
-            {isFocused && <Text color={Colors.Gray}> [Enter] Edit</Text>}
+            {isFieldFocused && <Text color={Colors.Gray}> [Enter] Edit</Text>}
           </Box>
         )}
       </Box>
@@ -315,29 +386,37 @@ export const SubagentCreationWizard: React.FC<SubagentCreationWizardProps> = ({
           Step 1: Name
         </Text>
       </Box>
-      {renderField('name', 'Name', 1, state.name)}
+      {renderField('name', 'Name (a-z, 0-9, -, _)', 1, state.name)}
 
-      {/* Step 2: System Prompt */}
+      {/* Step 2: Mode */}
       <Box marginTop={1}>
         <Text bold color={Colors.Foreground}>
-          Step 2: System Prompt
+          Step 2: Mode
+        </Text>
+      </Box>
+      {renderField('mode', 'Mode', 2, state.mode)}
+
+      {/* Step 3: System Prompt / Description */}
+      <Box marginTop={1}>
+        <Text bold color={Colors.Foreground}>
+          Step 3: {state.mode === 'auto' ? 'Description' : 'System Prompt'}
         </Text>
       </Box>
       {renderField(
         'systemPrompt',
-        'System Prompt',
-        2,
+        state.mode === 'auto' ? 'Description' : 'System Prompt',
+        3,
         state.systemPrompt,
         true,
       )}
 
-      {/* Step 3: Profile Assignment */}
+      {/* Step 4: Profile Assignment */}
       <Box marginTop={1}>
         <Text bold color={Colors.Foreground}>
-          Step 3: Profile Assignment
+          Step 4: Profile Assignment
         </Text>
       </Box>
-      {renderField('profile', 'Profile', 3, state.selectedProfile)}
+      {renderField('profile', 'Profile', 4, state.selectedProfile)}
 
       {/* Controls */}
       <Box flexDirection="column" marginTop={1}>
