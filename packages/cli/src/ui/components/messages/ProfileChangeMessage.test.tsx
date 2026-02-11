@@ -4,44 +4,70 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderWithProviders } from '../../../test-utils/render.js';
+import { describe, expect, it } from 'vitest';
+import { renderWithProviders, waitFor } from '../../../test-utils/render.js';
 import { ProfileChangeMessage } from './ProfileChangeMessage.js';
 
+type RenderStdout = {
+  lastFrame: () => string | undefined;
+  frames?: string[];
+};
+
+function getRenderedOutput(stdout: RenderStdout): string {
+  const lastFrame = stdout.lastFrame() ?? '';
+  const frames = Array.isArray(stdout.frames) ? stdout.frames.join('\n') : '';
+  return [lastFrame, frames].filter(Boolean).join('\n');
+}
+
 describe('ProfileChangeMessage', () => {
-  it('renders profile name in message text', () => {
-    const { lastFrame } = renderWithProviders(
+  it('renders profile name in message text', async () => {
+    const { stdout } = renderWithProviders(
       <ProfileChangeMessage profileName="production" />,
     );
-    const output = lastFrame();
-    expect(output).toContain('Switched to profile: production');
+
+    await waitFor(() => {
+      expect(getRenderedOutput(stdout)).toContain(
+        'Switched to profile: production',
+      );
+    });
   });
 
-  it('uses compact left margin layout', () => {
-    const { lastFrame } = renderWithProviders(
+  it('uses compact left margin layout', async () => {
+    const { stdout } = renderWithProviders(
       <ProfileChangeMessage profileName="test-profile" />,
     );
-    const output = lastFrame();
-    // Verify it renders without errors and produces output
-    expect(output).toBeTruthy();
-    expect(output).toContain('Switched to profile:');
+
+    await waitFor(() => {
+      const output = getRenderedOutput(stdout);
+      expect(output).toBeTruthy();
+      expect(output).toContain('Switched to profile:');
+    });
   });
 
-  it('does not use warning icon semantics', () => {
-    const { lastFrame } = renderWithProviders(
+  it('does not use warning icon semantics', async () => {
+    const { stdout } = renderWithProviders(
       <ProfileChangeMessage profileName="dev" />,
     );
-    const output = lastFrame();
-    // Should not contain the info icon 'ℹ' or warning icon '!'
-    expect(output).not.toContain('ℹ');
-    expect(output).not.toContain('!');
+
+    await waitFor(() => {
+      const output = getRenderedOutput(stdout);
+      expect(output).toContain('Switched to profile: dev');
+      // Should not contain the info icon 'ℹ' or warning icon '!'
+      expect(output).not.toContain('ℹ');
+      expect(output).not.toContain('!');
+    });
   });
 
-  it('uses sentence-case capitalization', () => {
-    const { lastFrame } = renderWithProviders(
+  it('uses sentence-case capitalization', async () => {
+    const { stdout } = renderWithProviders(
       <ProfileChangeMessage profileName="staging" />,
     );
-    const output = lastFrame();
-    // Message should start with capital 'S' in 'Switched'
-    expect(output).toContain('Switched to profile: staging');
+
+    await waitFor(() => {
+      // Message should start with capital 'S' in 'Switched'
+      expect(getRenderedOutput(stdout)).toContain(
+        'Switched to profile: staging',
+      );
+    });
   });
 });
