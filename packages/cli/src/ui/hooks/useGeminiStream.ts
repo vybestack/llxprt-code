@@ -769,16 +769,15 @@ export const useGeminiStream = (
           },
           userMessageTimestamp,
         );
+
+        // Clear thinking blocks after committing to prevent duplication
+        // on subsequent gemini_content items (#1272)
+        thinkingBlocksRef.current = [];
       }
 
-      // @plan:PLAN-20251202-THINKING-UI.P08
-      // Preserve thinkingBlocks in continuation pending item
       setPendingHistoryItem({
         type: 'gemini_content',
         text: afterText,
-        ...(thinkingBlocksRef.current.length > 0
-          ? { thinkingBlocks: [...thinkingBlocksRef.current] }
-          : {}),
       });
       return afterText;
     },
