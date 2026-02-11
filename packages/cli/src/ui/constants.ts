@@ -27,3 +27,5 @@ export const TOOL_STATUS = {
   CANCELED: '-',
   ERROR: 'x',
 } as const;
+
+export const SHELL_FOCUS_HINT_DELAY_MS = 5000;

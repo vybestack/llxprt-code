@@ -1574,6 +1574,7 @@ export const AppContainer = (props: AppContainerProps) => {
     thought,
     cancelOngoingRequest,
     activeShellPtyId: geminiActiveShellPtyId,
+    lastOutputTime,
   } = useGeminiStream(
     config.getGeminiClient(),
     history,
@@ -1714,6 +1715,8 @@ export const AppContainer = (props: AppContainerProps) => {
       'default',
     settings.merged.ui?.customWittyPhrases ??
       settings.merged.customWittyPhrases,
+    !!activeShellPtyId && !embeddedShellFocused,
+    lastOutputTime,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 

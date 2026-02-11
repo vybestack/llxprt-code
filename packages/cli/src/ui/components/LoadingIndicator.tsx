@@ -12,6 +12,7 @@ import { useStreamingContext } from '../contexts/StreamingContext.js';
 import { StreamingState } from '../types.js';
 import { GeminiRespondingSpinner } from './GeminiRespondingSpinner.js';
 import { formatDuration } from '../utils/formatters.js';
+import { INTERACTIVE_SHELL_WAITING_PHRASE } from '../hooks/usePhraseCycler.js';
 
 interface LoadingIndicatorProps {
   currentLoadingPhrase?: string;
@@ -32,7 +33,11 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     return null;
   }
 
-  const primaryText = thought?.subject || currentLoadingPhrase;
+  const isShellFocusHint =
+    currentLoadingPhrase === INTERACTIVE_SHELL_WAITING_PHRASE;
+  const primaryText = isShellFocusHint
+    ? currentLoadingPhrase
+    : thought?.subject || currentLoadingPhrase;
 
   const timerText =
     streamingState === StreamingState.WaitingForConfirmation

@@ -369,6 +369,7 @@ export const useGeminiStream = (
     scheduleToolCalls,
     markToolsAsSubmitted,
     cancelAllToolCalls,
+    lastToolOutputTime,
   ] = useReactToolScheduler(
     async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) {
@@ -442,7 +443,8 @@ export const useGeminiStream = (
     await done;
     setIsResponding(false);
   }, []);
-  const { handleShellCommand, activeShellPtyId } = useShellCommandProcessor(
+  const { handleShellCommand, activeShellPtyId, lastShellOutputTime } =
+    useShellCommandProcessor(
     addItem,
     setPendingHistoryItem,
     onExec,
@@ -1717,6 +1719,8 @@ export const useGeminiStream = (
     storage,
   ]);
 
+  const lastOutputTime = Math.max(lastToolOutputTime, lastShellOutputTime);
+
   return {
     streamingState,
     submitQuery,
@@ -1725,5 +1729,6 @@ export const useGeminiStream = (
     thought,
     cancelOngoingRequest,
     activeShellPtyId,
+    lastOutputTime,
   };
 };

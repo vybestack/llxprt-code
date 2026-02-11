@@ -82,6 +82,7 @@ export const useShellCommandProcessor = (
   pendingHistoryItemRef?: React.MutableRefObject<HistoryItemWithoutId | null>,
 ) => {
   const [activeShellPtyId, setActiveShellPtyId] = useState<number | null>(null);
+  const [lastShellOutputTime, setLastShellOutputTime] = useState(0);
   const handleShellCommand = useCallback(
     (rawQuery: PartListUnion, abortSignal: AbortSignal): boolean => {
       if (typeof rawQuery !== 'string' || rawQuery.trim() === '') {
@@ -217,6 +218,9 @@ export const useShellCommandProcessor = (
                 Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS;
               const isPtyData =
                 event.type === 'data' && config.getShouldUseNodePtyShell();
+              if (shouldUpdate) {
+                setLastShellOutputTime(Date.now());
+              }
               if (shouldUpdate && (isPtyData || pastThrottle)) {
                 const updateItem = (
                   baseItem: HistoryItemWithoutId | null,
@@ -407,5 +411,5 @@ export const useShellCommandProcessor = (
     ],
   );
 
-  return { handleShellCommand, activeShellPtyId };
+  return { handleShellCommand, activeShellPtyId, lastShellOutputTime };
 };
