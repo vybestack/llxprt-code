@@ -100,20 +100,25 @@ export function useShellPathCompletion(
 
     debounceTimerRef.current = setTimeout(() => {
       setIsLoadingSuggestions(true);
-      getPathSuggestions(pathToken.token, cwd).then((results) => {
-        if (generation !== generationRef.current) return;
+      getPathSuggestions(pathToken.token, cwd)
+        .then((results) => {
+          if (generation !== generationRef.current) return;
 
-        const mapped: Suggestion[] = results.map((r) => ({
-          label: r.label,
-          value: r.value,
-        }));
+          const mapped: Suggestion[] = results.map((r) => ({
+            label: r.label,
+            value: r.value,
+          }));
 
-        setSuggestions(mapped);
-        setActiveSuggestionIndex(mapped.length > 0 ? 0 : -1);
-        setVisibleStartIndex(0);
-        setShowSuggestions(mapped.length > 0);
-        setIsLoadingSuggestions(false);
-      });
+          setSuggestions(mapped);
+          setActiveSuggestionIndex(mapped.length > 0 ? 0 : -1);
+          setVisibleStartIndex(0);
+          setShowSuggestions(mapped.length > 0);
+          setIsLoadingSuggestions(false);
+        })
+        .catch(() => {
+          if (generation !== generationRef.current) return;
+          resetCompletionState();
+        });
     }, DEBOUNCE_MS);
 
     return () => {

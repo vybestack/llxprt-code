@@ -920,19 +920,20 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const { inlineGhost, additionalLines } = getGhostTextLines();
 
-  const completionSuggestionsNode = completion.showSuggestions ? (
-    <Box paddingRight={2}>
-      <SuggestionsDisplay
-        suggestions={completion.suggestions}
-        activeIndex={completion.activeSuggestionIndex}
-        isLoading={completion.isLoadingSuggestions}
-        width={suggestionsWidth}
-        scrollOffset={completion.visibleStartIndex}
-        userInput={buffer.text}
-        activeHint={completion.activeHint}
-      />
-    </Box>
-  ) : null;
+  const completionSuggestionsNode =
+    completion.showSuggestions && !shellModeActive ? (
+      <Box paddingRight={2}>
+        <SuggestionsDisplay
+          suggestions={completion.suggestions}
+          activeIndex={completion.activeSuggestionIndex}
+          isLoading={completion.isLoadingSuggestions}
+          width={suggestionsWidth}
+          scrollOffset={completion.visibleStartIndex}
+          userInput={buffer.text}
+          activeHint={completion.activeHint}
+        />
+      </Box>
+    ) : null;
 
   const reverseSearchSuggestionsNode = reverseSearchActive ? (
     <Box paddingRight={2}>

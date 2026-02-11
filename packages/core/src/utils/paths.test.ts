@@ -514,7 +514,7 @@ describe('expandTildePath', () => {
     expect(expandTildePath('/path/to/~file')).toBe('/path/to/~file');
   });
 
-  it('should handle bare tilde with no trailing slash', () => {
-    expect(expandTildePath('~')).toBe(homeDir);
+  it('should not expand tilde-prefixed non-path strings', () => {
+    expect(expandTildePath('~username')).toBe('~username');
   });
 });

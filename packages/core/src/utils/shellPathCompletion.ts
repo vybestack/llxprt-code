@@ -55,6 +55,26 @@ export function extractPathToken(
   return { token, tokenStart: wordStart, tokenEnd: cursorCol, isPathLike };
 }
 
+async function resolveIsDirectory(
+  dirPath: string,
+  entry: {
+    name: string;
+    isDirectory: () => boolean;
+    isSymbolicLink: () => boolean;
+  },
+): Promise<boolean> {
+  if (entry.isDirectory()) return true;
+  if (entry.isSymbolicLink()) {
+    try {
+      const stat = await fs.stat(path.join(dirPath, entry.name));
+      return stat.isDirectory();
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 export async function getPathSuggestions(
   partialPath: string,
   cwd: string,
@@ -62,7 +82,9 @@ export async function getPathSuggestions(
   if (partialPath.length === 0) return [];
 
   try {
-    const expandedPath = expandTildePath(partialPath);
+    // Normalize bare ~ to ~/ so dirname/basename split works correctly
+    const normalizedPath = partialPath === '~' ? '~/' : partialPath;
+    const expandedPath = expandTildePath(normalizedPath);
 
     let dirPath: string;
     let prefix: string;
@@ -90,18 +112,23 @@ export async function getPathSuggestions(
       return entry.name.toLowerCase().startsWith(lowerPrefix);
     });
 
-    filtered.sort((a, b) => {
-      const aIsDir = a.isDirectory() || a.isSymbolicLink();
-      const bIsDir = b.isDirectory() || b.isSymbolicLink();
-      if (aIsDir && !bIsDir) return -1;
-      if (!aIsDir && bIsDir) return 1;
-      return a.name.localeCompare(b.name);
+    // Resolve symlinks to determine actual directory status
+    const withDirInfo = await Promise.all(
+      filtered.map(async (entry) => ({
+        entry,
+        isDir: await resolveIsDirectory(dirPath, entry),
+      })),
+    );
+
+    withDirInfo.sort((a, b) => {
+      if (a.isDir && !b.isDir) return -1;
+      if (!a.isDir && b.isDir) return 1;
+      return a.entry.name.localeCompare(b.entry.name);
     });
 
-    const limited = filtered.slice(0, MAX_SUGGESTIONS);
+    const limited = withDirInfo.slice(0, MAX_SUGGESTIONS);
 
-    return limited.map((entry) => {
-      const isDir = entry.isDirectory() || entry.isSymbolicLink();
+    return limited.map(({ entry, isDir }) => {
       const suffix = isDir ? '/' : '';
 
       let basePath: string;
@@ -109,8 +136,8 @@ export async function getPathSuggestions(
         const homeDir = expandTildePath('~');
         const fullEntryPath = path.join(dirPath, entry.name);
         basePath = '~' + fullEntryPath.slice(homeDir.length);
-      } else if (partialPath.endsWith('/')) {
-        basePath = partialPath + entry.name;
+      } else if (normalizedPath.endsWith('/')) {
+        basePath = normalizedPath + entry.name;
       } else {
         const dirOfPartial = partialPath.substring(
           0,
