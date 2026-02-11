@@ -1044,6 +1044,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
     while (streamingAttempt < maxStreamingAttempts) {
       streamingAttempt++;
 
+      // @fix #1076: Use maxAttempts: 1 so the outer while loop owns all retry
+      // logic. Previously both retryWithBackoff and the outer loop retried
+      // network errors independently, risking maxAttempts^2 total fetch calls.
       const response = await retryWithBackoff(
         () =>
           fetch(responsesURL, {
@@ -1052,9 +1055,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
             body: bodyBlob,
           }),
         {
-          shouldRetryOnError: this.shouldRetryOnError.bind(this),
-          maxAttempts: maxStreamingAttempts,
-          initialDelayMs: streamRetryInitialDelayMs,
+          maxAttempts: 1,
         },
       );
 
@@ -1086,8 +1087,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
         }
         return;
       } catch (error) {
-        // @fix #1076: Use both shouldRetryOnError (HTTP status) and isNetworkTransientError
-        // (network transport) to decide retryability, matching AnthropicProvider pattern
+        // @fix #1076: shouldRetryOnError handles HTTP status codes (429, 5xx).
+        // isNetworkTransientError is a defensive fallback for transport errors
+        // whose shape might not have a status (e.g. stream "terminated").
         const canRetryStream =
           this.shouldRetryOnError(error) || isNetworkTransientError(error);
 
