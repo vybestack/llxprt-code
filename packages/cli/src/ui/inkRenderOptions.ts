@@ -5,6 +5,7 @@
  */
 
 import type { RenderOptions } from 'ink';
+import { createInkStdio } from '@vybestack/llxprt-code-core';
 
 type InkRenderOptionsConfig = {
   getScreenReader(): boolean;
@@ -33,7 +34,11 @@ export const inkRenderOptions = (
   const incrementalRendering =
     useAlternateBuffer && settings.merged.ui?.incrementalRendering !== false;
 
+  const { stdout, stderr } = createInkStdio();
+
   return {
+    stdout,
+    stderr,
     exitOnCtrlC: false,
     patchConsole: false,
     isScreenReaderEnabled,
