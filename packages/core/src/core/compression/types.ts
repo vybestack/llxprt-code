@@ -26,6 +26,7 @@ import type { PromptContext } from '../../prompt-config/types.js';
 export const COMPRESSION_STRATEGIES = [
   'middle-out',
   'top-down-truncation',
+  'one-shot',
 ] as const;
 
 export type CompressionStrategyName = (typeof COMPRESSION_STRATEGIES)[number];

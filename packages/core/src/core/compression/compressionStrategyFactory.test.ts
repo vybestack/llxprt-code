@@ -20,6 +20,7 @@ import {
 } from './compressionStrategyFactory.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
+import { OneShotStrategy } from './OneShotStrategy.js';
 import { COMPRESSION_STRATEGIES, UnknownStrategyError } from './types.js';
 
 describe('compressionStrategyFactory @plan PLAN-20260211-COMPRESSION.P09', () => {
@@ -50,6 +51,17 @@ describe('compressionStrategyFactory @plan PLAN-20260211-COMPRESSION.P09', () =>
       expect(strategy.requiresLLM).toBe(false);
     });
 
+    it('returns an OneShotStrategy instance for one-shot', () => {
+      const strategy = getCompressionStrategy('one-shot');
+      expect(strategy).toBeInstanceOf(OneShotStrategy);
+    });
+
+    it('returned one-shot instance has correct name and requiresLLM', () => {
+      const strategy = getCompressionStrategy('one-shot');
+      expect(strategy.name).toBe('one-shot');
+      expect(strategy.requiresLLM).toBe(true);
+    });
+
     it('returns fresh instances on each call (not singletons)', () => {
       const a = getCompressionStrategy('middle-out');
       const b = getCompressionStrategy('middle-out');
@@ -70,6 +82,10 @@ describe('compressionStrategyFactory @plan PLAN-20260211-COMPRESSION.P09', () =>
       expect(parseCompressionStrategyName('top-down-truncation')).toBe(
         'top-down-truncation',
       );
+    });
+
+    it('returns one-shot for valid input', () => {
+      expect(parseCompressionStrategyName('one-shot')).toBe('one-shot');
     });
 
     it('throws UnknownStrategyError for an unknown name', () => {
