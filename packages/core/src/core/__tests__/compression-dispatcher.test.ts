@@ -323,9 +323,9 @@ describe('Compression Dispatcher Integration (P13)', () => {
       // Make the provider throw an error to simulate strategy failure
       const mockProvider = {
         name: 'test-provider',
-        // eslint-disable-next-line require-yield
         generateChatCompletion: vi.fn(async function* () {
           throw new Error('Strategy execution failed');
+          yield undefined as never;
         }),
       };
       vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(

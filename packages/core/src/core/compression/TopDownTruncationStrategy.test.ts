@@ -84,9 +84,9 @@ function createThrowingProvider(): IProvider {
     invokeServerTool: async () => {
       throw new Error('LLM should never be called by top-down-truncation');
     },
-    // eslint-disable-next-line require-yield
     async *generateChatCompletion() {
       throw new Error('LLM should never be called by top-down-truncation');
+      yield undefined as never;
     },
   } as unknown as IProvider;
 }
