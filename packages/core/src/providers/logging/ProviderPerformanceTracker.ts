@@ -14,7 +14,11 @@ import { DebugLogger } from '../../debug/index.js';
  */
 export class ProviderPerformanceTracker {
   private metrics: ProviderPerformanceMetrics;
-  private tokenTimestamps: Array<{ timestamp: number; tokenCount: number }>;
+  private tokenTimestamps: Array<{
+    startTimestamp: number;
+    completionTimestamp: number;
+    tokenCount: number;
+  }>;
   private logger: DebugLogger;
 
   constructor(private providerName: string) {
@@ -81,8 +85,12 @@ export class ProviderPerformanceTracker {
 
     this.metrics.chunksReceived = chunkCount;
 
-    // Track token timestamps for calculating TPM
-    this.tokenTimestamps.push({ timestamp: Date.now(), tokenCount });
+    const now = Date.now();
+    this.tokenTimestamps.push({
+      startTimestamp: now - totalTime,
+      completionTimestamp: now,
+      tokenCount,
+    });
     this.calculateTokensPerMinute();
   }
 
@@ -132,46 +140,29 @@ export class ProviderPerformanceTracker {
    */
   private calculateTokensPerMinute(): void {
     const now = Date.now();
-    // Filter to keep only entries within last 60 seconds
     this.tokenTimestamps = this.tokenTimestamps.filter(
-      (entry) => now - entry.timestamp <= 60000,
+      (entry) => now - entry.completionTimestamp <= 60000,
     );
 
-    // Sum token counts from filtered entries
     const totalRecentTokens = this.tokenTimestamps.reduce(
       (sum, entry) => sum + entry.tokenCount,
       0,
     );
 
-    // Calculate actual time span in minutes
-    let timeSpanInMinutes = 1; // Default to 1 minute
-    if (this.tokenTimestamps.length > 1) {
-      const timestamps = this.tokenTimestamps
-        .map((entry) => entry.timestamp)
-        .sort((a, b) => a - b);
-      const oldestTimestamp = timestamps[0];
-      const newestTimestamp = timestamps[timestamps.length - 1];
-      timeSpanInMinutes = (newestTimestamp - oldestTimestamp) / 60000;
-
-      // When timeSpanInMinutes is 0 (because all timestamps are identical),
-      // but we have multiple token counts, calculate rate as if tokens were
-      // processed over a minimal time period to show activity
-      if (timeSpanInMinutes <= 0) {
-        // For identical timestamps with multiple entries, assume minimum processing time
-        // This represents the theoretical maximum rate for the tokens processed
-        timeSpanInMinutes = 0.001; // 60ms minimum observable time unit
-      }
-    } else if (this.tokenTimestamps.length === 0) {
-      // Handle case when there are no timestamp entries
+    if (this.tokenTimestamps.length === 0) {
       this.metrics.tokensPerMinute = 0;
       return;
-    } else if (this.tokenTimestamps.length === 1) {
-      // For a single token record, use a minimum time span to ensure non-zero TPM
-      timeSpanInMinutes = 0.001; // 60ms minimum observable time unit
     }
 
-    // Update metrics with calculated tokens per minute as a rate
-    // Ensure that we never divide by zero or get NaN
+    const oldestStartTimestamp = Math.min(
+      ...this.tokenTimestamps.map((entry) => entry.startTimestamp),
+    );
+    let timeSpanInMinutes = (now - oldestStartTimestamp) / 60000;
+
+    if (timeSpanInMinutes <= 0) {
+      timeSpanInMinutes = 0.001;
+    }
+
     if (
       timeSpanInMinutes > 0 &&
       !isNaN(totalRecentTokens) &&
