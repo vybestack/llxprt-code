@@ -8,10 +8,7 @@ import React, { useState } from 'react';
 import { Box, Text } from 'ink';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { Colors } from '../../colors.js';
-import {
-  SHELL_COMMAND_NAME,
-  SHELL_NAME,
-} from '../../constants.js';
+import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import {
   ShellExecutionService,

@@ -134,13 +134,11 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
                         <Text color={Colors.AccentRed} bold>
                           AST Validation Failed
                         </Text>
-                        {astValidation.errors.map(
-                          (err: string, i: number) => (
-                            <Text key={i} color={Colors.AccentRed}>
-                              - {err}
-                            </Text>
-                          ),
-                        )}
+                        {astValidation.errors.map((err: string, i: number) => (
+                          <Text key={i} color={Colors.AccentRed}>
+                            - {err}
+                          </Text>
+                        ))}
                       </Box>
                     )}
                   </Box>

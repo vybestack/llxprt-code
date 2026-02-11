@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as fs from 'node:fs';
+
 let detectionComplete = false;
 
 let kittySupported = false;
@@ -106,9 +108,8 @@ export async function detectAndEnableKittyProtocol(): Promise<void> {
     process.stdin.on('data', handleData);
     process.stdin.on('error', handleDetectionError);
 
-    // Send queries
-    process.stdout.write('\x1b[?u'); // Query progressive enhancement
-    process.stdout.write('\x1b[c'); // Query device attributes
+    // Send queries (synchronous to avoid interleaving with async output)
+    fs.writeSync(process.stdout.fd, '\x1b[?u\x1b[c');
 
     // Timeout after 200ms
     // When an iterm2 terminal does not have focus this can take over 90ms on a
@@ -122,13 +123,17 @@ export function isKittyProtocolEnabled(): boolean {
 }
 
 function disableAllProtocols() {
-  if (kittyEnabled) {
-    process.stdout.write('\x1b[<u');
-    kittyEnabled = false;
-  }
-  if (sgrMouseEnabled) {
-    process.stdout.write('\x1b[?1006l');
-    sgrMouseEnabled = false;
+  try {
+    if (kittyEnabled) {
+      fs.writeSync(process.stdout.fd, '\x1b[<u');
+      kittyEnabled = false;
+    }
+    if (sgrMouseEnabled) {
+      fs.writeSync(process.stdout.fd, '\x1b[?1006l');
+      sgrMouseEnabled = false;
+    }
+  } catch (_err) {
+    // Ignore errors during disable (terminal may already be closed)
   }
 }
 
@@ -137,12 +142,16 @@ function disableAllProtocols() {
  * change the mode.
  */
 export function enableSupportedProtocol(): void {
-  if (kittySupported) {
-    process.stdout.write('\x1b[>1u');
-    kittyEnabled = true;
-  }
-  if (sgrMouseSupported) {
-    process.stdout.write('\x1b[?1006h');
-    sgrMouseEnabled = true;
+  try {
+    if (kittySupported) {
+      fs.writeSync(process.stdout.fd, '\x1b[>1u');
+      kittyEnabled = true;
+    }
+    if (sgrMouseSupported) {
+      fs.writeSync(process.stdout.fd, '\x1b[?1006h');
+      sgrMouseEnabled = true;
+    }
+  } catch (_err) {
+    // Ignore errors during enable (terminal may not support these modes)
   }
 }
