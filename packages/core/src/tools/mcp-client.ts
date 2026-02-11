@@ -118,7 +118,14 @@ export class McpClient {
         }
         if (originalOnError) originalOnError(error);
         console.error(`MCP ERROR (${this.serverName}):`, error.toString());
+        this.toolRegistry.removeMcpToolsByServer(this.serverName);
+        this.promptRegistry.removePromptsByServer(this.serverName);
+        const client = this.client;
+        this.client = undefined;
         this.updateStatus(MCPServerStatus.DISCONNECTED);
+        if (client) {
+          client.close().catch(() => {});
+        }
       };
       this.updateStatus(MCPServerStatus.CONNECTED);
     } catch (error) {
@@ -531,7 +538,12 @@ export async function connectAndDiscover(
 
     mcpClient.onerror = (error) => {
       console.error(`MCP ERROR (${mcpServerName}):`, error.toString());
+      if (!mcpClient) return;
+      toolRegistry.removeMcpToolsByServer(mcpServerName);
+      promptRegistry.removePromptsByServer(mcpServerName);
       updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
+      mcpClient.close().catch(() => {});
+      mcpClient = undefined;
     };
 
     // Attempt to discover both prompts and tools
@@ -562,7 +574,7 @@ export async function connectAndDiscover(
     toolRegistry.sortTools();
   } catch (error) {
     if (mcpClient) {
-      mcpClient.close();
+      mcpClient.close().catch(() => {});
     }
     console.error(
       `Error connecting to MCP server '${mcpServerName}': ${getErrorMessage(

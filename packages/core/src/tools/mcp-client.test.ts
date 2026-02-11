@@ -450,6 +450,75 @@ describe('mcp-client', () => {
       expect(mockedToolRegistry.removeMcpToolsByServer).toHaveBeenCalledOnce();
       expect(mockedPromptRegistry.removePromptsByServer).toHaveBeenCalledOnce();
     });
+
+    it('should close client on onerror to release resources', async () => {
+      const mockedClient = {
+        connect: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        getServerCapabilities: vi
+          .fn()
+          .mockReturnValue({ tools: {}, prompts: {} }),
+        listTools: vi.fn().mockResolvedValue({
+          tools: [
+            {
+              name: 'testTool',
+              description: 'A test tool',
+              inputSchema: { type: 'object', properties: {} },
+            },
+          ],
+        }),
+        listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
+        request: vi.fn().mockResolvedValue({}),
+        onerror: undefined as ((error: Error) => void) | undefined,
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const mockedToolRegistry = {
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        removeMcpToolsByServer: vi.fn(),
+        getMessageBus: vi.fn().mockReturnValue(undefined),
+      } as unknown as ToolRegistry;
+      const mockedPromptRegistry = {
+        registerPrompt: vi.fn(),
+        removePromptsByServer: vi.fn(),
+      } as unknown as PromptRegistry;
+      const client = new McpClient(
+        'test-server',
+        {
+          command: 'test-command',
+        },
+        mockedToolRegistry,
+        mockedPromptRegistry,
+        workspaceContext,
+        false,
+      );
+      await client.connect();
+      await client.discover({} as Config);
+
+      const errorHandler = mockedClient.onerror!;
+      expect(errorHandler).toBeDefined();
+
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      errorHandler(new Error('connection lost'));
+
+      await vi.waitFor(() => {
+        expect(mockedClient.close).toHaveBeenCalled();
+      });
+      expect(mockedToolRegistry.removeMcpToolsByServer).toHaveBeenCalledWith(
+        'test-server',
+      );
+      expect(mockedPromptRegistry.removePromptsByServer).toHaveBeenCalledWith(
+        'test-server',
+      );
+      expect(client.getStatus()).toBe('disconnected');
+    });
   });
   describe('appendMcpServerCommand', () => {
     it('should do nothing if no MCP servers or command are configured', () => {
