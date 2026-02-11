@@ -28,7 +28,7 @@ import type {
   CompressionResultMetadata,
   CompressionStrategy,
 } from './types.js';
-import { PromptResolutionError } from './types.js';
+import { CompressionExecutionError, PromptResolutionError } from './types.js';
 import { adjustForToolCallBoundary } from './utils.js';
 import { getCompressionPrompt } from '../prompts.js';
 
@@ -91,14 +91,8 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const prompt = this.resolvePrompt(context);
 
     // Resolve the provider (compression profile may be undefined)
-    const ephemerals = context.runtimeContext.ephemerals as Record<
-      string,
-      unknown
-    >;
-    const compressionProfileFn = ephemerals.compressionProfile as
-      | (() => string | undefined)
-      | undefined;
-    const compressionProfile = compressionProfileFn?.();
+    const compressionProfile =
+      context.runtimeContext.ephemerals.compressionProfile();
     const provider = context.resolveProvider(compressionProfile);
 
     // Build the LLM request
@@ -116,6 +110,13 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
     // Call the provider and aggregate the streamed response
     const summary = await this.callProvider(provider, compressionRequest);
+
+    if (!summary.trim()) {
+      throw new CompressionExecutionError(
+        'LLM returned empty summary during compression',
+        new Error('empty provider response'),
+      );
+    }
 
     // Assemble result
     const newHistory = this.assembleHistory(toKeepTop, summary, toKeepBottom);
