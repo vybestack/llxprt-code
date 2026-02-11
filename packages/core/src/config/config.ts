@@ -23,6 +23,9 @@ import { EditTool } from '../tools/edit.js';
 import { ShellTool } from '../tools/shell.js';
 import { ASTEditTool } from '../tools/ast-edit.js';
 import { ASTReadFileTool } from '../tools/ast-edit.js';
+// @plan PLAN-20260211-ASTGREP.P05
+import { AstGrepTool } from '../tools/ast-grep.js';
+import { StructuralAnalysisTool } from '../tools/structural-analysis.js';
 import { WriteFileTool } from '../tools/write-file.js';
 import { GoogleWebFetchTool } from '../tools/google-web-fetch.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
@@ -2073,6 +2076,9 @@ export class Config {
     registerCoreTool(ReadManyFilesTool, this);
     registerCoreTool(ReadLineRangeTool, this);
     registerCoreTool(ASTReadFileTool, this);
+    // @plan PLAN-20260211-ASTGREP.P05
+    registerCoreTool(AstGrepTool, this);
+    registerCoreTool(StructuralAnalysisTool, this);
     registerCoreTool(DeleteLineRangeTool, this);
     registerCoreTool(InsertAtLineTool, this);
     registerCoreTool(ShellTool, this);
