@@ -49,25 +49,47 @@ packages/core/src/core/compression/
 └── index.ts                        # Barrel exports
 ```
 
+### Strategy Names — Single Source of Truth
+
+Strategy names are defined once as a const tuple and everything derives from it:
+
+```typescript
+export const COMPRESSION_STRATEGIES = ['middle-out', 'top-down-truncation'] as const;
+export type CompressionStrategyName = (typeof COMPRESSION_STRATEGIES)[number];
+```
+
+Settings registry `enumValues`, type unions in `EphemeralSettings` and `ChatCompressionSettings`, and factory validation all derive from this constant. No duplicated string lists.
+
 ### Strategy Interface
 
 ```typescript
 export interface CompressionStrategy {
-  readonly name: string;
+  readonly name: CompressionStrategyName;
   readonly requiresLLM: boolean;
 
   compress(context: CompressionContext): Promise<CompressionResult>;
 }
 
 export interface CompressionContext {
+  /** The curated history to compress (read-only input) */
   history: IContent[];
+  /** Runtime context for reading settings/thresholds */
   runtimeContext: AgentRuntimeContext;
+  /** Current model/provider state */
   runtimeState: AgentRuntimeState;
-  historyService: HistoryService;
+  /** Token estimation for the history (read-only — strategies do NOT add/clear/lock history) */
+  estimateTokens: (contents: IContent[]) => Promise<number>;
+  /** Current total token count */
+  currentTokenCount: number;
+  /** Logger */
   logger: Logger;
+  /** Resolve a provider for LLM calls (optional profile override) */
   resolveProvider: (profileName?: string) => IProvider;
-  promptService: PromptService;       // for loading compression prompts
-  promptContext: PromptContext;        // provider/model info for prompt resolution
+  /** Prompt resolver for loading strategy-specific prompts */
+  promptResolver: PromptResolver;
+  /** Provider/model context for prompt resolution hierarchy */
+  promptContext: Partial<PromptContext>;
+  /** Prompt ID for telemetry */
   promptId: string;
 }
 
@@ -85,6 +107,8 @@ export interface CompressionResult {
 }
 ```
 
+Note: `historyService` is intentionally **not** in `CompressionContext`. Strategies receive immutable inputs and return a result. The dispatcher in `geminiChat.ts` owns history service locking, clearing, and rebuilding. This enforces separation — strategies cannot accidentally mutate history state.
+
 ### Strategy 1: Middle-Out (current behavior, extracted)
 
 - Sandwich: keep top N%, compress middle via LLM, keep bottom N%.
@@ -97,6 +121,7 @@ export interface CompressionResult {
 - **No LLM call** — pure mechanical truncation. That's the point.
 - Drops oldest messages until token count is under the compression target.
 - Respects tool-call boundaries via shared utility (won't orphan a tool response from its call).
+- Must preserve a minimum number of messages (at least 2 — one human, one AI) to avoid producing an empty or degenerate history.
 - `requiresLLM: false`.
 
 ### Shared Utilities (`utils.ts`)
@@ -199,10 +224,17 @@ Update `settingsSchema.ts` to set `showInDialog: true` on `chatCompression` with
 In `createAgentRuntimeContext.ts`:
 
 ```typescript
-compressionStrategy: (): 'middle-out' | 'top-down-truncation' =>
-  options.settings['compression.strategy'] ??       // ephemeral first
-  options.chatCompression?.strategy,                 // persistent (has schema default)
-  // NO hardcoded fallback here — the default lives in the settings schema
+compressionStrategy: (): CompressionStrategyName => {
+  const value =
+    options.settings['compression.strategy'] ??     // ephemeral first
+    options.chatCompression?.strategy;               // persistent (has schema default)
+  if (!value) {
+    throw new Error(
+      'compression.strategy is not configured — settings system failed to provide a value'
+    );
+  }
+  return value;
+},
 
 compressionProfile: (): string | undefined =>
   options.settings['compression.profile'] ??         // ephemeral first
@@ -210,7 +242,7 @@ compressionProfile: (): string | undefined =>
   // undefined = use active model
 ```
 
-The settings schema defines `'middle-out'` as the default for `compression.strategy`. That single definition is the source of truth. Runtime code never repeats it.
+The settings schema defines `'middle-out'` as the default for `compression.strategy`. That single definition is the source of truth. Runtime code never repeats it. If both ephemeral and persistent are somehow undefined, the accessor throws immediately rather than returning undefined to be discovered later during compression.
 
 #### `/set` Command UX
 
@@ -227,7 +259,15 @@ The settings schema defines `'middle-out'` as the default for `compression.strat
 
 ### Error Handling
 
-Fail fast and hard. If the configured strategy fails (e.g., LLM error during middle-out compression), it throws. No silent fallback to a different strategy. The user needs to know compression failed so they can adjust.
+Fail fast and hard. No silent fallback to a different strategy. Specific failure modes:
+
+- **Strategy execution fails** (LLM error, timeout, etc.) — propagate error. User needs to know.
+- **Unknown strategy name** — factory throws identifying the bad name.
+- **`compression.strategy` not resolved** — runtime accessor throws at read time, not deferred to compression time.
+- **Unknown `compression.profile`** — profile name doesn't exist, strategy throws with actionable error identifying the missing profile.
+- **Profile exists but provider/model unavailable** — provider resolution throws, strategy propagates.
+- **Prompt resolution fails** — missing file or malformed content, strategy throws.
+- **Token estimation fails** — strategy propagates the error.
 
 ### What's Explicitly Out of Scope
 
@@ -237,8 +277,8 @@ Fail fast and hard. If the configured strategy fails (e.g., LLM error during mid
 
 ### Testing Approach
 
-- **`MiddleOutStrategy.test.ts`** — Unit tests with mock history, mock provider. Verifies split logic, prompt loading, result assembly.
-- **`TopDownTruncationStrategy.test.ts`** — Unit tests for truncation. Tool-call boundary edge cases (orphaned responses, boundary at start/end, minimum message counts).
-- **`utils.test.ts`** — Focused tests for `adjustForToolCallBoundary`, `findForwardValidSplitPoint`, `findBackwardValidSplitPoint`. Extracted from any existing coverage in `geminiChat.test.ts`.
-- **`compressionStrategyFactory.test.ts`** — Registry lookup, unknown strategy name → error.
-- **Settings integration** — Verify the three-tier resolution chain (ephemeral → persistent → default). Verify `/set` autocomplete works for both settings.
+- **Per-strategy unit tests** — Each strategy tested in isolation with mock inputs. Verifies split logic, result assembly, boundary respect, failure modes.
+- **Shared utility tests** — Focused tests for tool-call boundary adjustment functions, extracted from any existing coverage in `geminiChat.test.ts`.
+- **Factory tests** — Registry lookup, unknown strategy name → error.
+- **Settings resolution** — Verify two-tier resolution (ephemeral → persistent), verify `/set` autocomplete for both settings.
+- **Behavioral equivalence** — Middle-out under default shipped prompt with no overrides must produce same output as current inline implementation for identical inputs.

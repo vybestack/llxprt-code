@@ -8,7 +8,7 @@ Covers issues #169, #170, #171, #173.
 ## REQ-CS-001: Strategy Pattern Architecture
 
 ### REQ-CS-001.1: Strategy Interface
-The system shall define a `CompressionStrategy` interface with a `name` property, a `requiresLLM` property, and a `compress(context)` method that accepts a `CompressionContext` and returns a `CompressionResult`.
+The system shall define a `CompressionStrategy` interface with a `name` property (typed as `CompressionStrategyName`), a `requiresLLM` property, and a `compress(context)` method that accepts a `CompressionContext` and returns a `CompressionResult`.
 
 ### REQ-CS-001.2: Strategy Factory
 The system shall provide a strategy factory that maps strategy names to `CompressionStrategy` instances.
@@ -19,12 +19,18 @@ If a strategy name is requested that does not exist in the factory, then the sys
 ### REQ-CS-001.4: Compression Result Metadata
 The system shall include metadata in every `CompressionResult` containing: original message count, compressed message count, strategy used, whether an LLM call was made, and (where applicable) counts of top-preserved, bottom-preserved, and middle-compressed messages.
 
+### REQ-CS-001.5: Centralized Strategy Names
+The system shall define strategy names as a single `const COMPRESSION_STRATEGIES` tuple. The `CompressionStrategyName` type, settings registry `enumValues`, and factory validation shall all derive from this constant. Strategy name strings shall not be duplicated across modules.
+
+### REQ-CS-001.6: Strategy Context Boundary
+The `CompressionContext` shall not include the `HistoryService` instance. Strategies receive immutable inputs (history snapshot, token counts, settings, provider resolver, prompt resolver) and return a `CompressionResult`. The dispatcher owns all history service mutation (locking, clearing, adding).
+
 ---
 
 ## REQ-CS-002: Middle-Out Strategy (Extraction of Existing Behavior)
 
 ### REQ-CS-002.1: Behavioral Equivalence
-The `MiddleOutStrategy` shall produce the same compression output as the current inline implementation in `geminiChat.ts` for identical inputs and configuration.
+The `MiddleOutStrategy` shall produce the same compression output as the current inline implementation in `geminiChat.ts` for identical inputs and configuration, when using the default shipped prompt with no user overrides.
 
 ### REQ-CS-002.2: Sandwich Split
 The `MiddleOutStrategy` shall split curated history into three sections: top-preserved (first N%), middle-to-compress, and bottom-preserved (last N%), where N% is driven by the existing `preserveThreshold` and `topPreserveThreshold` settings.
@@ -65,6 +71,9 @@ The `TopDownTruncationStrategy` shall use shared boundary utilities to ensure tr
 
 ### REQ-CS-003.4: Result Assembly
 The `TopDownTruncationStrategy` shall return only the surviving messages as its `newHistory`, with no synthetic summary or acknowledgment messages.
+
+### REQ-CS-003.5: Minimum Preservation
+The `TopDownTruncationStrategy` shall preserve at least 2 messages (preventing an empty or single-message degenerate history). If truncation to the target would require removing all but fewer than 2 messages, then the strategy shall return the last 2 messages respecting tool-call boundaries.
 
 ---
 
@@ -114,6 +123,25 @@ After a strategy returns a `CompressionResult`, `performCompression()` shall cle
 ### REQ-CS-006.3: Fail Fast
 If the strategy's `compress()` method throws, then `performCompression()` shall propagate the error. The system shall not silently fall back to a different strategy.
 
+### REQ-CS-006.4: Atomicity
+The dispatcher's clear-and-rebuild of the history service (clear + add loop) shall execute within the existing history service compression lock (`startCompression` / `endCompression`).
+
+---
+
+## REQ-CS-006A: Failure Modes
+
+### REQ-CS-006A.1: Unknown Compression Profile
+If `compression.profile` names a profile that does not exist, then the system shall throw an error identifying the missing profile name.
+
+### REQ-CS-006A.2: Profile Provider Unavailable
+If the resolved compression profile's provider or model is unavailable, then the provider resolution shall throw and the strategy shall propagate the error.
+
+### REQ-CS-006A.3: Prompt Resolution Failure
+If the `PromptResolver` cannot find the compression prompt file (e.g., `compression/middle-out.md` is missing or unreadable), then the strategy shall throw an error identifying the missing prompt.
+
+### REQ-CS-006A.4: Token Estimation Failure
+If the token estimator throws during strategy execution, then the strategy shall propagate the error.
+
 ---
 
 ## REQ-CS-007: Settings — Ephemeral (`/set`)
@@ -162,18 +190,21 @@ While no ephemeral `compression.strategy` value is set, the system shall use the
 ### REQ-CS-009.3: No Scattered Defaults
 The runtime resolution code (e.g., `createAgentRuntimeContext.ts`) shall not contain hardcoded fallback values for `compression.strategy` or `compression.profile`. The default is defined once in the settings schema.
 
-### REQ-CS-009.4: Settings Failure
-If the settings system fails to provide a `compression.strategy` value (both ephemeral and persistent are undefined), then the system shall fail with an error rather than silently using a hardcoded default.
+### REQ-CS-009.4: Settings Invariant
+The runtime accessor for `compression.strategy` shall validate that the resolved value is non-empty and throw immediately if both ephemeral and persistent values are undefined. This check occurs at accessor read time, not deferred to compression time.
 
 ---
 
 ## REQ-CS-010: Type Definitions
 
 ### REQ-CS-010.1: EphemeralSettings
-The `EphemeralSettings` interface shall include `'compression.strategy'` typed as the union of registered strategy names and `'compression.profile'` typed as `string`.
+The `EphemeralSettings` interface shall include `'compression.strategy'` typed as `CompressionStrategyName` and `'compression.profile'` typed as `string`.
 
 ### REQ-CS-010.2: ChatCompressionSettings
-The `ChatCompressionSettings` interface shall include `strategy` typed as the union of registered strategy names and `profile` typed as `string`, in addition to the existing `contextPercentageThreshold`.
+The `ChatCompressionSettings` interface shall include `strategy` typed as `CompressionStrategyName` and `profile` typed as `string`, in addition to the existing `contextPercentageThreshold`.
+
+### REQ-CS-010.3: CompressionStrategyName
+The `CompressionStrategyName` type shall be derived from the `COMPRESSION_STRATEGIES` const tuple (see REQ-CS-001.5), not independently declared as a string union.
 
 ---
 
