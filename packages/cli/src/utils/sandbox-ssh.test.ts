@@ -1,0 +1,339 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as child_process from 'child_process';
+
+vi.mock('child_process');
+
+import {
+  setupSshAgentForwarding,
+  setupSshAgentDockerMacOS,
+  getPodmanMachineConnection,
+  setupSshAgentPodmanMacOS,
+} from './sandbox.js';
+
+describe('setupSshAgentDockerMacOS', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('mounts magic socket when Docker Desktop detected (R6.1)', () => {
+    vi.mocked(child_process.execSync).mockReturnValue(
+      Buffer.from('Docker Desktop'),
+    );
+    const args: string[] = [];
+    setupSshAgentDockerMacOS(args);
+    const vol = args.find((a) =>
+      a.includes('/run/host-services/ssh-auth.sock'),
+    );
+    expect(vol).toBeDefined();
+    expect(args).toContain('SSH_AUTH_SOCK=/ssh-agent');
+  });
+
+  it('warns and skips when Docker Desktop not detected (R6.2)', () => {
+    vi.mocked(child_process.execSync).mockReturnValue(
+      Buffer.from('Alpine Linux'),
+    );
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const args: string[] = [];
+    setupSshAgentDockerMacOS(args);
+    expect(args).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Docker Desktop not detected'),
+    );
+  });
+
+  it('warns gracefully on docker info failure (R6.2)', () => {
+    vi.mocked(child_process.execSync).mockImplementation(() => {
+      throw new Error('docker not available');
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const args: string[] = [];
+    setupSshAgentDockerMacOS(args);
+    expect(args).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalled();
+  });
+});
+
+describe('getPodmanMachineConnection', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('parses default connection (R7.2)', () => {
+    vi.mocked(child_process.execSync).mockReturnValue(
+      Buffer.from(
+        JSON.stringify([
+          {
+            Name: 'podman-machine-default',
+            URI: 'ssh://core@localhost:54321/run/podman/podman.sock',
+            Identity: '/Users/alice/.ssh/podman-machine-default',
+            Default: true,
+          },
+        ]),
+      ),
+    );
+    const result = getPodmanMachineConnection();
+    expect(result.user).toBe('core');
+    expect(result.host).toBe('localhost');
+    expect(result.port).toBe(54321);
+    expect(result.identityPath).toBe(
+      '/Users/alice/.ssh/podman-machine-default',
+    );
+  });
+
+  it('falls back to sole connection when no default (R7.2)', () => {
+    vi.mocked(child_process.execSync).mockReturnValue(
+      Buffer.from(
+        JSON.stringify([
+          {
+            Name: 'my-machine',
+            URI: 'ssh://user@127.0.0.1:22222/run/podman/podman.sock',
+            Identity: '/Users/alice/.ssh/id',
+            Default: false,
+          },
+        ]),
+      ),
+    );
+    const result = getPodmanMachineConnection();
+    expect(result.user).toBe('user');
+    expect(result.port).toBe(22222);
+  });
+
+  it('throws on empty connection list (R7.2)', () => {
+    vi.mocked(child_process.execSync).mockReturnValue(
+      Buffer.from(JSON.stringify([])),
+    );
+    expect(() => getPodmanMachineConnection()).toThrow(
+      /No Podman machine connections found/,
+    );
+  });
+
+  it('throws on multiple non-default connections (R7.2)', () => {
+    vi.mocked(child_process.execSync).mockReturnValue(
+      Buffer.from(
+        JSON.stringify([
+          {
+            Name: 'a',
+            URI: 'ssh://u@h:1/s',
+            Identity: '/i',
+            Default: false,
+          },
+          {
+            Name: 'b',
+            URI: 'ssh://u@h:2/s',
+            Identity: '/i',
+            Default: false,
+          },
+        ]),
+      ),
+    );
+    expect(() => getPodmanMachineConnection()).toThrow(
+      /Multiple Podman connections/,
+    );
+  });
+
+  it('throws on malformed JSON (R7.6)', () => {
+    vi.mocked(child_process.execSync).mockReturnValue(Buffer.from('not json'));
+    expect(() => getPodmanMachineConnection()).toThrow(
+      /Failed to parse Podman connection list JSON/,
+    );
+  });
+
+  it('throws on command failure with guidance', () => {
+    vi.mocked(child_process.execSync).mockImplementation(() => {
+      throw new Error('podman not found');
+    });
+    expect(() => getPodmanMachineConnection()).toThrow(
+      /Failed to list Podman connections/,
+    );
+  });
+});
+
+describe('setupSshAgentForwarding', () => {
+  const origEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = { ...origEnv };
+    vi.restoreAllMocks();
+  });
+
+  it('returns empty result when SSH agent is off (R4.1)', async () => {
+    process.env.LLXPRT_SANDBOX_SSH_AGENT = 'off';
+    const args: string[] = [];
+    const result = await setupSshAgentForwarding({ command: 'docker' }, args);
+    expect(result).toEqual({});
+    expect(args).toHaveLength(0);
+  });
+
+  it('warns and skips when SSH_AUTH_SOCK not set (R4.2)', async () => {
+    process.env.LLXPRT_SANDBOX_SSH_AGENT = 'on';
+    delete process.env.SSH_AUTH_SOCK;
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const args: string[] = [];
+    const result = await setupSshAgentForwarding({ command: 'docker' }, args);
+    expect(result).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('SSH_AUTH_SOCK is not set'),
+    );
+  });
+
+  it('returns empty when not explicitly enabled and no SSH_AUTH_SOCK (R4.4)', async () => {
+    delete process.env.LLXPRT_SANDBOX_SSH_AGENT;
+    delete process.env.SANDBOX_SSH_AGENT;
+    delete process.env.SSH_AUTH_SOCK;
+    const args: string[] = [];
+    const result = await setupSshAgentForwarding({ command: 'docker' }, args);
+    expect(result).toEqual({});
+  });
+});
+
+describe('setupSshAgentPodmanMacOS', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mockValidConnection() {
+    vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('connection list')) {
+        return Buffer.from(
+          JSON.stringify([
+            {
+              Name: 'default',
+              URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
+              Identity: '/Users/test/.ssh/key',
+              Default: true,
+            },
+          ]),
+        );
+      }
+      if (cmdStr.includes('rm -f')) {
+        return Buffer.from('');
+      }
+      if (cmdStr.includes('test -S')) {
+        return Buffer.from('ok');
+      }
+      return Buffer.from('');
+    });
+  }
+
+  function mockTunnelProcess(exitCode: number | null = null) {
+    const fakeProcess = {
+      pid: 99999,
+      exitCode,
+      on: vi.fn().mockReturnThis(),
+      removeListener: vi.fn().mockReturnThis(),
+      kill: vi.fn(),
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+    };
+    vi.mocked(child_process.spawn).mockReturnValue(
+      fakeProcess as unknown as child_process.ChildProcess,
+    );
+    return fakeProcess;
+  }
+
+  it('removes stale socket before spawning tunnel (R7.3)', async () => {
+    mockValidConnection();
+    mockTunnelProcess();
+
+    await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
+
+    const calls = vi.mocked(child_process.execSync).mock.calls;
+    const rmCall = calls.find((c) => String(c[0]).includes('rm -f'));
+    expect(rmCall).toBeDefined();
+  }, 10000);
+
+  it('spawns SSH tunnel with -R reverse forwarding (R7.1)', async () => {
+    mockValidConnection();
+    mockTunnelProcess();
+
+    await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
+
+    expect(child_process.spawn).toHaveBeenCalledWith(
+      'ssh',
+      expect.arrayContaining(['-R']),
+      expect.objectContaining({ detached: true }),
+    );
+  }, 10000);
+
+  it('mounts VM socket and sets SSH_AUTH_SOCK on success (R7.5)', async () => {
+    mockValidConnection();
+    mockTunnelProcess();
+
+    const args: string[] = [];
+    const result = await setupSshAgentPodmanMacOS(args, '/tmp/auth.sock');
+
+    expect(args).toContain('--volume');
+    expect(args).toContain('--env');
+    const sshEnv = args.find((a) => a.includes('SSH_AUTH_SOCK'));
+    expect(sshEnv).toBe('SSH_AUTH_SOCK=/ssh-agent');
+    expect(result.cleanup).toBeDefined();
+  }, 10000);
+
+  it('returns cleanup function that kills tunnel (R7.9)', async () => {
+    mockValidConnection();
+    const fakeProc = mockTunnelProcess();
+
+    const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
+    expect(result.cleanup).toBeDefined();
+
+    result.cleanup!();
+    expect(fakeProc.kill).toHaveBeenCalledWith('SIGTERM');
+  }, 10000);
+
+  it('cleanup is idempotent (R7.10)', async () => {
+    mockValidConnection();
+    const fakeProc = mockTunnelProcess();
+
+    const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
+    result.cleanup!();
+    result.cleanup!(); // second call should not throw
+
+    // kill is only called once due to idempotent guard
+    expect(fakeProc.kill).toHaveBeenCalledTimes(1);
+  }, 10000);
+
+  it('cleanup attempts socket removal best-effort (R7.11)', async () => {
+    mockValidConnection();
+    mockTunnelProcess();
+
+    const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
+    result.cleanup!();
+
+    const cleanupCalls = vi.mocked(child_process.execSync).mock.calls;
+    const rmCalls = cleanupCalls.filter((c) => String(c[0]).includes('rm -f'));
+    // At least 2: one for stale cleanup, one for final cleanup
+    expect(rmCalls.length).toBeGreaterThanOrEqual(2);
+  }, 10000);
+
+  it('throws FatalSandboxError when tunnel fails to start (R7.7)', async () => {
+    mockValidConnection();
+    mockTunnelProcess(1); // exitCode=1 means process died
+
+    await expect(
+      setupSshAgentPodmanMacOS([], '/tmp/auth.sock'),
+    ).rejects.toThrow(/SSH tunnel process failed to start/);
+  }, 10000);
+});
