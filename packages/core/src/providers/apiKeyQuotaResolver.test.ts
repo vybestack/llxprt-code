@@ -29,7 +29,8 @@ vi.mock('./chutes/usageInfo.js', () => ({
 vi.mock('./kimi/usageInfo.js', () => ({
   fetchKimiUsage: vi.fn(),
   formatKimiUsage: vi.fn(),
-  formatKimiCodeKeyMessage: vi.fn(),
+  fetchKimiCodeUsage: vi.fn(),
+  formatKimiCodeUsage: vi.fn(),
 }));
 
 describe('apiKeyQuotaResolver', () => {
@@ -215,15 +216,42 @@ describe('apiKeyQuotaResolver', () => {
       expect(result).toEqual({ provider: 'Kimi', lines: mockLines });
     });
 
-    it('should return Kimi Code message for sk-kimi- keys', async () => {
-      const { formatKimiCodeKeyMessage } = await import('./kimi/usageInfo.js');
-      const mockLines = ['  Kimi Code subscription detected'];
-      vi.mocked(formatKimiCodeKeyMessage).mockReturnValue(mockLines);
+    it('should fetch and format Kimi Code quota for sk-kimi- keys', async () => {
+      const { fetchKimiCodeUsage, formatKimiCodeUsage } = await import(
+        './kimi/usageInfo.js'
+      );
+      const mockUsage = {
+        usage: { limit: '100', remaining: '85' },
+      };
+      const mockLines = ['  Weekly quota: 15/100 used (85 remaining)'];
+      vi.mocked(fetchKimiCodeUsage).mockResolvedValue(
+        mockUsage as ReturnType<typeof fetchKimiCodeUsage> extends Promise<
+          infer T
+        >
+          ? T
+          : never,
+      );
+      vi.mocked(formatKimiCodeUsage).mockReturnValue(mockLines);
+
+      const result = await fetchApiKeyQuota(
+        'kimi',
+        'sk-kimi-subscription-key',
+        'https://api.kimi.com/coding/v1',
+      );
+
+      expect(fetchKimiCodeUsage).toHaveBeenCalledWith(
+        'sk-kimi-subscription-key',
+        'https://api.kimi.com/coding/v1',
+      );
+      expect(result).toEqual({ provider: 'Kimi Code', lines: mockLines });
+    });
+
+    it('should return null when Kimi Code fetch returns null', async () => {
+      const { fetchKimiCodeUsage } = await import('./kimi/usageInfo.js');
+      vi.mocked(fetchKimiCodeUsage).mockResolvedValue(null);
 
       const result = await fetchApiKeyQuota('kimi', 'sk-kimi-subscription-key');
-
-      expect(formatKimiCodeKeyMessage).toHaveBeenCalled();
-      expect(result).toEqual({ provider: 'Kimi', lines: mockLines });
+      expect(result).toBeNull();
     });
 
     it('should return null when fetch returns null', async () => {

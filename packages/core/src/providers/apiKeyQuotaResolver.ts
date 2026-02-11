@@ -14,7 +14,8 @@ import { fetchChutesUsage, formatChutesUsage } from './chutes/usageInfo.js';
 import {
   fetchKimiUsage,
   formatKimiUsage,
-  formatKimiCodeKeyMessage,
+  fetchKimiCodeUsage,
+  formatKimiCodeUsage,
 } from './kimi/usageInfo.js';
 
 const logger = new DebugLogger('llxprt:quota:apikey');
@@ -113,12 +114,10 @@ export async function fetchApiKeyQuota(
       }
 
       case 'kimi': {
-        // Kimi Code subscription keys don't support balance endpoint
         if (apiKey.startsWith('sk-kimi-')) {
-          return {
-            provider: 'Kimi',
-            lines: formatKimiCodeKeyMessage(),
-          };
+          const usage = await fetchKimiCodeUsage(apiKey, baseUrl);
+          if (!usage) return null;
+          return { provider: 'Kimi Code', lines: formatKimiCodeUsage(usage) };
         }
 
         const usage = await fetchKimiUsage(apiKey, baseUrl);
