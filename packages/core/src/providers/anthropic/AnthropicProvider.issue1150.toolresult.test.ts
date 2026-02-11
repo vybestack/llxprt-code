@@ -859,9 +859,6 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       ).toBe(true);
     });
 
-    /**
-     * Test that tool_result content is properly serialized
-     */
     it('should serialize tool_result content correctly for complex objects', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -948,6 +945,462 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
 
       // Should not throw when stringified
       expect(() => JSON.stringify(result.content)).not.toThrow();
+    });
+  });
+
+  describe('Issue #1312: Interrupted tool calls and consecutive same-role messages', () => {
+    const assertStrictAlternation = (
+      messages: Array<{ role: string; content: unknown }>,
+    ) => {
+      for (let i = 1; i < messages.length; i++) {
+        expect(messages[i].role).not.toBe(messages[i - 1].role);
+      }
+    };
+
+    it('should handle interrupted tool calls followed by user messages (issue #1312)', async () => {
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Find some files' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'I will search for files',
+              sourceField: 'thinking',
+              signature: 'sig_interrupted',
+            } as ThinkingBlock,
+            {
+              type: 'tool_call',
+              id: 'toolu_01QzKQrpaCwfR4JgXphWnGrC',
+              name: 'glob',
+              parameters: { pattern: '**/*.ts' },
+            } as ToolCallBlock,
+            {
+              type: 'tool_call',
+              id: 'toolu_017u1Ybt9ECtS4GYE46hXB8H',
+              name: 'glob',
+              parameters: { pattern: '**/*.js' },
+            } as ToolCallBlock,
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'text',
+              text: 'First, reason in your scratchpad...',
+            },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'do you remember what we are doing?' },
+          ],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'The user is asking me to remember',
+              sourceField: 'thinking',
+              signature: 'sig_response',
+            } as ThinkingBlock,
+            {
+              type: 'text',
+              text: 'Yes, I remember we were looking for files.',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      assertStrictAlternation(request.messages);
+
+      let toolUseMessageIndex = -1;
+      let toolUseIds: string[] = [];
+
+      for (let i = 0; i < request.messages.length; i++) {
+        const msg = request.messages[i];
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          const ids = getToolUseIds(msg.content);
+          if (ids.length > 0) {
+            toolUseMessageIndex = i;
+            toolUseIds = ids;
+            break;
+          }
+        }
+      }
+
+      expect(toolUseMessageIndex).toBeGreaterThan(-1);
+      expect(toolUseIds.length).toBe(2);
+
+      const nextMessage = request.messages[toolUseMessageIndex + 1];
+      expect(nextMessage).toBeDefined();
+      expect(nextMessage.role).toBe('user');
+      expect(Array.isArray(nextMessage.content)).toBe(true);
+
+      const toolResultIds = getToolResultIds(
+        nextMessage.content as AnthropicContentBlock[],
+      );
+      for (const toolUseId of toolUseIds) {
+        expect(toolResultIds).toContain(toolUseId);
+      }
+
+      const toolResults = (
+        nextMessage.content as AnthropicContentBlock[]
+      ).filter((b) => b.type === 'tool_result') as Array<{
+        type: 'tool_result';
+        tool_use_id: string;
+        content: unknown;
+        is_error?: boolean;
+      }>;
+      for (const tr of toolResults) {
+        expect(tr.is_error).toBe(true);
+        expect(tr.content).toBe('[tool execution interrupted]');
+      }
+    });
+
+    it('should merge consecutive user messages containing tool_results to maintain role alternation', async () => {
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Do something' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Calling a tool',
+              sourceField: 'thinking',
+              signature: 'sig_tool',
+            } as ThinkingBlock,
+            {
+              type: 'tool_call',
+              id: 'tool_merge_test',
+              name: 'read_file',
+              parameters: { path: 'test.txt' },
+            } as ToolCallBlock,
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'tool_merge_test',
+              toolName: 'read_file',
+              result: 'file contents',
+            } as ToolResponseBlock,
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Now do something else' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Got it',
+              sourceField: 'thinking',
+              signature: 'sig_response',
+            } as ThinkingBlock,
+            { type: 'text', text: 'Done.' },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      assertStrictAlternation(request.messages);
+
+      let toolUseIdx = -1;
+      for (let i = 0; i < request.messages.length; i++) {
+        const msg = request.messages[i];
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          if (msg.content.some((b) => b.type === 'tool_use')) {
+            toolUseIdx = i;
+            break;
+          }
+        }
+      }
+
+      expect(toolUseIdx).toBeGreaterThan(-1);
+      const nextMsg = request.messages[toolUseIdx + 1];
+      expect(nextMsg.role).toBe('user');
+      expect(Array.isArray(nextMsg.content)).toBe(true);
+
+      const content = nextMsg.content as AnthropicContentBlock[];
+      const hasToolResult = content.some((b) => b.type === 'tool_result');
+      const hasText = content.some((b) => b.type === 'text');
+      expect(hasToolResult).toBe(true);
+      expect(hasText).toBe(true);
+    });
+
+    it('should handle tool_use followed by user interruption then another tool_use cycle', async () => {
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Start' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'First tool call',
+              sourceField: 'thinking',
+              signature: 'sig_first_call',
+            } as ThinkingBlock,
+            {
+              type: 'tool_call',
+              id: 'tool_interrupted_1',
+              name: 'read_file',
+              parameters: { path: 'a.txt' },
+            } as ToolCallBlock,
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Actually, try something else' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Second tool call',
+              sourceField: 'thinking',
+              signature: 'sig_second_call',
+            } as ThinkingBlock,
+            {
+              type: 'tool_call',
+              id: 'tool_success_2',
+              name: 'read_file',
+              parameters: { path: 'b.txt' },
+            } as ToolCallBlock,
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'tool_success_2',
+              toolName: 'read_file',
+              result: 'content of b.txt',
+            } as ToolResponseBlock,
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Great, what did you find?' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      assertStrictAlternation(request.messages);
+
+      const toolUseIndices: Array<{
+        index: number;
+        ids: string[];
+      }> = [];
+      for (let i = 0; i < request.messages.length; i++) {
+        const msg = request.messages[i];
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+          const ids = getToolUseIds(msg.content);
+          if (ids.length > 0) {
+            toolUseIndices.push({ index: i, ids });
+          }
+        }
+      }
+
+      for (const { index, ids } of toolUseIndices) {
+        const nextMsg = request.messages[index + 1];
+        expect(nextMsg).toBeDefined();
+        expect(nextMsg.role).toBe('user');
+        expect(Array.isArray(nextMsg.content)).toBe(true);
+
+        const resultIds = getToolResultIds(
+          nextMsg.content as AnthropicContentBlock[],
+        );
+        for (const id of ids) {
+          expect(resultIds).toContain(id);
+        }
+      }
+
+      const firstToolUse = toolUseIndices.find((t) =>
+        t.ids.some((id) => id.includes('tool_interrupted_1')),
+      );
+      expect(firstToolUse).toBeDefined();
+      const firstNextMsg = request.messages[firstToolUse!.index + 1];
+      const firstToolResults = (
+        firstNextMsg.content as AnthropicContentBlock[]
+      ).filter((b) => b.type === 'tool_result') as Array<{
+        type: 'tool_result';
+        tool_use_id: string;
+        content: unknown;
+        is_error?: boolean;
+      }>;
+      const interruptedResult = firstToolResults.find((tr) =>
+        tr.tool_use_id.includes('tool_interrupted_1'),
+      );
+      expect(interruptedResult).toBeDefined();
+      expect(interruptedResult!.is_error).toBe(true);
+      expect(interruptedResult!.content).toBe('[tool execution interrupted]');
+
+      const secondToolUse = toolUseIndices.find((t) =>
+        t.ids.some((id) => id.includes('tool_success_2')),
+      );
+      expect(secondToolUse).toBeDefined();
+      const secondNextMsg = request.messages[secondToolUse!.index + 1];
+      const secondToolResults = (
+        secondNextMsg.content as AnthropicContentBlock[]
+      ).filter((b) => b.type === 'tool_result') as Array<{
+        type: 'tool_result';
+        tool_use_id: string;
+        content: unknown;
+        is_error?: boolean;
+      }>;
+      const successResult = secondToolResults.find((tr) =>
+        tr.tool_use_id.includes('tool_success_2'),
+      );
+      expect(successResult).toBeDefined();
+      expect(successResult!.is_error).toBeUndefined();
+    });
+
+    it('should merge consecutive text-only user messages to maintain role alternation', async () => {
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'First message' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Thinking about it',
+              sourceField: 'thinking',
+              signature: 'sig_consec_user',
+            } as ThinkingBlock,
+            { type: 'text', text: 'Let me think...' },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Actually, do this instead' }],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'And also this' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'Got updated instructions',
+              sourceField: 'thinking',
+              signature: 'sig_consec_response',
+            } as ThinkingBlock,
+            { type: 'text', text: 'Sure, doing both.' },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      assertStrictAlternation(request.messages);
+    });
+
+    it('should merge consecutive assistant messages to maintain role alternation', async () => {
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Tell me something' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Here is part one.' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'And here is part two.' }],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Thanks' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      assertStrictAlternation(request.messages);
     });
   });
 });
