@@ -8,3 +8,4 @@ export * from './types.js';
 export * from './utils.js';
 export { MiddleOutStrategy } from './MiddleOutStrategy.js';
 export { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
+export * from './compressionStrategyFactory.js';
