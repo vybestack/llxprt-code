@@ -1280,7 +1280,7 @@ class Session {
 
     if (pathSpecsToRead.length > 0) {
       const toolArgs = {
-        include: pathSpecsToRead,
+        paths: pathSpecsToRead,
       };
 
       const callId = `${readManyFilesTool.name}-${Date.now()}`;

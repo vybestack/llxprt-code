@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,10 +8,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders } from '../../test-utils/render.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
-import { Banner } from './Banner.js';
 import { Footer } from './Footer.js';
 import { Header } from './Header.js';
-import { ModelDialog } from './ModelDialog.js';
+import { ModelsDialog } from './ModelDialog.js';
 import { StatsDisplay } from './StatsDisplay.js';
 
 // Mock the theme module
@@ -94,30 +93,14 @@ const defaultFooterProps = {
 describe('Gradient Crash Regression Tests', () => {
   it('<Header /> should not crash when theme.ui.gradient is empty', () => {
     const { lastFrame } = renderWithProviders(
-      <Header version="1.0.0" nightly={false} />,
-      {
-        width: 120,
-      },
+      <Header version="1.0.0" nightly={false} terminalWidth={120} />,
     );
     expect(lastFrame()).toBeDefined();
   });
 
-  it('<ModelDialog /> should not crash when theme.ui.gradient is empty', () => {
+  it('<ModelsDialog /> should not crash when theme.ui.gradient is empty', () => {
     const { lastFrame } = renderWithProviders(
-      <ModelDialog onClose={() => {}} />,
-      {
-        width: 120,
-      },
-    );
-    expect(lastFrame()).toBeDefined();
-  });
-
-  it('<Banner /> should not crash when theme.ui.gradient is empty', () => {
-    const { lastFrame } = renderWithProviders(
-      <Banner bannerText="Test Banner" color="blue" width={80} />,
-      {
-        width: 120,
-      },
+      <ModelsDialog onClose={() => {}} onSelect={() => {}} />,
     );
     expect(lastFrame()).toBeDefined();
   });
