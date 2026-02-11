@@ -119,6 +119,7 @@ function buildContext(
     preserveThreshold: number;
     topPreserveThreshold: number;
     compressionThreshold: number;
+    compressionProfile: string;
     resolveProvider: (profileName?: string) => IProvider;
     model: string;
     provider: string;
@@ -143,6 +144,7 @@ function buildContext(
       contextLimit: () => 100000,
       preserveThreshold: () => overrides.preserveThreshold ?? 0.2,
       topPreserveThreshold: () => overrides.topPreserveThreshold ?? 0.2,
+      compressionProfile: () => overrides.compressionProfile,
       toolFormatOverride: () => undefined,
       reasoning: {
         enabled: () => false,
@@ -171,6 +173,7 @@ function buildContext(
     logger: noopLogger,
     resolveProvider,
     promptResolver,
+    promptBaseDir: '/tmp/test-prompts',
     promptContext: {
       provider: overrides.provider ?? 'test-provider',
       model: overrides.model ?? 'test-model',
@@ -393,19 +396,11 @@ describe('MiddleOutStrategy', () => {
       );
 
       const history = generateHistory(20);
-
-      // Override the runtime context to simulate a compression profile
-      // by making the strategy resolve with the profile name.
-      // The strategy should call resolveProvider with the profile name.
       const strategy = new MiddleOutStrategy();
 
-      // We need the context to carry the profile info. The strategy
-      // should look at the runtimeContext for compression profile settings
-      // or accept it via the context. Let's use the runtimeContext ephemerals.
-      // Since the types don't have compressionProfile in ephemerals directly,
-      // the strategy will read it from somewhere. We'll verify by the output.
       const ctxWithProfile = buildContext({
         history,
+        compressionProfile: 'compression-profile',
         resolveProvider: (profileName?: string) => {
           if (profileName === 'compression-profile') {
             return profileProvider;
@@ -413,18 +408,12 @@ describe('MiddleOutStrategy', () => {
           return defaultProvider;
         },
       });
-      // The compression profile name is typically stored in settings.
-      // We'll rely on the strategy's implementation to determine how
-      // it reads the profile name. The key behavioral test: when a profile
-      // is configured, the profile provider's output appears in the result.
-      // For now, verify the default case (no profile → default provider).
-      const defaultResult = await strategy.compress(ctxWithProfile);
-      const topCount = defaultResult.metadata.topPreserved!;
-      const summaryMsg = defaultResult.newHistory[topCount];
-      // Without a profile, it should use the default provider
+      const profileResult = await strategy.compress(ctxWithProfile);
+      const topCount = profileResult.metadata.topPreserved!;
+      const summaryMsg = profileResult.newHistory[topCount];
       expect(summaryMsg.blocks[0]).toMatchObject({
         type: 'text',
-        text: expect.stringContaining(defaultSummary),
+        text: expect.stringContaining(profileSummary),
       });
     });
   });

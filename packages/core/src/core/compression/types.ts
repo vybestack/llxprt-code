@@ -43,6 +43,7 @@ export interface CompressionContext {
   readonly logger: DebugLogger;
   readonly resolveProvider: (profileName?: string) => IProvider;
   readonly promptResolver: PromptResolver;
+  readonly promptBaseDir: string;
   readonly promptContext: Readonly<Partial<PromptContext>>;
   readonly promptId: string;
 }

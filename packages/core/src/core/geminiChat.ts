@@ -7,6 +7,8 @@
 // DISCLAIMER: This is a copied version of https://github.com/googleapis/js-genai/blob/main/src/chats.ts with the intention of working around a key bug
 // where function responses are not treated as "valid" responses: https://b.corp.google.com/issues/420354090
 
+import os from 'node:os';
+import path from 'node:path';
 import {
   GenerateContentResponse,
   type Content,
@@ -2043,6 +2045,7 @@ export class GeminiChat {
    */
   private buildCompressionContext(promptId: string): CompressionContext {
     const promptResolver = new PromptResolver();
+    const promptBaseDir = path.join(os.homedir(), '.llxprt', 'prompts');
     return {
       history: this.historyService.getCurated(),
       runtimeContext: this.runtimeContext,
@@ -2054,6 +2057,7 @@ export class GeminiChat {
       resolveProvider: (profileName?) =>
         this.resolveProviderForRuntime(profileName ?? 'compression'),
       promptResolver,
+      promptBaseDir,
       promptContext: {
         provider: this.runtimeState.provider,
         model: this.runtimeState.model,

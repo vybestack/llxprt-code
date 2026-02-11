@@ -167,6 +167,7 @@ function buildContext(
     logger: noopLogger,
     resolveProvider: () => throwingProvider,
     promptResolver,
+    promptBaseDir: '/tmp/test-prompts',
     promptContext: {
       provider: 'test-provider',
       model: 'test-model',

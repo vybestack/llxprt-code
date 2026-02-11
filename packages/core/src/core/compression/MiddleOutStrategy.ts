@@ -171,7 +171,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
   private resolvePrompt(context: CompressionContext): string {
     const resolved = context.promptResolver.resolveFile(
-      '',
+      context.promptBaseDir,
       'compression.md',
       context.promptContext,
     );

@@ -424,6 +424,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
         'logger',
         'resolveProvider',
         'promptResolver',
+        'promptBaseDir',
         'promptContext',
         'promptId',
       ];
