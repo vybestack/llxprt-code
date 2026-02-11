@@ -6,9 +6,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { patchStdio, createInkStdio } from './stdio.js';
-import { coreEvents } from '@vybestack/llxprt-code-core';
+import { coreEvents } from './events.js';
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
+vi.mock('./events.js', () => ({
   coreEvents: {
     emitOutput: vi.fn(),
   },
@@ -33,18 +33,18 @@ describe('stdio utils', () => {
     const cleanup = patchStdio();
 
     process.stdout.write('test stdout');
-    expect(coreEvents.emitOutput).toHaveBeenCalledWith(
-      false,
-      'test stdout',
-      undefined,
-    );
+    expect(coreEvents.emitOutput).toHaveBeenCalledWith({
+      chunk: 'test stdout',
+      encoding: undefined,
+      isStderr: false,
+    });
 
     process.stderr.write('test stderr');
-    expect(coreEvents.emitOutput).toHaveBeenCalledWith(
-      true,
-      'test stderr',
-      undefined,
-    );
+    expect(coreEvents.emitOutput).toHaveBeenCalledWith({
+      chunk: 'test stderr',
+      encoding: undefined,
+      isStderr: true,
+    });
 
     cleanup();
 

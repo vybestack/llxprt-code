@@ -78,6 +78,9 @@ import {
   CoreEvent,
   type OutputPayload,
   type ConsoleLogPayload,
+  patchStdio,
+  writeToStderr,
+  writeToStdout,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
@@ -115,7 +118,6 @@ import { computeWindowTitle } from './utils/windowTitle.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
-import { patchStdio, writeToStderr, writeToStdout } from './utils/stdio.js';
 import {
   setCliRuntimeContext,
   switchActiveProvider,
