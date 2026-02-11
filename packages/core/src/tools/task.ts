@@ -735,29 +735,28 @@ class TaskToolInvocation extends BaseToolInvocation<
           : setTimeout(() => asyncAbortController.abort(), timeoutMs);
 
       // Register with AsyncTaskManager consuming the booking ID
-      asyncTaskManager.registerTask({
-        id: agentId,
-        subagentName: this.normalized.subagentName,
-        goalPrompt: this.normalized.goalPrompt,
-        abortController: asyncAbortController,
-      }, bookingId);
-      
-      taskRegistered = true;
+      asyncTaskManager.registerTask(
+        {
+          id: agentId,
+          subagentName: this.normalized.subagentName,
+          goalPrompt: this.normalized.goalPrompt,
+          abortController: asyncAbortController,
+        },
+        bookingId,
+      );
 
+      taskRegistered = true;
     } catch (error) {
       // If any setup step fails, make sure to clean up the reservation
       if (!taskRegistered && bookingId) {
-        // Cancel the reservation - access private member for cleanup
-        const manager = asyncTaskManager as unknown as { pendingReservations?: Map<string, unknown> };
-        const pendingReservations = manager.pendingReservations ?? new Map<string, unknown>();
-        pendingReservations.delete(bookingId);
+        asyncTaskManager.cancelReservation(bookingId);
       }
-      
+
       // Clean up any created resources
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
-      
+
       if (dispose) {
         dispose();
       }

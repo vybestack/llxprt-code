@@ -61,6 +61,27 @@ describe('CheckAsyncTasksTool', () => {
       expect(result.llmContent).toContain('task-def456');
     });
 
+    it('uses [FAILED] status label (not [ERROR]) for failed tasks', async () => {
+      const manager = createMockManager();
+
+      manager.registerTask({
+        id: 'task-failed-123',
+        subagentName: 'typescriptexpert',
+        goalPrompt: 'Fix boundary issue',
+        abortController: new AbortController(),
+      });
+      manager.failTask('task-failed-123', 'Subagent execution failed');
+
+      const tool = new CheckAsyncTasksTool(buildDependencies(manager));
+      const invocation = tool.build({});
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeUndefined();
+      expect(result.returnDisplay).toContain(
+        '[FAILED] **task-failed-123** - failed',
+      );
+      expect(result.returnDisplay).not.toContain('[ERROR]');
+    });
     it('returns "no tasks" when empty', async () => {
       const manager = createMockManager();
 
@@ -150,6 +171,26 @@ describe('CheckAsyncTasksTool', () => {
       // Full task IDs now shown for ambiguous matches
       expect(result.llmContent).toContain('task-abc-111');
       expect(result.llmContent).toContain('task-abc-222');
+    });
+
+    it('uses [FAILED] status label in detailed display for failed tasks', async () => {
+      const manager = createMockManager();
+
+      manager.registerTask({
+        id: 'task-failed-detail-123',
+        subagentName: 'typescriptexpert',
+        goalPrompt: 'Refactor module',
+        abortController: new AbortController(),
+      });
+      manager.failTask('task-failed-detail-123', 'Compilation failed');
+
+      const tool = new CheckAsyncTasksTool(buildDependencies(manager));
+      const invocation = tool.build({ task_id: 'task-failed-detail-123' });
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeUndefined();
+      expect(result.returnDisplay).toContain('[FAILED] **typescriptexpert**');
+      expect(result.returnDisplay).not.toContain('[ERROR]');
     });
 
     it('returns error for not found', async () => {

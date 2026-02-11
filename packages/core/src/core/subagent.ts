@@ -54,7 +54,6 @@ import {
 } from './coreToolScheduler.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
-import { ContentConverters } from '../services/history/ContentConverters.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -877,25 +876,6 @@ export class SubAgentScope {
             });
           }
 
-          // Record tool responses to history
-          // This ensures proper tool_result blocks for Anthropic
-          const userContent: Content = { role: 'user', parts: responseParts };
-          const turnKeyForToolResults =
-            this.runtimeContext.history.generateTurnKey();
-          const idGenForToolResults =
-            this.runtimeContext.history.getIdGeneratorCallback(
-              turnKeyForToolResults,
-            );
-          this.runtimeContext.history.add(
-            ContentConverters.toIContent(
-              userContent,
-              idGenForToolResults,
-              undefined,
-              turnKeyForToolResults,
-            ),
-            this.modelConfig.model,
-          );
-
           currentMessages = [{ role: 'user', parts: responseParts }];
           continue;
         }
@@ -1106,37 +1086,6 @@ export class SubAgentScope {
           if (resp.type === StreamEventType.CHUNK && resp.value.text) {
             textResponse += resp.value.text;
           }
-        }
-
-        // Record model response with tool_call blocks to history
-        // This ensures proper tool_use/tool_result pairing for Anthropic
-        if (functionCalls.length > 0 || textResponse) {
-          const modelParts: Part[] = [];
-          if (textResponse) {
-            modelParts.push({ text: textResponse });
-          }
-          functionCalls.forEach((fc) => {
-            modelParts.push({
-              functionCall: {
-                id: fc.id,
-                name: fc.name,
-                args: fc.args,
-              },
-            });
-          });
-          const modelContent: Content = { role: 'model', parts: modelParts };
-          const turnKey = this.runtimeContext.history.generateTurnKey();
-          const idGen =
-            this.runtimeContext.history.getIdGeneratorCallback(turnKey);
-          this.runtimeContext.history.add(
-            ContentConverters.toIContent(
-              modelContent,
-              idGen,
-              undefined,
-              turnKey,
-            ),
-            this.modelConfig.model,
-          );
         }
 
         if (textResponse) {
@@ -1483,7 +1432,14 @@ export class SubAgentScope {
       }
 
       if (toolResponse.responseParts) {
-        toolResponseParts.push(...toolResponse.responseParts);
+        // Only include functionResponse parts — the functionCall is already in
+        // history from the model's assistant message (Issue #244).
+        for (const part of toolResponse.responseParts) {
+          if ('functionCall' in part) {
+            continue;
+          }
+          toolResponseParts.push(part);
+        }
       }
     }
     // If all tool calls failed, inform the model so it can re-evaluate.
@@ -1492,16 +1448,6 @@ export class SubAgentScope {
         text: 'All tool calls failed. Please analyze the errors and try an alternative approach.',
       });
     }
-
-    // Record tool responses to history
-    // This ensures proper tool_result blocks for Anthropic
-    const userContent: Content = { role: 'user', parts: toolResponseParts };
-    const turnKey = this.runtimeContext.history.generateTurnKey();
-    const idGen = this.runtimeContext.history.getIdGeneratorCallback(turnKey);
-    this.runtimeContext.history.add(
-      ContentConverters.toIContent(userContent, idGen, undefined, turnKey),
-      this.modelConfig.model,
-    );
 
     return [{ role: 'user', parts: toolResponseParts }];
   }
@@ -1714,10 +1660,16 @@ export class SubAgentScope {
   ): Part[] {
     const aggregate: Part[] = [];
     for (const call of completedCalls) {
-      // History already has functionCall from model response recorded via Turn
-      // Just include the functionResponse parts here
+      // History already has functionCall from model response recorded via Turn.
+      // Only include functionResponse parts here — including functionCall would
+      // create orphan tool_use blocks for Anthropic (Issue #244).
       if (call.response?.responseParts?.length) {
-        aggregate.push(...call.response.responseParts);
+        for (const part of call.response.responseParts) {
+          if ('functionCall' in part) {
+            continue;
+          }
+          aggregate.push(part);
+        }
       } else {
         // Fallback: create a proper functionResponse instead of plain text
         aggregate.push({

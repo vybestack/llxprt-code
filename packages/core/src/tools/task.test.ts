@@ -810,6 +810,7 @@ describe('TaskTool', () => {
           allowed: false,
           reason: 'Max async tasks (5) reached',
         }),
+        tryReserveAsyncSlot: () => null,
       };
       const tool = new TaskTool(config, {
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
@@ -834,6 +835,7 @@ describe('TaskTool', () => {
       const registerTaskMock = vi.fn();
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
         registerTask: registerTaskMock,
         completeTask: vi.fn(),
         failTask: vi.fn(),
@@ -871,6 +873,7 @@ describe('TaskTool', () => {
           goalPrompt: 'Do async work',
           abortController: expect.any(AbortController),
         }),
+        'booking-1',
       );
 
       // Wait for background task to complete
@@ -880,6 +883,7 @@ describe('TaskTool', () => {
     it('returns immediately with launch status when async=true (does not block)', async () => {
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
         registerTask: vi.fn(),
         completeTask: vi.fn(),
         failTask: vi.fn(),
@@ -939,6 +943,7 @@ describe('TaskTool', () => {
       const failTaskMock = vi.fn(); // Add failTask to prevent unhandled error
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
         registerTask: vi.fn(),
         completeTask: completeTaskMock,
         failTask: failTaskMock,
@@ -991,6 +996,7 @@ describe('TaskTool', () => {
       const completeTaskMock = vi.fn(); // Add completeTask to prevent unhandled error
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
         registerTask: vi.fn(),
         failTask: failTaskMock,
         completeTask: completeTaskMock,

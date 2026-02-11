@@ -690,11 +690,12 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       );
 
       const parts = response.responseParts;
-      // Error responses still need functionCall + functionResponse for proper pairing
-      // in nonInteractiveToolExecutor (different from coreToolScheduler)
-      expect(parts.length).toBeGreaterThanOrEqual(2);
-      expect(parts[0].functionCall?.id).toBe(request.callId);
-      expect(parts[1].functionResponse?.id).toBe(request.callId);
+      // Error responseParts should contain only functionResponse (no functionCall).
+      // The functionCall is already in history from the model's assistant message.
+      // Including it causes Anthropic invalid_request_error (Issue #244).
+      expect(parts).toHaveLength(1);
+      expect(parts[0]).not.toHaveProperty('functionCall');
+      expect(parts[0].functionResponse?.id).toBe(request.callId);
     });
 
     it('should return error for tool that does not exist', async () => {

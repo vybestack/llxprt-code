@@ -3075,19 +3075,16 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('cancelled');
 
-    // THIS IS THE BUG TEST: cancelled tools should have responseParts populated
-    // but the current implementation doesn't populate them when cancelled via cancelAll()
+    // Cancelled tools should have responseParts populated with functionResponse only.
+    // The functionCall is already in history from the model's assistant message;
+    // re-emitting it causes Anthropic invalid_request_error (Issue #244).
     expect(completedCalls[0].response).toBeDefined();
     expect(completedCalls[0].response.responseParts).toBeDefined();
-    expect(completedCalls[0].response.responseParts).toHaveLength(2);
+    expect(completedCalls[0].response.responseParts).toHaveLength(1);
 
-    // Check that responseParts contains the expected functionCall and functionResponse
-    const functionCallPart = completedCalls[0].response.responseParts[0];
-    expect(functionCallPart).toHaveProperty('functionCall');
-    expect(functionCallPart.functionCall.id).toBe('cancel-response-parts-test');
-    expect(functionCallPart.functionCall.name).toBe('mockTool');
-
-    const functionResponsePart = completedCalls[0].response.responseParts[1];
+    // responseParts should contain only functionResponse (no functionCall)
+    const functionResponsePart = completedCalls[0].response.responseParts[0];
+    expect(functionResponsePart).not.toHaveProperty('functionCall');
     expect(functionResponsePart).toHaveProperty('functionResponse');
     expect(functionResponsePart.functionResponse.id).toBe(
       'cancel-response-parts-test',

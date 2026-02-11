@@ -211,13 +211,8 @@ function createErrorCompletedToolCall(
       errorType,
       resultDisplay: error.message,
       responseParts: [
-        {
-          functionCall: {
-            id: request.callId,
-            name: request.name,
-            args: request.args,
-          },
-        },
+        // Only functionResponse — the functionCall is already recorded in
+        // history from the model's assistant message (Issue #244).
         {
           functionResponse: {
             id: request.callId,

@@ -1663,7 +1663,7 @@ export class Config {
     if (key === 'task-max-async') {
       // Normalize the setting value to handle both string and number inputs
       let normalizedValue: number;
-      
+
       if (typeof settingValue === 'number') {
         normalizedValue = settingValue;
       } else if (typeof settingValue === 'string') {
@@ -1674,7 +1674,7 @@ export class Config {
         // Fallback for other types
         normalizedValue = 0;
       }
-      
+
       const asyncTaskManager = this.getAsyncTaskManager();
       if (asyncTaskManager) {
         asyncTaskManager.setMaxAsyncTasks(normalizedValue);

@@ -89,13 +89,14 @@ export class AsyncTaskManager {
       return { allowed: true };
     }
 
-    // Lines 064-070: Count running tasks
+    // Lines 064-070: Count running tasks + pending reservations atomically
     const runningCount = Array.from(this.tasks.values()).filter(
       (t) => t.status === 'running',
     ).length;
+    const occupiedSlots = runningCount + this.pendingReservations.size;
 
     // Lines 072-075: Check limit
-    if (runningCount >= this.maxAsyncTasks) {
+    if (occupiedSlots >= this.maxAsyncTasks) {
       return {
         allowed: false,
         reason: `Max async tasks (${this.maxAsyncTasks}) reached`,
@@ -121,7 +122,7 @@ export class AsyncTaskManager {
 
     // Generate a unique booking ID for this reservation
     const bookingId = `reserve_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    
+
     // Store the reservation temporarily to prevent race conditions
     // The actual task will be registered with the same ID during registerTask
     this.pendingReservations.set(bookingId, {
@@ -131,6 +132,14 @@ export class AsyncTaskManager {
     });
 
     return bookingId;
+  }
+
+  /**
+   * Cancel a pending reservation, releasing the slot it occupies.
+   * Safe to call with an invalid or already-consumed bookingId (no-op).
+   */
+  cancelReservation(bookingId: string): boolean {
+    return this.pendingReservations.delete(bookingId);
   }
 
   /**
@@ -291,12 +300,12 @@ export class AsyncTaskManager {
     return { candidates: matches };
   }
 
-/**
+  /**
    * Clean up expired reservations to prevent memory leaks
    */
   private cleanupExpiredReservations(): void {
     const now = Date.now();
-    
+
     for (const [bookingId, reservation] of this.pendingReservations.entries()) {
       if (now > reservation.expiresAt) {
         this.pendingReservations.delete(bookingId);

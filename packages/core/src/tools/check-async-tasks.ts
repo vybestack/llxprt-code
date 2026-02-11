@@ -91,7 +91,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
           : task.status === 'completed'
             ? '[OK]'
             : task.status === 'failed'
-              ? '[ERROR]'
+              ? '[FAILED]'
               : '';
       // Use full task ID (agentId like "hardproblemcoder-cmh7yw") for uniqueness
       const duration = this.formatDuration(task.launchedAt, task.completedAt);
@@ -108,7 +108,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
           : t.status === 'completed'
             ? '[OK]'
             : t.status === 'failed'
-              ? '[ERROR]'
+              ? '[FAILED]'
               : '';
       // Use full task ID (agentId) for uniqueness
       return `${icon} **${t.id}** - ${t.status}`;
@@ -228,7 +228,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
         : task.status === 'completed'
           ? '[OK]'
           : task.status === 'failed'
-            ? '[ERROR]'
+            ? '[FAILED]'
             : '';
 
     lines.push(`${icon} **${task.subagentName}**`);

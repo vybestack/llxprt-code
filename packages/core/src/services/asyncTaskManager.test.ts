@@ -889,4 +889,125 @@ describe('AsyncTaskManager', () => {
       expect(handler).toHaveBeenCalledTimes(1); // Only once
     });
   });
+
+  describe('reservation race condition', () => {
+    /**
+     * @requirement REQ-ASYNC-001
+     * @scenario Concurrent reservations must not exceed max limit
+     * @given maxAsyncTasks=1 and no running tasks
+     * @when two tryReserveAsyncSlot calls are made without intermediate registerTask
+     * @then Only the first reservation succeeds; second returns null
+     */
+    it('should prevent concurrent reservations from exceeding max limit', () => {
+      const manager = new AsyncTaskManager(1);
+
+      const booking1 = manager.tryReserveAsyncSlot();
+      expect(booking1).not.toBeNull();
+
+      // Second reservation should be denied because pending reservation
+      // counts against the limit
+      const booking2 = manager.tryReserveAsyncSlot();
+      expect(booking2).toBeNull();
+    });
+
+    /**
+     * @requirement REQ-ASYNC-001
+     * @scenario Pending reservations plus running tasks must not exceed limit
+     * @given maxAsyncTasks=2, one running task, one pending reservation
+     * @when tryReserveAsyncSlot is called again
+     * @then Returns null because running(1) + pending(1) = 2 = max
+     */
+    it('should count pending reservations in addition to running tasks', () => {
+      const manager = new AsyncTaskManager(2);
+
+      // Register one running task
+      manager.registerTask({
+        id: 'task-1',
+        subagentName: 'test',
+        goalPrompt: 'goal',
+        abortController: new AbortController(),
+      });
+
+      // Reserve one slot
+      const booking = manager.tryReserveAsyncSlot();
+      expect(booking).not.toBeNull();
+
+      // Third attempt should fail: 1 running + 1 pending = 2 = max
+      const booking2 = manager.tryReserveAsyncSlot();
+      expect(booking2).toBeNull();
+    });
+
+    /**
+     * @requirement REQ-ASYNC-001
+     * @scenario Expired reservations should be cleaned up and not block new reservations
+     * @given maxAsyncTasks=1 and one expired reservation
+     * @when tryReserveAsyncSlot is called
+     * @then Returns a valid booking ID because expired reservation was cleaned up
+     */
+    it('should clean up expired reservations before checking limit', () => {
+      const manager = new AsyncTaskManager(1);
+
+      // Create a reservation
+      const booking1 = manager.tryReserveAsyncSlot();
+      expect(booking1).not.toBeNull();
+
+      // Fast-forward time past expiration (5 seconds)
+      vi.useFakeTimers();
+      vi.advanceTimersByTime(6000);
+
+      // Now the expired reservation should be cleaned up and a new one allowed
+      const booking2 = manager.tryReserveAsyncSlot();
+      expect(booking2).not.toBeNull();
+
+      vi.useRealTimers();
+    });
+
+    /**
+     * @requirement REQ-ASYNC-001
+     * @scenario canLaunchAsync should account for pending reservations
+     * @given maxAsyncTasks=1 and one pending reservation
+     * @when canLaunchAsync is called
+     * @then Returns { allowed: false } because pending reservation fills the limit
+     */
+    it('should include pending reservations in canLaunchAsync check', () => {
+      const manager = new AsyncTaskManager(1);
+
+      const booking = manager.tryReserveAsyncSlot();
+      expect(booking).not.toBeNull();
+
+      expect(manager.canLaunchAsync()).toEqual({
+        allowed: false,
+        reason: 'Max async tasks (1) reached',
+      });
+    });
+
+    /**
+     * @requirement REQ-ASYNC-001
+     * @scenario cancelReservation frees the slot
+     * @given maxAsyncTasks=1 and one pending reservation
+     * @when cancelReservation is called with the booking ID
+     * @then The slot is freed and a new reservation can be made
+     */
+    it('should free slot when cancelReservation is called', () => {
+      const manager = new AsyncTaskManager(1);
+
+      const booking = manager.tryReserveAsyncSlot();
+      expect(booking).not.toBeNull();
+
+      // Slot is occupied
+      expect(manager.canLaunchAsync().allowed).toBe(false);
+
+      // Cancel the reservation
+      const cancelled = manager.cancelReservation(booking!);
+      expect(cancelled).toBe(true);
+
+      // Slot is now free
+      expect(manager.canLaunchAsync().allowed).toBe(true);
+    });
+
+    it('should return false when cancelling non-existent reservation', () => {
+      const manager = new AsyncTaskManager(5);
+      expect(manager.cancelReservation('bogus-id')).toBe(false);
+    });
+  });
 });
