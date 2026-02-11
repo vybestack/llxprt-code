@@ -140,6 +140,7 @@ const providers: Record<string, StubProviderInstance> = {
   openai: new StubProvider('openai'),
   qwenvercel: new StubProvider('qwenvercel'),
   gemini: new StubProvider('gemini'),
+  anthropic: new StubProvider('anthropic'),
 };
 
 let activeProviderName = 'openai';
@@ -260,6 +261,8 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     providers.qwenvercel.defaultModel = 'gpt-4o';
     providers.qwenvercel.providerConfig.baseUrl = 'https://portal.qwen.ai/v1';
 
+    providers.anthropic.defaultModel = 'claude-opus-4-6';
+
     vi.clearAllMocks();
   });
 
@@ -355,5 +358,100 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
     expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
     expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+  });
+
+  it('applies model-aware reasoning defaults for opus model on bare switch', async () => {
+    aliasEntries.push({
+      alias: 'anthropic',
+      source: 'builtin',
+      filePath: '/fake/anthropic.config',
+      config: {
+        baseProvider: 'anthropic',
+        defaultModel: 'claude-opus-4-6',
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+        },
+      },
+    });
+
+    await switchActiveProvider('anthropic');
+
+    expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
+    expect(stubConfig.getEphemeralSetting('reasoning.adaptiveThinking')).toBe(
+      true,
+    );
+    expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
+  });
+
+  it('does not apply model-aware reasoning defaults for sonnet model', async () => {
+    aliasEntries.push({
+      alias: 'anthropic',
+      source: 'builtin',
+      filePath: '/fake/anthropic.config',
+      config: {
+        baseProvider: 'anthropic',
+        defaultModel: 'claude-sonnet-4-20250514',
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+        },
+      },
+    });
+
+    await switchActiveProvider('anthropic');
+
+    expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBeUndefined();
+    expect(
+      stubConfig.getEphemeralSetting('reasoning.adaptiveThinking'),
+    ).toBeUndefined();
+    expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBeUndefined();
+  });
+
+  it('skips model defaults when skipModelDefaults is true', async () => {
+    aliasEntries.push({
+      alias: 'anthropic',
+      source: 'builtin',
+      filePath: '/fake/anthropic.config',
+      config: {
+        baseProvider: 'anthropic',
+        defaultModel: 'claude-opus-4-6',
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+        },
+      },
+    });
+
+    await switchActiveProvider('anthropic', { skipModelDefaults: true });
+
+    expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBeUndefined();
+    expect(
+      stubConfig.getEphemeralSetting('reasoning.adaptiveThinking'),
+    ).toBeUndefined();
+    expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBeUndefined();
+  });
+
+  it('does not override existing reasoning settings with model defaults', async () => {
+    aliasEntries.push({
+      alias: 'anthropic',
+      source: 'builtin',
+      filePath: '/fake/anthropic.config',
+      config: {
+        baseProvider: 'anthropic',
+        defaultModel: 'claude-opus-4-6',
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+          'reasoning.effort': 'medium',
+        },
+      },
+    });
+
+    await switchActiveProvider('anthropic');
+
+    // The alias set reasoning.effort to 'medium', model defaults should not override it
+    expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('medium');
+    // The other reasoning keys were not set by the alias, so model defaults apply
+    expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
+    expect(stubConfig.getEphemeralSetting('reasoning.adaptiveThinking')).toBe(
+      true,
+    );
   });
 });

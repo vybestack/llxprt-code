@@ -94,6 +94,30 @@ export {
  */
 
 const logger = new DebugLogger('llxprt:runtime:settings');
+
+/**
+ * Model-aware ephemeral defaults applied when switching to a provider
+ * whose resolved model matches one of the patterns below.
+ * Settings are only applied when the ephemeral key is not already set,
+ * so explicit profile or alias values always win.
+ *
+ * @requirement Issue #1323 – reasoning defaults should only apply to
+ * models that actually support extended thinking (e.g. Opus).
+ */
+export const MODEL_EPHEMERAL_DEFAULTS: ReadonlyArray<{
+  pattern: RegExp;
+  settings: Record<string, unknown>;
+}> = [
+  {
+    pattern: /claude.*opus|claude-opus/,
+    settings: {
+      'reasoning.enabled': true,
+      'reasoning.adaptiveThinking': true,
+      'reasoning.effort': 'high',
+    },
+  },
+];
+
 const STATELESS_METADATA_KEYS = [
   'statelessHardening',
   'statelessProviderMode',
@@ -1516,6 +1540,7 @@ export async function switchActiveProvider(
   options: {
     autoOAuth?: boolean;
     preserveEphemerals?: string[];
+    skipModelDefaults?: boolean;
     addItem?: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
       baseTimestamp: number,
@@ -1523,6 +1548,7 @@ export async function switchActiveProvider(
   } = {},
 ): Promise<ProviderSwitchResult> {
   const autoOAuth = options.autoOAuth ?? false;
+  const skipModelDefaults = options.skipModelDefaults ?? false;
   // Merge default preserved ephemerals with any caller-specified ones
   const preserveEphemerals = [
     ...DEFAULT_PRESERVE_EPHEMERALS,
@@ -1926,6 +1952,21 @@ export async function switchActiveProvider(
       }
 
       config.setEphemeralSetting(key, rawValue);
+    }
+  }
+
+  // Apply model-aware ephemeral defaults (e.g. reasoning for Opus models).
+  // Skipped when the caller is a profile application (skipModelDefaults),
+  // and only applied when the ephemeral key is not already set.
+  if (!skipModelDefaults && modelToApply) {
+    for (const rule of MODEL_EPHEMERAL_DEFAULTS) {
+      if (rule.pattern.test(modelToApply)) {
+        for (const [key, value] of Object.entries(rule.settings)) {
+          if (config.getEphemeralSetting(key) === undefined) {
+            config.setEphemeralSetting(key, value);
+          }
+        }
+      }
     }
   }
 

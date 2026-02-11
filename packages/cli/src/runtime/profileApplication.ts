@@ -537,6 +537,7 @@ export async function applyProfileWithGuards(
   // Also preserve timeout settings so they survive provider switches (fixes #1049)
   const providerSwitch = await switchActiveProvider(targetProviderName, {
     autoOAuth: false,
+    skipModelDefaults: true,
     preserveEphemerals: [
       'auth-key',
       'auth-keyfile',
@@ -613,7 +614,8 @@ export async function applyProfileWithGuards(
     logger.debug(
       () => `[profile] applying ephemeral '${key}' => ${JSON.stringify(value)}`,
     );
-    setEphemeralSetting(key, value);
+    // null means "explicitly unset" – the profile wants to clear this key
+    setEphemeralSetting(key, value === null ? undefined : value);
   }
 
   // STEP 6: Apply model and modelParams
