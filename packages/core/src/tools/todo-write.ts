@@ -195,7 +195,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
   }
 
   private normalizeTodos(rawTodos: TodoWriteParams['todos']): Todo[] {
-    return rawTodos.map((todo, index) => {
+    const normalized = rawTodos.map((todo, index) => {
       const normalizedId =
         todo?.id !== undefined &&
         todo?.id !== null &&
@@ -223,6 +223,25 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
         id: normalizedId,
         subtasks: normalizedSubtasks,
       } as Todo;
+    });
+    return this.enforceOneInProgress(normalized);
+  }
+
+  private enforceOneInProgress(todos: Todo[]): Todo[] {
+    const inProgressIndices = todos
+      .map((todo, index) => (todo.status === 'in_progress' ? index : -1))
+      .filter((index) => index !== -1);
+
+    if (inProgressIndices.length <= 1) {
+      return todos;
+    }
+
+    const lastInProgressIndex = inProgressIndices[inProgressIndices.length - 1];
+    return todos.map((todo, index) => {
+      if (todo.status === 'in_progress' && index !== lastInProgressIndex) {
+        return { ...todo, status: 'pending' as const };
+      }
+      return todo;
     });
   }
 
