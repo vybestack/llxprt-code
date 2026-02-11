@@ -115,11 +115,7 @@ import { computeWindowTitle } from './utils/windowTitle.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
-import {
-  patchStdio,
-  writeToStderr,
-  writeToStdout,
-} from './utils/stdio.js';
+import { patchStdio, writeToStderr, writeToStdout } from './utils/stdio.js';
 import {
   setCliRuntimeContext,
   switchActiveProvider,

@@ -192,9 +192,7 @@ export class CoreEventEmitter extends EventEmitter {
   emitConsoleLog(type: string, content: string): void {
     const payload: ConsoleLogPayload = { type, content };
     if (this.listenerCount(CoreEvent.ConsoleLog) === 0) {
-      if (
-        this._consoleLogBacklog.length >= CoreEventEmitter.MAX_BACKLOG_SIZE
-      ) {
+      if (this._consoleLogBacklog.length >= CoreEventEmitter.MAX_BACKLOG_SIZE) {
         this._consoleLogBacklog.shift();
       }
       this._consoleLogBacklog.push(payload);
