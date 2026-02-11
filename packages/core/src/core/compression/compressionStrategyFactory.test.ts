@@ -20,10 +20,7 @@ import {
 } from './compressionStrategyFactory.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
-import {
-  COMPRESSION_STRATEGIES,
-  UnknownStrategyError,
-} from './types.js';
+import { COMPRESSION_STRATEGIES, UnknownStrategyError } from './types.js';
 
 describe('compressionStrategyFactory @plan PLAN-20260211-COMPRESSION.P09', () => {
   // -----------------------------------------------------------------------

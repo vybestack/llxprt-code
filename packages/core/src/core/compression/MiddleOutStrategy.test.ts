@@ -19,10 +19,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '../../services/history/IContent.js';
-import type {
-  CompressionContext,
-  CompressionResult,
-} from './types.js';
+import type { CompressionContext } from './types.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
@@ -78,7 +75,8 @@ function toolResponseMsg(
 // Fake provider — returns a known summary from generateChatCompletion
 // ---------------------------------------------------------------------------
 
-const KNOWN_SUMMARY = '<state_snapshot>Compressed summary of the middle section</state_snapshot>';
+const KNOWN_SUMMARY =
+  '<state_snapshot>Compressed summary of the middle section</state_snapshot>';
 
 function createFakeProvider(
   name: string,
@@ -128,9 +126,7 @@ function buildContext(
   }> = {},
 ): CompressionContext {
   const defaultProvider = createFakeProvider('default-provider');
-  const resolveProvider =
-    overrides.resolveProvider ??
-    (() => defaultProvider);
+  const resolveProvider = overrides.resolveProvider ?? (() => defaultProvider);
 
   const runtimeState: AgentRuntimeState = {
     runtimeId: 'test-runtime',
@@ -169,7 +165,8 @@ function buildContext(
     history: overrides.history ?? [],
     runtimeContext,
     runtimeState,
-    estimateTokens: async (contents: readonly IContent[]) => contents.length * 100,
+    estimateTokens: async (contents: readonly IContent[]) =>
+      contents.length * 100,
     currentTokenCount: overrides.currentTokenCount ?? 5000,
     logger: noopLogger,
     resolveProvider,
@@ -275,26 +272,26 @@ describe('MiddleOutStrategy', () => {
       // 20 messages, topPreserveThreshold=0.2 → topSplitIndex = ceil(20*0.2) = 4
       // Place a tool call at index 3 and tool response at index 4.
       const history: IContent[] = [
-        humanMsg('msg 0'),            // 0
-        aiTextMsg('msg 1'),           // 1
-        humanMsg('msg 2'),            // 2
+        humanMsg('msg 0'), // 0
+        aiTextMsg('msg 1'), // 1
+        humanMsg('msg 2'), // 2
         aiToolCallMsg({ id: 'c1', name: 'search' }), // 3
-        toolResponseMsg('c1', 'search', 'found'),     // 4 ← naive top split lands here
-        humanMsg('msg 5'),            // 5
-        aiTextMsg('msg 6'),           // 6
-        humanMsg('msg 7'),            // 7
-        aiTextMsg('msg 8'),           // 8
-        humanMsg('msg 9'),            // 9
-        aiTextMsg('msg 10'),          // 10
-        humanMsg('msg 11'),           // 11
-        aiTextMsg('msg 12'),          // 12
-        humanMsg('msg 13'),           // 13
-        aiTextMsg('msg 14'),          // 14
-        humanMsg('msg 15'),           // 15
-        aiTextMsg('msg 16'),          // 16
-        humanMsg('msg 17'),           // 17
-        aiTextMsg('msg 18'),          // 18
-        humanMsg('msg 19'),           // 19
+        toolResponseMsg('c1', 'search', 'found'), // 4 ← naive top split lands here
+        humanMsg('msg 5'), // 5
+        aiTextMsg('msg 6'), // 6
+        humanMsg('msg 7'), // 7
+        aiTextMsg('msg 8'), // 8
+        humanMsg('msg 9'), // 9
+        aiTextMsg('msg 10'), // 10
+        humanMsg('msg 11'), // 11
+        aiTextMsg('msg 12'), // 12
+        humanMsg('msg 13'), // 13
+        aiTextMsg('msg 14'), // 14
+        humanMsg('msg 15'), // 15
+        aiTextMsg('msg 16'), // 16
+        humanMsg('msg 17'), // 17
+        aiTextMsg('msg 18'), // 18
+        humanMsg('msg 19'), // 19
       ];
 
       const ctx = buildContext({ history });
@@ -349,8 +346,12 @@ describe('MiddleOutStrategy', () => {
 
   describe('LLM call', () => {
     it('sends middle section to provider and includes returned summary in result', async () => {
-      const customSummary = 'Custom LLM compression summary about the conversation';
-      const fakeProvider = createFakeProvider('summary-provider', customSummary);
+      const customSummary =
+        'Custom LLM compression summary about the conversation';
+      const fakeProvider = createFakeProvider(
+        'summary-provider',
+        customSummary,
+      );
       const history = generateHistory(20);
       const ctx = buildContext({
         history,
@@ -382,19 +383,16 @@ describe('MiddleOutStrategy', () => {
       const profileSummary = 'Summary from profile provider';
       const defaultSummary = 'Summary from default provider';
 
-      const profileProvider = createFakeProvider('profile-provider', profileSummary);
-      const defaultProvider = createFakeProvider('default-provider', defaultSummary);
+      const profileProvider = createFakeProvider(
+        'profile-provider',
+        profileSummary,
+      );
+      const defaultProvider = createFakeProvider(
+        'default-provider',
+        defaultSummary,
+      );
 
       const history = generateHistory(20);
-      const ctx = buildContext({
-        history,
-        resolveProvider: (profileName?: string) => {
-          if (profileName === 'compression-profile') {
-            return profileProvider;
-          }
-          return defaultProvider;
-        },
-      });
 
       // Override the runtime context to simulate a compression profile
       // by making the strategy resolve with the profile name.
@@ -626,16 +624,16 @@ describe('MiddleOutStrategy', () => {
       // If index 3 is a tool response, forward adjustment may push top past the
       // bottom split, causing overlap → original returned.
       const history: IContent[] = [
-        humanMsg('start'),                                    // 0
-        aiTextMsg('thinking'),                                // 1
-        aiToolCallMsg({ id: 'c1', name: 'big_search' }),     // 2
+        humanMsg('start'), // 0
+        aiTextMsg('thinking'), // 1
+        aiToolCallMsg({ id: 'c1', name: 'big_search' }), // 2
         toolResponseMsg('c1', 'big_search', 'lots of data'), // 3 ← top split
-        toolResponseMsg('c1', 'big_search', 'more data'),    // 4
-        toolResponseMsg('c1', 'big_search', 'even more'),    // 5
-        toolResponseMsg('c1', 'big_search', 'final chunk'),  // 6
-        humanMsg('ok what did you find'),                     // 7 ← bottom split
-        aiTextMsg('here is what I found'),                    // 8
-        humanMsg('thanks'),                                   // 9
+        toolResponseMsg('c1', 'big_search', 'more data'), // 4
+        toolResponseMsg('c1', 'big_search', 'even more'), // 5
+        toolResponseMsg('c1', 'big_search', 'final chunk'), // 6
+        humanMsg('ok what did you find'), // 7 ← bottom split
+        aiTextMsg('here is what I found'), // 8
+        humanMsg('thanks'), // 9
       ];
 
       const ctx = buildContext({

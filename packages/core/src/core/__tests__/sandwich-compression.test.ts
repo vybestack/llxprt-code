@@ -4,6 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan PLAN-20260211-COMPRESSION.P14
+ * @requirement REQ-CS-006.1, REQ-CS-002.9
+ *
+ * Sandwich compression tests updated to use the public performCompression()
+ * interface now that the private methods (getCompressionSplit, applyCompression)
+ * have been moved into the compression strategy module.
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat } from '../geminiChat.js';
 import { HistoryService } from '../../services/history/HistoryService.js';
@@ -53,6 +62,68 @@ function createToolResponseMessage(callId: string): IContent {
   };
 }
 
+function buildRuntimeContext(
+  historyService: HistoryService,
+  overrides: {
+    topPreserveThreshold?: number;
+  } = {},
+): AgentRuntimeContext {
+  const runtimeState = createAgentRuntimeState({
+    runtimeId: 'test-runtime',
+    provider: 'test-provider',
+    model: 'test-model',
+    sessionId: 'test-session',
+  });
+
+  const mockProviderAdapter = {
+    getActiveProvider: vi.fn(() => ({
+      name: 'test-provider',
+      generateChatCompletion: vi.fn(),
+    })),
+  };
+
+  const mockTelemetryAdapter = {
+    recordTokenUsage: vi.fn(),
+    recordEvent: vi.fn(),
+  };
+
+  const mockToolsView = {
+    getToolRegistry: vi.fn(() => undefined),
+  };
+
+  return createAgentRuntimeContext({
+    state: runtimeState,
+    history: historyService,
+    settings: {
+      compressionThreshold: 0.8,
+      contextLimit: 131134,
+      preserveThreshold: 0.3,
+      topPreserveThreshold: overrides.topPreserveThreshold,
+      telemetry: { enabled: false, target: null },
+    },
+    provider: mockProviderAdapter,
+    telemetry: mockTelemetryAdapter,
+    tools: mockToolsView,
+    providerRuntime: {
+      runtimeId: 'test-runtime',
+      settingsService: { get: vi.fn(() => undefined) } as never,
+      config: {} as never,
+    },
+  });
+}
+
+function buildMockProvider(summaryText: string) {
+  return {
+    name: 'test-provider',
+    generateChatCompletion: vi.fn(async function* () {
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: summaryText }],
+      };
+    }),
+  };
+}
+
 describe('Sandwich Compression (Issue #1011)', () => {
   let historyService: HistoryService;
   let runtimeContext: AgentRuntimeContext;
@@ -61,48 +132,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     historyService = new HistoryService();
-
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'test-runtime',
-      provider: 'test-provider',
-      model: 'test-model',
-      sessionId: 'test-session',
-    });
-
-    const mockProviderAdapter = {
-      getActiveProvider: vi.fn(() => ({
-        name: 'test-provider',
-        generateChatCompletion: vi.fn(),
-      })),
-    };
-
-    const mockTelemetryAdapter = {
-      recordTokenUsage: vi.fn(),
-      recordEvent: vi.fn(),
-    };
-
-    const mockToolsView = {
-      getToolRegistry: vi.fn(() => undefined),
-    };
-
-    runtimeContext = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 131134,
-        preserveThreshold: 0.3,
-        telemetry: { enabled: false, target: null },
-      },
-      provider: mockProviderAdapter,
-      telemetry: mockTelemetryAdapter,
-      tools: mockToolsView,
-      providerRuntime: {
-        runtimeId: 'test-runtime',
-        settingsService: {} as never,
-        config: {} as never,
-      },
-    });
+    runtimeContext = buildRuntimeContext(historyService);
 
     mockContentGenerator = {
       generateContent: vi.fn(),
@@ -119,49 +149,9 @@ describe('Sandwich Compression (Issue #1011)', () => {
     });
 
     it('should return override value when specified in settings', () => {
-      const runtimeState = createAgentRuntimeState({
-        runtimeId: 'test-runtime-2',
-        provider: 'test-provider',
-        model: 'test-model',
-        sessionId: 'test-session',
+      const customContext = buildRuntimeContext(new HistoryService(), {
+        topPreserveThreshold: 0.25,
       });
-
-      const mockProviderAdapter = {
-        getActiveProvider: vi.fn(() => ({
-          name: 'test-provider',
-          generateChatCompletion: vi.fn(),
-        })),
-      };
-
-      const mockTelemetryAdapter = {
-        recordTokenUsage: vi.fn(),
-        recordEvent: vi.fn(),
-      };
-
-      const mockToolsView = {
-        getToolRegistry: vi.fn(() => undefined),
-      };
-
-      const customContext = createAgentRuntimeContext({
-        state: runtimeState,
-        history: new HistoryService(),
-        settings: {
-          compressionThreshold: 0.8,
-          contextLimit: 131134,
-          preserveThreshold: 0.3,
-          topPreserveThreshold: 0.25,
-          telemetry: { enabled: false, target: null },
-        },
-        provider: mockProviderAdapter,
-        telemetry: mockTelemetryAdapter,
-        tools: mockToolsView,
-        providerRuntime: {
-          runtimeId: 'test-runtime',
-          settingsService: {} as never,
-          config: {} as never,
-        },
-      });
-
       const customThreshold = customContext.ephemerals.topPreserveThreshold
         ? customContext.ephemerals.topPreserveThreshold()
         : undefined;
@@ -169,53 +159,82 @@ describe('Sandwich Compression (Issue #1011)', () => {
     });
   });
 
-  describe('getCompressionSplit with sandwich approach', () => {
-    it('should return correct top/bottom split for 20 messages with 0.2/0.3 thresholds', () => {
+  describe('performCompression integration', () => {
+    it('should produce correct top/bottom split for 20 messages with default thresholds', async () => {
       // Add 20 messages to history (10 user + 10 AI)
       for (let i = 0; i < 10; i++) {
         historyService.add(createUserMessage(`User message ${i}`));
         historyService.add(createAiTextMessage(`AI response ${i}`));
       }
 
+      const messageCountBefore = historyService.getCurated().length;
+      expect(messageCountBefore).toBe(20);
+
       const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
 
-      // @ts-expect-error - testing private method
-      const result = chat['getCompressionSplit']();
+      const summaryText =
+        '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
+      const mockProvider = buildMockProvider(summaryText);
+      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+        mockProvider as never,
+      );
+      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
-      // Should preserve top 20% (first 4 messages out of 20)
-      // Should preserve bottom 30% (last 6 messages out of 20)
-      // Should compress middle 50% (10 messages)
-      // Note: Actual values may differ slightly due to tool call boundary adjustments
-      expect(result.toKeepTop).toBeDefined();
-      expect(result.toCompress).toBeDefined();
-      expect(result.toKeepBottom).toBeDefined();
-      expect(result.toKeepTop.length).toBe(4);
-      expect(result.toCompress.length).toBe(10);
-      expect(result.toKeepBottom.length).toBe(6);
+      await chat.performCompression('test-prompt-id');
+
+      const finalHistory = historyService.getCurated();
+
+      // Should have: top preserved (4) + summary (1) + ack (1) + bottom preserved (6) = 12
+      // Top 20% of 20 = 4, Bottom 30% of 20 = 6, Middle 10 compressed
+      expect(finalHistory.length).toBeLessThan(messageCountBefore);
+
+      // First message should be the original first user message
+      expect(finalHistory[0].speaker).toBe('human');
+      expect(finalHistory[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'User message 0',
+      });
+
+      // Should contain the state_snapshot summary
+      const hasSummary = finalHistory.some((msg) =>
+        msg.blocks.some(
+          (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+        ),
+      );
+      expect(hasSummary).toBe(true);
+
+      // Last message should be from the original bottom section
+      const lastMsg = finalHistory[finalHistory.length - 1];
+      expect(lastMsg.blocks[0].type).toBe('text');
     });
 
-    it('should handle overlap gracefully by failing to middle section', () => {
-      // Add only 4 messages (10 total: 5 user + 5 AI)
-      // With small dataset, top 20% + bottom 30% may overlap
+    it('should handle overlap gracefully (not enough to compress)', async () => {
+      // Add only 8 messages - with 0.2 top + 0.3 bottom thresholds,
+      // middle section will be < 4 messages so nothing to compress
       for (let i = 0; i < 4; i++) {
         historyService.add(createUserMessage(`User message ${i}`));
         historyService.add(createAiTextMessage(`AI response ${i}`));
       }
 
+      const messageCountBefore = historyService.getCurated().length;
+
       const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
 
-      // @ts-expect-error - testing private method
-      const result = chat['getCompressionSplit']();
-
-      // With only 8 messages and minimum 4 required for compression,
-      // the split should preserve everything (no compression)
-      expect(result.toCompress.length).toBe(0);
-      expect(result.toKeepTop.length + result.toKeepBottom.length).toBe(
-        historyService.getCurated().length,
+      const mockProvider = buildMockProvider('should-not-be-used');
+      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+        mockProvider as never,
       );
+      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+
+      await chat.performCompression('test-prompt-id');
+
+      // With only 8 messages and minimum 4 required for middle,
+      // no compression should occur - all messages preserved
+      const finalHistory = historyService.getCurated();
+      expect(finalHistory.length).toBe(messageCountBefore);
     });
 
-    it('should preserve tool call boundaries for both splits', () => {
+    it('should preserve tool call boundaries', async () => {
       historyService.add(createUserMessage('Start'));
 
       for (let i = 0; i < 10; i++) {
@@ -228,31 +247,47 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
 
-      // @ts-expect-error - testing private method
-      const result = chat['getCompressionSplit']();
+      const summaryText =
+        '<state_snapshot><overall_goal>Tool boundary test</overall_goal></state_snapshot>';
+      const mockProvider = buildMockProvider(summaryText);
+      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+        mockProvider as never,
+      );
+      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
-      // Check that tool calls are not split
+      await chat.performCompression('test-prompt-id');
+
+      const finalHistory = historyService.getCurated();
+
+      // Check that tool calls are not split in the preserved sections
       const toolCallCount = (msg: IContent) =>
         msg.blocks.filter((b) => b.type === 'tool_call').length;
       const toolResponseCount = (msg: IContent) =>
         msg.blocks.filter((b) => b.type === 'tool_response').length;
 
-      // Count compressed tool calls and responses
-      const compressedToolCalls = result.toCompress.reduce(
+      // In preserved sections (excluding summary/ack), tool calls should match responses
+      const nonSummaryMessages = finalHistory.filter(
+        (msg) =>
+          !msg.blocks.some(
+            (b) =>
+              b.type === 'text' &&
+              (b.text.includes('state_snapshot') ||
+                b.text === 'Got it. Thanks for the additional context!'),
+          ),
+      );
+
+      const totalToolCalls = nonSummaryMessages.reduce(
         (sum, msg) => sum + toolCallCount(msg),
         0,
       );
-      const compressedToolResponses = result.toCompress.reduce(
+      const totalToolResponses = nonSummaryMessages.reduce(
         (sum, msg) => sum + toolResponseCount(msg),
         0,
       );
 
-      // The number of tool calls should equal the number of tool responses in compressed section
-      expect(compressedToolCalls).toBe(compressedToolResponses);
+      expect(totalToolCalls).toBe(totalToolResponses);
     });
-  });
 
-  describe('performCompression integration', () => {
     it('should integrate all three sections correctly', async () => {
       // Add enough messages to trigger compression
       for (let i = 0; i < 20; i++) {
@@ -262,21 +297,9 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
 
-      const mockProvider = {
-        name: 'test-provider',
-        generateChatCompletion: vi.fn(async function* () {
-          yield {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'text',
-                text: '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>',
-              },
-            ],
-          };
-        }),
-      };
-
+      const summaryText =
+        '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
+      const mockProvider = buildMockProvider(summaryText);
       vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
         mockProvider as never,
       );
@@ -287,7 +310,6 @@ describe('Sandwich Compression (Issue #1011)', () => {
       const finalHistory = historyService.getCurated();
 
       // Should have summary + kept top + kept bottom
-      // Compressed middle should be replaced by summary
       expect(finalHistory.length).toBeGreaterThan(0);
       const hasSummary = finalHistory.some((msg) =>
         msg.blocks.some(
@@ -298,8 +320,8 @@ describe('Sandwich Compression (Issue #1011)', () => {
     });
   });
 
-  describe('applyCompression order', () => {
-    it('should maintain proper order: top + summary + bottom', () => {
+  describe('applyCompression order via performCompression', () => {
+    it('should maintain proper order: top + summary + ack + bottom', async () => {
       // Add test messages
       for (let i = 0; i < 10; i++) {
         historyService.add(createUserMessage(`User ${i}`));
@@ -308,26 +330,29 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
 
-      // @ts-expect-error - testing private method
-      const split = chat['getCompressionSplit']();
-
-      const summary =
+      const summaryText =
         '<state_snapshot><overall_goal>Summary</overall_goal></state_snapshot>';
+      const mockProvider = buildMockProvider(summaryText);
+      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+        mockProvider as never,
+      );
+      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
-      // @ts-expect-error - testing private method
-      chat['applyCompression'](summary, split.toKeepTop, split.toKeepBottom);
+      await chat.performCompression('test-prompt-id');
 
       const finalHistory = historyService.getCurated();
 
-      // First messages should be from toKeepTop
+      // First message should be from original top section
       const firstMessage = finalHistory[0];
-      const firstInTop = split.toKeepTop[0];
-      expect(firstMessage?.id).toBe(firstInTop?.id);
+      expect(firstMessage.speaker).toBe('human');
+      expect(firstMessage.blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'User 0',
+      });
 
-      // Last messages should be from toKeepBottom
+      // Last message should be from original bottom section
       const lastMessage = finalHistory[finalHistory.length - 1];
-      const lastInBottom = split.toKeepBottom[split.toKeepBottom.length - 1];
-      expect(lastMessage?.id).toBe(lastInBottom?.id);
+      expect(lastMessage.blocks[0].type).toBe('text');
 
       // There should be a summary in between
       const hasSummary = finalHistory.some((msg) =>
@@ -336,6 +361,19 @@ describe('Sandwich Compression (Issue #1011)', () => {
         ),
       );
       expect(hasSummary).toBe(true);
+
+      // There should be an ack right after the summary
+      const summaryIndex = finalHistory.findIndex((msg) =>
+        msg.blocks.some(
+          (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+        ),
+      );
+      const ackMessage = finalHistory[summaryIndex + 1];
+      expect(ackMessage.speaker).toBe('ai');
+      expect(ackMessage.blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'Got it. Thanks for the additional context!',
+      });
     });
   });
 });

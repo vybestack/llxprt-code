@@ -19,10 +19,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '../../services/history/IContent.js';
-import type {
-  CompressionContext,
-  CompressionResult,
-} from './types.js';
+import type { CompressionContext } from './types.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
@@ -87,6 +84,7 @@ function createThrowingProvider(): IProvider {
     invokeServerTool: async () => {
       throw new Error('LLM should never be called by top-down-truncation');
     },
+    // eslint-disable-next-line require-yield
     async *generateChatCompletion() {
       throw new Error('LLM should never be called by top-down-truncation');
     },
@@ -462,16 +460,16 @@ describe('TopDownTruncationStrategy', () => {
       // If naive truncation removes first 4 messages, tool_resp at index 3
       // would be orphaned. Strategy should use adjustForToolCallBoundary.
       const history: IContent[] = [
-        humanMsg('msg 0'),                                     // 0
-        aiTextMsg('msg 1'),                                    // 1
-        aiToolCallMsg({ id: 'c1', name: 'search' }),           // 2
-        toolResponseMsg('c1', 'search', 'found something'),    // 3
-        humanMsg('msg 4'),                                     // 4
-        aiTextMsg('msg 5'),                                    // 5
-        humanMsg('msg 6'),                                     // 6
-        aiTextMsg('msg 7'),                                    // 7
-        humanMsg('msg 8'),                                     // 8
-        aiTextMsg('msg 9'),                                    // 9
+        humanMsg('msg 0'), // 0
+        aiTextMsg('msg 1'), // 1
+        aiToolCallMsg({ id: 'c1', name: 'search' }), // 2
+        toolResponseMsg('c1', 'search', 'found something'), // 3
+        humanMsg('msg 4'), // 4
+        aiTextMsg('msg 5'), // 5
+        humanMsg('msg 6'), // 6
+        aiTextMsg('msg 7'), // 7
+        humanMsg('msg 8'), // 8
+        aiTextMsg('msg 9'), // 9
       ];
 
       const ctx = buildContext({
@@ -518,21 +516,21 @@ describe('TopDownTruncationStrategy', () => {
     it('adjusts boundary past consecutive tool responses', async () => {
       // Multiple tool responses in a row — truncation should skip past all of them
       const history: IContent[] = [
-        humanMsg('msg 0'),                                       // 0
+        humanMsg('msg 0'), // 0
         aiToolCallMsg(
           { id: 'c1', name: 'search' },
           { id: 'c2', name: 'fetch' },
-        ),                                                       // 1
-        toolResponseMsg('c1', 'search', 'result1'),              // 2
-        toolResponseMsg('c2', 'fetch', 'result2'),               // 3
-        humanMsg('msg 4'),                                       // 4
-        aiTextMsg('msg 5'),                                      // 5
-        humanMsg('msg 6'),                                       // 6
-        aiTextMsg('msg 7'),                                      // 7
-        humanMsg('msg 8'),                                       // 8
-        aiTextMsg('msg 9'),                                      // 9
-        humanMsg('msg 10'),                                      // 10
-        aiTextMsg('msg 11'),                                     // 11
+        ), // 1
+        toolResponseMsg('c1', 'search', 'result1'), // 2
+        toolResponseMsg('c2', 'fetch', 'result2'), // 3
+        humanMsg('msg 4'), // 4
+        aiTextMsg('msg 5'), // 5
+        humanMsg('msg 6'), // 6
+        aiTextMsg('msg 7'), // 7
+        humanMsg('msg 8'), // 8
+        aiTextMsg('msg 9'), // 9
+        humanMsg('msg 10'), // 10
+        aiTextMsg('msg 11'), // 11
       ];
 
       const ctx = buildContext({
@@ -560,10 +558,7 @@ describe('TopDownTruncationStrategy', () => {
               (m) =>
                 m.speaker === 'ai' &&
                 m.blocks.some(
-                  (b) =>
-                    b.type === 'tool_call' &&
-                    'id' in b &&
-                    b.id === callId,
+                  (b) => b.type === 'tool_call' && 'id' in b && b.id === callId,
                 ),
             );
             expect(hasCall).toBe(true);

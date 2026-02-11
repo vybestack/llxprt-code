@@ -118,7 +118,9 @@ export function createAgentRuntimeContext(
         'compression.strategy',
         options.settings.compressionStrategy,
       );
-      return live ?? (getSettingSpec('compression.strategy')?.default as string);
+      return (
+        live ?? (getSettingSpec('compression.strategy')?.default as string)
+      );
     },
     /** @plan PLAN-20260211-COMPRESSION.P12 */
     compressionProfile: (): string | undefined =>

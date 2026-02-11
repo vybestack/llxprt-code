@@ -47,7 +47,11 @@ function aiToolCallMsg(
   };
 }
 
-function toolResponseMsg(callId: string, toolName: string, result: string): IContent {
+function toolResponseMsg(
+  callId: string,
+  toolName: string,
+  result: string,
+): IContent {
   return {
     speaker: 'tool',
     blocks: [
@@ -92,7 +96,7 @@ describe('adjustForToolCallBoundary', () => {
   it('falls back to backward search when forward reaches end', () => {
     // If the forward search would go past the end of history,
     // it should search backward from the original index.
-    const history: IContent[] = [
+    const _history: IContent[] = [
       humanMsg('start'),
       aiToolCallMsg({ id: 'call_1', name: 'tool_a' }),
       toolResponseMsg('call_1', 'tool_a', 'result_a'),
@@ -122,7 +126,7 @@ describe('adjustForToolCallBoundary', () => {
     //
     // Let me instead test a scenario where forward truly can't find anything:
     // All trailing entries are tool responses with no subsequent non-tool content.
-    const history2: IContent[] = [
+    const _history2: IContent[] = [
       humanMsg('query'),
       aiToolCallMsg({ id: 'c1', name: 'tool_x' }),
       toolResponseMsg('c1', 'tool_x', 'res1'),
@@ -148,10 +152,7 @@ describe('adjustForToolCallBoundary', () => {
   });
 
   it('returns index unchanged when index is 0', () => {
-    const history: IContent[] = [
-      humanMsg('hello'),
-      aiTextMsg('world'),
-    ];
+    const history: IContent[] = [humanMsg('hello'), aiTextMsg('world')];
     expect(adjustForToolCallBoundary(history, 0)).toBe(0);
   });
 
@@ -169,10 +170,7 @@ describe('findForwardValidSplitPoint', () => {
   it('advances past consecutive tool responses', () => {
     const history: IContent[] = [
       humanMsg('go'),
-      aiToolCallMsg(
-        { id: 'c1', name: 'tool_a' },
-        { id: 'c2', name: 'tool_b' },
-      ),
+      aiToolCallMsg({ id: 'c1', name: 'tool_a' }, { id: 'c2', name: 'tool_b' }),
       toolResponseMsg('c1', 'tool_a', 'res_a'),
       toolResponseMsg('c2', 'tool_b', 'res_b'),
       humanMsg('next'),
@@ -187,7 +185,7 @@ describe('findForwardValidSplitPoint', () => {
     // The kept portion starts at `index` after skipping tool responses.
     // If the previous entry (before the kept portion) is an AI with tool_calls
     // whose responses are NOT in the kept portion, it backs up by 1.
-    const history: IContent[] = [
+    const _history: IContent[] = [
       humanMsg('start'),
       aiToolCallMsg({ id: 'c1', name: 'read' }),
       toolResponseMsg('c1', 'read', 'contents'),
@@ -201,7 +199,7 @@ describe('findForwardValidSplitPoint', () => {
     // We need: after skipping tool responses, the entry just before the split point
     // is an AI message with tool_calls, but those tool_calls' responses aren't in
     // the kept portion (history.slice(index)).
-    const history2: IContent[] = [
+    const _history2: IContent[] = [
       humanMsg('start'),
       aiToolCallMsg({ id: 'c1', name: 'fetch' }),
       toolResponseMsg('c1', 'fetch', 'data'),
@@ -215,7 +213,7 @@ describe('findForwardValidSplitPoint', () => {
     // For the check to trigger, prev must be 'ai' with tool_calls.
     // That means after skipping tool responses, the item at index-1 must be 'ai'.
     // Example:
-    const history3: IContent[] = [
+    const _history3: IContent[] = [
       humanMsg('start'),
       aiToolCallMsg({ id: 'c1', name: 'search' }),
       // no tool response for c1 immediately after!
@@ -226,7 +224,7 @@ describe('findForwardValidSplitPoint', () => {
     //
     // The real scenario: split right after an AI tool_call message, where the
     // tool responses for that call are NOT in the kept portion.
-    const history4: IContent[] = [
+    const _history4: IContent[] = [
       aiToolCallMsg({ id: 'c1', name: 'search' }),
       toolResponseMsg('c1', 'search', 'found'),
       aiToolCallMsg({ id: 'c2', name: 'analyze' }),
@@ -237,7 +235,7 @@ describe('findForwardValidSplitPoint', () => {
     // index=2, prev=history[1] (tool response, speaker='tool') → not 'ai' → return 2.
     //
     // The check really triggers when the forward skip lands us right after an AI message:
-    const history5: IContent[] = [
+    const _history5: IContent[] = [
       humanMsg('start'),
       aiToolCallMsg({ id: 'c1', name: 'tool_a' }),
       toolResponseMsg('c1', 'tool_a', 'res'),
@@ -252,7 +250,7 @@ describe('findForwardValidSplitPoint', () => {
     // This means the AI message is being kept but its responses were removed.
     //
     // That happens when there's a tool response gap:
-    const history6: IContent[] = [
+    const _history6: IContent[] = [
       humanMsg('start'),
       aiToolCallMsg({ id: 'c1', name: 'search' }, { id: 'c2', name: 'fetch' }),
       toolResponseMsg('c1', 'search', 'found'),
@@ -431,7 +429,12 @@ describe('edge cases', () => {
         speaker: 'ai',
         blocks: [
           { type: 'text', text: 'Let me search for that.' },
-          { type: 'tool_call', id: 'c1', name: 'search', parameters: { q: 'test' } },
+          {
+            type: 'tool_call',
+            id: 'c1',
+            name: 'search',
+            parameters: { q: 'test' },
+          },
         ],
       },
       toolResponseMsg('c1', 'search', 'results'),

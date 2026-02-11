@@ -374,7 +374,6 @@ describe('getDirectSettingSpecs', () => {
   });
 });
 
-
 /**
  * @plan PLAN-20260211-COMPRESSION.P11
  * @requirement REQ-CS-008.1, REQ-CS-008.2, REQ-CS-008.3

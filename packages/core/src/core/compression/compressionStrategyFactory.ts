@@ -11,14 +11,8 @@
  * Factory functions for resolving compression strategies by name.
  */
 
-import type {
-  CompressionStrategy,
-  CompressionStrategyName,
-} from './types.js';
-import {
-  COMPRESSION_STRATEGIES,
-  UnknownStrategyError,
-} from './types.js';
+import type { CompressionStrategy, CompressionStrategyName } from './types.js';
+import { COMPRESSION_STRATEGIES, UnknownStrategyError } from './types.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 
@@ -29,9 +23,7 @@ import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 export function parseCompressionStrategyName(
   name: string,
 ): CompressionStrategyName {
-  if (
-    (COMPRESSION_STRATEGIES as readonly string[]).includes(name)
-  ) {
+  if ((COMPRESSION_STRATEGIES as readonly string[]).includes(name)) {
     return name as CompressionStrategyName;
   }
   throw new UnknownStrategyError(name);
@@ -48,5 +40,9 @@ export function getCompressionStrategy(
       return new MiddleOutStrategy();
     case 'top-down-truncation':
       return new TopDownTruncationStrategy();
+    default: {
+      const exhaustive: never = name;
+      throw new UnknownStrategyError(exhaustive as string);
+    }
   }
 }

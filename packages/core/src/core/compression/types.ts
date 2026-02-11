@@ -14,7 +14,7 @@
 import type { IContent } from '../../services/history/IContent.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
-import type { Logger } from '../logger.js';
+import type { DebugLogger } from '../../debug/DebugLogger.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type { PromptResolver } from '../../prompt-config/prompt-resolver.js';
 import type { PromptContext } from '../../prompt-config/types.js';
@@ -28,8 +28,7 @@ export const COMPRESSION_STRATEGIES = [
   'top-down-truncation',
 ] as const;
 
-export type CompressionStrategyName =
-  (typeof COMPRESSION_STRATEGIES)[number];
+export type CompressionStrategyName = (typeof COMPRESSION_STRATEGIES)[number];
 
 // ---------------------------------------------------------------------------
 // Core interfaces
@@ -39,11 +38,9 @@ export interface CompressionContext {
   readonly history: readonly IContent[];
   readonly runtimeContext: AgentRuntimeContext;
   readonly runtimeState: AgentRuntimeState;
-  readonly estimateTokens: (
-    contents: readonly IContent[],
-  ) => Promise<number>;
+  readonly estimateTokens: (contents: readonly IContent[]) => Promise<number>;
   readonly currentTokenCount: number;
-  readonly logger: Logger;
+  readonly logger: DebugLogger;
   readonly resolveProvider: (profileName?: string) => IProvider;
   readonly promptResolver: PromptResolver;
   readonly promptContext: Readonly<Partial<PromptContext>>;
@@ -95,11 +92,9 @@ export class CompressionStrategyError extends Error {
 
 export class UnknownStrategyError extends CompressionStrategyError {
   constructor(strategyName: string) {
-    super(
-      `Unknown compression strategy: ${strategyName}`,
-      'UNKNOWN_STRATEGY',
-      { strategy: strategyName },
-    );
+    super(`Unknown compression strategy: ${strategyName}`, 'UNKNOWN_STRATEGY', {
+      strategy: strategyName,
+    });
     this.name = 'UnknownStrategyError';
   }
 }
@@ -115,11 +110,7 @@ export class PromptResolutionError extends CompressionStrategyError {
 }
 
 export class CompressionExecutionError extends CompressionStrategyError {
-  constructor(
-    strategy: string,
-    cause: string,
-    profile?: string,
-  ) {
+  constructor(strategy: string, cause: string, profile?: string) {
     super(
       `Compression strategy "${strategy}" failed: ${cause}`,
       'EXECUTION_FAILED',

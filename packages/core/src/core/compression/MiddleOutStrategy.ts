@@ -17,7 +17,10 @@
  */
 
 import { readFileSync } from 'node:fs';
-import type { IContent, ContentBlock } from '../../services/history/IContent.js';
+import type {
+  IContent,
+  ContentBlock,
+} from '../../services/history/IContent.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type {
   CompressionContext,
@@ -78,8 +81,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     }
 
     // Compute sandwich split
-    const { toKeepTop, toCompress, toKeepBottom } =
-      this.computeSplit(context);
+    const { toKeepTop, toCompress, toKeepBottom } = this.computeSplit(context);
 
     if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
       return this.noCompressionResult(history);
@@ -89,7 +91,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const prompt = this.resolvePrompt(context);
 
     // Resolve the provider (compression profile may be undefined)
-    const ephemerals = context.runtimeContext.ephemerals as Record<string, unknown>;
+    const ephemerals = context.runtimeContext.ephemerals as Record<
+      string,
+      unknown
+    >;
     const compressionProfileFn = ephemerals.compressionProfile as
       | (() => string | undefined)
       | undefined;
@@ -113,11 +118,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const summary = await this.callProvider(provider, compressionRequest);
 
     // Assemble result
-    const newHistory = this.assembleHistory(
-      toKeepTop,
-      summary,
-      toKeepBottom,
-    );
+    const newHistory = this.assembleHistory(toKeepTop, summary, toKeepBottom);
 
     const metadata: CompressionResultMetadata = {
       originalMessageCount: history.length,
@@ -148,9 +149,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       context.runtimeContext.ephemerals.topPreserveThreshold();
 
     let topSplitIndex = Math.ceil(history.length * topPreserveThreshold);
-    let bottomSplitIndex = Math.floor(
-      history.length * (1 - preserveThreshold),
-    );
+    let bottomSplitIndex = Math.floor(history.length * (1 - preserveThreshold));
 
     if (bottomSplitIndex - topSplitIndex < MINIMUM_MIDDLE_MESSAGES) {
       return { toKeepTop: [...history], toCompress: [], toKeepBottom: [] };
@@ -239,9 +238,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     ];
   }
 
-  private noCompressionResult(
-    history: readonly IContent[],
-  ): CompressionResult {
+  private noCompressionResult(history: readonly IContent[]): CompressionResult {
     return {
       newHistory: [...history],
       metadata: {

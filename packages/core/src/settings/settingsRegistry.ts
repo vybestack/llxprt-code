@@ -935,7 +935,8 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
   {
     key: 'compression.strategy',
     category: 'cli-behavior',
-    description: 'Compression strategy to use (middle-out or top-down-truncation)',
+    description:
+      'Compression strategy to use (middle-out or top-down-truncation)',
     type: 'enum',
     enumValues: [...COMPRESSION_STRATEGIES],
     default: 'middle-out',
