@@ -113,8 +113,8 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
     if (!summary.trim()) {
       throw new CompressionExecutionError(
+        'middle-out',
         'LLM returned empty summary during compression',
-        new Error('empty provider response'),
       );
     }
 
