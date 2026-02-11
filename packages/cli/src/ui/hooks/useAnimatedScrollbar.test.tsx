@@ -8,6 +8,7 @@ import { act } from 'react';
 import { render } from '../../test-utils/render.js';
 import { useAnimatedScrollbar } from './useAnimatedScrollbar.js';
 import { debugState } from '../debug.js';
+import { theme } from '../semantic-colors.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const TestComponent = ({ isFocused = false }: { isFocused?: boolean }) => {
@@ -69,6 +70,32 @@ describe('useAnimatedScrollbar', () => {
     });
 
     expect(debugState.debugNumAnimatedComponents).toBe(0);
+  });
+
+  it('should not leak debug counter when flashScrollbar hits early return', () => {
+    // Save originals
+    const origText = theme.text;
+
+    // Override theme.text to make secondary undefined → triggers early return
+    Object.defineProperty(theme, 'text', {
+      get: () => ({ ...origText, secondary: undefined }),
+      configurable: true,
+    });
+
+    const { rerender } = render(<TestComponent isFocused={false} />);
+    expect(debugState.debugNumAnimatedComponents).toBe(0);
+
+    // Focus transition triggers flashScrollbar, which should hit the early return
+    rerender(<TestComponent isFocused={true} />);
+
+    // Counter must stay at 0 — no real animation was started
+    expect(debugState.debugNumAnimatedComponents).toBe(0);
+
+    // Restore
+    Object.defineProperty(theme, 'text', {
+      get: () => origText,
+      configurable: true,
+    });
   });
 
   it('should not crash if Date.now() goes backwards (regression test)', async () => {

@@ -6,7 +6,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { directoryCommand, expandHomeDir } from './directoryCommand.js';
-import { Config, WorkspaceContext } from '@vybestack/llxprt-code-core';
+import {
+  loadServerHierarchicalMemory,
+  type Config,
+  type WorkspaceContext,
+} from '@vybestack/llxprt-code-core';
 import { CommandContext } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
@@ -18,6 +22,19 @@ import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
 vi.mock('../../config/trustedFolders.js', () => ({
   loadTrustedFolders: vi.fn(),
 }));
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...original,
+    loadServerHierarchicalMemory: vi.fn(),
+  };
+});
+
+const mockLoadServerHierarchicalMemory = vi.mocked(
+  loadServerHierarchicalMemory,
+);
 
 describe('directoryCommand', () => {
   let mockContext: CommandContext;
@@ -31,6 +48,13 @@ describe('directoryCommand', () => {
   );
 
   beforeEach(() => {
+    mockLoadServerHierarchicalMemory.mockReset();
+    mockLoadServerHierarchicalMemory.mockResolvedValue({
+      memoryContent: '',
+      fileCount: 0,
+      filePaths: [],
+    });
+
     mockWorkspaceContext = {
       addDirectory: vi.fn(),
       getDirectories: vi
@@ -51,6 +75,7 @@ describe('directoryCommand', () => {
       shouldLoadMemoryFromIncludeDirectories: () => false,
       getDebugMode: () => false,
       getFileService: () => ({}),
+      getExtensions: () => [],
       getExtensionContextFilePaths: () => [],
       getFileFilteringOptions: () => ({ ignore: [], include: [] }),
       setUserMemory: vi.fn(),
@@ -247,7 +272,6 @@ describe('directoryCommand', () => {
       mockConfig = {
         ...mockConfig,
         getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
-        isTrustedFolder: vi.fn().mockReturnValue(true),
       } as unknown as Config;
       mockContext = {
         ...mockContext,
@@ -287,7 +311,6 @@ describe('directoryCommand', () => {
       mockConfig = {
         ...mockConfig,
         getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
-        isTrustedFolder: vi.fn().mockReturnValue(true),
       } as unknown as Config;
       mockContext = {
         ...mockContext,
@@ -345,7 +368,6 @@ describe('directoryCommand', () => {
       mockConfig = {
         ...mockConfig,
         getFolderTrust: vi.fn().mockReturnValue(true), // Folder trust enabled
-        isTrustedFolder: vi.fn().mockReturnValue(true),
         isRestrictiveSandbox: vi.fn().mockReturnValue(true),
       } as unknown as Config;
       mockContext = {
@@ -369,6 +391,49 @@ describe('directoryCommand', () => {
 
       // Should NOT have called addDirectory even for trusted path
       expect(mockWorkspaceContext.addDirectory).not.toHaveBeenCalled();
+    });
+
+    it('should refresh memory using only successfully added expanded paths', async () => {
+      const trustedPath = path.normalize('/home/user/trusted-project');
+      const rejectedRawPath = '~/untrusted-project';
+      const rejectedExpandedPath = expandHomeDir(rejectedRawPath);
+
+      const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
+        isPathTrusted: vi
+          .fn()
+          .mockImplementation((p: string) => p === trustedPath),
+      };
+      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
+        mockLoadedTrustedFolders as LoadedTrustedFolders,
+      );
+
+      mockConfig = {
+        ...mockConfig,
+        getFolderTrust: vi.fn().mockReturnValue(true),
+        shouldLoadMemoryFromIncludeDirectories: () => true,
+      } as unknown as Config;
+      mockContext = {
+        ...mockContext,
+        services: {
+          ...mockContext.services,
+          config: mockConfig,
+        },
+      };
+
+      if (!addCommand?.action) throw new Error('No action');
+      await addCommand.action(mockContext, `${trustedPath},${rejectedRawPath}`);
+
+      expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledTimes(1);
+      expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(
+        trustedPath,
+      );
+
+      expect(mockLoadServerHierarchicalMemory).toHaveBeenCalledTimes(1);
+      const includeDirectoriesArg =
+        mockLoadServerHierarchicalMemory.mock.calls[0][1];
+      expect(includeDirectoriesArg).toContain(trustedPath);
+      expect(includeDirectoriesArg).not.toContain(rejectedRawPath);
+      expect(includeDirectoriesArg).not.toContain(rejectedExpandedPath);
     });
   });
 });

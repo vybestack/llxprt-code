@@ -102,7 +102,7 @@ export const directoryCommand: SlashCommand = {
 
           try {
             workspaceContext.addDirectory(expandedPath);
-            added.push(pathToAdd.trim());
+            added.push(expandedPath);
           } catch (e) {
             const error = e as Error;
             errors.push(`Error adding '${pathToAdd.trim()}': ${error.message}`);
@@ -114,10 +114,7 @@ export const directoryCommand: SlashCommand = {
             const { memoryContent, fileCount } =
               await loadServerHierarchicalMemory(
                 config.getWorkingDir(),
-                [
-                  ...config.getWorkspaceContext().getDirectories(),
-                  ...pathsToAdd,
-                ],
+                [...config.getWorkspaceContext().getDirectories(), ...added],
                 config.getDebugMode(),
                 config.getFileService(),
                 config.getExtensions(),

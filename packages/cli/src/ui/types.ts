@@ -275,8 +275,6 @@ export enum MessageType {
   GEMINI = 'gemini',
   COMPRESSION = 'compression',
   EXTENSIONS_LIST = 'extensions_list',
-  TOOLS_LIST = 'tools_list',
-  MCP_STATUS = 'mcp_status',
   CHAT_LIST = 'chat_list',
   PROFILE_CHANGE = 'profile_change',
 }

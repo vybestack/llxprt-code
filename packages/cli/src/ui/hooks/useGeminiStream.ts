@@ -286,7 +286,7 @@ export const useGeminiStream = (
       }
 
       const sanitized =
-        typeof result.filtered === 'string' ? (result.filtered as string) : '';
+        typeof result.filtered === 'string' ? result.filtered : '';
 
       return {
         text: sanitized,
@@ -1212,7 +1212,7 @@ export const useGeminiStream = (
             {
               type: 'profile_change',
               profileName: activeProfileName,
-            } as HistoryItemWithoutId,
+            } as Omit<HistoryItem, 'id'>,
             userMessageTimestamp,
           );
         }

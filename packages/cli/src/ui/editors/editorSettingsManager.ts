@@ -33,6 +33,7 @@ class EditorSettingsManager {
 
   constructor() {
     const editorTypes: EditorType[] = [
+      'antigravity',
       'zed',
       'vscode',
       'vscodium',

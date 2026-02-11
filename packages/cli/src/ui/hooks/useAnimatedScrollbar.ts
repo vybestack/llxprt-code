@@ -38,8 +38,6 @@ export function useAnimatedScrollbar(
 
   const flashScrollbar = useCallback(() => {
     cleanup();
-    debugState.debugNumAnimatedComponents++;
-    isAnimatingRef.current = true;
 
     const fadeInDuration = 200;
     const visibleDuration = 1000;
@@ -52,6 +50,9 @@ export function useAnimatedScrollbar(
     if (!focusedColor || !unfocusedColor) {
       return;
     }
+
+    debugState.debugNumAnimatedComponents++;
+    isAnimatingRef.current = true;
 
     // Phase 1: Fade In
     let start = Date.now();
