@@ -6,6 +6,7 @@
 
 import { CommandModule } from 'yargs';
 import { uninstallExtension } from '../../config/extension.js';
+import { exitCli } from '../utils.js';
 
 interface UninstallArgs {
   names: string[];
@@ -16,7 +17,7 @@ export async function handleUninstall(args: UninstallArgs): Promise<void> {
 
   if (uniqueNames.length === 0) {
     console.error('No valid extension names provided to uninstall.');
-    process.exit(1);
+    await exitCli(1);
     return;
   }
 
@@ -35,7 +36,7 @@ export async function handleUninstall(args: UninstallArgs): Promise<void> {
     for (const { name, error } of errors) {
       console.error(`Failed to uninstall "${name}": ${error}`);
     }
-    process.exit(1);
+    await exitCli(1);
   }
 }
 

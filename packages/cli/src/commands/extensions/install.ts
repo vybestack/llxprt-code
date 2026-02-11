@@ -18,6 +18,7 @@ import {
 
 import { getErrorMessage } from '../../utils/errors.js';
 import * as fs from 'node:fs/promises';
+import { exitCli } from '../utils.js';
 
 interface InstallArgs {
   source?: string;
@@ -93,7 +94,7 @@ export async function handleInstall(args: InstallArgs) {
             };
           } catch {
             console.error('Install source not found.');
-            process.exit(1);
+            await exitCli(1);
           }
         }
       }
@@ -120,7 +121,7 @@ export async function handleInstall(args: InstallArgs) {
     );
   } catch (error) {
     console.error(getErrorMessage(error));
-    process.exit(1);
+    await exitCli(1);
   }
 }
 

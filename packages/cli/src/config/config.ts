@@ -617,23 +617,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
   // We no longer accept it as a CLI argument
 
   // Map camelCase names to match CliArgs interface
-  // Check if an MCP or extensions subcommand was handled
-  // The _ array contains the commands that were run
-  if (result._ && result._.length > 0 && result._[0] === 'mcp') {
-    // An MCP subcommand was executed (like 'mcp list'), exit cleanly
-    process.exit(0);
-  }
-
-  if (
-    result._ &&
-    result._.length > 0 &&
-    (result._[0] === 'extensions' ||
-      result._[0] === 'extension' ||
-      result._[0] === 'ext')
-  ) {
-    // An extensions subcommand was executed (like 'extensions install'), exit cleanly
-    process.exit(0);
-  }
+  // Note: MCP and extension commands manage their own shutdown via exitCli()
 
   const promptWords = result.promptWords as string[] | undefined;
   const promptWordsFiltered =
