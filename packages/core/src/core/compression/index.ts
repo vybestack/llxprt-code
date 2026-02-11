@@ -6,3 +6,4 @@
 
 export * from './types.js';
 export * from './utils.js';
+export { MiddleOutStrategy } from './MiddleOutStrategy.js';
