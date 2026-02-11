@@ -159,7 +159,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
     topSplitIndex = adjustForToolCallBoundary(history, topSplitIndex);
     bottomSplitIndex = adjustForToolCallBoundary(history, bottomSplitIndex);
 
-    if (topSplitIndex >= bottomSplitIndex) {
+    if (
+      topSplitIndex >= bottomSplitIndex ||
+      bottomSplitIndex - topSplitIndex < MINIMUM_MIDDLE_MESSAGES
+    ) {
       return { toKeepTop: [...history], toCompress: [], toKeepBottom: [] };
     }
 
@@ -197,27 +200,34 @@ export class MiddleOutStrategy implements CompressionStrategy {
     provider: IProvider,
     request: IContent[],
   ): Promise<string> {
-    const stream = provider.generateChatCompletion({
-      contents: request,
-      tools: undefined,
-    });
+    try {
+      const stream = provider.generateChatCompletion({
+        contents: request,
+        tools: undefined,
+      });
 
-    let summary = '';
-    let lastBlockWasNonText = false;
+      let summary = '';
+      let lastBlockWasNonText = false;
 
-    for await (const chunk of stream) {
-      if (chunk.blocks) {
-        const result = aggregateTextFromBlocks(
-          chunk.blocks,
-          summary,
-          lastBlockWasNonText,
-        );
-        summary = result.text;
-        lastBlockWasNonText = result.lastBlockWasNonText;
+      for await (const chunk of stream) {
+        if (chunk.blocks) {
+          const result = aggregateTextFromBlocks(
+            chunk.blocks,
+            summary,
+            lastBlockWasNonText,
+          );
+          summary = result.text;
+          lastBlockWasNonText = result.lastBlockWasNonText;
+        }
       }
-    }
 
-    return summary;
+      return summary;
+    } catch (error) {
+      throw new CompressionExecutionError(
+        'middle-out',
+        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private assembleHistory(
