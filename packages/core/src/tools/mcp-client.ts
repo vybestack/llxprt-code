@@ -538,10 +538,11 @@ export async function connectAndDiscover(
 
     mcpClient.onerror = (error) => {
       console.error(`MCP ERROR (${mcpServerName}):`, error.toString());
+      if (!mcpClient) return;
       toolRegistry.removeMcpToolsByServer(mcpServerName);
       promptRegistry.removePromptsByServer(mcpServerName);
       updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
-      mcpClient?.close().catch(() => {});
+      mcpClient.close().catch(() => {});
       mcpClient = undefined;
     };
 
