@@ -2988,3 +2988,114 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
     expect(completedCalls[0].request.callId).toBe('duplicate-test-call');
   });
 });
+
+describe('CoreToolScheduler cancelled tool responseParts', () => {
+  it('should populate responseParts for cancelled tools when cancelAll is called', async () => {
+    const mockTool = new MockTool();
+    mockTool.shouldConfirm = true; // Needs confirmation to trigger the bug
+    const declarativeTool = mockTool;
+
+    const mockToolRegistry = {
+      getTool: () => declarativeTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByName: () => declarativeTool,
+      getToolByDisplayName: () => declarativeTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    } as unknown as ToolRegistry;
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+
+    const mockMessageBus = createMockMessageBus();
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getEphemeralSettings: () => ({}),
+      getAllowedTools: () => [],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+      getToolRegistry: () => mockToolRegistry,
+      getMessageBus: () => mockMessageBus,
+      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    const request = {
+      callId: 'cancel-response-parts-test',
+      name: 'mockTool',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-id-cancel',
+    };
+
+    // Schedule the tool
+    await scheduler.schedule([request], new AbortController().signal);
+
+    // Wait for tool to be awaiting_approval
+    const awaitingCall = (await waitForStatus(
+      onToolCallsUpdate,
+      'awaiting_approval',
+    )) as WaitingToolCall;
+
+    expect(awaitingCall).toBeDefined();
+    expect(awaitingCall.status).toBe('awaiting_approval');
+
+    // Call cancelAll to cancel the tool
+    scheduler.cancelAll();
+
+    // Wait for tool to be cancelled
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
+
+    const completedCalls = onAllToolCallsComplete.mock
+      .calls[0][0] as CompletedToolCall[];
+    expect(completedCalls).toHaveLength(1);
+    expect(completedCalls[0].status).toBe('cancelled');
+
+    // Cancelled tools should have responseParts populated with functionResponse only.
+    // The functionCall is already in history from the model's assistant message;
+    // re-emitting it causes Anthropic invalid_request_error (Issue #244).
+    expect(completedCalls[0].response).toBeDefined();
+    expect(completedCalls[0].response.responseParts).toBeDefined();
+    expect(completedCalls[0].response.responseParts).toHaveLength(1);
+
+    // responseParts should contain only functionResponse (no functionCall)
+    const functionResponsePart = completedCalls[0].response.responseParts[0];
+    expect(functionResponsePart).not.toHaveProperty('functionCall');
+    expect(functionResponsePart).toHaveProperty('functionResponse');
+    expect(functionResponsePart.functionResponse.id).toBe(
+      'cancel-response-parts-test',
+    );
+    expect(functionResponsePart.functionResponse.name).toBe('mockTool');
+    expect(functionResponsePart.functionResponse.response).toHaveProperty(
+      'error',
+    );
+    expect(
+      (functionResponsePart.functionResponse.response as { error: string })
+        .error,
+    ).toContain('Tool call cancelled by user');
+  });
+});
