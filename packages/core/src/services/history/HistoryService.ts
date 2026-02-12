@@ -522,40 +522,130 @@ export class HistoryService
   /**
    * Apply a density optimization result to the raw history.
    *
-   * @plan PLAN-20260211-HIGHDENSITY.P06
-   * @requirement REQ-HD-003.1
+   * @plan PLAN-20260211-HIGHDENSITY.P08
+   * @requirement REQ-HD-003.1, REQ-HD-003.2, REQ-HD-003.3, REQ-HD-001.6, REQ-HD-001.7
    * @pseudocode history-service.md lines 20-82
    */
   async applyDensityResult(result: DensityResult): Promise<void> {
-    throw new CompressionStrategyError(
-      'applyDensityResult not yet implemented',
-      'DENSITY_NOT_IMPLEMENTED',
-    );
+    // === VALIDATION PHASE ===
+
+    // V1: Check for duplicates in removals
+    const removalSet = new Set(result.removals);
+    if (removalSet.size !== result.removals.length) {
+      throw new CompressionStrategyError(
+        'DensityResult contains duplicate removal indices',
+        'DENSITY_INVALID_RESULT',
+      );
+    }
+
+    // V2: Check no index appears in both removals and replacements
+    for (const index of result.replacements.keys()) {
+      if (removalSet.has(index)) {
+        throw new CompressionStrategyError(
+          `DensityResult conflict: index ${index} in both removals and replacements`,
+          'DENSITY_CONFLICT',
+        );
+      }
+    }
+
+    // V3: Validate removal indices are within bounds
+    for (const index of result.removals) {
+      if (index < 0 || index >= this.history.length) {
+        throw new CompressionStrategyError(
+          `DensityResult removal index ${index} out of bounds [0, ${this.history.length})`,
+          'DENSITY_INDEX_OUT_OF_BOUNDS',
+        );
+      }
+    }
+
+    // V4: Validate replacement indices are within bounds
+    for (const index of result.replacements.keys()) {
+      if (index < 0 || index >= this.history.length) {
+        throw new CompressionStrategyError(
+          `DensityResult replacement index ${index} out of bounds [0, ${this.history.length})`,
+          'DENSITY_INDEX_OUT_OF_BOUNDS',
+        );
+      }
+    }
+
+    // === MUTATION PHASE ===
+
+    // M1: Apply replacements first — indices are stable (no length changes)
+    for (const [index, replacement] of result.replacements) {
+      this.history[index] = replacement;
+      this.logger.debug('Density: replaced history entry', { index });
+    }
+
+    // M2: Sort removals in descending order to preserve earlier indices during splice
+    const sortedRemovals = [...result.removals].sort((a, b) => b - a);
+
+    // M3: Apply removals in reverse order
+    for (const index of sortedRemovals) {
+      this.history.splice(index, 1);
+      this.logger.debug('Density: removed history entry', { index });
+    }
+
+    this.logger.debug('Density: applied result', {
+      replacements: result.replacements.size,
+      removals: result.removals.length,
+      newHistoryLength: this.history.length,
+      metadata: result.metadata,
+    });
+
+    // === TOKEN RECALCULATION PHASE ===
+
+    // T1: Full recalculation through tokenizerLock
+    await this.recalculateTotalTokens();
   }
 
   /**
    * Return a read-only typed view of the backing history array.
    *
-   * @plan PLAN-20260211-HIGHDENSITY.P06
+   * @plan PLAN-20260211-HIGHDENSITY.P08
    * @requirement REQ-HD-003.5
    * @pseudocode history-service.md lines 10-15
    */
   getRawHistory(): readonly IContent[] {
-    return [];
+    return this.history;
   }
 
   /**
    * Force a full token recalculation after density operations.
    *
-   * @plan PLAN-20260211-HIGHDENSITY.P06
+   * @plan PLAN-20260211-HIGHDENSITY.P08
    * @requirement REQ-HD-003.6
    * @pseudocode history-service.md lines 90-120
    */
   async recalculateTotalTokens(): Promise<void> {
-    throw new CompressionStrategyError(
-      'recalculateTotalTokens not yet implemented',
-      'DENSITY_NOT_IMPLEMENTED',
-    );
+    this.tokenizerLock = this.tokenizerLock.then(async () => {
+      let newTotal = 0;
+      const defaultModel = 'gpt-4.1';
+
+      for (const entry of this.history) {
+        const entryTokens = await this.estimateContentTokens(
+          entry,
+          defaultModel,
+        );
+        newTotal += entryTokens;
+      }
+
+      const previousTotal = this.totalTokens;
+      this.totalTokens = newTotal;
+
+      this.logger.debug('Density: recalculated total tokens', {
+        previousTotal,
+        newTotal,
+        entryCount: this.history.length,
+      });
+
+      this.emit('tokensUpdated', {
+        totalTokens: this.getTotalTokens(),
+        addedTokens: newTotal - previousTotal,
+        contentId: null,
+      });
+    });
+
+    return this.tokenizerLock;
   }
 
   /**
