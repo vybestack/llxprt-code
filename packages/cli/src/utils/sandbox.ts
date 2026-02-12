@@ -375,7 +375,6 @@ export async function setupSshAgentPodmanMacOS(
     ],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true,
     },
   );
 
@@ -439,6 +438,22 @@ export async function setupSshAgentPodmanMacOS(
 
   // R7.5: Use --network=host so the container can reach the VM's loopback.
   // This is safe because the Podman VM itself provides the security boundary.
+  // Guard: if a --network flag is already present (e.g., 'none' from SANDBOX_NETWORK=off),
+  // SSH agent forwarding cannot work — warn and bail out gracefully.
+  const existingNetIdx = args.indexOf('--network');
+  if (existingNetIdx !== -1) {
+    const existingNet = args[existingNetIdx + 1];
+    console.warn(
+      `Podman macOS SSH agent forwarding requires --network=host but ` +
+        `--network=${existingNet} is already set. Skipping SSH agent setup.`,
+    );
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch {
+      // ignore
+    }
+    return {};
+  }
   args.push('--network', 'host');
 
   // socat creates the socket at runtime (no volume mount), so it must be in a
@@ -448,7 +463,10 @@ export async function setupSshAgentPodmanMacOS(
 
   // The socat relay runs inside the container entrypoint to convert
   // TCP back to the Unix socket that SSH clients expect.
-  const entrypointPrefix = `socat UNIX-LISTEN:${socatSocketPath},fork TCP4:127.0.0.1:${tunnelPort} &`;
+  // Guard: if socat is not available, print a clear error instead of failing silently.
+  const entrypointPrefix =
+    `command -v socat >/dev/null 2>&1 || { echo "ERROR: socat not found — SSH agent relay requires socat in the sandbox image" >&2; }; ` +
+    `socat UNIX-LISTEN:${socatSocketPath},fork TCP4:127.0.0.1:${tunnelPort} &`;
 
   // R7.9, R7.10, R7.11: Create idempotent cleanup function
   let cleanedUp = false;

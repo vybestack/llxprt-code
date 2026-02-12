@@ -282,7 +282,6 @@ describe('setupSshAgentPodmanMacOS', () => {
     expect(sshArgs[rIdx + 1]).toMatch(/^127\.0\.0\.1:\d+:\/tmp\/auth\.sock$/);
     expect(sshArgs).toContain('-N');
     expect(sshArgs).toContain('ExitOnForwardFailure=yes');
-    expect(spawnCall[2]).toEqual(expect.objectContaining({ detached: true }));
   }, 10000);
 
   it('adds --network host and SSH_AUTH_SOCK env on success (R7.5)', async () => {
@@ -308,9 +307,11 @@ describe('setupSshAgentPodmanMacOS', () => {
 
     const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
 
-    expect(result.entrypointPrefix).toMatch(
-      /^socat UNIX-LISTEN:\/tmp\/ssh-agent,fork TCP4:127\.0\.0\.1:\d+ &$/,
+    expect(result.entrypointPrefix).toContain(
+      'socat UNIX-LISTEN:/tmp/ssh-agent,fork TCP4:127.0.0.1:',
     );
+    // Should include socat availability guard
+    expect(result.entrypointPrefix).toContain('command -v socat');
   }, 10000);
 
   it('returns cleanup function that kills tunnel (R7.9)', async () => {
@@ -334,6 +335,23 @@ describe('setupSshAgentPodmanMacOS', () => {
 
     // kill is only called once due to idempotent guard
     expect(fakeProc.kill).toHaveBeenCalledTimes(1);
+  }, 10000);
+
+  it('warns and skips when --network already set (conflict guard)', async () => {
+    mockValidConnection();
+    const fakeProc = mockTunnelProcess();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Pre-populate args with a conflicting network flag
+    const args = ['--network', 'none'];
+    const result = await setupSshAgentPodmanMacOS(args, '/tmp/auth.sock');
+
+    expect(result).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('--network=none is already set'),
+    );
+    // Tunnel should be killed since we're bailing
+    expect(fakeProc.kill).toHaveBeenCalledWith('SIGTERM');
   }, 10000);
 
   it('throws FatalSandboxError when tunnel fails to start (R7.7)', async () => {
