@@ -21,6 +21,7 @@ import chalk from 'chalk';
 import { useShellHistory } from '../hooks/useShellHistory.js';
 import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
 import { useCommandCompletion } from '../hooks/useCommandCompletion.js';
+import { useShellPathCompletion } from '../hooks/useShellPathCompletion.js';
 import { useKeypress, Key } from '../hooks/useKeypress.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
@@ -173,17 +174,28 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     historyData,
     reverseSearchActive,
   );
+
+  const shellPathCompletion = useShellPathCompletion(
+    buffer,
+    config.getTargetDir(),
+    shellModeActive,
+    reverseSearchActive,
+  );
+
   const resetCompletionState = completion.resetCompletionState;
   const resetReverseSearchCompletionState =
     reverseSearchCompletion.resetCompletionState;
 
   useEffect(() => {
     onSuggestionsVisibilityChange?.(
-      completion.showSuggestions || reverseSearchActive,
+      completion.showSuggestions ||
+        reverseSearchActive ||
+        shellPathCompletion.showSuggestions,
     );
   }, [
     completion.showSuggestions,
     reverseSearchActive,
+    shellPathCompletion.showSuggestions,
     onSuggestionsVisibilityChange,
   ]);
 
@@ -468,6 +480,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           buffer.moveToOffset(offset);
           return;
         }
+        if (shellModeActive && shellPathCompletion.showSuggestions) {
+          shellPathCompletion.resetCompletionState();
+          resetEscapeState();
+          return;
+        }
         if (shellModeActive) {
           setShellModeActive(false);
           resetEscapeState();
@@ -628,8 +645,30 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           inputHistory.navigateDown();
           return;
         }
-      } else {
-        // Shell History Navigation
+      } else if (shellPathCompletion.showSuggestions) {
+        // Shell path completion — when suggestions are showing
+        if (shellPathCompletion.suggestions.length > 1) {
+          if (keyMatchers[Command.COMPLETION_UP](key)) {
+            shellPathCompletion.navigateUp();
+            return;
+          }
+          if (keyMatchers[Command.COMPLETION_DOWN](key)) {
+            shellPathCompletion.navigateDown();
+            return;
+          }
+        }
+        if (key.name === 'tab') {
+          const idx =
+            shellPathCompletion.activeSuggestionIndex === -1
+              ? 0
+              : shellPathCompletion.activeSuggestionIndex;
+          if (idx < shellPathCompletion.suggestions.length) {
+            shellPathCompletion.handleAutocomplete(idx);
+          }
+          return;
+        }
+      } else if (shellModeActive) {
+        // Shell History Navigation — only when NO path suggestions showing
         if (keyMatchers[Command.NAVIGATION_UP](key)) {
           const prevCommand = shellHistory.getPreviousCommand();
           if (prevCommand !== null) buffer.setText(prevCommand);
@@ -734,6 +773,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       handleSubmit,
       shellHistory,
       reverseSearchCompletion,
+      shellPathCompletion,
       handleClipboardPaste,
       resetCompletionState,
       showEscapePrompt,
@@ -880,19 +920,20 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const { inlineGhost, additionalLines } = getGhostTextLines();
 
-  const completionSuggestionsNode = completion.showSuggestions ? (
-    <Box paddingRight={2}>
-      <SuggestionsDisplay
-        suggestions={completion.suggestions}
-        activeIndex={completion.activeSuggestionIndex}
-        isLoading={completion.isLoadingSuggestions}
-        width={suggestionsWidth}
-        scrollOffset={completion.visibleStartIndex}
-        userInput={buffer.text}
-        activeHint={completion.activeHint}
-      />
-    </Box>
-  ) : null;
+  const completionSuggestionsNode =
+    completion.showSuggestions && !shellModeActive ? (
+      <Box paddingRight={2}>
+        <SuggestionsDisplay
+          suggestions={completion.suggestions}
+          activeIndex={completion.activeSuggestionIndex}
+          isLoading={completion.isLoadingSuggestions}
+          width={suggestionsWidth}
+          scrollOffset={completion.visibleStartIndex}
+          userInput={buffer.text}
+          activeHint={completion.activeHint}
+        />
+      </Box>
+    ) : null;
 
   const reverseSearchSuggestionsNode = reverseSearchActive ? (
     <Box paddingRight={2}>
@@ -907,8 +948,23 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     </Box>
   ) : null;
 
+  const shellPathSuggestionsNode = shellPathCompletion.showSuggestions ? (
+    <Box paddingRight={2}>
+      <SuggestionsDisplay
+        suggestions={shellPathCompletion.suggestions}
+        activeIndex={shellPathCompletion.activeSuggestionIndex}
+        isLoading={shellPathCompletion.isLoadingSuggestions}
+        width={suggestionsWidth}
+        scrollOffset={shellPathCompletion.visibleStartIndex}
+        userInput={buffer.text}
+      />
+    </Box>
+  ) : null;
+
   const suggestionsNode =
-    completionSuggestionsNode ?? reverseSearchSuggestionsNode;
+    completionSuggestionsNode ??
+    shellPathSuggestionsNode ??
+    reverseSearchSuggestionsNode;
 
   return (
     <>
