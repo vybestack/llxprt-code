@@ -1774,8 +1774,8 @@ export class GeminiChat {
       );
       const strategy = getCompressionStrategy(strategyName);
 
-      // REQ-HD-002.2: If strategy has no optimize method, skip
-      if (!strategy.optimize) {
+      // REQ-HD-002.2: If strategy has no optimize method or trigger isn't continuous, skip
+      if (!strategy.optimize || strategy.trigger?.mode !== 'continuous') {
         return;
       }
 

@@ -430,7 +430,6 @@ The structure MUST be as follows:
     </open_questions>
 
     <task_context>
-        <!-- @plan PLAN-20260211-HIGHDENSITY.P21 @requirement REQ-HD-010.1 -->
         <!-- For each active task or todo item, capture: why it exists, what user request originated it, what constraints apply, what approach was chosen, and what has been tried so far. -->
         <!-- Example:
          - Task: "Fix TypeScript errors in login.ts" — originated from user request to refactor auth. Constraint: must maintain backward compatibility. Approach: incremental migration. Tried: direct replacement (failed due to type mismatches).
@@ -438,7 +437,6 @@ The structure MUST be as follows:
     </task_context>
 
     <user_directives>
-        <!-- @requirement REQ-HD-010.2 -->
         <!-- Capture specific user feedback, corrections, and preferences. Use exact quotes where possible. -->
         <!-- Example:
          - User said: "Don't use any as a type, ever"
@@ -448,7 +446,6 @@ The structure MUST be as follows:
     </user_directives>
 
     <errors_encountered>
-        <!-- @requirement REQ-HD-010.3 -->
         <!-- Record errors hit during the session: exact messages, root causes identified, and resolutions applied. -->
         <!-- Example:
          - Error: "Cannot find module './auth/middleware'" — Root cause: file was renamed to middleware.ts. Resolution: updated import path.
@@ -457,7 +454,6 @@ The structure MUST be as follows:
     </errors_encountered>
 
     <code_references>
-        <!-- @requirement REQ-HD-010.4 -->
         <!-- Preserve important code snippets, exact file paths, and function signatures that are essential for continuing work. -->
         <!-- Example:
          - Key file: src/auth/middleware.ts — exports: authenticateRequest(req, res, next)

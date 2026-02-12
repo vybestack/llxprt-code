@@ -202,8 +202,12 @@ export class HighDensityStrategy implements CompressionStrategy {
     }
 
     // Phase 3: Tool result recency pruning
+    // Apply prior replacements so recency pruning sees already-pruned entries
     if (config.recencyPruning) {
-      const rpResult = this.pruneByRecency(history, config, removals);
+      const historyForRecency = history.map(
+        (entry, idx) => replacements.get(idx) ?? entry,
+      );
+      const rpResult = this.pruneByRecency(historyForRecency, config, removals);
       for (const [idx, entry] of rpResult.replacements) {
         if (!removals.has(idx)) {
           replacements.set(idx, entry);

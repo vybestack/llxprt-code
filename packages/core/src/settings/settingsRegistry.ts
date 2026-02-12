@@ -1011,6 +1011,16 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     type: 'number',
     default: 3,
     persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value >= 1) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'compression.density.recencyRetention must be a positive integer (>= 1)',
+      };
+    },
   },
 ];
 
