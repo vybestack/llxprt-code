@@ -297,7 +297,7 @@ describe('setupSshAgentPodmanMacOS', () => {
     const netIdx = args.indexOf('--network');
     expect(args[netIdx + 1]).toBe('host');
     const sshEnv = args.find((a) => a.includes('SSH_AUTH_SOCK'));
-    expect(sshEnv).toBe('SSH_AUTH_SOCK=/ssh-agent');
+    expect(sshEnv).toBe('SSH_AUTH_SOCK=/tmp/ssh-agent');
     expect(result.cleanup).toBeDefined();
     expect(result.entrypointPrefix).toBeDefined();
   }, 10000);
@@ -309,7 +309,7 @@ describe('setupSshAgentPodmanMacOS', () => {
     const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
 
     expect(result.entrypointPrefix).toMatch(
-      /^socat UNIX-LISTEN:\/ssh-agent,fork TCP4:127\.0\.0\.1:\d+ &$/,
+      /^socat UNIX-LISTEN:\/tmp\/ssh-agent,fork TCP4:127\.0\.0\.1:\d+ &$/,
     );
   }, 10000);
 

@@ -440,11 +440,15 @@ export async function setupSshAgentPodmanMacOS(
   // R7.5: Use --network=host so the container can reach the VM's loopback.
   // This is safe because the Podman VM itself provides the security boundary.
   args.push('--network', 'host');
-  args.push('--env', `SSH_AUTH_SOCK=${CONTAINER_SSH_AGENT_SOCK}`);
+
+  // socat creates the socket at runtime (no volume mount), so it must be in a
+  // world-writable directory — the container runs as the `node` user, not root.
+  const socatSocketPath = '/tmp/ssh-agent';
+  args.push('--env', `SSH_AUTH_SOCK=${socatSocketPath}`);
 
   // The socat relay runs inside the container entrypoint to convert
   // TCP back to the Unix socket that SSH clients expect.
-  const entrypointPrefix = `socat UNIX-LISTEN:${CONTAINER_SSH_AGENT_SOCK},fork TCP4:127.0.0.1:${tunnelPort} &`;
+  const entrypointPrefix = `socat UNIX-LISTEN:${socatSocketPath},fork TCP4:127.0.0.1:${tunnelPort} &`;
 
   // R7.9, R7.10, R7.11: Create idempotent cleanup function
   let cleanedUp = false;
