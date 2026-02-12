@@ -71,13 +71,20 @@ vi.mock('./src/providers/providerAliases.js', () => ({
         ephemeralSettings: {
           'context-limit': 262144,
           max_tokens: 32768,
-          'reasoning.effort': 'medium',
-          'reasoning.enabled': true,
-          'reasoning.includeInResponse': true,
-          'reasoning.includeInContext': true,
-          'reasoning.stripFromContext': 'none',
           'user-agent': 'RooCode/1.0',
         },
+        modelDefaults: [
+          {
+            pattern: 'kimi.*',
+            ephemeralSettings: {
+              'reasoning.effort': 'medium',
+              'reasoning.enabled': true,
+              'reasoning.includeInResponse': true,
+              'reasoning.includeInContext': true,
+              'reasoning.stripFromContext': 'none',
+            },
+          },
+        ],
       },
       filePath: '/mock/aliases/kimi.config',
       source: 'builtin',
