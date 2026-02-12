@@ -37,8 +37,6 @@ import { createOpenAI } from '@ai-sdk/openai';
 
 import { type IContent } from '../../services/history/IContent.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
-import { type ToolFormat } from '../../tools/IToolFormatter.js';
-import { isKimiModel, isMistralModel } from '../../tools/ToolIdStrategy.js';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
@@ -71,6 +69,16 @@ import {
   type StripPolicy,
 } from '../reasoning/reasoningUtils.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
+import { extractThinkTagsAsBlock } from '../utils/thinkingExtraction.js';
+import { sanitizeProviderText } from '../utils/textSanitizer.js';
+import { detectToolFormat } from '../utils/toolFormatDetection.js';
+import { getContentPreview } from '../utils/contentPreview.js';
+import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
+import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
+import {
+  normalizeToOpenAIToolId,
+  normalizeToHistoryToolId,
+} from '../utils/toolIdNormalization.js';
 
 type VercelTools = Record<string, Tool<unknown, never>>;
 const streamText = Ai.streamText;
@@ -84,28 +92,7 @@ interface CaptureBuffer {
   headers?: Headers;
 }
 
-function isQwenBaseURL(baseURL: string | undefined): boolean {
-  const candidate = baseURL?.trim();
-  if (!candidate) return false;
-
-  const normalized = candidate.includes('://')
-    ? candidate
-    : `https://${candidate}`;
-
-  try {
-    const hostname = new URL(normalized).hostname.toLowerCase();
-    return (
-      hostname === 'dashscope.aliyuncs.com' ||
-      hostname.endsWith('.dashscope.aliyuncs.com') ||
-      hostname === 'portal.qwen.ai' ||
-      hostname.endsWith('.qwen.ai') ||
-      hostname === 'api.qwen.com' ||
-      hostname.endsWith('.qwen.com')
-    );
-  } catch {
-    return false;
-  }
-}
+// isQwenBaseURL is imported from ../utils/qwenEndpoint.js
 
 /**
  * Some OpenAI-compatible providers reject the OpenAI "developer" role. The Vercel
@@ -436,48 +423,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
    * Normalize tool IDs from various formats to OpenAI-style format.
    * Kept for compatibility with existing history/tool logic.
    */
-  private normalizeToOpenAIToolId(id: string): string {
-    if (!id) {
-      return 'call_';
-    }
-
-    if (id.startsWith('call_')) {
-      return id;
-    }
-
-    if (id.startsWith('hist_tool_')) {
-      return `call_${id.substring('hist_tool_'.length)}`;
-    }
-
-    if (id.startsWith('toolu_')) {
-      return `call_${id.substring('toolu_'.length)}`;
-    }
-
-    return `call_${id}`;
-  }
-
-  /**
-   * Normalize tool IDs from OpenAI-style format to history format.
-   */
-  private normalizeToHistoryToolId(id: string): string {
-    if (!id) {
-      return 'hist_tool_';
-    }
-
-    if (id.startsWith('hist_tool_')) {
-      return id;
-    }
-
-    if (id.startsWith('call_')) {
-      return `hist_tool_${id.substring('call_'.length)}`;
-    }
-
-    if (id.startsWith('toolu_')) {
-      return `hist_tool_${id.substring('toolu_'.length)}`;
-    }
-
-    return `hist_tool_${id}`;
-  }
+  // normalizeToOpenAIToolId is imported from ../utils/toolIdNormalization.js
+  // normalizeToHistoryToolId is imported from ../utils/toolIdNormalization.js
 
   /**
    * Convert internal history IContent[] to AI SDK ModelMessage[].
@@ -492,7 +439,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     contents: IContent[],
     options?: { includeReasoningInContext?: boolean },
   ): ModelMessage[] {
-    const toolFormat = this.detectToolFormat();
+    const toolFormat = detectToolFormat(
+      this.getModel() || this.getDefaultModel(),
+      this.getLogger(),
+    );
 
     // Create a ToolIdMapper based on the tool format
     // For Kimi K2, this generates sequential IDs in the format functions.{name}:{index}
@@ -608,169 +558,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
    *
    * For fragmented format, joins with spaces. For standard, joins with newlines.
    */
-  private extractThinkTagsAsBlock(text: string): ThinkingBlock | null {
-    if (!text) {
-      return null;
-    }
-
-    const thinkingParts: string[] = [];
-
-    // Match <think>...</think>
-    const thinkMatches = text.matchAll(/<think>([\s\S]*?)<\/think>/gi);
-    for (const match of thinkMatches) {
-      if (match[1]?.trim()) {
-        thinkingParts.push(match[1].trim());
-      }
-    }
-
-    // Match <thinking>...</thinking>
-    const thinkingMatches = text.matchAll(/<thinking>([\s\S]*?)<\/thinking>/gi);
-    for (const match of thinkingMatches) {
-      if (match[1]?.trim()) {
-        thinkingParts.push(match[1].trim());
-      }
-    }
-
-    // Match <analysis>...</analysis>
-    const analysisMatches = text.matchAll(/<analysis>([\s\S]*?)<\/analysis>/gi);
-    for (const match of analysisMatches) {
-      if (match[1]?.trim()) {
-        thinkingParts.push(match[1].trim());
-      }
-    }
-
-    if (thinkingParts.length === 0) {
-      return null;
-    }
-
-    // Detect fragmented format: many short parts (likely token-by-token streaming)
-    const avgPartLength =
-      thinkingParts.reduce((sum, p) => sum + p.length, 0) /
-      thinkingParts.length;
-    const isFragmented = thinkingParts.length > 5 && avgPartLength < 15;
-
-    // Join with space for fragmented, newlines for standard multi-paragraph thinking
-    const combinedThought = isFragmented
-      ? thinkingParts.join(' ')
-      : thinkingParts.join('\n\n');
-
-    const logger = this.getLogger();
-    logger.debug(
-      () =>
-        `[OpenAIVercelProvider] Extracted thinking from tags: ${combinedThought.length} chars`,
-      { tagCount: thinkingParts.length, isFragmented, avgPartLength },
-    );
-
-    return {
-      type: 'thinking',
-      thought: combinedThought,
-      sourceField: 'think_tags',
-      isHidden: false,
-    };
-  }
-
-  /**
-   * Sanitize text content from provider response by removing thinking tags and artifacts.
-   * This prevents <think>...</think> tags from leaking into visible output.
-   */
-  private sanitizeText(text: string): string {
-    if (!text) {
-      return text;
-    }
-
-    // Check if there are any reasoning tags before modification
-    const hadReasoningTags =
-      /<(?:think|thinking|analysis)>|<\/(?:think|thinking|analysis)>/i.test(
-        text,
-      );
-
-    let cleaned = text;
-
-    // Remove <think>...</think> tags and their content
-    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '\n');
-
-    // Remove <thinking>...</thinking> tags and their content
-    cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '\n');
-
-    // Remove <analysis>...</analysis> tags and their content
-    cleaned = cleaned.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '\n');
-
-    // Remove unclosed tags (streaming edge case)
-    cleaned = cleaned.replace(/<think>[\s\S]*$/gi, '');
-    cleaned = cleaned.replace(/<thinking>[\s\S]*$/gi, '');
-    cleaned = cleaned.replace(/<analysis>[\s\S]*$/gi, '');
-
-    // Also remove opening tags without closing (another streaming edge case)
-    cleaned = cleaned.replace(/<think>/gi, '');
-    cleaned = cleaned.replace(/<thinking>/gi, '');
-    cleaned = cleaned.replace(/<analysis>/gi, '');
-
-    // Only clean up whitespace if we had reasoning tags to strip
-    // This preserves meaningful whitespace in regular text chunks during streaming
-    // (e.g., " 5 Biggest" should remain " 5 Biggest", not become "5 Biggest")
-    if (hadReasoningTags) {
-      // Normalize multiple consecutive newlines to at most two
-      cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-
-      // Trim leading/trailing whitespace only when we stripped tags
-      cleaned = cleaned.trim();
-    }
-
-    return cleaned;
-  }
-
-  /**
-   * Get a short preview of a message's content for debug logging.
-   */
-  private getContentPreview(
-    content: ModelMessage['content'],
-    maxLength = 200,
-  ): string | undefined {
-    if (content === null || content === undefined) {
-      return undefined;
-    }
-
-    if (typeof content === 'string') {
-      if (content.length <= maxLength) {
-        return content;
-      }
-      return `${content.slice(0, maxLength)}…`;
-    }
-
-    if (Array.isArray(content)) {
-      // text parts, tool-call parts, etc.
-      const textParts = content.map((part) => {
-        if (
-          typeof part === 'object' &&
-          part !== null &&
-          'type' in part &&
-          (part as { type?: string }).type === 'text'
-        ) {
-          return (part as { text?: string }).text ?? '';
-        }
-        try {
-          return JSON.stringify(part);
-        } catch {
-          return '[unserializable part]';
-        }
-      });
-      const joined = textParts.join('\n');
-      if (joined.length <= maxLength) {
-        return joined;
-      }
-      return `${joined.slice(0, maxLength)}…`;
-    }
-
-    try {
-      const serialized = JSON.stringify(content);
-      if (serialized.length <= maxLength) {
-        return serialized;
-      }
-      return `${serialized.slice(0, maxLength)}…`;
-    } catch {
-      return '[unserializable content]';
-    }
-  }
+  // extractThinkTagsAsBlock is imported from ../utils/thinkingExtraction.js
+  // sanitizeProviderText is imported from ../utils/textSanitizer.js (replaces sanitizeText)
+  // getContentPreview is imported from ../utils/contentPreview.js
 
   /**
    * Core chat completion implementation using AI SDK v5.
@@ -876,7 +666,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         messageCount: messages.length,
         messages: messages.map((msg) => ({
           role: msg.role,
-          contentPreview: this.getContentPreview(msg.content),
+          contentPreview: getContentPreview(msg.content),
         })),
       });
     }
@@ -1038,9 +828,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       let accumulatedThinkingContent = '';
       let hasEmittedThinking = false;
 
-      // Capture method references for use in nested functions
-      const extractThinkTags = this.extractThinkTagsAsBlock.bind(this);
-      const sanitizeTextFn = this.sanitizeText.bind(this);
+      // Capture shared utility references for use in nested functions
+      const extractThinkTags = (text: string) =>
+        extractThinkTagsAsBlock(text, logger);
+      const sanitizeTextFn = (text: string) =>
+        sanitizeProviderText(text, logger);
 
       // Helper to check if buffer has an open think tag without closing
       const hasOpenThinkTag = (text: string): boolean => {
@@ -1438,8 +1230,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
           return {
             type: 'tool_call',
-            id: this.normalizeToHistoryToolId(
-              this.normalizeToOpenAIToolId(call.toolCallId),
+            id: normalizeToHistoryToolId(
+              normalizeToOpenAIToolId(call.toolCallId),
             ),
             name: call.toolName,
             parameters: processedParameters,
@@ -1532,7 +1324,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
       // 1. Extract from <think> tags in text (if enabled)
       if (rsEnabled && rsIncludeInResponse && result.text) {
-        const thinkBlock = this.extractThinkTagsAsBlock(result.text);
+        const thinkBlock = extractThinkTagsAsBlock(result.text, logger);
         if (thinkBlock) {
           thinkingContent = thinkBlock.thought;
           logger.debug(
@@ -1593,7 +1385,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
       // 4. Sanitize and emit text content
       if (result.text) {
-        const sanitizedText = this.sanitizeText(result.text);
+        const sanitizedText = sanitizeProviderText(result.text, logger);
         if (sanitizedText) {
           blocks.push({
             type: 'text',
@@ -1628,7 +1420,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
         blocks.push({
           type: 'tool_call',
-          id: this.normalizeToHistoryToolId(this.normalizeToOpenAIToolId(id)),
+          id: normalizeToHistoryToolId(normalizeToOpenAIToolId(id)),
           name: toolName,
           parameters: processedParameters,
         } as ToolCallBlock);
@@ -1821,11 +1613,12 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   }
 
   override getToolFormat(): string {
-    const format = this.detectToolFormat();
+    const modelName = this.getModel() || this.getDefaultModel();
     const logger = new DebugLogger('llxprt:provider:openaivercel');
+    const format = detectToolFormat(modelName, logger);
     logger.debug(() => `getToolFormat() called, returning: ${format}`, {
       provider: this.name,
-      model: this.getModel(),
+      model: modelName,
       format,
     });
     return format;
@@ -1835,46 +1628,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
    * Detects the tool call format based on the model being used.
    * Mirrors OpenAIProvider behavior so existing ToolFormatter logic works.
    */
-  private detectToolFormat(): ToolFormat {
-    const modelName = this.getModel() || this.getDefaultModel();
-    const logger = new DebugLogger('llxprt:provider:openaivercel');
-
-    // Check for Kimi K2 models (requires special ID format: functions.{name}:{index})
-    if (isKimiModel(modelName)) {
-      logger.debug(
-        () => `Auto-detected 'kimi' format for K2 model: ${modelName}`,
-      );
-      return 'kimi';
-    }
-
-    // Check for Mistral models (requires 9-char alphanumeric IDs)
-    // This applies to both hosted API and self-hosted Mistral models
-    if (isMistralModel(modelName)) {
-      logger.debug(
-        () => `Auto-detected 'mistral' format for Mistral model: ${modelName}`,
-      );
-      return 'mistral';
-    }
-
-    const lowerModelName = modelName.toLowerCase();
-
-    if (lowerModelName.includes('glm-4')) {
-      logger.debug(
-        () => `Auto-detected 'qwen' format for GLM-4.x model: ${modelName}`,
-      );
-      return 'qwen';
-    }
-
-    if (lowerModelName.includes('qwen')) {
-      logger.debug(
-        () => `Auto-detected 'qwen' format for Qwen model: ${modelName}`,
-      );
-      return 'qwen';
-    }
-
-    logger.debug(() => `Using default 'openai' format for model: ${modelName}`);
-    return 'openai';
-  }
+  // detectToolFormat is imported from ../utils/toolFormatDetection.js
 
   parseToolResponse(response: unknown): unknown {
     return response;
@@ -1908,60 +1662,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
    * own built-in retry logic.
    */
   shouldRetryResponse(error: unknown): boolean {
-    const logger = new DebugLogger('llxprt:provider:openaivercel');
-
-    // Don't retry if it's a "successful" 200 error wrapper
-    if (
-      error &&
-      typeof error === 'object' &&
-      'status' in error &&
-      (error as { status?: number }).status === 200
-    ) {
-      return false;
-    }
-
-    let status: number | undefined;
-
-    if (error && typeof error === 'object' && 'status' in error) {
-      status = (error as { status?: number }).status;
-    }
-
-    if (!status && error && typeof error === 'object' && 'response' in error) {
-      const response = (error as { response?: { status?: number } }).response;
-      if (response && typeof response === 'object' && 'status' in response) {
-        status = response.status;
-      }
-    }
-
-    if (!status && error instanceof Error) {
-      if (error.message.includes('429')) {
-        status = 429;
-      }
-    }
-
-    logger.debug(() => `shouldRetryResponse checking error:`, {
-      hasError: !!error,
-      errorType:
-        error && typeof error === 'object'
-          ? (error as { constructor?: { name?: string } }).constructor?.name
-          : undefined,
-      status,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      errorKeys: error && typeof error === 'object' ? Object.keys(error) : [],
-      errorData:
-        error && typeof error === 'object' && 'error' in error
-          ? (error as { error?: unknown }).error
-          : undefined,
+    return shouldRetryOnStatus(error, {
+      logger: new DebugLogger('llxprt:provider:openaivercel'),
     });
-
-    const shouldRetry = Boolean(
-      status === 429 || (status !== undefined && status >= 500 && status < 600),
-    );
-
-    if (shouldRetry) {
-      logger.debug(() => `Will retry request due to status ${status}`);
-    }
-
-    return shouldRetry;
   }
 }
