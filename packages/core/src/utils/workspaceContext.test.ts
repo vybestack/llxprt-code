@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { WorkspaceContext } from './workspaceContext.js';
-import { debugLogger } from './debugLogger.js';
 
 describe('WorkspaceContext with real filesystem', () => {
   let tempDir: string;
@@ -396,7 +395,7 @@ describe('WorkspaceContext with optional directories', () => {
     fs.mkdirSync(existingDir1, { recursive: true });
     fs.mkdirSync(existingDir2, { recursive: true });
 
-    vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -411,8 +410,8 @@ describe('WorkspaceContext with optional directories', () => {
     ]);
     const directories = workspaceContext.getDirectories();
     expect(directories).toEqual([cwd, existingDir1]);
-    expect(debugLogger.warn).toHaveBeenCalledTimes(1);
-    expect(debugLogger.warn).toHaveBeenCalledWith(
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(console.warn).toHaveBeenCalledWith(
       `[WARN] Skipping unreadable directory: ${nonExistentDir} (Directory does not exist: ${nonExistentDir})`,
     );
   });
@@ -421,6 +420,6 @@ describe('WorkspaceContext with optional directories', () => {
     const workspaceContext = new WorkspaceContext(cwd, [existingDir1]);
     const directories = workspaceContext.getDirectories();
     expect(directories).toEqual([cwd, existingDir1]);
-    expect(debugLogger.warn).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
   });
 });

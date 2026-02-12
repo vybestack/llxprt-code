@@ -126,6 +126,23 @@ vi.mock('./ui/utils/mouse.js', () => ({
   DISABLE_MOUSE_EVENTS: '',
 }));
 
+// Mock writeToStdout/writeToStderr so exit-handler tests can observe calls
+// (the real writeToStdout captures process.stdout.write at module load and
+// would bypass vi.spyOn on process.stdout.write).
+const { mockWriteToStdout } = vi.hoisted(() => ({
+  mockWriteToStdout: vi.fn().mockReturnValue(true),
+}));
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...actual,
+    writeToStdout: mockWriteToStdout,
+    writeToStderr: vi.fn().mockReturnValue(true),
+    patchStdio: vi.fn(() => vi.fn()),
+  };
+});
+
 describe('gemini.tsx main function', () => {
   let loadSettingsMock: ReturnType<typeof vi.mocked<typeof loadSettings>>;
   let originalEnvGeminiSandbox: string | undefined;
@@ -567,6 +584,7 @@ describe('startInteractiveUI', () => {
   vi.mock('./utils/cleanup.js', () => ({
     cleanupCheckpoints: vi.fn(() => Promise.resolve()),
     registerCleanup: vi.fn(),
+    registerSyncCleanup: vi.fn(),
     runExitCleanup: vi.fn(),
   }));
 
@@ -647,7 +665,6 @@ describe('startInteractiveUI', () => {
         },
       );
 
-    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     // Ensure isTTY is true so the guard passes
     const originalIsTTY = process.stdout.isTTY;
     Object.defineProperty(process.stdout, 'isTTY', {
@@ -670,6 +687,8 @@ describe('startInteractiveUI', () => {
     } as unknown as LoadedSettings;
 
     try {
+      mockWriteToStdout.mockClear();
+
       await startInteractiveUI(
         mouseEnabledConfig,
         mouseEnabledSettings,
@@ -682,12 +701,12 @@ describe('startInteractiveUI', () => {
         handler();
       }
 
-      // Verify bracketed paste disabled
-      expect(writeSpy).toHaveBeenCalledWith(
+      // Verify bracketed paste disabled (via mocked writeToStdout)
+      expect(mockWriteToStdout).toHaveBeenCalledWith(
         expect.stringContaining('\x1b[?2004l'),
       );
       // Verify focus tracking disabled
-      expect(writeSpy).toHaveBeenCalledWith(
+      expect(mockWriteToStdout).toHaveBeenCalledWith(
         expect.stringContaining('\x1b[?1004l'),
       );
     } finally {
@@ -696,7 +715,6 @@ describe('startInteractiveUI', () => {
         configurable: true,
       });
       processOnSpy.mockRestore();
-      writeSpy.mockRestore();
     }
   });
 
@@ -713,7 +731,6 @@ describe('startInteractiveUI', () => {
         },
       );
 
-    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     const originalIsTTY = process.stdout.isTTY;
     Object.defineProperty(process.stdout, 'isTTY', {
       value: false,
@@ -735,6 +752,8 @@ describe('startInteractiveUI', () => {
     } as unknown as LoadedSettings;
 
     try {
+      mockWriteToStdout.mockClear();
+
       await startInteractiveUI(
         mouseEnabledConfig,
         mouseEnabledSettings,
@@ -743,17 +762,17 @@ describe('startInteractiveUI', () => {
       );
 
       // Clear any writes from render setup
-      writeSpy.mockClear();
+      mockWriteToStdout.mockClear();
 
       // Fire all exit handlers
       for (const handler of exitHandlers) {
         handler();
       }
 
-      // When not a TTY, should not write any escape sequences
-      const calls = writeSpy.mock.calls.map((c) => c[0]);
+      // When not a TTY, should not write any escape sequences via writeToStdout
+      const calls = mockWriteToStdout.mock.calls.map((c: unknown[]) => c[0]);
       const hasEscapeSeq = calls.some(
-        (arg) => typeof arg === 'string' && arg.includes('\x1b['),
+        (arg: unknown) => typeof arg === 'string' && arg.includes('\x1b['),
       );
       expect(hasEscapeSeq).toBe(false);
     } finally {
@@ -762,7 +781,6 @@ describe('startInteractiveUI', () => {
         configurable: true,
       });
       processOnSpy.mockRestore();
-      writeSpy.mockRestore();
     }
   });
 });

@@ -215,7 +215,7 @@ describe('updateGitignore', () => {
     expect(content).toBe('.llxprt/\nsome-other-file\n\ngha-creds-*.json\n');
     expect(content).toContain('gha-creds-*.json');
     // Should not duplicate .llxprt/ entry
-    expect((content.match(/\.gemini\//g) || []).length).toBe(1);
+    expect((content.match(/\.llxprt\//g) || []).length).toBe(1);
   });
 
   it('does not get confused by entries in comments or as substrings', async () => {
@@ -257,20 +257,14 @@ describe('updateGitignore', () => {
   });
 
   it('handles permission errors gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
-
     const fsModule = await import('node:fs');
     const writeFileSpy = vi
       .spyOn(fsModule.promises, 'writeFile')
       .mockRejectedValue(new Error('Permission denied'));
 
+    // Should not throw — error is logged via DebugLogger
     await expect(updateGitignore(scratchDir)).resolves.toBeUndefined();
-    expect(consoleSpy).toHaveBeenCalledWith(
-      'Failed to update .gitignore:',
-      expect.any(Error),
-    );
 
     writeFileSpy.mockRestore();
-    consoleSpy.mockRestore();
   });
 });

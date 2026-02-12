@@ -5,39 +5,13 @@
  */
 
 import { act, useCallback } from 'react';
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render } from '../../test-utils/render.js';
 import { useConsoleMessages } from './useConsoleMessages.js';
-import { CoreEvent, type ConsoleLogPayload } from '@vybestack/llxprt-code-core';
-
-// Mock coreEvents
-let consoleLogHandler: ((payload: ConsoleLogPayload) => void) | undefined;
-
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const actual = (await importOriginal()) as any;
-  return {
-    ...actual,
-    coreEvents: {
-      on: vi.fn((event, handler) => {
-        if (event === CoreEvent.ConsoleLog) {
-          consoleLogHandler = handler;
-        }
-      }),
-      off: vi.fn((event) => {
-        if (event === CoreEvent.ConsoleLog) {
-          consoleLogHandler = undefined;
-        }
-      }),
-      emitConsoleLog: vi.fn(),
-    },
-  };
-});
 
 describe('useConsoleMessages', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    consoleLogHandler = undefined;
   });
 
   afterEach(() => {
@@ -47,22 +21,24 @@ describe('useConsoleMessages', () => {
   });
 
   const useTestableConsoleMessages = () => {
-    const { ...rest } = useConsoleMessages();
-    const log = useCallback((content: string) => {
-      if (consoleLogHandler) {
-        consoleLogHandler({ type: 'log', content });
-      }
-    }, []);
-    const error = useCallback((content: string) => {
-      if (consoleLogHandler) {
-        consoleLogHandler({ type: 'error', content });
-      }
-    }, []);
+    const { handleNewMessage, ...rest } = useConsoleMessages();
+    const log = useCallback(
+      (content: string) => {
+        handleNewMessage({ type: 'log', content, count: 1 });
+      },
+      [handleNewMessage],
+    );
+    const error = useCallback(
+      (content: string) => {
+        handleNewMessage({ type: 'error', content, count: 1 });
+      },
+      [handleNewMessage],
+    );
     return {
       ...rest,
+      handleNewMessage,
       log,
       error,
-      clearConsoleMessages: rest.clearConsoleMessages,
     };
   };
 
@@ -173,7 +149,6 @@ describe('useConsoleMessages', () => {
     });
 
     expect(clearTimeoutSpy).toHaveBeenCalled();
-    // clearTimeoutSpy.mockRestore() is handled by afterEach restoreAllMocks
   });
 
   it('should clean up the timeout on unmount', () => {
