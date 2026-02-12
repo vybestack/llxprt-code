@@ -65,7 +65,7 @@ vi.mock('./src/providers/providerAliases.js', () => ({
         name: 'kimi',
         modelsDevProviderId: 'kimi-for-coding',
         baseProvider: 'openai',
-        baseUrl: 'https://api.kimi.com/coding/v1',
+        'base-url': 'https://api.kimi.com/coding/v1',
         defaultModel: 'kimi-for-coding',
         description: 'Kimi For Coding OpenAI-compatible endpoint',
         ephemeralSettings: {
