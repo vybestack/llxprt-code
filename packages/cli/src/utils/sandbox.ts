@@ -99,6 +99,7 @@ export function mountGitConfigFiles(
     '.gitconfig',
     path.join('.config', 'git', 'config'),
     '.gitignore_global',
+    path.join('.ssh', 'known_hosts'),
   ];
 
   for (const relPath of gitConfigFiles) {

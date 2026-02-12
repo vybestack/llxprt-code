@@ -356,7 +356,8 @@ describe('mountGitConfigFiles', () => {
       return (
         s === '/Users/alice/.gitconfig' ||
         s === path.join('/Users/alice', '.config', 'git', 'config') ||
-        s === '/Users/alice/.gitignore_global'
+        s === '/Users/alice/.gitignore_global' ||
+        s === path.join('/Users/alice', '.ssh', 'known_hosts')
       );
     });
     const args: string[] = [];
@@ -397,6 +398,17 @@ describe('mountGitConfigFiles', () => {
     mountGitConfigFiles(args, '/Users/alice', '/home/node');
     const hasCredentials = args.some((a) => a.includes('.git-credentials'));
     expect(hasCredentials).toBe(false);
+  });
+
+  it('adds --volume for ~/.ssh/known_hosts when file exists', () => {
+    existsSyncSpy.mockImplementation((p: string) =>
+      String(p).includes('known_hosts'),
+    );
+    const args: string[] = [];
+    mountGitConfigFiles(args, '/Users/alice', '/home/node');
+    const vol = args.find((a) => a.includes('.ssh/known_hosts'));
+    expect(vol).toBeDefined();
+    expect(vol).toMatch(/:ro$/);
   });
 });
 
