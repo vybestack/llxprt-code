@@ -458,14 +458,16 @@ export class GeminiChat {
     // @requirement REQ-HD-002.6
     // Wrap historyService.add to set densityDirty on turn-loop content adds.
     // Compression rebuilds suppress this via _suppressDensityDirty.
-    const originalAdd = this.historyService.add.bind(this.historyService);
-    this.historyService.add = (...args: Parameters<typeof originalAdd>) => {
-      const result = originalAdd(...args);
-      if (!this._suppressDensityDirty) {
-        this.densityDirty = true;
-      }
-      return result;
-    };
+    if (typeof this.historyService.add === 'function') {
+      const originalAdd = this.historyService.add.bind(this.historyService);
+      this.historyService.add = (...args: Parameters<typeof originalAdd>) => {
+        const result = originalAdd(...args);
+        if (!this._suppressDensityDirty) {
+          this.densityDirty = true;
+        }
+        return result;
+      };
+    }
 
     validateHistory(initialHistory);
 

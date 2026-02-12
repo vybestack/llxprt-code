@@ -55,4 +55,20 @@ The structure MUST be as follows:
         -->
     </current_plan>
 
+    <task_context>
+        <!-- For each active task or todo item: why it exists, what user request originated it, constraints, approach chosen, and what has been tried. -->
+    </task_context>
+
+    <user_directives>
+        <!-- Specific user feedback, corrections, and preferences. Use exact quotes where possible. -->
+    </user_directives>
+
+    <errors_encountered>
+        <!-- Errors hit during the session: exact messages, root causes, and resolutions applied. -->
+    </errors_encountered>
+
+    <code_references>
+        <!-- Important code snippets, exact file paths, and function signatures essential for continuing work. -->
+    </code_references>
+
 </state_snapshot>

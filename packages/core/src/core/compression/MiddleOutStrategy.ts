@@ -48,7 +48,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
   readonly name = 'middle-out' as const;
   readonly requiresLLM = true;
   /** @plan PLAN-20260211-HIGHDENSITY.P03 @requirement REQ-HD-001.3 */
-  readonly trigger: StrategyTrigger = { mode: 'threshold', defaultThreshold: 0.85 };
+  readonly trigger: StrategyTrigger = {
+    mode: 'threshold',
+    defaultThreshold: 0.85,
+  };
 
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history } = context;
@@ -73,12 +76,15 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const provider = context.resolveProvider(compressionProfile);
 
     // Build the LLM request
+    // @plan PLAN-20260211-HIGHDENSITY.P23
+    // @requirement REQ-HD-011.3, REQ-HD-012.2
     const compressionRequest: IContent[] = [
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: prompt }],
       },
       ...toCompress,
+      ...this.buildContextInjections(context),
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: TRIGGER_INSTRUCTION }],
@@ -239,5 +245,42 @@ export class MiddleOutStrategy implements CompressionStrategy {
         middleCompressed: 0,
       },
     };
+  }
+
+  /**
+   * @plan PLAN-20260211-HIGHDENSITY.P23
+   * @requirement REQ-HD-011.3, REQ-HD-012.2
+   * @pseudocode prompts-todos.md lines 251-276
+   */
+  private buildContextInjections(context: CompressionContext): IContent[] {
+    const injections: IContent[] = [];
+
+    if (context.activeTodos && context.activeTodos.trim().length > 0) {
+      injections.push({
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: `The following are the current active todo/task items. When summarizing, preserve context about why each task exists and what has been tried:
+
+${context.activeTodos}`,
+          },
+        ],
+      });
+    }
+
+    if (context.transcriptPath) {
+      injections.push({
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: `Note: The full pre-compression transcript is available at: ${context.transcriptPath}`,
+          },
+        ],
+      });
+    }
+
+    return injections;
   }
 }
