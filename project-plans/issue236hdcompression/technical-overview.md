@@ -573,6 +573,12 @@ strategy's `compress()` runs. This is a more aggressive deterministic pass:
 3. Preserve all tool call blocks, human messages, and AI text blocks intact.
 4. Return the result as `CompressionResult` with the new history.
 
+**Target token count:** The compress phase targets approximately
+`compressionThreshold × contextLimit × 0.6` tokens post-compression. At
+the default 85% threshold, this yields ~51%, providing headroom before the
+next trigger. This follows the same formula established for
+`TopDownTruncationStrategy`.
+
 ### Touchpoints
 
 - New file: `packages/core/src/core/compression/HighDensityStrategy.ts`

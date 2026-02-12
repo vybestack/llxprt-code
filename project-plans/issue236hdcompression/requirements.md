@@ -97,6 +97,13 @@ The `optimize()` method shall receive the raw history array (via
 `getRawHistory()`), not the curated view. `DensityResult` indices shall
 refer to positions in the raw array.
 
+### REQ-HD-002.10: Sequential Turn-Loop Safety
+The `ensureDensityOptimized()` method shall only be called from the
+sequential pre-send window (within `ensureCompressionBeforeSend`), where
+no concurrent `historyService.add()` calls occur. The
+`applyDensityResult()` method shall not be called from event handlers,
+callbacks, or any context outside this sequential window.
+
 ---
 
 ## REQ-HD-003: HistoryService Changes
@@ -415,3 +422,18 @@ propagate the error.
 The `HighDensityStrategy.compress()` failure behavior shall follow the
 same pattern as existing strategies: propagate the error, no silent
 fallback to a different strategy.
+
+### REQ-HD-013.5: Malformed Tool Parameters
+Where a tool call's `parameters` field is not an object or does not contain
+a recognizable file path key, the strategy shall skip that tool call for
+pruning purposes. It shall not throw.
+
+### REQ-HD-013.6: Invalid Recency Retention
+Where `recencyRetention` in `DensityConfig` is less than 1, the system
+shall treat it as 1 (retain at least the most recent result per tool type).
+
+### REQ-HD-013.7: Metadata Accuracy
+The counts in `DensityResultMetadata` (`readWritePairsPruned`,
+`fileDeduplicationsPruned`, `recencyPruned`) shall accurately reflect the
+number of entries actually marked for removal or replacement by each
+optimization pass.
