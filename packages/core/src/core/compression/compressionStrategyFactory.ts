@@ -15,6 +15,7 @@ import type { CompressionStrategy, CompressionStrategyName } from './types.js';
 import { COMPRESSION_STRATEGIES, UnknownStrategyError } from './types.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
+import { OneShotStrategy } from './OneShotStrategy.js';
 
 /**
  * Validates a raw string against the known strategy names.
@@ -40,6 +41,8 @@ export function getCompressionStrategy(
       return new MiddleOutStrategy();
     case 'top-down-truncation':
       return new TopDownTruncationStrategy();
+    case 'one-shot':
+      return new OneShotStrategy();
     default: {
       const exhaustive: never = name;
       throw new UnknownStrategyError(exhaustive as string);

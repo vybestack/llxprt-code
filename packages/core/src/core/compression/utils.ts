@@ -16,10 +16,39 @@
  */
 
 import type {
+  ContentBlock,
   IContent,
   ToolCallBlock,
   ToolResponseBlock,
 } from '../../services/history/IContent.js';
+
+/**
+ * Aggregate text from content blocks, handling spacing between text and
+ * non-text blocks. Used by LLM-based compression strategies to collect
+ * streamed response text.
+ */
+export function aggregateTextFromBlocks(
+  blocks: ContentBlock[],
+  currentText: string,
+  lastBlockWasNonText: boolean,
+): { text: string; lastBlockWasNonText: boolean } {
+  let aggregatedText = currentText;
+  let wasNonText = lastBlockWasNonText;
+
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      if (wasNonText && aggregatedText.length > 0) {
+        aggregatedText += ' ';
+      }
+      aggregatedText += block.text;
+      wasNonText = false;
+    } else {
+      wasNonText = true;
+    }
+  }
+
+  return { text: aggregatedText, lastBlockWasNonText: wasNonText };
+}
 
 /**
  * Adjust compression boundary to not split tool call/response pairs.

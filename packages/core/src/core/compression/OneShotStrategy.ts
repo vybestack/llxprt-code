@@ -5,15 +5,13 @@
  */
 
 /**
- * @plan PLAN-20260211-COMPRESSION.P06
- * @requirement REQ-CS-002.1, REQ-CS-002.2, REQ-CS-002.3, REQ-CS-002.4
- * @requirement REQ-CS-002.5, REQ-CS-002.6, REQ-CS-002.7, REQ-CS-002.8
+ * One-shot compression strategy: summarizes the entire history except
+ * the last N messages in a single LLM call. The preserved tail is
+ * determined by the preserveThreshold ephemeral setting.
  *
- * Middle-out compression strategy: preserves the top and bottom of the
- * conversation history and compresses the middle section via an LLM call.
- *
- * Extracted from the sandwich compression logic previously embedded in
- * GeminiChat (getCompressionSplit, directCompressionCall, applyCompression).
+ * Unlike middle-out (which preserves both top and bottom), one-shot
+ * preserves ONLY the recent tail. The summary replaces everything
+ * above the preserved messages.
  */
 
 import { readFileSync } from 'node:fs';
@@ -29,18 +27,18 @@ import { CompressionExecutionError, PromptResolutionError } from './types.js';
 import { adjustForToolCallBoundary, aggregateTextFromBlocks } from './utils.js';
 import { getCompressionPrompt } from '../prompts.js';
 
-const MINIMUM_MIDDLE_MESSAGES = 4;
+const MINIMUM_COMPRESS_MESSAGES = 4;
 
 const ACK_TEXT = 'Got it. Thanks for the additional context!';
 const TRIGGER_INSTRUCTION =
   'First, reason in your scratchpad. Then, generate the <state_snapshot>.';
 
 // ---------------------------------------------------------------------------
-// MiddleOutStrategy
+// OneShotStrategy
 // ---------------------------------------------------------------------------
 
-export class MiddleOutStrategy implements CompressionStrategy {
-  readonly name = 'middle-out' as const;
+export class OneShotStrategy implements CompressionStrategy {
+  readonly name = 'one-shot' as const;
   readonly requiresLLM = true;
 
   async compress(context: CompressionContext): Promise<CompressionResult> {
@@ -50,10 +48,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
       return this.noCompressionResult(history);
     }
 
-    // Compute sandwich split
-    const { toKeepTop, toCompress, toKeepBottom } = this.computeSplit(context);
+    // Compute the split: everything above the preserved tail gets compressed
+    const { toCompress, toKeep } = this.computeSplit(context);
 
-    if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
+    if (toCompress.length < MINIMUM_COMPRESS_MESSAGES) {
       return this.noCompressionResult(history);
     }
 
@@ -83,21 +81,31 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
     if (!summary.trim()) {
       throw new CompressionExecutionError(
-        'middle-out',
+        'one-shot',
         'LLM returned empty summary during compression',
       );
     }
 
-    // Assemble result
-    const newHistory = this.assembleHistory(toKeepTop, summary, toKeepBottom);
+    // Assemble result: summary + ack + preserved tail
+    const newHistory: IContent[] = [
+      {
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: summary }],
+      },
+      {
+        speaker: 'ai' as const,
+        blocks: [{ type: 'text' as const, text: ACK_TEXT }],
+      },
+      ...toKeep,
+    ];
 
     const metadata: CompressionResultMetadata = {
       originalMessageCount: history.length,
       compressedMessageCount: newHistory.length,
-      strategyUsed: 'middle-out',
+      strategyUsed: 'one-shot',
       llmCallMade: true,
-      topPreserved: toKeepTop.length,
-      bottomPreserved: toKeepBottom.length,
+      topPreserved: 0,
+      bottomPreserved: toKeep.length,
       middleCompressed: toCompress.length,
     };
 
@@ -109,37 +117,28 @@ export class MiddleOutStrategy implements CompressionStrategy {
   // -------------------------------------------------------------------------
 
   private computeSplit(context: CompressionContext): {
-    toKeepTop: IContent[];
     toCompress: IContent[];
-    toKeepBottom: IContent[];
+    toKeep: IContent[];
   } {
     const history = context.history as IContent[];
     const preserveThreshold =
       context.runtimeContext.ephemerals.preserveThreshold();
-    const topPreserveThreshold =
-      context.runtimeContext.ephemerals.topPreserveThreshold();
 
-    let topSplitIndex = Math.ceil(history.length * topPreserveThreshold);
-    let bottomSplitIndex = Math.floor(history.length * (1 - preserveThreshold));
+    let splitIndex = Math.floor(history.length * (1 - preserveThreshold));
 
-    if (bottomSplitIndex - topSplitIndex < MINIMUM_MIDDLE_MESSAGES) {
-      return { toKeepTop: [...history], toCompress: [], toKeepBottom: [] };
+    if (splitIndex < MINIMUM_COMPRESS_MESSAGES) {
+      return { toCompress: [], toKeep: [...history] };
     }
 
-    topSplitIndex = adjustForToolCallBoundary(history, topSplitIndex);
-    bottomSplitIndex = adjustForToolCallBoundary(history, bottomSplitIndex);
+    splitIndex = adjustForToolCallBoundary(history, splitIndex);
 
-    if (
-      topSplitIndex >= bottomSplitIndex ||
-      bottomSplitIndex - topSplitIndex < MINIMUM_MIDDLE_MESSAGES
-    ) {
-      return { toKeepTop: [...history], toCompress: [], toKeepBottom: [] };
+    if (splitIndex < MINIMUM_COMPRESS_MESSAGES) {
+      return { toCompress: [], toKeep: [...history] };
     }
 
     return {
-      toKeepTop: history.slice(0, topSplitIndex),
-      toCompress: history.slice(topSplitIndex, bottomSplitIndex),
-      toKeepBottom: history.slice(bottomSplitIndex),
+      toCompress: history.slice(0, splitIndex),
+      toKeep: history.slice(splitIndex),
     };
   }
 
@@ -158,7 +157,6 @@ export class MiddleOutStrategy implements CompressionStrategy {
       }
     }
 
-    // Fall back to the hardcoded compression prompt
     const fallback = getCompressionPrompt();
     if (!fallback) {
       throw new PromptResolutionError('compression.md');
@@ -194,29 +192,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
       return summary;
     } catch (error) {
       throw new CompressionExecutionError(
-        'middle-out',
+        'one-shot',
         `LLM provider call failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-  }
-
-  private assembleHistory(
-    toKeepTop: IContent[],
-    summary: string,
-    toKeepBottom: IContent[],
-  ): IContent[] {
-    return [
-      ...toKeepTop,
-      {
-        speaker: 'human' as const,
-        blocks: [{ type: 'text' as const, text: summary }],
-      },
-      {
-        speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: ACK_TEXT }],
-      },
-      ...toKeepBottom,
-    ];
   }
 
   private noCompressionResult(history: readonly IContent[]): CompressionResult {
@@ -225,7 +204,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       metadata: {
         originalMessageCount: history.length,
         compressedMessageCount: history.length,
-        strategyUsed: 'middle-out',
+        strategyUsed: 'one-shot',
         llmCallMade: false,
         topPreserved: 0,
         bottomPreserved: 0,
