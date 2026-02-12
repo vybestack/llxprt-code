@@ -656,6 +656,57 @@ describe('OAuth2', () => {
       }
     });
 
+    it('should throw FatalAuthenticationError instead of readline when TTY is active and no hook available (Issue #1370)', async () => {
+      const mockConfig = {
+        getNoBrowser: () => true,
+        getProxy: () => undefined,
+        isBrowserLaunchSuppressed: () => true,
+      } as unknown as Config;
+
+      const mockCodeVerifier = {
+        codeChallenge: 'test',
+        codeVerifier: 'test',
+      };
+      const mockOAuth2Client = {
+        generateAuthUrl: vi.fn().mockReturnValue('https://example.com/auth'),
+        getToken: vi.fn(),
+        setCredentials: vi.fn(),
+        generateCodeVerifierAsync: vi.fn().mockResolvedValue(mockCodeVerifier),
+        on: vi.fn(),
+      } as unknown as OAuth2Client;
+      (OAuth2Client as unknown as Mock).mockImplementation(
+        () => mockOAuth2Client,
+      );
+
+      // Ensure NO UI hook is set
+      delete (global as Record<string, unknown>).__oauth_wait_for_code;
+
+      // Mock stdout.isTTY to true (simulating sandbox with TTY)
+      const originalIsTTY = process.stdout.isTTY;
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+
+      const createInterfaceSpy = vi.spyOn(readline, 'createInterface');
+
+      try {
+        await expect(performLogin(mockConfig)).rejects.toThrow(
+          FatalAuthenticationError,
+        );
+        // readline should NOT have been called
+        expect(createInterfaceSpy).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(process.stdout, 'isTTY', {
+          value: originalIsTTY,
+          writable: true,
+          configurable: true,
+        });
+        createInterfaceSpy.mockRestore();
+      }
+    });
+
     it('should throw FatalAuthenticationError when __oauth_wait_for_code hook returns empty string', async () => {
       // Issue #878: When the UI hook returns an empty string (e.g., user didn't enter code),
       // we should throw FatalAuthenticationError instead of falling back to readline
