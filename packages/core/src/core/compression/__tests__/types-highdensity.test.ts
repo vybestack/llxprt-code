@@ -32,6 +32,7 @@ import type {
 import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
+import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import {
   getCompressionStrategy,
   parseCompressionStrategyName,
@@ -284,12 +285,13 @@ describe('Factory high-density support @plan PLAN-20260211-HIGHDENSITY.P04', () 
   });
 
   /**
-   * @requirement REQ-HD-004.1
-   * high-density is recognized as a valid name but throws UnknownStrategyError
-   * until the HighDensityStrategy class is implemented in P09.
+   * @requirement REQ-HD-004.1, REQ-HD-004.3
+   * @plan PLAN-20260211-HIGHDENSITY.P09
    */
-  it('getCompressionStrategy handles high-density case (throws until P09)', () => {
-    expect(() => getCompressionStrategy('high-density')).toThrow(UnknownStrategyError);
+  it('getCompressionStrategy returns HighDensityStrategy for high-density', () => {
+    const strategy = getCompressionStrategy('high-density');
+    expect(strategy).toBeInstanceOf(HighDensityStrategy);
+    expect(strategy.trigger).toEqual({ mode: 'continuous', defaultThreshold: 0.85 });
   });
 });
 

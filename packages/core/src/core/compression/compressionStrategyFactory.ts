@@ -16,6 +16,7 @@ import { COMPRESSION_STRATEGIES, UnknownStrategyError } from './types.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
+import { HighDensityStrategy } from './HighDensityStrategy.js';
 
 /**
  * Validates a raw string against the known strategy names.
@@ -44,8 +45,7 @@ export function getCompressionStrategy(
     case 'one-shot':
       return new OneShotStrategy();
     case 'high-density':
-      // Strategy class not yet implemented (P09)
-      throw new UnknownStrategyError(name);
+      return new HighDensityStrategy();
     default: {
       const exhaustive: never = name;
       throw new UnknownStrategyError(exhaustive as string);
