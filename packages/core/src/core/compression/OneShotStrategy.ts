@@ -5,6 +5,9 @@
  */
 
 /**
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @requirement REQ-HD-001.3
+ *
  * One-shot compression strategy: summarizes the entire history except
  * the last N messages in a single LLM call. The preserved tail is
  * determined by the preserveThreshold ephemeral setting.
@@ -22,6 +25,7 @@ import type {
   CompressionResult,
   CompressionResultMetadata,
   CompressionStrategy,
+  StrategyTrigger,
 } from './types.js';
 import { CompressionExecutionError, PromptResolutionError } from './types.js';
 import { adjustForToolCallBoundary, aggregateTextFromBlocks } from './utils.js';
@@ -40,6 +44,8 @@ const TRIGGER_INSTRUCTION =
 export class OneShotStrategy implements CompressionStrategy {
   readonly name = 'one-shot' as const;
   readonly requiresLLM = true;
+  /** @plan PLAN-20260211-HIGHDENSITY.P03 @requirement REQ-HD-001.3 */
+  readonly trigger: StrategyTrigger = { mode: 'threshold', defaultThreshold: 0.85 };
 
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history } = context;

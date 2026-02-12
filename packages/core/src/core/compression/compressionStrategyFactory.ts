@@ -43,6 +43,9 @@ export function getCompressionStrategy(
       return new TopDownTruncationStrategy();
     case 'one-shot':
       return new OneShotStrategy();
+    case 'high-density':
+      // Strategy class not yet implemented (P09)
+      throw new UnknownStrategyError(name);
     default: {
       const exhaustive: never = name;
       throw new UnknownStrategyError(exhaustive as string);

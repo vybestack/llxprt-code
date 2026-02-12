@@ -6,8 +6,10 @@
 
 /**
  * @plan PLAN-20260211-COMPRESSION.P06
+ * @plan PLAN-20260211-HIGHDENSITY.P03
  * @requirement REQ-CS-002.1, REQ-CS-002.2, REQ-CS-002.3, REQ-CS-002.4
  * @requirement REQ-CS-002.5, REQ-CS-002.6, REQ-CS-002.7, REQ-CS-002.8
+ * @requirement REQ-HD-001.3
  *
  * Middle-out compression strategy: preserves the top and bottom of the
  * conversation history and compresses the middle section via an LLM call.
@@ -24,6 +26,7 @@ import type {
   CompressionResult,
   CompressionResultMetadata,
   CompressionStrategy,
+  StrategyTrigger,
 } from './types.js';
 import { CompressionExecutionError, PromptResolutionError } from './types.js';
 import { adjustForToolCallBoundary, aggregateTextFromBlocks } from './utils.js';
@@ -42,6 +45,8 @@ const TRIGGER_INSTRUCTION =
 export class MiddleOutStrategy implements CompressionStrategy {
   readonly name = 'middle-out' as const;
   readonly requiresLLM = true;
+  /** @plan PLAN-20260211-HIGHDENSITY.P03 @requirement REQ-HD-001.3 */
+  readonly trigger: StrategyTrigger = { mode: 'threshold', defaultThreshold: 0.85 };
 
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history } = context;
