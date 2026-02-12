@@ -30,6 +30,8 @@ import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
 import { canonicalizeToolCallId } from './canonicalToolIds.js';
 import { estimateTokens as estimateTextTokens } from '../../utils/toolOutputLimiter.js';
+import type { DensityResult } from '../../core/compression/types.js';
+import { CompressionStrategyError } from '../../core/compression/types.js';
 
 /**
  * Typed EventEmitter for HistoryService events
@@ -515,6 +517,45 @@ export class HistoryService
    */
   async waitForTokenUpdates(): Promise<void> {
     await this.tokenizerLock;
+  }
+
+  /**
+   * Apply a density optimization result to the raw history.
+   *
+   * @plan PLAN-20260211-HIGHDENSITY.P06
+   * @requirement REQ-HD-003.1
+   * @pseudocode history-service.md lines 20-82
+   */
+  async applyDensityResult(result: DensityResult): Promise<void> {
+    throw new CompressionStrategyError(
+      'applyDensityResult not yet implemented',
+      'DENSITY_NOT_IMPLEMENTED',
+    );
+  }
+
+  /**
+   * Return a read-only typed view of the backing history array.
+   *
+   * @plan PLAN-20260211-HIGHDENSITY.P06
+   * @requirement REQ-HD-003.5
+   * @pseudocode history-service.md lines 10-15
+   */
+  getRawHistory(): readonly IContent[] {
+    return [];
+  }
+
+  /**
+   * Force a full token recalculation after density operations.
+   *
+   * @plan PLAN-20260211-HIGHDENSITY.P06
+   * @requirement REQ-HD-003.6
+   * @pseudocode history-service.md lines 90-120
+   */
+  async recalculateTotalTokens(): Promise<void> {
+    throw new CompressionStrategyError(
+      'recalculateTotalTokens not yet implemented',
+      'DENSITY_NOT_IMPLEMENTED',
+    );
   }
 
   /**
