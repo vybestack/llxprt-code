@@ -99,8 +99,9 @@ describe('Gradient Crash Regression Tests', () => {
   });
 
   it('<ModelsDialog /> should not crash when theme.ui.gradient is empty', () => {
+    const noop = vi.fn();
     const { lastFrame } = renderWithProviders(
-      <ModelsDialog onClose={() => {}} onSelect={() => {}} />,
+      <ModelsDialog onClose={noop} onSelect={noop} />,
     );
     expect(lastFrame()).toBeDefined();
   });
