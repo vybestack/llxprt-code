@@ -353,7 +353,12 @@ class TaskToolInvocation extends BaseToolInvocation<
       );
     }
 
+    let xmlOutputStarted = false;
     if (updateOutput) {
+      // Send opening XML tag to identify the subagent
+      updateOutput(`<subagent name="${launchRequest.name}" id="${agentId}">\n`);
+      xmlOutputStarted = true;
+
       const existingHandler = scope.onMessage;
       // Ensure each streamed chunk renders on its own line in TTY/CLI UIs.
       // - Normalize CR/CRLF to LF
@@ -368,7 +373,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       scope.onMessage = (message: string) => {
         const cleaned = normalizeForStreaming(message);
         if (cleaned.trim().length > 0) {
-          updateOutput(`[${agentId}] ${cleaned}`);
+          updateOutput(cleaned);
         }
         // Preserve any existing handler behavior
         existingHandler?.(message);
@@ -390,6 +395,13 @@ class TaskToolInvocation extends BaseToolInvocation<
         await scope.runNonInteractive(contextState);
       }
       if (aborted) {
+        // Send closing XML tag before teardown
+        if (xmlOutputStarted && updateOutput) {
+          updateOutput(
+            `</subagent name="${launchRequest.name}" id="${agentId}">
+`,
+          );
+        }
         await teardown();
         taskLogger.warn(
           () => `Subagent '${launchRequest.name}' aborted before completion`,
@@ -401,6 +413,13 @@ class TaskToolInvocation extends BaseToolInvocation<
         );
       }
       if (this.isTimeoutError(signal, timeoutController)) {
+        // Send closing XML tag before teardown
+        if (xmlOutputStarted && updateOutput) {
+          updateOutput(
+            `</subagent name="${launchRequest.name}" id="${agentId}">
+`,
+          );
+        }
         await teardown();
         return this.createTimeoutResult(timeoutSeconds, scope.output);
       }
@@ -418,6 +437,13 @@ class TaskToolInvocation extends BaseToolInvocation<
         agentId,
         output,
       );
+      // Send closing XML tag before teardown
+      if (xmlOutputStarted && updateOutput) {
+        updateOutput(
+          `</subagent name="${launchRequest.name}" id="${agentId}">
+`,
+        );
+      }
       await teardown();
       return {
         llmContent,
@@ -433,10 +459,24 @@ class TaskToolInvocation extends BaseToolInvocation<
       };
     } catch (error) {
       if (this.isTimeoutError(signal, timeoutController, error)) {
+        // Send closing XML tag before teardown
+        if (xmlOutputStarted && updateOutput) {
+          updateOutput(
+            `</subagent name="${launchRequest.name}" id="${agentId}">
+`,
+          );
+        }
         await teardown();
         return this.createTimeoutResult(timeoutSeconds, scope.output, agentId);
       }
       if (this.isAbortError(error) || aborted || signal.aborted) {
+        // Send closing XML tag before teardown
+        if (xmlOutputStarted && updateOutput) {
+          updateOutput(
+            `</subagent name="${launchRequest.name}" id="${agentId}">
+`,
+          );
+        }
         await teardown();
         return this.createCancelledResult(
           'Task execution aborted before completion.',
@@ -449,6 +489,13 @@ class TaskToolInvocation extends BaseToolInvocation<
         `Subagent '${this.normalized.subagentName}' failed during execution.`,
         agentId,
       );
+      // Send closing XML tag before teardown
+      if (xmlOutputStarted && updateOutput) {
+        updateOutput(
+          `</subagent name="${launchRequest.name}" id="${agentId}">
+`,
+        );
+      }
       await teardown();
       taskLogger.warn(
         () =>
@@ -770,7 +817,15 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     // Set up message streaming (same as sync)
+    // For async tasks, we only send opening tag (closing tag not applicable since
+    // task runs in background and this method returns immediately)
     if (updateOutput) {
+      // Send opening XML tag to identify the subagent
+      // Use normalized.subagentName since launchRequest is scoped to inner try block
+      updateOutput(
+        `<subagent name="${this.normalized.subagentName}" id="${agentId}">\n`,
+      );
+
       const existingHandler = scope.onMessage;
       const normalizeForStreaming = (text: string): string => {
         if (!text) {
@@ -782,7 +837,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       scope.onMessage = (message: string) => {
         const cleaned = normalizeForStreaming(message);
         if (cleaned.trim().length > 0) {
-          updateOutput(`[${agentId}] ${cleaned}`);
+          updateOutput(cleaned);
         }
         existingHandler?.(message);
       };
