@@ -325,6 +325,7 @@ describe('loadCliConfig memory discovery', () => {
       set: undefined,
       query: undefined,
       continue: undefined,
+      nobrowser: undefined,
     };
 
     const { ExtensionEnablementManager, ExtensionStorage } = await import(

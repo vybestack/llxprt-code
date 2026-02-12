@@ -374,6 +374,69 @@ describe('getDirectSettingSpecs', () => {
   });
 });
 
+describe('auth.noBrowser setting', () => {
+  it('returns spec with type boolean', () => {
+    const spec = getSettingSpec('auth.noBrowser');
+
+    expect(spec?.type).toBe('boolean');
+  });
+
+  it('returns spec with default false', () => {
+    const spec = getSettingSpec('auth.noBrowser');
+
+    expect(spec?.default).toBe(false);
+  });
+
+  it('returns spec with category cli-behavior', () => {
+    const spec = getSettingSpec('auth.noBrowser');
+
+    expect(spec?.category).toBe('cli-behavior');
+  });
+
+  it('returns spec with persistToProfile true', () => {
+    const spec = getSettingSpec('auth.noBrowser');
+
+    expect(spec?.persistToProfile).toBe(true);
+  });
+
+  it('is included in profile persistable keys', () => {
+    const keys = getProfilePersistableKeys();
+
+    expect(keys).toContain('auth.noBrowser');
+  });
+
+  it('is included in direct setting specs', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'auth.noBrowser');
+
+    expect(found).toBeDefined();
+  });
+
+  it('places auth.noBrowser in cliSettings when separated', () => {
+    const result = separateSettings({ 'auth.noBrowser': true });
+
+    expect(result.cliSettings['auth.noBrowser']).toBe(true);
+  });
+
+  it('validates true as valid boolean', () => {
+    const result = validateSetting('auth.noBrowser', true);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('validates false as valid boolean', () => {
+    const result = validateSetting('auth.noBrowser', false);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects non-boolean value', () => {
+    const result = validateSetting('auth.noBrowser', 'yes');
+
+    expect(result.success).toBe(false);
+  });
+});
+
 /**
  * @plan PLAN-20260211-COMPRESSION.P11
  * @requirement REQ-CS-008.1, REQ-CS-008.2, REQ-CS-008.3

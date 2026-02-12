@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from 'vitest';
 
 vi.mock('./local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
@@ -20,7 +28,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
   let provider: AnthropicOAuthProvider;
   let tokenStore: TokenStore;
   let deviceFlow: coreModule.AnthropicDeviceFlow;
-  let shouldLaunchBrowserSpy: ReturnType<typeof vi.spyOn>;
+  let shouldLaunchBrowserSpy: MockInstance;
 
   beforeEach(() => {
     openBrowserArgs.length = 0;
