@@ -21,17 +21,12 @@ import {
   uiTelemetryService,
   coreEvents,
   CoreEvent,
-  parseThought,
   setActiveProviderRuntimeContext,
-  partToString,
   type UserFeedbackPayload,
   type EmojiFilterMode,
   type ServerGeminiThoughtEvent,
-  type IContent,
-  type ProviderToolset,
-  type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
-import { Content, Part } from '@google/genai';
+import { Part } from '@google/genai';
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
 import type { LoadedSettings } from './config/settings.js';
@@ -178,18 +173,12 @@ export async function runNonInteractive({
     });
 
     const geminiClient = config.getGeminiClient();
-    const providerManager =
-      typeof config.getProviderManager === 'function'
-        ? config.getProviderManager()
-        : undefined;
-    if (providerManager) {
-      setActiveProviderRuntimeContext({
-        settingsService: config.getSettingsService(),
-        config,
-        runtimeId: config.getSessionId?.(),
-        metadata: { source: 'nonInteractiveCli' },
-      });
-    }
+    setActiveProviderRuntimeContext({
+      settingsService: config.getSettingsService(),
+      config,
+      runtimeId: config.getSessionId?.(),
+      metadata: { source: 'nonInteractiveCli' },
+    });
 
     // Emit init event for streaming JSON
     if (streamFormatter) {
@@ -252,149 +241,6 @@ export async function runNonInteractive({
       query = processedQuery as Part[];
     }
 
-    const toIContent = (parts: Part[]): IContent[] =>
-      parts.map((part) => {
-        if ('functionResponse' in part && part.functionResponse) {
-          const functionResponse = part.functionResponse as {
-            id?: string;
-            name?: string;
-            response?: Record<string, unknown>;
-          };
-          return {
-            speaker: 'tool',
-            blocks: [
-              {
-                type: 'tool_response',
-                callId: functionResponse.id ?? '',
-                toolName: functionResponse.name ?? '',
-                result: functionResponse.response ?? {},
-              },
-            ],
-          } as IContent;
-        }
-        if ('text' in part && typeof part.text === 'string') {
-          return {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: part.text }],
-          } as IContent;
-        }
-        const fallbackText = partToString(part, { verbose: true }).trim();
-        if (fallbackText) {
-          return {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: fallbackText }],
-          } as IContent;
-        }
-        throw new FatalInputError(
-          'Unsupported Part type in non-interactive provider path.',
-        );
-      });
-
-    const toProviderTools = (): ProviderToolset => [
-      {
-        functionDeclarations: config
-          .getToolRegistry()
-          .getFunctionDeclarations()
-          .filter((tool) => !!tool.name) as Array<{
-          name: string;
-          description?: string;
-          parametersJsonSchema?: unknown;
-          parameters?: unknown;
-        }>,
-      },
-    ];
-
-    const streamProviderEvents = async function* (
-      parts: Part[],
-    ): AsyncGenerator<ServerGeminiStreamEvent> {
-      if (!providerManager) {
-        throw new FatalInputError(
-          'No provider manager configured for non-interactive provider run.',
-        );
-      }
-      const provider = providerManager.getActiveProvider();
-      if (!provider) {
-        throw new FatalInputError(
-          'No active provider available for non-interactive run.',
-        );
-      }
-      if (!provider.generateChatCompletion) {
-        throw new FatalInputError(
-          `Active provider "${provider.name}" does not support generateChatCompletion.`,
-        );
-      }
-      const settingsService = config.getSettingsService();
-      const runtimeContext = {
-        settingsService,
-        config,
-        runtimeId: config.getSessionId?.(),
-        metadata: { source: 'nonInteractiveCli', requirement: 'REQ-SP4-004' },
-      };
-      const providerStream = provider.generateChatCompletion({
-        contents: toIContent(parts),
-        tools: toProviderTools(),
-        config,
-        runtime: runtimeContext,
-        settings: settingsService,
-        metadata: runtimeContext.metadata,
-      });
-
-      for await (const chunk of providerStream) {
-        if (chunk.speaker === 'ai') {
-          for (const block of chunk.blocks) {
-            if (block.type === 'thinking') {
-              yield {
-                type: GeminiEventType.Thought,
-                value: parseThought(block.thought),
-              };
-              continue;
-            }
-            if (block.type === 'text') {
-              yield { type: GeminiEventType.Content, value: block.text };
-              continue;
-            }
-            if (block.type === 'tool_call') {
-              yield {
-                type: GeminiEventType.ToolCallRequest,
-                value: {
-                  callId: block.id,
-                  name: block.name,
-                  args: (block.parameters ?? {}) as Record<string, unknown>,
-                  isClientInitiated: false,
-                  prompt_id,
-                },
-              };
-            }
-          }
-          continue;
-        }
-        if (chunk.speaker === 'tool') {
-          for (const block of chunk.blocks) {
-            if (block.type === 'tool_response') {
-              yield {
-                type: GeminiEventType.ToolCallResponse,
-                value: {
-                  callId: block.callId,
-                  responseParts: [
-                    {
-                      functionResponse: {
-                        id: block.callId,
-                        name: block.toolName,
-                        response: block.result as Record<string, unknown>,
-                      },
-                    },
-                  ],
-                  resultDisplay: undefined,
-                  error: undefined,
-                  errorType: undefined,
-                },
-              };
-            }
-          }
-        }
-      }
-    };
-
     // Emit user message event for streaming JSON
     if (streamFormatter) {
       streamFormatter.emitEvent({
@@ -405,8 +251,7 @@ export async function runNonInteractive({
       });
     }
 
-    let currentMessages: Content[] = [{ role: 'user', parts: query }];
-    let providerParts: Part[] = query;
+    let currentMessages: Part[] = query;
 
     let jsonResponseText = '';
 
@@ -445,13 +290,11 @@ export async function runNonInteractive({
         thoughtBuffer = '';
       };
 
-      const responseStream = providerManager
-        ? streamProviderEvents(providerParts)
-        : geminiClient.sendMessageStream(
-            currentMessages[0]?.parts || [],
-            abortController.signal,
-            prompt_id,
-          );
+      const responseStream = geminiClient.sendMessageStream(
+        currentMessages,
+        abortController.signal,
+        prompt_id,
+      );
 
       for await (const event of responseStream) {
         if (abortController.signal.aborted) {
@@ -661,8 +504,7 @@ export async function runNonInteractive({
             toolResponseParts.push(...toolResponse.responseParts);
           }
         }
-        currentMessages = [{ role: 'user', parts: toolResponseParts }];
-        providerParts = toolResponseParts;
+        currentMessages = toolResponseParts;
       } else {
         // Emit final result event for streaming JSON
         if (streamFormatter) {
