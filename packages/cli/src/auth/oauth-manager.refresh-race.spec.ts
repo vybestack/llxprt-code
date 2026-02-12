@@ -256,4 +256,43 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       expect(acquireLockSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
     });
   });
+
+  describe('OAuthManager is the sole refresh authority (Issue #1378)', () => {
+    it('should refresh expired token through OAuthManager only, not through provider.getToken()', async () => {
+      // Track refresh calls to prove only OAuthManager triggers refresh
+      let managerRefreshCount = 0;
+
+      const anthropicProvider: OAuthProvider = {
+        name: 'anthropic',
+        initiateAuth: vi.fn().mockResolvedValue(undefined),
+        // Simulates the FIXED getToken() - just returns stored token, no refresh
+        getToken: vi
+          .fn()
+          .mockImplementation(async () => createToken('expired-token', -10)),
+        refreshToken: vi.fn().mockImplementation(async (_token: OAuthToken) => {
+          managerRefreshCount++;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return createToken('refreshed-by-manager', 3600);
+        }),
+      };
+
+      oauthManager.registerProvider(anthropicProvider);
+      await oauthManager.toggleOAuthEnabled('anthropic');
+
+      // Store an expired token
+      const expiredToken = createToken('expired-token', -10);
+      await tokenStore.saveToken('anthropic', expiredToken);
+
+      // Call OAuthManager.getOAuthToken (the correct path)
+      const result = await oauthManager.getOAuthToken('anthropic');
+
+      // OAuthManager should have called provider.refreshToken() exactly once
+      expect(managerRefreshCount).toBe(1);
+      expect(result?.access_token).toBe('refreshed-by-manager');
+
+      // provider.getToken() should NOT have been called by OAuthManager for refresh
+      // (OAuthManager reads from tokenStore directly)
+      expect(anthropicProvider.getToken).not.toHaveBeenCalled();
+    });
+  });
 });
