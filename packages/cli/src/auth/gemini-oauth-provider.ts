@@ -73,6 +73,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
       );
     }
 
+    this.installPersistentAuthCodeHook();
+
     // DO NOT call initializeToken() - lazy initialization pattern
   }
 
@@ -559,6 +561,18 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
         );
       }
     });
+  }
+
+  /**
+   * Install a persistent auth-code hook so ANY code path that triggers OAuth
+   * (e.g. streaming re-auth) can use the UI dialog instead of readline (Issue #1370).
+   */
+  private installPersistentAuthCodeHook(): void {
+    const globalObj = global as Record<string, unknown>;
+    if (!globalObj.__oauth_wait_for_code) {
+      globalObj.__oauth_wait_for_code = () => this.waitForAuthCode();
+      globalObj.__oauth_provider = this.name;
+    }
   }
 
   /**
