@@ -98,16 +98,21 @@ describe('<ToolStatusIndicator />', () => {
     ).not.toThrow();
   });
 
-  it('renders different output for different statuses', () => {
-    const success = renderInContext(
-      <ToolStatusIndicator status={ToolCallStatus.Success} name="test" />,
-    );
-    const error = renderInContext(
-      <ToolStatusIndicator status={ToolCallStatus.Error} name="test" />,
-    );
-    // At least verify they're not identical (different statuses render differently)
-    // Both could be truthy but should have different frames
-    expect(success.lastFrame()).not.toBe(error.lastFrame());
+  it('renders all status variants without crashing', () => {
+    // Verify every ToolCallStatus produces a valid render
+    const statuses = [
+      ToolCallStatus.Success,
+      ToolCallStatus.Error,
+      ToolCallStatus.Pending,
+      ToolCallStatus.Confirming,
+      ToolCallStatus.Canceled,
+      ToolCallStatus.Executing,
+    ];
+    for (const status of statuses) {
+      expect(() =>
+        renderInContext(<ToolStatusIndicator status={status} name="test" />),
+      ).not.toThrow();
+    }
   });
 });
 

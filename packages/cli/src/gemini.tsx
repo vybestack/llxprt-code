@@ -407,8 +407,8 @@ export async function main() {
   if (hasPipedInput) {
     const stdinSnapshot = await readStdinOnce();
     if (!stdinSnapshot && !questionFromArgs) {
-      console.error(
-        `No input provided via stdin. Input can be provided by piping data into gemini or using the --prompt option.`,
+      writeToStderr(
+        `No input provided via stdin. Input can be provided by piping data into llxprt or using the --prompt option.\n`,
       );
       process.exit(1);
     }
@@ -464,8 +464,8 @@ export async function main() {
 
   // Check for invalid input combinations early to prevent crashes
   if (argv.promptInteractive && !process.stdin.isTTY) {
-    console.error(
-      'Error: The --prompt-interactive flag cannot be used when input is piped from stdin.',
+    writeToStderr(
+      'Error: The --prompt-interactive flag cannot be used when input is piped from stdin.\n',
     );
     process.exit(1);
   }
@@ -1087,8 +1087,8 @@ export async function main() {
     }
   }
   if (!input) {
-    console.error(
-      `No input provided via stdin. Input can be provided by piping data into gemini or using the --prompt option.`,
+    writeToStderr(
+      `No input provided via stdin. Input can be provided by piping data into llxprt or using the --prompt option.\n`,
     );
     process.exit(1);
   }
