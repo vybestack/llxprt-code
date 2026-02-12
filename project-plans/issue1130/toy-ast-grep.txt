@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2250,SC2292
+# toy-ast-grep.sh — Toy wrapper around sg (ast-grep) for testing
+# Usage:
+#   ./toy-ast-grep.sh pattern <pattern> <language> [path]
+#   ./toy-ast-grep.sh rule <rule-yaml-string> [path]
+#
+# Examples:
+#   ./toy-ast-grep.sh pattern '$OBJ.getAsyncTaskManager()' typescript packages/core/src/
+#   ./toy-ast-grep.sh pattern 'class $NAME extends $PARENT { $$$BODY }' typescript packages/core/src/tools/
+#   ./toy-ast-grep.sh pattern 'registerCoreTool($TOOL, $$$REST)' typescript packages/core/src/config/config.ts
+
+set -euo pipefail
+
+MODE="${1:?Usage: toy-ast-grep.sh <pattern|rule> ...}"
+shift
+
+if [ "$MODE" = "pattern" ]; then
+    PATTERN="${1:?pattern string required}"
+    LANG="${2:?language required}"
+    SEARCH_PATH="${3:-.}"
+
+    echo "=== ast_grep pattern search ==="
+    echo "Pattern: $PATTERN"
+    echo "Language: $LANG"
+    echo "Path: $SEARCH_PATH"
+    echo "---"
+
+    # Text output (human readable)
+    echo ""
+    echo "## Matches:"
+    sg --pattern "$PATTERN" --lang "$LANG" "$SEARCH_PATH" 2>&1 || true
+
+    echo ""
+    echo "## Structured (JSON metavariables):"
+    sg --pattern "$PATTERN" --lang "$LANG" --json "$SEARCH_PATH" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(f'Total matches: {len(data)}')
+for m in data:
+    f = m.get('file', '?')
+    start = m.get('range', {}).get('start', {})
+    line = start.get('line', '?')
+    col = start.get('col', start.get('column', '?'))
+    end = m.get('range', {}).get('end', {})
+    end_line = end.get('line', '?')
+    end_col = end.get('col', end.get('column', '?'))
+    text = m.get('text', '').split(chr(10))[0][:100]
+    node_kind = m.get('nodeKind', m.get('kind', ''))
+
+    # Extract metavariables
+    mv = m.get('metaVariables', {})
+    singles = mv.get('single', {})
+    multis = mv.get('multi', {})
+    mv_parts = []
+    for k, v in singles.items():
+        mv_parts.append(f'{k}={v.get(\"text\", \"?\")[:40]}')
+    for k, v in multis.items():
+        texts = [i.get('text', '?')[:20] for i in (v if isinstance(v, list) else [])]
+        mv_parts.append(f'{k}=[{\", \".join(texts)}]')
+    mv_str = ', '.join(mv_parts) if mv_parts else '(none)'
+
+    print(f'  {f}:{line}:{col}-{end_line}:{end_col}  {text}')
+    if mv_str != '(none)':
+        print(f'    metaVars: {mv_str}')
+" 2>&1 || echo "(no matches or parse error)"
+
+elif [ "$MODE" = "rule" ]; then
+    RULE_CONTENT="${1:?rule YAML content required}"
+    SEARCH_PATH="${2:-.}"
+
+    # Write rule to temp file
+    RULE_FILE=$(mktemp /tmp/ast-grep-rule-XXXXXX.yaml)
+    echo "$RULE_CONTENT" > "$RULE_FILE"
+
+    echo "=== ast_grep rule search ==="
+    echo "Rule file: $RULE_FILE"
+    echo "Path: $SEARCH_PATH"
+    echo "---"
+
+    echo ""
+    echo "## Matches:"
+    sg scan --rule "$RULE_FILE" "$SEARCH_PATH" 2>&1 || true
+
+    echo ""
+    echo "## Structured (JSON):"
+    sg scan --rule "$RULE_FILE" --json "$SEARCH_PATH" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(f'Total matches: {len(data)}')
+for m in data:
+    f = m.get('file', '?')
+    start = m.get('range', {}).get('start', {})
+    line = start.get('line', '?')
+    text = m.get('text', '').split(chr(10))[0][:100]
+    print(f'  {f}:{line}  {text}')
+" 2>&1 || echo "(no matches or parse error)"
+
+    rm -f "$RULE_FILE"
+else
+    echo "Unknown mode: $MODE (use 'pattern' or 'rule')"
+    exit 1
+fi

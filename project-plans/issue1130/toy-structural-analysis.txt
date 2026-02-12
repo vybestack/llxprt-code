@@ -1,0 +1,592 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2250,SC2292
+# toy-structural-analysis.sh — Toy multi-hop ast-grep analysis for testing
+# Usage:
+#   ./toy-structural-analysis.sh <mode> <symbol|target> <language> [path] [depth]
+#
+# Modes:
+#   callers <symbol> <lang> [path] [depth]     — who calls this method?
+#   callees <symbol> <lang> [path] [depth]     — what does this method call?
+#   definitions <symbol> <lang> [path]         — where is this symbol defined?
+#   hierarchy <symbol> <lang> [path]           — class/interface inheritance tree
+#   references <symbol> <lang> [path]          — all structural references
+#   dependencies <file> <lang>                 — import graph for a file
+#   exports <file> <lang>                      — what does a file export?
+#
+# Examples:
+#   ./toy-structural-analysis.sh callers getAsyncTaskManager typescript packages/core/src/ 2
+#   ./toy-structural-analysis.sh callees getAsyncTaskManager typescript packages/core/src/config/config.ts
+#   ./toy-structural-analysis.sh hierarchy BaseDeclarativeTool typescript packages/core/src/tools/
+#   ./toy-structural-analysis.sh references ToolRegistry typescript packages/core/src/
+#   ./toy-structural-analysis.sh dependencies packages/core/src/config/config.ts typescript
+
+set -euo pipefail
+
+MODE="${1:?Usage: toy-structural-analysis.sh <mode> <symbol|target> <language> [path] [depth]}"
+SYMBOL="${2:?symbol or target file required}"
+LANG="${3:?language required}"
+SEARCH_PATH="${4:-.}"
+DEPTH="${5:-1}"
+
+# Uppercase first letter of LANG (bash 3.2 compatible)
+LANG_UPPER="$(echo "$LANG" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')"
+
+# Helper: run a YAML rule and extract JSON results
+run_rule() {
+    local rule_content="$1"
+    local search_path="$2"
+    local rule_file
+    rule_file=$(mktemp /tmp/sa-rule-XXXXXX.yaml)
+    echo "$rule_content" > "$rule_file"
+    sg scan --rule "$rule_file" --json "$search_path" 2>/dev/null || echo "[]"
+    rm -f "$rule_file"
+}
+
+case "$MODE" in
+
+callers)
+    echo "=== structural_analysis: callers of $SYMBOL (depth $DEPTH) ==="
+    echo ""
+
+    VISITED_FILE=$(mktemp /tmp/sa-visited-XXXXXX.txt)
+    QUEUE_FILE=$(mktemp /tmp/sa-queue-XXXXXX.txt)
+    OUTPUT_FILE=$(mktemp /tmp/sa-output-XXXXXX.txt)
+    cleanup_callers() { rm -f "$VISITED_FILE" "$QUEUE_FILE" "$OUTPUT_FILE"; }
+    trap cleanup_callers EXIT
+
+    echo "${SYMBOL}:0" > "$QUEUE_FILE"
+
+    while [ -s "$QUEUE_FILE" ]; do
+        entry=$(head -1 "$QUEUE_FILE")
+        tail -n +2 "$QUEUE_FILE" > "${QUEUE_FILE}.tmp" && mv "${QUEUE_FILE}.tmp" "$QUEUE_FILE"
+
+        current=$(echo "$entry" | cut -d: -f1)
+        current_depth=$(echo "$entry" | cut -d: -f2)
+
+        if grep -qx "$current" "$VISITED_FILE" 2>/dev/null; then continue; fi
+        echo "$current" >> "$VISITED_FILE"
+        if [ "$current_depth" -ge "$DEPTH" ]; then continue; fi
+
+        # Find call sites for context
+        CALL_SITES_FILE=$(mktemp /tmp/sa-cs-XXXXXX.json)
+        sg --pattern "\$OBJ.${current}(\$\$\$ARGS)" --lang "$LANG" --json "$SEARCH_PATH" > "$CALL_SITES_FILE" 2>/dev/null || echo "[]" > "$CALL_SITES_FILE"
+
+        # Find containing methods
+        METHODS_FILE=$(mktemp /tmp/sa-mt-XXXXXX.json)
+        RULE="id: find-callers
+language: ${LANG_UPPER}
+rule:
+  kind: method_definition
+  has:
+    stopBy: end
+    kind: call_expression
+    pattern: \$OBJ.${current}(\$\$\$ARGS)"
+        run_rule "$RULE" "$SEARCH_PATH" > "$METHODS_FILE"
+
+        # Process results: print output and collect queue entries
+        python3 -c "
+import json, sys, re
+
+depth = int(sys.argv[1])
+methods_file = sys.argv[2]
+callsites_file = sys.argv[3]
+queue_file = sys.argv[4]
+visited_file = sys.argv[5]
+max_depth = int(sys.argv[6])
+
+with open(methods_file) as f:
+    methods = json.load(f)
+with open(callsites_file) as f:
+    call_sites = json.load(f)
+
+# Read visited set
+visited = set()
+try:
+    with open(visited_file) as f:
+        visited = set(line.strip() for line in f)
+except: pass
+
+# Index call sites by file
+site_by_file = {}
+for cs in call_sites:
+    cf = cs.get('file', '')
+    ln = cs.get('range', {}).get('start', {}).get('line', 0)
+    site_by_file.setdefault(cf, []).append({
+        'line': ln,
+        'text': cs.get('lines', cs.get('text', '')).strip()[:80]
+    })
+
+queue_entries = []
+for m in methods:
+    text = m.get('text', '')
+    first_line = text.split(chr(10))[0].strip()
+    match = re.match(r'(?:async\s+)?(\w+)\s*[\(<]', first_line)
+    method_name = match.group(1) if match else first_line[:40]
+    mf = m.get('file', '?')
+    f_short = mf.split('/')[-1]
+    m_start = m.get('range', {}).get('start', {}).get('line', 0)
+    m_end = m.get('range', {}).get('end', {}).get('line', 0)
+
+    # Find the specific call site within this method
+    via = ''
+    for site in site_by_file.get(mf, []):
+        if m_start <= site['line'] <= m_end:
+            via = site['text']
+            break
+
+    indent = '  ' * (depth + 1)
+    print(f'{indent}← {method_name}()  {f_short}:{m_start}')
+    if via:
+        print(f'{indent}  via: {via}')
+
+    next_depth = depth + 1
+    if method_name not in visited and next_depth < max_depth:
+        queue_entries.append(f'{method_name}:{next_depth}')
+
+# Append to queue file
+if queue_entries:
+    with open(queue_file, 'a') as f:
+        for qe in queue_entries:
+            f.write(qe + chr(10))
+" "$current_depth" "$METHODS_FILE" "$CALL_SITES_FILE" "$QUEUE_FILE" "$VISITED_FILE" "$DEPTH"
+
+        rm -f "$CALL_SITES_FILE" "$METHODS_FILE"
+    done
+    ;;
+
+callees)
+    echo "=== structural_analysis: callees of $SYMBOL (depth $DEPTH) ==="
+    echo ""
+
+    # Find what the method calls, deduplicating chained subcalls
+    RULE="id: find-callees
+language: ${LANG_UPPER}
+rule:
+  kind: call_expression
+  inside:
+    stopBy: end
+    kind: method_definition
+    has:
+      kind: property_identifier
+      regex: \"^${SYMBOL}\$\""
+
+    RESULTS=$(run_rule "$RULE" "$SEARCH_PATH")
+
+    echo "$RESULTS" | python3 -c "
+import json, sys
+
+data = json.load(sys.stdin)
+
+# Deduplicate: if call A contains call B (by byte range), keep only A (the outermost)
+# Sort by start offset descending so we process inner calls first
+calls = []
+for m in data:
+    start = m.get('range', {}).get('byteOffset', {}).get('start', 0)
+    end = m.get('range', {}).get('byteOffset', {}).get('end', 0)
+    calls.append({
+        'start': start,
+        'end': end,
+        'text': m.get('text', '').split(chr(10))[0].strip()[:80],
+        'file': m.get('file', '?').split('/')[-1],
+        'line': m.get('range', {}).get('start', {}).get('line', '?'),
+        'full_text': m.get('text', '')
+    })
+
+# Sort by range size descending (largest/outermost first)
+calls.sort(key=lambda c: -(c['end'] - c['start']))
+
+# Keep only calls that aren't contained within another kept call
+kept = []
+for c in calls:
+    is_subcall = False
+    for k in kept:
+        if k['start'] <= c['start'] and c['end'] <= k['end']:
+            is_subcall = True
+            break
+    if not is_subcall:
+        kept.append(c)
+
+# Sort by line number for display
+kept.sort(key=lambda c: (c['file'], c['line']))
+
+for c in kept:
+    print(f'  → {c[\"text\"]}  {c[\"file\"]}:{c[\"line\"]}')
+" 2>/dev/null
+    ;;
+
+definitions)
+    echo "=== structural_analysis: definitions of $SYMBOL ==="
+    echo ""
+
+    # Search for method definitions
+    RULE1="id: find-method-def
+language: ${LANG_UPPER}
+rule:
+  kind: method_definition
+  has:
+    kind: property_identifier
+    regex: \"^${SYMBOL}\$\""
+
+    # Search for function declarations
+    RULE2="id: find-func-def
+language: ${LANG_UPPER}
+rule:
+  kind: function_declaration
+  has:
+    kind: identifier
+    regex: \"^${SYMBOL}\$\""
+
+    # Search for class declarations
+    RULE3="id: find-class-def
+language: ${LANG_UPPER}
+rule:
+  kind: class_declaration
+  has:
+    kind: type_identifier
+    regex: \"^${SYMBOL}\$\""
+
+    # Search for interface declarations
+    RULE4="id: find-iface-def
+language: ${LANG_UPPER}
+rule:
+  kind: interface_declaration
+  has:
+    kind: type_identifier
+    regex: \"^${SYMBOL}\$\""
+
+    for RULE in "$RULE1" "$RULE2" "$RULE3" "$RULE4"; do
+        RESULTS=$(run_rule "$RULE" "$SEARCH_PATH")
+        echo "$RESULTS" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    text = m.get('text', '').split(chr(10))[0].strip()[:100]
+    f = m.get('file', '?')
+    line = m.get('range', {}).get('start', {}).get('line', '?')
+    kind = m.get('ruleId', '').replace('find-', '').replace('-def', '')
+    print(f'  [{kind}] {f}:{line}  {text}')
+" 2>/dev/null
+    done
+    ;;
+
+hierarchy)
+    echo "=== structural_analysis: hierarchy of $SYMBOL ==="
+    echo ""
+
+    # What does SYMBOL extend?
+    echo "Extends:"
+    sg --pattern "class ${SYMBOL} extends \$PARENT { \$\$\$BODY }" --lang "$LANG" --json "$SEARCH_PATH" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    parent = m.get('metaVariables',{}).get('single',{}).get('PARENT',{}).get('text','?')
+    f = m.get('file','?').split('/')[-1]
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    print(f'  → {parent}  {f}:{line}')
+" 2>/dev/null || true
+
+    # What does SYMBOL implement?
+    echo ""
+    echo "Implements:"
+    sg --pattern "class ${SYMBOL} implements \$IFACE { \$\$\$BODY }" --lang "$LANG" --json "$SEARCH_PATH" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    iface = m.get('metaVariables',{}).get('single',{}).get('IFACE',{}).get('text','?')
+    f = m.get('file','?').split('/')[-1]
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    print(f'  → {iface}  {f}:{line}')
+" 2>/dev/null || true
+
+    # What extends SYMBOL?
+    echo ""
+    echo "Extended by:"
+    sg --pattern "class \$NAME extends ${SYMBOL} { \$\$\$BODY }" --lang "$LANG" --json "$SEARCH_PATH" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+    f = m.get('file','?').split('/')[-1]
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    print(f'  ← {name}  {f}:{line}')
+" 2>/dev/null || true
+
+    # What implements SYMBOL?
+    echo ""
+    echo "Implemented by:"
+    sg --pattern "class \$NAME implements ${SYMBOL} { \$\$\$BODY }" --lang "$LANG" --json "$SEARCH_PATH" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+    f = m.get('file','?').split('/')[-1]
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    print(f'  ← {name}  {f}:{line}')
+" 2>/dev/null || true
+    ;;
+
+references)
+    echo "=== structural_analysis: references to $SYMBOL ==="
+    echo ""
+
+    # Method calls ON instances of symbol (e.g. registry.register() where registry is a ToolRegistry)
+    # We match: variableName.method() where variableName contains the symbol (case-insensitive)
+    # This is best-effort since ast-grep can't resolve types
+    echo "Method calls (on variables named like ${SYMBOL}):"
+    RULE_MCALLS="id: method-calls-on
+language: ${LANG_UPPER}
+rule:
+  kind: call_expression
+  has:
+    kind: member_expression
+    has:
+      kind: identifier
+      regex: \"(?i)${SYMBOL}\""
+    MCALL_RESULTS=$(run_rule "$RULE_MCALLS" "$SEARCH_PATH")
+    echo "$MCALL_RESULTS" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+# Deduplicate by file:line
+seen = set()
+matches = []
+for m in data:
+    f = m.get('file','?').split('/')[-1]
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    key = f'{f}:{line}'
+    if key not in seen:
+        seen.add(key)
+        text = m.get('text','').split(chr(10))[0].strip()[:80]
+        matches.append(f'    {f}:{line}  {text}')
+print(f'  ({len(matches)} matches)')
+for m in matches[:10]:
+    print(m)
+if len(matches) > 10: print(f'    ... and {len(matches)-10} more')
+" 2>/dev/null || true
+
+    # Function/method calls TO symbol (e.g. someObj.ToolRegistry() — rare but valid for factories)
+    echo ""
+    echo "Direct calls (as function/method name):"
+    sg --pattern "\$OBJ.${SYMBOL}(\$\$\$ARGS)" --lang "$LANG" --json "$SEARCH_PATH" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(f'  ({len(data)} matches)')
+for m in data[:10]:
+    f = m.get('file','?').split('/')[-1]
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    text = m.get('text','')[:80]
+    print(f'    {f}:{line}  {text}')
+if len(data) > 10: print(f'    ... and {len(data)-10} more')
+" 2>/dev/null || true
+
+    # Instantiations
+    echo ""
+    echo "Instantiations:"
+    sg --pattern "new ${SYMBOL}(\$\$\$ARGS)" --lang "$LANG" --json "$SEARCH_PATH" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(f'  ({len(data)} matches)')
+for m in data[:10]:
+    f = m.get('file','?').split('/')[-1]
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    text = m.get('text','')[:80]
+    print(f'    {f}:{line}  {text}')
+" 2>/dev/null || true
+
+    # Type annotations
+    echo ""
+    echo "Type annotations:"
+    RULE_TYPES="id: type-refs
+language: ${LANG_UPPER}
+rule:
+  kind: type_annotation
+  has:
+    kind: type_identifier
+    regex: \"^${SYMBOL}\$\""
+    TYPE_RESULTS=$(run_rule "$RULE_TYPES" "$SEARCH_PATH")
+    echo "$TYPE_RESULTS" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(f'  ({len(data)} matches)')
+for m in data[:10]:
+    f = m.get('file','?').split('/')[-1]
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    text = m.get('text','')[:80]
+    print(f'    {f}:{line}  {text}')
+if len(data) > 10: print(f'    ... and {len(data)-10} more')
+" 2>/dev/null || true
+
+    # Extends / Implements
+    echo ""
+    echo "Extends/Implements:"
+    python3 -c "
+import json, subprocess, sys
+
+symbol = '${SYMBOL}'
+lang = '${LANG}'
+path = '${SEARCH_PATH}'
+results = []
+
+# Classes extending symbol
+try:
+    out = subprocess.check_output(
+        ['sg', '--pattern', f'class \$NAME extends {symbol} {{ \$\$\$BODY }}', '--lang', lang, '--json', path],
+        stderr=subprocess.DEVNULL
+    )
+    for m in json.loads(out):
+        name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+        f = m.get('file','?').split('/')[-1]
+        line = m.get('range',{}).get('start',{}).get('line','?')
+        results.append(f'    {f}:{line}  class {name} extends {symbol}')
+except: pass
+
+# Classes implementing symbol
+try:
+    out = subprocess.check_output(
+        ['sg', '--pattern', f'class \$NAME implements {symbol} {{ \$\$\$BODY }}', '--lang', lang, '--json', path],
+        stderr=subprocess.DEVNULL
+    )
+    for m in json.loads(out):
+        name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+        f = m.get('file','?').split('/')[-1]
+        line = m.get('range',{}).get('start',{}).get('line','?')
+        results.append(f'    {f}:{line}  class {name} implements {symbol}')
+except: pass
+
+print(f'  ({len(results)} matches)')
+for r in results[:10]:
+    print(r)
+if len(results) > 10: print(f'    ... and {len(results)-10} more')
+" 2>/dev/null || true
+
+    # Imports
+    echo ""
+    echo "Imports:"
+    sg --pattern "import { \$\$\$NAMES } from \$SOURCE" --lang "$LANG" --json "$SEARCH_PATH" 2>/dev/null | python3 -c "
+import json, sys
+symbol = '${SYMBOL}'
+data = json.load(sys.stdin)
+matches = []
+for m in data:
+    multi = m.get('metaVariables',{}).get('multi',{})
+    names = multi.get('NAMES', [])
+    name_texts = [n.get('text','') for n in (names if isinstance(names, list) else [])]
+    if any(symbol in t for t in name_texts):
+        f = m.get('file','?').split('/')[-1]
+        line = m.get('range',{}).get('start',{}).get('line','?')
+        source = m.get('metaVariables',{}).get('single',{}).get('SOURCE',{}).get('text','?')
+        matches.append(f'    {f}:{line}  from {source}')
+print(f'  ({len(matches)} matches)')
+for m in matches[:10]:
+    print(m)
+if len(matches) > 10: print(f'    ... and {len(matches)-10} more')
+" 2>/dev/null || true
+    ;;
+
+dependencies)
+    echo "=== structural_analysis: dependencies of $SYMBOL ==="
+    echo ""
+
+    if [ ! -f "$SYMBOL" ]; then
+        echo "Error: $SYMBOL is not a file"
+        exit 1
+    fi
+
+    echo "Imports:"
+    sg --pattern "import { \$\$\$NAMES } from \$SOURCE" --lang "$LANG" --json "$SYMBOL" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    source = m.get('metaVariables',{}).get('single',{}).get('SOURCE',{}).get('text','?')
+    multi = m.get('metaVariables',{}).get('multi',{})
+    names = multi.get('NAMES', [])
+    name_texts = [n.get('text','') for n in (names if isinstance(names, list) else []) if n.get('text','').strip() not in (',', '')]
+    print(f'  {source}  [{chr(44).join(n.strip() for n in name_texts)}]')
+" 2>/dev/null || true
+
+    # Default imports
+    echo ""
+    echo "Default imports:"
+    sg --pattern "import \$NAME from \$SOURCE" --lang "$LANG" --json "$SYMBOL" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    source = m.get('metaVariables',{}).get('single',{}).get('SOURCE',{}).get('text','?')
+    name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+    print(f'  {source}  [{name}]')
+" 2>/dev/null || true
+
+    # Namespace imports
+    echo ""
+    echo "Namespace imports:"
+    sg --pattern "import * as \$NAME from \$SOURCE" --lang "$LANG" --json "$SYMBOL" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    source = m.get('metaVariables',{}).get('single',{}).get('SOURCE',{}).get('text','?')
+    name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+    print(f'  {source}  [* as {name}]')
+" 2>/dev/null || true
+    ;;
+
+exports)
+    echo "=== structural_analysis: exports of $SYMBOL ==="
+    echo ""
+
+    if [ ! -f "$SYMBOL" ]; then
+        echo "Error: $SYMBOL is not a file"
+        exit 1
+    fi
+
+    echo "Exported declarations:"
+    sg --pattern "export class \$NAME" --lang "$LANG" --json "$SYMBOL" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    print(f'  class {name}  line {line}')
+" 2>/dev/null || true
+
+    sg --pattern "export function \$NAME(\$\$\$ARGS)" --lang "$LANG" --json "$SYMBOL" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    print(f'  function {name}  line {line}')
+" 2>/dev/null || true
+
+    sg --pattern "export const \$NAME" --lang "$LANG" --json "$SYMBOL" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    print(f'  const {name}  line {line}')
+" 2>/dev/null || true
+
+    sg --pattern "export interface \$NAME" --lang "$LANG" --json "$SYMBOL" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    print(f'  interface {name}  line {line}')
+" 2>/dev/null || true
+
+    sg --pattern "export type \$NAME" --lang "$LANG" --json "$SYMBOL" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data:
+    name = m.get('metaVariables',{}).get('single',{}).get('NAME',{}).get('text','?')
+    line = m.get('range',{}).get('start',{}).get('line','?')
+    print(f'  type {name}  line {line}')
+" 2>/dev/null || true
+    ;;
+
+*)
+    echo "Unknown mode: $MODE"
+    echo "Modes: callers, callees, definitions, hierarchy, references, dependencies, exports"
+    exit 1
+    ;;
+esac

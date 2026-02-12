@@ -40,66 +40,17 @@ import { DebugLogger } from '../debug/index.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 
 const logger = new DebugLogger('llxprt:tools:ast-edit');
+// @plan PLAN-20260211-ASTGREP.P03
+import { parse, Lang, findInFiles } from '@ast-grep/napi';
+// Shared language mapping and utilities — single source of truth
+export {
+  LANGUAGE_MAP,
+  JAVASCRIPT_FAMILY_EXTENSIONS,
+} from '../utils/ast-grep-utils.js';
 import {
-  parse,
-  Lang,
-  findInFiles,
-  registerDynamicLanguage,
-} from '@ast-grep/napi';
-
-import python from '@ast-grep/lang-python';
-import go from '@ast-grep/lang-go';
-import rust from '@ast-grep/lang-rust';
-import java from '@ast-grep/lang-java';
-import cpp from '@ast-grep/lang-cpp';
-import c from '@ast-grep/lang-c';
-import json from '@ast-grep/lang-json';
-import ruby from '@ast-grep/lang-ruby';
-
-registerDynamicLanguage({
-  python,
-  go,
-  rust,
-  java,
-  cpp,
-  c,
-  json,
-  ruby,
-} as any); // eslint-disable-line @typescript-eslint/no-explicit-any -- Required for ast-grep dynamic language registration (third-party API limitation)
-
-// ===== Shared Language Mapping =====
-/**
- * Shared language mapping for file extensions to AST language types.
- * This is the single source of truth for language mapping across all tools.
- * Must be kept in sync with ast-grep's supported languages.
- */
-export const LANGUAGE_MAP: Record<string, string | Lang> = {
-  ts: Lang.TypeScript,
-  js: Lang.JavaScript,
-  tsx: Lang.Tsx,
-  jsx: Lang.Tsx,
-  py: 'python',
-  rb: 'ruby',
-  go: 'go',
-  rs: 'rust',
-  java: 'java',
-  cpp: 'cpp',
-  c: 'c',
-  html: Lang.Html,
-  css: Lang.Css,
-  json: 'json',
-};
-
-// ===== Language Families =====
-/**
- * File extensions that belong to JavaScript/TypeScript language family.
- */
-export const JAVASCRIPT_FAMILY_EXTENSIONS: readonly string[] = [
-  'ts',
-  'js',
-  'tsx',
-  'jsx',
-];
+  LANGUAGE_MAP,
+  JAVASCRIPT_FAMILY_EXTENSIONS,
+} from '../utils/ast-grep-utils.js';
 
 // ===== Code Keywords =====
 /**
