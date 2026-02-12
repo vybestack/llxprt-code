@@ -243,10 +243,8 @@ describe('setupSshAgentPodmanMacOS', () => {
           ]),
         );
       }
-      if (cmdStr.includes('rm -f')) {
-        return Buffer.from('');
-      }
-      if (cmdStr.includes('test -S')) {
+      // TCP port poll via ss
+      if (cmdStr.includes('ss -tln')) {
         return Buffer.from('ok');
       }
       return Buffer.from('');
@@ -269,42 +267,50 @@ describe('setupSshAgentPodmanMacOS', () => {
     return fakeProcess;
   }
 
-  it('removes stale socket before spawning tunnel (R7.3)', async () => {
+  it('spawns SSH tunnel with -R TCP reverse forwarding (R7.1)', async () => {
     mockValidConnection();
     mockTunnelProcess();
 
     await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
 
-    const calls = vi.mocked(child_process.execSync).mock.calls;
-    const rmCall = calls.find((c) => String(c[0]).includes('rm -f'));
-    expect(rmCall).toBeDefined();
+    const spawnCall = vi.mocked(child_process.spawn).mock.calls[0];
+    expect(spawnCall[0]).toBe('ssh');
+    const sshArgs = spawnCall[1] as string[];
+    expect(sshArgs).toContain('-R');
+    // Verify -R arg uses TCP port format (127.0.0.1:PORT:/tmp/auth.sock)
+    const rIdx = sshArgs.indexOf('-R');
+    expect(sshArgs[rIdx + 1]).toMatch(/^127\.0\.0\.1:\d+:\/tmp\/auth\.sock$/);
+    expect(sshArgs).toContain('-N');
+    expect(sshArgs).toContain('ExitOnForwardFailure=yes');
+    expect(spawnCall[2]).toEqual(expect.objectContaining({ detached: true }));
   }, 10000);
 
-  it('spawns SSH tunnel with -R reverse forwarding (R7.1)', async () => {
-    mockValidConnection();
-    mockTunnelProcess();
-
-    await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
-
-    expect(child_process.spawn).toHaveBeenCalledWith(
-      'ssh',
-      expect.arrayContaining(['-R']),
-      expect.objectContaining({ detached: true }),
-    );
-  }, 10000);
-
-  it('mounts VM socket and sets SSH_AUTH_SOCK on success (R7.5)', async () => {
+  it('adds --network host and SSH_AUTH_SOCK env on success (R7.5)', async () => {
     mockValidConnection();
     mockTunnelProcess();
 
     const args: string[] = [];
     const result = await setupSshAgentPodmanMacOS(args, '/tmp/auth.sock');
 
-    expect(args).toContain('--volume');
-    expect(args).toContain('--env');
+    // TCP approach uses --network=host instead of --volume socket mount
+    expect(args).toContain('--network');
+    const netIdx = args.indexOf('--network');
+    expect(args[netIdx + 1]).toBe('host');
     const sshEnv = args.find((a) => a.includes('SSH_AUTH_SOCK'));
     expect(sshEnv).toBe('SSH_AUTH_SOCK=/ssh-agent');
     expect(result.cleanup).toBeDefined();
+    expect(result.entrypointPrefix).toBeDefined();
+  }, 10000);
+
+  it('returns entrypointPrefix with socat relay command (R7.5)', async () => {
+    mockValidConnection();
+    mockTunnelProcess();
+
+    const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
+
+    expect(result.entrypointPrefix).toMatch(
+      /^socat UNIX-LISTEN:\/ssh-agent,fork TCP4:127\.0\.0\.1:\d+ &$/,
+    );
   }, 10000);
 
   it('returns cleanup function that kills tunnel (R7.9)', async () => {
@@ -330,19 +336,6 @@ describe('setupSshAgentPodmanMacOS', () => {
     expect(fakeProc.kill).toHaveBeenCalledTimes(1);
   }, 10000);
 
-  it('cleanup attempts socket removal best-effort (R7.11)', async () => {
-    mockValidConnection();
-    mockTunnelProcess();
-
-    const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
-    result.cleanup!();
-
-    const cleanupCalls = vi.mocked(child_process.execSync).mock.calls;
-    const rmCalls = cleanupCalls.filter((c) => String(c[0]).includes('rm -f'));
-    // At least 2: one for stale cleanup, one for final cleanup
-    expect(rmCalls.length).toBeGreaterThanOrEqual(2);
-  }, 10000);
-
   it('throws FatalSandboxError when tunnel fails to start (R7.7)', async () => {
     mockValidConnection();
     mockTunnelProcess(1); // exitCode=1 means process died
@@ -352,8 +345,7 @@ describe('setupSshAgentPodmanMacOS', () => {
     ).rejects.toThrow(/SSH tunnel process failed to start/);
   }, 10000);
 
-  it('throws when poll timeout expires and socket never appears (R7.4)', async () => {
-    // Mock connection parsing
+  it('throws when poll timeout expires and TCP port never ready (R7.4)', async () => {
     vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
       const cmdStr = String(cmd);
       if (cmdStr.includes('connection list')) {
@@ -368,12 +360,9 @@ describe('setupSshAgentPodmanMacOS', () => {
           ]),
         );
       }
-      if (cmdStr.includes('rm -f')) {
-        return Buffer.from('');
-      }
-      // test -S always fails: socket never appears
-      if (cmdStr.includes('test -S')) {
-        throw new Error('socket not found');
+      // ss -tln always fails: port never appears
+      if (cmdStr.includes('ss -tln')) {
+        throw new Error('port not found');
       }
       return Buffer.from('');
     });
@@ -400,12 +389,9 @@ describe('setupSshAgentPodmanMacOS', () => {
           ]),
         );
       }
-      if (cmdStr.includes('rm -f')) {
-        return Buffer.from('');
-      }
-      // test -S always fails
-      if (cmdStr.includes('test -S')) {
-        throw new Error('socket not found');
+      // ss -tln always fails
+      if (cmdStr.includes('ss -tln')) {
+        throw new Error('port not found');
       }
       return Buffer.from('');
     });

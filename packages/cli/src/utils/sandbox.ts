@@ -126,6 +126,8 @@ export function mountGitConfigFiles(
 export interface SshAgentResult {
   tunnelProcess?: ChildProcess;
   cleanup?: () => void;
+  /** Shell command to prepend to the container entrypoint (e.g. socat relay). */
+  entrypointPrefix?: string;
 }
 
 const CONTAINER_SSH_AGENT_SOCK = '/ssh-agent';
@@ -326,14 +328,19 @@ export function getPodmanMachineConnection(): {
   };
 }
 
-const PODMAN_VM_SSH_AGENT_SOCK = '/tmp/host-ssh-agent.sock';
 const SSH_TUNNEL_POLL_INTERVAL_MS = 200;
 const SSH_TUNNEL_POLL_TIMEOUT_MS = 10000;
 
 /**
  * Sets up SSH agent forwarding for Podman on macOS via an SSH reverse tunnel
  * into the Podman VM. This is necessary because virtiofs (the macOS hypervisor
- * filesystem) cannot share Unix sockets across the hypervisor boundary.
+ * filesystem) cannot share Unix sockets across the hypervisor boundary
+ * (Podman issue #23245/#23785).
+ *
+ * Strategy: SSH reverse-forward the host agent to a TCP port on the VM's
+ * loopback, then run the container with --network=host so it can reach
+ * that port.  A socat relay inside the entrypoint converts TCP back to the
+ * Unix socket expected by SSH_AUTH_SOCK.
  */
 export async function setupSshAgentPodmanMacOS(
   args: string[],
@@ -342,16 +349,10 @@ export async function setupSshAgentPodmanMacOS(
 ): Promise<SshAgentResult> {
   const conn = getPodmanMachineConnection();
 
-  // R7.3: Remove stale socket before establishing tunnel
-  try {
-    execSync(`podman machine ssh -- rm -f ${PODMAN_VM_SSH_AGENT_SOCK}`, {
-      timeout: 5000,
-    });
-  } catch {
-    // Best-effort: ignore failure
-  }
+  // Pick a random ephemeral port for the TCP tunnel
+  const tunnelPort = 49152 + Math.floor(Math.random() * 16383);
 
-  // R7.1: Spawn SSH reverse tunnel
+  // R7.1: Spawn SSH reverse tunnel (TCP port, not Unix socket)
   const tunnelProcess = spawn(
     'ssh',
     [
@@ -361,12 +362,14 @@ export async function setupSshAgentPodmanMacOS(
       'UserKnownHostsFile=/dev/null',
       '-o',
       'LogLevel=ERROR',
+      '-o',
+      'ExitOnForwardFailure=yes',
       '-i',
       conn.identityPath,
       '-p',
       String(conn.port),
       '-R',
-      `${PODMAN_VM_SSH_AGENT_SOCK}:${sshAuthSock}`,
+      `127.0.0.1:${tunnelPort}:${sshAuthSock}`,
       '-N',
       `${conn.user}@${conn.host}`,
     ],
@@ -399,47 +402,49 @@ export async function setupSshAgentPodmanMacOS(
     );
   }
 
-  // R7.4: Poll for socket existence with timeout
+  // R7.4: Poll for TCP port readiness with timeout
   const pollStart = Date.now();
-  let socketReady = false;
+  let portReady = false;
   while (Date.now() - pollStart < pollTimeoutMs) {
     try {
       const result = execSync(
-        `podman machine ssh -- test -S ${PODMAN_VM_SSH_AGENT_SOCK} && echo ok`,
+        `podman machine ssh -- ss -tln | grep -q ':${tunnelPort} ' && echo ok`,
         { timeout: 2000 },
       )
         .toString()
         .trim();
       if (result === 'ok') {
-        socketReady = true;
+        portReady = true;
         break;
       }
     } catch {
-      // Socket not ready yet
+      // Port not ready yet
     }
     await new Promise((r) => setTimeout(r, SSH_TUNNEL_POLL_INTERVAL_MS));
   }
 
   // R7.8: Timeout kills tunnel and throws
-  if (!socketReady) {
+  if (!portReady) {
     try {
       tunnelProcess.kill('SIGTERM');
     } catch {
       // ignore
     }
     throw new FatalSandboxError(
-      'SSH agent forwarding timed out waiting for socket in Podman VM. ' +
+      'SSH agent forwarding timed out waiting for TCP tunnel in Podman VM. ' +
         'Ensure your SSH agent is running and SSH_AUTH_SOCK is valid. ' +
         'Check Podman machine: `podman machine ssh`.',
     );
   }
 
-  // R7.5: Mount the VM socket into the container
-  args.push(
-    '--volume',
-    `${PODMAN_VM_SSH_AGENT_SOCK}:${CONTAINER_SSH_AGENT_SOCK}`,
-  );
+  // R7.5: Use --network=host so the container can reach the VM's loopback.
+  // This is safe because the Podman VM itself provides the security boundary.
+  args.push('--network', 'host');
   args.push('--env', `SSH_AUTH_SOCK=${CONTAINER_SSH_AGENT_SOCK}`);
+
+  // The socat relay runs inside the container entrypoint to convert
+  // TCP back to the Unix socket that SSH clients expect.
+  const entrypointPrefix = `socat UNIX-LISTEN:${CONTAINER_SSH_AGENT_SOCK},fork TCP4:127.0.0.1:${tunnelPort} &`;
 
   // R7.9, R7.10, R7.11: Create idempotent cleanup function
   let cleanedUp = false;
@@ -455,18 +460,9 @@ export async function setupSshAgentPodmanMacOS(
     } catch {
       // ignore — process may already be dead
     }
-
-    // R7.11: Best-effort socket removal
-    try {
-      execSync(`podman machine ssh -- rm -f ${PODMAN_VM_SSH_AGENT_SOCK}`, {
-        timeout: 5000,
-      });
-    } catch {
-      // ignore
-    }
   };
 
-  return { tunnelProcess, cleanup };
+  return { tunnelProcess, cleanup, entrypointPrefix };
 }
 
 /**
@@ -1251,6 +1247,13 @@ export async function start_sandbox(
     // See shouldUseCurrentUserInSandbox for more details.
     let userFlag = '';
     const finalEntrypoint = entrypoint(workdir, cliArgs);
+
+    // If SSH agent forwarding provided an entrypoint prefix (e.g. socat relay
+    // for Podman macOS TCP tunnel), prepend it to the shell command.
+    if (sshResult.entrypointPrefix) {
+      finalEntrypoint[2] =
+        sshResult.entrypointPrefix + ' ' + finalEntrypoint[2];
+    }
 
     if (process.env.LLXPRT_CODE_INTEGRATION_TEST === 'true') {
       args.push('--user', 'root');
