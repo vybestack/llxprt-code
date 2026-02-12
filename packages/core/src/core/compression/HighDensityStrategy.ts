@@ -340,16 +340,13 @@ export class HighDensityStrategy implements CompressionStrategy {
     while (index > 0 && history[index].speaker === 'tool') {
       index--;
     }
-    // If we landed on an AI entry with tool_calls, include it too
+    // If we landed on an AI entry with tool_calls, include it only if
+    // its tool responses are in the tail (to avoid orphaning the call)
     if (index > 0 && history[index].speaker === 'ai') {
-      const hasToolCalls = history[index].blocks.some(
-        (b) => b.type === 'tool_call',
-      );
-      if (hasToolCalls) {
-        // Check if the tool responses for this AI entry are in the tail
-        const toolCallIds = history[index].blocks
-          .filter((b): b is ToolCallBlock => b.type === 'tool_call')
-          .map((b) => b.id);
+      const toolCallIds = history[index].blocks
+        .filter((b): b is ToolCallBlock => b.type === 'tool_call')
+        .map((b) => b.id);
+      if (toolCallIds.length > 0) {
         const tailHasResponses = toolCallIds.some((id) =>
           history
             .slice(index + 1)
@@ -363,9 +360,8 @@ export class HighDensityStrategy implements CompressionStrategy {
                 ),
             ),
         );
-        if (tailHasResponses) {
-          // Include this AI tool_call entry in the tail
-          // (it's already at index, so tail starts here)
+        if (!tailHasResponses) {
+          index++;
         }
       }
     }
