@@ -18,6 +18,11 @@ vi.mock('../services/ClipboardService.js', () => ({
 // Import the mocked ClipboardService for test assertions
 import { ClipboardService } from '../services/ClipboardService.js';
 
+// Mock runtimeSettings to provide getEphemeralSetting
+vi.mock('../runtime/runtimeSettings.js', () => ({
+  getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+}));
+
 // Mock the device flow implementation
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');

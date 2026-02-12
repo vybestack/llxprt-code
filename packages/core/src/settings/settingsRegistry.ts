@@ -987,6 +987,18 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     type: 'string',
     persistToProfile: true,
   },
+  {
+    key: 'auth.noBrowser',
+    category: 'cli-behavior',
+    description: 'Skip automatic browser OAuth flow and use manual code entry',
+    type: 'boolean',
+    default: false,
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Disable browser auto-launch for OAuth' },
+      { value: 'false', description: 'Allow browser auto-launch for OAuth' },
+    ],
+  },
 ];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
