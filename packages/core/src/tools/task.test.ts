@@ -1394,12 +1394,20 @@ describe('TaskTool', () => {
       );
     });
 
-    it('should send opening XML tag for async tasks', async () => {
+    it('should send opening and closing XML tags for async tasks', async () => {
+      let resolveBackgroundExecution: (() => void) | undefined;
+      const backgroundExecutionPromise = new Promise<void>((resolve) => {
+        resolveBackgroundExecution = resolve;
+      });
+
+      const completeTaskMock = vi.fn(() => {
+        resolveBackgroundExecution?.();
+      });
       const mockAsyncTaskManager = {
         canLaunchAsync: () => ({ allowed: true }),
         tryReserveAsyncSlot: () => 'booking-1',
         registerTask: vi.fn(),
-        completeTask: vi.fn(),
+        completeTask: completeTaskMock,
         failTask: vi.fn(),
       };
       const updateOutput = vi.fn();
@@ -1436,7 +1444,11 @@ describe('TaskTool', () => {
         '<subagent name="async-helper" id="async-xml-agent">\n',
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Wait for background execution to complete and emit closing tag
+      await backgroundExecutionPromise;
+      expect(updateOutput).toHaveBeenLastCalledWith(
+        '</subagent name="async-helper" id="async-xml-agent">\n',
+      );
     });
   });
 });
