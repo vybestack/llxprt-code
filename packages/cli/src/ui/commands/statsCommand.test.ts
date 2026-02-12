@@ -246,7 +246,7 @@ describe('statsCommand', () => {
         success: true,
       }),
     } as Response);
-    global.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -340,7 +340,7 @@ describe('statsCommand', () => {
         success: true,
       }),
     } as Response);
-    global.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -379,7 +379,7 @@ describe('statsCommand', () => {
         toolCallDiscounts: null,
       }),
     } as Response);
-    global.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -432,7 +432,7 @@ describe('statsCommand', () => {
         }),
       } as Response);
     });
-    global.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
@@ -468,7 +468,7 @@ describe('statsCommand', () => {
       status: 401,
       statusText: 'Unauthorized',
     } as Response);
-    global.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',

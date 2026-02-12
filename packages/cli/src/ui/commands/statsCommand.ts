@@ -73,7 +73,6 @@ async function resolveApiKey(
  * Returns null if the profile doesn't use a supported API-key provider.
  */
 async function fetchApiKeyProviderQuota(
-  _context: CommandContext,
   runtimeApi: ReturnType<typeof getRuntimeApi>,
 ): Promise<{ provider: string; lines: string[] } | null> {
   const baseUrl = runtimeApi.getEphemeralSetting('base-url');
@@ -302,10 +301,7 @@ export const statsCommand: SlashCommand = {
           }
 
           // 2. Fetch API-key provider quota (Z.ai, Synthetic, Chutes, Kimi)
-          const apiKeyQuotaResult = await fetchApiKeyProviderQuota(
-            context,
-            runtimeApi,
-          );
+          const apiKeyQuotaResult = await fetchApiKeyProviderQuota(runtimeApi);
           if (apiKeyQuotaResult) {
             if (output.length > 0) {
               output.push('');

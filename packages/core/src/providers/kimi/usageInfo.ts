@@ -17,15 +17,15 @@ export const KimiBalanceSchema = z
   .object({
     available_balance: z
       .number()
-      .describe('Total available balance (cash + voucher) in USD'),
+      .describe('Total available balance (cash + voucher) in CNY'),
     voucher_balance: z
       .number()
       .optional()
-      .describe('Balance from vouchers in USD'),
+      .describe('Balance from vouchers in CNY'),
     cash_balance: z
       .number()
       .optional()
-      .describe('Cash balance in USD (can be negative)'),
+      .describe('Cash balance in CNY (can be negative)'),
   })
   .passthrough();
 
@@ -117,8 +117,11 @@ function buildKimiCodeUsageEndpoint(baseUrl?: string): string {
     const url = new URL(baseUrl.trim());
     const hostname = url.hostname.toLowerCase();
     if (hostname === 'kimi.com' || hostname.endsWith('.kimi.com')) {
-      // Derive from base URL: strip trailing slashes and append /usages
-      const base = baseUrl.trim().replace(/\/+$/, '');
+      // Derive from base URL: strip trailing slashes without regex (avoid ReDoS)
+      let base = baseUrl.trim();
+      while (base.endsWith('/')) {
+        base = base.slice(0, -1);
+      }
       return `${base}/usages`;
     }
     return DEFAULT_KIMI_CODE_USAGE_ENDPOINT;
@@ -214,14 +217,14 @@ export async function fetchKimiUsage(
 export function formatKimiUsage(usage: KimiBalanceInfo): string[] {
   const lines: string[] = [];
 
-  lines.push(`  Available balance: $${usage.available_balance.toFixed(2)}`);
+  lines.push(`  Available balance: ¥${usage.available_balance.toFixed(2)}`);
 
   if (typeof usage.cash_balance === 'number') {
-    lines.push(`  Cash balance: $${usage.cash_balance.toFixed(2)}`);
+    lines.push(`  Cash balance: ¥${usage.cash_balance.toFixed(2)}`);
   }
 
   if (typeof usage.voucher_balance === 'number' && usage.voucher_balance > 0) {
-    lines.push(`  Voucher balance: $${usage.voucher_balance.toFixed(2)}`);
+    lines.push(`  Voucher balance: ¥${usage.voucher_balance.toFixed(2)}`);
   }
 
   if (usage.available_balance <= 0) {

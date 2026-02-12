@@ -13,7 +13,7 @@ describe('chutesUsageInfo', () => {
 
     beforeEach(() => {
       fetchMock = vi.fn();
-      global.fetch = fetchMock;
+      vi.stubGlobal('fetch', fetchMock);
     });
 
     afterEach(() => {

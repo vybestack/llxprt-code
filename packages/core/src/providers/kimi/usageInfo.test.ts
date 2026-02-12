@@ -18,7 +18,7 @@ describe('kimiUsageInfo', () => {
 
     beforeEach(() => {
       fetchMock = vi.fn();
-      global.fetch = fetchMock;
+      vi.stubGlobal('fetch', fetchMock);
     });
 
     afterEach(() => {
@@ -177,7 +177,7 @@ describe('kimiUsageInfo', () => {
       };
 
       const result = formatKimiUsage(usage);
-      expect(result[0]).toBe('  Available balance: $42.50');
+      expect(result[0]).toBe('  Available balance: ¥42.50');
     });
 
     it('should format cash balance when present', () => {
@@ -189,9 +189,9 @@ describe('kimiUsageInfo', () => {
 
       const result = formatKimiUsage(usage);
       expect(result).toHaveLength(3);
-      expect(result[0]).toBe('  Available balance: $42.50');
-      expect(result[1]).toBe('  Cash balance: $32.50');
-      expect(result[2]).toBe('  Voucher balance: $10.00');
+      expect(result[0]).toBe('  Available balance: ¥42.50');
+      expect(result[1]).toBe('  Cash balance: ¥32.50');
+      expect(result[2]).toBe('  Voucher balance: ¥10.00');
     });
 
     it('should not show zero voucher balance', () => {
@@ -232,7 +232,7 @@ describe('kimiUsageInfo', () => {
 
     beforeEach(() => {
       fetchMock = vi.fn();
-      global.fetch = fetchMock;
+      vi.stubGlobal('fetch', fetchMock);
     });
 
     afterEach(() => {
