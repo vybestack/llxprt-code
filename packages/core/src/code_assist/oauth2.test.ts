@@ -1211,4 +1211,208 @@ describe('oauth2', () => {
       expect(fs.existsSync(credsPath)).toBe(true); // The unencrypted file should remain
     });
   });
+
+  describe('OAuth Client Caching', () => {
+    it('should cache OAuth client per auth type', async () => {
+      const mockConfig = {
+        getProxy: () => 'http://test.proxy.com:8080',
+        isBrowserLaunchSuppressed: () => false,
+        isInteractive: () => false,
+      } as unknown as Config;
+
+      const mockOAuth2Client = {
+        on: vi.fn(),
+        setCredentials: vi.fn(),
+        getAccessToken: vi.fn().mockResolvedValue({ token: undefined }),
+        generateAuthUrl: vi.fn().mockReturnValue('https://example.com/auth'),
+      } as unknown as OAuth2Client;
+
+      (OAuth2Client as unknown as Mock).mockImplementation(
+        () => mockOAuth2Client,
+      );
+
+      (fs.readFile as Mock).mockResolvedValue(
+        JSON.stringify({ refresh_token: 'token' }),
+      );
+
+      // First call, should create a client
+      await getOauthClient(mockConfig);
+      expect(OAuth2Client).toHaveBeenCalledTimes(1);
+
+      // Second call, should use cached client
+      await getOauthClient(mockConfig);
+      expect(OAuth2Client).toHaveBeenCalledTimes(1);
+
+      clearOauthClientCache();
+
+      // Third call, after clearing cache, should create a new client
+      await getOauthClient(mockConfig);
+      expect(OAuth2Client).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('Issue #878 - Readline fallback when __oauth_wait_for_code is available', () => {
+    it('should NOT call readline when __oauth_wait_for_code hook is available (NoBrowser mode)', async () => {
+      const mockConfigWithNoBrowser = {
+        getNoBrowser: () => true,
+        getProxy: () => 'http://test.proxy.com:8080',
+        isBrowserLaunchSuppressed: () => true,
+      } as unknown as Config;
+
+      const mockCodeVerifier = {
+        codeChallenge: 'test-challenge',
+        codeVerifier: 'test-verifier',
+      };
+      const mockAuthUrl = 'https://example.com/auth-fallback-test';
+      const mockCode = 'test-code-from-hook';
+      const mockTokens = {
+        access_token: 'test-access-token-fallback',
+        refresh_token: 'test-refresh-token-fallback',
+      };
+
+      const mockGenerateAuthUrl = vi.fn().mockReturnValue(mockAuthUrl);
+      const mockGetToken = vi.fn().mockResolvedValue({ tokens: mockTokens });
+      const mockSetCredentials = vi.fn();
+      const mockGenerateCodeVerifierAsync = vi
+        .fn()
+        .mockResolvedValue(mockCodeVerifier);
+
+      const mockOAuth2Client = {
+        generateAuthUrl: mockGenerateAuthUrl,
+        getToken: mockGetToken,
+        setCredentials: mockSetCredentials,
+        generateCodeVerifierAsync: mockGenerateCodeVerifierAsync,
+        on: vi.fn(),
+      } as unknown as OAuth2Client;
+      (OAuth2Client as unknown as Mock).mockImplementation(
+        () => mockOAuth2Client,
+      );
+
+      // Set up the UI hook - this simulates interactive mode with UI available
+      const waitForCode = vi.fn().mockResolvedValue(mockCode);
+      (global as Record<string, unknown>).__oauth_wait_for_code = waitForCode;
+
+      // Create a spy on readline.createInterface that should NOT be called
+      const createInterfaceSpy = vi.spyOn(readline, 'createInterface');
+
+      try {
+        const result = await performLogin(mockConfigWithNoBrowser);
+
+        expect(result).toBe(true);
+        // The UI hook should have been called
+        expect(waitForCode).toHaveBeenCalledTimes(1);
+        // readline.createInterface should NOT have been called because the hook was used
+        expect(createInterfaceSpy).not.toHaveBeenCalled();
+      } finally {
+        delete (global as Record<string, unknown>).__oauth_wait_for_code;
+        createInterfaceSpy.mockRestore();
+      }
+    });
+
+    it('should throw FatalAuthenticationError instead of readline when TTY is active and no hook available (Issue #1370)', async () => {
+      const mockConfig = {
+        getNoBrowser: () => true,
+        getProxy: () => undefined,
+        isBrowserLaunchSuppressed: () => true,
+      } as unknown as Config;
+
+      const mockCodeVerifier = {
+        codeChallenge: 'test',
+        codeVerifier: 'test',
+      };
+      const mockOAuth2Client = {
+        generateAuthUrl: vi.fn().mockReturnValue('https://example.com/auth'),
+        getToken: vi.fn(),
+        setCredentials: vi.fn(),
+        generateCodeVerifierAsync: vi.fn().mockResolvedValue(mockCodeVerifier),
+        on: vi.fn(),
+      } as unknown as OAuth2Client;
+      (OAuth2Client as unknown as Mock).mockImplementation(
+        () => mockOAuth2Client,
+      );
+
+      // Ensure NO UI hook is set
+      delete (global as Record<string, unknown>).__oauth_wait_for_code;
+
+      // Mock stdout.isTTY to true (simulating sandbox with TTY)
+      const originalIsTTY = process.stdout.isTTY;
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+
+      const createInterfaceSpy = vi.spyOn(readline, 'createInterface');
+
+      try {
+        await expect(performLogin(mockConfig)).rejects.toThrow(
+          FatalAuthenticationError,
+        );
+        // readline should NOT have been called
+        expect(createInterfaceSpy).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(process.stdout, 'isTTY', {
+          value: originalIsTTY,
+          writable: true,
+          configurable: true,
+        });
+        createInterfaceSpy.mockRestore();
+      }
+    });
+
+    it('should throw FatalAuthenticationError when __oauth_wait_for_code hook returns empty string', async () => {
+      // Issue #878: When the UI hook returns an empty string (e.g., user didn't enter code),
+      // we should throw FatalAuthenticationError instead of falling back to readline
+      // which would corrupt the terminal UI
+      const mockConfigWithNoBrowser = {
+        getNoBrowser: () => true,
+        getProxy: () => 'http://test.proxy.com:8080',
+        isBrowserLaunchSuppressed: () => true,
+      } as unknown as Config;
+
+      const mockCodeVerifier = {
+        codeChallenge: 'test-challenge',
+        codeVerifier: 'test-verifier',
+      };
+
+      const mockGenerateAuthUrl = vi
+        .fn()
+        .mockReturnValue('https://example.com/auth');
+      const mockGetToken = vi.fn();
+      const mockSetCredentials = vi.fn();
+      const mockGenerateCodeVerifierAsync = vi
+        .fn()
+        .mockResolvedValue(mockCodeVerifier);
+
+      const mockOAuth2Client = {
+        generateAuthUrl: mockGenerateAuthUrl,
+        getToken: mockGetToken,
+        setCredentials: mockSetCredentials,
+        generateCodeVerifierAsync: mockGenerateCodeVerifierAsync,
+        on: vi.fn(),
+      } as unknown as OAuth2Client;
+      (OAuth2Client as unknown as Mock).mockImplementation(
+        () => mockOAuth2Client,
+      );
+
+      // Set up the UI hook that returns empty string - simulating user cancel
+      const waitForCode = vi.fn().mockResolvedValue('');
+      (global as Record<string, unknown>).__oauth_wait_for_code = waitForCode;
+
+      const createInterfaceSpy = vi.spyOn(readline, 'createInterface');
+
+      try {
+        // The login should fail with FatalAuthenticationError, NOT fall back to readline
+        await expect(performLogin(mockConfigWithNoBrowser)).rejects.toThrow(
+          FatalAuthenticationError,
+        );
+
+        // readline.createInterface should NEVER be called when hook is available
+        expect(createInterfaceSpy).not.toHaveBeenCalled();
+      } finally {
+        delete (global as Record<string, unknown>).__oauth_wait_for_code;
+        createInterfaceSpy.mockRestore();
+      }
+    });
+  });
 });

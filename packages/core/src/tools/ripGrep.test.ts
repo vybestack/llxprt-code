@@ -156,19 +156,15 @@ describe('RipGrepTool', () => {
         pattern: 'hello',
         path: 'nonexistent',
       };
-      // Check for the core error message, as the full path might vary
-      expect(grepTool.validateToolParams(params)).toContain(
-        'Failed to access path stats for',
-      );
-      expect(grepTool.validateToolParams(params)).toContain('nonexistent');
+      const result = grepTool.validateToolParams(params);
+      expect(result).toContain('Path does not exist');
+      expect(result).toContain('nonexistent');
     });
 
-    it('should return error if path is a file, not a directory', async () => {
+    it('should accept a file path and pass validation', async () => {
       const filePath = path.join(tempRootDir, 'fileA.txt');
       const params: RipGrepToolParams = { pattern: 'hello', path: filePath };
-      expect(grepTool.validateToolParams(params)).toContain(
-        `Path is not a directory: ${filePath}`,
-      );
+      expect(grepTool.validateToolParams(params)).toBeNull();
     });
   });
 

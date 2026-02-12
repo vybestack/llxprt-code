@@ -19,6 +19,7 @@ import {
   getProviderConfigKeys,
   getDirectSettingSpecs,
 } from '../settingsRegistry.js';
+import { COMPRESSION_STRATEGIES } from '../../core/compression/types.js';
 
 describe('resolveAlias', () => {
   it('resolves max-tokens alias to max_tokens', () => {
@@ -370,5 +371,133 @@ describe('getDirectSettingSpecs', () => {
     const found = specs.find((s) => s.value === 'reasoning.enabled');
 
     expect(found?.description).toBeDefined();
+  });
+});
+
+describe('auth.noBrowser setting', () => {
+  it('returns spec with type boolean', () => {
+    const spec = getSettingSpec('auth.noBrowser');
+
+    expect(spec?.type).toBe('boolean');
+  });
+
+  it('returns spec with default false', () => {
+    const spec = getSettingSpec('auth.noBrowser');
+
+    expect(spec?.default).toBe(false);
+  });
+
+  it('returns spec with category cli-behavior', () => {
+    const spec = getSettingSpec('auth.noBrowser');
+
+    expect(spec?.category).toBe('cli-behavior');
+  });
+
+  it('returns spec with persistToProfile true', () => {
+    const spec = getSettingSpec('auth.noBrowser');
+
+    expect(spec?.persistToProfile).toBe(true);
+  });
+
+  it('is included in profile persistable keys', () => {
+    const keys = getProfilePersistableKeys();
+
+    expect(keys).toContain('auth.noBrowser');
+  });
+
+  it('is included in direct setting specs', () => {
+    const specs = getDirectSettingSpecs();
+    const found = specs.find((s) => s.value === 'auth.noBrowser');
+
+    expect(found).toBeDefined();
+  });
+
+  it('places auth.noBrowser in cliSettings when separated', () => {
+    const result = separateSettings({ 'auth.noBrowser': true });
+
+    expect(result.cliSettings['auth.noBrowser']).toBe(true);
+  });
+
+  it('validates true as valid boolean', () => {
+    const result = validateSetting('auth.noBrowser', true);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('validates false as valid boolean', () => {
+    const result = validateSetting('auth.noBrowser', false);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects non-boolean value', () => {
+    const result = validateSetting('auth.noBrowser', 'yes');
+
+    expect(result.success).toBe(false);
+  });
+});
+
+/**
+ * @plan PLAN-20260211-COMPRESSION.P11
+ * @requirement REQ-CS-008.1, REQ-CS-008.2, REQ-CS-008.3
+ *
+ * RED phase: Tests for compression strategy and profile settings.
+ * These FAIL until Phase 12 adds the setting specs to the registry.
+ */
+describe('compression settings', () => {
+  describe('compression.strategy', () => {
+    it('returns spec with type enum', () => {
+      const spec = getSettingSpec('compression.strategy');
+
+      expect(spec?.type).toBe('enum');
+    });
+
+    it('returns spec with default middle-out', () => {
+      const spec = getSettingSpec('compression.strategy');
+
+      expect(spec?.default).toBe('middle-out');
+    });
+
+    it('returns spec with enumValues matching COMPRESSION_STRATEGIES', () => {
+      const spec = getSettingSpec('compression.strategy');
+
+      expect(spec?.enumValues).toEqual([...COMPRESSION_STRATEGIES]);
+    });
+
+    it('returns spec with persistToProfile true', () => {
+      const spec = getSettingSpec('compression.strategy');
+
+      expect(spec?.persistToProfile).toBe(true);
+    });
+  });
+
+  describe('compression.profile', () => {
+    it('returns spec with type string', () => {
+      const spec = getSettingSpec('compression.profile');
+
+      expect(spec?.type).toBe('string');
+    });
+
+    it('returns spec with persistToProfile true', () => {
+      const spec = getSettingSpec('compression.profile');
+
+      expect(spec?.persistToProfile).toBe(true);
+    });
+  });
+
+  describe('getDirectSettingSpecs includes compression settings', () => {
+    it('includes compression.strategy in direct setting specs', () => {
+      const specs = getDirectSettingSpecs();
+      const found = specs.find((s) => s.value === 'compression.strategy');
+
+      expect(found).toBeDefined();
+    });
+
+    it('includes compression.profile in direct setting specs', () => {
+      const specs = getDirectSettingSpecs();
+      const found = specs.find((s) => s.value === 'compression.profile');
+
+      expect(found).toBeDefined();
+    });
   });
 });

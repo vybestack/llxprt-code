@@ -177,6 +177,7 @@ export interface CliArgs {
   query: string | undefined;
   set: string[] | undefined;
   continue: boolean | undefined;
+  nobrowser: boolean | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -390,6 +391,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'boolean',
           description:
             'Resume the most recent session for this project. Can be combined with --prompt to continue with a new message.',
+          default: false,
+        })
+        .option('nobrowser', {
+          type: 'boolean',
+          description: 'Skip browser OAuth flow, use manual code entry',
           default: false,
         })
         .deprecateOption(
@@ -674,6 +680,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     query: queryFromPromptWords,
     set: result.set as string[] | undefined,
     continue: result.continue as boolean | undefined,
+    nobrowser: result.nobrowser as boolean | undefined,
   };
 
   return cliArgs;
@@ -719,6 +726,7 @@ export async function loadHierarchicalLlxprtMemory(
     memoryImportFormat,
     fileFilteringOptions,
     settings.ui?.memoryDiscoveryMaxDirs,
+    settings.ui?.memoryDiscoveryMaxDepth,
   );
 }
 

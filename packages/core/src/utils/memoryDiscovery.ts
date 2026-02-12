@@ -88,6 +88,7 @@ async function getGeminiMdFilePathsInternal(
   folderTrust: boolean,
   fileFilteringOptions: FileFilteringOptions,
   maxDirs: number,
+  maxDepth?: number,
 ): Promise<string[]> {
   const dirs = new Set<string>([
     ...includeDirectoriesToReadGemini,
@@ -110,6 +111,7 @@ async function getGeminiMdFilePathsInternal(
         folderTrust,
         fileFilteringOptions,
         maxDirs,
+        maxDepth,
       ),
     );
 
@@ -139,6 +141,7 @@ async function getGeminiMdFilePathsInternalForEachDir(
   folderTrust: boolean,
   fileFilteringOptions: FileFilteringOptions,
   maxDirs: number,
+  maxDepth?: number,
 ): Promise<string[]> {
   const allPaths = new Set<string>();
   const geminiMdFilenames = getAllGeminiMdFilenames();
@@ -227,6 +230,7 @@ async function getGeminiMdFilePathsInternalForEachDir(
       const downwardPaths = await bfsFileSearch(resolvedCwd, {
         fileName: geminiMdFilename,
         maxDirs,
+        maxDepth,
         debug: debugMode,
         fileService,
         fileFilteringOptions: mergedOptions,
@@ -496,6 +500,7 @@ export async function loadServerHierarchicalMemory(
   importFormat: 'flat' | 'tree' = 'tree',
   fileFilteringOptions?: FileFilteringOptions,
   maxDirs: number = 200,
+  maxDepth?: number,
 ): Promise<LoadServerHierarchicalMemoryResponse> {
   if (debugMode)
     logger.debug(
@@ -514,6 +519,7 @@ export async function loadServerHierarchicalMemory(
     folderTrust,
     fileFilteringOptions || DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
     maxDirs,
+    maxDepth,
   );
 
   // Add extension file paths separately since they may be conditionally enabled.

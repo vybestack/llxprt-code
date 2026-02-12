@@ -439,6 +439,12 @@
           "markdownDescription": "Maximum number of directories to scan for memory files.\n\n- Category: `UI`\n- Requires restart: `no`",
           "type": "number"
         },
+        "memoryDiscoveryMaxDepth": {
+          "title": "Memory Discovery Max Depth",
+          "description": "Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.",
+          "markdownDescription": "Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.\n\n- Category: `UI`\n- Requires restart: `no`",
+          "type": "number"
+        },
         "contextFileName": {
           "title": "Context File Name",
           "description": "The name of the context file or files to load into memory. Accepts either a single string or an array of strings.",

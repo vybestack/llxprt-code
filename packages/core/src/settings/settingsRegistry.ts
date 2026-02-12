@@ -1,4 +1,6 @@
 export const PLAN_MARKER = '@plan:PLAN-20260126-SETTINGS-SEPARATION.P05';
+/** @plan PLAN-20260211-COMPRESSION.P12 */
+import { COMPRESSION_STRATEGIES } from '../core/compression/types.js';
 
 export type SettingCategory =
   | 'model-behavior'
@@ -561,6 +563,19 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'auth.noBrowser',
+    category: 'cli-behavior',
+    description:
+      'Skip automatic browser OAuth flow and prompt for manual code entry',
+    type: 'boolean',
+    default: false,
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Force manual OAuth code entry' },
+      { value: 'false', description: 'Allow automatic browser launch' },
+    ],
+  },
+  {
     key: 'todo-continuation',
     category: 'cli-behavior',
     description: 'Enable todo continuation mode',
@@ -634,6 +649,30 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
         success: false,
         message:
           'task-max-timeout-seconds must be a positive number in seconds or -1 for unlimited',
+      };
+    },
+  },
+  {
+    // @plan PLAN-20260130-ASYNCTASK.P21
+    // @requirement REQ-ASYNC-012
+    key: 'task-max-async',
+    category: 'cli-behavior',
+    description:
+      'Maximum concurrent async tasks. Default 5, use -1 for unlimited.',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        (value === -1 || (value >= 1 && value <= 100))
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'task-max-async must be -1 (unlimited) or an integer between 1 and 100',
       };
     },
   },
@@ -928,6 +967,37 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
           'circuit_breaker_recovery_timeout_ms must be a positive integer',
       };
     },
+  },
+  /** @plan PLAN-20260211-COMPRESSION.P12 */
+  {
+    key: 'compression.strategy',
+    category: 'cli-behavior',
+    description:
+      'Compression strategy to use (middle-out or top-down-truncation)',
+    type: 'enum',
+    enumValues: [...COMPRESSION_STRATEGIES],
+    default: 'middle-out',
+    persistToProfile: true,
+  },
+  /** @plan PLAN-20260211-COMPRESSION.P12 */
+  {
+    key: 'compression.profile',
+    category: 'cli-behavior',
+    description: 'Profile name for compression LLM calls',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'auth.noBrowser',
+    category: 'cli-behavior',
+    description: 'Skip automatic browser OAuth flow and use manual code entry',
+    type: 'boolean',
+    default: false,
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Disable browser auto-launch for OAuth' },
+      { value: 'false', description: 'Allow browser auto-launch for OAuth' },
+    ],
   },
 ];
 

@@ -56,6 +56,11 @@ export const LIST_SUBAGENTS_TOOL = 'list_subagents';
 // Shell Tool
 export const SHELL_TOOL = 'shell';
 
+// @plan PLAN-20260211-ASTGREP.P04
+// AST Analysis Tools
+export const AST_GREP_TOOL = 'ast_grep';
+export const STRUCTURAL_ANALYSIS_TOOL = 'structural_analysis';
+
 /**
  * Union type of all tool names for type safety
  */
@@ -83,4 +88,6 @@ export type ToolName =
   | typeof TODO_WRITE_TOOL
   | typeof TODO_PAUSE_TOOL
   | typeof LIST_SUBAGENTS_TOOL
-  | typeof SHELL_TOOL;
+  | typeof SHELL_TOOL
+  | typeof AST_GREP_TOOL
+  | typeof STRUCTURAL_ANALYSIS_TOOL;

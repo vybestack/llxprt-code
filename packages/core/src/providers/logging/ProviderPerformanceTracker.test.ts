@@ -34,9 +34,9 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should record completion metrics correctly', () => {
+    vi.useFakeTimers();
     const tracker = new ProviderPerformanceTracker('test-provider');
 
-    // Mock Date.now for consistent testing
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
     vi.setSystemTime(mockDate);
 
@@ -50,39 +50,67 @@ describe('ProviderPerformanceTracker', () => {
     expect(metrics.timeToFirstToken).toBe(200);
     expect(metrics.tokensPerSecond).toBe(500);
     expect(metrics.chunksReceived).toBe(10);
-    expect(metrics.tokensPerMinute).toBe(500000);
+    expect(metrics.tokensPerMinute).toBe(30000);
+
+    vi.useRealTimers();
   });
 
   it('should accumulate tokens per minute correctly', () => {
+    vi.useFakeTimers();
     const tracker = new ProviderPerformanceTracker('test-provider');
 
-    // Mock Date.now and add token entries within a minute
     const now = new Date('2025-01-01T00:00:00Z').getTime();
     vi.setSystemTime(now);
 
     tracker.recordCompletion(500, 100, 200, 5);
 
-    vi.setSystemTime(now + 30000); // 30 seconds later
+    vi.setSystemTime(now + 30000);
     tracker.recordCompletion(600, 120, 300, 8);
 
     const metrics = tracker.getLatestMetrics();
-    // TPM calculation: (200+300 tokens) / (30 seconds = 0.5 minutes) = 1000 tokens/minute
-    expect(metrics.tokensPerMinute).toBe(1000);
+    expect(metrics.tokensPerMinute).toBeCloseTo(983.61, 1);
 
-    // Add entry outside the 60-second window
-    vi.setSystemTime(now + 65000); // 65 seconds later
+    vi.setSystemTime(now + 65000);
     tracker.recordCompletion(400, 80, 150, 6);
 
     const updatedMetrics = tracker.getLatestMetrics();
-    // After 65 seconds, the first entry (timestamp at 0s, 200 tokens) is filtered out
-    // since it's now outside the 60-second window
-    // Remaining entries:
-    // - 2nd entry: timestamp at 30s, 300 tokens
-    // - 3rd entry: timestamp at 65s, 150 tokens
-    // Time span: 65s - 30s = 35 seconds = 0.583 minutes
-    // Total tokens: 300 + 150 = 450
-    // TPM = 450 tokens / 0.583 minutes = 771.43 tokens per minute
-    expect(updatedMetrics.tokensPerMinute).toBeCloseTo(771.43, 2);
+    expect(updatedMetrics.tokensPerMinute).toBeCloseTo(758.43, 1);
+
+    vi.useRealTimers();
+  });
+
+  it('should not produce inflated TPM when requests complete close together after long delays', () => {
+    vi.useFakeTimers();
+    const tracker = new ProviderPerformanceTracker('test-provider');
+
+    const now = new Date('2025-01-01T00:00:00Z').getTime();
+    vi.setSystemTime(now);
+
+    tracker.recordCompletion(90000, null, 10000, 50);
+
+    vi.setSystemTime(now + 2000);
+    tracker.recordCompletion(90000, null, 10000, 50);
+
+    const metrics = tracker.getLatestMetrics();
+    expect(metrics.tokensPerMinute).toBeLessThan(20000);
+    expect(metrics.tokensPerMinute).toBeGreaterThan(0);
+
+    vi.useRealTimers();
+  });
+
+  it('should produce accurate TPM for long-running request', () => {
+    vi.useFakeTimers();
+    const tracker = new ProviderPerformanceTracker('test-provider');
+
+    const now = new Date('2025-01-01T00:00:00Z').getTime();
+    vi.setSystemTime(now);
+
+    tracker.recordCompletion(60000, null, 10000, 100);
+
+    const metrics = tracker.getLatestMetrics();
+    expect(metrics.tokensPerMinute).toBe(10000);
+
+    vi.useRealTimers();
   });
 
   it('should record error metrics correctly', () => {

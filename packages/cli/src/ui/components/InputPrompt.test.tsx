@@ -2239,6 +2239,41 @@ describe('InputPrompt', () => {
       },
     );
   });
+
+  describe('shell path completion', () => {
+    // User-visible behavior tests
+    it.todo(
+      'should show path suggestions when typing a tilde path in shell mode',
+    );
+    it.todo('should accept path suggestion on Tab in shell mode');
+    it.todo(
+      'should navigate path suggestions with Up/Down when suggestions are visible',
+    );
+    it.todo(
+      'should navigate shell history with Up/Down when NO suggestions are visible',
+    );
+    it.todo('should clear path suggestions when exiting shell mode via Escape');
+    it.todo('should not show path suggestions when reverse search is active');
+    it.todo('should not interfere with @ completion in normal mode');
+    it.todo(
+      'should not show path suggestions for non-path tokens in shell mode',
+    );
+
+    // Key precedence matrix tests
+    it.todo(
+      'Tab in shell mode with path suggestions: accepts suggestion (not submit)',
+    );
+    it.todo(
+      'Enter in shell mode with path suggestions: submits command (not accept suggestion)',
+    );
+    it.todo(
+      'Up/Down in shell mode with path suggestions: navigates suggestions (not history)',
+    );
+    it.todo(
+      'Up/Down in shell mode without suggestions: navigates shell history',
+    );
+    it.todo('Escape in shell mode with path suggestions: exits shell mode');
+  });
 });
 
 function clean(str: string | undefined): string {

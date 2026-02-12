@@ -92,8 +92,8 @@ describe('ShellExecutionService', () => {
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();
-    mockPtyProcess.onData = vi.fn();
-    mockPtyProcess.onExit = vi.fn();
+    mockPtyProcess.onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
+    mockPtyProcess.onExit = vi.fn().mockReturnValue({ dispose: vi.fn() });
     mockPtyProcess.write = vi.fn();
 
     mockPtySpawn.mockReturnValue(mockPtyProcess);
@@ -511,6 +511,58 @@ describe('ShellExecutionService', () => {
 
       ShellExecutionService.writeToPty(pid, 'input');
       expect(mockPtyProcess.write).not.toHaveBeenCalled();
+    });
+
+    it('should dispose PTY event listener disposables on normal exit', async () => {
+      const onDataDispose = vi.fn();
+      const onExitDispose = vi.fn();
+      mockPtyProcess.onData = vi
+        .fn()
+        .mockReturnValue({ dispose: onDataDispose });
+      mockPtyProcess.onExit = vi
+        .fn()
+        .mockReturnValue({ dispose: onExitDispose });
+
+      await simulateExecution('echo cleanup', async (pty) => {
+        pty.onData.mock.calls[0][0]('output\n');
+
+        await new Promise((resolve) => setImmediate(resolve));
+        pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      });
+
+      expect(onDataDispose).toHaveBeenCalled();
+      expect(onExitDispose).toHaveBeenCalled();
+    });
+
+    it('should dispose PTY event listener disposables on abort', async () => {
+      const onDataDispose = vi.fn();
+      const onExitDispose = vi.fn();
+      mockPtyProcess.onData = vi
+        .fn()
+        .mockReturnValue({ dispose: onDataDispose });
+      mockPtyProcess.onExit = vi
+        .fn()
+        .mockReturnValue({ dispose: onExitDispose });
+
+      const abortController = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'sleep 10',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+        defaultShellConfig,
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      abortController.abort();
+      await new Promise((resolve) => setImmediate(resolve));
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 1, signal: null });
+      await handle.result;
+
+      expect(onDataDispose).toHaveBeenCalled();
+      expect(onExitDispose).toHaveBeenCalled();
     });
   });
 });
@@ -1001,8 +1053,8 @@ describe('ShellExecutionService execution method selection', () => {
     };
     mockPtyProcess.pid = 12345;
     mockPtyProcess.kill = vi.fn();
-    mockPtyProcess.onData = vi.fn();
-    mockPtyProcess.onExit = vi.fn();
+    mockPtyProcess.onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
+    mockPtyProcess.onExit = vi.fn().mockReturnValue({ dispose: vi.fn() });
     mockPtySpawn.mockReturnValue(mockPtyProcess);
     mockGetPty.mockResolvedValue({
       module: { spawn: mockPtySpawn },

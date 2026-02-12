@@ -106,6 +106,80 @@ describe('bfsFileSearch', () => {
     expect(result).toEqual([targetFilePath]);
   });
 
+  it('should only find files in root directory when maxDepth is 0', async () => {
+    const rootFile = await createTestFile('content', 'target.txt');
+    await createTestFile('content', 'a', 'target.txt');
+    await createTestFile('content', 'a', 'b', 'target.txt');
+
+    const result = await bfsFileSearch(testRootDir, {
+      fileName: 'target.txt',
+      maxDepth: 0,
+    });
+    expect(result).toEqual([rootFile]);
+  });
+
+  it('should find files up to one level deep when maxDepth is 1', async () => {
+    const rootFile = await createTestFile('content', 'target.txt');
+    const level1File = await createTestFile('content', 'a', 'target.txt');
+    await createTestFile('content', 'a', 'b', 'target.txt');
+
+    const result = await bfsFileSearch(testRootDir, {
+      fileName: 'target.txt',
+      maxDepth: 1,
+    });
+    result.sort();
+    expect(result).toEqual([rootFile, level1File].sort());
+  });
+
+  it('should find files at all depths when maxDepth is undefined', async () => {
+    const rootFile = await createTestFile('content', 'target.txt');
+    const level1File = await createTestFile('content', 'a', 'target.txt');
+    const level2File = await createTestFile('content', 'a', 'b', 'target.txt');
+
+    const result = await bfsFileSearch(testRootDir, {
+      fileName: 'target.txt',
+    });
+    result.sort();
+    expect(result).toEqual([rootFile, level1File, level2File].sort());
+  });
+
+  it('should find files at all depths when maxDepth is very large', async () => {
+    const rootFile = await createTestFile('content', 'target.txt');
+    const level1File = await createTestFile('content', 'a', 'target.txt');
+    const level2File = await createTestFile('content', 'a', 'b', 'target.txt');
+
+    const result = await bfsFileSearch(testRootDir, {
+      fileName: 'target.txt',
+      maxDepth: 999999,
+    });
+    result.sort();
+    expect(result).toEqual([rootFile, level1File, level2File].sort());
+  });
+
+  it('should work correctly when maxDepth and maxDirs are both set', async () => {
+    const rootFile = await createTestFile('content', 'target.txt');
+    // Create many dirs at level 1 to test maxDirs interaction
+    for (let i = 0; i < 10; i++) {
+      await createTestFile('content', `dir${i}`, 'target.txt');
+    }
+    await createTestFile('content', 'dir0', 'deep', 'target.txt');
+
+    // maxDepth=1 limits depth, maxDirs=5 limits total dirs scanned
+    const result = await bfsFileSearch(testRootDir, {
+      fileName: 'target.txt',
+      maxDepth: 1,
+      maxDirs: 5,
+    });
+    // Should find root file + up to 4 level-1 files (maxDirs=5 total dirs scanned)
+    // Should NOT find dir0/deep/target.txt because maxDepth=1
+    for (const file of result) {
+      expect(file).not.toContain(path.join('deep', 'target.txt'));
+    }
+    expect(result).toContain(rootFile);
+    // maxDirs=5 means at most 5 directories scanned (root + up to 4 subdirs)
+    expect(result.length).toBeLessThanOrEqual(5);
+  });
+
   describe('with FileDiscoveryService', () => {
     let projectRoot: string;
 

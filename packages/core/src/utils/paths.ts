@@ -28,6 +28,19 @@ export function ensureLlxprtDirExists() {
 export const SHELL_SPECIAL_CHARS = /[ \t()[\]{};|*?$`'"#&<>!~]/;
 
 /**
+ * Expands a leading tilde to the user's home directory.
+ */
+export function expandTildePath(filePath: string): string {
+  if (filePath === '~') {
+    return os.homedir();
+  }
+  if (filePath.startsWith('~/')) {
+    return path.join(os.homedir(), filePath.slice(2));
+  }
+  return filePath;
+}
+
+/**
  * Replaces the home directory with a tilde.
  * @param path - The path to tildeify.
  * @returns The tildeified path.

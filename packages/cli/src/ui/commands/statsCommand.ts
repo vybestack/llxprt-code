@@ -13,9 +13,91 @@ import {
   CommandKind,
 } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  detectApiKeyProvider,
+  fetchApiKeyQuota,
+} from '@vybestack/llxprt-code-core';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
 
 const logger = new DebugLogger('llxprt:cli:stats');
+
+/**
+ * Read API key from a keyfile path, handling tilde expansion
+ */
+async function readKeyFile(filePath: string): Promise<string | null> {
+  try {
+    const expandedPath = filePath.startsWith('~')
+      ? path.join(os.homedir(), filePath.slice(1))
+      : filePath;
+
+    const resolvedPath = path.isAbsolute(expandedPath)
+      ? expandedPath
+      : path.resolve(process.cwd(), expandedPath);
+
+    const content = await fs.readFile(resolvedPath, 'utf-8');
+    const key = content.trim();
+    return key || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the API key for the current profile.
+ * Checks ephemeral settings for auth-keyfile first, then falls back to auth-key.
+ */
+async function resolveApiKey(
+  runtimeApi: ReturnType<typeof getRuntimeApi>,
+): Promise<string | null> {
+  // Try auth-keyfile first
+  const keyfilePath = runtimeApi.getEphemeralSetting('auth-keyfile');
+  if (typeof keyfilePath === 'string' && keyfilePath.trim() !== '') {
+    const key = await readKeyFile(keyfilePath.trim());
+    if (key) return key;
+  }
+
+  // Try auth-key directly
+  const authKey = runtimeApi.getEphemeralSetting('auth-key');
+  if (typeof authKey === 'string' && authKey.trim() !== '') {
+    return authKey.trim();
+  }
+
+  return null;
+}
+
+/**
+ * Attempt to fetch quota for the current profile's API-key-based provider.
+ * Returns null if the profile doesn't use a supported API-key provider.
+ */
+async function fetchApiKeyProviderQuota(
+  runtimeApi: ReturnType<typeof getRuntimeApi>,
+): Promise<{ provider: string; lines: string[] } | null> {
+  const baseUrl = runtimeApi.getEphemeralSetting('base-url');
+
+  const provider = detectApiKeyProvider(
+    typeof baseUrl === 'string' ? baseUrl : undefined,
+  );
+  if (!provider) {
+    return null;
+  }
+
+  const apiKey = await resolveApiKey(runtimeApi);
+  if (!apiKey) {
+    logger.debug(
+      () => `Detected ${provider} provider but no API key available`,
+    );
+    return null;
+  }
+
+  return fetchApiKeyQuota(
+    provider,
+    apiKey,
+    typeof baseUrl === 'string' ? baseUrl : undefined,
+  );
+}
 
 export const statsCommand: SlashCommand = {
   name: 'stats',
@@ -88,162 +170,151 @@ export const statsCommand: SlashCommand = {
     {
       name: 'quota',
       description:
-        'Show Anthropic and Codex OAuth usage quota information for all authenticated buckets.',
+        'Show quota/usage information for OAuth providers (Anthropic, Codex) and API-key providers (Z.ai, Synthetic, Chutes, Kimi).',
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext) => {
-        const oauthManager = getRuntimeApi().getCliOAuthManager();
-
-        if (!oauthManager) {
-          context.ui.addItem(
-            {
-              type: MessageType.ERROR,
-              text: 'OAuth is not available or configured',
-            },
-            Date.now(),
-          );
-          return;
-        }
+        const runtimeApi = getRuntimeApi();
+        const oauthManager = runtimeApi.getCliOAuthManager();
 
         try {
-          // Fetch both providers in parallel; show whichever provider succeeds
-          const [anthropicResult, codexResult] = await Promise.allSettled([
-            oauthManager.getAllAnthropicUsageInfo(),
-            oauthManager.getAllCodexUsageInfo(),
-          ]);
-
-          if (anthropicResult.status === 'rejected') {
-            logger.warn(
-              'Failed to fetch Anthropic usage info:',
-              anthropicResult.reason,
-            );
-          }
-          if (codexResult.status === 'rejected') {
-            logger.warn(
-              'Failed to fetch Codex usage info:',
-              codexResult.reason,
-            );
-          }
-
-          const anthropicUsageInfo =
-            anthropicResult.status === 'fulfilled'
-              ? anthropicResult.value
-              : new Map<string, Record<string, unknown>>();
-          const codexUsageInfo =
-            codexResult.status === 'fulfilled'
-              ? codexResult.value
-              : new Map<string, Record<string, unknown>>();
-
-          if (anthropicUsageInfo.size === 0 && codexUsageInfo.size === 0) {
-            context.ui.addItem(
-              {
-                type: MessageType.INFO,
-                text: 'No quota information available. This feature requires OAuth authentication (not API keys).\n\nUse /auth anthropic or /auth codex to authenticate with OAuth.',
-              },
-              Date.now(),
-            );
-            return;
-          }
-
-          const {
-            formatAllUsagePeriods,
-            formatCodexUsage,
-            CodexUsageInfoSchema,
-          } = await import('@vybestack/llxprt-code-core');
-
           const output: string[] = [];
 
-          // Collect Anthropic lines first, only add header if non-empty
-          if (anthropicUsageInfo.size > 0) {
-            const anthropicLines: string[] = [];
+          // 1. Fetch OAuth provider quotas (Anthropic + Codex)
+          if (oauthManager) {
+            const [anthropicResult, codexResult] = await Promise.allSettled([
+              oauthManager.getAllAnthropicUsageInfo(),
+              oauthManager.getAllCodexUsageInfo(),
+            ]);
 
-            const sortedBuckets = Array.from(anthropicUsageInfo.keys()).sort(
-              (a, b) => {
-                if (a === 'default') return -1;
-                if (b === 'default') return 1;
-                return a.localeCompare(b);
-              },
-            );
+            if (anthropicResult.status === 'rejected') {
+              logger.warn(
+                'Failed to fetch Anthropic usage info:',
+                anthropicResult.reason,
+              );
+            }
+            if (codexResult.status === 'rejected') {
+              logger.warn(
+                'Failed to fetch Codex usage info:',
+                codexResult.reason,
+              );
+            }
 
-            for (const bucket of sortedBuckets) {
-              const usageInfo = anthropicUsageInfo.get(bucket)!;
-              const lines = formatAllUsagePeriods(
-                usageInfo as Record<string, unknown>,
+            const anthropicUsageInfo =
+              anthropicResult.status === 'fulfilled'
+                ? anthropicResult.value
+                : new Map<string, Record<string, unknown>>();
+            const codexUsageInfo =
+              codexResult.status === 'fulfilled'
+                ? codexResult.value
+                : new Map<string, Record<string, unknown>>();
+
+            const {
+              formatAllUsagePeriods,
+              formatCodexUsage,
+              CodexUsageInfoSchema,
+            } = await import('@vybestack/llxprt-code-core');
+
+            // Collect Anthropic lines
+            if (anthropicUsageInfo.size > 0) {
+              const anthropicLines: string[] = [];
+
+              const sortedBuckets = Array.from(anthropicUsageInfo.keys()).sort(
+                (a, b) => {
+                  if (a === 'default') return -1;
+                  if (b === 'default') return 1;
+                  return a.localeCompare(b);
+                },
               );
 
-              if (lines.length > 0) {
-                if (anthropicUsageInfo.size > 1) {
-                  anthropicLines.push(`### Bucket: ${bucket}\n`);
+              for (const bucket of sortedBuckets) {
+                const usageInfo = anthropicUsageInfo.get(bucket)!;
+                const lines = formatAllUsagePeriods(
+                  usageInfo as Record<string, unknown>,
+                );
+
+                if (lines.length > 0) {
+                  if (anthropicUsageInfo.size > 1) {
+                    anthropicLines.push(`### Bucket: ${bucket}\n`);
+                  }
+                  anthropicLines.push(...lines);
+                  anthropicLines.push('');
                 }
-                anthropicLines.push(...lines);
-                anthropicLines.push('');
+              }
+
+              if (anthropicLines[anthropicLines.length - 1] === '') {
+                anthropicLines.pop();
+              }
+
+              if (anthropicLines.length > 0) {
+                output.push('## Anthropic Quota Information\n');
+                output.push(...anthropicLines);
               }
             }
 
-            // Remove trailing empty line
-            if (anthropicLines[anthropicLines.length - 1] === '') {
-              anthropicLines.pop();
-            }
+            // Collect Codex lines
+            if (codexUsageInfo.size > 0) {
+              const codexLines: string[] = [];
 
-            if (anthropicLines.length > 0) {
-              output.push('## Anthropic Quota Information\n');
-              output.push(...anthropicLines);
+              const sortedBuckets = Array.from(codexUsageInfo.keys()).sort(
+                (a, b) => {
+                  if (a === 'default') return -1;
+                  if (b === 'default') return 1;
+                  return a.localeCompare(b);
+                },
+              );
+
+              for (const bucket of sortedBuckets) {
+                const usageInfo = codexUsageInfo.get(bucket)!;
+
+                const parsed = CodexUsageInfoSchema.safeParse(usageInfo);
+                if (!parsed.success) {
+                  logger.warn(
+                    `Invalid Codex usage info for bucket ${bucket}:`,
+                    parsed.error,
+                  );
+                  continue;
+                }
+
+                const lines = formatCodexUsage(parsed.data);
+
+                if (lines.length > 0) {
+                  if (codexUsageInfo.size > 1) {
+                    codexLines.push(`### Bucket: ${bucket}\n`);
+                  }
+                  codexLines.push(...lines);
+                  codexLines.push('');
+                }
+              }
+
+              if (codexLines[codexLines.length - 1] === '') {
+                codexLines.pop();
+              }
+
+              if (codexLines.length > 0) {
+                if (output.length > 0) {
+                  output.push('');
+                }
+                output.push('## Codex Quota Information\n');
+                output.push(...codexLines);
+              }
             }
           }
 
-          // Collect Codex lines first, only add header if non-empty
-          if (codexUsageInfo.size > 0) {
-            const codexLines: string[] = [];
-
-            const sortedBuckets = Array.from(codexUsageInfo.keys()).sort(
-              (a, b) => {
-                if (a === 'default') return -1;
-                if (b === 'default') return 1;
-                return a.localeCompare(b);
-              },
-            );
-
-            for (const bucket of sortedBuckets) {
-              const usageInfo = codexUsageInfo.get(bucket)!;
-
-              const parsed = CodexUsageInfoSchema.safeParse(usageInfo);
-              if (!parsed.success) {
-                logger.warn(
-                  `Invalid Codex usage info for bucket ${bucket}:`,
-                  parsed.error,
-                );
-                continue;
-              }
-
-              const lines = formatCodexUsage(parsed.data);
-
-              if (lines.length > 0) {
-                if (codexUsageInfo.size > 1) {
-                  codexLines.push(`### Bucket: ${bucket}\n`);
-                }
-                codexLines.push(...lines);
-                codexLines.push('');
-              }
+          // 2. Fetch API-key provider quota (Z.ai, Synthetic, Chutes, Kimi)
+          const apiKeyQuotaResult = await fetchApiKeyProviderQuota(runtimeApi);
+          if (apiKeyQuotaResult) {
+            if (output.length > 0) {
+              output.push('');
             }
-
-            // Remove trailing empty line
-            if (codexLines[codexLines.length - 1] === '') {
-              codexLines.pop();
-            }
-
-            if (codexLines.length > 0) {
-              if (output.length > 0) {
-                output.push('');
-              }
-              output.push('## Codex Quota Information\n');
-              output.push(...codexLines);
-            }
+            output.push(`## ${apiKeyQuotaResult.provider} Quota Information\n`);
+            output.push(...apiKeyQuotaResult.lines);
           }
 
           if (output.length === 0) {
             context.ui.addItem(
               {
                 type: MessageType.INFO,
-                text: 'No quota information available from the usage endpoints.',
+                text: 'No quota information available. Supported providers: Anthropic (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
               },
               Date.now(),
             );

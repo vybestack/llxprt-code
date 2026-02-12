@@ -315,6 +315,7 @@ describe('gemini.tsx main function', () => {
       listSessions: undefined,
       deleteSession: undefined,
       continue: undefined,
+      nobrowser: undefined,
     });
 
     const originalIsTTY = process.stdin.isTTY;

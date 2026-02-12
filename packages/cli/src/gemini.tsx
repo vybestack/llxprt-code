@@ -1101,10 +1101,6 @@ export async function main() {
     settings,
   );
 
-  const hasDeprecatedPromptArg = process.argv.some((arg) =>
-    arg.startsWith('--prompt'),
-  );
-
   initializeOutputListenersAndFlush();
 
   try {
@@ -1113,7 +1109,6 @@ export async function main() {
       settings,
       input,
       prompt_id,
-      hasDeprecatedPromptArg,
     });
   } catch (error) {
     if (nonInteractiveConfig.getOutputFormat() === OutputFormat.JSON) {

@@ -10,6 +10,7 @@ import type { Config } from '../config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { ContextState, SubagentTerminateMode } from '../core/subagent.js';
 import { ToolErrorType } from './tool-error.js';
+import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -778,5 +779,385 @@ describe('TaskTool', () => {
     // Only the actual message should be output, empty/whitespace-only are filtered
     expect(updateOutput).toHaveBeenCalledWith('[agent-42] actual message\n');
     expect(updateOutput).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * @plan PLAN-20260130-ASYNCTASK.P10
+   */
+  describe('async mode', () => {
+    it('returns error when async=true but AsyncTaskManager not available', async () => {
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => ({}) as SubagentOrchestrator,
+        // No getAsyncTaskManager provided
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Do something',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
+      expect(result.llmContent).toContain('AsyncTaskManager');
+    });
+
+    it('returns error when async=true and at task limit', async () => {
+      const mockAsyncTaskManager = {
+        canLaunchAsync: () => ({
+          allowed: false,
+          reason: 'Max async tasks (5) reached',
+        }),
+        tryReserveAsyncSlot: () => null,
+      };
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () => ({}) as SubagentOrchestrator,
+        getAsyncTaskManager: () =>
+          mockAsyncTaskManager as unknown as AsyncTaskManager,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Do something',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
+      expect(result.llmContent).toContain('Max async tasks');
+    });
+
+    it('registers task with AsyncTaskManager when async=true', async () => {
+      const registerTaskMock = vi.fn();
+      const mockAsyncTaskManager = {
+        canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
+        registerTask: registerTaskMock,
+        completeTask: vi.fn(),
+        failTask: vi.fn(),
+      };
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-agent-123',
+        scope: {
+          runNonInteractive: vi.fn().mockResolvedValue(undefined),
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () =>
+          mockAsyncTaskManager as unknown as AsyncTaskManager,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Do async work',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      expect(registerTaskMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'async-agent-123',
+          subagentName: 'helper',
+          goalPrompt: 'Do async work',
+          abortController: expect.any(AbortController),
+        }),
+        'booking-1',
+      );
+
+      // Wait for background task to complete
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    it('passes undefined (not foreground signal) to orchestrator.launch for async tasks', async () => {
+      const mockAsyncTaskManager = {
+        canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
+        registerTask: vi.fn(),
+        completeTask: vi.fn(),
+        failTask: vi.fn(),
+      };
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-agent-sig',
+        scope: {
+          runNonInteractive: vi.fn().mockResolvedValue(undefined),
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () =>
+          mockAsyncTaskManager as unknown as AsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Async work',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // Async tasks must NOT pass the foreground signal to launch
+      // so the scope has no parent abort signal dependency
+      expect(launchMock).toHaveBeenCalledWith(expect.anything(), undefined);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    it('returns immediately with launch status when async=true (does not block)', async () => {
+      const mockAsyncTaskManager = {
+        canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
+        registerTask: vi.fn(),
+        completeTask: vi.fn(),
+        failTask: vi.fn(),
+      };
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-agent-456',
+        scope: {
+          runNonInteractive: vi.fn().mockImplementation(async () => {
+            // Simulate long-running task
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }),
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: { result: 'success' },
+          },
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () =>
+          mockAsyncTaskManager as unknown as AsyncTaskManager,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Long running task',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      const startTime = Date.now();
+      const result = await invocation.execute(new AbortController().signal);
+      const endTime = Date.now();
+
+      // Should return immediately (< 50ms), not wait for subagent completion (100ms)
+      expect(endTime - startTime).toBeLessThan(50);
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.async).toBe(true);
+      expect(result.metadata?.status).toBe('running');
+      expect(result.metadata?.agentId).toBe('async-agent-456');
+      expect(result.llmContent).toContain('Async task launched');
+      expect(result.llmContent).toContain('check_async_tasks');
+
+      // Wait for background task to complete to avoid test pollution
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
+
+    it('calls completeTask on AsyncTaskManager when background execution succeeds', async () => {
+      let resolveExecution: (() => void) | undefined;
+      const executionPromise = new Promise<void>(
+        (resolve) => (resolveExecution = resolve),
+      );
+      const completeTaskMock = vi.fn(() => {
+        resolveExecution?.();
+      });
+      const failTaskMock = vi.fn(); // Add failTask to prevent unhandled error
+      const mockAsyncTaskManager = {
+        canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
+        registerTask: vi.fn(),
+        completeTask: completeTaskMock,
+        failTask: failTaskMock,
+      };
+      const outputObject = {
+        terminate_reason: SubagentTerminateMode.GOAL,
+        emitted_vars: { result: 'done' },
+      };
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-agent-789',
+        scope: {
+          runNonInteractive: vi.fn().mockResolvedValue(undefined),
+          output: outputObject,
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () =>
+          mockAsyncTaskManager as unknown as AsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Quick task',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // Wait for background execution to complete
+      await executionPromise;
+
+      expect(completeTaskMock).toHaveBeenCalledWith(
+        'async-agent-789',
+        outputObject,
+      );
+    });
+
+    it('calls failTask on AsyncTaskManager when background execution fails', async () => {
+      let resolveExecution: (() => void) | undefined;
+      const executionPromise = new Promise<void>(
+        (resolve) => (resolveExecution = resolve),
+      );
+      const failTaskMock = vi.fn(() => {
+        resolveExecution?.();
+      });
+      const completeTaskMock = vi.fn(); // Add completeTask to prevent unhandled error
+      const mockAsyncTaskManager = {
+        canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
+        registerTask: vi.fn(),
+        failTask: failTaskMock,
+        completeTask: completeTaskMock,
+      };
+      const error = new Error('Subagent crashed');
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-agent-error',
+        scope: {
+          runNonInteractive: vi.fn().mockRejectedValue(error),
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const tool = new TaskTool(config, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () =>
+          mockAsyncTaskManager as unknown as AsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Failing task',
+        async: true,
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // Wait for background execution to fail
+      await executionPromise;
+
+      expect(failTaskMock).toHaveBeenCalledWith(
+        'async-agent-error',
+        'Subagent crashed',
+      );
+    });
+
+    it('calls failTask when timeout fires and scope returns normally', async () => {
+      vi.useFakeTimers();
+      let resolveExecution: (() => void) | undefined;
+      const executionPromise = new Promise<void>(
+        (resolve) => (resolveExecution = resolve),
+      );
+      const failTaskMock = vi.fn(() => {
+        resolveExecution?.();
+      });
+      const completeTaskMock = vi.fn();
+      // getTask returns a task still in 'running' status (timeout, not cancelTask)
+      const getTaskMock = vi.fn(() => ({ status: 'running' }));
+      const mockAsyncTaskManager = {
+        canLaunchAsync: () => ({ allowed: true }),
+        tryReserveAsyncSlot: () => 'booking-1',
+        registerTask: vi.fn(),
+        completeTask: completeTaskMock,
+        failTask: failTaskMock,
+        getTask: getTaskMock,
+      };
+
+      // runNonInteractive resolves normally AFTER the signal is aborted (timeout)
+      let resolveRun: (() => void) | undefined;
+      const launchMock = vi.fn().mockResolvedValue({
+        agentId: 'async-agent-timeout',
+        scope: {
+          output: {
+            terminate_reason: SubagentTerminateMode.GOAL,
+            emitted_vars: {},
+          },
+          runNonInteractive: vi.fn(
+            () =>
+              new Promise<void>((resolve) => {
+                resolveRun = resolve;
+              }),
+          ),
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
+      const configWithSettings = {
+        ...config,
+        getEphemeralSettings: () => ({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithSettings, {
+        orchestratorFactory: () =>
+          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        getAsyncTaskManager: () =>
+          mockAsyncTaskManager as unknown as AsyncTaskManager,
+        isInteractiveEnvironment: () => false,
+      });
+      const params: TaskToolParams = {
+        subagent_name: 'helper',
+        goal_prompt: 'Slow task',
+        async: true,
+        timeout_seconds: 0.05, // 50ms
+      };
+
+      const invocation = tool.build(params);
+      await invocation.execute(new AbortController().signal);
+
+      // Advance past the timeout so the abort fires
+      await vi.advanceTimersByTimeAsync(60);
+
+      // Now let the scope return normally (simulating scope completing after timeout)
+      resolveRun?.();
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Wait for the background execution to finish
+      await executionPromise;
+
+      // failTask should have been called because the task was still 'running'
+      // when the timeout-caused abort was detected
+      expect(failTaskMock).toHaveBeenCalledWith(
+        'async-agent-timeout',
+        'Async task timed out',
+      );
+      expect(completeTaskMock).not.toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
   });
 });

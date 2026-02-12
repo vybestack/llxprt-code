@@ -33,6 +33,11 @@ export interface StaticModelEntry {
   name: string;
 }
 
+export interface ModelDefaultRule {
+  pattern: string;
+  ephemeralSettings: Record<string, unknown>;
+}
+
 export interface ProviderAliasConfig {
   name?: string;
   baseProvider: string;
@@ -53,6 +58,12 @@ export interface ProviderAliasConfig {
    * to restrict the available models to a specific set.
    */
   staticModels?: StaticModelEntry[];
+  /**
+   * Per-model ephemeral setting overrides. Rules are matched against the model
+   * name using RegExp.test() and applied in order — later rules override earlier
+   * ones for the same key. Invalid patterns are stripped at parse time.
+   */
+  modelDefaults?: ModelDefaultRule[];
 }
 
 export interface ProviderAliasEntry {
@@ -110,6 +121,65 @@ function readAliasFile(
         `[ProviderAliases] Alias '${alias}' is missing required baseProvider`,
       );
       return null;
+    }
+
+    // Validate modelDefaults if present
+    if ('modelDefaults' in parsed) {
+      if (!Array.isArray(parsed.modelDefaults)) {
+        console.warn(
+          `[ProviderAliases] Ignoring non-array modelDefaults in ${filePath}`,
+        );
+        parsed.modelDefaults = undefined;
+      } else {
+        parsed.modelDefaults = parsed.modelDefaults.filter(
+          (entry: unknown): entry is ModelDefaultRule => {
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+              console.warn(
+                `[ProviderAliases] Skipping non-object modelDefaults entry in ${filePath}`,
+              );
+              return false;
+            }
+
+            const rule = entry as Record<string, unknown>;
+
+            if (typeof rule.pattern !== 'string') {
+              console.warn(
+                `[ProviderAliases] Skipping modelDefaults entry with non-string pattern in ${filePath}`,
+              );
+              return false;
+            }
+
+            if (rule.pattern === '') {
+              console.warn(
+                `[ProviderAliases] Skipping modelDefaults entry with empty pattern in ${filePath}`,
+              );
+              return false;
+            }
+
+            if (
+              !rule.ephemeralSettings ||
+              typeof rule.ephemeralSettings !== 'object' ||
+              Array.isArray(rule.ephemeralSettings)
+            ) {
+              console.warn(
+                `[ProviderAliases] Skipping modelDefaults entry with invalid ephemeralSettings in ${filePath}`,
+              );
+              return false;
+            }
+
+            try {
+              new RegExp(rule.pattern);
+            } catch {
+              console.warn(
+                `[ProviderAliases] Skipping modelDefaults entry with invalid regex pattern "${rule.pattern}" in ${filePath}`,
+              );
+              return false;
+            }
+
+            return true;
+          },
+        );
+      }
     }
 
     return {

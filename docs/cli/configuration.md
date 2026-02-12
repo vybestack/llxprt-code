@@ -326,6 +326,10 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** Maximum number of directories to scan for memory files.
   - **Default:** `undefined`
 
+- **`ui.memoryDiscoveryMaxDepth`** (number):
+  - **Description:** Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.
+  - **Default:** `undefined`
+
 - **`ui.contextFileName`** (string | string[]):
   - **Description:** The name of the context file or files to load into memory. Accepts either a single string or an array of strings.
   - **Default:** `undefined`

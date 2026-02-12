@@ -90,6 +90,7 @@ export interface SubagentManagerDialogProps {
 export interface CreateWizardState {
   currentStep: CreateStep;
   name: string;
+  mode: 'auto' | 'manual';
   systemPrompt: string;
   selectedProfile: string;
   validationErrors: Record<string, string>;
@@ -125,23 +126,8 @@ export const MENU_ACTIONS: MenuAction[] = [
     description: 'Show all available subagents',
   },
   {
-    label: 'Show Subagent',
-    value: SubagentView.SHOW,
-    description: 'View detailed configuration',
-  },
-  {
-    label: 'Edit Subagent',
-    value: SubagentView.EDIT,
-    description: 'Modify subagent settings',
-  },
-  {
     label: 'Create Subagent',
     value: SubagentView.CREATE,
     description: 'Create new subagent',
-  },
-  {
-    label: 'Delete Subagent',
-    value: SubagentView.DELETE,
-    description: 'Remove an existing subagent',
   },
 ];

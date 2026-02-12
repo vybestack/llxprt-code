@@ -12,7 +12,6 @@ import {
   shutdownTelemetry,
   GeminiEventType,
   ServerGeminiStreamEvent,
-  OutputFormat,
   type IContent,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
@@ -81,8 +80,6 @@ describe('runNonInteractive', () => {
   let mockGeminiClient: {
     sendMessageStream: vi.Mock;
   };
-  let processStderrSpy: vi.SpyInstance;
-
   beforeEach(async () => {
     mockCoreExecuteToolCall = vi.mocked(executeToolCall);
     mockShutdownTelemetry = vi.mocked(shutdownTelemetry);
@@ -96,9 +93,7 @@ describe('runNonInteractive', () => {
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
-    processStderrSpy = vi
-      .spyOn(process.stderr, 'write')
-      .mockImplementation(() => true);
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     mockToolRegistry = {
       getTool: vi.fn(),
@@ -1040,59 +1035,6 @@ describe('runNonInteractive', () => {
     const thinkingText = thinkingOutputs[0][0];
     const thoughtCount = (thinkingText.match(/Analyzing/g) || []).length;
     expect(thoughtCount).toBe(1);
-  });
-
-  // Tests from main branch
-  it('should display a deprecation warning if hasDeprecatedPromptArg is true', async () => {
-    const events: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'Final Answer' },
-      {
-        type: GeminiEventType.Finished,
-        value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
-      },
-    ];
-    mockGeminiClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
-
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Test input',
-      prompt_id: 'prompt-id-deprecated',
-      hasDeprecatedPromptArg: true,
-    });
-
-    expect(processStderrSpy).toHaveBeenCalledWith(
-      'The --prompt (-p) flag has been deprecated and will be removed in a future version. Please use a positional argument for your prompt. See gemini --help for more information.\n',
-    );
-    expect(processStdoutSpy).toHaveBeenCalledWith('Final Answer');
-  });
-
-  it('should display a deprecation warning for JSON format', async () => {
-    const events: ServerGeminiStreamEvent[] = [
-      { type: GeminiEventType.Content, value: 'Final Answer' },
-      {
-        type: GeminiEventType.Finished,
-        value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
-      },
-    ];
-    mockGeminiClient.sendMessageStream.mockReturnValue(
-      createStreamFromEvents(events),
-    );
-    vi.mocked(mockConfig.getOutputFormat).mockReturnValue(OutputFormat.JSON);
-
-    await runNonInteractive({
-      config: mockConfig,
-      settings: mockSettings,
-      input: 'Test input',
-      prompt_id: 'prompt-id-deprecated-json',
-      hasDeprecatedPromptArg: true,
-    });
-
-    const deprecateText =
-      'The --prompt (-p) flag has been deprecated and will be removed in a future version. Please use a positional argument for your prompt. See gemini --help for more information.\n';
-    expect(processStderrSpy).toHaveBeenCalledWith(deprecateText);
   });
 
   it('should filter emojis from thinking blocks in auto mode', async () => {

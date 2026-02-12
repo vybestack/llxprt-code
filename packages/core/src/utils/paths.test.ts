@@ -5,7 +5,15 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { escapePath, unescapePath, isSubpath, shortenPath } from './paths.js';
+import os from 'os';
+import path from 'path';
+import {
+  escapePath,
+  unescapePath,
+  isSubpath,
+  shortenPath,
+  expandTildePath,
+} from './paths.js';
 
 describe('escapePath', () => {
   it.each([
@@ -470,5 +478,43 @@ describe('shortenPath', () => {
       expect(result).toBe('\\s...\\...\\file.txt');
       expect(result.length).toBeLessThanOrEqual(18);
     });
+  });
+});
+
+describe('expandTildePath', () => {
+  const homeDir = os.homedir();
+
+  it('should expand standalone tilde to home directory', () => {
+    expect(expandTildePath('~')).toBe(homeDir);
+  });
+
+  it('should expand tilde-slash prefix to home directory path', () => {
+    expect(expandTildePath('~/Documents')).toBe(
+      path.join(homeDir, 'Documents'),
+    );
+  });
+
+  it('should expand nested tilde-slash paths', () => {
+    expect(expandTildePath('~/a/b/c')).toBe(path.join(homeDir, 'a/b/c'));
+  });
+
+  it('should pass through absolute paths unchanged', () => {
+    expect(expandTildePath('/usr/local/bin')).toBe('/usr/local/bin');
+  });
+
+  it('should pass through relative paths unchanged', () => {
+    expect(expandTildePath('foo/bar')).toBe('foo/bar');
+  });
+
+  it('should pass through empty string unchanged', () => {
+    expect(expandTildePath('')).toBe('');
+  });
+
+  it('should NOT expand tilde in the middle of a path', () => {
+    expect(expandTildePath('/path/to/~file')).toBe('/path/to/~file');
+  });
+
+  it('should not expand tilde-prefixed non-path strings', () => {
+    expect(expandTildePath('~username')).toBe('~username');
   });
 });

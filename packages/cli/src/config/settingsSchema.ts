@@ -737,6 +737,16 @@ export const SETTINGS_SCHEMA = {
         description: 'Maximum number of directories to scan for memory files.',
         showInDialog: false,
       },
+      memoryDiscoveryMaxDepth: {
+        type: 'number',
+        label: 'Memory Discovery Max Depth',
+        category: 'UI',
+        requiresRestart: false,
+        default: undefined as number | undefined,
+        description:
+          'Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.',
+        showInDialog: true,
+      },
       contextFileName: {
         type: 'string',
         label: 'Context File Name',

@@ -52,6 +52,7 @@ import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-regis
 import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,
+  type ModelDefaultRule,
 } from '../providers/providerAliases.js';
 
 type ProfileApplicationResult = Awaited<
@@ -94,6 +95,28 @@ export {
  */
 
 const logger = new DebugLogger('llxprt:runtime:settings');
+
+/**
+ * Compute merged ephemeral settings from modelDefaults rules that match a model name.
+ * Rules are applied in order — later rules override earlier for the same key.
+ * Returns a flat Record of the merged settings.
+ */
+function computeModelDefaults(
+  modelName: string,
+  modelDefaultRules: ModelDefaultRule[],
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = {};
+  for (const rule of modelDefaultRules) {
+    const regex = new RegExp(rule.pattern, 'i');
+    if (regex.test(modelName)) {
+      for (const [key, value] of Object.entries(rule.ephemeralSettings)) {
+        merged[key] = value;
+      }
+    }
+  }
+  return merged;
+}
+
 const STATELESS_METADATA_KEYS = [
   'statelessHardening',
   'statelessProviderMode',
@@ -1516,6 +1539,7 @@ export async function switchActiveProvider(
   options: {
     autoOAuth?: boolean;
     preserveEphemerals?: string[];
+    skipModelDefaults?: boolean;
     addItem?: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
       baseTimestamp: number,
@@ -1523,6 +1547,7 @@ export async function switchActiveProvider(
   } = {},
 ): Promise<ProviderSwitchResult> {
   const autoOAuth = options.autoOAuth ?? false;
+  const skipModelDefaults = options.skipModelDefaults ?? false;
   // Merge default preserved ephemerals with any caller-specified ones
   const preserveEphemerals = [
     ...DEFAULT_PRESERVE_EPHEMERALS,
@@ -1576,6 +1601,13 @@ export async function switchActiveProvider(
     }
     config.setEphemeralSetting(key, undefined);
   }
+
+  // Snapshot of keys that survived the ephemeral clear.
+  // These are exactly the preserveEphemerals-listed keys that had values.
+  // Model defaults must NOT override these — they represent user/profile intent.
+  const preAliasEphemeralKeys = new Set(
+    Object.keys(config.getEphemeralSettings()),
+  );
 
   await providerManager.setActiveProvider(name);
 
@@ -1929,6 +1961,21 @@ export async function switchActiveProvider(
     }
   }
 
+  // Apply model-aware ephemeral defaults from alias config modelDefaults.
+  // Skipped when the caller is a profile application (skipModelDefaults).
+  // Model defaults override alias-level ephemeralSettings but NOT preserved keys.
+  if (!skipModelDefaults && modelToApply && aliasConfig?.modelDefaults) {
+    const modelDefaults = computeModelDefaults(
+      modelToApply,
+      aliasConfig.modelDefaults,
+    );
+    for (const [key, value] of Object.entries(modelDefaults)) {
+      if (!preAliasEphemeralKeys.has(key)) {
+        config.setEphemeralSetting(key, value);
+      }
+    }
+  }
+
   if (hadCustomBaseUrl) {
     const baseUrlChanged =
       !finalBaseUrl || finalBaseUrl === providerBaseUrl || !explicitBaseUrl;
@@ -2170,6 +2217,52 @@ export async function setActiveModel(
 
   config.setModel(modelName);
 
+  // Load alias config for the current provider to apply model defaults
+  let aliasConfig: ProviderAliasConfig | undefined;
+  try {
+    aliasConfig = loadProviderAliasEntries().find(
+      (entry) => entry.alias === activeProvider.name,
+    )?.config;
+  } catch {
+    aliasConfig = undefined;
+  }
+
+  // Stateless recomputation of model defaults.
+  // Compare old model's defaults against new model's defaults to determine
+  // which keys to clear (no longer applicable) and which to apply (newly applicable),
+  // while protecting user-set values (current value differs from old default).
+  if (aliasConfig?.modelDefaults) {
+    const oldDefaults = previousModel
+      ? computeModelDefaults(previousModel, aliasConfig.modelDefaults)
+      : {};
+
+    const newDefaults = computeModelDefaults(
+      modelName,
+      aliasConfig.modelDefaults,
+    );
+
+    // Clear keys in old defaults but NOT in new defaults,
+    // only if current value matches the old default (model-defaulted, not user-set).
+    for (const [key, oldValue] of Object.entries(oldDefaults)) {
+      if (!(key in newDefaults)) {
+        const currentValue = config.getEphemeralSetting(key);
+        if (currentValue === oldValue) {
+          config.setEphemeralSetting(key, undefined);
+        }
+      }
+    }
+
+    // Apply new defaults: only if key is undefined or current value matches old default.
+    for (const [key, newValue] of Object.entries(newDefaults)) {
+      const currentValue = config.getEphemeralSetting(key);
+      if (currentValue === undefined) {
+        config.setEphemeralSetting(key, newValue);
+      } else if (key in oldDefaults && currentValue === oldDefaults[key]) {
+        config.setEphemeralSetting(key, newValue);
+      }
+    }
+  }
+
   return {
     providerName: activeProvider.name,
     previousModel,
@@ -2199,6 +2292,7 @@ export async function applyCliArgumentOverrides(
     keyfile?: string;
     set?: string[];
     baseurl?: string;
+    nobrowser?: boolean;
   },
   bootstrapArgs?: {
     keyOverride?: string | null;
@@ -2247,5 +2341,10 @@ export async function applyCliArgumentOverrides(
   const baseurlToUse = bootstrapArgs?.baseurlOverride ?? argv.baseurl;
   if (baseurlToUse) {
     await updateActiveProviderBaseUrl(baseurlToUse);
+  }
+
+  // 5. Apply --nobrowser (sets auth.noBrowser ephemeral setting)
+  if (argv.nobrowser) {
+    config.setEphemeralSetting('auth.noBrowser', true);
   }
 }

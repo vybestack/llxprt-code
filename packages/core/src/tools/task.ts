@@ -19,6 +19,7 @@ import {
   ContextState,
   SubagentTerminateMode,
   type OutputObject,
+  type SubAgentScope,
 } from '../core/subagent.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '../config/subagentManager.js';
@@ -27,6 +28,7 @@ import { ToolErrorType } from './tool-error.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import type { ToolRegistry } from './tool-registry.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
@@ -51,6 +53,7 @@ export interface TaskToolParams {
   context_vars?: Record<string, unknown>;
   contextVars?: Record<string, unknown>;
   timeout_seconds?: number;
+  async?: boolean;
 }
 
 interface TaskToolInvocationParams {
@@ -60,6 +63,7 @@ interface TaskToolInvocationParams {
   toolWhitelist?: string[];
   outputSpec?: Record<string, string>;
   context: Record<string, unknown>;
+  async: boolean;
 }
 
 export interface TaskToolDependencies {
@@ -68,6 +72,7 @@ export interface TaskToolDependencies {
   subagentManager?: SubagentManager;
   schedulerFactoryProvider?: () => SubagentSchedulerFactory | undefined;
   isInteractiveEnvironment?: () => boolean;
+  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
 }
 
 interface TaskToolInvocationDeps {
@@ -75,6 +80,7 @@ interface TaskToolInvocationDeps {
   getToolRegistry?: () => ToolRegistry | undefined;
   getSchedulerFactory?: () => SubagentSchedulerFactory | undefined;
   isInteractiveEnvironment?: () => boolean;
+  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
 }
 
 /**
@@ -205,6 +211,10 @@ class TaskToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
+    if (this.normalized.async) {
+      return this.executeAsync(signal, updateOutput);
+    }
+
     const {
       timeoutMs,
       timeoutSeconds,
@@ -631,6 +641,258 @@ class TaskToolInvocation extends BaseToolInvocation<
       },
     };
   }
+
+  /**
+   * @plan PLAN-20260130-ASYNCTASK.P11
+   *
+   * Note: Async tasks are designed to run independently in the background.
+   * Unlike foreground task execution, they do NOT wire cancellation or timeout
+   * to the parent agent's signal. This is an intentional design choice to allow
+   * async tasks to continue running even if the foreground agent is interrupted.
+   */
+  private async executeAsync(
+    signal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
+    // Get AsyncTaskManager
+    const asyncTaskManager = this.deps.getAsyncTaskManager?.();
+    if (asyncTaskManager === undefined) {
+      return {
+        llmContent: 'Async mode requires AsyncTaskManager to be configured.',
+        returnDisplay: 'Error: Async mode not available.',
+        error: {
+          message: 'AsyncTaskManager not configured',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
+    // Step 1: Create orchestrator (same as sync)
+    let orchestrator: SubagentOrchestrator;
+    try {
+      orchestrator = this.deps.createOrchestrator();
+    } catch (error) {
+      return this.createErrorResult(
+        error,
+        'Failed to create orchestrator for async task.',
+      );
+    }
+
+    // Step 2: Atomically reserve an async slot before launching
+    const bookingId = asyncTaskManager.tryReserveAsyncSlot();
+    if (!bookingId) {
+      const canLaunch = asyncTaskManager.canLaunchAsync();
+      return {
+        llmContent: canLaunch.reason ?? 'Cannot launch async task.',
+        returnDisplay: canLaunch.reason ?? 'Async task limit reached.',
+        error: {
+          message: canLaunch.reason ?? 'Limit reached',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
+    // Step 3: Set up async task infrastructure
+    let launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>;
+    let agentId: string | undefined;
+    let scope: SubAgentScope;
+    let contextState: ContextState;
+    let dispose: (() => Promise<void>) | undefined;
+    const asyncAbortController = new AbortController();
+    let timeoutId: NodeJS.Timeout | null = null;
+    let taskRegistered = false;
+
+    try {
+      // Create launch request (no timeout for launch itself)
+      const launchRequest = this.createLaunchRequest(undefined);
+
+      // Launch subagent — pass undefined instead of the foreground signal so
+      // the scope is NOT wired to the foreground lifecycle (Ctrl+C, turn end).
+      // Async tasks manage their own lifecycle via asyncAbortController.
+      launchResult = await orchestrator.launch(launchRequest, undefined);
+      agentId = launchResult.agentId;
+      scope = launchResult.scope;
+      dispose = launchResult.dispose;
+      contextState = this.buildContextState();
+
+      // Set up timeout for async task (but don't wire to parent signal)
+      const settings = this.config.getEphemeralSettings?.() ?? {};
+      const defaultTimeoutSeconds =
+        (settings['task-default-timeout-seconds'] as number | undefined) ??
+        DEFAULT_TASK_TIMEOUT_SECONDS;
+      const maxTimeoutSeconds =
+        (settings['task-max-timeout-seconds'] as number | undefined) ??
+        MAX_TASK_TIMEOUT_SECONDS;
+
+      const timeoutSeconds = this.resolveTimeoutSeconds(
+        this.params.timeout_seconds,
+        defaultTimeoutSeconds,
+        maxTimeoutSeconds,
+      );
+      const timeoutMs =
+        timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
+      timeoutId =
+        timeoutMs === undefined
+          ? null
+          : setTimeout(() => asyncAbortController.abort(), timeoutMs);
+
+      // Register with AsyncTaskManager consuming the booking ID
+      asyncTaskManager.registerTask(
+        {
+          id: agentId,
+          subagentName: this.normalized.subagentName,
+          goalPrompt: this.normalized.goalPrompt,
+          abortController: asyncAbortController,
+        },
+        bookingId,
+      );
+
+      taskRegistered = true;
+    } catch (error) {
+      // If any setup step fails, make sure to clean up the reservation
+      if (!taskRegistered && bookingId) {
+        asyncTaskManager.cancelReservation(bookingId);
+      }
+
+      // Clean up any created resources
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+
+      if (dispose) {
+        dispose();
+      }
+
+      return this.createErrorResult(
+        error,
+        `Failed to launch async subagent '${this.normalized.subagentName}'.`,
+      );
+    }
+
+    // Set up message streaming (same as sync)
+    if (updateOutput) {
+      const existingHandler = scope.onMessage;
+      const normalizeForStreaming = (text: string): string => {
+        if (!text) {
+          return '';
+        }
+        const lf = text.replace(/\r\n?/g, '\n');
+        return lf.endsWith('\n') ? lf : lf + '\n';
+      };
+      scope.onMessage = (message: string) => {
+        const cleaned = normalizeForStreaming(message);
+        if (cleaned.trim().length > 0) {
+          updateOutput(`[${agentId}] ${cleaned}`);
+        }
+        existingHandler?.(message);
+      };
+    }
+
+    // DO NOT await this - execute in background
+    this.executeInBackground(
+      scope,
+      contextState,
+      agentId,
+      asyncTaskManager,
+      dispose,
+      asyncAbortController.signal,
+      timeoutId,
+    );
+
+    // Return immediately with launch status
+    return {
+      llmContent:
+        `Async task launched: subagent '${this.normalized.subagentName}' (ID: ${agentId}). ` +
+        `Task is running in background. Use 'check_async_tasks' to monitor progress.`,
+      returnDisplay: `Async task started: **${this.normalized.subagentName}** (\`${agentId}\`)`,
+
+      metadata: {
+        agentId,
+        async: true,
+        status: 'running',
+      },
+    };
+  }
+
+  /**
+   * @plan PLAN-20260130-ASYNCTASK.P11
+   *
+   * Execute async task in background using the SAME execution path as sync tasks.
+   * The only difference is the foreground agent doesn't wait for completion.
+   * - Interactive environment → runInteractive() with shared scheduler (tool calls show in UI)
+   * - Non-interactive environment → runNonInteractive()
+   */
+  private executeInBackground(
+    scope: SubAgentScope,
+    contextState: ContextState,
+    agentId: string,
+    asyncTaskManager: AsyncTaskManager,
+    dispose: () => Promise<void>,
+    signal: AbortSignal,
+    timeoutId: ReturnType<typeof setTimeout> | null,
+  ): void {
+    // Use IIFE to avoid returning promise
+    (async () => {
+      try {
+        // Use the SAME execution path as sync tasks:
+        // - Interactive environment → runInteractive() (tool calls go through shared scheduler/UI)
+        // - Non-interactive environment → runNonInteractive()
+        const environmentInteractive =
+          this.deps.isInteractiveEnvironment?.() ?? true;
+
+        if (
+          environmentInteractive &&
+          typeof scope.runInteractive === 'function'
+        ) {
+          const schedulerFactory = this.deps.getSchedulerFactory?.();
+          const interactiveOptions = schedulerFactory
+            ? { schedulerFactory }
+            : undefined;
+          await scope.runInteractive(contextState, interactiveOptions);
+        } else {
+          await scope.runNonInteractive(contextState);
+        }
+
+        // Check if aborted (by cancelTask or timeout)
+        if (signal.aborted) {
+          // If cancelTask was called, status is already 'cancelled'.
+          // If timeout fired, status is still 'running' — record as failed
+          // so the task doesn't permanently occupy a concurrency slot.
+          const task = asyncTaskManager.getTask(agentId);
+          if (task?.status === 'running') {
+            asyncTaskManager.failTask(agentId, 'Async task timed out');
+          }
+          return;
+        }
+
+        // Get output
+        const output = scope.output ?? {
+          terminate_reason: SubagentTerminateMode.ERROR,
+          emitted_vars: {},
+        };
+
+        // Update AsyncTaskManager
+        asyncTaskManager.completeTask(agentId, output);
+      } catch (error) {
+        // Update AsyncTaskManager with failure
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        asyncTaskManager.failTask(agentId, errorMessage);
+      } finally {
+        // Clear timeout
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+        }
+
+        // Always dispose
+        try {
+          await dispose();
+        } catch {
+          // Swallow dispose errors
+        }
+      }
+    })();
+  }
 }
 
 /**
@@ -689,6 +951,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
             description:
               'Optional timeout in seconds for the task execution (-1 for unlimited).',
           },
+          async: {
+            type: 'boolean',
+            description:
+              'If true, launch subagent in background and return immediately. Default: false.',
+          },
           context: {
             type: 'object',
             description:
@@ -732,6 +999,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       isInteractiveEnvironment:
         this.dependencies.isInteractiveEnvironment ??
         (() => this.config.isInteractive()),
+      getAsyncTaskManager: this.dependencies.getAsyncTaskManager,
     });
   }
 
@@ -771,6 +1039,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       toolWhitelist: toolWhitelist.length > 0 ? toolWhitelist : undefined,
       outputSpec,
       context,
+      async: params.async ?? false,
     };
   }
 

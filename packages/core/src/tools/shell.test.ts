@@ -168,13 +168,16 @@ describe('ShellTool', () => {
       );
     });
 
-    it('should throw an error for a non-existent directory', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+    it('should accept a multi-segment relative path within workspace', () => {
+      const workspaceContext = createMockWorkspaceContext('/test/dir');
+      vi.mocked(workspaceContext.isPathWithinWorkspace).mockReturnValue(true);
+      (mockConfig.getWorkspaceContext as Mock).mockReturnValue(
+        workspaceContext,
+      );
+
       expect(() =>
         shellTool.build({ command: 'ls', directory: 'rel/path' }),
-      ).toThrow(
-        "Directory 'rel/path' is not a registered workspace directory.",
-      );
+      ).not.toThrow();
     });
 
     it('should allow absolute directory within workspace', () => {
@@ -367,7 +370,7 @@ describe('ShellTool', () => {
       expect(() =>
         shellTool.build({ command: 'ls', directory: 'nonexistent' }),
       ).toThrow(
-        `Directory 'nonexistent' is not a registered workspace directory.`,
+        `Directory 'nonexistent' is not a registered workspace directory`,
       );
     });
 
@@ -815,18 +818,21 @@ describe('build', () => {
   });
 
   it('should throw an error for directory outside workspace', () => {
+    const workspaceContext = createMockWorkspaceContext('/root', [
+      '/users/test',
+    ]);
+    vi.mocked(workspaceContext.isPathWithinWorkspace).mockReturnValue(false);
     const config = {
       getCoreTools: () => undefined,
       getExcludeTools: () => undefined,
       getTargetDir: () => '/root',
-      getWorkspaceContext: () =>
-        createMockWorkspaceContext('/root', ['/users/test']),
+      getWorkspaceContext: () => workspaceContext,
     } as unknown as Config;
     const shellTool = new ShellTool(config);
     expect(() =>
       shellTool.build({
         command: 'ls',
-        directory: 'test2',
+        directory: 'outside',
       }),
     ).toThrow('is not a registered workspace directory');
   });

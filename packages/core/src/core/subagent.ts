@@ -1366,10 +1366,24 @@ export class SubAgentScope {
         const valVal = String(requestInfo.args['emit_variable_value']);
         this.output.emitted_vars[valName] = valVal;
 
+        const successMessage = `Emitted variable ${valName} successfully`;
         toolResponse = {
           callId,
-          responseParts: [{ text: `Emitted variable ${valName} successfully` }],
-          resultDisplay: `Emitted variable ${valName} successfully`,
+          // Only include functionResponse - history already has functionCall from model response
+          responseParts: [
+            {
+              functionResponse: {
+                id: callId,
+                name: requestInfo.name,
+                response: {
+                  emit_variable_name: valName,
+                  emit_variable_value: valVal,
+                  message: successMessage,
+                },
+              },
+            },
+          ],
+          resultDisplay: successMessage,
           error: undefined,
           errorType: undefined,
           agentId: requestInfo.agentId,
@@ -1418,7 +1432,14 @@ export class SubAgentScope {
       }
 
       if (toolResponse.responseParts) {
-        toolResponseParts.push(...toolResponse.responseParts);
+        // Only include functionResponse parts — the functionCall is already in
+        // history from the model's assistant message (Issue #244).
+        for (const part of toolResponse.responseParts) {
+          if ('functionCall' in part) {
+            continue;
+          }
+          toolResponseParts.push(part);
+        }
       }
     }
     // If all tool calls failed, inform the model so it can re-evaluate.
@@ -1601,14 +1622,8 @@ export class SubAgentScope {
       if (this.onMessage) {
         this.onMessage(`[${this.subagentId}] ${message}`);
       }
+      // Only return functionResponse - history already has functionCall from Turn
       return [
-        {
-          functionCall: {
-            id: request.callId,
-            name: request.name,
-            args: request.args,
-          },
-        },
         {
           functionResponse: {
             id: request.callId,
@@ -1628,14 +1643,8 @@ export class SubAgentScope {
     this.logger.warn(
       () => `Subagent ${this.subagentId} failed to emit value: ${errorMessage}`,
     );
+    // Only return functionResponse - history already has functionCall from Turn
     return [
-      {
-        functionCall: {
-          id: request.callId,
-          name: request.name,
-          args: request.args,
-        },
-      },
       {
         functionResponse: {
           id: request.callId,
@@ -1651,11 +1660,26 @@ export class SubAgentScope {
   ): Part[] {
     const aggregate: Part[] = [];
     for (const call of completedCalls) {
+      // History already has functionCall from model response recorded via Turn.
+      // Only include functionResponse parts here — including functionCall would
+      // create orphan tool_use blocks for Anthropic (Issue #244).
       if (call.response?.responseParts?.length) {
-        aggregate.push(...call.response.responseParts);
+        for (const part of call.response.responseParts) {
+          if ('functionCall' in part) {
+            continue;
+          }
+          aggregate.push(part);
+        }
       } else {
+        // Fallback: create a proper functionResponse instead of plain text
         aggregate.push({
-          text: `Tool ${call.request.name} completed without response.`,
+          functionResponse: {
+            id: call.request.callId,
+            name: call.request.name,
+            response: {
+              output: `Tool ${call.request.name} completed without response.`,
+            },
+          },
         });
       }
 

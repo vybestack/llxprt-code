@@ -19,6 +19,8 @@ import type {
 } from './AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import { tokenLimit } from '../core/tokenLimits.js';
+/** @plan PLAN-20260211-COMPRESSION.P12 */
+import { getSettingSpec } from '../settings/settingsRegistry.js';
 
 const EPHEMERAL_DEFAULTS = {
   compressionThreshold: 0.5,
@@ -27,7 +29,7 @@ const EPHEMERAL_DEFAULTS = {
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */
   reasoning: {
     enabled: true, // REQ-THINK-006.1
-    includeInContext: false, // REQ-THINK-006.2
+    includeInContext: true, // REQ-THINK-006.2
     includeInResponse: true, // REQ-THINK-006.3
     format: 'field' as const, // REQ-THINK-006.4
     stripFromContext: 'none' as const, // REQ-THINK-006.5
@@ -110,6 +112,22 @@ export function createAgentRuntimeContext(
       EPHEMERAL_DEFAULTS.topPreserveThreshold,
     toolFormatOverride: (): string | undefined =>
       options.settings.toolFormatOverride,
+    /** @plan PLAN-20260211-COMPRESSION.P12 */
+    compressionStrategy: (): string => {
+      const live = getLiveSetting<string>(
+        'compression.strategy',
+        options.settings.compressionStrategy,
+      );
+      return (
+        live ?? (getSettingSpec('compression.strategy')?.default as string)
+      );
+    },
+    /** @plan PLAN-20260211-COMPRESSION.P12 */
+    compressionProfile: (): string | undefined =>
+      getLiveSetting<string>(
+        'compression.profile',
+        options.settings.compressionProfile,
+      ),
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006
