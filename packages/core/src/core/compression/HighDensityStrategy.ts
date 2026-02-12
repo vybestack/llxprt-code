@@ -40,7 +40,12 @@ import type {
 // Constants (@pseudocode high-density-optimize.md lines 10-15)
 // ---------------------------------------------------------------------------
 
-export const READ_TOOLS = ['read_file', 'read_line_range', 'read_many_files', 'ast_read_file'] as const;
+export const READ_TOOLS = [
+  'read_file',
+  'read_line_range',
+  'read_many_files',
+  'ast_read_file',
+] as const;
 export const WRITE_TOOLS = [
   'write_file',
   'ast_edit',
@@ -96,7 +101,11 @@ function findAllInclusions(text: string): Array<{
   startOffset: number;
   endOffset: number;
 }> {
-  const results: Array<{ filePath: string; startOffset: number; endOffset: number }> = [];
+  const results: Array<{
+    filePath: string;
+    startOffset: number;
+    endOffset: number;
+  }> = [];
   const openPattern = /^--- (.+) ---$/gm;
   let match: RegExpExecArray | null;
 
@@ -104,7 +113,10 @@ function findAllInclusions(text: string): Array<{
     const filePath = match[1].trim();
     const startOffset = match.index;
 
-    const closeIndex = text.indexOf(FILE_INCLUSION_CLOSE, startOffset + match[0].length);
+    const closeIndex = text.indexOf(
+      FILE_INCLUSION_CLOSE,
+      startOffset + match[0].length,
+    );
     if (closeIndex === -1) {
       continue;
     }
@@ -143,17 +155,17 @@ function isEmptyTextBlock(block: ContentBlock): boolean {
 export class HighDensityStrategy implements CompressionStrategy {
   readonly name = 'high-density' as const;
   readonly requiresLLM = false;
-  readonly trigger: StrategyTrigger = { mode: 'continuous', defaultThreshold: 0.85 };
+  readonly trigger: StrategyTrigger = {
+    mode: 'continuous',
+    defaultThreshold: 0.85,
+  };
 
   /**
    * @plan PLAN-20260211-HIGHDENSITY.P11
    * @requirement REQ-HD-005.1, REQ-HD-006.1, REQ-HD-007.1, REQ-HD-013.7
    * @pseudocode high-density-optimize.md lines 20-53
    */
-  optimize(
-    history: readonly IContent[],
-    config: DensityConfig,
-  ): DensityResult {
+  optimize(history: readonly IContent[], config: DensityConfig): DensityResult {
     const removals = new Set<number>();
     const replacements = new Map<number, IContent>();
     let readWritePairsPruned = 0;
@@ -176,7 +188,11 @@ export class HighDensityStrategy implements CompressionStrategy {
 
     // Phase 2: Duplicate @ file inclusion dedup
     if (config.fileDedupe) {
-      const ddResult = this.deduplicateFileInclusions(history, config, removals);
+      const ddResult = this.deduplicateFileInclusions(
+        history,
+        config,
+        removals,
+      );
       for (const [idx, entry] of ddResult.replacements) {
         if (!removals.has(idx)) {
           replacements.set(idx, entry);
@@ -232,12 +248,16 @@ export class HighDensityStrategy implements CompressionStrategy {
     }
 
     // STEP 1: Calculate tail size from preserveThreshold (@pseudocode lines 21-27)
-    const preserveThreshold = context.runtimeContext.ephemerals.preserveThreshold();
+    const preserveThreshold =
+      context.runtimeContext.ephemerals.preserveThreshold();
     const tailSize = Math.max(1, Math.floor(originalCount * preserveThreshold));
     let tailStartIndex = originalCount - tailSize;
 
     // Adjust for tool_call boundary — expand tail backward to avoid splitting pairs
-    tailStartIndex = this.adjustTailBoundary([...history] as IContent[], tailStartIndex);
+    tailStartIndex = this.adjustTailBoundary(
+      [...history] as IContent[],
+      tailStartIndex,
+    );
 
     // If tail covers everything, return history unchanged (@pseudocode lines 29-34)
     if (tailStartIndex <= 0) {
@@ -248,7 +268,8 @@ export class HighDensityStrategy implements CompressionStrategy {
     }
 
     // STEP 2: Calculate target tokens (@pseudocode lines 36-39)
-    const compressionThreshold = context.runtimeContext.ephemerals.compressionThreshold();
+    const compressionThreshold =
+      context.runtimeContext.ephemerals.compressionThreshold();
     const contextLimit = context.runtimeContext.ephemerals.contextLimit();
     const targetTokens = Math.floor(compressionThreshold * contextLimit * 0.6);
 
@@ -317,18 +338,26 @@ export class HighDensityStrategy implements CompressionStrategy {
     }
     // If we landed on an AI entry with tool_calls, include it too
     if (index > 0 && history[index].speaker === 'ai') {
-      const hasToolCalls = history[index].blocks.some((b) => b.type === 'tool_call');
+      const hasToolCalls = history[index].blocks.some(
+        (b) => b.type === 'tool_call',
+      );
       if (hasToolCalls) {
         // Check if the tool responses for this AI entry are in the tail
         const toolCallIds = history[index].blocks
           .filter((b): b is ToolCallBlock => b.type === 'tool_call')
           .map((b) => b.id);
         const tailHasResponses = toolCallIds.some((id) =>
-          history.slice(index + 1).some(
-            (e) => e.speaker === 'tool' && e.blocks.some(
-              (b) => b.type === 'tool_response' && (b as ToolResponseBlock).callId === id,
+          history
+            .slice(index + 1)
+            .some(
+              (e) =>
+                e.speaker === 'tool' &&
+                e.blocks.some(
+                  (b) =>
+                    b.type === 'tool_response' &&
+                    (b as ToolResponseBlock).callId === id,
+                ),
             ),
-          ),
         );
         if (tailHasResponses) {
           // Include this AI tool_call entry in the tail
@@ -357,7 +386,10 @@ export class HighDensityStrategy implements CompressionStrategy {
       }
       return {
         ...block,
-        result: this.buildToolSummaryText(block as ToolResponseBlock, fullHistory),
+        result: this.buildToolSummaryText(
+          block as ToolResponseBlock,
+          fullHistory,
+        ),
       } as ToolResponseBlock;
     });
     return { ...entry, blocks: newBlocks } as IContent;
@@ -379,14 +411,15 @@ export class HighDensityStrategy implements CompressionStrategy {
 
     // Determine status: error if error field present or result contains error indicators
     const hasError = block.error !== undefined && block.error !== '';
-    const resultStr = typeof block.result === 'string'
-      ? block.result
-      : JSON.stringify(block.result ?? '');
-    const looksLikeError = !hasError && (
-      resultStr.toLowerCase().includes('error:') ||
-      resultStr.toLowerCase().includes('error occurred') ||
-      resultStr.toLowerCase().includes('command failed')
-    );
+    const resultStr =
+      typeof block.result === 'string'
+        ? block.result
+        : JSON.stringify(block.result ?? '');
+    const looksLikeError =
+      !hasError &&
+      (resultStr.toLowerCase().includes('error:') ||
+        resultStr.toLowerCase().includes('error occurred') ||
+        resultStr.toLowerCase().includes('command failed'));
     const outcome = hasError || looksLikeError ? 'error' : 'success';
 
     // Extract key param — look for matching tool_call by callId
@@ -394,7 +427,10 @@ export class HighDensityStrategy implements CompressionStrategy {
     for (const entry of fullHistory) {
       if (entry.speaker !== 'ai') continue;
       for (const b of entry.blocks) {
-        if (b.type === 'tool_call' && (b as ToolCallBlock).id === block.callId) {
+        if (
+          b.type === 'tool_call' &&
+          (b as ToolCallBlock).id === block.callId
+        ) {
           const params = (b as ToolCallBlock).parameters;
           keyParam = extractFilePath(params);
           break;
@@ -423,7 +459,7 @@ export class HighDensityStrategy implements CompressionStrategy {
     targetTokens: number,
     context: CompressionContext,
   ): Promise<IContent[]> {
-    let result = [...history];
+    const result = [...history];
     let currentHeadEnd = headEnd;
     let estimatedTokens = await context.estimateTokens(result);
 
@@ -466,7 +502,11 @@ export class HighDensityStrategy implements CompressionStrategy {
   private pruneReadWritePairs(
     history: readonly IContent[],
     config: DensityConfig,
-  ): { removals: Set<number>; replacements: Map<number, IContent>; prunedCount: number } {
+  ): {
+    removals: Set<number>;
+    replacements: Map<number, IContent>;
+    prunedCount: number;
+  } {
     const removals = new Set<number>();
     const replacements = new Map<number, IContent>();
     let prunedCount = 0;
@@ -501,7 +541,10 @@ export class HighDensityStrategy implements CompressionStrategy {
     }
 
     // STEP 2: Build tool call → history index mapping
-    const callMap = new Map<string, { aiIndex: number; toolCallBlock: ToolCallBlock }>();
+    const callMap = new Map<
+      string,
+      { aiIndex: number; toolCallBlock: ToolCallBlock }
+    >();
 
     for (let index = 0; index < history.length; index++) {
       const entry = history[index];
@@ -576,11 +619,16 @@ export class HighDensityStrategy implements CompressionStrategy {
         const nonToolCallBlocks = history[aiIndex].blocks.filter(
           (b) => b.type !== 'tool_call',
         );
-        if (nonToolCallBlocks.length === 0 || nonToolCallBlocks.every((b) => isEmptyTextBlock(b))) {
+        if (
+          nonToolCallBlocks.length === 0 ||
+          nonToolCallBlocks.every((b) => isEmptyTextBlock(b))
+        ) {
           removals.add(aiIndex);
         } else {
           const filteredBlocks = history[aiIndex].blocks.filter(
-            (b) => b.type !== 'tool_call' || !staleCalls.has((b as ToolCallBlock).id),
+            (b) =>
+              b.type !== 'tool_call' ||
+              !staleCalls.has((b as ToolCallBlock).id),
           );
           replacements.set(aiIndex, {
             ...history[aiIndex],
@@ -589,7 +637,8 @@ export class HighDensityStrategy implements CompressionStrategy {
         }
       } else {
         const filteredBlocks = history[aiIndex].blocks.filter(
-          (b) => b.type !== 'tool_call' || !staleCalls.has((b as ToolCallBlock).id),
+          (b) =>
+            b.type !== 'tool_call' || !staleCalls.has((b as ToolCallBlock).id),
         );
         replacements.set(aiIndex, {
           ...history[aiIndex],
@@ -611,7 +660,9 @@ export class HighDensityStrategy implements CompressionStrategy {
       const responseBlocks = entry.blocks.filter(
         (b): b is ToolResponseBlock => b.type === 'tool_response',
       );
-      const staleResponses = responseBlocks.filter((b) => staleCallIds.has(b.callId));
+      const staleResponses = responseBlocks.filter((b) =>
+        staleCallIds.has(b.callId),
+      );
 
       if (staleResponses.length === 0) {
         continue;
@@ -625,7 +676,9 @@ export class HighDensityStrategy implements CompressionStrategy {
         prunedCount = prunedCount + staleResponses.length;
       } else {
         const filteredBlocks = entry.blocks.filter(
-          (b) => b.type !== 'tool_response' || !staleCallIds.has((b as ToolResponseBlock).callId),
+          (b) =>
+            b.type !== 'tool_response' ||
+            !staleCallIds.has((b as ToolResponseBlock).callId),
         );
         if (filteredBlocks.length === 0) {
           removals.add(index);
@@ -738,7 +791,10 @@ export class HighDensityStrategy implements CompressionStrategy {
         const matches = findAllInclusions(text);
 
         for (const match of matches) {
-          const resolvedFilePath = resolvePath(match.filePath, config.workspaceRoot);
+          const resolvedFilePath = resolvePath(
+            match.filePath,
+            config.workspaceRoot,
+          );
           if (!inclusions.has(resolvedFilePath)) {
             inclusions.set(resolvedFilePath, []);
           }
@@ -758,15 +814,17 @@ export class HighDensityStrategy implements CompressionStrategy {
         continue;
       }
 
-      entries.sort((a, b) =>
-        b.messageIndex - a.messageIndex || b.startOffset - a.startOffset,
+      entries.sort(
+        (a, b) =>
+          b.messageIndex - a.messageIndex || b.startOffset - a.startOffset,
       );
 
       // entries[0] is the latest — preserve. Strip entries[1..n]
       for (let i = 1; i < entries.length; i++) {
         const stale = entries[i];
 
-        const originalEntry = replacements.get(stale.messageIndex) ?? history[stale.messageIndex];
+        const originalEntry =
+          replacements.get(stale.messageIndex) ?? history[stale.messageIndex];
         const originalBlock = originalEntry.blocks[stale.blockIndex];
         if (originalBlock.type !== 'text') {
           continue;
@@ -820,7 +878,11 @@ export class HighDensityStrategy implements CompressionStrategy {
         continue;
       }
 
-      for (let blockIndex = entry.blocks.length - 1; blockIndex >= 0; blockIndex--) {
+      for (
+        let blockIndex = entry.blocks.length - 1;
+        blockIndex >= 0;
+        blockIndex--
+      ) {
         const block = entry.blocks[blockIndex];
         if (block.type !== 'tool_response') {
           continue;

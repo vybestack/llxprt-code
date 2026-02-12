@@ -24,10 +24,7 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '../../../services/history/IContent.js';
-import type {
-  CompressionContext,
-  CompressionResult,
-} from '../types.js';
+import type { CompressionContext } from '../types.js';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
 
 // ---------------------------------------------------------------------------
@@ -108,16 +105,19 @@ function makeToolResponse(
  * Simple word-count token estimator for tests.
  * Counts words across all text-like content in an IContent array.
  */
-function wordCountEstimateTokens(contents: readonly IContent[]): Promise<number> {
+function wordCountEstimateTokens(
+  contents: readonly IContent[],
+): Promise<number> {
   let total = 0;
   for (const entry of contents) {
     for (const block of entry.blocks) {
       if (block.type === 'text') {
         total += block.text.split(/\s+/).filter(Boolean).length;
       } else if (block.type === 'tool_response') {
-        const resultStr = typeof block.result === 'string'
-          ? block.result
-          : JSON.stringify(block.result);
+        const resultStr =
+          typeof block.result === 'string'
+            ? block.result
+            : JSON.stringify(block.result);
         total += resultStr.split(/\s+/).filter(Boolean).length;
       } else if (block.type === 'tool_call') {
         const paramStr = JSON.stringify(block.parameters);
@@ -133,14 +133,16 @@ function wordCountEstimateTokens(contents: readonly IContent[]): Promise<number>
 // CompressionContext builder
 // ---------------------------------------------------------------------------
 
-function buildCompressContext(overrides?: Partial<{
-  history: IContent[];
-  preserveThreshold: number;
-  compressionThreshold: number;
-  contextLimit: number;
-  estimateTokens: (contents: readonly IContent[]) => Promise<number>;
-  currentTokenCount: number;
-}>): CompressionContext {
+function buildCompressContext(
+  overrides?: Partial<{
+    history: IContent[];
+    preserveThreshold: number;
+    compressionThreshold: number;
+    contextLimit: number;
+    estimateTokens: (contents: readonly IContent[]) => Promise<number>;
+    currentTokenCount: number;
+  }>,
+): CompressionContext {
   const history = overrides?.history ?? [];
   const preserveThreshold = overrides?.preserveThreshold ?? 0.3;
   const compressionThreshold = overrides?.compressionThreshold ?? 0.85;
@@ -225,9 +227,7 @@ function buildMixedHistory(entryCount: number): IContent[] {
         { length: 50 },
         (_, j) => `line ${j + 1}: content of file${i}.ts`,
       ).join('\n');
-      history.push(
-        makeToolResponse(callId, 'read_file', lines),
-      );
+      history.push(makeToolResponse(callId, 'read_file', lines));
       i++; // consumed an extra slot
     } else if (phase === 2) {
       history.push(makeAiText(`Here is my analysis of the code at step ${i}.`));
@@ -237,7 +237,11 @@ function buildMixedHistory(entryCount: number): IContent[] {
       });
       history.push(entry);
       history.push(
-        makeToolResponse(callId, 'run_shell_command', `test output ${i}\nmore output`),
+        makeToolResponse(
+          callId,
+          'run_shell_command',
+          `test output ${i}\nmore output`,
+        ),
       );
       i++; // consumed an extra slot
     }
@@ -374,7 +378,9 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
               (e) =>
                 e.speaker === 'tool' &&
                 e.blocks.some(
-                  (b) => b.type === 'tool_response' && (b as ToolResponseBlock).callId === tc.id,
+                  (b) =>
+                    b.type === 'tool_response' &&
+                    (b as ToolResponseBlock).callId === tc.id,
                 ),
             );
             expect(hasMatchingResponse).toBe(true);
@@ -440,9 +446,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       const result = await strategy.compress(ctx);
 
       // Find the tool response entry in the non-tail portion
-      const toolEntries = result.newHistory.filter(
-        (e) => e.speaker === 'tool',
-      );
+      const toolEntries = result.newHistory.filter((e) => e.speaker === 'tool');
       for (const te of toolEntries) {
         for (const block of te.blocks) {
           if (block.type === 'tool_response') {
@@ -468,12 +472,21 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       const { entry: readAi, callId: readId } = makeAiToolCall('read_file', {
         file_path: '/workspace/src/file.ts',
       });
-      const readResp = makeToolResponse(readId, 'read_file', 'file content here...');
+      const readResp = makeToolResponse(
+        readId,
+        'read_file',
+        'file content here...',
+      );
 
       const { entry: grepAi, callId: grepId } = makeAiToolCall('grep', {
         pattern: 'TODO',
       });
-      const grepResp = makeToolResponse(grepId, 'grep', 'error occurred', 'grep failed');
+      const grepResp = makeToolResponse(
+        grepId,
+        'grep',
+        'error occurred',
+        'grep failed',
+      );
 
       // tail covers only the last entry
       const tail = makeHumanMessage('done');
@@ -487,9 +500,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       const result = await strategy.compress(ctx);
 
       // Check that summaries reference tool names
-      const toolEntries = result.newHistory.filter(
-        (e) => e.speaker === 'tool',
-      );
+      const toolEntries = result.newHistory.filter((e) => e.speaker === 'tool');
       const summaries: string[] = [];
       for (const te of toolEntries) {
         for (const block of te.blocks) {
@@ -500,12 +511,10 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       }
 
       // At least one summary should contain the tool name
-      const hasSummaryWithReadFile = summaries.some(
-        (s) => s.includes('read_file'),
+      const hasSummaryWithReadFile = summaries.some((s) =>
+        s.includes('read_file'),
       );
-      const hasSummaryWithGrep = summaries.some(
-        (s) => s.includes('grep'),
-      );
+      const hasSummaryWithGrep = summaries.some((s) => s.includes('grep'));
       expect(hasSummaryWithReadFile || hasSummaryWithGrep).toBe(true);
     });
 
@@ -544,8 +553,8 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
             // Summary should mention either the path or the tool name
             expect(
               resultStr.includes('read_file') ||
-              resultStr.includes('important.ts') ||
-              resultStr.includes('/workspace'),
+                resultStr.includes('important.ts') ||
+                resultStr.includes('/workspace'),
             ).toBe(true);
           }
         }
@@ -603,7 +612,11 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       const { entry: aiCall, callId } = makeAiToolCall('read_file', {
         file_path: '/workspace/a.ts',
       });
-      const toolResp = makeToolResponse(callId, 'read_file', 'file contents...');
+      const toolResp = makeToolResponse(
+        callId,
+        'read_file',
+        'file contents...',
+      );
       const human2 = makeHumanMessage('Second question');
       const ai2 = makeAiText('Answer');
 
@@ -623,7 +636,8 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       expect(humanEntries.length).toBe(originalHumans.length);
       for (const oh of originalHumans) {
         const found = humanEntries.some(
-          (h) => h.blocks[0].type === 'text' &&
+          (h) =>
+            h.blocks[0].type === 'text' &&
             oh.blocks[0].type === 'text' &&
             h.blocks[0].text === oh.blocks[0].text,
         );
@@ -668,8 +682,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       // AI tool_call blocks should be unchanged
       const aiToolCallEntries = result.newHistory.filter(
         (e) =>
-          e.speaker === 'ai' &&
-          e.blocks.some((b) => b.type === 'tool_call'),
+          e.speaker === 'ai' && e.blocks.some((b) => b.type === 'tool_call'),
       );
       for (const ate of aiToolCallEntries) {
         const tcBlock = ate.blocks.find(
@@ -843,16 +856,17 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       'ast_read_file',
     );
 
-    const arbHumanEntry = fc.string({ minLength: 1, maxLength: 100 }).map(
-      (text) => makeHumanMessage(text),
-    );
+    const arbHumanEntry = fc
+      .string({ minLength: 1, maxLength: 100 })
+      .map((text) => makeHumanMessage(text));
 
-    const arbAiTextEntry = fc.string({ minLength: 1, maxLength: 100 }).map(
-      (text) => makeAiText(text),
-    );
+    const arbAiTextEntry = fc
+      .string({ minLength: 1, maxLength: 100 })
+      .map((text) => makeAiText(text));
 
-    const arbToolPair = fc.tuple(arbToolName, fc.string({ minLength: 1, maxLength: 200 })).map(
-      ([toolName, resultText]) => {
+    const arbToolPair = fc
+      .tuple(arbToolName, fc.string({ minLength: 1, maxLength: 200 }))
+      .map(([toolName, resultText]) => {
         const id = nextCallId();
         const aiEntry: IContent = {
           speaker: 'ai',
@@ -868,8 +882,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
         };
         const toolEntry = makeToolResponse(id, toolName, resultText);
         return [aiEntry, toolEntry] as [IContent, IContent];
-      },
-    );
+      });
 
     const arbHistorySegment = fc.oneof(
       arbHumanEntry.map((e) => [e]),
@@ -877,9 +890,9 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       arbToolPair,
     );
 
-    const arbHistory = fc.array(arbHistorySegment, { minLength: 1, maxLength: 8 }).map(
-      (segments) => segments.flat(),
-    );
+    const arbHistory = fc
+      .array(arbHistorySegment, { minLength: 1, maxLength: 8 })
+      .map((segments) => segments.flat());
 
     /**
      * @plan PLAN-20260211-HIGHDENSITY.P13
@@ -936,7 +949,10 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           resetCallIds();
           const strategy = createStrategy();
           const preserveThreshold = 0.3;
-          const tailSize = Math.max(1, Math.floor(history.length * preserveThreshold));
+          const tailSize = Math.max(
+            1,
+            Math.floor(history.length * preserveThreshold),
+          );
           const ctx = buildCompressContext({
             history,
             preserveThreshold,
@@ -947,7 +963,11 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           // The last tailSize entries in result should match original
           const originalTail = history.slice(-tailSize);
           const resultTail = result.newHistory.slice(-tailSize);
-          for (let i = 0; i < originalTail.length && i < resultTail.length; i++) {
+          for (
+            let i = 0;
+            i < originalTail.length && i < resultTail.length;
+            i++
+          ) {
             if (originalTail[i].speaker === 'ai') {
               expect(resultTail[i]).toEqual(originalTail[i]);
             }
@@ -1002,7 +1022,10 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           resetCallIds();
           const strategy = createStrategy();
           const preserveThreshold = 0.3;
-          const tailSize = Math.max(1, Math.floor(history.length * preserveThreshold));
+          const tailSize = Math.max(
+            1,
+            Math.floor(history.length * preserveThreshold),
+          );
           const ctx = buildCompressContext({
             history,
             preserveThreshold,
@@ -1012,7 +1035,11 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
 
           const originalTail = history.slice(-tailSize);
           const resultTail = result.newHistory.slice(-tailSize);
-          for (let i = 0; i < Math.min(originalTail.length, resultTail.length); i++) {
+          for (
+            let i = 0;
+            i < Math.min(originalTail.length, resultTail.length);
+            i++
+          ) {
             expect(resultTail[i]).toEqual(originalTail[i]);
           }
         }),
@@ -1035,7 +1062,9 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           expect(result.metadata.compressedMessageCount).toBeLessThanOrEqual(
             result.metadata.originalMessageCount,
           );
-          expect(result.metadata.compressedMessageCount).toBe(result.newHistory.length);
+          expect(result.metadata.compressedMessageCount).toBe(
+            result.newHistory.length,
+          );
         }),
         { numRuns: 30 },
       );
@@ -1052,7 +1081,10 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           resetCallIds();
           const strategy = createStrategy();
           const preserveThreshold = 0.3;
-          const tailSize = Math.max(1, Math.floor(history.length * preserveThreshold));
+          const tailSize = Math.max(
+            1,
+            Math.floor(history.length * preserveThreshold),
+          );
           const ctx = buildCompressContext({
             history,
             preserveThreshold,
@@ -1066,7 +1098,9 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
             if (entry.speaker === 'tool') {
               for (const block of entry.blocks) {
                 if (block.type === 'tool_response') {
-                  expect(typeof (block as ToolResponseBlock).result).toBe('string');
+                  expect(typeof (block as ToolResponseBlock).result).toBe(
+                    'string',
+                  );
                 }
               }
             }

@@ -17,10 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import type { IContent } from '../../../services/history/IContent.js';
-import {
-  COMPRESSION_STRATEGIES,
-  UnknownStrategyError,
-} from '../types.js';
+import { COMPRESSION_STRATEGIES } from '../types.js';
 import type {
   CompressionStrategyName,
   StrategyTrigger,
@@ -79,13 +76,19 @@ describe('Type shapes @plan PLAN-20260211-HIGHDENSITY.P04', () => {
    */
   describe('StrategyTrigger', () => {
     it('threshold trigger has mode and defaultThreshold', () => {
-      const trigger: StrategyTrigger = { mode: 'threshold', defaultThreshold: 0.85 };
+      const trigger: StrategyTrigger = {
+        mode: 'threshold',
+        defaultThreshold: 0.85,
+      };
       expect(trigger.mode).toBe('threshold');
       expect(trigger.defaultThreshold).toBe(0.85);
     });
 
     it('continuous trigger has mode and defaultThreshold', () => {
-      const trigger: StrategyTrigger = { mode: 'continuous', defaultThreshold: 0.7 };
+      const trigger: StrategyTrigger = {
+        mode: 'continuous',
+        defaultThreshold: 0.7,
+      };
       expect(trigger.mode).toBe('continuous');
       expect(trigger.defaultThreshold).toBe(0.7);
     });
@@ -180,7 +183,10 @@ describe('Existing strategy triggers @plan PLAN-20260211-HIGHDENSITY.P04', () =>
    */
   it('MiddleOutStrategy has trigger { mode: threshold, defaultThreshold: 0.85 }', () => {
     const strategy = new MiddleOutStrategy();
-    expect(strategy.trigger).toEqual({ mode: 'threshold', defaultThreshold: 0.85 });
+    expect(strategy.trigger).toEqual({
+      mode: 'threshold',
+      defaultThreshold: 0.85,
+    });
   });
 
   /**
@@ -188,7 +194,10 @@ describe('Existing strategy triggers @plan PLAN-20260211-HIGHDENSITY.P04', () =>
    */
   it('TopDownTruncationStrategy has trigger { mode: threshold, defaultThreshold: 0.85 }', () => {
     const strategy = new TopDownTruncationStrategy();
-    expect(strategy.trigger).toEqual({ mode: 'threshold', defaultThreshold: 0.85 });
+    expect(strategy.trigger).toEqual({
+      mode: 'threshold',
+      defaultThreshold: 0.85,
+    });
   });
 
   /**
@@ -196,7 +205,10 @@ describe('Existing strategy triggers @plan PLAN-20260211-HIGHDENSITY.P04', () =>
    */
   it('OneShotStrategy has trigger { mode: threshold, defaultThreshold: 0.85 }', () => {
     const strategy = new OneShotStrategy();
-    expect(strategy.trigger).toEqual({ mode: 'threshold', defaultThreshold: 0.85 });
+    expect(strategy.trigger).toEqual({
+      mode: 'threshold',
+      defaultThreshold: 0.85,
+    });
   });
 
   /**
@@ -269,19 +281,28 @@ describe('Factory high-density support @plan PLAN-20260211-HIGHDENSITY.P04', () 
   it('getCompressionStrategy returns MiddleOutStrategy for middle-out', () => {
     const strategy = getCompressionStrategy('middle-out');
     expect(strategy).toBeInstanceOf(MiddleOutStrategy);
-    expect(strategy.trigger).toEqual({ mode: 'threshold', defaultThreshold: 0.85 });
+    expect(strategy.trigger).toEqual({
+      mode: 'threshold',
+      defaultThreshold: 0.85,
+    });
   });
 
   it('getCompressionStrategy returns TopDownTruncationStrategy for top-down-truncation', () => {
     const strategy = getCompressionStrategy('top-down-truncation');
     expect(strategy).toBeInstanceOf(TopDownTruncationStrategy);
-    expect(strategy.trigger).toEqual({ mode: 'threshold', defaultThreshold: 0.85 });
+    expect(strategy.trigger).toEqual({
+      mode: 'threshold',
+      defaultThreshold: 0.85,
+    });
   });
 
   it('getCompressionStrategy returns OneShotStrategy for one-shot', () => {
     const strategy = getCompressionStrategy('one-shot');
     expect(strategy).toBeInstanceOf(OneShotStrategy);
-    expect(strategy.trigger).toEqual({ mode: 'threshold', defaultThreshold: 0.85 });
+    expect(strategy.trigger).toEqual({
+      mode: 'threshold',
+      defaultThreshold: 0.85,
+    });
   });
 
   /**
@@ -291,7 +312,10 @@ describe('Factory high-density support @plan PLAN-20260211-HIGHDENSITY.P04', () 
   it('getCompressionStrategy returns HighDensityStrategy for high-density', () => {
     const strategy = getCompressionStrategy('high-density');
     expect(strategy).toBeInstanceOf(HighDensityStrategy);
-    expect(strategy.trigger).toEqual({ mode: 'continuous', defaultThreshold: 0.85 });
+    expect(strategy.trigger).toEqual({
+      mode: 'continuous',
+      defaultThreshold: 0.85,
+    });
   });
 });
 
@@ -340,15 +364,12 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P04', () => {
     ];
 
     fc.assert(
-      fc.property(
-        fc.integer({ min: 0, max: strategies.length - 1 }),
-        (idx) => {
-          const trigger = strategies[idx].trigger;
-          expect(trigger.defaultThreshold).toBeGreaterThan(0);
-          expect(typeof trigger.defaultThreshold).toBe('number');
-          expect(Number.isFinite(trigger.defaultThreshold)).toBe(true);
-        },
-      ),
+      fc.property(fc.integer({ min: 0, max: strategies.length - 1 }), (idx) => {
+        const trigger = strategies[idx].trigger;
+        expect(trigger.defaultThreshold).toBeGreaterThan(0);
+        expect(typeof trigger.defaultThreshold).toBe('number');
+        expect(Number.isFinite(trigger.defaultThreshold)).toBe(true);
+      }),
       { numRuns: 50 },
     );
   });
@@ -427,7 +448,13 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P04', () => {
         fc.boolean(),
         fc.integer({ min: 1, max: 10000 }),
         fc.string({ minLength: 1, maxLength: 200 }),
-        (readWritePruning, fileDedupe, recencyPruning, recencyRetention, workspaceRoot) => {
+        (
+          readWritePruning,
+          fileDedupe,
+          recencyPruning,
+          recencyRetention,
+          workspaceRoot,
+        ) => {
           const config: DensityConfig = {
             readWritePruning,
             fileDedupe,
@@ -452,20 +479,21 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P04', () => {
    * @requirement REQ-HD-001.1
    */
   it('every strategy from factory has a valid trigger with mode and defaultThreshold', () => {
-    const validNames: CompressionStrategyName[] = ['middle-out', 'top-down-truncation', 'one-shot'];
+    const validNames: CompressionStrategyName[] = [
+      'middle-out',
+      'top-down-truncation',
+      'one-shot',
+    ];
 
     fc.assert(
-      fc.property(
-        fc.integer({ min: 0, max: validNames.length - 1 }),
-        (idx) => {
-          const strategy = getCompressionStrategy(validNames[idx]);
-          expect(strategy.trigger).toBeDefined();
-          expect(['threshold', 'continuous']).toContain(strategy.trigger.mode);
-          expect(typeof strategy.trigger.defaultThreshold).toBe('number');
-          expect(strategy.trigger.defaultThreshold).toBeGreaterThan(0);
-          expect(strategy.trigger.defaultThreshold).toBeLessThanOrEqual(1);
-        },
-      ),
+      fc.property(fc.integer({ min: 0, max: validNames.length - 1 }), (idx) => {
+        const strategy = getCompressionStrategy(validNames[idx]);
+        expect(strategy.trigger).toBeDefined();
+        expect(['threshold', 'continuous']).toContain(strategy.trigger.mode);
+        expect(typeof strategy.trigger.defaultThreshold).toBe('number');
+        expect(strategy.trigger.defaultThreshold).toBeGreaterThan(0);
+        expect(strategy.trigger.defaultThreshold).toBeLessThanOrEqual(1);
+      }),
       { numRuns: 50 },
     );
   });
@@ -518,15 +546,30 @@ function buildMinimalContext(
       sessionId: 'test',
       updatedAt: Date.now(),
     } as unknown as CompressionContext['runtimeState'],
-    estimateTokens: async (contents: readonly IContent[]) => contents.length * 100,
+    estimateTokens: async (contents: readonly IContent[]) =>
+      contents.length * 100,
     currentTokenCount: 5000,
-    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, log: () => {} } as unknown as CompressionContext['logger'],
-    resolveProvider: () => { throw new Error('No provider in minimal context'); },
-    promptResolver: { resolveFile: () => ({ found: false, path: null, source: null }) } as unknown as CompressionContext['promptResolver'],
+    logger: {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      log: () => {},
+    } as unknown as CompressionContext['logger'],
+    resolveProvider: () => {
+      throw new Error('No provider in minimal context');
+    },
+    promptResolver: {
+      resolveFile: () => ({ found: false, path: null, source: null }),
+    } as unknown as CompressionContext['promptResolver'],
     promptBaseDir: '/tmp/test',
     promptContext: { provider: 'test', model: 'test' },
     promptId: 'test',
-    ...(overrides.activeTodos !== undefined ? { activeTodos: overrides.activeTodos } : {}),
-    ...(overrides.transcriptPath !== undefined ? { transcriptPath: overrides.transcriptPath } : {}),
+    ...(overrides.activeTodos !== undefined
+      ? { activeTodos: overrides.activeTodos }
+      : {}),
+    ...(overrides.transcriptPath !== undefined
+      ? { transcriptPath: overrides.transcriptPath }
+      : {}),
   };
 }

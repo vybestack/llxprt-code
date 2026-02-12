@@ -22,8 +22,12 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
-import type { IContent, ToolCallBlock, ToolResponseBlock } from '../../../services/history/IContent.js';
-import type { DensityConfig, DensityResult } from '../types.js';
+import type {
+  IContent,
+  ToolCallBlock,
+  ToolResponseBlock,
+} from '../../../services/history/IContent.js';
+import type { DensityConfig } from '../types.js';
 import { HighDensityStrategy, PRUNED_POINTER } from '../HighDensityStrategy.js';
 
 // ---------------------------------------------------------------------------
@@ -79,7 +83,7 @@ function makeAiToolCall(
   };
 }
 
-function makeAiMultiToolCall(
+function _makeAiMultiToolCall(
   calls: Array<{ toolName: string; parameters: unknown; callId?: string }>,
 ): { entry: IContent; callIds: string[] } {
   const callIds: string[] = [];
@@ -122,7 +126,7 @@ function makeToolResponse(
   };
 }
 
-function makeMultiToolResponse(
+function _makeMultiToolResponse(
   responses: Array<{ callId: string; toolName: string; result: unknown }>,
 ): IContent {
   return {
@@ -239,12 +243,29 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
   it('post-write read is preserved', () => {
     const strategy = createStrategy();
     // Write first, then read
-    const writeCall = makeAiToolCall('write_file', { file_path: '/workspace/src/a.ts' });
-    const writeResp = makeToolResponse(writeCall.callId, 'write_file', 'wrote a.ts');
-    const readCall = makeAiToolCall('read_file', { file_path: '/workspace/src/a.ts' });
-    const readResp = makeToolResponse(readCall.callId, 'read_file', 'contents of a.ts');
+    const writeCall = makeAiToolCall('write_file', {
+      file_path: '/workspace/src/a.ts',
+    });
+    const writeResp = makeToolResponse(
+      writeCall.callId,
+      'write_file',
+      'wrote a.ts',
+    );
+    const readCall = makeAiToolCall('read_file', {
+      file_path: '/workspace/src/a.ts',
+    });
+    const readResp = makeToolResponse(
+      readCall.callId,
+      'read_file',
+      'contents of a.ts',
+    );
 
-    const history: IContent[] = [writeCall.entry, writeResp, readCall.entry, readResp];
+    const history: IContent[] = [
+      writeCall.entry,
+      writeResp,
+      readCall.entry,
+      readResp,
+    ];
     const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
 
     const result = strategy.optimize(history, config);
@@ -263,7 +284,12 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
    */
   it('all read tool types are recognized as stale when followed by a write', () => {
     const strategy = createStrategy();
-    const readTools = ['read_file', 'read_line_range', 'read_many_files', 'ast_read_file'] as const;
+    const readTools = [
+      'read_file',
+      'read_line_range',
+      'read_many_files',
+      'ast_read_file',
+    ] as const;
     const history: IContent[] = [];
 
     const readCallIds: string[] = [];
@@ -276,7 +302,9 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
       const rc = makeAiToolCall(readTool, params);
       readCallIds.push(rc.callId);
       history.push(rc.entry);
-      history.push(makeToolResponse(rc.callId, readTool, `content of ${filePath}`));
+      history.push(
+        makeToolResponse(rc.callId, readTool, `content of ${filePath}`),
+      );
     }
 
     // Add writes for all of them
@@ -284,7 +312,9 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
       const filePath = `/workspace/src/${readTool}.ts`;
       const wc = makeAiToolCall('write_file', { file_path: filePath });
       history.push(wc.entry);
-      history.push(makeToolResponse(wc.callId, 'write_file', `wrote ${filePath}`));
+      history.push(
+        makeToolResponse(wc.callId, 'write_file', `wrote ${filePath}`),
+      );
     }
 
     const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
@@ -301,7 +331,13 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
    */
   it('all write tool types are recognized and cause preceding reads to be stale', () => {
     const strategy = createStrategy();
-    const writeTools = ['write_file', 'ast_edit', 'replace', 'insert_at_line', 'delete_line_range'] as const;
+    const writeTools = [
+      'write_file',
+      'ast_edit',
+      'replace',
+      'insert_at_line',
+      'delete_line_range',
+    ] as const;
     const history: IContent[] = [];
 
     for (const writeTool of writeTools) {
@@ -309,7 +345,9 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
       // Read first
       const rc = makeAiToolCall('read_file', { file_path: filePath });
       history.push(rc.entry);
-      history.push(makeToolResponse(rc.callId, 'read_file', `content of ${filePath}`));
+      history.push(
+        makeToolResponse(rc.callId, 'read_file', `content of ${filePath}`),
+      );
       // Then write
       const wc = makeAiToolCall(writeTool, { file_path: filePath });
       history.push(wc.entry);
@@ -337,7 +375,9 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     history.push(makeToolResponse(rc1.callId, 'read_file', 'content a'));
 
     // Read with absolute_path key
-    const rc2 = makeAiToolCall('read_file', { absolute_path: '/workspace/b.ts' });
+    const rc2 = makeAiToolCall('read_file', {
+      absolute_path: '/workspace/b.ts',
+    });
     history.push(rc2.entry);
     history.push(makeToolResponse(rc2.callId, 'read_file', 'content b'));
 
@@ -347,7 +387,11 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     history.push(makeToolResponse(rc3.callId, 'read_file', 'content c'));
 
     // Writes for all three
-    for (const fp of ['/workspace/a.ts', '/workspace/b.ts', '/workspace/c.ts']) {
+    for (const fp of [
+      '/workspace/a.ts',
+      '/workspace/b.ts',
+      '/workspace/c.ts',
+    ]) {
       const wc = makeAiToolCall('write_file', { file_path: fp });
       history.push(wc.entry);
       history.push(makeToolResponse(wc.callId, 'write_file', `wrote ${fp}`));
@@ -419,13 +463,23 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     };
 
     const readResp = makeToolResponse(readCallId, 'read_file', 'content');
-    const searchResp = makeToolResponse(searchCallId, 'search_file_content', 'found foo');
+    const searchResp = makeToolResponse(
+      searchCallId,
+      'search_file_content',
+      'found foo',
+    );
 
     // Later write to a.ts
     const wc = makeAiToolCall('write_file', { file_path: '/workspace/a.ts' });
     const writeResp = makeToolResponse(wc.callId, 'write_file', 'wrote a.ts');
 
-    const history: IContent[] = [aiEntry, readResp, searchResp, wc.entry, writeResp];
+    const history: IContent[] = [
+      aiEntry,
+      readResp,
+      searchResp,
+      wc.entry,
+      writeResp,
+    ];
     const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
 
     const result = strategy.optimize(history, config);
@@ -452,7 +506,11 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const readCall = makeAiToolCall('read_many_files', {
       paths: ['/workspace/a.ts', '/workspace/b.ts'],
     });
-    const readResp = makeToolResponse(readCall.callId, 'read_many_files', 'contents');
+    const readResp = makeToolResponse(
+      readCall.callId,
+      'read_many_files',
+      'contents',
+    );
 
     // Write to both
     const wc1 = makeAiToolCall('write_file', { file_path: '/workspace/a.ts' });
@@ -460,12 +518,22 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const wc2 = makeAiToolCall('write_file', { file_path: '/workspace/b.ts' });
     const wr2 = makeToolResponse(wc2.callId, 'write_file', 'wrote b');
 
-    const history: IContent[] = [readCall.entry, readResp, wc1.entry, wr1, wc2.entry, wr2];
+    const history: IContent[] = [
+      readCall.entry,
+      readResp,
+      wc1.entry,
+      wr1,
+      wc2.entry,
+      wr2,
+    ];
     const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
 
     const result = strategy.optimize(history, config);
 
-    const allAffected = new Set([...result.removals, ...result.replacements.keys()]);
+    const allAffected = new Set([
+      ...result.removals,
+      ...result.replacements.keys(),
+    ]);
     // The read_many_files AI entry or its tool response should be affected
     expect(allAffected.has(0) || allAffected.has(1)).toBe(true);
   });
@@ -481,10 +549,16 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const readCall = makeAiToolCall('read_many_files', {
       paths: ['src/*.ts'],
     });
-    const readResp = makeToolResponse(readCall.callId, 'read_many_files', 'glob contents');
+    const readResp = makeToolResponse(
+      readCall.callId,
+      'read_many_files',
+      'glob contents',
+    );
 
     // Write to a specific file that would match the glob
-    const wc = makeAiToolCall('write_file', { file_path: '/workspace/src/foo.ts' });
+    const wc = makeAiToolCall('write_file', {
+      file_path: '/workspace/src/foo.ts',
+    });
     const wr = makeToolResponse(wc.callId, 'write_file', 'wrote foo');
 
     const history: IContent[] = [readCall.entry, readResp, wc.entry, wr];
@@ -537,7 +611,14 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const wc = makeAiToolCall('write_file', { file_path: '/workspace/a.ts' });
     const wr = makeToolResponse(wc.callId, 'write_file', 'wrote a');
 
-    const history: IContent[] = [rc1.entry, resp1, rc2.entry, resp2, wc.entry, wr];
+    const history: IContent[] = [
+      rc1.entry,
+      resp1,
+      rc2.entry,
+      resp2,
+      wc.entry,
+      wr,
+    ];
     const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
 
     // Should not throw
@@ -555,7 +636,9 @@ describe('pruneReadWritePairs @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const rc = makeAiToolCall('read_file', { file_path: 'src/foo.ts' });
     const readResp = makeToolResponse(rc.callId, 'read_file', 'content');
 
-    const wc = makeAiToolCall('write_file', { file_path: '/project/src/foo.ts' });
+    const wc = makeAiToolCall('write_file', {
+      file_path: '/project/src/foo.ts',
+    });
     const writeResp = makeToolResponse(wc.callId, 'write_file', 'wrote');
 
     const history: IContent[] = [rc.entry, readResp, wc.entry, writeResp];
@@ -595,7 +678,10 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
       makeHumanWithFileInclusion('src/foo.ts', 'version2'),
       makeAiText('got it'),
     ];
-    const config = defaultConfig({ readWritePruning: false, recencyPruning: false });
+    const config = defaultConfig({
+      readWritePruning: false,
+      recencyPruning: false,
+    });
 
     const result = strategy.optimize(history, config);
 
@@ -626,7 +712,10 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
       makeAiText('ok'),
       makeHumanWithFileInclusion('src/foo.ts', 'new content'),
     ];
-    const config = defaultConfig({ readWritePruning: false, recencyPruning: false });
+    const config = defaultConfig({
+      readWritePruning: false,
+      recencyPruning: false,
+    });
 
     const result = strategy.optimize(history, config);
 
@@ -674,13 +763,18 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
   it('unpaired delimiters leave text unchanged', () => {
     const strategy = createStrategy();
     // Opening delimiter but no closing delimiter
-    const brokenInclusion = makeHumanMessage('--- src/foo.ts ---\nsome content without closing');
+    const brokenInclusion = makeHumanMessage(
+      '--- src/foo.ts ---\nsome content without closing',
+    );
     const history: IContent[] = [
       brokenInclusion,
       makeAiText('ok'),
       makeHumanWithFileInclusion('src/foo.ts', 'proper content'),
     ];
-    const config = defaultConfig({ readWritePruning: false, recencyPruning: false });
+    const config = defaultConfig({
+      readWritePruning: false,
+      recencyPruning: false,
+    });
 
     const result = strategy.optimize(history, config);
 
@@ -708,9 +802,13 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
 
     // 5 read_file tool responses
     for (let i = 0; i < 5; i++) {
-      const rc = makeAiToolCall('read_file', { file_path: `/workspace/file${i}.ts` });
+      const rc = makeAiToolCall('read_file', {
+        file_path: `/workspace/file${i}.ts`,
+      });
       history.push(rc.entry);
-      history.push(makeToolResponse(rc.callId, 'read_file', `content of file${i}`));
+      history.push(
+        makeToolResponse(rc.callId, 'read_file', `content of file${i}`),
+      );
     }
 
     const config = defaultConfig({
@@ -750,16 +848,28 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
 
     // 4 read_file responses
     for (let i = 0; i < 4; i++) {
-      const rc = makeAiToolCall('read_file', { file_path: `/workspace/read${i}.ts` });
+      const rc = makeAiToolCall('read_file', {
+        file_path: `/workspace/read${i}.ts`,
+      });
       history.push(rc.entry);
-      history.push(makeToolResponse(rc.callId, 'read_file', `read content ${i}`));
+      history.push(
+        makeToolResponse(rc.callId, 'read_file', `read content ${i}`),
+      );
     }
 
     // 4 search_file_content responses
     for (let i = 0; i < 4; i++) {
-      const sc = makeAiToolCall('search_file_content', { pattern: `pattern${i}` });
+      const sc = makeAiToolCall('search_file_content', {
+        pattern: `pattern${i}`,
+      });
       history.push(sc.entry);
-      history.push(makeToolResponse(sc.callId, 'search_file_content', `search result ${i}`));
+      history.push(
+        makeToolResponse(
+          sc.callId,
+          'search_file_content',
+          `search result ${i}`,
+        ),
+      );
     }
 
     const config = defaultConfig({
@@ -853,7 +963,9 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const history: IContent[] = [];
 
     for (let i = 0; i < 5; i++) {
-      const rc = makeAiToolCall('read_file', { file_path: `/workspace/f${i}.ts` });
+      const rc = makeAiToolCall('read_file', {
+        file_path: `/workspace/f${i}.ts`,
+      });
       history.push(rc.entry);
       history.push(makeToolResponse(rc.callId, 'read_file', `content ${i}`));
     }
@@ -880,7 +992,9 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const history: IContent[] = [];
 
     for (let i = 0; i < 3; i++) {
-      const rc = makeAiToolCall('read_file', { file_path: `/workspace/f${i}.ts` });
+      const rc = makeAiToolCall('read_file', {
+        file_path: `/workspace/f${i}.ts`,
+      });
       history.push(rc.entry);
       history.push(makeToolResponse(rc.callId, 'read_file', `content ${i}`));
     }
@@ -927,9 +1041,13 @@ describe('optimize() orchestration @plan PLAN-20260211-HIGHDENSITY.P10', () => {
 
     // Phase 3 trigger: many tool results for recency
     for (let i = 0; i < 5; i++) {
-      const sc = makeAiToolCall('search_file_content', { pattern: `pattern${i}` });
+      const sc = makeAiToolCall('search_file_content', {
+        pattern: `pattern${i}`,
+      });
       history.push(sc.entry);
-      history.push(makeToolResponse(sc.callId, 'search_file_content', `result ${i}`));
+      history.push(
+        makeToolResponse(sc.callId, 'search_file_content', `result ${i}`),
+      );
     }
 
     const config = defaultConfig({ recencyRetention: 3 });
@@ -986,7 +1104,11 @@ describe('optimize() orchestration @plan PLAN-20260211-HIGHDENSITY.P10', () => {
 
     // Read a file, then write it — the read tool response should be removed by RW pruning
     const rc = makeAiToolCall('read_file', { file_path: '/workspace/a.ts' });
-    const readResp = makeToolResponse(rc.callId, 'read_file', 'content of a.ts');
+    const readResp = makeToolResponse(
+      rc.callId,
+      'read_file',
+      'content of a.ts',
+    );
     const wc = makeAiToolCall('write_file', { file_path: '/workspace/a.ts' });
     const writeResp = makeToolResponse(wc.callId, 'write_file', 'wrote a.ts');
 
@@ -1117,7 +1239,9 @@ describe('Failure modes @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     for (let i = 0; i < 5; i++) {
       const rc = makeAiToolCall('search_file_content', { pattern: `p${i}` });
       history.push(rc.entry);
-      history.push(makeToolResponse(rc.callId, 'search_file_content', `result ${i}`));
+      history.push(
+        makeToolResponse(rc.callId, 'search_file_content', `result ${i}`),
+      );
     }
 
     const config = defaultConfig({
@@ -1169,7 +1293,7 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
 
   const arbFilePath = fc.stringMatching(/^\/workspace\/src\/[a-z]{1,8}\.ts$/);
 
-  const arbToolCallEntry = arbFilePath.chain((fp) =>
+  const _arbToolCallEntry = arbFilePath.chain((fp) =>
     fc.record({
       speaker: fc.constant('ai' as const),
       blocks: fc.constant([
@@ -1184,7 +1308,7 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     }),
   );
 
-  const arbToolResponseEntry = arbFilePath.chain((fp) =>
+  const _arbToolResponseEntry = arbFilePath.chain((fp) =>
     fc.record({
       speaker: fc.constant('tool' as const),
       blocks: fc.constant([
@@ -1207,10 +1331,10 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     .string({ minLength: 1, maxLength: 100 })
     .map((text) => makeAiText(text));
 
-  const arbSimpleHistory = fc.array(
-    fc.oneof(arbHumanEntry, arbAiEntry),
-    { minLength: 0, maxLength: 20 },
-  );
+  const arbSimpleHistory = fc.array(fc.oneof(arbHumanEntry, arbAiEntry), {
+    minLength: 0,
+    maxLength: 20,
+  });
 
   const arbConfig = fc.record({
     readWritePruning: fc.boolean(),
@@ -1272,7 +1396,9 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
       fc.property(arbSimpleHistory, arbConfig, (history, config) => {
         const result = strategy.optimize(history, config);
         expect(result.metadata.readWritePairsPruned).toBeGreaterThanOrEqual(0);
-        expect(result.metadata.fileDeduplicationsPruned).toBeGreaterThanOrEqual(0);
+        expect(result.metadata.fileDeduplicationsPruned).toBeGreaterThanOrEqual(
+          0,
+        );
         expect(result.metadata.recencyPruned).toBeGreaterThanOrEqual(0);
       }),
       { numRuns: 100 },
@@ -1311,13 +1437,29 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     fc.assert(
       fc.property(arbFilePath, (fp) => {
         const writeCall = makeAiToolCall('write_file', { file_path: fp });
-        const writeResp = makeToolResponse(writeCall.callId, 'write_file', 'wrote');
+        const writeResp = makeToolResponse(
+          writeCall.callId,
+          'write_file',
+          'wrote',
+        );
         const readCall = makeAiToolCall('read_file', { file_path: fp });
-        const readResp = makeToolResponse(readCall.callId, 'read_file', 'content');
+        const readResp = makeToolResponse(
+          readCall.callId,
+          'read_file',
+          'content',
+        );
 
         // Write at 0,1 then read at 2,3
-        const history: IContent[] = [writeCall.entry, writeResp, readCall.entry, readResp];
-        const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
+        const history: IContent[] = [
+          writeCall.entry,
+          writeResp,
+          readCall.entry,
+          readResp,
+        ];
+        const config = defaultConfig({
+          fileDedupe: false,
+          recencyPruning: false,
+        });
 
         const result = strategy.optimize(history, config);
 
@@ -1344,9 +1486,13 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
         (totalResults, retention) => {
           const history: IContent[] = [];
           for (let i = 0; i < totalResults; i++) {
-            const rc = makeAiToolCall('read_file', { file_path: `/workspace/f${i}.ts` });
+            const rc = makeAiToolCall('read_file', {
+              file_path: `/workspace/f${i}.ts`,
+            });
             history.push(rc.entry);
-            history.push(makeToolResponse(rc.callId, 'read_file', `content ${i}`));
+            history.push(
+              makeToolResponse(rc.callId, 'read_file', `content ${i}`),
+            );
           }
 
           const config = defaultConfig({
@@ -1384,7 +1530,9 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
             }
           }
           const expectedPreserved = Math.min(retention, totalResults);
-          expect(unprunedToolResponses).toBeGreaterThanOrEqual(expectedPreserved);
+          expect(unprunedToolResponses).toBeGreaterThanOrEqual(
+            expectedPreserved,
+          );
         },
       ),
       { numRuns: 50 },
@@ -1398,41 +1546,38 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const strategy = createStrategy();
 
     fc.assert(
-      fc.property(
-        fc.integer({ min: 4, max: 8 }),
-        (count) => {
-          const history: IContent[] = [];
-          for (let i = 0; i < count; i++) {
-            const rc = makeAiToolCall('read_file', {
-              file_path: `/workspace/f${i}.ts`,
-            });
-            history.push(rc.entry);
-            history.push(
-              makeToolResponse(rc.callId, 'read_file', `content ${i}`),
+      fc.property(fc.integer({ min: 4, max: 8 }), (count) => {
+        const history: IContent[] = [];
+        for (let i = 0; i < count; i++) {
+          const rc = makeAiToolCall('read_file', {
+            file_path: `/workspace/f${i}.ts`,
+          });
+          history.push(rc.entry);
+          history.push(
+            makeToolResponse(rc.callId, 'read_file', `content ${i}`),
+          );
+        }
+
+        const config = defaultConfig({
+          readWritePruning: false,
+          fileDedupe: false,
+          recencyPruning: true,
+          recencyRetention: 2,
+        });
+
+        const result = strategy.optimize(history, config);
+
+        for (const [idx, replacement] of result.replacements) {
+          const original = history[idx];
+          expect(replacement.speaker).toBe(original.speaker);
+          // Metadata should be preserved
+          if (original.metadata?.timestamp !== undefined) {
+            expect(replacement.metadata?.timestamp).toBe(
+              original.metadata.timestamp,
             );
           }
-
-          const config = defaultConfig({
-            readWritePruning: false,
-            fileDedupe: false,
-            recencyPruning: true,
-            recencyRetention: 2,
-          });
-
-          const result = strategy.optimize(history, config);
-
-          for (const [idx, replacement] of result.replacements) {
-            const original = history[idx];
-            expect(replacement.speaker).toBe(original.speaker);
-            // Metadata should be preserved
-            if (original.metadata?.timestamp !== undefined) {
-              expect(replacement.metadata?.timestamp).toBe(
-                original.metadata.timestamp,
-              );
-            }
-          }
-        },
-      ),
+        }
+      }),
       { numRuns: 50 },
     );
   });
@@ -1446,7 +1591,9 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     // Build a history that triggers recency pruning
     const history: IContent[] = [];
     for (let i = 0; i < 5; i++) {
-      const rc = makeAiToolCall('read_file', { file_path: `/workspace/f${i}.ts` });
+      const rc = makeAiToolCall('read_file', {
+        file_path: `/workspace/f${i}.ts`,
+      });
       history.push(rc.entry);
       history.push(makeToolResponse(rc.callId, 'read_file', `content ${i}`));
     }
@@ -1490,7 +1637,10 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
       fc.property(arbFilePath, (fp) => {
         const { entries } = makeReadWritePair(fp);
         const history: IContent[] = [...entries];
-        const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
+        const config = defaultConfig({
+          fileDedupe: false,
+          recencyPruning: false,
+        });
 
         const result = strategy.optimize(history, config);
 
@@ -1512,7 +1662,13 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
    */
   it('each write tool type causes preceding read to be marked stale', () => {
     const strategy = createStrategy();
-    const writeToolsArr = ['write_file', 'ast_edit', 'replace', 'insert_at_line', 'delete_line_range'] as const;
+    const writeToolsArr = [
+      'write_file',
+      'ast_edit',
+      'replace',
+      'insert_at_line',
+      'delete_line_range',
+    ] as const;
 
     fc.assert(
       fc.property(
@@ -1526,7 +1682,10 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
           const writeResp = makeToolResponse(wc.callId, writeTool, 'wrote');
 
           const history: IContent[] = [rc.entry, readResp, wc.entry, writeResp];
-          const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
+          const config = defaultConfig({
+            fileDedupe: false,
+            recencyPruning: false,
+          });
 
           const result = strategy.optimize(history, config);
 
@@ -1545,30 +1704,30 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const strategy = createStrategy();
 
     fc.assert(
-      fc.property(
-        fc.integer({ min: 2, max: 5 }),
-        (dupCount) => {
-          const history: IContent[] = [];
-          for (let i = 0; i < dupCount; i++) {
-            history.push(makeHumanWithFileInclusion('src/dup.ts', `version${i}`));
-            history.push(makeAiText(`response ${i}`));
-          }
+      fc.property(fc.integer({ min: 2, max: 5 }), (dupCount) => {
+        const history: IContent[] = [];
+        for (let i = 0; i < dupCount; i++) {
+          history.push(makeHumanWithFileInclusion('src/dup.ts', `version${i}`));
+          history.push(makeAiText(`response ${i}`));
+        }
 
-          const config = defaultConfig({ readWritePruning: false, recencyPruning: false });
-          const result = strategy.optimize(history, config);
+        const config = defaultConfig({
+          readWritePruning: false,
+          recencyPruning: false,
+        });
+        const result = strategy.optimize(history, config);
 
-          // The latest inclusion is at index (dupCount - 1) * 2
-          const latestIdx = (dupCount - 1) * 2;
-          // Latest should NOT be in replacements (it's preserved)
-          expect(result.replacements.has(latestIdx)).toBe(false);
-          expect(result.removals).not.toContain(latestIdx);
+        // The latest inclusion is at index (dupCount - 1) * 2
+        const latestIdx = (dupCount - 1) * 2;
+        // Latest should NOT be in replacements (it's preserved)
+        expect(result.replacements.has(latestIdx)).toBe(false);
+        expect(result.removals).not.toContain(latestIdx);
 
-          // Earlier inclusions should be deduplicated
-          if (dupCount > 1) {
-            expect(result.metadata.fileDeduplicationsPruned).toBe(dupCount - 1);
-          }
-        },
-      ),
+        // Earlier inclusions should be deduplicated
+        if (dupCount > 1) {
+          expect(result.metadata.fileDeduplicationsPruned).toBe(dupCount - 1);
+        }
+      }),
       { numRuns: 30 },
     );
   });
@@ -1593,11 +1752,16 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
         (params) => {
           const rc = makeAiToolCall('read_file', params);
           const resp = makeToolResponse(rc.callId, 'read_file', 'result');
-          const wc = makeAiToolCall('write_file', { file_path: '/workspace/a.ts' });
+          const wc = makeAiToolCall('write_file', {
+            file_path: '/workspace/a.ts',
+          });
           const wr = makeToolResponse(wc.callId, 'write_file', 'wrote');
 
           const history: IContent[] = [rc.entry, resp, wc.entry, wr];
-          const config = defaultConfig({ fileDedupe: false, recencyPruning: false });
+          const config = defaultConfig({
+            fileDedupe: false,
+            recencyPruning: false,
+          });
 
           // Should never throw
           expect(() => strategy.optimize(history, config)).not.toThrow();
@@ -1615,29 +1779,26 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
     const strategy = createStrategy();
 
     fc.assert(
-      fc.property(
-        fc.integer({ min: 1, max: 6 }),
-        (count) => {
-          const history: IContent[] = [];
+      fc.property(fc.integer({ min: 1, max: 6 }), (count) => {
+        const history: IContent[] = [];
 
-          // Create read-write pairs for RW pruning
-          for (let i = 0; i < count; i++) {
-            const { entries } = makeReadWritePair(`/workspace/rw${i}.ts`);
-            history.push(...entries);
-          }
+        // Create read-write pairs for RW pruning
+        for (let i = 0; i < count; i++) {
+          const { entries } = makeReadWritePair(`/workspace/rw${i}.ts`);
+          history.push(...entries);
+        }
 
-          const config = defaultConfig({
-            readWritePruning: true,
-            fileDedupe: false,
-            recencyPruning: false,
-          });
+        const config = defaultConfig({
+          readWritePruning: true,
+          fileDedupe: false,
+          recencyPruning: false,
+        });
 
-          const result = strategy.optimize(history, config);
+        const result = strategy.optimize(history, config);
 
-          // readWritePairsPruned should equal number of pairs pruned
-          expect(result.metadata.readWritePairsPruned).toBe(count);
-        },
-      ),
+        // readWritePairsPruned should equal number of pairs pruned
+        expect(result.metadata.readWritePairsPruned).toBe(count);
+      }),
       { numRuns: 30 },
     );
   });
@@ -1660,7 +1821,9 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
               file_path: `/workspace/r${i}.ts`,
             });
             history.push(rc.entry);
-            history.push(makeToolResponse(rc.callId, 'read_file', `content ${i}`));
+            history.push(
+              makeToolResponse(rc.callId, 'read_file', `content ${i}`),
+            );
           }
 
           const config = defaultConfig({
@@ -1706,7 +1869,9 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
               file_path: `/workspace/f${i}.ts`,
             });
             history.push(rc.entry);
-            history.push(makeToolResponse(rc.callId, 'read_file', `content ${i}`));
+            history.push(
+              makeToolResponse(rc.callId, 'read_file', `content ${i}`),
+            );
           }
 
           const config = defaultConfig({

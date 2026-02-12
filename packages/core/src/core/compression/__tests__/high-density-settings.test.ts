@@ -412,23 +412,17 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P16', () => {
     const spec = findSettingSpec('compression.strategy');
     expect(spec).toBeDefined();
     fc.assert(
-      fc.property(
-        fc.constantFrom(...COMPRESSION_STRATEGIES),
-        (name) => {
-          expect(spec!.enumValues).toContain(name);
-        },
-      ),
+      fc.property(fc.constantFrom(...COMPRESSION_STRATEGIES), (name) => {
+        expect(spec!.enumValues).toContain(name);
+      }),
     );
   });
 
   it('parseCompressionStrategyName accepts every member of COMPRESSION_STRATEGIES', () => {
     fc.assert(
-      fc.property(
-        fc.constantFrom(...COMPRESSION_STRATEGIES),
-        (name) => {
-          expect(parseCompressionStrategyName(name)).toBe(name);
-        },
-      ),
+      fc.property(fc.constantFrom(...COMPRESSION_STRATEGIES), (name) => {
+        expect(parseCompressionStrategyName(name)).toBe(name);
+      }),
     );
   });
 

@@ -132,10 +132,7 @@ export interface CompressionStrategy {
   readonly requiresLLM: boolean;
   readonly trigger: StrategyTrigger;
   compress(context: CompressionContext): Promise<CompressionResult>;
-  optimize?(
-    history: readonly IContent[],
-    config: DensityConfig,
-  ): DensityResult;
+  optimize?(history: readonly IContent[], config: DensityConfig): DensityResult;
 }
 
 export interface CompressionResult {

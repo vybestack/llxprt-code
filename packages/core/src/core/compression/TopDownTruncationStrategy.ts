@@ -32,7 +32,10 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
   readonly name = 'top-down-truncation' as const;
   readonly requiresLLM = false;
   /** @plan PLAN-20260211-HIGHDENSITY.P03 @requirement REQ-HD-001.3 */
-  readonly trigger: StrategyTrigger = { mode: 'threshold', defaultThreshold: 0.85 };
+  readonly trigger: StrategyTrigger = {
+    mode: 'threshold',
+    defaultThreshold: 0.85,
+  };
 
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history, runtimeContext, estimateTokens, currentTokenCount } =
