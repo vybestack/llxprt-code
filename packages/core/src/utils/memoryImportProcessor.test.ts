@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,6 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { marked } from 'marked';
 import { processImports, validateImportPath } from './memoryImportProcessor.js';
-import { debugLogger } from './debugLogger.js';
 
 // Helper function to create platform-agnostic test paths
 function testPath(...segments: string[]): string {
@@ -32,6 +31,11 @@ function testPath(...segments: string[]): string {
 
 vi.mock('fs/promises');
 const mockedFs = vi.mocked(fs);
+
+// Mock console methods to capture warnings
+const originalConsoleWarn = console.warn;
+const originalConsoleError = console.error;
+const originalConsoleDebug = console.debug;
 
 // Helper functions using marked for parsing and validation
 const parseMarkdown = (content: string) => marked.lexer(content);
@@ -90,13 +94,16 @@ describe('memoryImportProcessor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Mock console methods
-    vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
-    vi.spyOn(debugLogger, 'error').mockImplementation(() => {});
-    vi.spyOn(debugLogger, 'debug').mockImplementation(() => {});
+    console.warn = vi.fn();
+    console.error = vi.fn();
+    console.debug = vi.fn();
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    // Restore console methods
+    console.warn = originalConsoleWarn;
+    console.error = originalConsoleError;
+    console.debug = originalConsoleDebug;
   });
 
   describe('processImports', () => {
@@ -166,7 +173,7 @@ describe('memoryImportProcessor', () => {
 
       // Verify the imported content is present
       expect(result.content).toContain(importedContent);
-      expect(debugLogger.warn).not.toHaveBeenCalled();
+      expect(console.warn).not.toHaveBeenCalled();
       expect(mockedFs.readFile).toHaveBeenCalledWith(
         path.resolve(basePath, './instructions.txt'),
         'utf-8',
@@ -208,7 +215,7 @@ describe('memoryImportProcessor', () => {
       expect(result.content).toContain(
         '<!-- Import failed: ./nonexistent.md - File not found -->',
       );
-      expect(debugLogger.error).toHaveBeenCalledWith(
+      expect(console.error).toHaveBeenCalledWith(
         '[ERROR] [ImportProcessor]',
         'Failed to import ./nonexistent.md: File not found',
       );
@@ -230,7 +237,7 @@ describe('memoryImportProcessor', () => {
 
       const result = await processImports(content, basePath, true, importState);
 
-      expect(debugLogger.warn).toHaveBeenCalledWith(
+      expect(console.warn).toHaveBeenCalledWith(
         '[WARN] [ImportProcessor]',
         'Maximum import depth (1) reached. Stopping import processing.',
       );
