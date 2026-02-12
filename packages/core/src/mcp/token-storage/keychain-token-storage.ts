@@ -4,10 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Keychain-based token storage for MCP OAuth credentials.
+ *
+ * Delegates keytar adapter loading to SecureStore's shared
+ * createDefaultKeytarAdapter, eliminating duplicate @napi-rs/keyring imports.
+ *
+ * @plan PLAN-20260211-SECURESTORE.P08
+ * @requirement R7.2
+ */
+
 import * as crypto from 'node:crypto';
 import { BaseTokenStorage } from './base-token-storage.js';
 import type { OAuthCredentials } from './types.js';
 import { coreEvents } from '../../utils/events.js';
+import { createDefaultKeytarAdapter } from '../../storage/secure-store.js';
 
 interface Keytar {
   getPassword(service: string, account: string): Promise<string | null>;
@@ -28,33 +39,18 @@ type KeytarModule = Keytar | { default: Keytar };
 export type KeytarLoader = () => Promise<KeytarModule>;
 
 const defaultKeytarLoader: KeytarLoader = async () => {
-  const keyring = (await import('@napi-rs/keyring')) as {
-    AsyncEntry: new (
-      service: string,
-      account: string,
-    ) => {
-      getPassword(): Promise<string | null>;
-      setPassword(password: string): Promise<void>;
-      deletePassword(): Promise<boolean>;
-    };
-    findCredentialsAsync: (
-      service: string,
-    ) => Promise<Array<{ account: string; password: string }>>;
-  };
+  const adapter = await createDefaultKeytarAdapter();
+  if (adapter === null) {
+    throw new Error('@napi-rs/keyring not available');
+  }
   return {
-    getPassword: (service: string, account: string) => {
-      const entry = new keyring.AsyncEntry(service, account);
-      return entry.getPassword();
-    },
-    setPassword: (service: string, account: string, password: string) => {
-      const entry = new keyring.AsyncEntry(service, account);
-      return entry.setPassword(password);
-    },
-    deletePassword: (service: string, account: string) => {
-      const entry = new keyring.AsyncEntry(service, account);
-      return entry.deletePassword();
-    },
-    findCredentials: keyring.findCredentialsAsync,
+    getPassword: adapter.getPassword,
+    setPassword: adapter.setPassword,
+    deletePassword: adapter.deletePassword,
+    findCredentials:
+      adapter.findCredentials ??
+      (() =>
+        Promise.resolve([] as Array<{ account: string; password: string }>)),
   } as Keytar;
 };
 let keytarLoader: KeytarLoader = defaultKeytarLoader;

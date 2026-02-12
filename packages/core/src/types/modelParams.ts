@@ -65,6 +65,8 @@ export interface EphemeralSettings {
   'auth-key'?: string;
   /** Path to key file */
   'auth-keyfile'?: string;
+  /** Named key reference for keyring lookup @plan PLAN-20260211-SECURESTORE.P16 @requirement R21.2 */
+  'auth-key-name'?: string;
   /** API base URL */
   'base-url'?: string;
   /** Tool format override */

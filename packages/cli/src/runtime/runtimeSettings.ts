@@ -2277,14 +2277,19 @@ export async function setActiveModel(
  * but BEFORE provider switching (so auth is ready).
  *
  * This function applies CLI arguments in the correct order to ensure they override
- * profile settings:
+ * profile settings. Precedence order (highest first):
  * 1. Apply --key (overrides profile auth-key)
- * 2. Apply --keyfile (overrides profile auth-keyfile)
- * 3. Apply --set arguments (overrides profile ephemerals)
- * 4. Apply --baseurl (overrides profile base-url)
+ * 2. Apply --key-name (named key from keyring) @plan PLAN-20260211-SECURESTORE.P16
+ * 3. Apply auth-key-name (profile field, named key from keyring)
+ * 4. Apply --keyfile (overrides profile auth-keyfile)
+ * 5. Apply --set arguments (overrides profile ephemerals)
+ * 6. Apply --baseurl (overrides profile base-url)
  *
  * @param argv - CLI arguments
  * @param bootstrapArgs - Bootstrap parsed arguments (used for bundle compatibility)
+ *
+ * @plan PLAN-20260211-SECURESTORE.P16
+ * @requirement R21.1, R22.1, R22.2, R23.1
  */
 export async function applyCliArgumentOverrides(
   argv: {
@@ -2296,6 +2301,7 @@ export async function applyCliArgumentOverrides(
   bootstrapArgs?: {
     keyOverride?: string | null;
     keyfileOverride?: string | null;
+    keyNameOverride?: string | null;
     setOverrides?: string[] | null;
     baseurlOverride?: string | null;
   },
@@ -2308,7 +2314,12 @@ export async function applyCliArgumentOverrides(
 
   const { config } = getCliRuntimeServices();
 
-  // 1. Apply --key (bootstrap override takes precedence, then argv)
+  // === API KEY RESOLUTION (R23.1 precedence order) ===
+  // Tracks whether a key source has already been applied so lower-precedence
+  // sources are skipped.
+  let keyResolved = false;
+
+  // 1. --key (highest precedence) (R23.1, R23.2)
   const keyToUse = bootstrapArgs?.keyOverride ?? argv.key;
   logger.debug(
     () =>
@@ -2318,11 +2329,44 @@ export async function applyCliArgumentOverrides(
     logger.debug(() => '[runtime] Calling updateActiveProviderApiKey');
     await updateActiveProviderApiKey(keyToUse);
     logger.debug(() => '[runtime] updateActiveProviderApiKey completed');
+    logger.debug(() => '[auth] Using API key from: --key (raw CLI flag)');
+    keyResolved = true;
   }
 
-  // 2. Apply --keyfile (bootstrap override takes precedence, then argv)
+  // 2. --key-name (CLI flag, named key from keyring) (R22.1)
+  // @plan PLAN-20260211-SECURESTORE.P16
+  if (!keyResolved) {
+    const keyNameToUse = bootstrapArgs?.keyNameOverride ?? null;
+    if (keyNameToUse) {
+      const resolvedKey = await resolveNamedKey(keyNameToUse);
+      await updateActiveProviderApiKey(resolvedKey);
+      logger.debug(
+        () =>
+          `[auth] Using API key from: --key-name '${keyNameToUse}' (keyring)`,
+      );
+      keyResolved = true;
+    }
+  }
+
+  // 3. auth-key-name from profile ephemeral settings (R21.1)
+  if (!keyResolved) {
+    const profileKeyName = config.getEphemeralSetting('auth-key-name') as
+      | string
+      | undefined;
+    if (profileKeyName) {
+      const resolvedKey = await resolveNamedKey(profileKeyName);
+      await updateActiveProviderApiKey(resolvedKey);
+      logger.debug(
+        () =>
+          `[auth] Using API key from: profile auth-key-name '${profileKeyName}' (keyring)`,
+      );
+      keyResolved = true;
+    }
+  }
+
+  // 4. --keyfile (R26.1 — unchanged behavior, only if no higher-precedence key resolved)
   const keyfileToUse = bootstrapArgs?.keyfileOverride ?? argv.keyfile;
-  if (keyfileToUse) {
+  if (!keyResolved && keyfileToUse) {
     const resolvedPath = keyfileToUse.replace(/^~/, homedir());
     const keyContent = await readFile(resolvedPath, 'utf-8');
     await updateActiveProviderApiKey(keyContent.trim());
@@ -2330,15 +2374,51 @@ export async function applyCliArgumentOverrides(
     config.setEphemeralSetting('auth-keyfile', resolvedPath);
   }
 
-  // 3. Apply --set arguments (bootstrap override takes precedence, then argv)
+  // 5. Apply --set arguments (bootstrap override takes precedence, then argv)
   const setArgsToUse = bootstrapArgs?.setOverrides ?? argv.set;
   if (setArgsToUse && Array.isArray(setArgsToUse) && setArgsToUse.length > 0) {
     applyCliSetArguments(config, setArgsToUse);
   }
 
-  // 4. Apply --baseurl (bootstrap override takes precedence, then argv)
+  // 6. Apply --baseurl (bootstrap override takes precedence, then argv)
   const baseurlToUse = bootstrapArgs?.baseurlOverride ?? argv.baseurl;
   if (baseurlToUse) {
     await updateActiveProviderBaseUrl(baseurlToUse);
   }
+}
+
+/**
+ * Resolve a named key from the keyring via ProviderKeyStorage.
+ * Throws with an actionable error if the key is not found (R24.1).
+ * Does NOT fall through to lower-precedence auth sources.
+ *
+ * @plan PLAN-20260211-SECURESTORE.P16
+ * @requirement R24.1, R24.2
+ * @pseudocode auth-key-name.md lines 96-119
+ */
+async function resolveNamedKey(name: string): Promise<string> {
+  const { getProviderKeyStorage } = await import('@vybestack/llxprt-code-core');
+  const storage = getProviderKeyStorage();
+
+  let key: string | null;
+  try {
+    key = await storage.getKey(name);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    const isValidation = msg.includes('Invalid key name');
+    const prefix = isValidation
+      ? `Invalid key name '${name}'`
+      : `Failed to access keyring while resolving named key '${name}'`;
+    throw new Error(
+      `${prefix}: ${msg}. Use '/key save ${name} <key>' to store it, or use --key to provide the key directly.`,
+    );
+  }
+
+  if (key === null) {
+    throw new Error(
+      `Named key '${name}' not found. Use '/key save ${name} <key>' to store it.`,
+    );
+  }
+
+  return key;
 }
