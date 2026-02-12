@@ -812,7 +812,16 @@ export class HighDensityStrategy implements CompressionStrategy {
       }
     }
 
-    // STEP 2: For each file with multiple inclusions, strip all but the latest
+    // STEP 2: Collect all stale inclusions (all-but-latest per file), group by block
+    const staleByBlock = new Map<
+      string,
+      Array<{
+        messageIndex: number;
+        blockIndex: number;
+        startOffset: number;
+        endOffset: number;
+      }>
+    >();
     for (const [, entries] of inclusions) {
       if (entries.length <= 1) {
         continue;
@@ -826,29 +835,43 @@ export class HighDensityStrategy implements CompressionStrategy {
       // entries[0] is the latest — preserve. Strip entries[1..n]
       for (let i = 1; i < entries.length; i++) {
         const stale = entries[i];
-
-        const originalEntry =
-          replacements.get(stale.messageIndex) ?? history[stale.messageIndex];
-        const originalBlock = originalEntry.blocks[stale.blockIndex];
-        if (originalBlock.type !== 'text') {
-          continue;
+        const key = `${stale.messageIndex}:${stale.blockIndex}`;
+        if (!staleByBlock.has(key)) {
+          staleByBlock.set(key, []);
         }
+        staleByBlock.get(key)!.push(stale);
+      }
+    }
 
-        let newText =
-          originalBlock.text.substring(0, stale.startOffset) +
-          originalBlock.text.substring(stale.endOffset);
+    // Apply all stale removals per block in descending offset order
+    for (const [, stales] of staleByBlock) {
+      stales.sort((a, b) => b.startOffset - a.startOffset);
 
-        newText = newText.replace(/\n{3,}/g, '\n\n');
+      const { messageIndex, blockIndex } = stales[0];
+      const originalEntry =
+        replacements.get(messageIndex) ?? history[messageIndex];
+      const originalBlock = originalEntry.blocks[blockIndex];
+      if (originalBlock.type !== 'text') {
+        continue;
+      }
 
-        const newBlocks = [...originalEntry.blocks];
-        newBlocks[stale.blockIndex] = { type: 'text' as const, text: newText };
-
-        replacements.set(stale.messageIndex, {
-          ...originalEntry,
-          blocks: newBlocks,
-        });
+      let newText = originalBlock.text;
+      for (const stale of stales) {
+        newText =
+          newText.substring(0, stale.startOffset) +
+          newText.substring(stale.endOffset);
         prunedCount = prunedCount + 1;
       }
+
+      newText = newText.replace(/\n{3,}/g, '\n\n');
+
+      const newBlocks = [...originalEntry.blocks];
+      newBlocks[blockIndex] = { type: 'text' as const, text: newText };
+
+      replacements.set(messageIndex, {
+        ...originalEntry,
+        blocks: newBlocks,
+      });
     }
 
     return { replacements, prunedCount };
