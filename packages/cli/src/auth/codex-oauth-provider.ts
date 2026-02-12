@@ -162,7 +162,16 @@ export class CodexOAuthProvider implements OAuthProvider {
   private async performAuth(): Promise<void> {
     this.logger.debug(() => '[FLOW] performAuth() starting');
 
-    const interactive = shouldLaunchBrowser();
+    let noBrowser = false;
+    try {
+      const { getEphemeralSetting } = await import(
+        '../runtime/runtimeSettings.js'
+      );
+      noBrowser = (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+    } catch {
+      // Runtime not initialized (e.g., tests) — use default
+    }
+    const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
     this.logger.debug(() => `[FLOW] Interactive mode: ${interactive}`);
 
     // Check if we should use device flow (browserless mode)

@@ -145,9 +145,16 @@ export async function openBrowserSecurely(url: string): Promise<void> {
  * Checks if the current environment should attempt to launch a browser.
  * This is the same logic as in browser.ts for consistency.
  *
+ * @param options Optional configuration to override browser launch behavior
+ * @param options.forceManual When true, always returns false to force manual code entry
  * @returns True if the tool should attempt to launch a browser
  */
-export function shouldLaunchBrowser(): boolean {
+export function shouldLaunchBrowser(
+  options?: { forceManual?: boolean } | undefined,
+): boolean {
+  if (options?.forceManual) {
+    return false;
+  }
   // A list of browser names that indicate we should not attempt to open a
   // web browser for the user.
   const browserBlocklist = ['www-browser'];

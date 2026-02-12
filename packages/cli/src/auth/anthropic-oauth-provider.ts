@@ -188,7 +188,17 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       async () => {
         await this.ensureInitialized();
         const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
-        const interactive = shouldLaunchBrowser();
+        let noBrowser = false;
+        try {
+          const { getEphemeralSetting } = await import(
+            '../runtime/runtimeSettings.js'
+          );
+          noBrowser =
+            (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+        } catch {
+          // Runtime not initialized (e.g., tests) — use default
+        }
+        const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
         let localCallback: LocalOAuthCallbackServer | null = null;
 
         if (interactive) {

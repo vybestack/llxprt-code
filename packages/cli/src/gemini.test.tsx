@@ -312,6 +312,7 @@ describe('gemini.tsx main function', () => {
       query: undefined,
       set: undefined,
       continue: undefined,
+      nobrowser: undefined,
     });
 
     const originalIsTTY = process.stdin.isTTY;

@@ -206,9 +206,20 @@ export class GeminiOAuthProvider implements OAuthProvider {
 
           // Create a minimal config for OAuth - use type assertion for test environment
           // Type assertion is needed since we're creating a partial Config for test mode
+          let noBrowser = false;
+          try {
+            const { getEphemeralSetting } = await import(
+              '../runtime/runtimeSettings.js'
+            );
+            noBrowser =
+              (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+          } catch {
+            // Runtime not initialized (e.g., tests) — use default
+          }
           const config = {
             getProxy: () => undefined,
-            isBrowserLaunchSuppressed: () => !shouldLaunchBrowser(),
+            isBrowserLaunchSuppressed: () =>
+              !shouldLaunchBrowser({ forceManual: noBrowser }),
           } as unknown as Parameters<typeof getOauthClient>[0];
 
           // Use the existing Google OAuth infrastructure to get a client
