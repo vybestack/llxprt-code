@@ -312,7 +312,9 @@ QUALITATIVE:
 1. 61f0f3c2: McpPromptLoader.ts handles prompts with spaces in their names
 2. 5c475921: mcp-client.ts createTransport has less duplicated code
 3. 0d89ac74: config.ts and sessionUtils.ts have improved session handling + sessions.test.ts has tests
-4. e1c711f5: chatRecordingService.ts records errors and warnings; hooks pass error/warning data through
+4. e1c711f5: chatRecordingService — OUT OF BAND. Upstream's Gemini-specific ChatRecordingService is
+   replaced by LLxprt's own provider-agnostic Session Recording Service (GitHub #1361).
+   Cherry-pick landed the non-recording parts (session config/utils); recording-specific code was removed.
 5. 300205b0: zedIntegration.ts properly handles cancellation errors
 
 Report PASS/FAIL per check.

@@ -19,3 +19,21 @@
 | 15 | REIMPLEMENT | 013f9848 | DONE | e0bebe781 | Created exitCli(); replaced 9 process.exit(1) calls; removed config.ts early-exit block. Output middleware deferred (function-local in gemini.tsx). |
 | 16 | PICK x1 | 4b19a833 | DONE | 5da8ce21c | MCP SDK bumped to ^1.25.2 in vscode-ide-companion (cli/core already ahead) |
 | 17 | REIMPLEMENT | 2e8d7831 | DONE | 75abfc44a | Moved stdio.ts to core; created terminal.ts; exported from core index; skipped auth/oauth changes |
+
+## Out-of-Band: Session Recording Service
+
+Upstream's `ChatRecordingService` (introduced across multiple commits including e1c711f5 in Batch 3) is
+**not** being cherry-picked into LLxprt. Instead, LLxprt is building its own replacement for
+`SessionPersistenceService` as a standalone design effort tracked under GitHub issue #1361.
+
+**Why out-of-band:**
+- Upstream's `ChatRecordingService` is Gemini-specific (`PartListUnion`, `GenerateContentResponseUsageMetadata`)
+- LLxprt needs a provider-agnostic solution built on `IContent` / `HistoryService`
+- Upstream uses sync I/O and JSON snapshots; LLxprt design uses async append-only JSONL
+- The architectural gap is too large for cherry-pick + adapt; a clean-room design is more maintainable
+
+**Tracking:**
+- Parent: [#1361 — Session Recording Service](https://github.com/vybestack/llxprt-code/issues/1361)
+- Sub-issues: #1362 (Core types + writer), #1363 (Replay engine), #1364 (Recording integration), #1365 (Resume flow), #1366 (List/delete), #1367 (Concurrency), #1368 (Remove old persistence), #1369 (Cleanup)
+- Design reviewed through 4 rounds of deepthinker review, declared implementation-ready
+- Local design artifacts: `project-plans/gmerge-0.18.4/sessionrecording/`

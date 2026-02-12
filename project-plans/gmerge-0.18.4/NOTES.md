@@ -96,6 +96,22 @@ Running notes during batch execution.
 - Fixed stdio.test.ts assertions: corrected from positional args to object-form emitOutput.
 - Skipped: Auth dialog changes (multi-provider), oauth2 changes (Google-specific).
 
+## Session Recording — Out-of-Band
+- Upstream's `ChatRecordingService` (Gemini-specific, sync I/O, JSON snapshots) was partially cherry-picked
+  in Batch 3 (e1c711f5) but the architecture is incompatible with LLxprt's multi-provider design.
+- Batch 3 notes already recorded: "Removed orphaned sessions.test.ts that referenced deleted chatRecordingService."
+- An initial WIP attempt to port `ChatRecordingService` directly was reverted — too many Gemini-specific
+  assumptions (`PartListUnion`, `GenerateContentResponseUsageMetadata`, Gemini-only model field).
+- Instead, a clean-room Session Recording Service was designed from scratch as an out-of-band effort:
+  - Append-only JSONL format (inspired by codex-cli's RolloutRecorder approach)
+  - Provider-agnostic: records `IContent` blocks, not Gemini-specific types
+  - Async I/O with explicit flush points (awaited at turn boundaries)
+  - Compression recorded as in-stream event in same file (not new file like upstream)
+  - Replaces `SessionPersistenceService` entirely (no migration shim)
+- Design tracked under GitHub #1361 with 8 sub-issues (#1362-#1369).
+- 4 rounds of deepthinker review completed; declared implementation-ready.
+- All upstream `ChatRecordingService` feature areas are covered (see `sessionrecording/chatrecording-features.md`).
+
 ## General Notes
 - Subagent tool (cherrypicker/reviewer) was broken throughout this session due to API errors. Work done directly by coordinator and via deepthinker subagent.
 - LLxprt's AppContainer.tsx is fundamentally different from upstream (v2 architecture with useAppDispatch/appState/AppDispatchProvider) — always keep HEAD on conflicts.
