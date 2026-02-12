@@ -15,7 +15,21 @@
  */
 
 /**
- * Normalize tool IDs from history format to OpenAI format.
+ * Shared utility for normalizing tool IDs between provider formats and history format.
+ */
+
+const SANITIZE_PATTERN = /[^a-zA-Z0-9_-]/g;
+
+function sanitizeSuffix(suffix: string): string {
+  return suffix.replace(SANITIZE_PATTERN, '');
+}
+
+/**
+ * Normalizes various tool ID formats to OpenAI format (call_xxx).
+ * - hist_tool_xxx → call_xxx
+ * - toolu_xxx → call_xxx
+ * - call_xxx → call_xxx (sanitized)
+ * - unknown → call_unknown
  */
 export function normalizeToOpenAIToolId(id: string): string {
   if (!id) {
@@ -23,16 +37,47 @@ export function normalizeToOpenAIToolId(id: string): string {
   }
 
   if (id.startsWith('call_')) {
-    return id;
+    const suffix = id.substring('call_'.length);
+    return `call_${sanitizeSuffix(suffix)}`;
+  }
+
+  let suffix = '';
+  if (id.startsWith('hist_tool_')) {
+    suffix = id.substring('hist_tool_'.length);
+  } else if (id.startsWith('toolu_')) {
+    suffix = id.substring('toolu_'.length);
+  } else {
+    suffix = id;
+  }
+
+  return `call_${sanitizeSuffix(suffix)}`;
+}
+
+/**
+ * Normalizes various tool ID formats to history format (hist_tool_xxx).
+ * - call_xxx → hist_tool_xxx
+ * - toolu_xxx → hist_tool_xxx
+ * - hist_tool_xxx → hist_tool_xxx (sanitized)
+ */
+export function normalizeToHistoryToolId(id: string): string {
+  if (!id) {
+    return 'hist_tool_';
   }
 
   if (id.startsWith('hist_tool_')) {
-    return `call_${id.substring('hist_tool_'.length)}`;
+    const suffix = id.substring('hist_tool_'.length);
+    return `hist_tool_${sanitizeSuffix(suffix)}`;
+  }
+
+  if (id.startsWith('call_')) {
+    const suffix = id.substring('call_'.length);
+    return `hist_tool_${sanitizeSuffix(suffix)}`;
   }
 
   if (id.startsWith('toolu_')) {
-    return `call_${id.substring('toolu_'.length)}`;
+    const suffix = id.substring('toolu_'.length);
+    return `hist_tool_${sanitizeSuffix(suffix)}`;
   }
 
-  return `call_${id}`;
+  return `hist_tool_${sanitizeSuffix(id)}`;
 }

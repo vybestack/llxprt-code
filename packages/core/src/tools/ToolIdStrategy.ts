@@ -21,7 +21,7 @@ import type {
   ContentBlock,
 } from '../services/history/IContent.js';
 import type { ToolFormat } from './IToolFormatter.js';
-import { normalizeToOpenAIToolId } from '../providers/openai-vercel/toolIdUtils.js';
+import { normalizeToOpenAIToolId } from '../providers/utils/toolIdNormalization.js';
 import crypto from 'node:crypto';
 
 /**
