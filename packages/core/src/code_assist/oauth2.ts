@@ -373,7 +373,7 @@ ${authUrl}`,
     if (process.stdout.isTTY || process.stderr.isTTY) {
       throw new FatalAuthenticationError(
         'OAuth code input is required but no UI dialog is available. ' +
-          'Please run with NO_BROWSER=true or use an API key with /keyfile.',
+          'Please use an API key with /keyfile or ensure the TUI is properly initialized.',
       );
     }
     code = await new Promise<string>((resolve) => {
