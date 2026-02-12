@@ -55,7 +55,7 @@ import {
   getCompressionStrategy,
   parseCompressionStrategyName,
 } from './compression/compressionStrategyFactory.js';
-import type { CompressionContext } from './compression/types.js';
+import type { CompressionContext, DensityConfig } from './compression/types.js';
 import { PromptResolver } from '../prompt-config/prompt-resolver.js';
 import { tokenLimit } from './tokenLimits.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -396,6 +396,20 @@ export class GeminiChat {
   private compressionPromise: Promise<void> | null = null;
   private logger = new DebugLogger('llxprt:gemini:chat');
   private lastPromptTokenCount: number | null = null;
+
+  /**
+   * Density dirty flag — tracks whether new content has been added since last optimization.
+   * @plan PLAN-20260211-HIGHDENSITY.P20
+   * @requirement REQ-HD-002.6, REQ-HD-002.7
+   */
+  private densityDirty: boolean = true;
+
+  /**
+   * Suppresses densityDirty from being set during compression rebuilds.
+   * @plan PLAN-20260211-HIGHDENSITY.P20
+   * @requirement REQ-HD-002.6
+   */
+  private _suppressDensityDirty: boolean = false;
   private readonly generationConfig: GenerateContentConfig;
 
   /**
@@ -439,6 +453,19 @@ export class GeminiChat {
     this.historyService = view.history;
     this.generationConfig = generationConfig;
     void contentGenerator;
+
+    // @plan PLAN-20260211-HIGHDENSITY.P20
+    // @requirement REQ-HD-002.6
+    // Wrap historyService.add to set densityDirty on turn-loop content adds.
+    // Compression rebuilds suppress this via _suppressDensityDirty.
+    const originalAdd = this.historyService.add.bind(this.historyService);
+    this.historyService.add = (...args: Parameters<typeof originalAdd>) => {
+      const result = originalAdd(...args);
+      if (!this._suppressDensityDirty) {
+        this.densityDirty = true;
+      }
+      return result;
+    };
 
     validateHistory(initialHistory);
 
@@ -1725,6 +1752,72 @@ export class GeminiChat {
   }
 
   /**
+   * Run density optimization if the active strategy supports it and new content exists.
+   * Called before the threshold check in ensureCompressionBeforeSend and enforceContextWindow.
+   *
+   * @plan PLAN-20260211-HIGHDENSITY.P20
+   * @requirement REQ-HD-002.1, REQ-HD-002.2, REQ-HD-002.3, REQ-HD-002.4, REQ-HD-002.5, REQ-HD-002.7, REQ-HD-002.9
+   * @pseudocode orchestration.md lines 50-99
+   */
+  private async ensureDensityOptimized(): Promise<void> {
+    // REQ-HD-002.3: Skip if no new content since last optimization
+    if (!this.densityDirty) {
+      return;
+    }
+
+    try {
+      // Step 1: Resolve the active compression strategy
+      const strategyName = parseCompressionStrategyName(
+        this.runtimeContext.ephemerals.compressionStrategy(),
+      );
+      const strategy = getCompressionStrategy(strategyName);
+
+      // REQ-HD-002.2: If strategy has no optimize method, skip
+      if (!strategy.optimize) {
+        return;
+      }
+
+      // Step 2: Build DensityConfig from ephemerals
+      const config: DensityConfig = {
+        readWritePruning:
+          this.runtimeContext.ephemerals.densityReadWritePruning(),
+        fileDedupe: this.runtimeContext.ephemerals.densityFileDedupe(),
+        recencyPruning: this.runtimeContext.ephemerals.densityRecencyPruning(),
+        recencyRetention:
+          this.runtimeContext.ephemerals.densityRecencyRetention(),
+        workspaceRoot: process.cwd(),
+      };
+
+      // Step 3: Get raw history (REQ-HD-002.9)
+      const history = this.historyService.getRawHistory();
+
+      // Step 4: Run optimization
+      const result = strategy.optimize(history, config);
+
+      // REQ-HD-002.5: Short-circuit if no changes
+      if (result.removals.length === 0 && result.replacements.size === 0) {
+        this.logger.debug(
+          () => '[GeminiChat] Density optimization produced no changes',
+        );
+        return;
+      }
+
+      // Step 5: Apply result (REQ-HD-002.4)
+      this.logger.debug(() => '[GeminiChat] Applying density optimization', {
+        removals: result.removals.length,
+        replacements: result.replacements.size,
+        metadata: result.metadata,
+      });
+
+      await this.historyService.applyDensityResult(result);
+      await this.historyService.waitForTokenUpdates();
+    } finally {
+      // REQ-HD-002.7: Always clear dirty flag, even on error or no-op
+      this.densityDirty = false;
+    }
+  }
+
+  /**
    * Check if compression is needed based on token count.
    *
    * Token calculation includes system prompt in both paths:
@@ -1789,6 +1882,10 @@ export class GeminiChat {
     }
 
     await this.historyService.waitForTokenUpdates();
+
+    // @plan PLAN-20260211-HIGHDENSITY.P18
+    // @requirement REQ-HD-002.1
+    await this.ensureDensityOptimized();
 
     if (this.shouldCompress(pendingTokens)) {
       const triggerMessage =
@@ -1977,6 +2074,25 @@ export class GeminiChat {
       },
     );
 
+    // @plan PLAN-20260211-HIGHDENSITY.P18
+    // @requirement REQ-HD-002.8
+    await this.ensureDensityOptimized();
+    await this.historyService.waitForTokenUpdates();
+
+    // Re-check after density optimization — may have freed enough space
+    const postOptProjected =
+      this.getEffectiveTokenCount() +
+      Math.max(0, pendingTokens) +
+      completionBudget;
+
+    if (postOptProjected <= marginAdjustedLimit) {
+      this.logger.debug(
+        () => '[GeminiChat] Density optimization reduced tokens below limit',
+        { postOptProjected, marginAdjustedLimit },
+      );
+      return;
+    }
+
     await this.performCompression(promptId);
     await this.historyService.waitForTokenUpdates();
 
@@ -2011,6 +2127,10 @@ export class GeminiChat {
   async performCompression(prompt_id: string): Promise<void> {
     this.logger.debug('Starting compression');
     this.historyService.startCompression();
+    // @plan PLAN-20260211-HIGHDENSITY.P20
+    // @requirement REQ-HD-002.6
+    // Suppress densityDirty during compression rebuild (clear+add loop)
+    this._suppressDensityDirty = true;
     try {
       const strategyName = parseCompressionStrategyName(
         this.runtimeContext.ephemerals.compressionStrategy(),
@@ -2030,6 +2150,7 @@ export class GeminiChat {
       this.logger.error('Compression failed:', error);
       throw error;
     } finally {
+      this._suppressDensityDirty = false;
       this.historyService.endCompression();
     }
 
