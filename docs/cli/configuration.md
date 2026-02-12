@@ -278,7 +278,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`ui.showLineNumbers`** (boolean):
   - **Description:** Show line numbers in the chat.
-  - **Default:** `false`
+  - **Default:** `true`
 
 - **`ui.showCitations`** (boolean):
   - **Description:** Show citations for generated text in the chat.

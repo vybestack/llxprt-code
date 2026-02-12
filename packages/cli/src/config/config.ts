@@ -619,11 +619,20 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
   yargsInstance.wrap(yargsInstance.terminalWidth());
   const result = await yargsInstance.parseAsync();
 
+  // Subcommand handlers (extensions, mcp) execute during parseAsync().
+  // If one ran successfully, exit now so we don't fall through to the
+  // main interactive/non-interactive stdin check.
+  const SUBCOMMAND_NAMES = new Set(['extensions', 'extension', 'ext', 'mcp']);
+  const matchedCommand = (result._ as string[])?.[0];
+  if (matchedCommand && SUBCOMMAND_NAMES.has(matchedCommand)) {
+    const { exitCli } = await import('../commands/utils.js');
+    await exitCli(0);
+  }
+
   // The import format is now only controlled by settings.memoryImportFormat
   // We no longer accept it as a CLI argument
 
   // Map camelCase names to match CliArgs interface
-  // Note: MCP and extension commands manage their own shutdown via exitCli()
 
   const promptWords = result.promptWords as string[] | undefined;
   const promptWordsFiltered =
