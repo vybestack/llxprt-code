@@ -1532,11 +1532,12 @@ export const AppContainer = (props: AppContainerProps) => {
 
   // Independent input history management (unaffected by /clear)
   const inputHistoryStore = useInputHistoryStore();
+  const lastSubmittedPromptRef = useRef<string>('');
 
   const handleUserCancel = useCallback(
     (shouldRestorePrompt?: boolean) => {
       if (shouldRestorePrompt) {
-        const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
+        const lastUserMessage = lastSubmittedPromptRef.current;
         if (lastUserMessage) {
           buffer.setText(lastUserMessage);
         }
@@ -1544,7 +1545,7 @@ export const AppContainer = (props: AppContainerProps) => {
         buffer.setText('');
       }
     },
-    [buffer, inputHistoryStore.inputHistory],
+    [buffer],
   );
 
   const handleOAuthCodeDialogClose = useCallback(() => {
@@ -1641,7 +1642,7 @@ export const AppContainer = (props: AppContainerProps) => {
       }
 
       if (shouldRestorePrompt) {
-        const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
+        const lastUserMessage = lastSubmittedPromptRef.current;
         if (lastUserMessage) {
           buffer.setText(lastUserMessage);
         }
@@ -1649,7 +1650,7 @@ export const AppContainer = (props: AppContainerProps) => {
         buffer.setText('');
       }
     },
-    [buffer, inputHistoryStore.inputHistory, pendingHistoryItems],
+    [buffer, pendingHistoryItems],
   );
 
   // Input handling - queue messages for processing
@@ -1666,6 +1667,8 @@ export const AppContainer = (props: AppContainerProps) => {
         hadToolCallsRef.current = false;
         todoContinuationRef.current?.clearPause();
 
+        // Capture synchronously before async state updates (prevents race condition on restore)
+        lastSubmittedPromptRef.current = trimmedValue;
         // Add to independent input history
         inputHistoryStore.addInput(trimmedValue);
         submitQuery(trimmedValue);

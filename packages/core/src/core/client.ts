@@ -1024,7 +1024,7 @@ ${systemInstruction}`;
           : undefined;
 
       const settings: ReadonlySettingsSnapshot = {
-        compressionThreshold: compressionThreshold ?? 0.8,
+        compressionThreshold: compressionThreshold ?? 0.5,
         contextLimit,
         preserveThreshold: preserveThreshold ?? 0.2,
         telemetry: {
