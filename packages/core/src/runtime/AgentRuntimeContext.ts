@@ -56,6 +56,14 @@ export interface ReadonlySettingsSnapshot {
   compressionStrategy?: string;
   /** @plan PLAN-20260211-COMPRESSION.P12 */
   compressionProfile?: string;
+  /**
+   * @plan PLAN-20260211-HIGHDENSITY.P15
+   * @requirement REQ-HD-009.5
+   */
+  'compression.density.readWritePruning'?: boolean;
+  'compression.density.fileDedupe'?: boolean;
+  'compression.density.recencyPruning'?: boolean;
+  'compression.density.recencyRetention'?: number;
 }
 
 /**
@@ -194,6 +202,14 @@ export interface AgentRuntimeContext {
     compressionStrategy(): string;
     /** @plan PLAN-20260211-COMPRESSION.P12 */
     compressionProfile(): string | undefined;
+    /**
+     * @plan PLAN-20260211-HIGHDENSITY.P15
+     * @requirement REQ-HD-009.5
+     */
+    densityReadWritePruning(): boolean;
+    densityFileDedupe(): boolean;
+    densityRecencyPruning(): boolean;
+    densityRecencyRetention(): number;
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006

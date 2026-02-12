@@ -974,6 +974,44 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     type: 'string',
     persistToProfile: true,
   },
+  /**
+   * @plan PLAN-20260211-HIGHDENSITY.P15
+   * @requirement REQ-HD-009.1, REQ-HD-009.2, REQ-HD-009.3, REQ-HD-009.4
+   * @pseudocode settings-factory.md lines 14-51
+   */
+  {
+    key: 'compression.density.readWritePruning',
+    category: 'cli-behavior',
+    description: 'Enable READ→WRITE pair pruning in high-density strategy',
+    type: 'boolean',
+    default: true,
+    persistToProfile: true,
+  },
+  {
+    key: 'compression.density.fileDedupe',
+    category: 'cli-behavior',
+    description: 'Enable duplicate @ file inclusion deduplication',
+    type: 'boolean',
+    default: true,
+    persistToProfile: true,
+  },
+  {
+    key: 'compression.density.recencyPruning',
+    category: 'cli-behavior',
+    description:
+      'Enable tool result recency pruning (keep last N per tool type)',
+    type: 'boolean',
+    default: false,
+    persistToProfile: true,
+  },
+  {
+    key: 'compression.density.recencyRetention',
+    category: 'cli-behavior',
+    description: 'Number of recent results to keep per tool type',
+    type: 'number',
+    default: 3,
+    persistToProfile: true,
+  },
 ];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

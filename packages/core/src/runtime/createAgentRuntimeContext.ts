@@ -129,6 +129,39 @@ export function createAgentRuntimeContext(
         options.settings.compressionProfile,
       ),
     /**
+     * @plan PLAN-20260211-HIGHDENSITY.P15
+     * @requirement REQ-HD-009.5
+     * @pseudocode settings-factory.md lines 90-121
+     */
+    densityReadWritePruning: (): boolean => {
+      const value = getLiveSetting<boolean>(
+        'compression.density.readWritePruning',
+        options.settings['compression.density.readWritePruning'],
+      );
+      return typeof value === 'boolean' ? value : true;
+    },
+    densityFileDedupe: (): boolean => {
+      const value = getLiveSetting<boolean>(
+        'compression.density.fileDedupe',
+        options.settings['compression.density.fileDedupe'],
+      );
+      return typeof value === 'boolean' ? value : true;
+    },
+    densityRecencyPruning: (): boolean => {
+      const value = getLiveSetting<boolean>(
+        'compression.density.recencyPruning',
+        options.settings['compression.density.recencyPruning'],
+      );
+      return typeof value === 'boolean' ? value : false;
+    },
+    densityRecencyRetention: (): number => {
+      const value = getLiveSetting<number>(
+        'compression.density.recencyRetention',
+        options.settings['compression.density.recencyRetention'],
+      );
+      return typeof value === 'number' && value >= 1 ? value : 3;
+    },
+    /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006
      */
