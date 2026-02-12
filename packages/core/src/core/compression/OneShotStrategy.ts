@@ -6,7 +6,9 @@
 
 /**
  * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @plan PLAN-20260211-HIGHDENSITY.P05
  * @requirement REQ-HD-001.3
+ * @pseudocode strategy-interface.md lines 90-94
  *
  * One-shot compression strategy: summarizes the entire history except
  * the last N messages in a single LLM call. The preserved tail is

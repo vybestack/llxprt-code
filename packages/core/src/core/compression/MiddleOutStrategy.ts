@@ -7,9 +7,11 @@
 /**
  * @plan PLAN-20260211-COMPRESSION.P06
  * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @plan PLAN-20260211-HIGHDENSITY.P05
  * @requirement REQ-CS-002.1, REQ-CS-002.2, REQ-CS-002.3, REQ-CS-002.4
  * @requirement REQ-CS-002.5, REQ-CS-002.6, REQ-CS-002.7, REQ-CS-002.8
  * @requirement REQ-HD-001.3
+ * @pseudocode strategy-interface.md lines 70-74
  *
  * Middle-out compression strategy: preserves the top and bottom of the
  * conversation history and compresses the middle section via an LLM call.
