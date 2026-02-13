@@ -939,7 +939,15 @@ export type TextBufferAction =
   | { type: 'vim_move_to_first_line' }
   | { type: 'vim_move_to_last_line' }
   | { type: 'vim_move_to_line'; payload: { lineNumber: number } }
-  | { type: 'vim_escape_insert_mode' };
+  | { type: 'vim_escape_insert_mode' }
+  | {
+      type: 'set_cursor';
+      payload: {
+        cursorRow: number;
+        cursorCol: number;
+        preferredCol: number | null;
+      };
+    };
 
 export function textBufferReducer(
   state: TextBufferState,
@@ -1399,6 +1407,16 @@ export function textBufferReducer(
         cursorRow: newRow,
         cursorCol: newCol,
         preferredCol: null,
+      };
+    }
+
+    case 'set_cursor': {
+      const { cursorRow, cursorCol, preferredCol } = action.payload;
+      return {
+        ...state,
+        cursorRow,
+        cursorCol,
+        preferredCol,
       };
     }
 

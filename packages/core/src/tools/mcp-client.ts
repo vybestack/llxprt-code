@@ -504,12 +504,13 @@ export async function discoverMcpTools(
  */
 class LenientJsonSchemaValidator implements jsonSchemaValidator {
   private readonly ajvValidator = new AjvJsonSchemaValidator();
+  private readonly debugLogger = new DebugLogger('llxprt:mcp:schema');
 
   getValidator<T>(schema: JsonSchemaType): JsonSchemaValidator<T> {
     try {
       return this.ajvValidator.getValidator<T>(schema);
     } catch (error) {
-      debugLogger.warn(
+      this.debugLogger.warn(
         `Failed to compile MCP tool output schema (${
           (schema as Record<string, unknown>)?.['$id'] ?? '<no $id>'
         }): ${error instanceof Error ? error.message : String(error)}. ` +
