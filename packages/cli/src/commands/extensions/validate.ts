@@ -112,5 +112,6 @@ export const validateCommand: CommandModule = {
     await handleValidate({
       path: args['path'] as string,
     });
+    await exitCli();
   },
 };

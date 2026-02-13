@@ -33,5 +33,6 @@ export const listCommand: CommandModule = {
   builder: (yargs) => yargs,
   handler: async () => {
     await handleList();
+    await exitCli();
   },
 };

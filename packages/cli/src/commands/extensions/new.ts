@@ -9,6 +9,7 @@ import { join, dirname } from 'node:path';
 import type { CommandModule } from 'yargs';
 import { fileURLToPath } from 'node:url';
 import { getErrorMessage } from '../../utils/errors.js';
+import { exitCli } from '../utils.js';
 
 interface NewArgs {
   path: string;
@@ -82,5 +83,6 @@ export const newCommand: CommandModule = {
       path: args['path'] as string,
       template: args['template'] as string,
     });
+    await exitCli();
   },
 };

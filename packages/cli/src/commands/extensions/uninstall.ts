@@ -62,5 +62,6 @@ export const uninstallCommand: CommandModule = {
     await handleUninstall({
       names: argv['names'] as string[],
     });
+    await exitCli();
   },
 };

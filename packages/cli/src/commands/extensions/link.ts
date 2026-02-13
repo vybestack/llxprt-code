@@ -56,5 +56,6 @@ export const linkCommand: CommandModule = {
     await handleLink({
       path: argv['path'] as string,
     });
+    await exitCli();
   },
 };

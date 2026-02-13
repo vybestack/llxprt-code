@@ -8,6 +8,7 @@ import { type CommandModule } from 'yargs';
 import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { disableExtension } from '../../config/extension.js';
 import { SettingScope } from '../../config/settings.js';
+import { exitCli } from '../utils.js';
 
 interface DisableArgs {
   name: string;
@@ -66,5 +67,6 @@ export const disableCommand: CommandModule = {
       name: argv['name'] as string,
       scope: argv['scope'] as string,
     });
+    await exitCli();
   },
 };

@@ -162,5 +162,6 @@ export const installCommand: CommandModule = {
       ref: argv['ref'] as string | undefined,
       autoUpdate: argv['auto-update'] as boolean | undefined,
     });
+    await exitCli();
   },
 };
