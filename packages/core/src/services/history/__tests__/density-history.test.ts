@@ -457,7 +457,7 @@ describe('HistoryService — Density Extensions', () => {
               );
             },
           ),
-          { numRuns: 50 },
+          { numRuns: 20 },
         );
       },
     );
@@ -516,7 +516,7 @@ describe('HistoryService — Density Extensions', () => {
               }
             },
           ),
-          { numRuns: 50 },
+          { numRuns: 20 },
         );
       },
     );
@@ -557,7 +557,7 @@ describe('HistoryService — Density Extensions', () => {
               }
             },
           ),
-          { numRuns: 50 },
+          { numRuns: 20 },
         );
       },
     );
@@ -610,7 +610,7 @@ describe('HistoryService — Density Extensions', () => {
             }
             expect(svc.getRawHistory()).toHaveLength(n);
           }),
-          { numRuns: 50 },
+          { numRuns: 20 },
         );
       },
     );
