@@ -190,6 +190,12 @@ export function buildContinuationDirective(activeTodos?: string): string {
 function extractFirstTaskContent(activeTodos: string): string | undefined {
   const firstLine = activeTodos.trim().split('\n')[0];
   if (!firstLine) return undefined;
-  const match = firstLine.match(/^-\s*\[.*?]\s*(.+)$/);
-  return match?.[1]?.trim();
+
+  const firstCloseBracket = firstLine.indexOf(']');
+  if (firstCloseBracket === -1) {
+    return firstLine.trim() || undefined;
+  }
+
+  const task = firstLine.slice(firstCloseBracket + 1).trim();
+  return task.length > 0 ? task : undefined;
 }

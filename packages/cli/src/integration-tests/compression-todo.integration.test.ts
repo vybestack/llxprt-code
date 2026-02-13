@@ -25,8 +25,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { TodoStore, Todo } from '@vybestack/llxprt-code-core';
-import { buildContinuationDirective } from '../../../core/src/core/compression/utils.js';
+import {
+  TodoStore,
+  Todo,
+  buildContinuationDirective,
+} from '@vybestack/llxprt-code-core';
 
 describe('Compression Todo Integration (Issues #1387, #1388)', () => {
   let tempDir: string;
@@ -44,6 +47,12 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
     content,
     status,
   });
+
+  const getActiveTodos = (todos: Todo[]): Todo[] => {
+    const inProgress = todos.filter((todo) => todo.status === 'in_progress');
+    const pending = todos.filter((todo) => todo.status === 'pending');
+    return [...inProgress, ...pending];
+  };
 
   beforeEach(async () => {
     originalHome = process.env.HOME;
@@ -138,14 +147,6 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       await todoStore.writeTodos(mixedTodos);
 
       // Simulate the compression context formatting from client.ts
-      const getActiveTodos = (todos: Todo[]): Todo[] => {
-        const inProgress = todos.filter(
-          (todo) => todo.status === 'in_progress',
-        );
-        const pending = todos.filter((todo) => todo.status === 'pending');
-        return [...inProgress, ...pending];
-      };
-
       const storedTodos = await todoStore.readTodos();
       const active = getActiveTodos(storedTodos);
 
@@ -173,14 +174,6 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       expect(storedTodos).toHaveLength(0);
 
       // When: Getting active todos
-      const getActiveTodos = (todos: Todo[]): Todo[] => {
-        const inProgress = todos.filter(
-          (todo) => todo.status === 'in_progress',
-        );
-        const pending = todos.filter((todo) => todo.status === 'pending');
-        return [...inProgress, ...pending];
-      };
-
       const active = getActiveTodos(storedTodos);
       expect(active).toHaveLength(0);
 
@@ -211,14 +204,6 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       const storedTodos = await todoStore.readTodos();
 
       // Filter like client.ts does
-      const getActiveTodos = (todos: Todo[]): Todo[] => {
-        const inProgress = todos.filter(
-          (todo) => todo.status === 'in_progress',
-        );
-        const pending = todos.filter((todo) => todo.status === 'pending');
-        return [...inProgress, ...pending];
-      };
-
       const active = getActiveTodos(storedTodos);
 
       // Should only have 3 active (1 in_progress + 2 pending)
