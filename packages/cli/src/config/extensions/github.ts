@@ -144,7 +144,7 @@ export function parseGitHubRepoForReleases(source: string): {
   if (source.startsWith('git@')) {
     if (source.startsWith('git@github.com:')) {
       throw new Error(
-        `GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via SSH.`,
+        `GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via HTTPS.`,
       );
     }
   }
