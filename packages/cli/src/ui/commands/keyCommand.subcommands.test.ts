@@ -231,15 +231,12 @@ describe('/key save (R13)', () => {
    */
   it('prompts for overwrite when key already exists in interactive mode', async () => {
     await mockStorage.saveKey('existing', 'old-key-value');
-    // The command should return a confirm_action since the key exists
-    const result = (await keyCommand.action!(
+    const result = await keyCommand.action!(
       context,
       'save existing new-key-value',
-    )) as MessageActionReturn;
+    );
     expect(result).toBeDefined();
-    // In interactive mode, it should either prompt (confirm_action) or succeed if confirmed
-    // After P15, this will return confirm_action; the re-invocation with overwriteConfirmed
-    // will proceed.
+    expect((result as Record<string, unknown>).type).toBe('confirm_action');
   });
 
   /**
@@ -507,11 +504,8 @@ describe('/key delete (R17)', () => {
     await mockStorage.saveKey('mykey', 'sk-todelete123');
     // overwriteConfirmed not set — should prompt
     const result = await keyCommand.action!(context, 'delete mykey');
-    // Should be confirm_action type
     expect(result).toBeDefined();
-    if (result && 'type' in result) {
-      expect(result.type).toBe('confirm_action');
-    }
+    expect((result as Record<string, unknown>).type).toBe('confirm_action');
   });
 });
 

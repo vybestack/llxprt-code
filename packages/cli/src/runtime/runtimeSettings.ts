@@ -2429,7 +2429,7 @@ async function resolveNamedKey(name: string): Promise<string> {
     key = await storage.getKey(name);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    const isValidation = msg.includes('Invalid key name');
+    const isValidation = msg.includes('is invalid');
     const prefix = isValidation
       ? `Invalid key name '${name}'`
       : `Failed to access keyring while resolving named key '${name}'`;

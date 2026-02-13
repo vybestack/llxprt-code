@@ -188,10 +188,18 @@ describe('SecureStore — Availability Probe', () => {
    */
   it('probe result is cached for 60 seconds', async () => {
     let callCount = 0;
+    let probeSetCalls = 0;
     const mockKeyring = createMockKeyring();
+    const spiedKeyring: KeyringAdapter = {
+      ...mockKeyring,
+      setPassword: async (...args: [string, string, string]) => {
+        probeSetCalls++;
+        return mockKeyring.setPassword(...args);
+      },
+    };
     const countingLoader = async () => {
       callCount++;
-      return mockKeyring;
+      return spiedKeyring;
     };
     const store = new SecureStore('test-service', {
       keyringLoader: countingLoader,
@@ -202,8 +210,10 @@ describe('SecureStore — Availability Probe', () => {
     const second = await store.isKeychainAvailable();
     expect(first).toBe(true);
     expect(second).toBe(true);
-    // The loader was called only once because the second call used the cache
+    // The loader is called once (adapter is cached)
     expect(callCount).toBe(1);
+    // The probe cycle (set/get/delete) runs only once — second call uses cached result
+    expect(probeSetCalls).toBe(1);
   });
 
   /**
@@ -212,17 +222,19 @@ describe('SecureStore — Availability Probe', () => {
    */
   it('transient error invalidates the cache', async () => {
     let shouldFail = false;
+    const probeStore = new Map<string, string>();
     const adapter: KeyringAdapter = {
-      getPassword: async () => {
+      getPassword: async (_svc: string, acct: string) => {
         if (shouldFail) throw new Error('timed out');
-        return 'probe-value';
+        return probeStore.get(acct) ?? null;
       },
-      setPassword: async () => {
+      setPassword: async (_svc: string, acct: string, pw: string) => {
         if (shouldFail) throw new Error('timed out');
+        probeStore.set(acct, pw);
       },
-      deletePassword: async () => {
+      deletePassword: async (_svc: string, acct: string) => {
         if (shouldFail) throw new Error('timed out');
-        return true;
+        return probeStore.delete(acct);
       },
     };
     const store = new SecureStore('test-service', {
@@ -236,8 +248,18 @@ describe('SecureStore — Availability Probe', () => {
 
     // Now make the adapter fail transiently
     shouldFail = true;
-    // The second call should re-probe (cache invalidated by transient error)
-    // and return false since the adapter now times out
+
+    // Trigger consecutive keyring failures via set() to invalidate the cache
+    // (3 consecutive failures = KEYRING_FAILURE_THRESHOLD)
+    for (let i = 0; i < 3; i++) {
+      try {
+        await store.set(`fail-${i}`, 'val');
+      } catch {
+        // expected — fallback policy is 'allow' so some may write to file
+      }
+    }
+
+    // After cache invalidation, isKeychainAvailable re-probes and fails
     const second = await store.isKeychainAvailable();
     expect(second).toBe(false);
   });
@@ -814,17 +836,19 @@ describe('SecureStore — Resilience', () => {
    */
   it('mid-session keyring failure falls back to encrypted file', async () => {
     let shouldFail = false;
+    const adapterStore = new Map<string, string>();
     const adapter: KeyringAdapter = {
-      getPassword: async (_service, _account) => {
+      getPassword: async (_service, account) => {
         if (shouldFail) throw new Error('Keyring daemon crashed');
-        return null;
+        return adapterStore.get(account) ?? null;
       },
-      setPassword: async (_service, _account, _password) => {
+      setPassword: async (_service, account, password) => {
         if (shouldFail) throw new Error('Keyring daemon crashed');
+        adapterStore.set(account, password);
       },
-      deletePassword: async () => {
+      deletePassword: async (_service, account) => {
         if (shouldFail) throw new Error('Keyring daemon crashed');
-        return true;
+        return adapterStore.delete(account);
       },
     };
 
@@ -853,7 +877,7 @@ describe('SecureStore — Resilience', () => {
    * @plan PLAN-20260211-SECURESTORE.P05
    * @requirement R7B.2
    */
-  it('atomic write prevents partial files on interruption', async () => {
+  it('sequential writes produce valid files with no temp file residue', async () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
@@ -1120,20 +1144,22 @@ describe('SecureStore — Probe Cache Invalidation', () => {
   it('after cache invalidation, next isKeychainAvailable re-probes', async () => {
     let probeCallCount = 0;
     let shouldFail = false;
+    const probeStore = new Map<string, string>();
     const adapter: KeyringAdapter = {
-      getPassword: async () => {
+      getPassword: async (_svc: string, acct: string) => {
         if (shouldFail) throw new Error('Keyring unavailable');
         probeCallCount++;
-        return 'probe-value';
+        return probeStore.get(acct) ?? null;
       },
-      setPassword: async () => {
+      setPassword: async (_svc: string, acct: string, pw: string) => {
         if (shouldFail) throw new Error('Keyring unavailable');
         probeCallCount++;
+        probeStore.set(acct, pw);
       },
-      deletePassword: async () => {
+      deletePassword: async (_svc: string, acct: string) => {
         if (shouldFail) throw new Error('Keyring unavailable');
         probeCallCount++;
-        return true;
+        return probeStore.delete(acct);
       },
     };
 
@@ -1186,7 +1212,7 @@ describe('SecureStore — Fault Injection', () => {
    * @plan PLAN-20260211-SECURESTORE.P05
    * @requirement R27.1
    */
-  it('write interruption leaves no partial .enc file', async () => {
+  it('sequential writes leave no temp files behind', async () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
@@ -1216,17 +1242,19 @@ describe('SecureStore — Fault Injection', () => {
    */
   it('keyring error after successful fallback write does not lose data', async () => {
     let keyringFailed = false;
+    const faultStore = new Map<string, string>();
     const adapter: KeyringAdapter = {
-      getPassword: async () => {
+      getPassword: async (_svc: string, acct: string) => {
         if (keyringFailed) throw new Error('Keyring crashed');
-        return null;
+        return faultStore.get(acct) ?? null;
       },
-      setPassword: async () => {
+      setPassword: async (_svc: string, acct: string, pw: string) => {
         if (keyringFailed) throw new Error('Keyring crashed');
+        faultStore.set(acct, pw);
       },
-      deletePassword: async () => {
+      deletePassword: async (_svc: string, acct: string) => {
         if (keyringFailed) throw new Error('Keyring crashed');
-        return true;
+        return faultStore.delete(acct);
       },
     };
 

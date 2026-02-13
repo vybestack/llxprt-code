@@ -345,8 +345,12 @@ export class ToolKeyStorage {
     try {
       const key = await this.secureStore.get(toolName);
       if (key !== null) return key;
-    } catch {
-      // SecureStore keychain failed; try file fallback
+    } catch (error) {
+      if (error instanceof SecureStoreError && error.code === 'UNAVAILABLE') {
+        // Keyring unavailable — fall through to file
+      } else {
+        throw error;
+      }
     }
     return await this.getFromFile(toolName);
   }
@@ -355,8 +359,12 @@ export class ToolKeyStorage {
     this.assertValidToolName(toolName);
     try {
       await this.secureStore.delete(toolName);
-    } catch {
-      // SecureStore keychain failed; continue to delete file
+    } catch (error) {
+      if (error instanceof SecureStoreError && error.code === 'UNAVAILABLE') {
+        // Keyring unavailable — continue to delete file
+      } else {
+        throw error;
+      }
     }
     await this.deleteFile(toolName);
   }

@@ -340,12 +340,14 @@ export class SecureStore {
   // ─── Availability Probe ──────────────────────────────────────────────────
 
   async isKeychainAvailable(): Promise<boolean> {
-    // Check cache — only honor cached 'false' results within TTL
-    if (this.probeCache !== null && !this.probeCache.available) {
+    // Check cache — honor both positive and negative results within TTL
+    if (this.probeCache !== null) {
       const elapsed = Date.now() - this.probeCache.timestamp;
       if (elapsed < this.PROBE_TTL_MS) {
-        this.logger.debug(() => '[probe] cached=false (within TTL)');
-        return false;
+        this.logger.debug(
+          () => `[probe] cached=${this.probeCache!.available} (within TTL)`,
+        );
+        return this.probeCache.available;
       }
     }
 
@@ -363,11 +365,23 @@ export class SecureStore {
     const testValue = 'probe-' + Date.now();
     try {
       await adapter.setPassword(this.serviceName, testAccount, testValue);
-      await adapter.getPassword(this.serviceName, testAccount);
+      const retrieved = await adapter.getPassword(
+        this.serviceName,
+        testAccount,
+      );
       await adapter.deletePassword(this.serviceName, testAccount);
-      this.probeCache = { available: true, timestamp: Date.now() };
-      this.logger.debug(() => '[probe] keyring available — OS keychain active');
-      return true;
+      const probeOk = retrieved === testValue;
+      this.probeCache = { available: probeOk, timestamp: Date.now() };
+      if (!probeOk) {
+        this.logger.debug(
+          () => '[probe] keyring probe value mismatch — marking unavailable',
+        );
+      } else {
+        this.logger.debug(
+          () => '[probe] keyring available — OS keychain active',
+        );
+      }
+      return probeOk;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.debug(() => `[probe] keyring probe failed: ${msg}`);
@@ -441,10 +455,25 @@ export class SecureStore {
         this.logger.debug(() => `[get] key='${key}' → not found in keyring`);
       } catch (error) {
         this.recordKeyringFailure();
+        const classified = classifyError(error);
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.debug(
-          () => `[get] key='${key}' keyring read failed: ${msg}`,
+          () =>
+            `[get] key='${key}' keyring read failed (${classified}): ${msg}`,
         );
+        // Re-throw non-transient, non-availability errors so callers know
+        // the keyring is actively denying access (not just missing).
+        if (
+          classified !== 'UNAVAILABLE' &&
+          classified !== 'NOT_FOUND' &&
+          classified !== 'TIMEOUT'
+        ) {
+          throw new SecureStoreError(
+            msg,
+            classified,
+            getRemediation(classified),
+          );
+        }
       }
     } else {
       this.logger.debug(

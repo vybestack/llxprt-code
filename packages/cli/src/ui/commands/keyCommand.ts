@@ -45,7 +45,7 @@ function formatStorageError(error: unknown): string {
     }
     return `${error.message} — ${error.remediation}`;
   }
-  if (error instanceof Error && error.message.includes('invalid')) {
+  if (error instanceof Error && error.message.includes('is invalid')) {
     return error.message;
   }
   return `Key operation failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -115,8 +115,9 @@ async function handleSave(
         };
       }
     }
-  } catch {
-    // Storage check failed — proceed with save attempt
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.warn(`[key save] Could not check if key '${name}' exists: ${msg}`);
   }
 
   // Save the key (R13.1)
