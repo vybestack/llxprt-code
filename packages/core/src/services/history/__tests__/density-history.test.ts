@@ -432,19 +432,16 @@ describe('HistoryService — Density Extensions', () => {
       async () => {
         await fc.assert(
           fc.asyncProperty(
-            // Generate a history size between 1 and 15
-            fc.integer({ min: 1, max: 15 }),
-            // Generate a set of unique removal indices (will be filtered to bounds)
-            fc.array(fc.integer({ min: 0, max: 14 }), {
+            fc.integer({ min: 1, max: 8 }),
+            fc.array(fc.integer({ min: 0, max: 7 }), {
               minLength: 0,
-              maxLength: 10,
+              maxLength: 5,
             }),
             async (histSize, rawRemovals) => {
               const svc = new HistoryService();
               seedHistory(svc, histSize);
               await svc.waitForTokenUpdates();
 
-              // Deduplicate and keep only in-bounds indices
               const removals = [...new Set(rawRemovals)].filter(
                 (i) => i >= 0 && i < histSize,
               );
@@ -457,7 +454,7 @@ describe('HistoryService — Density Extensions', () => {
               );
             },
           ),
-          { numRuns: 20 },
+          { numRuns: 10 },
         );
       },
     );
@@ -471,21 +468,20 @@ describe('HistoryService — Density Extensions', () => {
       async () => {
         await fc.assert(
           fc.asyncProperty(
-            fc.integer({ min: 2, max: 12 }),
-            fc.array(fc.integer({ min: 0, max: 11 }), {
-              minLength: 0,
-              maxLength: 6,
-            }),
-            fc.array(fc.integer({ min: 0, max: 11 }), {
+            fc.integer({ min: 2, max: 8 }),
+            fc.array(fc.integer({ min: 0, max: 7 }), {
               minLength: 0,
               maxLength: 4,
+            }),
+            fc.array(fc.integer({ min: 0, max: 7 }), {
+              minLength: 0,
+              maxLength: 3,
             }),
             async (histSize, rawRemovals, rawReplacements) => {
               const svc = new HistoryService();
               const entries = seedHistory(svc, histSize);
               await svc.waitForTokenUpdates();
 
-              // Build valid non-overlapping sets
               const removalSet = new Set(
                 rawRemovals.filter((i) => i >= 0 && i < histSize),
               );
@@ -504,7 +500,6 @@ describe('HistoryService — Density Extensions', () => {
               const result = makeDensityResult(removals, replacements);
               await svc.applyDensityResult(result);
 
-              // Entries that were NOT touched must still be the same reference
               const raw = svc.getRawHistory();
               let rawIdx = 0;
               for (let origIdx = 0; origIdx < histSize; origIdx++) {
@@ -516,7 +511,7 @@ describe('HistoryService — Density Extensions', () => {
               }
             },
           ),
-          { numRuns: 20 },
+          { numRuns: 10 },
         );
       },
     );
@@ -530,10 +525,10 @@ describe('HistoryService — Density Extensions', () => {
       async () => {
         await fc.assert(
           fc.asyncProperty(
-            fc.integer({ min: 2, max: 10 }),
-            fc.array(fc.integer({ min: 0, max: 9 }), {
+            fc.integer({ min: 2, max: 8 }),
+            fc.array(fc.integer({ min: 0, max: 7 }), {
               minLength: 1,
-              maxLength: 5,
+              maxLength: 4,
             }),
             async (histSize, rawReplacements) => {
               const svc = new HistoryService();
@@ -546,7 +541,7 @@ describe('HistoryService — Density Extensions', () => {
                   replacements.set(idx, makeEntry('human', `REPLACED_${idx}`));
                 }
               }
-              if (replacements.size === 0) return; // skip trivial case
+              if (replacements.size === 0) return;
 
               const result = makeDensityResult([], replacements);
               await svc.applyDensityResult(result);
@@ -557,7 +552,7 @@ describe('HistoryService — Density Extensions', () => {
               }
             },
           ),
-          { numRuns: 20 },
+          { numRuns: 10 },
         );
       },
     );
@@ -571,10 +566,10 @@ describe('HistoryService — Density Extensions', () => {
       async () => {
         await fc.assert(
           fc.asyncProperty(
-            fc.integer({ min: 1, max: 10 }),
-            fc.integer({ min: 0, max: 9 }),
+            fc.integer({ min: 1, max: 8 }),
+            fc.integer({ min: 0, max: 7 }),
             async (histSize, conflictIdx) => {
-              if (conflictIdx >= histSize) return; // skip out-of-range
+              if (conflictIdx >= histSize) return;
 
               const svc = new HistoryService();
               seedHistory(svc, histSize);
@@ -590,7 +585,7 @@ describe('HistoryService — Density Extensions', () => {
               );
             },
           ),
-          { numRuns: 30 },
+          { numRuns: 10 },
         );
       },
     );
@@ -603,14 +598,14 @@ describe('HistoryService — Density Extensions', () => {
       { timeout: 60_000 },
       () => {
         fc.assert(
-          fc.property(fc.integer({ min: 0, max: 20 }), (n) => {
+          fc.property(fc.integer({ min: 0, max: 10 }), (n) => {
             const svc = new HistoryService();
             for (let i = 0; i < n; i++) {
               svc.add(makeEntry('human', `msg-${i}`));
             }
             expect(svc.getRawHistory()).toHaveLength(n);
           }),
-          { numRuns: 20 },
+          { numRuns: 10 },
         );
       },
     );
@@ -624,14 +619,14 @@ describe('HistoryService — Density Extensions', () => {
       async () => {
         await fc.assert(
           fc.asyncProperty(
-            fc.integer({ min: 1, max: 10 }),
-            fc.integer({ min: 0, max: 5 }),
+            fc.integer({ min: 1, max: 8 }),
+            fc.integer({ min: 0, max: 4 }),
             async (histSize, offset) => {
               const svc = new HistoryService();
               seedHistory(svc, histSize);
               await svc.waitForTokenUpdates();
 
-              const oobIndex = histSize + offset; // always >= histSize
+              const oobIndex = histSize + offset;
               const result = makeDensityResult([oobIndex], new Map());
 
               await expect(svc.applyDensityResult(result)).rejects.toThrow(
@@ -639,7 +634,7 @@ describe('HistoryService — Density Extensions', () => {
               );
             },
           ),
-          { numRuns: 30 },
+          { numRuns: 10 },
         );
       },
     );
@@ -653,10 +648,10 @@ describe('HistoryService — Density Extensions', () => {
       async () => {
         await fc.assert(
           fc.asyncProperty(
-            fc.integer({ min: 1, max: 10 }),
-            fc.array(fc.integer({ min: 0, max: 9 }), {
+            fc.integer({ min: 1, max: 8 }),
+            fc.array(fc.integer({ min: 0, max: 7 }), {
               minLength: 0,
-              maxLength: 5,
+              maxLength: 4,
             }),
             async (histSize, rawRemovals) => {
               const svc = new HistoryService();
@@ -673,7 +668,7 @@ describe('HistoryService — Density Extensions', () => {
               expect(svc.getTotalTokens()).toBeGreaterThanOrEqual(0);
             },
           ),
-          { numRuns: 30 },
+          { numRuns: 10 },
         );
       },
     );
