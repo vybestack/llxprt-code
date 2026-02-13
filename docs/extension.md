@@ -334,7 +334,7 @@ command:
 ## Installing Extensions with Custom Transports
 
 LLxprt Code allows
-`llxprt extensions install --source sso://example/repo` so enterprise
+`llxprt extensions install sso://example/repo` so enterprise
 users can use single-sign-on Git remotes. Git does **not** natively understand
 the `sso://` protocol — you must provide a
 [`git-remote-<name>` helper](https://git-scm.com/docs/git-remote-helpers) (for
