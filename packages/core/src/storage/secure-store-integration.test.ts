@@ -25,7 +25,7 @@ import * as os from 'node:os';
 import {
   SecureStore,
   SecureStoreError,
-  type KeytarAdapter,
+  type KeyringAdapter,
 } from './secure-store.js';
 import { maskKeyForDisplay } from '../tools/tool-key-storage.js';
 
@@ -33,9 +33,9 @@ import { maskKeyForDisplay } from '../tools/tool-key-storage.js';
 
 /**
  * Creates an in-memory mock keytar adapter for testing keychain operations.
- * This is injected via SecureStoreOptions.keytarLoader — no mock theater.
+ * This is injected via SecureStoreOptions.keyringLoader — no mock theater.
  */
-function createMockKeytar(): KeytarAdapter & { store: Map<string, string> } {
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
     store,
@@ -75,11 +75,11 @@ async function createTempFallbackDir(): Promise<string> {
 
 describe('SecureStore — ToolKeyStorage Pattern', () => {
   let tempDir: string;
-  let mockKeytar: KeytarAdapter & { store: Map<string, string> };
+  let mockKeyring: KeyringAdapter & { store: Map<string, string> };
 
   beforeEach(async () => {
     tempDir = await createTempFallbackDir();
-    mockKeytar = createMockKeytar();
+    mockKeyring = createMockKeyring();
   });
 
   afterEach(async () => {
@@ -95,7 +95,7 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
    */
   it('stores raw string value and retrieves it', async () => {
     const store = new SecureStore('llxprt-code-tool-keys', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -112,7 +112,7 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
    */
   it('deletes a stored key', async () => {
     const store = new SecureStore('llxprt-code-tool-keys', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -132,7 +132,7 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
    */
   it('has returns true for existing key', async () => {
     const store = new SecureStore('llxprt-code-tool-keys', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -153,11 +153,11 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
    */
   it('service name scoping isolates data', async () => {
     const toolStore = new SecureStore('llxprt-code-tool-keys', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'tools'),
     });
     const otherStore = new SecureStore('other-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'other'),
     });
 
@@ -179,7 +179,7 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
    */
   it('maskKeyForDisplay works on retrieved values', async () => {
     const store = new SecureStore('llxprt-code-tool-keys', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -199,11 +199,11 @@ describe('SecureStore — ToolKeyStorage Pattern', () => {
 
 describe('SecureStore — KeychainTokenStorage Pattern', () => {
   let tempDir: string;
-  let mockKeytar: KeytarAdapter & { store: Map<string, string> };
+  let mockKeyring: KeyringAdapter & { store: Map<string, string> };
 
   beforeEach(async () => {
     tempDir = await createTempFallbackDir();
-    mockKeytar = createMockKeytar();
+    mockKeyring = createMockKeyring();
   });
 
   afterEach(async () => {
@@ -219,7 +219,7 @@ describe('SecureStore — KeychainTokenStorage Pattern', () => {
    */
   it('stores JSON-serialized credentials and retrieves + parses', async () => {
     const store = new SecureStore('llxprt-code-mcp-tokens', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -251,7 +251,7 @@ describe('SecureStore — KeychainTokenStorage Pattern', () => {
    */
   it('account name with special chars works', async () => {
     const store = new SecureStore('llxprt-code-mcp-tokens', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -272,7 +272,7 @@ describe('SecureStore — KeychainTokenStorage Pattern', () => {
    */
   it('findCredentials lists all stored entries via list()', async () => {
     const store = new SecureStore('llxprt-code-mcp-tokens', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -295,7 +295,7 @@ describe('SecureStore — KeychainTokenStorage Pattern', () => {
    */
   it('deletes credentials by account name', async () => {
     const store = new SecureStore('llxprt-code-mcp-tokens', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -312,11 +312,11 @@ describe('SecureStore — KeychainTokenStorage Pattern', () => {
 
 describe('SecureStore — ExtensionSettingsStorage Pattern', () => {
   let tempDir: string;
-  let mockKeytar: KeytarAdapter & { store: Map<string, string> };
+  let mockKeyring: KeyringAdapter & { store: Map<string, string> };
 
   beforeEach(async () => {
     tempDir = await createTempFallbackDir();
-    mockKeytar = createMockKeytar();
+    mockKeyring = createMockKeyring();
   });
 
   afterEach(async () => {
@@ -333,7 +333,7 @@ describe('SecureStore — ExtensionSettingsStorage Pattern', () => {
   it('stores and retrieves with extension-specific service name', async () => {
     const extensionServiceName = 'LLxprt Code Extension my-cool-extension';
     const store = new SecureStore(extensionServiceName, {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -351,7 +351,7 @@ describe('SecureStore — ExtensionSettingsStorage Pattern', () => {
    */
   it("fallbackPolicy 'deny' throws UNAVAILABLE when keyring absent", async () => {
     const store = new SecureStore('LLxprt Code Extension secure-ext', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'deny',
     });
@@ -371,11 +371,11 @@ describe('SecureStore — ExtensionSettingsStorage Pattern', () => {
 
 describe('SecureStore — Cross-Wrapper Isolation', () => {
   let tempDir: string;
-  let mockKeytar: KeytarAdapter & { store: Map<string, string> };
+  let mockKeyring: KeyringAdapter & { store: Map<string, string> };
 
   beforeEach(async () => {
     tempDir = await createTempFallbackDir();
-    mockKeytar = createMockKeytar();
+    mockKeyring = createMockKeyring();
   });
 
   afterEach(async () => {
@@ -391,15 +391,15 @@ describe('SecureStore — Cross-Wrapper Isolation', () => {
    */
   it("different service names don't interfere", async () => {
     const toolStore = new SecureStore('llxprt-code-tool-keys', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'tools'),
     });
     const mcpStore = new SecureStore('llxprt-code-mcp-tokens', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'mcp'),
     });
     const extStore = new SecureStore('LLxprt Code Extension my-ext', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'ext'),
     });
 
@@ -421,11 +421,11 @@ describe('SecureStore — Cross-Wrapper Isolation', () => {
    */
   it('same key name in different services are independent', async () => {
     const storeA = new SecureStore('service-a', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'a'),
     });
     const storeB = new SecureStore('service-b', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: path.join(tempDir, 'b'),
     });
 
@@ -463,7 +463,7 @@ describe('SecureStore — Legacy Format Detection', () => {
    */
   it("file that doesn't parse as JSON → CORRUPT error with remediation", async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -493,7 +493,7 @@ describe('SecureStore — Legacy Format Detection', () => {
    */
   it('file with wrong envelope version → CORRUPT error with upgrade instructions', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -524,7 +524,7 @@ describe('SecureStore — Legacy Format Detection', () => {
    */
   it('plain text file (old .key format) → CORRUPT error', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -556,7 +556,7 @@ describe('SecureStore — Legacy Format Detection', () => {
    */
   it('valid envelope but tampered data → CORRUPT error (decryption fails)', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });

@@ -88,6 +88,14 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'auth-key-name',
+    category: 'provider-config',
+    description:
+      'Name of a saved API key in the keyring (resolved via /key save)',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
     key: 'baseUrl',
     aliases: ['baseURL', 'base-url'],
     category: 'provider-config',

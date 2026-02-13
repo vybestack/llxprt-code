@@ -205,7 +205,7 @@ export {
 export {
   SecureStore,
   SecureStoreError,
-  createDefaultKeytarAdapter,
+  createDefaultKeyringAdapter,
   type SecureStoreErrorCode,
   type SecureStoreOptions,
 } from './storage/secure-store.js';

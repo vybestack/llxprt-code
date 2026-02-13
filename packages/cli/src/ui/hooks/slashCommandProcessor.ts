@@ -49,6 +49,7 @@ import type {
   ExtensionUpdateAction,
 } from '../state/extensions.js';
 import { SubagentView } from '../components/SubagentManagement/types.js';
+import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 const confirmationLogger = new DebugLogger('llxprt:ui:selection');
 const slashCommandLogger = new DebugLogger('llxprt:ui:slash-commands');
@@ -412,7 +413,14 @@ export const useSlashCommandProcessor = (
       setIsProcessing(true);
 
       const userMessageTimestamp = Date.now();
-      addItem({ type: MessageType.USER, text: trimmed }, userMessageTimestamp);
+      const sanitizedCommand =
+        trimmed.startsWith('/key ') || trimmed.startsWith('/toolkey ')
+          ? secureInputHandler.sanitizeForHistory(trimmed)
+          : trimmed;
+      addItem(
+        { type: MessageType.USER, text: sanitizedCommand },
+        userMessageTimestamp,
+      );
 
       let hasError = false;
       const { commandToExecute, args, canonicalPath } = parseSlashCommand(

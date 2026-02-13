@@ -18,7 +18,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { SecureStore, type KeytarAdapter } from './secure-store.js';
+import { SecureStore, type KeyringAdapter } from './secure-store.js';
 import {
   ProviderKeyStorage,
   getProviderKeyStorage,
@@ -31,9 +31,9 @@ import {
 
 /**
  * Creates an in-memory mock keytar adapter for testing keychain operations.
- * Injected via SecureStoreOptions.keytarLoader — no mock theater.
+ * Injected via SecureStoreOptions.keyringLoader — no mock theater.
  */
-function createMockKeytar(): KeytarAdapter & { store: Map<string, string> } {
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
     store,
@@ -71,11 +71,11 @@ async function createTempFallbackDir(): Promise<string> {
  * an in-memory mock keytar adapter and a temp fallback directory.
  */
 function createTestStorage(
-  mockKeytar: KeytarAdapter,
+  mockKeyring: KeyringAdapter,
   fallbackDir: string,
 ): ProviderKeyStorage {
   const secureStore = new SecureStore('llxprt-code-provider-keys', {
-    keytarLoader: async () => mockKeytar,
+    keyringLoader: async () => mockKeyring,
     fallbackDir,
     fallbackPolicy: 'allow',
   });
@@ -164,13 +164,13 @@ describe('ProviderKeyStorage — Key Name Validation', () => {
 
 describe('ProviderKeyStorage — CRUD Operations', () => {
   let tempDir: string;
-  let mockKeytar: KeytarAdapter & { store: Map<string, string> };
+  let mockKeyring: KeyringAdapter & { store: Map<string, string> };
   let storage: ProviderKeyStorage;
 
   beforeEach(async () => {
     tempDir = await createTempFallbackDir();
-    mockKeytar = createMockKeytar();
-    storage = createTestStorage(mockKeytar, tempDir);
+    mockKeyring = createMockKeyring();
+    storage = createTestStorage(mockKeyring, tempDir);
   });
 
   afterEach(async () => {
@@ -334,13 +334,13 @@ describe('ProviderKeyStorage — CRUD Operations', () => {
 
 describe('ProviderKeyStorage — Case Sensitivity', () => {
   let tempDir: string;
-  let mockKeytar: KeytarAdapter & { store: Map<string, string> };
+  let mockKeyring: KeyringAdapter & { store: Map<string, string> };
   let storage: ProviderKeyStorage;
 
   beforeEach(async () => {
     tempDir = await createTempFallbackDir();
-    mockKeytar = createMockKeytar();
-    storage = createTestStorage(mockKeytar, tempDir);
+    mockKeyring = createMockKeyring();
+    storage = createTestStorage(mockKeyring, tempDir);
   });
 
   afterEach(async () => {
@@ -381,7 +381,7 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
    */
   it('stores and retrieves keys via encrypted fallback when keyring unavailable', async () => {
     const secureStore = new SecureStore('llxprt-code-provider-keys', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -397,31 +397,31 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
    * @requirement R9.5
    */
   it('listKeys deduplicates across keyring and fallback', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
 
     // Create a SecureStore where keyring will fail after initial set
     let shouldFailKeyring = false;
-    const flakyKeytar: KeytarAdapter = {
+    const flakyKeyring: KeyringAdapter = {
       getPassword: async (service, account) => {
         if (shouldFailKeyring) throw new Error('keyring locked');
-        return mockKeytar.getPassword(service, account);
+        return mockKeyring.getPassword(service, account);
       },
       setPassword: async (service, account, password) => {
         if (shouldFailKeyring) throw new Error('keyring locked');
-        return mockKeytar.setPassword(service, account, password);
+        return mockKeyring.setPassword(service, account, password);
       },
       deletePassword: async (service, account) => {
         if (shouldFailKeyring) throw new Error('keyring locked');
-        return mockKeytar.deletePassword(service, account);
+        return mockKeyring.deletePassword(service, account);
       },
       findCredentials: async (service) => {
         if (shouldFailKeyring) throw new Error('keyring locked');
-        return mockKeytar.findCredentials!(service);
+        return mockKeyring.findCredentials!(service);
       },
     };
 
     const secureStore = new SecureStore('llxprt-code-provider-keys', {
-      keytarLoader: async () => flakyKeytar,
+      keyringLoader: async () => flakyKeyring,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });

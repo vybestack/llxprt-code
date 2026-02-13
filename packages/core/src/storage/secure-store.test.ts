@@ -20,16 +20,16 @@ import * as os from 'node:os';
 import {
   SecureStore,
   SecureStoreError,
-  type KeytarAdapter,
+  type KeyringAdapter,
 } from './secure-store.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
 /**
  * Creates an in-memory mock keytar adapter for testing keychain operations.
- * This is injected via SecureStoreOptions.keytarLoader — no mock theater.
+ * This is injected via SecureStoreOptions.keyringLoader — no mock theater.
  */
-function createMockKeytar(): KeytarAdapter & { store: Map<string, string> } {
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
     store,
@@ -81,9 +81,9 @@ describe('SecureStore — Keyring Access', () => {
    * @requirement R1.1
    */
   it('stores a value in keyring when available', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -97,9 +97,9 @@ describe('SecureStore — Keyring Access', () => {
    * @requirement R1.1
    */
   it('retrieves a value from keyring', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -112,9 +112,9 @@ describe('SecureStore — Keyring Access', () => {
    * @plan PLAN-20260211-SECURESTORE.P05
    * @requirement R1.2
    */
-  it('handles keyring unavailable when keytarLoader returns null', async () => {
+  it('handles keyring unavailable when keyringLoader returns null', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
     });
 
@@ -126,16 +126,16 @@ describe('SecureStore — Keyring Access', () => {
    * @plan PLAN-20260211-SECURESTORE.P05
    * @requirement R1.3
    */
-  it('keytarLoader injection provides the adapter used for storage', async () => {
-    const mockKeytar = createMockKeytar();
+  it('keyringLoader injection provides the adapter used for storage', async () => {
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
     await store.set('injected-key', 'injected-value');
     // Verify the value was actually stored via the injected adapter
-    const storedInAdapter = mockKeytar.store.get('test-service:injected-key');
+    const storedInAdapter = mockKeyring.store.get('test-service:injected-key');
     expect(storedInAdapter).toBe('injected-value');
   });
 });
@@ -158,9 +158,9 @@ describe('SecureStore — Availability Probe', () => {
    * @requirement R2.1
    */
   it('probe returns true when keyring works', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -174,7 +174,7 @@ describe('SecureStore — Availability Probe', () => {
    */
   it('probe returns false when keyring adapter is null', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
     });
 
@@ -188,13 +188,13 @@ describe('SecureStore — Availability Probe', () => {
    */
   it('probe result is cached for 60 seconds', async () => {
     let callCount = 0;
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const countingLoader = async () => {
       callCount++;
-      return mockKeytar;
+      return mockKeyring;
     };
     const store = new SecureStore('test-service', {
-      keytarLoader: countingLoader,
+      keyringLoader: countingLoader,
       fallbackDir: tempDir,
     });
 
@@ -212,7 +212,7 @@ describe('SecureStore — Availability Probe', () => {
    */
   it('transient error invalidates the cache', async () => {
     let shouldFail = false;
-    const adapter: KeytarAdapter = {
+    const adapter: KeyringAdapter = {
       getPassword: async () => {
         if (shouldFail) throw new Error('timed out');
         return 'probe-value';
@@ -226,7 +226,7 @@ describe('SecureStore — Availability Probe', () => {
       },
     };
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => adapter,
+      keyringLoader: async () => adapter,
       fallbackDir: tempDir,
     });
 
@@ -261,9 +261,9 @@ describe('SecureStore — CRUD Operations', () => {
    * @requirement R3.1a
    */
   it('set() stores in keyring when available', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -278,7 +278,7 @@ describe('SecureStore — CRUD Operations', () => {
    */
   it('set() stores in fallback when keyring unavailable', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -293,9 +293,9 @@ describe('SecureStore — CRUD Operations', () => {
    * @requirement R3.2
    */
   it('get() retrieves from keyring', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -311,7 +311,7 @@ describe('SecureStore — CRUD Operations', () => {
   it('get() retrieves from fallback when not in keyring', async () => {
     // Store via fallback (no keyring)
     const fallbackStore = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -319,7 +319,7 @@ describe('SecureStore — CRUD Operations', () => {
 
     // Read with a new store instance that also has no keyring
     const readStore = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -332,9 +332,9 @@ describe('SecureStore — CRUD Operations', () => {
    * @requirement R3.4
    */
   it('get() returns null when not found anywhere', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -347,11 +347,11 @@ describe('SecureStore — CRUD Operations', () => {
    * @requirement R3.5
    */
   it('get() keyring value wins over fallback value', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
 
     // Write to fallback only (no keyring)
     const fallbackStore = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -359,7 +359,7 @@ describe('SecureStore — CRUD Operations', () => {
 
     // Write to keyring (now with keyring available)
     const keyringStore = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
     await keyringStore.set('both-key', 'keyring-val');
@@ -374,11 +374,11 @@ describe('SecureStore — CRUD Operations', () => {
    * @requirement R3.6
    */
   it('delete() removes from both keyring and fallback', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
 
     // Store in fallback first (no keyring)
     const fallbackStore = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -386,7 +386,7 @@ describe('SecureStore — CRUD Operations', () => {
 
     // Also store in keyring
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
     await store.set('delete-me', 'kr-value');
@@ -401,7 +401,7 @@ describe('SecureStore — CRUD Operations', () => {
 
     // Verify gone from fallback (new store with no keyring)
     const fallbackRead = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -414,11 +414,11 @@ describe('SecureStore — CRUD Operations', () => {
    * @requirement R3.7
    */
   it('list() combines keyring and fallback, deduplicated and sorted', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
 
     // Store 'a' and 'b' in keyring
     const keyringStore = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
     await keyringStore.set('a', 'val-a');
@@ -426,7 +426,7 @@ describe('SecureStore — CRUD Operations', () => {
 
     // Store 'b' and 'c' in fallback
     const fallbackStore = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -443,9 +443,9 @@ describe('SecureStore — CRUD Operations', () => {
    * @requirement R3.8
    */
   it('has() returns true when key exists', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -459,9 +459,9 @@ describe('SecureStore — CRUD Operations', () => {
    * @requirement R3.8
    */
   it('has() returns false when key not found', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -474,7 +474,7 @@ describe('SecureStore — CRUD Operations', () => {
    * @requirement R3.8
    */
   it('has() throws SecureStoreError on non-NOT_FOUND keyring errors', async () => {
-    const adapter: KeytarAdapter = {
+    const adapter: KeyringAdapter = {
       getPassword: async () => {
         throw new Error('Keyring locked');
       },
@@ -486,7 +486,7 @@ describe('SecureStore — CRUD Operations', () => {
       },
     };
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => adapter,
+      keyringLoader: async () => adapter,
       fallbackDir: tempDir,
     });
 
@@ -519,7 +519,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
    */
   it('fallback uses AES-256-GCM — file content is not plaintext', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -541,7 +541,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
    */
   it('fallback files use versioned envelope format with correct structure', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -569,7 +569,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
    */
   it('unrecognized envelope version throws CORRUPT error', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -594,7 +594,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
    */
   it('atomic write — no temp files left after successful write', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -615,7 +615,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
   it('fallback directory created with 0o700 permissions', async () => {
     const nestedDir = path.join(tempDir, 'nested', 'secure');
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: nestedDir,
       fallbackPolicy: 'allow',
     });
@@ -636,7 +636,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
    */
   it('fallback file permissions are 0o600', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -671,7 +671,7 @@ describe('SecureStore — No Backward Compatibility', () => {
    */
   it('legacy format files are treated as CORRUPT', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -696,7 +696,7 @@ describe('SecureStore — No Backward Compatibility', () => {
    */
   it('no migration attempt on unrecognized format', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -737,7 +737,7 @@ describe('SecureStore — Error Taxonomy', () => {
    */
   it('UNAVAILABLE error with remediation when keyring down and fallback denied', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'deny',
     });
@@ -758,7 +758,7 @@ describe('SecureStore — Error Taxonomy', () => {
    */
   it('CORRUPT error on bad envelope data', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -783,9 +783,9 @@ describe('SecureStore — Error Taxonomy', () => {
    * @requirement R6.1
    */
   it('NOT_FOUND handling — get returns null instead of throwing', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 
@@ -814,7 +814,7 @@ describe('SecureStore — Resilience', () => {
    */
   it('mid-session keyring failure falls back to encrypted file', async () => {
     let shouldFail = false;
-    const adapter: KeytarAdapter = {
+    const adapter: KeyringAdapter = {
       getPassword: async (_service, _account) => {
         if (shouldFail) throw new Error('Keyring daemon crashed');
         return null;
@@ -829,7 +829,7 @@ describe('SecureStore — Resilience', () => {
     };
 
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => adapter,
+      keyringLoader: async () => adapter,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -855,7 +855,7 @@ describe('SecureStore — Resilience', () => {
    */
   it('atomic write prevents partial files on interruption', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -895,7 +895,7 @@ describe('SecureStore — Key Validation', () => {
    */
   it('rejects keys with path separators', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -923,7 +923,7 @@ describe('SecureStore — Key Validation', () => {
    */
   it('rejects keys with null bytes', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -943,7 +943,7 @@ describe('SecureStore — Key Validation', () => {
    */
   it('rejects keys with dot/dotdot components', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -971,7 +971,7 @@ describe('SecureStore — Key Validation', () => {
    */
   it('list() skips malformed filenames in fallback directory', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1010,7 +1010,7 @@ describe('SecureStore — Probe Cache Invalidation', () => {
    */
   it('probe cache invalidated after N consecutive keyring failures', async () => {
     let failCount = 0;
-    const adapter: KeytarAdapter = {
+    const adapter: KeyringAdapter = {
       getPassword: async () => {
         failCount++;
         if (failCount >= 1) throw new Error('Keyring daemon unavailable');
@@ -1023,7 +1023,7 @@ describe('SecureStore — Probe Cache Invalidation', () => {
     };
 
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => adapter,
+      keyringLoader: async () => adapter,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1055,24 +1055,24 @@ describe('SecureStore — Probe Cache Invalidation', () => {
    */
   it('consecutive failure counter resets on successful keyring operation', async () => {
     let shouldFail = false;
-    const mockKeytar = createMockKeytar();
-    const adapter: KeytarAdapter = {
+    const mockKeyring = createMockKeyring();
+    const adapter: KeyringAdapter = {
       getPassword: async (service, account) => {
         if (shouldFail) throw new Error('Keyring temporarily locked');
-        return mockKeytar.getPassword(service, account);
+        return mockKeyring.getPassword(service, account);
       },
       setPassword: async (service, account, password) => {
         if (shouldFail) throw new Error('Keyring temporarily locked');
-        return mockKeytar.setPassword(service, account, password);
+        return mockKeyring.setPassword(service, account, password);
       },
       deletePassword: async (service, account) => {
         if (shouldFail) throw new Error('Keyring temporarily locked');
-        return mockKeytar.deletePassword(service, account);
+        return mockKeyring.deletePassword(service, account);
       },
     };
 
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => adapter,
+      keyringLoader: async () => adapter,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1120,7 +1120,7 @@ describe('SecureStore — Probe Cache Invalidation', () => {
   it('after cache invalidation, next isKeychainAvailable re-probes', async () => {
     let probeCallCount = 0;
     let shouldFail = false;
-    const adapter: KeytarAdapter = {
+    const adapter: KeyringAdapter = {
       getPassword: async () => {
         if (shouldFail) throw new Error('Keyring unavailable');
         probeCallCount++;
@@ -1138,7 +1138,7 @@ describe('SecureStore — Probe Cache Invalidation', () => {
     };
 
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => adapter,
+      keyringLoader: async () => adapter,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1188,7 +1188,7 @@ describe('SecureStore — Fault Injection', () => {
    */
   it('write interruption leaves no partial .enc file', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1216,7 +1216,7 @@ describe('SecureStore — Fault Injection', () => {
    */
   it('keyring error after successful fallback write does not lose data', async () => {
     let keyringFailed = false;
-    const adapter: KeytarAdapter = {
+    const adapter: KeyringAdapter = {
       getPassword: async () => {
         if (keyringFailed) throw new Error('Keyring crashed');
         return null;
@@ -1231,7 +1231,7 @@ describe('SecureStore — Fault Injection', () => {
     };
 
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => adapter,
+      keyringLoader: async () => adapter,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1255,12 +1255,12 @@ describe('SecureStore — Fault Injection', () => {
    */
   it('concurrent writers produce complete non-corrupt files', async () => {
     const store1 = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
     const store2 = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1273,7 +1273,7 @@ describe('SecureStore — Fault Injection', () => {
 
     // The file should contain one complete valid value (last write wins)
     const readStore = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1304,7 +1304,7 @@ describe('SecureStore — Fallback Policy', () => {
    */
   it('deny policy throws UNAVAILABLE when keyring is down', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'deny',
     });
@@ -1325,7 +1325,7 @@ describe('SecureStore — Fallback Policy', () => {
    */
   it('allow policy stores in fallback when keyring is down', async () => {
     const store = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1355,13 +1355,13 @@ describe('SecureStore — Cross-Instance Consistency', () => {
    */
   it('different SecureStore instances with same config read each other fallback files', async () => {
     const store1 = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
 
     const store2 = new SecureStore('test-service', {
-      keytarLoader: async () => null,
+      keyringLoader: async () => null,
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
     });
@@ -1376,13 +1376,13 @@ describe('SecureStore — Cross-Instance Consistency', () => {
    * @requirement R3.4
    */
   it('delete from one instance is reflected in another', async () => {
-    const mockKeytar = createMockKeytar();
+    const mockKeyring = createMockKeyring();
     const store1 = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
     const store2 = new SecureStore('test-service', {
-      keytarLoader: async () => mockKeytar,
+      keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
     });
 

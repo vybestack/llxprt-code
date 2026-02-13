@@ -23,13 +23,13 @@ import {
   ProviderKeyStorage,
   SecureStore,
   clearActiveProviderRuntimeContext,
-  type KeytarAdapter,
+  type KeyringAdapter,
   type IProvider,
 } from '@vybestack/llxprt-code-core';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
-function createMockKeytar(): KeytarAdapter & { store: Map<string, string> } {
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
     store,
@@ -56,11 +56,11 @@ function createMockKeytar(): KeytarAdapter & { store: Map<string, string> } {
 }
 
 function createTestStorage(
-  mockKeytar: KeytarAdapter,
+  mockKeyring: KeyringAdapter,
   fallbackDir: string,
 ): ProviderKeyStorage {
   const secureStore = new SecureStore('llxprt-code-provider-keys', {
-    keytarLoader: async () => mockKeytar,
+    keyringLoader: async () => mockKeyring,
     fallbackDir,
     fallbackPolicy: 'allow',
   });
@@ -180,16 +180,16 @@ describe('--key-name bootstrap parsing @plan:PLAN-20260211-SECURESTORE.P17', () 
 // ─── Precedence & Resolution Tests (R21-R27) ────────────────────────────────
 
 describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURESTORE.P17', () => {
-  let mockKeytar: KeytarAdapter & { store: Map<string, string> };
+  let mockKeyring: KeyringAdapter & { store: Map<string, string> };
   let tempDir: string;
   let runtimeMod: typeof import('../runtimeSettings.js');
   let contextFactoryMod: typeof import('../runtimeContextFactory.js');
   let cleanupHandle: (() => Promise<void> | void) | null = null;
 
   beforeEach(async () => {
-    mockKeytar = createMockKeytar();
+    mockKeyring = createMockKeyring();
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'auth-key-name-test-'));
-    mockStorageRef = createTestStorage(mockKeytar, tempDir);
+    mockStorageRef = createTestStorage(mockKeyring, tempDir);
 
     runtimeMod = await import('../runtimeSettings.js');
     contextFactoryMod = await import('../runtimeContextFactory.js');
@@ -259,7 +259,9 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     );
 
     const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-key')).toBe('cli-named-value');
+    // auth-key-name stores the name reference; auth-key is cleared
+    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('cli-named');
+    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 
   /** @requirement R23.1 */
@@ -272,7 +274,9 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await runtimeMod.applyCliArgumentOverrides({}, {});
 
     const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-key')).toBe('named-key-value');
+    // auth-key-name kept; auth-key cleared to prevent raw key in snapshots
+    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('my-named');
+    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 
   /** @requirement R23.1, R27.3 */
@@ -303,7 +307,9 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     );
 
     const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-key')).toBe('cli-key-value');
+    // auth-key-name stores the name reference; auth-key is cleared
+    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('cli-key');
+    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 
   // ─── Named Key Resolution (R21.1, R22.1) ──────────────────────────────
@@ -319,7 +325,9 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     );
 
     const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-key')).toBe('sk-ant-abc123');
+    // auth-key-name stores the name reference; auth-key is cleared
+    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('myanthropic');
+    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 
   /** @requirement R21.1 */
@@ -331,7 +339,9 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await runtimeMod.applyCliArgumentOverrides({}, {});
 
     const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-key')).toBe('AIzaSy-work-key');
+    // auth-key-name preserved; auth-key cleared to prevent raw key in snapshots
+    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('work-gemini');
+    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 
   // ─── Error Handling (R24.1, R24.2) ─────────────────────────────────────

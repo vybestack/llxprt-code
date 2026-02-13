@@ -24,13 +24,13 @@ import type { CommandContext, MessageActionReturn } from './types.js';
 import {
   ProviderKeyStorage,
   SecureStore,
-  type KeytarAdapter,
+  type KeyringAdapter,
 } from '@vybestack/llxprt-code-core';
 import { SecureInputHandler } from '../utils/secureInputHandler.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
-function createMockKeytar(): KeytarAdapter & { store: Map<string, string> } {
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
     store,
@@ -61,11 +61,11 @@ async function createTempFallbackDir(): Promise<string> {
 }
 
 function createTestStorage(
-  mockKeytar: KeytarAdapter,
+  mockKeyring: KeyringAdapter,
   fallbackDir: string,
 ): ProviderKeyStorage {
   const secureStore = new SecureStore('llxprt-code-provider-keys', {
-    keytarLoader: async () => mockKeytar,
+    keyringLoader: async () => mockKeyring,
     fallbackDir,
     fallbackPolicy: 'allow',
   });
@@ -96,15 +96,15 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 // ─── Test Setup ──────────────────────────────────────────────────────────────
 
-let mockKeytar: KeytarAdapter & { store: Map<string, string> };
+let mockKeyring: KeyringAdapter & { store: Map<string, string> };
 let tempDir: string;
 let context: CommandContext;
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  mockKeytar = createMockKeytar();
+  mockKeyring = createMockKeyring();
   tempDir = await createTempFallbackDir();
-  mockStorage = createTestStorage(mockKeytar, tempDir);
+  mockStorage = createTestStorage(mockKeyring, tempDir);
 
   context = createMockCommandContext();
 
@@ -524,7 +524,7 @@ describe('/key — Storage Failure (R18)', () => {
    */
   it('returns actionable error when storage is unavailable', async () => {
     // Create a storage that always fails — use saveKey to trigger SecureStoreError
-    const failingKeytar: KeytarAdapter = {
+    const failingKeytar: KeyringAdapter = {
       getPassword: async () => {
         throw new Error('keyring unavailable');
       },
@@ -540,7 +540,7 @@ describe('/key — Storage Failure (R18)', () => {
     };
 
     const failStore = new SecureStore('llxprt-code-provider-keys', {
-      keytarLoader: async () => failingKeytar,
+      keyringLoader: async () => failingKeytar,
       fallbackDir: '/nonexistent/path/that/does/not/exist',
       fallbackPolicy: 'deny',
     });
@@ -616,7 +616,7 @@ describe('/key — Autocomplete (R19)', () => {
    * @requirement R19.3
    */
   it('returns empty list when keyring is unavailable', async () => {
-    const failingKeytar: KeytarAdapter = {
+    const failingKeytar: KeyringAdapter = {
       getPassword: async () => {
         throw new Error('unavailable');
       },
@@ -631,7 +631,7 @@ describe('/key — Autocomplete (R19)', () => {
       },
     };
     const failStore = new SecureStore('llxprt-code-provider-keys', {
-      keytarLoader: async () => failingKeytar,
+      keyringLoader: async () => failingKeytar,
       fallbackDir: '/nonexistent/path',
       fallbackPolicy: 'deny',
     });

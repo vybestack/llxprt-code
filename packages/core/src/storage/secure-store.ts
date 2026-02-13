@@ -8,7 +8,7 @@
  * Secure credential storage with OS keychain integration.
  *
  * Provides get/set/delete/list/has operations against the OS keyring,
- * with injectable adapter for testing via keytarLoader option.
+ * with injectable adapter for testing via keyringLoader option.
  *
  * @plan PLAN-20260211-SECURESTORE.P06
  * @requirement R1.1, R1.3, R2.1, R3.1a, R3.1b, R3.2-R3.8, R4.1-R4.8, R5.1-R5.2, R6.1
@@ -18,6 +18,7 @@ import * as crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
 // ─── Error Type ──────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ export class SecureStoreError extends Error {
 
 // ─── Adapter Interface ───────────────────────────────────────────────────────
 
-export interface KeytarAdapter {
+export interface KeyringAdapter {
   getPassword(service: string, account: string): Promise<string | null>;
   setPassword(
     service: string,
@@ -65,7 +66,7 @@ export interface KeytarAdapter {
 export interface SecureStoreOptions {
   fallbackDir?: string;
   fallbackPolicy?: 'allow' | 'deny';
-  keytarLoader?: () => Promise<KeytarAdapter | null>;
+  keyringLoader?: () => Promise<KeyringAdapter | null>;
 }
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
@@ -141,13 +142,13 @@ function isValidEnvelope(envelope: unknown): envelope is Envelope {
 }
 
 /**
- * Creates a default KeytarAdapter by loading @napi-rs/keyring.
+ * Creates a default KeyringAdapter by loading @napi-rs/keyring.
  * Exported so that other modules can reuse this without duplicating
  * the @napi-rs/keyring import.
  *
  * @plan PLAN-20260211-SECURESTORE.P08
  */
-export async function createDefaultKeytarAdapter(): Promise<KeytarAdapter | null> {
+export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | null> {
   try {
     const module = await import('@napi-rs/keyring');
     const keyring = (module as Record<string, unknown>).default ?? module;
@@ -236,11 +237,12 @@ function scryptAsync(
 export class SecureStore {
   private readonly serviceName: string;
   private readonly fallbackPolicy: 'allow' | 'deny';
-  private readonly keytarLoaderFn: () => Promise<KeytarAdapter | null>;
+  private readonly keyringLoaderFn: () => Promise<KeyringAdapter | null>;
   private readonly fallbackDir: string;
+  private readonly logger: DebugLogger;
 
-  private keytarInstance: KeytarAdapter | null | undefined = undefined;
-  private keytarLoadAttempted = false;
+  private keyringInstance: KeyringAdapter | null | undefined = undefined;
+  private keyringLoadAttempted = false;
   private probeCache: { available: boolean; timestamp: number } | null = null;
   private readonly PROBE_TTL_MS = 60000;
   private consecutiveKeyringFailures = 0;
@@ -252,22 +254,29 @@ export class SecureStore {
       options?.fallbackDir ??
       path.join(os.homedir(), '.llxprt', 'secure-store', serviceName);
     this.fallbackPolicy = options?.fallbackPolicy ?? 'allow';
-    this.keytarLoaderFn = options?.keytarLoader ?? createDefaultKeytarAdapter;
+    this.keyringLoaderFn =
+      options?.keyringLoader ?? createDefaultKeyringAdapter;
+    this.logger = new DebugLogger(`llxprt:secure-store:${serviceName}`);
   }
 
-  // ─── Keytar Loading ──────────────────────────────────────────────────────
+  // ─── Keyring Loading ──────────────────────────────────────────────────────
 
-  private async getKeytar(): Promise<KeytarAdapter | null> {
-    if (this.keytarLoadAttempted) {
-      return this.keytarInstance ?? null;
+  private async getKeyring(): Promise<KeyringAdapter | null> {
+    if (this.keyringLoadAttempted) {
+      return this.keyringInstance ?? null;
     }
-    this.keytarLoadAttempted = true;
+    this.keyringLoadAttempted = true;
     try {
-      const adapter = await this.keytarLoaderFn();
-      this.keytarInstance = adapter;
+      const adapter = await this.keyringLoaderFn();
+      this.keyringInstance = adapter;
+      this.logger.debug(
+        () => `[keyring] @napi-rs/keyring loaded=${adapter !== null}`,
+      );
       return adapter;
-    } catch {
-      this.keytarInstance = null;
+    } catch (error) {
+      this.keyringInstance = null;
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.debug(() => `[keyring] @napi-rs/keyring load failed: ${msg}`);
       return null;
     }
   }
@@ -335,13 +344,17 @@ export class SecureStore {
     if (this.probeCache !== null && !this.probeCache.available) {
       const elapsed = Date.now() - this.probeCache.timestamp;
       if (elapsed < this.PROBE_TTL_MS) {
+        this.logger.debug(() => '[probe] cached=false (within TTL)');
         return false;
       }
     }
 
-    const adapter = await this.getKeytar();
+    const adapter = await this.getKeyring();
     if (adapter === null) {
       this.probeCache = { available: false, timestamp: Date.now() };
+      this.logger.debug(
+        () => '[probe] @napi-rs/keyring not loaded — unavailable',
+      );
       return false;
     }
 
@@ -353,8 +366,11 @@ export class SecureStore {
       await adapter.getPassword(this.serviceName, testAccount);
       await adapter.deletePassword(this.serviceName, testAccount);
       this.probeCache = { available: true, timestamp: Date.now() };
+      this.logger.debug(() => '[probe] keyring available — OS keychain active');
       return true;
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.debug(() => `[probe] keyring probe failed: ${msg}`);
       if (isTransientError(error)) {
         this.probeCache = null;
       } else {
@@ -370,19 +386,27 @@ export class SecureStore {
     this.validateKey(key);
 
     // Try keyring first (directly, not via isKeychainAvailable)
-    const adapter = await this.getKeytar();
+    const adapter = await this.getKeyring();
     if (adapter !== null) {
       try {
         await adapter.setPassword(this.serviceName, key, value);
         this.recordKeyringSuccess();
+        this.logger.debug(() => `[set] key='${key}' → keyring (OS keychain)`);
         return;
-      } catch {
+      } catch (error) {
         this.recordKeyringFailure();
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.debug(
+          () => `[set] key='${key}' keyring write failed: ${msg}`,
+        );
       }
     }
 
     // Keyring unavailable or write failed — check fallback policy
     if (this.fallbackPolicy === 'deny') {
+      this.logger.debug(
+        () => `[set] key='${key}' fallback denied — throwing UNAVAILABLE`,
+      );
       throw new SecureStoreError(
         'Keyring is unavailable and fallback is denied',
         'UNAVAILABLE',
@@ -390,6 +414,10 @@ export class SecureStore {
       );
     }
 
+    this.logger.debug(
+      () =>
+        `[set] key='${key}' → encrypted fallback file (${this.fallbackDir})`,
+    );
     await this.writeFallbackFile(key, value);
   }
 
@@ -399,25 +427,41 @@ export class SecureStore {
     this.validateKey(key);
 
     // Try keyring first (authoritative)
-    const adapter = await this.getKeytar();
+    const adapter = await this.getKeyring();
     if (adapter !== null) {
       try {
         const value = await adapter.getPassword(this.serviceName, key);
         if (value !== null) {
           this.recordKeyringSuccess();
+          this.logger.debug(
+            () => `[get] key='${key}' → found in keyring (OS keychain)`,
+          );
           return value;
         }
-      } catch {
+        this.logger.debug(() => `[get] key='${key}' → not found in keyring`);
+      } catch (error) {
         this.recordKeyringFailure();
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.debug(
+          () => `[get] key='${key}' keyring read failed: ${msg}`,
+        );
       }
+    } else {
+      this.logger.debug(
+        () => `[get] key='${key}' keyring adapter not available`,
+      );
     }
 
     // Try fallback file
     const fallbackValue = await this.readFallbackFile(key);
     if (fallbackValue !== null) {
+      this.logger.debug(
+        () => `[get] key='${key}' → found in encrypted fallback file`,
+      );
       return fallbackValue;
     }
 
+    this.logger.debug(() => `[get] key='${key}' → not found anywhere`);
     return null;
   }
 
@@ -429,7 +473,7 @@ export class SecureStore {
     let deletedFromKeyring = false;
     let deletedFromFile = false;
 
-    const adapter = await this.getKeytar();
+    const adapter = await this.getKeyring();
     if (adapter !== null) {
       try {
         deletedFromKeyring = await adapter.deletePassword(
@@ -452,6 +496,10 @@ export class SecureStore {
       }
     }
 
+    this.logger.debug(
+      () =>
+        `[delete] key='${key}' keyring=${deletedFromKeyring} fallback=${deletedFromFile}`,
+    );
     return deletedFromKeyring || deletedFromFile;
   }
 
@@ -460,7 +508,7 @@ export class SecureStore {
   async list(): Promise<string[]> {
     const keys = new Set<string>();
 
-    const adapter = await this.getKeytar();
+    const adapter = await this.getKeyring();
     if (adapter !== null && typeof adapter.findCredentials === 'function') {
       try {
         const creds = await adapter.findCredentials(this.serviceName);
@@ -494,7 +542,9 @@ export class SecureStore {
       }
     }
 
-    return Array.from(keys).sort();
+    const sorted = Array.from(keys).sort();
+    this.logger.debug(() => `[list] found ${sorted.length} key(s)`);
+    return sorted;
   }
 
   // ─── CRUD: has() ─────────────────────────────────────────────────────────
@@ -502,7 +552,7 @@ export class SecureStore {
   async has(key: string): Promise<boolean> {
     this.validateKey(key);
 
-    const adapter = await this.getKeytar();
+    const adapter = await this.getKeyring();
     if (adapter !== null) {
       try {
         const value = await adapter.getPassword(this.serviceName, key);

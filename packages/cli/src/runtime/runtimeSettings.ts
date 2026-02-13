@@ -981,9 +981,17 @@ export function buildRuntimeProfileSnapshot(): Profile {
   const hasAuthKeyfile =
     ephemeralRecord['auth-keyfile'] !== undefined &&
     ephemeralRecord['auth-keyfile'] !== null;
+  const hasAuthKeyName =
+    ephemeralRecord['auth-key-name'] !== undefined &&
+    ephemeralRecord['auth-key-name'] !== null;
 
   for (const key of PROFILE_EPHEMERAL_KEYS) {
-    if (key === 'auth-key' && hasAuthKeyfile) {
+    // auth-key-name supersedes auth-key and auth-keyfile — don't persist
+    // the resolved secret when the user intended a keyring reference.
+    if (key === 'auth-key' && (hasAuthKeyfile || hasAuthKeyName)) {
+      continue;
+    }
+    if (key === 'auth-keyfile' && hasAuthKeyName) {
       continue;
     }
     // Use getNestedValue to handle dot-notation keys like 'reasoning.enabled'
@@ -1005,8 +1013,15 @@ export function buildRuntimeProfileSnapshot(): Profile {
 
   const snapshotHasAuthKeyfile =
     snapshot['auth-keyfile'] !== undefined && snapshot['auth-keyfile'] !== null;
+  const snapshotHasAuthKeyName =
+    snapshot['auth-key-name'] !== undefined &&
+    snapshot['auth-key-name'] !== null;
 
-  if (!snapshotHasAuthKeyfile && snapshot['auth-key'] === undefined) {
+  if (
+    !snapshotHasAuthKeyfile &&
+    !snapshotHasAuthKeyName &&
+    snapshot['auth-key'] === undefined
+  ) {
     const authKey =
       ephemeralRecord['auth-key'] ??
       (settingsService.get('auth-key') as string | undefined);
@@ -2340,6 +2355,11 @@ export async function applyCliArgumentOverrides(
     if (keyNameToUse) {
       const resolvedKey = await resolveNamedKey(keyNameToUse);
       await updateActiveProviderApiKey(resolvedKey);
+      // Persist the name reference — not the resolved key — so profile
+      // snapshots store auth-key-name instead of the raw secret.
+      config.setEphemeralSetting('auth-key-name', keyNameToUse);
+      config.setEphemeralSetting('auth-key', undefined);
+      config.setEphemeralSetting('auth-keyfile', undefined);
       logger.debug(
         () =>
           `[auth] Using API key from: --key-name '${keyNameToUse}' (keyring)`,
@@ -2356,6 +2376,10 @@ export async function applyCliArgumentOverrides(
     if (profileKeyName) {
       const resolvedKey = await resolveNamedKey(profileKeyName);
       await updateActiveProviderApiKey(resolvedKey);
+      // Clear raw key from ephemeral settings — the profile already has
+      // auth-key-name, so snapshots should preserve that, not the secret.
+      config.setEphemeralSetting('auth-key', undefined);
+      config.setEphemeralSetting('auth-keyfile', undefined);
       logger.debug(
         () =>
           `[auth] Using API key from: profile auth-key-name '${profileKeyName}' (keyring)`,

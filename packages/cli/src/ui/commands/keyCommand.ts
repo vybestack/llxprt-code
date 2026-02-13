@@ -122,11 +122,10 @@ async function handleSave(
   // Save the key (R13.1)
   try {
     await storage.saveKey(name, apiKey);
-    const masked = maskKeyForDisplay(apiKey.trim());
     return {
       type: 'message',
       messageType: 'info',
-      content: `Saved key '${name}' (${masked})`,
+      content: `Saved key '${name}' to OS keyring. Use /key load ${name} to activate it for this session.`,
     };
   } catch (error) {
     return {
@@ -175,7 +174,16 @@ async function handleLoad(
     // Set as active session key (R14.1)
     const runtime = getRuntimeApi();
     await runtime.updateActiveProviderApiKey(key);
-    const masked = maskKeyForDisplay(key);
+
+    // Set auth-key-name so profile saves capture the name reference,
+    // not the raw key value. Clear auth-key/auth-keyfile to prevent
+    // buildRuntimeProfileSnapshot from persisting the resolved secret.
+    const config = context.services.config;
+    if (config) {
+      config.setEphemeralSetting('auth-key-name', name);
+      config.setEphemeralSetting('auth-key', undefined);
+      config.setEphemeralSetting('auth-keyfile', undefined);
+    }
 
     const extendedContext = context as CommandContext & {
       checkPaymentModeChange?: () => void;
@@ -187,7 +195,7 @@ async function handleLoad(
     return {
       type: 'message',
       messageType: 'info',
-      content: `Loaded key '${name}' (${masked}) — active for this session`,
+      content: `Loaded key '${name}' — active for this session`,
     };
   } catch (error) {
     return {

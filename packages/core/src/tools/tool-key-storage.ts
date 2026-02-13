@@ -23,7 +23,7 @@ import * as os from 'node:os';
 import {
   SecureStore,
   SecureStoreError,
-  type KeytarAdapter,
+  type KeyringAdapter,
 } from '../storage/secure-store.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -129,11 +129,11 @@ export function getToolKeyStorage(): ToolKeyStorage {
 
 // ─── Storage Interfaces ──────────────────────────────────────────────────────
 
-export type { KeytarAdapter };
+export type { KeyringAdapter };
 
 export interface ToolKeyStorageOptions {
   toolsDir?: string;
-  keytarLoader?: () => Promise<KeytarAdapter | null>;
+  keyringLoader?: () => Promise<KeyringAdapter | null>;
 }
 
 // ─── ToolKeyStorage Class ────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ export class ToolKeyStorage {
     this.keyfilesJsonPath = path.join(this.toolsDir, KEYFILES_JSON_NAME);
     this.secureStore = new SecureStore(KEYCHAIN_SERVICE, {
       fallbackPolicy: 'deny',
-      keytarLoader: options?.keytarLoader,
+      keyringLoader: options?.keyringLoader,
     });
     this.encryptionKey = this.deriveEncryptionKey();
   }
