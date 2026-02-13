@@ -163,7 +163,7 @@
     "defaultDisabledTools": {
       "title": "Default Disabled Tools",
       "description": "Tool names disabled by default. Users can re-enable them with /tools enable.",
-      "markdownDescription": "Tool names disabled by default. Users can re-enable them with /tools enable.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `[\"google_web_fetch\"]`",
+      "markdownDescription": "Tool names disabled by default. Users can re-enable them with /tools enable.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `[\n  \"google_web_fetch\"\n]`",
       "default": ["google_web_fetch"],
       "type": "array",
       "items": {}
@@ -771,7 +771,7 @@
     "excludedProjectEnvVars": {
       "title": "Excluded Project Environment Variables",
       "description": "Environment variables to exclude from project context.",
-      "markdownDescription": "Environment variables to exclude from project context.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `[\"DEBUG\",\"DEBUG_MODE\"]`",
+      "markdownDescription": "Environment variables to exclude from project context.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `[\n  \"DEBUG\",\n  \"DEBUG_MODE\"\n]`",
       "default": ["DEBUG", "DEBUG_MODE"],
       "type": "array",
       "items": {}
@@ -897,7 +897,7 @@
     "extensions": {
       "title": "Extensions",
       "description": "Settings for extensions.",
-      "markdownDescription": "Settings for extensions.\n\n- Category: `Extensions`\n- Requires restart: `yes`\n- Default: `{\"disabled\":[],\"workspacesWithMigrationNudge\":[],\"autoUpdate\":{\"enabled\":true,\"checkIntervalHours\":24,\"installMode\":\"immediate\",\"notificationLevel\":\"toast\",\"perExtension\":{}}}`",
+      "markdownDescription": "Settings for extensions.\n\n- Category: `Extensions`\n- Requires restart: `yes`\n- Default: `{\n  \"disabled\": [],\n  \"workspacesWithMigrationNudge\": [],\n  \"autoUpdate\": {\n    \"enabled\": true,\n    \"checkIntervalHours\": 24,\n    \"installMode\": \"immediate\",\n    \"notificationLevel\": \"toast\",\n    \"perExtension\": {}\n  }\n}`",
       "default": {
         "disabled": [],
         "workspacesWithMigrationNudge": [],
@@ -930,7 +930,7 @@
         "autoUpdate": {
           "title": "Extension Auto-Update",
           "description": "Configure how llxprt-code checks for and applies extension updates.",
-          "markdownDescription": "Configure how llxprt-code checks for and applies extension updates.\n\n- Category: `Extensions`\n- Requires restart: `no`\n- Default: `{\"enabled\":true,\"checkIntervalHours\":24,\"installMode\":\"immediate\",\"notificationLevel\":\"toast\",\"perExtension\":{}}`",
+          "markdownDescription": "Configure how llxprt-code checks for and applies extension updates.\n\n- Category: `Extensions`\n- Requires restart: `no`\n- Default: `{\n  \"enabled\": true,\n  \"checkIntervalHours\": 24,\n  \"installMode\": \"immediate\",\n  \"notificationLevel\": \"toast\",\n  \"perExtension\": {}\n}`",
           "default": {
             "enabled": true,
             "checkIntervalHours": 24,
