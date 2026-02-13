@@ -16,6 +16,7 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { type FunctionDeclaration } from '@google/genai';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import process from 'node:process';
 import { Storage } from '../config/storage.js';
 import * as Diff from 'diff';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
@@ -26,6 +27,7 @@ import {
 } from './modifiable-tool.js';
 import { ToolErrorType } from './tool-error.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 
 const logger = new DebugLogger('llxprt:tools:memory');
 
@@ -43,9 +45,10 @@ const memoryToolSchemaData: FunctionDeclaration = {
       },
       scope: {
         type: 'string',
-        enum: ['global', 'project'],
+        enum: ['global', 'project', 'core.global', 'core.project'],
         description:
-          'Where to save the memory: "global" or "project" (default, saves to project-local .llxprt directory)',
+          'Where to save the memory: "global" or "project" (default, saves to project-local .llxprt directory). ' +
+          '"core.global" and "core.project" save to the system prompt (.LLXPRT_SYSTEM) — requires model.canSaveCore to be enabled.',
         default: 'project',
       },
     },
@@ -70,12 +73,18 @@ Do NOT use this tool:
 ## Parameters
 
 - \`fact\` (string, required): The specific fact or piece of information to remember. This should be a clear, self-contained statement. For example, if the user says "My favorite color is blue", the fact would be "My favorite color is blue".
+- \`scope\` (string, optional): Where to save the memory. Defaults to "project".
+  - \`"global"\` — saved to the global LLXPRT.md file.
+  - \`"project"\` — saved to the project-local .llxprt/LLXPRT.md file.
+  - \`"core.global"\` — saved to the global system prompt (.LLXPRT_SYSTEM). Requires \`model.canSaveCore\` to be enabled.
+  - \`"core.project"\` — saved to the project system prompt (.LLXPRT_SYSTEM). Requires \`model.canSaveCore\` to be enabled.
 `;
 
 export const LLXPRT_CONFIG_DIR = '.llxprt';
 // Alias for backward compatibility with gemini-cli code
 export const GEMINI_DIR = LLXPRT_CONFIG_DIR;
 export const DEFAULT_CONTEXT_FILENAME = 'LLXPRT.md';
+export const CORE_MEMORY_FILENAME = '.LLXPRT_SYSTEM';
 export const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
 
 // This variable will hold the currently configured filename for LLXPRT.md context files.
@@ -106,11 +115,17 @@ export function getAllLlxprtMdFilenames(): string[] {
   return [currentLlxprtMdFilename];
 }
 
+type MemoryScope = 'global' | 'project' | 'core.global' | 'core.project';
+
 interface SaveMemoryParams {
   fact: string;
-  scope?: 'global' | 'project';
+  scope?: MemoryScope;
   modified_by_user?: boolean;
   modified_content?: string;
+}
+
+function isCoreScope(scope?: MemoryScope): boolean {
+  return scope === 'core.global' || scope === 'core.project';
 }
 
 function getGlobalMemoryFilePath(): string {
@@ -119,6 +134,14 @@ function getGlobalMemoryFilePath(): string {
 
 function getProjectMemoryFilePath(workingDir: string): string {
   return path.join(workingDir, LLXPRT_CONFIG_DIR, getCurrentLlxprtMdFilename());
+}
+
+export function getGlobalCoreMemoryFilePath(): string {
+  return path.join(Storage.getGlobalLlxprtDir(), CORE_MEMORY_FILENAME);
+}
+
+export function getProjectCoreMemoryFilePath(workingDir: string): string {
+  return path.join(workingDir, LLXPRT_CONFIG_DIR, CORE_MEMORY_FILENAME);
 }
 
 /**
@@ -194,10 +217,20 @@ class MemoryToolInvocation extends BaseToolInvocation<
 
   getMemoryFilePath(): string {
     const scope = this.params.scope || 'project';
-    if (scope === 'project' && this.workingDir) {
-      return getProjectMemoryFilePath(this.workingDir);
+    switch (scope) {
+      case 'core.project':
+        return getProjectCoreMemoryFilePath(this.workingDir || process.cwd());
+      case 'core.global':
+        return getGlobalCoreMemoryFilePath();
+      case 'project':
+        if (this.workingDir) {
+          return getProjectMemoryFilePath(this.workingDir);
+        }
+        return getGlobalMemoryFilePath();
+      case 'global':
+      default:
+        return getGlobalMemoryFilePath();
     }
-    return getGlobalMemoryFilePath();
   }
 
   async readMemoryFileContent(): Promise<string> {
@@ -343,6 +376,25 @@ export class MemoryTool
       return 'Parameter "fact" must be a non-empty string.';
     }
 
+    // Core scopes require model.canSaveCore to be enabled
+    if (isCoreScope(params.scope)) {
+      try {
+        const settingsService = getSettingsService();
+        const canSaveCore = settingsService.get('model.canSaveCore') as
+          | boolean
+          | undefined;
+        if (!canSaveCore) {
+          return (
+            'Core memory scopes (core.global, core.project) are disabled. ' +
+            'Enable them with: /set model.canSaveCore true\n' +
+            'WARNING: This allows the model to modify your system directives.'
+          );
+        }
+      } catch {
+        return 'Core memory scopes require model.canSaveCore to be enabled.';
+      }
+    }
+
     return null;
   }
 
@@ -396,12 +448,24 @@ export class MemoryTool
   }
 
   getModifyContext(_abortSignal: AbortSignal): ModifyContext<SaveMemoryParams> {
-    const resolvePath = (scope?: 'global' | 'project'): string => {
+    const resolvePath = (scope?: MemoryScope): string => {
       const resolvedScope = scope || 'project';
-      if (resolvedScope === 'project' && this.config) {
-        return getProjectMemoryFilePath(this.config.getWorkingDir());
+      switch (resolvedScope) {
+        case 'core.project':
+          return getProjectCoreMemoryFilePath(
+            this.config?.getWorkingDir() || process.cwd(),
+          );
+        case 'core.global':
+          return getGlobalCoreMemoryFilePath();
+        case 'project':
+          if (this.config) {
+            return getProjectMemoryFilePath(this.config.getWorkingDir());
+          }
+          return getGlobalMemoryFilePath();
+        case 'global':
+        default:
+          return getGlobalMemoryFilePath();
       }
-      return getGlobalMemoryFilePath();
     };
 
     return {

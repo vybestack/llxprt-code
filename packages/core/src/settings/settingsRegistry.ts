@@ -619,6 +619,44 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'model.canSaveCore',
+    category: 'cli-behavior',
+    description:
+      'Allow the model to save core (system) memories via save_memory tool. ' +
+      'WARNING: Unsafe — the model can override your directives when this is enabled.',
+    type: 'boolean',
+    default: false,
+    persistToProfile: false,
+    completionOptions: [
+      {
+        value: 'true',
+        description:
+          'Enable (unsafe: model can override your system directives)',
+      },
+      { value: 'false', description: 'Disable (default, recommended)' },
+    ],
+  },
+  {
+    key: 'model.allMemoriesAreCore',
+    category: 'cli-behavior',
+    description:
+      'Load LLXPRT.md files as part of the system prompt instead of user context. ' +
+      'Useful for models that strictly follow system directives.',
+    type: 'boolean',
+    default: false,
+    persistToProfile: true,
+    completionOptions: [
+      {
+        value: 'true',
+        description: 'Load LLXPRT.md as system directives',
+      },
+      {
+        value: 'false',
+        description: 'Load LLXPRT.md as user context (default)',
+      },
+    ],
+  },
+  {
     key: 'task-default-timeout-seconds',
     category: 'cli-behavior',
     description: 'Default timeout in seconds for task tool executions',
