@@ -1348,13 +1348,20 @@ export const useGeminiStream = (
       const pendingTools = [...pendingToolCompletionsRef.current];
       pendingToolCompletionsRef.current = [];
       geminiStreamLogger.debug(
-        `pendingToolCompletions effect: processing ${pendingTools.length} queued tools`,
+        `pendingToolCompletions effect: processing ${pendingTools.length} queued tools after waiting for history`,
       );
-      // Now that isResponding is false, we can safely process the completions
-      // Pass skipRespondingCheck=true because we already verified isResponding is false
-      void handleCompletedToolsRef.current?.(pendingTools, true);
+
+      // Wait for history commit before processing tool completions
+      (async () => {
+        try {
+          await geminiClient.waitForIdle();
+        } catch (e) {
+          geminiStreamLogger.debug(`History wait failed (non-fatal): ${e}`);
+        }
+        void handleCompletedToolsRef.current?.(pendingTools, true);
+      })();
     }
-  }, [isResponding]);
+  }, [isResponding, geminiClient]);
 
   // Ref to hold the latest handleCompletedTools for the effect above
   const handleCompletedToolsRef = useRef<
@@ -1556,6 +1563,13 @@ export const useGeminiStream = (
 
       if (allToolsCancelled) {
         if (geminiClient) {
+          // Wait for any pending history commit before adding cancelled tool history
+          try {
+            await geminiClient.waitForIdle();
+          } catch (e) {
+            geminiStreamLogger.debug(`History wait failed (non-fatal): ${e}`);
+          }
+
           // We need to manually add the function responses to the history
           // so the model knows the tools were cancelled.
           const combinedParts = geminiTools.flatMap(
