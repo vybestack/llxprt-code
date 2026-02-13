@@ -31,12 +31,15 @@ import type {
   StrategyTrigger,
 } from './types.js';
 import { CompressionExecutionError, PromptResolutionError } from './types.js';
-import { adjustForToolCallBoundary, aggregateTextFromBlocks } from './utils.js';
+import {
+  adjustForToolCallBoundary,
+  aggregateTextFromBlocks,
+  buildContinuationDirective,
+} from './utils.js';
 import { getCompressionPrompt } from '../prompts.js';
 
 const MINIMUM_MIDDLE_MESSAGES = 4;
 
-const ACK_TEXT = 'Got it. Thanks for the additional context!';
 const TRIGGER_INSTRUCTION =
   'First, reason in your scratchpad. Then, generate the <state_snapshot>.';
 
@@ -102,7 +105,12 @@ export class MiddleOutStrategy implements CompressionStrategy {
     }
 
     // Assemble result
-    const newHistory = this.assembleHistory(toKeepTop, summary, toKeepBottom);
+    const newHistory = this.assembleHistory(
+      toKeepTop,
+      summary,
+      toKeepBottom,
+      context.activeTodos,
+    );
 
     const metadata: CompressionResultMetadata = {
       originalMessageCount: history.length,
@@ -217,6 +225,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     toKeepTop: IContent[],
     summary: string,
     toKeepBottom: IContent[],
+    activeTodos?: string,
   ): IContent[] {
     return [
       ...toKeepTop,
@@ -226,7 +235,12 @@ export class MiddleOutStrategy implements CompressionStrategy {
       },
       {
         speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: ACK_TEXT }],
+        blocks: [
+          {
+            type: 'text' as const,
+            text: buildContinuationDirective(activeTodos),
+          },
+        ],
       },
       ...toKeepBottom,
     ];

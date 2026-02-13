@@ -30,12 +30,15 @@ import type {
   StrategyTrigger,
 } from './types.js';
 import { CompressionExecutionError, PromptResolutionError } from './types.js';
-import { adjustForToolCallBoundary, aggregateTextFromBlocks } from './utils.js';
+import {
+  adjustForToolCallBoundary,
+  aggregateTextFromBlocks,
+  buildContinuationDirective,
+} from './utils.js';
 import { getCompressionPrompt } from '../prompts.js';
 
 const MINIMUM_COMPRESS_MESSAGES = 4;
 
-const ACK_TEXT = 'Got it. Thanks for the additional context!';
 const TRIGGER_INSTRUCTION =
   'First, reason in your scratchpad. Then, generate the <state_snapshot>.';
 
@@ -100,7 +103,7 @@ export class OneShotStrategy implements CompressionStrategy {
       );
     }
 
-    // Assemble result: summary + ack + preserved tail
+    // Assemble result: summary + continuation directive + preserved tail
     const newHistory: IContent[] = [
       {
         speaker: 'human' as const,
@@ -108,7 +111,12 @@ export class OneShotStrategy implements CompressionStrategy {
       },
       {
         speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: ACK_TEXT }],
+        blocks: [
+          {
+            type: 'text' as const,
+            text: buildContinuationDirective(context.activeTodos),
+          },
+        ],
       },
       ...toKeep,
     ];
