@@ -187,11 +187,13 @@ export type ReplayResult =
 // ---------------------------------------------------------------------------
 
 /**
- * Summary information for a single session file — used by `--list-sessions`.
+ * Summary information for a single session file — used by `--list-sessions`
+ * and session discovery/resume.
  */
 export interface SessionSummary {
   sessionId: string;
   filePath: string;
+  projectHash: string;
   startTime: string;
   lastModified: Date;
   fileSize: number;
