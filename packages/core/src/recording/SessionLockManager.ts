@@ -128,10 +128,7 @@ export class SessionLockManager {
   }
 
   /** @pseudocode concurrency-lifecycle.md lines 104-114 */
-  static async isLocked(
-    chatsDir: string,
-    sessionId: string,
-  ): Promise<boolean> {
+  static async isLocked(chatsDir: string, sessionId: string): Promise<boolean> {
     const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
     try {
       await fs.access(lockPath);
@@ -143,10 +140,7 @@ export class SessionLockManager {
   }
 
   /** @pseudocode concurrency-lifecycle.md lines 116-124 */
-  static async isStale(
-    chatsDir: string,
-    sessionId: string,
-  ): Promise<boolean> {
+  static async isStale(chatsDir: string, sessionId: string): Promise<boolean> {
     const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
     try {
       await fs.access(lockPath);
