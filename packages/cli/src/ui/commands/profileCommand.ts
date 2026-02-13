@@ -621,6 +621,17 @@ const loadCommand: SlashCommand = {
         );
       }
 
+      // Record the provider/model switch for session recording
+      try {
+        const statusAfter = runtime.getActiveProviderStatus();
+        context.recordingIntegration?.recordProviderSwitch(
+          statusAfter.providerName ?? result.providerName ?? 'unknown',
+          statusAfter.modelName ?? 'unknown',
+        );
+      } catch {
+        // Best-effort recording — don't let it block profile loading
+      }
+
       const extendedContext = context as CommandContext & {
         checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
       };

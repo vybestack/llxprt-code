@@ -283,6 +283,12 @@ export const AppContainer = (props: AppContainerProps) => {
         content: payload.message,
         count: 1,
       });
+      if (payload.severity === 'error' || payload.severity === 'warning') {
+        recordingIntegration?.recordSessionEvent(
+          payload.severity,
+          payload.message,
+        );
+      }
     };
 
     coreEvents.on(CoreEvent.UserFeedback, handleUserFeedback);
@@ -291,7 +297,7 @@ export const AppContainer = (props: AppContainerProps) => {
     return () => {
       coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
     };
-  }, [handleNewMessage]);
+  }, [handleNewMessage, recordingIntegration]);
 
   useEffect(() => {
     const consolePatcher = new ConsolePatcher({
@@ -830,6 +836,7 @@ export const AppContainer = (props: AppContainerProps) => {
       ),
     appState,
     config,
+    recordingIntegration,
   });
 
   // Watch for model changes from config
@@ -1184,6 +1191,7 @@ export const AppContainer = (props: AppContainerProps) => {
     extensionsUpdateState,
     true, // isConfigInitialized
     todoContextForCommands, // @plan PLAN-20260129-TODOPERSIST.P07
+    recordingIntegration,
   );
 
   // Memoize viewport to ensure it updates when inputWidth changes
