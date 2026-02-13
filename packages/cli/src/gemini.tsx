@@ -51,7 +51,12 @@ import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import dns from 'node:dns';
 import { start_sandbox } from './utils/sandbox.js';
-import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
+import {
+  shouldRelaunchForMemory,
+  isDebugMode,
+  computeSandboxMemoryArgs,
+  parseDockerMemoryToMB,
+} from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import chalk from 'chalk';
 import {
@@ -777,11 +782,28 @@ export async function main() {
 
   // hop into sandbox if we are outside and sandboxing is enabled
   if (!process.env.SANDBOX) {
-    // Memory relaunch was already handled at the top of main() before config loading
-    // Now only handle sandbox entry, which needs memory args passed to the sandbox process
-    const sandboxMemoryArgs = settings.merged.ui?.autoConfigureMaxOldSpaceSize
-      ? shouldRelaunchForMemory(config.getDebugMode())
-      : [];
+    // For sandbox, always compute memory args for the new process.
+    // Unlike shouldRelaunchForMemory() which compares against the host's current heap,
+    // computeSandboxMemoryArgs() always returns args because the sandbox starts fresh
+    // with Node.js default ~950MB heap.
+    let sandboxMemoryArgs: string[] = [];
+    if (settings.merged.ui?.autoConfigureMaxOldSpaceSize) {
+      const containerMemoryStr =
+        process.env.LLXPRT_SANDBOX_MEMORY ?? process.env.SANDBOX_MEMORY;
+      let containerMemoryMB: number | undefined;
+      if (containerMemoryStr) {
+        containerMemoryMB = parseDockerMemoryToMB(containerMemoryStr);
+      } else if (process.env.SANDBOX_FLAGS) {
+        const match = process.env.SANDBOX_FLAGS.match(/--memory[= ](\S+)/);
+        if (match) {
+          containerMemoryMB = parseDockerMemoryToMB(match[1]);
+        }
+      }
+      sandboxMemoryArgs = computeSandboxMemoryArgs(
+        config.getDebugMode(),
+        containerMemoryMB,
+      );
+    }
     const sandboxConfig = config.getSandbox();
     if (sandboxConfig) {
       // We intentionally omit the list of extensions here because extensions

@@ -100,6 +100,8 @@ vi.mock('./utils/sandbox.js', () => ({
 
 vi.mock('./utils/bootstrap.js', () => ({
   shouldRelaunchForMemory: vi.fn(() => []),
+  computeSandboxMemoryArgs: vi.fn(() => ['--max-old-space-size=3072']),
+  parseDockerMemoryToMB: vi.fn(() => undefined),
   isDebugMode: vi.fn(() => false),
 }));
 
