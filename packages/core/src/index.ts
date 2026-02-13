@@ -420,6 +420,10 @@ export {
   type PersistedToolCall,
 } from './storage/SessionPersistenceService.js';
 
+// @plan PLAN-20260211-SESSIONRECORDING.P03
+// Export session recording module
+export * from './recording/index.js';
+
 export {
   type SettingCategory,
   type SettingSpec,
