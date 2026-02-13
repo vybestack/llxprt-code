@@ -428,6 +428,39 @@ The structure MUST be as follows:
          - Database migration for user table might be needed
         -->
     </open_questions>
+
+    <task_context>
+        <!-- For each active task or todo item, capture: why it exists, what user request originated it, what constraints apply, what approach was chosen, and what has been tried so far. -->
+        <!-- Example:
+         - Task: "Fix TypeScript errors in login.ts" — originated from user request to refactor auth. Constraint: must maintain backward compatibility. Approach: incremental migration. Tried: direct replacement (failed due to type mismatches).
+        -->
+    </task_context>
+
+    <user_directives>
+        <!-- Capture specific user feedback, corrections, and preferences. Use exact quotes where possible. -->
+        <!-- Example:
+         - User said: "Don't use any as a type, ever"
+         - User prefers: functional style over class-based
+         - User corrected: "The config file is at /etc/app.conf, not /etc/app.json"
+        -->
+    </user_directives>
+
+    <errors_encountered>
+        <!-- Record errors hit during the session: exact messages, root causes identified, and resolutions applied. -->
+        <!-- Example:
+         - Error: "Cannot find module './auth/middleware'" — Root cause: file was renamed to middleware.ts. Resolution: updated import path.
+         - Error: "Type 'string' is not assignable to type 'number'" — Root cause: API response shape changed. Resolution: added parseInt() conversion.
+        -->
+    </errors_encountered>
+
+    <code_references>
+        <!-- Preserve important code snippets, exact file paths, and function signatures that are essential for continuing work. -->
+        <!-- Example:
+         - Key file: src/auth/middleware.ts — exports: authenticateRequest(req, res, next)
+         - Modified: src/routes/login.ts lines 45-60 (JWT token generation)
+         - Config: config/keys.json (contains API keys, do not commit)
+        -->
+    </code_references>
 </state_snapshot>
 `.trim();
 }

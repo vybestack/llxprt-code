@@ -6,8 +6,12 @@
 
 /**
  * @plan PLAN-20260211-COMPRESSION.P08
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @plan PLAN-20260211-HIGHDENSITY.P05
  * @requirement REQ-CS-003.1, REQ-CS-003.2, REQ-CS-003.3
  * @requirement REQ-CS-003.4, REQ-CS-003.5
+ * @requirement REQ-HD-001.3
+ * @pseudocode strategy-interface.md lines 80-84
  *
  * Top-down truncation compression strategy: removes the oldest messages
  * from the conversation history until the estimated token count drops
@@ -20,12 +24,18 @@ import type {
   CompressionContext,
   CompressionResult,
   CompressionStrategy,
+  StrategyTrigger,
 } from './types.js';
 import { adjustForToolCallBoundary } from './utils.js';
 
 export class TopDownTruncationStrategy implements CompressionStrategy {
   readonly name = 'top-down-truncation' as const;
   readonly requiresLLM = false;
+  /** @plan PLAN-20260211-HIGHDENSITY.P03 @requirement REQ-HD-001.3 */
+  readonly trigger: StrategyTrigger = {
+    mode: 'threshold',
+    defaultThreshold: 0.85,
+  };
 
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history, runtimeContext, estimateTokens, currentTokenCount } =
