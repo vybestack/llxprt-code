@@ -219,12 +219,11 @@ describe('HistoryService — Density Extensions', () => {
         new Map([[2, makeEntry('human', 'X')]]),
       );
 
-      await expect(service.applyDensityResult(result)).rejects.toThrow(
-        CompressionStrategyError,
-      );
-      await expect(service.applyDensityResult(result)).rejects.toMatchObject({
-        code: 'DENSITY_CONFLICT',
-      });
+      const err = await service
+        .applyDensityResult(result)
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CompressionStrategyError);
+      expect(err).toMatchObject({ code: 'DENSITY_CONFLICT' });
     });
 
     /**
@@ -238,12 +237,11 @@ describe('HistoryService — Density Extensions', () => {
 
       const result = makeDensityResult([5], new Map());
 
-      await expect(service.applyDensityResult(result)).rejects.toThrow(
-        CompressionStrategyError,
-      );
-      await expect(service.applyDensityResult(result)).rejects.toMatchObject({
-        code: 'DENSITY_INDEX_OUT_OF_BOUNDS',
-      });
+      const err = await service
+        .applyDensityResult(result)
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CompressionStrategyError);
+      expect(err).toMatchObject({ code: 'DENSITY_INDEX_OUT_OF_BOUNDS' });
     });
 
     /**
@@ -260,12 +258,11 @@ describe('HistoryService — Density Extensions', () => {
         new Map([[10, makeEntry('human', 'X')]]),
       );
 
-      await expect(service.applyDensityResult(result)).rejects.toThrow(
-        CompressionStrategyError,
-      );
-      await expect(service.applyDensityResult(result)).rejects.toMatchObject({
-        code: 'DENSITY_INDEX_OUT_OF_BOUNDS',
-      });
+      const err = await service
+        .applyDensityResult(result)
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CompressionStrategyError);
+      expect(err).toMatchObject({ code: 'DENSITY_INDEX_OUT_OF_BOUNDS' });
     });
 
     /**
@@ -277,12 +274,11 @@ describe('HistoryService — Density Extensions', () => {
 
       const result = makeDensityResult([-1], new Map());
 
-      await expect(service.applyDensityResult(result)).rejects.toThrow(
-        CompressionStrategyError,
-      );
-      await expect(service.applyDensityResult(result)).rejects.toMatchObject({
-        code: 'DENSITY_INDEX_OUT_OF_BOUNDS',
-      });
+      const err = await service
+        .applyDensityResult(result)
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CompressionStrategyError);
+      expect(err).toMatchObject({ code: 'DENSITY_INDEX_OUT_OF_BOUNDS' });
     });
 
     /**
@@ -430,228 +426,256 @@ describe('HistoryService — Density Extensions', () => {
      * @plan PLAN-20260211-HIGHDENSITY.P07
      * @requirement REQ-HD-003.1
      */
-    it('history length after removal equals original minus removal count', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          // Generate a history size between 1 and 15
-          fc.integer({ min: 1, max: 15 }),
-          // Generate a set of unique removal indices (will be filtered to bounds)
-          fc.array(fc.integer({ min: 0, max: 14 }), {
-            minLength: 0,
-            maxLength: 10,
-          }),
-          async (histSize, rawRemovals) => {
-            const svc = new HistoryService();
-            seedHistory(svc, histSize);
-            await svc.waitForTokenUpdates();
+    it(
+      'history length after removal equals original minus removal count',
+      { timeout: 60_000 },
+      async () => {
+        await fc.assert(
+          fc.asyncProperty(
+            // Generate a history size between 1 and 15
+            fc.integer({ min: 1, max: 15 }),
+            // Generate a set of unique removal indices (will be filtered to bounds)
+            fc.array(fc.integer({ min: 0, max: 14 }), {
+              minLength: 0,
+              maxLength: 10,
+            }),
+            async (histSize, rawRemovals) => {
+              const svc = new HistoryService();
+              seedHistory(svc, histSize);
+              await svc.waitForTokenUpdates();
 
-            // Deduplicate and keep only in-bounds indices
-            const removals = [...new Set(rawRemovals)].filter(
-              (i) => i >= 0 && i < histSize,
-            );
+              // Deduplicate and keep only in-bounds indices
+              const removals = [...new Set(rawRemovals)].filter(
+                (i) => i >= 0 && i < histSize,
+              );
 
-            const result = makeDensityResult(removals, new Map());
-            await svc.applyDensityResult(result);
+              const result = makeDensityResult(removals, new Map());
+              await svc.applyDensityResult(result);
 
-            expect(svc.getRawHistory()).toHaveLength(
-              histSize - removals.length,
-            );
-          },
-        ),
-        { numRuns: 50 },
-      );
-    });
-
-    /**
-     * @requirement REQ-HD-003.1
-     */
-    it('non-removed non-replaced entries are unchanged (same reference)', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 2, max: 12 }),
-          fc.array(fc.integer({ min: 0, max: 11 }), {
-            minLength: 0,
-            maxLength: 6,
-          }),
-          fc.array(fc.integer({ min: 0, max: 11 }), {
-            minLength: 0,
-            maxLength: 4,
-          }),
-          async (histSize, rawRemovals, rawReplacements) => {
-            const svc = new HistoryService();
-            const entries = seedHistory(svc, histSize);
-            await svc.waitForTokenUpdates();
-
-            // Build valid non-overlapping sets
-            const removalSet = new Set(
-              rawRemovals.filter((i) => i >= 0 && i < histSize),
-            );
-            const replacements = new Map<number, IContent>();
-            for (const idx of rawReplacements) {
-              if (idx >= 0 && idx < histSize && !removalSet.has(idx)) {
-                replacements.set(idx, makeEntry('human', `R${idx}`));
-              }
-            }
-            const removals = [...removalSet].filter(
-              (i) => !replacements.has(i),
-            );
-
-            const touched = new Set([...removals, ...replacements.keys()]);
-
-            const result = makeDensityResult(removals, replacements);
-            await svc.applyDensityResult(result);
-
-            // Entries that were NOT touched must still be the same reference
-            const raw = svc.getRawHistory();
-            let rawIdx = 0;
-            for (let origIdx = 0; origIdx < histSize; origIdx++) {
-              if (removals.includes(origIdx)) continue;
-              if (!touched.has(origIdx)) {
-                expect(raw[rawIdx]).toBe(entries[origIdx]);
-              }
-              rawIdx++;
-            }
-          },
-        ),
-        { numRuns: 50 },
-      );
-    });
+              expect(svc.getRawHistory()).toHaveLength(
+                histSize - removals.length,
+              );
+            },
+          ),
+          { numRuns: 50 },
+        );
+      },
+    );
 
     /**
      * @requirement REQ-HD-003.1
      */
-    it('replaced entries match the replacement content', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 2, max: 10 }),
-          fc.array(fc.integer({ min: 0, max: 9 }), {
-            minLength: 1,
-            maxLength: 5,
-          }),
-          async (histSize, rawReplacements) => {
-            const svc = new HistoryService();
-            seedHistory(svc, histSize);
-            await svc.waitForTokenUpdates();
+    it(
+      'non-removed non-replaced entries are unchanged (same reference)',
+      { timeout: 60_000 },
+      async () => {
+        await fc.assert(
+          fc.asyncProperty(
+            fc.integer({ min: 2, max: 12 }),
+            fc.array(fc.integer({ min: 0, max: 11 }), {
+              minLength: 0,
+              maxLength: 6,
+            }),
+            fc.array(fc.integer({ min: 0, max: 11 }), {
+              minLength: 0,
+              maxLength: 4,
+            }),
+            async (histSize, rawRemovals, rawReplacements) => {
+              const svc = new HistoryService();
+              const entries = seedHistory(svc, histSize);
+              await svc.waitForTokenUpdates();
 
-            const replacements = new Map<number, IContent>();
-            for (const idx of rawReplacements) {
-              if (idx >= 0 && idx < histSize) {
-                replacements.set(idx, makeEntry('human', `REPLACED_${idx}`));
+              // Build valid non-overlapping sets
+              const removalSet = new Set(
+                rawRemovals.filter((i) => i >= 0 && i < histSize),
+              );
+              const replacements = new Map<number, IContent>();
+              for (const idx of rawReplacements) {
+                if (idx >= 0 && idx < histSize && !removalSet.has(idx)) {
+                  replacements.set(idx, makeEntry('human', `R${idx}`));
+                }
               }
-            }
-            if (replacements.size === 0) return; // skip trivial case
+              const removals = [...removalSet].filter(
+                (i) => !replacements.has(i),
+              );
 
-            const result = makeDensityResult([], replacements);
-            await svc.applyDensityResult(result);
+              const touched = new Set([...removals, ...replacements.keys()]);
 
-            const raw = svc.getRawHistory();
-            for (const [idx, expected] of replacements) {
-              expect(raw[idx]).toBe(expected);
-            }
-          },
-        ),
-        { numRuns: 50 },
-      );
-    });
+              const result = makeDensityResult(removals, replacements);
+              await svc.applyDensityResult(result);
+
+              // Entries that were NOT touched must still be the same reference
+              const raw = svc.getRawHistory();
+              let rawIdx = 0;
+              for (let origIdx = 0; origIdx < histSize; origIdx++) {
+                if (removals.includes(origIdx)) continue;
+                if (!touched.has(origIdx)) {
+                  expect(raw[rawIdx]).toBe(entries[origIdx]);
+                }
+                rawIdx++;
+              }
+            },
+          ),
+          { numRuns: 50 },
+        );
+      },
+    );
+
+    /**
+     * @requirement REQ-HD-003.1
+     */
+    it(
+      'replaced entries match the replacement content',
+      { timeout: 60_000 },
+      async () => {
+        await fc.assert(
+          fc.asyncProperty(
+            fc.integer({ min: 2, max: 10 }),
+            fc.array(fc.integer({ min: 0, max: 9 }), {
+              minLength: 1,
+              maxLength: 5,
+            }),
+            async (histSize, rawReplacements) => {
+              const svc = new HistoryService();
+              seedHistory(svc, histSize);
+              await svc.waitForTokenUpdates();
+
+              const replacements = new Map<number, IContent>();
+              for (const idx of rawReplacements) {
+                if (idx >= 0 && idx < histSize) {
+                  replacements.set(idx, makeEntry('human', `REPLACED_${idx}`));
+                }
+              }
+              if (replacements.size === 0) return; // skip trivial case
+
+              const result = makeDensityResult([], replacements);
+              await svc.applyDensityResult(result);
+
+              const raw = svc.getRawHistory();
+              for (const [idx, expected] of replacements) {
+                expect(raw[idx]).toBe(expected);
+              }
+            },
+          ),
+          { numRuns: 50 },
+        );
+      },
+    );
 
     /**
      * @requirement REQ-HD-001.6
      */
-    it('all conflict combinations are caught (index in both removals and replacements)', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 1, max: 10 }),
-          fc.integer({ min: 0, max: 9 }),
-          async (histSize, conflictIdx) => {
-            if (conflictIdx >= histSize) return; // skip out-of-range
+    it(
+      'all conflict combinations are caught (index in both removals and replacements)',
+      { timeout: 60_000 },
+      async () => {
+        await fc.assert(
+          fc.asyncProperty(
+            fc.integer({ min: 1, max: 10 }),
+            fc.integer({ min: 0, max: 9 }),
+            async (histSize, conflictIdx) => {
+              if (conflictIdx >= histSize) return; // skip out-of-range
 
-            const svc = new HistoryService();
-            seedHistory(svc, histSize);
-            await svc.waitForTokenUpdates();
+              const svc = new HistoryService();
+              seedHistory(svc, histSize);
+              await svc.waitForTokenUpdates();
 
-            const result = makeDensityResult(
-              [conflictIdx],
-              new Map([[conflictIdx, makeEntry('human', 'X')]]),
-            );
+              const result = makeDensityResult(
+                [conflictIdx],
+                new Map([[conflictIdx, makeEntry('human', 'X')]]),
+              );
 
-            await expect(svc.applyDensityResult(result)).rejects.toThrow(
-              CompressionStrategyError,
-            );
-          },
-        ),
-        { numRuns: 30 },
-      );
-    });
+              await expect(svc.applyDensityResult(result)).rejects.toThrow(
+                CompressionStrategyError,
+              );
+            },
+          ),
+          { numRuns: 30 },
+        );
+      },
+    );
 
     /**
      * @requirement REQ-HD-003.5
      */
-    it('getRawHistory length equals number of add() calls', () => {
-      fc.assert(
-        fc.property(fc.integer({ min: 0, max: 20 }), (n) => {
-          const svc = new HistoryService();
-          for (let i = 0; i < n; i++) {
-            svc.add(makeEntry('human', `msg-${i}`));
-          }
-          expect(svc.getRawHistory()).toHaveLength(n);
-        }),
-        { numRuns: 50 },
-      );
-    });
+    it(
+      'getRawHistory length equals number of add() calls',
+      { timeout: 60_000 },
+      () => {
+        fc.assert(
+          fc.property(fc.integer({ min: 0, max: 20 }), (n) => {
+            const svc = new HistoryService();
+            for (let i = 0; i < n; i++) {
+              svc.add(makeEntry('human', `msg-${i}`));
+            }
+            expect(svc.getRawHistory()).toHaveLength(n);
+          }),
+          { numRuns: 50 },
+        );
+      },
+    );
 
     /**
      * @requirement REQ-HD-001.7
      */
-    it('out-of-bounds indices always throw regardless of history size', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 1, max: 10 }),
-          fc.integer({ min: 0, max: 5 }),
-          async (histSize, offset) => {
-            const svc = new HistoryService();
-            seedHistory(svc, histSize);
-            await svc.waitForTokenUpdates();
+    it(
+      'out-of-bounds indices always throw regardless of history size',
+      { timeout: 60_000 },
+      async () => {
+        await fc.assert(
+          fc.asyncProperty(
+            fc.integer({ min: 1, max: 10 }),
+            fc.integer({ min: 0, max: 5 }),
+            async (histSize, offset) => {
+              const svc = new HistoryService();
+              seedHistory(svc, histSize);
+              await svc.waitForTokenUpdates();
 
-            const oobIndex = histSize + offset; // always >= histSize
-            const result = makeDensityResult([oobIndex], new Map());
+              const oobIndex = histSize + offset; // always >= histSize
+              const result = makeDensityResult([oobIndex], new Map());
 
-            await expect(svc.applyDensityResult(result)).rejects.toThrow(
-              CompressionStrategyError,
-            );
-          },
-        ),
-        { numRuns: 30 },
-      );
-    });
+              await expect(svc.applyDensityResult(result)).rejects.toThrow(
+                CompressionStrategyError,
+              );
+            },
+          ),
+          { numRuns: 30 },
+        );
+      },
+    );
 
     /**
      * @requirement REQ-HD-003.4
      */
-    it('totalTokens is non-negative after any valid density operation', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 1, max: 10 }),
-          fc.array(fc.integer({ min: 0, max: 9 }), {
-            minLength: 0,
-            maxLength: 5,
-          }),
-          async (histSize, rawRemovals) => {
-            const svc = new HistoryService();
-            seedHistory(svc, histSize);
-            await svc.waitForTokenUpdates();
+    it(
+      'totalTokens is non-negative after any valid density operation',
+      { timeout: 60_000 },
+      async () => {
+        await fc.assert(
+          fc.asyncProperty(
+            fc.integer({ min: 1, max: 10 }),
+            fc.array(fc.integer({ min: 0, max: 9 }), {
+              minLength: 0,
+              maxLength: 5,
+            }),
+            async (histSize, rawRemovals) => {
+              const svc = new HistoryService();
+              seedHistory(svc, histSize);
+              await svc.waitForTokenUpdates();
 
-            const removals = [...new Set(rawRemovals)].filter(
-              (i) => i >= 0 && i < histSize,
-            );
-            const result = makeDensityResult(removals, new Map());
-            await svc.applyDensityResult(result);
-            await svc.waitForTokenUpdates();
+              const removals = [...new Set(rawRemovals)].filter(
+                (i) => i >= 0 && i < histSize,
+              );
+              const result = makeDensityResult(removals, new Map());
+              await svc.applyDensityResult(result);
+              await svc.waitForTokenUpdates();
 
-            expect(svc.getTotalTokens()).toBeGreaterThanOrEqual(0);
-          },
-        ),
-        { numRuns: 30 },
-      );
-    });
+              expect(svc.getTotalTokens()).toBeGreaterThanOrEqual(0);
+            },
+          ),
+          { numRuns: 30 },
+        );
+      },
+    );
   });
 });

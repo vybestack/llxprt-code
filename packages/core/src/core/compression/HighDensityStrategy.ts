@@ -258,10 +258,7 @@ export class HighDensityStrategy implements CompressionStrategy {
     let tailStartIndex = originalCount - tailSize;
 
     // Adjust for tool_call boundary — expand tail backward to avoid splitting pairs
-    tailStartIndex = this.adjustTailBoundary(
-      [...history] as IContent[],
-      tailStartIndex,
-    );
+    tailStartIndex = this.adjustTailBoundary(history, tailStartIndex);
 
     // If tail covers everything, return history unchanged (@pseudocode lines 29-34)
     if (tailStartIndex <= 0) {
@@ -334,7 +331,10 @@ export class HighDensityStrategy implements CompressionStrategy {
    * pairs. If the boundary lands on a tool_response, move it back to include
    * the preceding AI tool_call entry as well.
    */
-  private adjustTailBoundary(history: IContent[], index: number): number {
+  private adjustTailBoundary(
+    history: readonly IContent[],
+    index: number,
+  ): number {
     if (index <= 0 || index >= history.length) {
       return index;
     }
