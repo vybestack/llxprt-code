@@ -179,9 +179,7 @@ function compactFolderStructureSnapshot(
  * Reads both global (~/.llxprt/.LLXPRT_SYSTEM) and project-level
  * (<cwd>/.llxprt/.LLXPRT_SYSTEM) files and concatenates them.
  */
-export async function loadCoreMemoryContent(
-  cwd: string,
-): Promise<string> {
+export async function loadCoreMemoryContent(cwd: string): Promise<string> {
   const paths = [
     { path: getGlobalCoreMemoryFilePath(), label: 'global' },
     { path: getProjectCoreMemoryFilePath(cwd), label: 'project' },
@@ -435,7 +433,11 @@ export async function getCoreSystemPromptAsync(
     includeSubagentDelegation,
   });
 
-  return await service.getPrompt(context, effectiveUserMemory, effectiveCoreMemory);
+  return await service.getPrompt(
+    context,
+    effectiveUserMemory,
+    effectiveCoreMemory,
+  );
 }
 
 /**

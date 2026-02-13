@@ -112,7 +112,8 @@ export const memoryCommand: SlashCommand = {
           }
 
           const fact = remainingArgs;
-          const workingDir = context.services.config?.getWorkingDir() || process.cwd();
+          const workingDir =
+            context.services.config?.getWorkingDir() || process.cwd();
           const filePath =
             firstArg === 'core.project'
               ? getProjectCoreMemoryFilePath(workingDir)

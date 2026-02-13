@@ -637,9 +637,7 @@ describe('MemoryTool', () => {
     let coreMemoryTool: MemoryTool;
 
     beforeEach(() => {
-      coreMemoryTool = new MemoryTool(
-        { getWorkingDir: () => mockWorkingDir },
-      );
+      coreMemoryTool = new MemoryTool({ getWorkingDir: () => mockWorkingDir });
     });
 
     it('should include core.global and core.project in the schema', () => {

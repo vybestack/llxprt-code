@@ -27,9 +27,11 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
       if (error instanceof Error) return error.message;
       return String(error);
     }),
-    getGlobalCoreMemoryFilePath: original.getGlobalCoreMemoryFilePath ??
+    getGlobalCoreMemoryFilePath:
+      original.getGlobalCoreMemoryFilePath ??
       vi.fn(() => '/mock/home/.llxprt/.LLXPRT_SYSTEM'),
-    getProjectCoreMemoryFilePath: original.getProjectCoreMemoryFilePath ??
+    getProjectCoreMemoryFilePath:
+      original.getProjectCoreMemoryFilePath ??
       vi.fn((dir: string) => `${dir}/.llxprt/.LLXPRT_SYSTEM`),
     MemoryTool: original.MemoryTool ?? {
       performAddMemoryEntry: vi.fn().mockResolvedValue(undefined),
@@ -136,7 +138,8 @@ describe('memoryCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /memory add <global|project|core.global|core.project> <text to remember>',
+        content:
+          'Usage: /memory add <global|project|core.global|core.project> <text to remember>',
       });
 
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
@@ -149,7 +152,8 @@ describe('memoryCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /memory add <global|project|core.global|core.project> <text to remember>',
+        content:
+          'Usage: /memory add <global|project|core.global|core.project> <text to remember>',
       });
 
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
@@ -162,7 +166,8 @@ describe('memoryCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /memory add <global|project|core.global|core.project> <text to remember>',
+        content:
+          'Usage: /memory add <global|project|core.global|core.project> <text to remember>',
       });
 
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
@@ -330,7 +335,10 @@ describe('memoryCommand', () => {
       });
 
       // core.project scope returns void (writes directly)
-      const result = addCommand.action(mockContext, 'core.project Always use strict mode');
+      const result = addCommand.action(
+        mockContext,
+        'core.project Always use strict mode',
+      );
 
       expect(result).toBeUndefined();
     });
@@ -346,7 +354,10 @@ describe('memoryCommand', () => {
         },
       });
 
-      const result = addCommand.action(mockContext, 'core.global Prefer TypeScript');
+      const result = addCommand.action(
+        mockContext,
+        'core.global Prefer TypeScript',
+      );
 
       expect(result).toBeUndefined();
     });
