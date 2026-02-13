@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { Colors } from '../../colors.js';
@@ -92,8 +92,8 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   );
 
   // Derive current subcommand for display when details visible
-  const deriveCurrentSubcommand = (): string | null => {
-    if (status !== ToolCallStatus.Executing) return null;
+  const currentSubcommand = useMemo((): string | null => {
+    if (!isDetailsVisible || status !== ToolCallStatus.Executing) return null;
     if (!description) return null;
     const outputString =
       typeof resultDisplay === 'string' ? resultDisplay : undefined;
@@ -159,12 +159,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
       }
     }
     return segments[idx] ?? null;
-  };
-
-  const currentSubcommand =
-    isDetailsVisible && status === ToolCallStatus.Executing
-      ? deriveCurrentSubcommand()
-      : null;
+  }, [isDetailsVisible, status, description, resultDisplay]);
 
   return (
     <>
@@ -223,7 +218,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         <ToolResultDisplay
           resultDisplay={resultDisplay}
           availableTerminalHeight={availableTerminalHeight}
-          terminalWidth={terminalWidth}
+          terminalWidth={Math.max(0, terminalWidth - 4)}
           renderOutputAsMarkdown={renderOutputAsMarkdown}
         />
         {isThisShellFocused && config && (

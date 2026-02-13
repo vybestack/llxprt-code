@@ -36,8 +36,6 @@ export interface SessionInfo {
   firstUserMessage?: string;
   /** Whether this is the currently active session */
   isCurrentSession: boolean;
-  /** 1-based index for display/selection */
-  index?: number;
 }
 
 /**
@@ -116,7 +114,6 @@ export const getAllSessionFiles = async (
             lastUpdated: content.lastUpdated,
             firstUserMessage,
             isCurrentSession,
-            index: 0, // Will be assigned after sorting
           };
 
           return { fileName: file, sessionInfo };

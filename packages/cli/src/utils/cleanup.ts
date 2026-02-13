@@ -52,6 +52,7 @@ export async function runExitCleanup() {
  */
 export function __resetCleanupStateForTesting() {
   cleanupFunctions.length = 0;
+  syncCleanupFunctions.length = 0;
   cleanupInProgress = false;
 }
 

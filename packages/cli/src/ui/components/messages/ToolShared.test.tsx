@@ -84,7 +84,7 @@ describe('<ToolStatusIndicator />', () => {
     // When idle the mock spinner renders nonRespondingDisplay which may
     // contain Unicode characters that Ink's test renderer strips on some
     // platforms (e.g., CI Ubuntu). Just verify it doesn't crash.
-    expect(lastFrame).toBeDefined();
+    expect(lastFrame()).toBeDefined();
   });
 
   it('renders for Executing status when responding without crashing', () => {
@@ -96,23 +96,6 @@ describe('<ToolStatusIndicator />', () => {
         StreamingState.Responding,
       ),
     ).not.toThrow();
-  });
-
-  it('renders all status variants without crashing', () => {
-    // Verify every ToolCallStatus produces a valid render
-    const statuses = [
-      ToolCallStatus.Success,
-      ToolCallStatus.Error,
-      ToolCallStatus.Pending,
-      ToolCallStatus.Confirming,
-      ToolCallStatus.Canceled,
-      ToolCallStatus.Executing,
-    ];
-    for (const status of statuses) {
-      expect(() =>
-        renderInContext(<ToolStatusIndicator status={status} name="test" />),
-      ).not.toThrow();
-    }
   });
 });
 

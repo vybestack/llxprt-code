@@ -124,6 +124,19 @@ interface ActivePty {
   terminationTimeout?: NodeJS.Timeout;
 }
 
+/**
+ * Returns true when the error is a benign race where the PTY has already
+ * exited before a resize/scroll call reaches it (Unix ESRCH or Windows
+ * message-based error).
+ */
+function isIgnorablePtyExitError(e: unknown): boolean {
+  const err = e as { code?: string; message?: string };
+  return (
+    err.code === 'ESRCH' ||
+    !!err.message?.includes('Cannot resize a pty that has already exited')
+  );
+}
+
 export class ShellExecutionService {
   private static activePtys = new Map<number, ActivePty>();
   private static lastActivePtyId: number | null = null;
@@ -956,19 +969,7 @@ export class ShellExecutionService {
         activePty.ptyProcess.resize(cols, rows);
         activePty.headlessTerminal.resize(cols, rows);
       } catch (e) {
-        // Ignore errors if the pty has already exited, which can happen
-        // due to a race condition between the exit event and this call.
-        const err = e as { code?: string; message?: string };
-        const isEsrch = err.code === 'ESRCH';
-        const isWindowsPtyError = err.message?.includes(
-          'Cannot resize a pty that has already exited',
-        );
-
-        if (isEsrch || isWindowsPtyError) {
-          // On Unix, we get an ESRCH error.
-          // On Windows, we get a message-based error.
-          // In both cases, it's safe to ignore.
-        } else {
+        if (!isIgnorablePtyExitError(e)) {
           throw e;
         }
       }
@@ -1044,11 +1045,7 @@ export class ShellExecutionService {
         targetPty.pty.headlessTerminal.scrollToTop();
       }
     } catch (e) {
-      // Ignore errors if the pty has already exited, which can happen
-      // due to a race condition between the exit event and this call.
-      if (e instanceof Error && 'code' in e && e.code === 'ESRCH') {
-        // ignore
-      } else {
+      if (!isIgnorablePtyExitError(e)) {
         throw e;
       }
     }

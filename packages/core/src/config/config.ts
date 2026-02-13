@@ -1193,8 +1193,8 @@ export class Config {
   }
 
   async updateSystemInstructionIfInitialized(): Promise<void> {
-    const geminiClient = this.getGeminiClient();
-    if (geminiClient.isInitialized()) {
+    const geminiClient = this.geminiClient;
+    if (geminiClient?.isInitialized()) {
       await geminiClient.updateSystemInstruction();
     }
   }

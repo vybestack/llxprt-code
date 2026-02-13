@@ -51,32 +51,31 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
   // Long tool call response in MarkdownDisplay doesn't respect availableTerminalHeight properly,
   // we're forcing it to not render as markdown when the response is too long, it will fallback
   // to render as plain text, which is contained within the terminal using MaxSizedBox
-  if (availableHeight) {
-    renderOutputAsMarkdown = false;
-  }
+  const shouldRenderMarkdown = availableHeight ? false : renderOutputAsMarkdown;
 
   const childWidth = terminalWidth;
 
-  if (typeof resultDisplay === 'string') {
-    if (resultDisplay.length > MAXIMUM_RESULT_DISPLAY_CHARACTERS) {
-      resultDisplay =
-        '...' + resultDisplay.slice(-MAXIMUM_RESULT_DISPLAY_CHARACTERS);
+  let displayContent = resultDisplay;
+  if (typeof displayContent === 'string') {
+    if (displayContent.length > MAXIMUM_RESULT_DISPLAY_CHARACTERS) {
+      displayContent =
+        '...' + displayContent.slice(-MAXIMUM_RESULT_DISPLAY_CHARACTERS);
     }
   }
 
   // Build a filtered version for visual rendering (hide runtime markers).
   const visualResultDisplay =
-    typeof resultDisplay === 'string'
-      ? stripShellMarkers(resultDisplay)
-      : resultDisplay;
+    typeof displayContent === 'string'
+      ? stripShellMarkers(displayContent)
+      : displayContent;
 
-  if (!resultDisplay) return null;
+  if (!displayContent) return null;
 
-  // Check if resultDisplay is AnsiOutput (array of arrays)
+  // Check if displayContent is AnsiOutput (array of arrays)
   const isAnsiOutput =
-    Array.isArray(resultDisplay) &&
-    resultDisplay.length > 0 &&
-    Array.isArray(resultDisplay[0]);
+    Array.isArray(displayContent) &&
+    displayContent.length > 0 &&
+    Array.isArray(displayContent[0]);
 
   return (
     <Box
@@ -87,12 +86,12 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
     >
       {isAnsiOutput && (
         <AnsiOutputText
-          data={resultDisplay as unknown as AnsiOutput}
+          data={displayContent as unknown as AnsiOutput}
           availableTerminalHeight={availableHeight}
           width={childWidth}
         />
       )}
-      {typeof resultDisplay === 'string' && renderOutputAsMarkdown && (
+      {typeof displayContent === 'string' && shouldRenderMarkdown && (
         <Box flexDirection="column">
           <MarkdownDisplay
             text={visualResultDisplay as string}
@@ -102,7 +101,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
           />
         </Box>
       )}
-      {typeof resultDisplay === 'string' && !renderOutputAsMarkdown && (
+      {typeof displayContent === 'string' && !shouldRenderMarkdown && (
         <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
           <Box>
             <Text color={Colors.Foreground} wrap="wrap">
@@ -111,13 +110,13 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
           </Box>
         </MaxSizedBox>
       )}
-      {!isAnsiOutput && typeof resultDisplay !== 'string' && (
+      {!isAnsiOutput && typeof displayContent !== 'string' && (
         <Box flexDirection="column">
-          {'fileDiff' in resultDisplay && (
+          {'fileDiff' in displayContent && (
             <>
               {(() => {
                 const astValidation = (
-                  resultDisplay as { metadata?: Record<string, unknown> }
+                  displayContent as { metadata?: Record<string, unknown> }
                 ).metadata?.astValidation as
                   | { valid: boolean; errors: string[] }
                   | undefined;
@@ -146,22 +145,22 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
               })()}
               <DiffRenderer
                 diffContent={
-                  (resultDisplay as unknown as { fileDiff: string }).fileDiff
+                  (displayContent as unknown as { fileDiff: string }).fileDiff
                 }
                 filename={
-                  (resultDisplay as unknown as { fileName: string }).fileName
+                  (displayContent as unknown as { fileName: string }).fileName
                 }
                 availableTerminalHeight={availableHeight}
                 terminalWidth={childWidth}
               />
             </>
           )}
-          {'content' in resultDisplay && (
+          {'content' in displayContent && (
             <Box flexDirection="column">
               <Box marginBottom={1} flexDirection="column">
                 {(() => {
                   const metadata = (
-                    resultDisplay as { metadata?: Record<string, unknown> }
+                    displayContent as { metadata?: Record<string, unknown> }
                   ).metadata;
                   const language = metadata?.language;
                   const declarationsCount = metadata?.declarationsCount;
@@ -182,7 +181,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
                 })()}
               </Box>
               <MarkdownDisplay
-                text={(resultDisplay as { content: string }).content}
+                text={(displayContent as { content: string }).content}
                 isPending={false}
                 availableTerminalHeight={availableHeight}
                 terminalWidth={childWidth}

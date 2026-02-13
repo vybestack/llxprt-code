@@ -329,6 +329,7 @@ export function useReactToolScheduler(
           // The local updateToolCallOutput handles the UI rendering for subagent tools.
           outputUpdateHandler: (toolCallId, chunk) => {
             updateToolCallOutput(schedulerId, toolCallId, chunk);
+            setLastToolOutputTime(Date.now());
           },
           onToolCallsUpdate: (calls) => {
             replaceToolCallsForScheduler(schedulerId, calls);

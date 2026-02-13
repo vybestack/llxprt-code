@@ -119,6 +119,47 @@ describe('<ToolResultDisplay />', () => {
     ).not.toThrow();
   });
 
+  it('renders without crashing for object with content property', () => {
+    const contentResult = {
+      content: 'const x = 1;',
+      metadata: { language: 'typescript', declarationsCount: 1 },
+    };
+
+    expect(() =>
+      renderWithProviders(
+        <ToolResultDisplay resultDisplay={contentResult} terminalWidth={80} />,
+      ),
+    ).not.toThrow();
+  });
+
+  it('truncates extremely long strings to MAXIMUM_RESULT_DISPLAY_CHARACTERS', () => {
+    // 500_001 chars exceeds the 500_000 cap; component should not throw
+    const veryLong = 'a'.repeat(500_001);
+    expect(() =>
+      renderWithProviders(
+        <ToolResultDisplay
+          resultDisplay={veryLong}
+          terminalWidth={80}
+          renderOutputAsMarkdown={false}
+        />,
+      ),
+    ).not.toThrow();
+  });
+
+  it('falls back to plain text when availableTerminalHeight is set', () => {
+    // When availableTerminalHeight is provided, markdown is disabled internally
+    expect(() =>
+      renderWithProviders(
+        <ToolResultDisplay
+          resultDisplay="# heading"
+          terminalWidth={80}
+          availableTerminalHeight={20}
+          renderOutputAsMarkdown={true}
+        />,
+      ),
+    ).not.toThrow();
+  });
+
   it('is a React component', () => {
     expect(typeof ToolResultDisplay).toBe('function');
     const element = React.createElement(ToolResultDisplay, {

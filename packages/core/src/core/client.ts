@@ -181,8 +181,6 @@ export class GeminiClient {
   private lastTodoSnapshot?: Todo[];
 
   /**
-   * At any point in this conversation, was compression triggered without
-  /**
    * Runtime state for stateless operation (Phase 5)
    * @plan PLAN-20251027-STATELESS5.P10
    * @requirement REQ-STAT5-003.1
@@ -559,31 +557,16 @@ export class GeminiClient {
       return;
     }
 
-    const userMemory = this.config.getUserMemory();
-    const model = this.runtimeState.model;
     const enabledToolNames = this.getEnabledToolNamesForPrompt();
-    const includeSubagentDelegation =
-      await this.shouldIncludeSubagentDelegation(enabledToolNames);
-
-    let systemInstruction = await getCoreSystemPromptAsync({
-      userMemory,
-      model,
-      tools: enabledToolNames,
-      includeSubagentDelegation,
-    });
-
     const envParts = await getEnvironmentContext(this.config);
-    const envContextText = envParts
-      .map((part) => ('text' in part ? part.text : ''))
-      .join('\n');
-    if (envContextText) {
-      systemInstruction = `${envContextText}
-
-${systemInstruction}`;
-    }
+    const systemInstruction = await this.buildSystemInstruction(
+      enabledToolNames,
+      envParts,
+    );
 
     this.getChat().setSystemInstruction(systemInstruction);
 
+    const model = this.runtimeState.model;
     const historyService = this.getHistoryService();
     if (historyService) {
       try {
@@ -598,6 +581,36 @@ ${systemInstruction}`;
         );
       }
     }
+  }
+
+  /**
+   * Builds the full system instruction by combining environment context with
+   * the core system prompt.  Shared by both startChat and
+   * updateSystemInstruction so the prompt is assembled consistently.
+   */
+  private async buildSystemInstruction(
+    enabledToolNames: string[],
+    envParts?: Array<{ text?: string }>,
+  ): Promise<string> {
+    const userMemory = this.config.getUserMemory();
+    const model = this.runtimeState.model;
+    const includeSubagentDelegation =
+      await this.shouldIncludeSubagentDelegation(enabledToolNames);
+
+    let systemInstruction = await getCoreSystemPromptAsync({
+      userMemory,
+      model,
+      tools: enabledToolNames,
+      includeSubagentDelegation,
+    });
+
+    const envContextText = (envParts ?? [])
+      .map((part) => ('text' in part && part.text ? part.text : ''))
+      .join('\n');
+    if (envContextText) {
+      systemInstruction = envContextText + '\n\n' + systemInstruction;
+    }
+    return systemInstruction;
   }
 
   getChat(): GeminiChat {
@@ -934,31 +947,17 @@ ${systemInstruction}`;
     }
 
     try {
-      const userMemory = this.config.getUserMemory();
       // @plan PLAN-20251027-STATELESS5.P10
       // @requirement REQ-STAT5-003.1
       const model = this.runtimeState.model;
-      // Provider name removed from prompt call signature
       const logger = new DebugLogger('llxprt:client:start');
       logger.debug(
         () => `DEBUG [client.startChat]: Model from config: ${model}`,
       );
-      const includeSubagentDelegation =
-        await this.shouldIncludeSubagentDelegation(enabledToolNames);
-      let systemInstruction = await getCoreSystemPromptAsync({
-        userMemory,
-        model,
-        tools: enabledToolNames,
-        includeSubagentDelegation,
-      });
-
-      // Add environment context to system instruction
-      const envContextText = envParts
-        .map((part) => ('text' in part ? part.text : ''))
-        .join('\n');
-      if (envContextText) {
-        systemInstruction = `${envContextText}\n\n${systemInstruction}`;
-      }
+      const systemInstruction = await this.buildSystemInstruction(
+        enabledToolNames,
+        envParts,
+      );
 
       let systemPromptTokens = 0;
       try {

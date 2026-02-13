@@ -66,7 +66,6 @@ export async function detectAndEnableKittyProtocol(): Promise<void> {
       if (kittySupported || sgrMouseSupported) {
         enableSupportedProtocol();
         process.on('exit', disableAllProtocols);
-        process.on('SIGTERM', disableAllProtocols);
       }
 
       detectionComplete = true;

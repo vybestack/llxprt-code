@@ -20,6 +20,9 @@ type InkRenderOptionsSettings = {
   };
 };
 
+// Create stdio streams once so they are reused across calls.
+const sharedStdio = createInkStdio();
+
 /**
  * @plan PLAN-20251215-OLDUI-SCROLL.P04
  * @requirement REQ-456.4
@@ -34,11 +37,9 @@ export const inkRenderOptions = (
   const incrementalRendering =
     useAlternateBuffer && settings.merged.ui?.incrementalRendering !== false;
 
-  const { stdout, stderr } = createInkStdio();
-
   return {
-    stdout,
-    stderr,
+    stdout: sharedStdio.stdout,
+    stderr: sharedStdio.stderr,
     exitOnCtrlC: false,
     patchConsole: false,
     isScreenReaderEnabled,

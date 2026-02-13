@@ -1785,7 +1785,10 @@ export const useGeminiStream = (
     storage,
   ]);
 
-  const lastOutputTime = Math.max(lastToolOutputTime, lastShellOutputTime);
+  const lastOutputTime = Math.max(
+    lastToolOutputTime ?? 0,
+    lastShellOutputTime ?? 0,
+  );
 
   return {
     streamingState,

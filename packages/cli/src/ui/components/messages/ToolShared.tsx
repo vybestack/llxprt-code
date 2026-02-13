@@ -28,7 +28,7 @@ export const ToolStatusIndicator: React.FC<ToolStatusIndicatorProps> = ({
   status,
   name,
 }) => {
-  const isShell = name === SHELL_COMMAND_NAME || name === SHELL_NAME || false;
+  const isShell = name === SHELL_COMMAND_NAME || name === SHELL_NAME;
   const warningColor = isShell ? Colors.Foreground : Colors.AccentYellow;
 
   return (
@@ -81,20 +81,7 @@ export const ToolInfo: React.FC<ToolInfoProps> = ({
   emphasis,
   showFullDescription = false,
 }) => {
-  const nameColor = React.useMemo<string>(() => {
-    switch (emphasis) {
-      case 'high':
-        return Colors.Foreground;
-      case 'medium':
-        return Colors.Foreground;
-      case 'low':
-        return Colors.Gray;
-      default: {
-        const exhaustiveCheck: never = emphasis;
-        return exhaustiveCheck;
-      }
-    }
-  }, [emphasis]);
+  const nameColor = emphasis === 'low' ? Colors.Gray : Colors.Foreground;
   return (
     <Box>
       <Text

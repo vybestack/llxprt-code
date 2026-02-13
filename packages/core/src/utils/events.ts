@@ -216,22 +216,34 @@ export class CoreEventEmitter extends EventEmitter {
   }
 
   /**
+   * Drains the output backlog, emitting all buffered events.
+   */
+  drainOutputBacklog(): void {
+    const backlog = [...this._outputBacklog];
+    this._outputBacklog.length = 0;
+    for (const payload of backlog) {
+      this.emit(CoreEvent.Output, payload);
+    }
+  }
+
+  /**
+   * Drains the console log backlog, emitting all buffered events.
+   */
+  drainConsoleLogBacklog(): void {
+    const backlog = [...this._consoleLogBacklog];
+    this._consoleLogBacklog.length = 0;
+    for (const payload of backlog) {
+      this.emit(CoreEvent.ConsoleLog, payload);
+    }
+  }
+
+  /**
    * Drains all backlogs (feedback, output, console log).
    */
   drainBacklogs(): void {
     this.drainFeedbackBacklog();
-
-    const outputBacklog = [...this._outputBacklog];
-    this._outputBacklog.length = 0;
-    for (const payload of outputBacklog) {
-      this.emit(CoreEvent.Output, payload);
-    }
-
-    const consoleLogBacklog = [...this._consoleLogBacklog];
-    this._consoleLogBacklog.length = 0;
-    for (const payload of consoleLogBacklog) {
-      this.emit(CoreEvent.ConsoleLog, payload);
-    }
+    this.drainOutputBacklog();
+    this.drainConsoleLogBacklog();
   }
 }
 

@@ -1110,10 +1110,6 @@ class Session {
     const readManyFilesTool = new ReadManyFilesTool(this.config);
     const globTool = toolRegistry.getTool('glob');
 
-    if (!readManyFilesTool) {
-      throw new Error('Error: read_many_files tool not found.');
-    }
-
     for (const atPathPart of atPathCommandParts) {
       const pathName = atPathPart.fileData!.fileUri;
       // Check if path should be ignored

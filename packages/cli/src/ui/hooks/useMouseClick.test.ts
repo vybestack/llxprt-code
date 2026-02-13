@@ -45,19 +45,17 @@ describe('useMouseClick', () => {
     });
   });
 
-  const fakeRef = { current: {} as unknown } as React.RefObject<unknown>;
+  const fakeRef = {
+    current: {},
+  } as Parameters<typeof useMouseClick>[0];
 
   it('registers a mouse handler via useMouse', () => {
-    renderHook(() =>
-      useMouseClick(fakeRef as Parameters<typeof useMouseClick>[0], handler),
-    );
+    renderHook(() => useMouseClick(fakeRef, handler));
     expect(capturedMouseHandler).not.toBeNull();
   });
 
   it('calls handler when left-press is inside bounding box', () => {
-    renderHook(() =>
-      useMouseClick(fakeRef as Parameters<typeof useMouseClick>[0], handler),
-    );
+    renderHook(() => useMouseClick(fakeRef, handler));
 
     // Simulate mouse event inside the bounding box (1-based terminal coords)
     const event: MouseEvent = {
@@ -75,9 +73,7 @@ describe('useMouseClick', () => {
   });
 
   it('does not call handler when click is outside bounding box', () => {
-    renderHook(() =>
-      useMouseClick(fakeRef as Parameters<typeof useMouseClick>[0], handler),
-    );
+    renderHook(() => useMouseClick(fakeRef, handler));
 
     const event: MouseEvent = {
       name: 'left-press',
@@ -94,9 +90,7 @@ describe('useMouseClick', () => {
   });
 
   it('ignores right-press when button is left (default)', () => {
-    renderHook(() =>
-      useMouseClick(fakeRef as Parameters<typeof useMouseClick>[0], handler),
-    );
+    renderHook(() => useMouseClick(fakeRef, handler));
 
     const event: MouseEvent = {
       name: 'right-release',
@@ -114,7 +108,7 @@ describe('useMouseClick', () => {
 
   it('responds to right-release when button option is right', () => {
     renderHook(() =>
-      useMouseClick(fakeRef as Parameters<typeof useMouseClick>[0], handler, {
+      useMouseClick(fakeRef, handler, {
         button: 'right',
       }),
     );
@@ -135,7 +129,7 @@ describe('useMouseClick', () => {
 
   it('passes isActive option through to useMouse', () => {
     renderHook(() =>
-      useMouseClick(fakeRef as Parameters<typeof useMouseClick>[0], handler, {
+      useMouseClick(fakeRef, handler, {
         isActive: false,
       }),
     );

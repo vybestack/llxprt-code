@@ -19,6 +19,7 @@ describe('stdio utils', () => {
   let originalStderrWrite: typeof process.stderr.write;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     originalStdoutWrite = process.stdout.write;
     originalStderrWrite = process.stderr.write;
   });

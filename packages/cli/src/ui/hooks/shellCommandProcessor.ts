@@ -218,10 +218,8 @@ export const useShellCommandProcessor = (
                 Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS;
               const isPtyData =
                 event.type === 'data' && config.getShouldUseNodePtyShell();
-              if (shouldUpdate) {
-                setLastShellOutputTime(Date.now());
-              }
               if (shouldUpdate && (isPtyData || pastThrottle)) {
+                setLastShellOutputTime(Date.now());
                 const updateItem = (
                   baseItem: HistoryItemWithoutId | null,
                 ): HistoryItemWithoutId | null =>

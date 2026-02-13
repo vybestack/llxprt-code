@@ -686,6 +686,8 @@ export const useSlashCommandProcessor = (
                     result.originalInvocation.raw,
                     // Pass the approved commands as a one-time grant for this execution.
                     new Set(approvedCommands),
+                    undefined,
+                    false,
                   );
                 }
                 case 'confirm_action': {
@@ -727,6 +729,7 @@ export const useSlashCommandProcessor = (
                     result.originalInvocation.raw,
                     undefined,
                     true,
+                    false,
                   );
                 }
                 default: {
