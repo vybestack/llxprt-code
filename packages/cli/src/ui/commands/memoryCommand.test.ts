@@ -304,6 +304,9 @@ describe('memoryCommand', () => {
         setUserMemory: mockSetUserMemory,
         setLlxprtMdFileCount: mockSetLlxprtMdFileCount,
         setLlxprtMdFilePaths: mockSetLlxprtMdFilePaths,
+        updateSystemInstructionIfInitialized: vi
+          .fn()
+          .mockResolvedValue(undefined),
         getWorkingDir: () => '/test/dir',
         getDebugMode: () => false,
         getFileService: () => ({}) as FileDiscoveryService,

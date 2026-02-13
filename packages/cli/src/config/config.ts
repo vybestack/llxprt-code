@@ -48,6 +48,7 @@ import * as dotenv from 'dotenv';
 import * as os from 'node:os';
 import { resolvePath } from '../utils/resolvePath.js';
 import { appEvents } from '../utils/events.js';
+import { RESUME_LATEST } from '../utils/sessionUtils.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P04
@@ -162,6 +163,9 @@ export interface CliArgs {
   keyfile: string | undefined;
   baseurl: string | undefined;
   proxy: string | undefined;
+  resume: string | typeof RESUME_LATEST | undefined;
+  listSessions: boolean | undefined;
+  deleteSession: string | undefined;
   includeDirectories: string[] | undefined;
   profileLoad: string | undefined;
   loadMemoryFromIncludeDirectories: boolean | undefined;
@@ -337,6 +341,28 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'string',
           description:
             'Proxy for LLxprt client, like schema://user:password@host:port',
+        })
+        .option('resume', {
+          alias: 'r',
+          type: 'string',
+          skipValidation: true,
+          description:
+            'Resume a previous session. Use "latest" for most recent or index number (e.g. --resume 5)',
+          coerce: (value: string): string => {
+            if (value === '') {
+              return RESUME_LATEST;
+            }
+            return value;
+          },
+        })
+        .option('list-sessions', {
+          type: 'boolean',
+          description:
+            'List available sessions for the current project and exit.',
+        })
+        .option('delete-session', {
+          type: 'string',
+          description: 'Delete a session by index and exit.',
         })
         .option('include-directories', {
           type: 'array',
@@ -593,27 +619,20 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
   yargsInstance.wrap(yargsInstance.terminalWidth());
   const result = await yargsInstance.parseAsync();
 
+  // Subcommand handlers (extensions, mcp) execute during parseAsync().
+  // If one ran successfully, exit now so we don't fall through to the
+  // main interactive/non-interactive stdin check.
+  const SUBCOMMAND_NAMES = new Set(['extensions', 'extension', 'ext', 'mcp']);
+  const matchedCommand = (result._ as string[])?.[0];
+  if (matchedCommand && SUBCOMMAND_NAMES.has(matchedCommand)) {
+    const { exitCli } = await import('../commands/utils.js');
+    await exitCli(0);
+  }
+
   // The import format is now only controlled by settings.memoryImportFormat
   // We no longer accept it as a CLI argument
 
   // Map camelCase names to match CliArgs interface
-  // Check if an MCP or extensions subcommand was handled
-  // The _ array contains the commands that were run
-  if (result._ && result._.length > 0 && result._[0] === 'mcp') {
-    // An MCP subcommand was executed (like 'mcp list'), exit cleanly
-    process.exit(0);
-  }
-
-  if (
-    result._ &&
-    result._.length > 0 &&
-    (result._[0] === 'extensions' ||
-      result._[0] === 'extension' ||
-      result._[0] === 'ext')
-  ) {
-    // An extensions subcommand was executed (like 'extensions install'), exit cleanly
-    process.exit(0);
-  }
 
   const promptWords = result.promptWords as string[] | undefined;
   const promptWordsFiltered =
@@ -654,6 +673,9 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     keyfile: result.keyfile as string | undefined,
     baseurl: result.baseurl as string | undefined,
     proxy: result.proxy as string | undefined,
+    resume: result.resume as string | typeof RESUME_LATEST | undefined,
+    listSessions: result.listSessions as boolean | undefined,
+    deleteSession: result.deleteSession as string | undefined,
     includeDirectories: result.includeDirectories as string[] | undefined,
     profileLoad: result.profileLoad as string | undefined,
     loadMemoryFromIncludeDirectories:
@@ -1139,6 +1161,7 @@ export async function loadCliConfig(
     argv.promptWords && argv.promptWords.some((word) => word.trim() !== '');
   const interactive =
     !!argv.promptInteractive ||
+    !!argv.experimentalAcp ||
     (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
 
   const allowedTools = argv.allowedTools || settings.allowedTools || [];
@@ -1146,7 +1169,7 @@ export async function loadCliConfig(
 
   // In non-interactive mode, exclude tools that require a prompt.
   const extraExcludes: string[] = [];
-  if (!interactive && !argv.experimentalAcp) {
+  if (!interactive) {
     const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
     const autoEditExcludes = [ShellTool.Name];
 

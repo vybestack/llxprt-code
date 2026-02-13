@@ -22,8 +22,6 @@ for this purpose.
 
 ### Self Assigning Issues
 
-If you're looking for an issue to work on, check out our list of issues that are labeled ["help wanted"](https://github.com/vybestack/llxprt-code/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22).
-
 To assign an issue to yourself, simply add a comment with the text `/assign`. The comment must contain only that text and nothing else. This command will assign the issue to you, provided it is not already assigned.
 
 Please note that you can have a maximum of 3 issues assigned to you at any given time.
@@ -278,7 +276,7 @@ To debug the CLI's React-based UI, you can use React DevTools. Ink, the library 
 
 ### macOS Seatbelt
 
-On macOS, `gemini` uses Seatbelt (`sandbox-exec`) under a `permissive-open` profile (see `packages/cli/src/utils/sandbox-macos-permissive-open.sb`) that restricts writes to the project folder but otherwise allows all other operations and outbound network traffic ("open") by default. You can switch to a `restrictive-closed` profile (see `packages/cli/src/utils/sandbox-macos-restrictive-closed.sb`) that declines all operations and outbound network traffic ("closed") by default by setting `SEATBELT_PROFILE=restrictive-closed` in your environment or `.env` file. Available built-in profiles are `{permissive,restrictive}-{open,closed,proxied}` (see below for proxied networking). You can also switch to a custom profile `SEATBELT_PROFILE=<profile>` if you also create a file `.gemini/sandbox-macos-<profile>.sb` under your project settings directory `.gemini`.
+On macOS, `llxprt-code` uses Seatbelt (`sandbox-exec`) under a `permissive-open` profile (see `packages/cli/src/utils/sandbox-macos-permissive-open.sb`) that restricts writes to the project folder but otherwise allows all other operations and outbound network traffic ("open") by default. You can switch to a `restrictive-closed` profile (see `packages/cli/src/utils/sandbox-macos-restrictive-closed.sb`) that declines all operations and outbound network traffic ("closed") by default by setting `SEATBELT_PROFILE=restrictive-closed` in your environment or `.env` file. Available built-in profiles are `{permissive,restrictive}-{open,closed,proxied}` (see below for proxied networking). You can also switch to a custom profile `SEATBELT_PROFILE=<profile>` if you also create a file `.llxprt/sandbox-macos-<profile>.sb` under your project settings directory `.llxprt`.
 
 ### Container-based Sandboxing (All Platforms)
 

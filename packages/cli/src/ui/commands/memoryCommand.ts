@@ -161,6 +161,12 @@ export const memoryCommand: SlashCommand = {
                 config.getFileFilteringOptions(),
               );
             config.setUserMemory(memoryContent);
+            try {
+              await config.updateSystemInstructionIfInitialized();
+            } catch {
+              // Best-effort: memory is already stored; instruction update
+              // can fail before the chat is initialized.
+            }
             config.setLlxprtMdFileCount(fileCount);
             config.setLlxprtMdFilePaths(filePaths);
             context.ui.setGeminiMdFileCount(fileCount);

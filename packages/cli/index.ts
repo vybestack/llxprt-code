@@ -8,13 +8,6 @@
 
 // Note: Using --no-deprecation in shebang to suppress deprecation warnings from dependencies
 
-/**
- * @license
- * Copyright 2025 Google LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import './src/gemini.js';
 import { main } from './src/gemini.js';
 import { FatalError } from '@vybestack/llxprt-code-core';
 

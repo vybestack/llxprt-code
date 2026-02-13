@@ -38,7 +38,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
-    "@google/genai": "1.16.0",
+    "@google/genai": "1.30.0",
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@types/update-notifier": "^6.0.8",

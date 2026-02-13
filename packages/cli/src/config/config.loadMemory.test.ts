@@ -324,6 +324,9 @@ describe('loadCliConfig memory discovery', () => {
       promptWords: [],
       set: undefined,
       query: undefined,
+      resume: undefined,
+      listSessions: undefined,
+      deleteSession: undefined,
       continue: undefined,
       nobrowser: undefined,
     };

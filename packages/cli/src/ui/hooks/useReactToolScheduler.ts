@@ -93,7 +93,13 @@ export function useReactToolScheduler(
   getPreferredEditor: () => EditorType | undefined,
   onEditorClose: () => void,
   onEditorOpen: () => void = () => {},
-): [TrackedToolCall[], ScheduleFn, MarkToolsAsSubmittedFn, CancelAllFn] {
+): readonly [
+  TrackedToolCall[],
+  ScheduleFn,
+  MarkToolsAsSubmittedFn,
+  CancelAllFn,
+  number,
+] {
   const [toolCallsByScheduler, setToolCallsByScheduler] = useState<
     Map<symbol, TrackedToolCall[]>
   >(new Map());
@@ -192,6 +198,8 @@ export function useReactToolScheduler(
     [toolCallsByScheduler],
   );
 
+  const [lastToolOutputTime, setLastToolOutputTime] = useState(0);
+
   const mainSchedulerId = useState(() => Symbol('main-scheduler'))[0];
   const sessionId = useMemo(() => config.getSessionId(), [config]);
   const [scheduler, setScheduler] = useState<CoreToolScheduler | null>(null);
@@ -222,6 +230,7 @@ export function useReactToolScheduler(
               return;
             }
             updateToolCallOutput(mainSchedulerId, toolCallId, chunk);
+            setLastToolOutputTime(Date.now());
           },
           onAllToolCallsComplete: async (completedToolCalls) => {
             if (!mounted) {
@@ -320,6 +329,7 @@ export function useReactToolScheduler(
           // The local updateToolCallOutput handles the UI rendering for subagent tools.
           outputUpdateHandler: (toolCallId, chunk) => {
             updateToolCallOutput(schedulerId, toolCallId, chunk);
+            setLastToolOutputTime(Date.now());
           },
           onToolCallsUpdate: (calls) => {
             replaceToolCallsForScheduler(schedulerId, calls);
@@ -451,7 +461,13 @@ export function useReactToolScheduler(
     scheduler?.cancelAll();
   }, [scheduler]);
 
-  return [toolCalls, schedule, markToolsAsSubmitted, cancelAllToolCalls];
+  return [
+    toolCalls,
+    schedule,
+    markToolsAsSubmitted,
+    cancelAllToolCalls,
+    lastToolOutputTime,
+  ] as const;
 }
 
 /**

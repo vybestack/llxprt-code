@@ -41,5 +41,6 @@ export const ThemedGradient: React.FC<ThemedGradientProps> = ({
     return <Text color={gradient[0]}>{children}</Text>;
   }
 
-  return <Text color={theme.text.primary}>{children}</Text>;
+  // Fallback to accent color if no gradient
+  return <Text color={theme.text.accent}>{children}</Text>;
 };

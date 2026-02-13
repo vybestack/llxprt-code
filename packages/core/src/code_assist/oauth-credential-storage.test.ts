@@ -39,6 +39,7 @@ vi.mock('node:fs', () => ({
 vi.mock('../utils/events.js', () => ({
   coreEvents: {
     emitFeedback: vi.fn(),
+    emitConsoleLog: vi.fn(),
   },
 }));
 

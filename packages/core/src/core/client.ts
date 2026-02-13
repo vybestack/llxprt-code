@@ -50,6 +50,7 @@ import {
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { tokenLimit } from './tokenLimits.js';
+
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext, type IdeContext, type File } from '../ide/ideContext.js';
 import {
@@ -68,9 +69,8 @@ import type { IContent } from '../services/history/IContent.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
-function isThinkingSupported(model: string) {
-  if (model.startsWith('gemini-2.5')) return true;
-  return false;
+export function isThinkingSupported(model: string) {
+  return !model.startsWith('gemini-2.0');
 }
 
 /**
@@ -180,8 +180,6 @@ export class GeminiClient {
   private toolCallReminderLevel: 'none' | 'base' | 'escalated' = 'none';
   private lastTodoSnapshot?: Todo[];
 
-  /**
-   * At any point in this conversation, was compression triggered without
   /**
    * Runtime state for stateless operation (Phase 5)
    * @plan PLAN-20251027-STATELESS5.P10
@@ -554,6 +552,67 @@ export class GeminiClient {
     this.getChat().addHistory(content);
   }
 
+  async updateSystemInstruction(): Promise<void> {
+    if (!this.isInitialized()) {
+      return;
+    }
+
+    const enabledToolNames = this.getEnabledToolNamesForPrompt();
+    const envParts = await getEnvironmentContext(this.config);
+    const systemInstruction = await this.buildSystemInstruction(
+      enabledToolNames,
+      envParts,
+    );
+
+    this.getChat().setSystemInstruction(systemInstruction);
+
+    const model = this.runtimeState.model;
+    const historyService = this.getHistoryService();
+    if (historyService) {
+      try {
+        const systemPromptTokens = await historyService.estimateTokensForText(
+          systemInstruction,
+          model,
+        );
+        historyService.setBaseTokenOffset(systemPromptTokens);
+      } catch (_error) {
+        historyService.setBaseTokenOffset(
+          estimateTextTokens(systemInstruction),
+        );
+      }
+    }
+  }
+
+  /**
+   * Builds the full system instruction by combining environment context with
+   * the core system prompt.  Shared by both startChat and
+   * updateSystemInstruction so the prompt is assembled consistently.
+   */
+  private async buildSystemInstruction(
+    enabledToolNames: string[],
+    envParts?: Array<{ text?: string }>,
+  ): Promise<string> {
+    const userMemory = this.config.getUserMemory();
+    const model = this.runtimeState.model;
+    const includeSubagentDelegation =
+      await this.shouldIncludeSubagentDelegation(enabledToolNames);
+
+    let systemInstruction = await getCoreSystemPromptAsync({
+      userMemory,
+      model,
+      tools: enabledToolNames,
+      includeSubagentDelegation,
+    });
+
+    const envContextText = (envParts ?? [])
+      .map((part) => ('text' in part && part.text ? part.text : ''))
+      .join('\n');
+    if (envContextText) {
+      systemInstruction = envContextText + '\n\n' + systemInstruction;
+    }
+    return systemInstruction;
+  }
+
   getChat(): GeminiChat {
     if (!this.chat) {
       throw new Error('Chat not initialized');
@@ -888,31 +947,17 @@ export class GeminiClient {
     }
 
     try {
-      const userMemory = this.config.getUserMemory();
       // @plan PLAN-20251027-STATELESS5.P10
       // @requirement REQ-STAT5-003.1
       const model = this.runtimeState.model;
-      // Provider name removed from prompt call signature
       const logger = new DebugLogger('llxprt:client:start');
       logger.debug(
         () => `DEBUG [client.startChat]: Model from config: ${model}`,
       );
-      const includeSubagentDelegation =
-        await this.shouldIncludeSubagentDelegation(enabledToolNames);
-      let systemInstruction = await getCoreSystemPromptAsync({
-        userMemory,
-        model,
-        tools: enabledToolNames,
-        includeSubagentDelegation,
-      });
-
-      // Add environment context to system instruction
-      const envContextText = envParts
-        .map((part) => ('text' in part ? part.text : ''))
-        .join('\n');
-      if (envContextText) {
-        systemInstruction = `${envContextText}\n\n${systemInstruction}`;
-      }
+      const systemInstruction = await this.buildSystemInstruction(
+        enabledToolNames,
+        envParts,
+      );
 
       let systemPromptTokens = 0;
       try {
@@ -978,7 +1023,7 @@ export class GeminiClient {
           : undefined;
 
       const settings: ReadonlySettingsSnapshot = {
-        compressionThreshold: compressionThreshold ?? 0.8,
+        compressionThreshold: compressionThreshold ?? 0.5,
         contextLimit,
         preserveThreshold: preserveThreshold ?? 0.2,
         telemetry: {
