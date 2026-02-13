@@ -5,9 +5,12 @@
  */
 
 import { type Credentials } from 'google-auth-library';
-import { HybridTokenStorage } from '../mcp/token-storage/hybrid-token-storage.js';
+import { KeychainTokenStorage } from '../mcp/token-storage/keychain-token-storage.js';
 import { OAUTH_FILE, Storage } from '../config/storage.js';
-import type { OAuthCredentials } from '../mcp/token-storage/types.js';
+import type {
+  OAuthCredentials,
+  TokenStorage,
+} from '../mcp/token-storage/types.js';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { promises as fs } from 'node:fs';
@@ -25,9 +28,12 @@ function getLegacyCredentialPaths(): string[] {
   return Array.from(new Set(legacyPaths));
 }
 
+/**
+ * @plan PLAN-20260211-SECURESTORE.P09
+ */
 export class OAuthCredentialStorage {
   constructor(
-    private readonly storage: HybridTokenStorage = new HybridTokenStorage(
+    private readonly storage: TokenStorage = new KeychainTokenStorage(
       KEYCHAIN_SERVICE_NAME,
     ),
   ) {}

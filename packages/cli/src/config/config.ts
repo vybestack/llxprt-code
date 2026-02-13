@@ -1476,13 +1476,15 @@ export async function loadCliConfig(
       `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
   );
 
-  // CRITICAL FIX for #492: When --provider is specified with CLI auth (--key/--keyfile/--baseurl),
+  // CRITICAL FIX for #492: When --provider is specified with CLI auth (--key/--keyfile/--key-name/--baseurl),
   // create a synthetic profile to apply the auth credentials using the same flow as profile loading.
   // This ensures auth is applied BEFORE provider switch, just like profile loading does.
+  // @plan PLAN-20260211-SECURESTORE.P16 @requirement R21.3, R22.2
   if (
     argv.provider &&
     (bootstrapArgs.keyOverride ||
       bootstrapArgs.keyfileOverride ||
+      bootstrapArgs.keyNameOverride ||
       bootstrapArgs.baseurlOverride)
   ) {
     logger.debug(
@@ -1503,6 +1505,11 @@ export async function loadCliConfig(
     if (bootstrapArgs.keyfileOverride) {
       syntheticProfile.ephemeralSettings['auth-keyfile'] =
         bootstrapArgs.keyfileOverride;
+    }
+    // @plan PLAN-20260211-SECURESTORE.P16 @requirement R21.3
+    if (bootstrapArgs.keyNameOverride) {
+      syntheticProfile.ephemeralSettings['auth-key-name'] =
+        bootstrapArgs.keyNameOverride;
     }
     if (bootstrapArgs.baseurlOverride) {
       syntheticProfile.ephemeralSettings['base-url'] =
@@ -1633,10 +1640,12 @@ export async function loadCliConfig(
   // Apply CLI argument overrides AFTER provider switch (switchActiveProvider clears ephemerals)
   // Note: We already applied key/keyfile/baseurl earlier, but we need to reapply after provider switch
   // Also apply --set arguments which weren't handled earlier
+  // @plan PLAN-20260211-SECURESTORE.P16 @requirement R22.1 — include keyNameOverride in override check
   if (
     bootstrapArgs &&
     (bootstrapArgs.keyOverride ||
       bootstrapArgs.keyfileOverride ||
+      bootstrapArgs.keyNameOverride ||
       bootstrapArgs.baseurlOverride ||
       (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
   ) {
@@ -1737,9 +1746,14 @@ export async function loadCliConfig(
     argv.provider === undefined
   ) {
     // Extract ephemeral settings that were merged from the profile
+    /**
+     * @plan PLAN-20260211-SECURESTORE.P16
+     * @requirement R21.2
+     */
     const ephemeralKeys = [
       'auth-key',
       'auth-keyfile',
+      'auth-key-name',
       'context-limit',
       'compression-threshold',
       'base-url',

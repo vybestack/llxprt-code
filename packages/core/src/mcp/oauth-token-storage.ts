@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { HybridTokenStorage } from './token-storage/hybrid-token-storage.js';
+import { KeychainTokenStorage } from './token-storage/keychain-token-storage.js';
 import type {
   OAuthCredentials,
   OAuthToken,
@@ -20,11 +20,13 @@ const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 /**
  * Token storage wrapper that bridges the legacy static API with the new
  * shared TokenStorage interface used across the MCP stack. By default it
- * delegates to a HybridTokenStorage that prefers secure keychain storage but
- * transparently falls back to encrypted file storage when necessary.
+ * delegates to a KeychainTokenStorage that uses SecureStore internally
+ * for keychain + encrypted-file fallback.
+ *
+ * @plan PLAN-20260211-SECURESTORE.P09
  */
 export class MCPOAuthTokenStorage implements TokenStorage {
-  private static tokenStore: TokenStorage = new HybridTokenStorage(
+  private static tokenStore: TokenStorage = new KeychainTokenStorage(
     DEFAULT_SERVICE_NAME,
   );
 

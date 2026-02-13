@@ -76,7 +76,33 @@ export class SecureInputHandler {
         }
       }
 
+      // @plan PLAN-20260211-SECURESTORE.P15
+      // @requirement R20.1
+      // /key save <name> <value> — mask only the value, leave subcommand and name visible
+      const keySaveMatch = text.match(/^(\/key\s+save\s+\S+\s+)([\s\S]+)/);
+      if (keySaveMatch && keySaveMatch[2]) {
+        const prefix = keySaveMatch[1];
+        const valueContent = keySaveMatch[2];
+        const lineBreakMatch = valueContent.match(/[\r\n]/);
+        if (lineBreakMatch) {
+          const keyToMask = valueContent.substring(0, lineBreakMatch.index!);
+          const afterLineBreak = valueContent.substring(lineBreakMatch.index!);
+          return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
+        }
+        return `${prefix}${this.maskValue(valueContent)}`;
+      }
+
+      // /key <subcommand> (non-save) — don't mask arguments for load/show/list/delete
+      const keySubcmdMatch = text.match(
+        /^\/key\s+(save|load|show|list|delete)(\s|$)/,
+      );
+      if (keySubcmdMatch) {
+        // Known subcommand without value to mask (save is handled above)
+        return text;
+      }
+
       // Check if text starts with /key or /keyfile followed by space and content
+      // @requirement R20.2 — legacy /key <raw-key> masking preserved
       const keyMatch = text.match(/^\/key\s+([\s\S]*)/);
       const keyfileMatch = text.match(/^\/keyfile\s+([\s\S]*)/);
 
@@ -186,6 +212,22 @@ export class SecureInputHandler {
         return `${prefix}${this.maskValue(keyValue)}`;
       }
 
+      // @plan PLAN-20260211-SECURESTORE.P15
+      // @requirement R20.1 — /key save <name> <value>: mask only the value
+      const keySaveMatch = command.match(/^(\/key\s+save\s+\S+\s+)(.+)$/);
+      if (keySaveMatch) {
+        return `${keySaveMatch[1]}${this.maskValue(keySaveMatch[2])}`;
+      }
+
+      // /key <subcommand> (non-save) — don't mask arguments
+      const subcommandMatch = command.match(
+        /^\/key\s+(save|load|show|list|delete)(\s|$)/,
+      );
+      if (subcommandMatch) {
+        return command;
+      }
+
+      // @requirement R20.2 — legacy /key <raw-key> masking
       const keyCommandMatch = command.match(/^(\/key\s+)(.+)$/);
       if (keyCommandMatch) {
         const prefix = keyCommandMatch[1];

@@ -196,6 +196,20 @@ export * from './tools/todo-events.js';
 export * from './tools/list-subagents.js';
 export * from './tools/task.js';
 export * from './tools/tool-key-storage.js';
+export {
+  ProviderKeyStorage,
+  getProviderKeyStorage,
+  resetProviderKeyStorage,
+  validateKeyName,
+  KEY_NAME_REGEX,
+} from './storage/provider-key-storage.js';
+export {
+  SecureStore,
+  SecureStoreError,
+  createDefaultKeyringAdapter,
+  type SecureStoreErrorCode,
+  type SecureStoreOptions,
+} from './storage/secure-store.js';
 export * from './todo/todoFormatter.js';
 
 // MCP OAuth

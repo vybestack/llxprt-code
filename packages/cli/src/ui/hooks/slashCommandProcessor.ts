@@ -49,6 +49,7 @@ import type {
   ExtensionUpdateAction,
 } from '../state/extensions.js';
 import { SubagentView } from '../components/SubagentManagement/types.js';
+import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 const confirmationLogger = new DebugLogger('llxprt:ui:selection');
 const slashCommandLogger = new DebugLogger('llxprt:ui:slash-commands');
@@ -396,7 +397,6 @@ export const useSlashCommandProcessor = (
       rawQuery: PartListUnion,
       oneTimeShellAllowlist?: Set<string>,
       overwriteConfirmed?: boolean,
-      addToHistory: boolean = true,
     ): Promise<SlashCommandProcessorResult | false> => {
       if (!commands) {
         return false;
@@ -412,13 +412,15 @@ export const useSlashCommandProcessor = (
 
       setIsProcessing(true);
 
-      if (addToHistory) {
-        const userMessageTimestamp = Date.now();
-        addItem(
-          { type: MessageType.USER, text: trimmed },
-          userMessageTimestamp,
-        );
-      }
+      const userMessageTimestamp = Date.now();
+      const sanitizedCommand =
+        trimmed.startsWith('/key ') || trimmed.startsWith('/toolkey ')
+          ? secureInputHandler.sanitizeForHistory(trimmed)
+          : trimmed;
+      addItem(
+        { type: MessageType.USER, text: sanitizedCommand },
+        userMessageTimestamp,
+      );
 
       let hasError = false;
       const { commandToExecute, args, canonicalPath } = parseSlashCommand(
@@ -686,8 +688,6 @@ export const useSlashCommandProcessor = (
                     result.originalInvocation.raw,
                     // Pass the approved commands as a one-time grant for this execution.
                     new Set(approvedCommands),
-                    undefined,
-                    false,
                   );
                 }
                 case 'confirm_action': {
@@ -729,7 +729,6 @@ export const useSlashCommandProcessor = (
                     result.originalInvocation.raw,
                     undefined,
                     true,
-                    false,
                   );
                 }
                 default: {

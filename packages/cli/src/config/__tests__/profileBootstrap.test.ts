@@ -25,6 +25,7 @@ type BootstrapProfileArgs = {
   modelOverride: string | null;
   keyOverride: string | null;
   keyfileOverride: string | null;
+  keyNameOverride: string | null;
   baseurlOverride: string | null;
   setOverrides: string[] | null;
 };
@@ -168,6 +169,7 @@ describe('profileBootstrap helpers', () => {
         modelOverride: null,
         keyOverride: null,
         keyfileOverride: null,
+        keyNameOverride: null,
         baseurlOverride: null,
         setOverrides: null,
       },
@@ -176,6 +178,7 @@ describe('profileBootstrap helpers', () => {
         metadata: { sessionId: 'bootstrap-session', source: 'test' },
       },
     };
+
     const runtimeState = await prepareRuntime(parsed);
     const bootstrapResult = finalizeBootstrap({
       runtime: runtimeState.runtime,
@@ -915,6 +918,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -952,6 +956,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -989,6 +994,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1025,6 +1031,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1063,6 +1070,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: 'gpt-3.5-turbo',
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1099,6 +1107,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1135,6 +1144,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: null,
       keyOverride: 'sk-override',
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1171,6 +1181,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: 'claude-3-5-sonnet-20241022',
       keyOverride: 'sk-override',
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1209,6 +1220,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1238,6 +1250,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1279,6 +1292,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1315,6 +1329,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
       modelOverride: 'gpt-4',
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1380,6 +1395,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1415,6 +1431,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1450,6 +1467,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: 'gpt-4',
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1485,6 +1503,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: null,
       keyOverride: 'sk-override',
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1523,6 +1542,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1563,6 +1583,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1604,6 +1625,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: 'gpt-4',
       keyOverride: 'sk-override',
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1638,6 +1660,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: 'gpt-4',
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1682,6 +1705,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1711,6 +1735,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1740,6 +1765,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
@@ -1779,6 +1805,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
       modelOverride: null,
       keyOverride: null,
       keyfileOverride: null,
+      keyNameOverride: null,
       baseurlOverride: null,
       setOverrides: null,
     };
