@@ -563,6 +563,19 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'auth.noBrowser',
+    category: 'cli-behavior',
+    description:
+      'Skip automatic browser OAuth flow and prompt for manual code entry',
+    type: 'boolean',
+    default: false,
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Force manual OAuth code entry' },
+      { value: 'false', description: 'Allow automatic browser launch' },
+    ],
+  },
+  {
     key: 'todo-continuation',
     category: 'cli-behavior',
     description: 'Enable todo continuation mode',
@@ -1021,6 +1034,18 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
           'compression.density.recencyRetention must be a positive integer (>= 1)',
       };
     },
+  },
+  {
+    key: 'auth.noBrowser',
+    category: 'cli-behavior',
+    description: 'Skip automatic browser OAuth flow and use manual code entry',
+    type: 'boolean',
+    default: false,
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Disable browser auto-launch for OAuth' },
+      { value: 'false', description: 'Allow browser auto-launch for OAuth' },
+    ],
   },
 ];
 

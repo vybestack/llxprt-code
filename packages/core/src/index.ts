@@ -81,6 +81,7 @@ export * from './code_assist/types.js';
 
 // Export utilities
 export * from './utils/paths.js';
+export * from './utils/shellPathCompletion.js';
 export * from './utils/ripgrepPathResolver.js';
 export * from './utils/schemaValidator.js';
 export * from './utils/errors.js';
@@ -252,6 +253,11 @@ export { OpenAIVercelProvider } from './providers/openai-vercel/index.js';
 export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';
 export * from './providers/anthropic/usageInfo.js';
 export * from './providers/openai/codexUsageInfo.js';
+export * from './providers/zai/usageInfo.js';
+export * from './providers/synthetic/usageInfo.js';
+export * from './providers/chutes/usageInfo.js';
+export * from './providers/kimi/usageInfo.js';
+export * from './providers/apiKeyQuotaResolver.js';
 export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
 export { FakeProvider } from './providers/fake/FakeProvider.js';
 export * from './providers/ProviderManager.js';

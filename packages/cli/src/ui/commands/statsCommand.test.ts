@@ -12,10 +12,12 @@ import { MessageType } from '../types.js';
 import { formatDuration } from '../utils/formatters.js';
 
 const getCliOAuthManagerMock = vi.fn();
+const getEphemeralSettingMock = vi.fn();
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     getCliOAuthManager: getCliOAuthManagerMock,
+    getEphemeralSetting: getEphemeralSettingMock,
   }),
 }));
 
@@ -35,6 +37,9 @@ describe('statsCommand', () => {
     mockContext.session.stats.sessionStartTime = startTime;
 
     getCliOAuthManagerMock.mockReset();
+    getEphemeralSettingMock.mockReset();
+    // Default: no API-key provider detected
+    getEphemeralSettingMock.mockReturnValue(undefined);
   });
 
   it('should display general session stats when run with no subcommand', () => {
@@ -206,5 +211,282 @@ describe('statsCommand', () => {
     expect(infoItem.text).not.toContain('Anthropic Quota Information');
     expect(infoItem.text).toContain('5-hour limit');
     expect(infoItem.text).toContain('Weekly limit');
+  });
+
+  it('should show API-key provider quota when base-url matches supported provider', async () => {
+    // No OAuth manager
+    getCliOAuthManagerMock.mockReturnValue(null);
+
+    // Simulate Z.ai base URL with an API key
+    getEphemeralSettingMock.mockImplementation((key: string) => {
+      if (key === 'base-url') return 'https://api.z.ai/v1';
+      if (key === 'auth-keyfile') return undefined;
+      if (key === 'auth-key') return 'test-zai-key';
+      return undefined;
+    });
+
+    // Mock fetch to return a valid Z.ai response
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 200,
+        msg: 'OK',
+        data: {
+          limits: [
+            {
+              type: 'TOKENS_LIMIT',
+              unit: 3,
+              number: 5,
+              percentage: 25,
+              nextResetTime: Date.now() + 3600000,
+            },
+          ],
+          level: 'max',
+        },
+        success: true,
+      }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const quotaSubCommand = statsCommand.subCommands?.find(
+      (sc) => sc.name === 'quota',
+    );
+    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+
+    await quotaSubCommand.action(mockContext, '');
+
+    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+      type: MessageType;
+      text?: string;
+    };
+
+    expect(lastItem.type).toBe(MessageType.INFO);
+    expect(lastItem.text).toContain('Z.ai Quota Information');
+    expect(lastItem.text).toContain('Plan: Max');
+    expect(lastItem.text).toContain('25% used');
+
+    vi.restoreAllMocks();
+  });
+
+  it('should show no quota message when no OAuth and no API-key provider', async () => {
+    getCliOAuthManagerMock.mockReturnValue(null);
+    getEphemeralSettingMock.mockReturnValue(undefined);
+
+    const quotaSubCommand = statsCommand.subCommands?.find(
+      (sc) => sc.name === 'quota',
+    );
+    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+
+    await quotaSubCommand.action(mockContext, '');
+
+    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+      type: MessageType;
+      text?: string;
+    };
+
+    expect(lastItem.type).toBe(MessageType.INFO);
+    expect(lastItem.text).toContain('No quota information available');
+  });
+
+  it('should show both OAuth and API-key provider quotas together', async () => {
+    const anthropicUsage = new Map<string, Record<string, unknown>>([
+      [
+        'default',
+        {
+          five_hour: {
+            utilization: 12.5,
+            resets_at: '2030-01-01T00:00:00Z',
+          },
+        },
+      ],
+    ]);
+
+    const oauthManager = {
+      getAllAnthropicUsageInfo: vi.fn().mockResolvedValue(anthropicUsage),
+      getAllCodexUsageInfo: vi
+        .fn()
+        .mockResolvedValue(new Map<string, Record<string, unknown>>()),
+    };
+
+    getCliOAuthManagerMock.mockReturnValue(oauthManager);
+
+    // Also set up an API-key provider (Z.ai)
+    getEphemeralSettingMock.mockImplementation((key: string) => {
+      if (key === 'base-url') return 'https://api.z.ai/v1';
+      if (key === 'auth-key') return 'test-zai-key';
+      return undefined;
+    });
+
+    // Mock fetch for Z.ai quota
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 200,
+        msg: 'OK',
+        data: {
+          limits: [
+            {
+              type: 'TOKENS_LIMIT',
+              unit: 3,
+              number: 5,
+              percentage: 10,
+              nextResetTime: Date.now() + 3600000,
+            },
+          ],
+          level: 'pro',
+        },
+        success: true,
+      }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const quotaSubCommand = statsCommand.subCommands?.find(
+      (sc) => sc.name === 'quota',
+    );
+    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+
+    await quotaSubCommand.action(mockContext, '');
+
+    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+      type: MessageType;
+      text?: string;
+    };
+
+    expect(lastItem.type).toBe(MessageType.INFO);
+    // Should contain both OAuth and API-key provider quotas
+    expect(lastItem.text).toContain('Anthropic Quota Information');
+    expect(lastItem.text).toContain('Z.ai Quota Information');
+
+    vi.restoreAllMocks();
+  });
+
+  it('should show Synthetic quota when base-url matches synthetic.new', async () => {
+    getCliOAuthManagerMock.mockReturnValue(null);
+    getEphemeralSettingMock.mockImplementation((key: string) => {
+      if (key === 'base-url') return 'https://api.synthetic.new/v2';
+      if (key === 'auth-key') return 'test-synthetic-key';
+      return undefined;
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        subscription: { limit: 1000, requests: 200, renewsAt: null },
+        search: null,
+        toolCallDiscounts: null,
+      }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const quotaSubCommand = statsCommand.subCommands?.find(
+      (sc) => sc.name === 'quota',
+    );
+    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+
+    await quotaSubCommand.action(mockContext, '');
+
+    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+      type: MessageType;
+      text?: string;
+    };
+
+    expect(lastItem.type).toBe(MessageType.INFO);
+    expect(lastItem.text).toContain('Synthetic Quota Information');
+    expect(lastItem.text).toContain('200/1000 used');
+
+    vi.restoreAllMocks();
+  });
+
+  it('should show Chutes quota when base-url matches chutes.ai', async () => {
+    getCliOAuthManagerMock.mockReturnValue(null);
+    getEphemeralSettingMock.mockImplementation((key: string) => {
+      if (key === 'base-url') return 'https://api.chutes.ai/v1';
+      if (key === 'auth-key') return 'test-chutes-key';
+      return undefined;
+    });
+
+    // Chutes makes 2 parallel fetch calls: quotas + user
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes('/quotas')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [
+            {
+              chute_id: null,
+              is_default: true,
+              quota: { usd_cents_per_hour: 500, usd_cents_per_day: 5000 },
+            },
+          ],
+        } as Response);
+      }
+      // /users/me
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          username: 'testuser',
+          balance: 42.5,
+        }),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const quotaSubCommand = statsCommand.subCommands?.find(
+      (sc) => sc.name === 'quota',
+    );
+    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+
+    await quotaSubCommand.action(mockContext, '');
+
+    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+      type: MessageType;
+      text?: string;
+    };
+
+    expect(lastItem.type).toBe(MessageType.INFO);
+    expect(lastItem.text).toContain('Chutes Quota Information');
+    expect(lastItem.text).toContain('Balance: $42.50');
+
+    vi.restoreAllMocks();
+  });
+
+  it('should gracefully handle API-key fetch failure with no OAuth', async () => {
+    getCliOAuthManagerMock.mockReturnValue(null);
+    getEphemeralSettingMock.mockImplementation((key: string) => {
+      if (key === 'base-url') return 'https://api.z.ai/v1';
+      if (key === 'auth-key') return 'test-key';
+      return undefined;
+    });
+
+    // Mock fetch to return an error
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+    } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const quotaSubCommand = statsCommand.subCommands?.find(
+      (sc) => sc.name === 'quota',
+    );
+    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+
+    await quotaSubCommand.action(mockContext, '');
+
+    const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+    const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+      type: MessageType;
+      text?: string;
+    };
+
+    // Should show no-quota-available message since fetch failed
+    expect(lastItem.type).toBe(MessageType.INFO);
+    expect(lastItem.text).toContain('No quota information available');
+
+    vi.restoreAllMocks();
   });
 });

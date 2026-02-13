@@ -1,5 +1,5 @@
 /**
- * Tests for OpenAI provider <think> tag extraction and text sanitization.
+ * Tests for think tag extraction and text sanitization shared utilities.
  *
  * These tests verify:
  * - Bug #1: Kimi-K2 text content should be sanitized (think tags stripped from text)
@@ -9,25 +9,12 @@
  * @plan PLAN-20251202-THINKING.P16
  * @requirement REQ-THINK-003
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { OpenAIProvider } from '../OpenAIProvider';
-import type { ThinkingBlock } from '../../../services/history/IContent';
+import { describe, it, expect } from 'vitest';
+import { extractThinkTagsAsBlock } from '../../utils/thinkingExtraction';
+import { sanitizeProviderText } from '../../utils/textSanitizer';
 
 describe('OpenAIProvider think tag handling @plan:PLAN-20251202-THINKING.P16', () => {
-  let provider: OpenAIProvider;
-
-  beforeEach(() => {
-    provider = new OpenAIProvider('test-api-key', 'https://api.openai.com/v1');
-  });
-
   describe('extractThinkTagsAsBlock @requirement:REQ-THINK-003', () => {
-    const extractThinkTagsAsBlock = (text: string): ThinkingBlock | null =>
-      (
-        provider as unknown as {
-          extractThinkTagsAsBlock: (text: string) => ThinkingBlock | null;
-        }
-      ).extractThinkTagsAsBlock(text);
-
     it('should extract single <think> tag content', () => {
       const text =
         '<think>Let me analyze this problem carefully.</think>Here is my answer.';
@@ -164,13 +151,6 @@ Third line with conclusion.
   });
 
   describe('sanitizeProviderText @requirement:REQ-THINK-003', () => {
-    const sanitizeProviderText = (text: unknown): string =>
-      (
-        provider as unknown as {
-          sanitizeProviderText: (text: unknown) => string;
-        }
-      ).sanitizeProviderText(text);
-
     it('should strip <think> tags and their content', () => {
       const text = '<think>Some thinking here.</think>Visible content remains.';
       const result = sanitizeProviderText(text);
@@ -288,13 +268,6 @@ Third line with conclusion.
      * causing <think> tags to leak into the visible output.
      */
     it('should sanitize text content for Kimi-K2 model (removing think tags)', () => {
-      const sanitizeProviderText = (text: unknown): string =>
-        (
-          provider as unknown as {
-            sanitizeProviderText: (text: unknown) => string;
-          }
-        ).sanitizeProviderText(text);
-
       // Simulate Kimi-K2 response with think tags in content
       const kimiContent =
         '<think>Let me analyze the code.</think>The code looks correct.';
@@ -310,13 +283,6 @@ Third line with conclusion.
     });
 
     it('should handle fragmented think tags from Synthetic API in Kimi-K2 content', () => {
-      const sanitizeProviderText = (text: unknown): string =>
-        (
-          provider as unknown as {
-            sanitizeProviderText: (text: unknown) => string;
-          }
-        ).sanitizeProviderText(text);
-
       // Synthetic API sends fragmented think tags token-by-token
       const fragmentedContent =
         '<think>The</think><think>user</think><think>asks</think>Here is the answer.';

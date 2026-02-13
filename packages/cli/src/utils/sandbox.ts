@@ -83,6 +83,411 @@ export function buildSandboxEnvArgs(env: NodeJS.ProcessEnv): string[] {
 }
 
 /**
+ * Mounts Git configuration files into the container read-only.
+ * Follows the dual-HOME mount pattern: when the container HOME differs from
+ * the host HOME, the same file is mounted at both paths so Git inside the
+ * container can find its configuration regardless of which HOME it resolves.
+ *
+ * Security: ~/.git-credentials is intentionally excluded (R3.7).
+ */
+export function mountGitConfigFiles(
+  args: string[],
+  hostHomedir: string,
+  containerHomePath: string,
+): void {
+  const gitConfigFiles = [
+    '.gitconfig',
+    path.join('.config', 'git', 'config'),
+    '.gitignore_global',
+    path.join('.ssh', 'known_hosts'),
+  ];
+
+  for (const relPath of gitConfigFiles) {
+    const hostPath = path.join(hostHomedir, relPath);
+    if (!fs.existsSync(hostPath)) {
+      continue;
+    }
+
+    const containerHostPath = getContainerPath(hostPath);
+    args.push('--volume', `${hostPath}:${containerHostPath}:ro`);
+
+    // Dual-HOME: also mount at container home path if it differs
+    const containerAltPath = getContainerPath(
+      path.join(containerHomePath, relPath),
+    );
+    if (containerAltPath !== containerHostPath) {
+      args.push('--volume', `${hostPath}:${containerAltPath}:ro`);
+    }
+  }
+}
+
+// --- SSH Agent Forwarding Helpers ---
+
+export interface SshAgentResult {
+  tunnelProcess?: ChildProcess;
+  cleanup?: () => void;
+  /** Shell command to prepend to the container entrypoint (e.g. socat relay). */
+  entrypointPrefix?: string;
+}
+
+const CONTAINER_SSH_AGENT_SOCK = '/ssh-agent';
+
+/**
+ * Routes SSH agent forwarding to the appropriate platform-specific helper.
+ * Respects LLXPRT_SANDBOX_SSH_AGENT (on/off/auto) and SSH_AUTH_SOCK.
+ */
+export async function setupSshAgentForwarding(
+  config: { command: 'docker' | 'podman' | 'sandbox-exec' },
+  args: string[],
+): Promise<SshAgentResult> {
+  const sshAgentSetting =
+    process.env.LLXPRT_SANDBOX_SSH_AGENT ?? process.env.SANDBOX_SSH_AGENT;
+
+  // R4.1: Off disables forwarding entirely
+  if (sshAgentSetting === 'off') {
+    return {};
+  }
+
+  const sshAuthSock = process.env.SSH_AUTH_SOCK;
+
+  // R4.4: "on" means attempt even without SSH_AUTH_SOCK
+  const shouldEnable =
+    sshAgentSetting === 'on' || (sshAgentSetting !== 'off' && !!sshAuthSock);
+
+  if (!shouldEnable) {
+    return {};
+  }
+
+  // R4.2: Missing SSH_AUTH_SOCK warns and skips
+  if (!sshAuthSock) {
+    console.warn('SSH agent requested but SSH_AUTH_SOCK is not set.');
+    return {};
+  }
+
+  // R4.3: Verify socket exists on disk before attempting mount
+  if (!fs.existsSync(sshAuthSock)) {
+    console.warn(
+      `SSH_AUTH_SOCK path not found at ${sshAuthSock}. Skipping SSH agent forwarding.`,
+    );
+    return {};
+  }
+
+  const platform = os.platform();
+
+  if (platform === 'linux') {
+    setupSshAgentLinux(config, args, sshAuthSock);
+    return {};
+  }
+
+  if (platform === 'darwin') {
+    if (config.command === 'docker') {
+      setupSshAgentDockerMacOS(args);
+      return {};
+    }
+
+    if (config.command === 'podman') {
+      return setupSshAgentPodmanMacOS(args, sshAuthSock);
+    }
+  }
+
+  // Unsupported platform/command combo: attempt direct mount as fallback
+  args.push('--volume', `${sshAuthSock}:${CONTAINER_SSH_AGENT_SOCK}`);
+  args.push('--env', `SSH_AUTH_SOCK=${CONTAINER_SSH_AGENT_SOCK}`);
+
+  return {};
+}
+
+/**
+ * Sets up SSH agent forwarding on Linux via direct socket mount.
+ * Uses :z SELinux label for Podman (R5.2).
+ */
+export function setupSshAgentLinux(
+  config: { command: 'docker' | 'podman' | 'sandbox-exec' },
+  args: string[],
+  sshAuthSock: string,
+): void {
+  let mountSpec = `${sshAuthSock}:${CONTAINER_SSH_AGENT_SOCK}`;
+
+  // R5.2: Podman on Linux needs :z for SELinux
+  if (config.command === 'podman') {
+    mountSpec += ':z';
+  }
+
+  args.push('--volume', mountSpec);
+  args.push('--env', `SSH_AUTH_SOCK=${CONTAINER_SSH_AGENT_SOCK}`);
+}
+
+/**
+ * Sets up SSH agent forwarding for Docker on macOS using the Docker Desktop
+ * magic socket (/run/host-services/ssh-auth.sock).
+ *
+ * Falls back gracefully if Docker Desktop is not detected (R6.2).
+ */
+export function setupSshAgentDockerMacOS(args: string[]): void {
+  try {
+    // Detect Docker Desktop by checking for the osType context
+    const info = execSync('docker info --format "{{.OperatingSystem}}"', {
+      timeout: 5000,
+    })
+      .toString()
+      .trim();
+    const isDesktop = /docker desktop/i.test(info);
+
+    if (!isDesktop) {
+      console.warn(
+        'Docker Desktop not detected on macOS. SSH agent forwarding may not work. ' +
+          'Consider using Docker Desktop or set LLXPRT_SANDBOX_SSH_AGENT=off.',
+      );
+      return;
+    }
+
+    // R6.1: Use the Docker Desktop magic socket
+    const magicSocket = '/run/host-services/ssh-auth.sock';
+    args.push('--volume', `${magicSocket}:${CONTAINER_SSH_AGENT_SOCK}`);
+    args.push('--env', `SSH_AUTH_SOCK=${CONTAINER_SSH_AGENT_SOCK}`);
+  } catch {
+    console.warn(
+      'Failed to detect Docker Desktop. SSH agent forwarding disabled. ' +
+        'Set LLXPRT_SANDBOX_SSH_AGENT=off to suppress this warning.',
+    );
+  }
+}
+
+/**
+ * Parses the default Podman machine connection from `podman system connection list`.
+ * Returns SSH connection details needed for the reverse tunnel.
+ */
+export function getPodmanMachineConnection(): {
+  host: string;
+  port: number;
+  user: string;
+  identityPath: string;
+} {
+  let raw: string;
+  try {
+    raw = execSync('podman system connection list --format json', {
+      timeout: 10000,
+    }).toString();
+  } catch (err) {
+    throw new FatalSandboxError(
+      'Failed to list Podman connections. Ensure Podman machine is running: ' +
+        '`podman machine start`. ' +
+        (err instanceof Error ? err.message : String(err)),
+    );
+  }
+
+  let connections: Array<{
+    Name: string;
+    URI: string;
+    Identity: string;
+    Default: boolean;
+  }>;
+  try {
+    connections = JSON.parse(raw);
+  } catch {
+    throw new FatalSandboxError(
+      'Failed to parse Podman connection list JSON. ' +
+        'Ensure Podman is installed correctly: `podman machine init && podman machine start`.',
+    );
+  }
+
+  if (!Array.isArray(connections) || connections.length === 0) {
+    throw new FatalSandboxError(
+      'No Podman machine connections found. ' +
+        'Run `podman machine init && podman machine start` to create one.',
+    );
+  }
+
+  // Find the default connection, or fall back to the sole connection
+  let conn = connections.find((c) => c.Default);
+  if (!conn) {
+    if (connections.length === 1) {
+      conn = connections[0];
+    } else {
+      throw new FatalSandboxError(
+        'Multiple Podman connections found but none marked as default. ' +
+          'Run `podman system connection default <name>` to set one.',
+      );
+    }
+  }
+
+  // Parse the URI: ssh://user@host:port/path
+  const uriMatch = conn.URI.match(/^ssh:\/\/([^@]+)@([^:]+):(\d+)(\/.*)?$/);
+  if (!uriMatch) {
+    throw new FatalSandboxError(
+      `Unable to parse Podman connection URI '${conn.URI}'. ` +
+        'Run `podman system connection list` to verify your machine setup.',
+    );
+  }
+
+  return {
+    user: uriMatch[1],
+    host: uriMatch[2],
+    port: parseInt(uriMatch[3], 10),
+    identityPath: conn.Identity,
+  };
+}
+
+const SSH_TUNNEL_POLL_INTERVAL_MS = 200;
+const SSH_TUNNEL_POLL_TIMEOUT_MS = 10000;
+
+/**
+ * Sets up SSH agent forwarding for Podman on macOS via an SSH reverse tunnel
+ * into the Podman VM. This is necessary because virtiofs (the macOS hypervisor
+ * filesystem) cannot share Unix sockets across the hypervisor boundary
+ * (Podman issue #23245/#23785).
+ *
+ * Strategy: SSH reverse-forward the host agent to a TCP port on the VM's
+ * loopback, then run the container with --network=host so it can reach
+ * that port.  A socat relay inside the entrypoint converts TCP back to the
+ * Unix socket expected by SSH_AUTH_SOCK.
+ */
+export async function setupSshAgentPodmanMacOS(
+  args: string[],
+  sshAuthSock: string,
+  pollTimeoutMs: number = SSH_TUNNEL_POLL_TIMEOUT_MS,
+): Promise<SshAgentResult> {
+  const conn = getPodmanMachineConnection();
+
+  // Pick a random ephemeral port for the TCP tunnel
+  const tunnelPort = 49152 + Math.floor(Math.random() * 16383);
+
+  // R7.1: Spawn SSH reverse tunnel (TCP port, not Unix socket)
+  const tunnelProcess = spawn(
+    'ssh',
+    [
+      '-o',
+      'StrictHostKeyChecking=no',
+      '-o',
+      'UserKnownHostsFile=/dev/null',
+      '-o',
+      'LogLevel=ERROR',
+      '-o',
+      'ExitOnForwardFailure=yes',
+      '-i',
+      conn.identityPath,
+      '-p',
+      String(conn.port),
+      '-R',
+      `127.0.0.1:${tunnelPort}:${sshAuthSock}`,
+      '-N',
+      `${conn.user}@${conn.host}`,
+    ],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+
+  // R7.7: Handle tunnel spawn failure
+  const tunnelStarted = await new Promise<boolean>((resolve) => {
+    const errorHandler = () => resolve(false);
+    tunnelProcess.on('error', errorHandler);
+    // Give the process a moment to fail or stabilize
+    setTimeout(() => {
+      tunnelProcess.removeListener('error', errorHandler);
+      if (tunnelProcess.exitCode !== null) {
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    }, 500);
+  });
+
+  if (!tunnelStarted) {
+    throw new FatalSandboxError(
+      'SSH tunnel process failed to start for Podman macOS SSH agent forwarding. ' +
+        'Ensure Podman machine is running: `podman machine start`. ' +
+        'Check SSH connectivity: `podman machine ssh`.',
+    );
+  }
+
+  // R7.4: Poll for TCP port readiness with timeout
+  const pollStart = Date.now();
+  let portReady = false;
+  while (Date.now() - pollStart < pollTimeoutMs) {
+    try {
+      const result = execSync(
+        `podman machine ssh -- ss -tln | grep -q ':${tunnelPort} ' && echo ok`,
+        { timeout: 2000 },
+      )
+        .toString()
+        .trim();
+      if (result === 'ok') {
+        portReady = true;
+        break;
+      }
+    } catch {
+      // Port not ready yet
+    }
+    await new Promise((r) => setTimeout(r, SSH_TUNNEL_POLL_INTERVAL_MS));
+  }
+
+  // R7.8: Timeout kills tunnel and throws
+  if (!portReady) {
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch {
+      // ignore
+    }
+    throw new FatalSandboxError(
+      'SSH agent forwarding timed out waiting for TCP tunnel in Podman VM. ' +
+        'Ensure your SSH agent is running and SSH_AUTH_SOCK is valid. ' +
+        'Check Podman machine: `podman machine ssh`.',
+    );
+  }
+
+  // R7.5: Use --network=host so the container can reach the VM's loopback.
+  // This is safe because the Podman VM itself provides the security boundary.
+  // Guard: if a --network flag is already present (e.g., 'none' from SANDBOX_NETWORK=off),
+  // SSH agent forwarding cannot work — warn and bail out gracefully.
+  const existingNetIdx = args.indexOf('--network');
+  if (existingNetIdx !== -1) {
+    const existingNet = args[existingNetIdx + 1];
+    console.warn(
+      `Podman macOS SSH agent forwarding requires --network=host but ` +
+        `--network=${existingNet} is already set. Skipping SSH agent setup.`,
+    );
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch {
+      // ignore
+    }
+    return {};
+  }
+  args.push('--network', 'host');
+
+  // socat creates the socket at runtime (no volume mount), so it must be in a
+  // world-writable directory — the container runs as the `node` user, not root.
+  const socatSocketPath = '/tmp/ssh-agent';
+  args.push('--env', `SSH_AUTH_SOCK=${socatSocketPath}`);
+
+  // The socat relay runs inside the container entrypoint to convert
+  // TCP back to the Unix socket that SSH clients expect.
+  // Guard: if socat is not available, print a clear error instead of failing silently.
+  const entrypointPrefix =
+    `command -v socat >/dev/null 2>&1 || { echo "ERROR: socat not found — SSH agent relay requires socat in the sandbox image" >&2; }; ` +
+    `socat UNIX-LISTEN:${socatSocketPath},fork TCP4:127.0.0.1:${tunnelPort} &`;
+
+  // R7.9, R7.10, R7.11: Create idempotent cleanup function
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+
+    // R7.9: Kill tunnel process
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch {
+      // ignore — process may already be dead
+    }
+  };
+
+  return { tunnelProcess, cleanup, entrypointPrefix };
+}
+
+/**
  * Determines whether the sandbox container should be run with the current user's UID and GID.
  * This is often necessary on Linux systems (especially Debian/Ubuntu based) when using
  * rootful Docker without userns-remap configured, to avoid permission issues with
@@ -523,7 +928,7 @@ export async function start_sandbox(
       const remedy =
         image === LOCAL_DEV_SANDBOX_IMAGE_NAME
           ? 'Try running `npm run build:all` or `npm run build:sandbox` under the gemini-cli repo to build it locally, or check the image name and your network connection.'
-          : 'Please check the image name, your network connection, or notify gemini-cli-dev@google.com if the issue persists.';
+          : 'Please check the image name, your network connection, or visit https://github.com/vybestack/llxprt-code/discussions if the issue persists.';
       throw new FatalSandboxError(
         `Sandbox image '${image}' is missing or could not be pulled. ${remedy}`,
       );
@@ -613,6 +1018,9 @@ export async function start_sandbox(
       );
     }
 
+    // Mount Git config files into container (read-only, dual-HOME pattern)
+    mountGitConfigFiles(args, os.homedir(), '/home/node');
+
     // mount os.tmpdir() as os.tmpdir() inside container
     args.push('--volume', `${os.tmpdir()}:${getContainerPath(os.tmpdir())}`);
 
@@ -670,38 +1078,8 @@ export async function start_sandbox(
       }
     }
 
-    const sshAgentSetting =
-      process.env.LLXPRT_SANDBOX_SSH_AGENT ?? process.env.SANDBOX_SSH_AGENT;
-    const shouldEnableSshAgent =
-      sshAgentSetting === 'on' ||
-      (sshAgentSetting !== 'off' && !!process.env.SSH_AUTH_SOCK);
-
-    if (shouldEnableSshAgent) {
-      const sshAuthSock = process.env.SSH_AUTH_SOCK;
-      if (!sshAuthSock) {
-        console.warn('SSH agent requested but SSH_AUTH_SOCK is not set.');
-      } else if (!fs.existsSync(sshAuthSock)) {
-        console.warn(`SSH_AUTH_SOCK not found at ${sshAuthSock}.`);
-      } else {
-        const containerSocket = '/ssh-agent';
-        let mountSpec = `${sshAuthSock}:${containerSocket}`;
-
-        if (config.command === 'podman' && os.platform() === 'linux') {
-          mountSpec = `${sshAuthSock}:${containerSocket}:z`;
-        }
-
-        if (config.command === 'podman' && os.platform() === 'darwin') {
-          if (sshAuthSock.includes('/private/tmp/com.apple.launchd')) {
-            console.warn(
-              'Podman on macOS may not access launchd SSH sockets reliably. Consider Docker or a custom SSH_AUTH_SOCK path.',
-            );
-          }
-        }
-
-        args.push('--volume', mountSpec);
-        args.push('--env', `SSH_AUTH_SOCK=${containerSocket}`);
-      }
-    }
+    // Platform-aware SSH agent forwarding
+    const sshResult = await setupSshAgentForwarding(config, args);
 
     // expose env-specified ports on the sandbox
     ports().forEach((p) => args.push('--publish', `${p}:${p}`));
@@ -823,6 +1201,9 @@ export async function start_sandbox(
     // Pass through curated CLI environment variables.
     args.push(...buildSandboxEnvArgs(process.env));
 
+    // Enable Git to discover repositories across container filesystem boundaries
+    args.push('--env', 'GIT_DISCOVERY_ACROSS_FILESYSTEM=1');
+
     // copy VIRTUAL_ENV if under working directory
     // also mount-replace VIRTUAL_ENV directory with <project_settings>/sandbox.venv
     // sandbox can then set up this new VIRTUAL_ENV directory using sandbox.bashrc (see below)
@@ -888,6 +1269,13 @@ export async function start_sandbox(
     // See shouldUseCurrentUserInSandbox for more details.
     let userFlag = '';
     const finalEntrypoint = entrypoint(workdir, cliArgs);
+
+    // If SSH agent forwarding provided an entrypoint prefix (e.g. socat relay
+    // for Podman macOS TCP tunnel), prepend it to the shell command.
+    if (sshResult.entrypointPrefix) {
+      finalEntrypoint[2] =
+        sshResult.entrypointPrefix + ' ' + finalEntrypoint[2];
+    }
 
     if (process.env.LLXPRT_CODE_INTEGRATION_TEST === 'true') {
       args.push('--user', 'root');
@@ -1045,6 +1433,15 @@ export async function start_sandbox(
     sandboxProcess.on('error', (err) => {
       console.error('Sandbox process error:', err);
     });
+
+    // Wire SSH tunnel cleanup into sandbox lifecycle (R7.9, R7.10)
+    if (sshResult.cleanup) {
+      const stopTunnel = sshResult.cleanup;
+      process.on('exit', stopTunnel);
+      process.on('SIGINT', stopTunnel);
+      process.on('SIGTERM', stopTunnel);
+      sandboxProcess.on('close', stopTunnel);
+    }
 
     return await new Promise<number>((resolve) => {
       sandboxProcess?.on('close', (code, signal) => {

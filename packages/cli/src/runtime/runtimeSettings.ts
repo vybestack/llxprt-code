@@ -2292,6 +2292,7 @@ export async function applyCliArgumentOverrides(
     keyfile?: string;
     set?: string[];
     baseurl?: string;
+    nobrowser?: boolean;
   },
   bootstrapArgs?: {
     keyOverride?: string | null;
@@ -2340,5 +2341,10 @@ export async function applyCliArgumentOverrides(
   const baseurlToUse = bootstrapArgs?.baseurlOverride ?? argv.baseurl;
   if (baseurlToUse) {
     await updateActiveProviderBaseUrl(baseurlToUse);
+  }
+
+  // 5. Apply --nobrowser (sets auth.noBrowser ephemeral setting)
+  if (argv.nobrowser) {
+    config.setEphemeralSetting('auth.noBrowser', true);
   }
 }

@@ -368,6 +368,14 @@ ${authUrl}`,
 
   // Only fall back to readline if NO UI hook was available (non-interactive mode)
   if (!code && !uiHookAvailable) {
+    // Safety guard: never use readline if a TUI may be active (Issue #1370)
+    // When stdout is a TTY, an Ink TUI is likely rendering — readline would corrupt it.
+    if (process.stdout.isTTY || process.stderr.isTTY) {
+      throw new FatalAuthenticationError(
+        'OAuth code input is required but no UI dialog is available. ' +
+          'Please use an API key with /keyfile or ensure the TUI is properly initialized.',
+      );
+    }
     code = await new Promise<string>((resolve) => {
       const rl = readline.createInterface({
         input: process.stdin,
