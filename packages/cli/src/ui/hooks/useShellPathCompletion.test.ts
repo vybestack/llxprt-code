@@ -300,5 +300,46 @@ describe('useShellPathCompletion', () => {
       expect(bufferRef.current?.text).toContain('cp ');
       expect(bufferRef.current?.text).toContain('./file1.txt');
     });
+
+    it('should insert escaped paths for names with spaces', async () => {
+      const spacesStructure: FileSystemStructure = {
+        'my file.txt': '',
+        'my dir': {
+          'nested.txt': '',
+        },
+      };
+      const spacesDir = await createTmpDir(spacesStructure);
+
+      try {
+        const bufferRef: {
+          current: ReturnType<typeof useTextBuffer> | null;
+        } = {
+          current: null,
+        };
+
+        const { result } = renderHook(() => {
+          const buffer = useTextBufferForTest('ls ./my');
+          bufferRef.current = buffer;
+          return useShellPathCompletion(buffer, spacesDir, true, false);
+        });
+
+        await waitFor(() => {
+          expect(result.current.suggestions.length).toBeGreaterThan(0);
+        });
+
+        const dirIdx = result.current.suggestions.findIndex(
+          (s) => s.value === './my\\ dir/',
+        );
+        expect(dirIdx).toBeGreaterThanOrEqual(0);
+
+        act(() => {
+          result.current.handleAutocomplete(dirIdx);
+        });
+
+        expect(bufferRef.current?.text).toBe('ls ./my\\ dir/');
+      } finally {
+        await cleanupTmpDir(spacesDir);
+      }
+    });
   });
 });
