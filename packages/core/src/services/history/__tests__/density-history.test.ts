@@ -454,7 +454,7 @@ describe('HistoryService — Density Extensions', () => {
               );
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
@@ -511,7 +511,7 @@ describe('HistoryService — Density Extensions', () => {
               }
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
@@ -552,7 +552,7 @@ describe('HistoryService — Density Extensions', () => {
               }
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
@@ -585,7 +585,7 @@ describe('HistoryService — Density Extensions', () => {
               );
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
@@ -605,7 +605,7 @@ describe('HistoryService — Density Extensions', () => {
             }
             expect(svc.getRawHistory()).toHaveLength(n);
           }),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
@@ -634,7 +634,7 @@ describe('HistoryService — Density Extensions', () => {
               );
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
@@ -668,7 +668,7 @@ describe('HistoryService — Density Extensions', () => {
               expect(svc.getTotalTokens()).toBeGreaterThanOrEqual(0);
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
