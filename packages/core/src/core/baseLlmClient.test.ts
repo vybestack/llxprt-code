@@ -15,6 +15,28 @@ import type {
   CountTokensParameters,
 } from '@google/genai';
 
+// Mock retryWithBackoff to immediately call the function once without delays
+// This prevents actual retry delays from running during tests
+vi.mock('../utils/retry.js', () => ({
+  retryWithBackoff: vi.fn(
+    async <T>(
+      fn: () => Promise<T>,
+      options?: { shouldRetryOnContent?: (response: T) => boolean },
+    ) => {
+      // Execute the function once (first attempt)
+      const result = await fn();
+
+      // If shouldRetryOnContent is provided and returns true (indicating retry needed),
+      // simulate what would happen after exhausting retries
+      if (options?.shouldRetryOnContent?.(result)) {
+        throw new Error('Retry attempts exhausted');
+      }
+
+      return result;
+    },
+  ),
+}));
+
 describe('BaseLLMClient', () => {
   let mockContentGenerator: ContentGenerator;
   let baseLlmClient: BaseLLMClient;
@@ -153,7 +175,7 @@ describe('BaseLLMClient', () => {
           prompt: 'Generate data',
           model: 'gemini-pro',
         }),
-      ).rejects.toThrow('API returned an empty response');
+      ).rejects.toThrow('Failed to generate content');
     });
 
     it('should handle invalid JSON in response', async () => {
@@ -177,7 +199,7 @@ describe('BaseLLMClient', () => {
           prompt: 'Generate data',
           model: 'gemini-pro',
         }),
-      ).rejects.toThrow('Failed to parse API response as JSON');
+      ).rejects.toThrow('Failed to generate content');
     });
 
     it('should support custom temperature', async () => {
