@@ -7,6 +7,7 @@
 // File for 'llxprt mcp remove' command
 import type { CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
+import { exitCli } from '../utils.js';
 
 async function removeMcpServer(
   name: string,
@@ -56,5 +57,6 @@ export const removeCommand: CommandModule = {
     await removeMcpServer(argv.name as string, {
       scope: argv.scope as string,
     });
+    await exitCli();
   },
 };

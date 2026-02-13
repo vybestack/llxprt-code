@@ -121,7 +121,7 @@ export async function runZedIntegration(
   });
 }
 
-class GeminiAgent {
+export class GeminiAgent {
   private sessions: Map<string, Session> = new Map();
   private clientCapabilities: acp.ClientCapabilities | undefined;
   private logger: DebugLogger;
@@ -510,7 +510,7 @@ class GeminiAgent {
   }
 }
 
-class Session {
+export class Session {
   private pendingPrompt: AbortController | null = null;
   private emojiFilter: EmojiFilter;
 
@@ -650,6 +650,10 @@ class Session {
               functionCalls.push(...respFunctionCalls);
             }
           }
+        }
+
+        if (pendingSend.signal.aborted) {
+          return { stopReason: 'cancelled' };
         }
       } catch (error) {
         if (getErrorStatus(error) === 429) {

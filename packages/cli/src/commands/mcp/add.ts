@@ -229,5 +229,6 @@ export const addCommand: CommandModule = {
         excludeTools: argv.excludeTools as string[] | undefined,
       },
     );
+    await exitCli();
   },
 };
