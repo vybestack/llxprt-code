@@ -1099,9 +1099,7 @@ export class GeminiClient {
         const todos = await this.readTodoSnapshot();
         const active = this.getActiveTodos(todos);
         if (active.length === 0) return undefined;
-        return active
-          .map((t) => `- [${t.status}] ${t.content}`)
-          .join('\n');
+        return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
       });
 
       return chat;

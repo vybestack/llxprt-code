@@ -25,10 +25,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import {
-  TodoStore,
-  Todo,
-} from '@vybestack/llxprt-code-core';
+import { TodoStore, Todo } from '@vybestack/llxprt-code-core';
 
 describe('Compression Todo Integration (Issues #1387, #1388)', () => {
   let tempDir: string;
@@ -47,7 +44,9 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
   });
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-compression-test-'));
+    tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'llxprt-compression-test-'),
+    );
 
     // Create local ./tmp directory (not /tmp)
     tmpDir = path.join(tempDir, 'tmp');
@@ -101,10 +100,18 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
         .join('\n');
 
       // Verify formatted todos include expected content
-      expect(formattedActiveTodos).toContain('- [in_progress] Analyze project structure');
-      expect(formattedActiveTodos).toContain('- [pending] Create temporary test files in ./tmp/');
-      expect(formattedActiveTodos).toContain('- [pending] Verify file contents with read_file');
-      expect(formattedActiveTodos).toContain('- [pending] List directory contents');
+      expect(formattedActiveTodos).toContain(
+        '- [in_progress] Analyze project structure',
+      );
+      expect(formattedActiveTodos).toContain(
+        '- [pending] Create temporary test files in ./tmp/',
+      );
+      expect(formattedActiveTodos).toContain(
+        '- [pending] Verify file contents with read_file',
+      );
+      expect(formattedActiveTodos).toContain(
+        '- [pending] List directory contents',
+      );
       expect(formattedActiveTodos).not.toContain('completed'); // Completed todos should not be active
     });
 
@@ -122,7 +129,9 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
 
       // Simulate the compression context formatting from client.ts
       const getActiveTodos = (todos: Todo[]): Todo[] => {
-        const inProgress = todos.filter((todo) => todo.status === 'in_progress');
+        const inProgress = todos.filter(
+          (todo) => todo.status === 'in_progress',
+        );
         const pending = todos.filter((todo) => todo.status === 'pending');
         return [...inProgress, ...pending];
       };
@@ -155,7 +164,9 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
 
       // When: Getting active todos
       const getActiveTodos = (todos: Todo[]): Todo[] => {
-        const inProgress = todos.filter((todo) => todo.status === 'in_progress');
+        const inProgress = todos.filter(
+          (todo) => todo.status === 'in_progress',
+        );
         const pending = todos.filter((todo) => todo.status === 'pending');
         return [...inProgress, ...pending];
       };
@@ -191,7 +202,9 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
 
       // Filter like client.ts does
       const getActiveTodos = (todos: Todo[]): Todo[] => {
-        const inProgress = todos.filter((todo) => todo.status === 'in_progress');
+        const inProgress = todos.filter(
+          (todo) => todo.status === 'in_progress',
+        );
         const pending = todos.filter((todo) => todo.status === 'pending');
         return [...inProgress, ...pending];
       };
@@ -255,9 +268,15 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       const directiveWhitespace = buildContinuationDirective('   \n  ');
 
       // Then: Should be simple continue statement
-      expect(directiveWithout).toBe('Understood. Continuing with the current task.');
-      expect(directiveEmpty).toBe('Understood. Continuing with the current task.');
-      expect(directiveWhitespace).toBe('Understood. Continuing with the current task.');
+      expect(directiveWithout).toBe(
+        'Understood. Continuing with the current task.',
+      );
+      expect(directiveEmpty).toBe(
+        'Understood. Continuing with the current task.',
+      );
+      expect(directiveWhitespace).toBe(
+        'Understood. Continuing with the current task.',
+      );
     });
 
     it('@requirement REQ-HD-012.3 should extract first task correctly from single todo', () => {
@@ -288,7 +307,11 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       const projectTasks = [
         createTodo('1', 'Read existing project files', 'in_progress'),
         createTodo('2', 'Analyze code structure', 'pending'),
-        createTodo('3', 'Write analysis results to ./tmp/analysis.md', 'pending'),
+        createTodo(
+          '3',
+          'Write analysis results to ./tmp/analysis.md',
+          'pending',
+        ),
         createTodo('4', 'Create summary report', 'pending'),
       ];
 
@@ -299,7 +322,9 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       // Step 1: Client creates the provider callback
       const activeTodosProvider = async (): Promise<string | undefined> => {
         const todos = await todoStore.readTodos();
-        const inProgress = todos.filter((todo) => todo.status === 'in_progress');
+        const inProgress = todos.filter(
+          (todo) => todo.status === 'in_progress',
+        );
         const pending = todos.filter((todo) => todo.status === 'pending');
         const active = [...inProgress, ...pending];
         if (active.length === 0) return undefined;
@@ -311,7 +336,9 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       expect(formattedTodos).toBeDefined();
       expect(formattedTodos).toContain('Read existing project files');
       expect(formattedTodos).toContain('Analyze code structure');
-      expect(formattedTodos).toContain('Write analysis results to ./tmp/analysis.md');
+      expect(formattedTodos).toContain(
+        'Write analysis results to ./tmp/analysis.md',
+      );
 
       // Step 3: Compression context includes activeTodos
       const compressionContext = {
@@ -334,7 +361,9 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
         return 'Understood. Continuing with the current task.';
       };
 
-      const directive = buildContinuationDirective(compressionContext.activeTodos);
+      const directive = buildContinuationDirective(
+        compressionContext.activeTodos,
+      );
 
       // Step 5: Verify directive references the current task
       expect(directive).toContain('Read existing project files');
@@ -403,7 +432,9 @@ Status: In Progress
       const active = storedTodos.filter(
         (todo) => todo.status === 'in_progress' || todo.status === 'pending',
       );
-      const formatted = active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
+      const formatted = active
+        .map((t) => `- [${t.status}] ${t.content}`)
+        .join('\n');
 
       expect(formatted).toContain('- [in_progress] Second task');
       expect(formatted).not.toContain('- [in_progress] First task'); // Now completed

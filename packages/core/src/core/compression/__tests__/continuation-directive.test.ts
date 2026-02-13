@@ -29,7 +29,8 @@ describe('buildContinuationDirective', () => {
   });
 
   it('references the first task when activeTodos is provided', () => {
-    const todos = '- [in_progress] Implement the auth middleware\n- [pending] Write tests';
+    const todos =
+      '- [in_progress] Implement the auth middleware\n- [pending] Write tests';
     const result = buildContinuationDirective(todos);
     expect(result).toBe(
       'Understood. Continue with current task: "Implement the auth middleware". Use todo_read for full context.',

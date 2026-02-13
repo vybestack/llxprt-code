@@ -1705,9 +1705,7 @@ export class GeminiChat {
    * Register a callback that provides formatted active todo items.
    * Called during compression to supply todo context to the summarizer.
    */
-  setActiveTodosProvider(
-    provider: () => Promise<string | undefined>,
-  ): void {
+  setActiveTodosProvider(provider: () => Promise<string | undefined>): void {
     this.activeTodosProvider = provider;
   }
 
@@ -2194,7 +2192,10 @@ export class GeminiChat {
       try {
         activeTodos = await this.activeTodosProvider();
       } catch (error) {
-        this.logger.debug('Failed to fetch active todos for compression', error);
+        this.logger.debug(
+          'Failed to fetch active todos for compression',
+          error,
+        );
       }
     }
 
