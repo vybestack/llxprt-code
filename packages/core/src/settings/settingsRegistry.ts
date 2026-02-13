@@ -1036,6 +1036,25 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     },
   },
   {
+    key: 'compression.density.compressHeadroom',
+    category: 'cli-behavior',
+    description:
+      'Headroom multiplier for compression target tokens (0 < value <= 1)',
+    type: 'number',
+    default: 0.6,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && value > 0 && value <= 1) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'compression.density.compressHeadroom must be a number > 0 and <= 1',
+      };
+    },
+  },
+  {
     key: 'auth.noBrowser',
     category: 'cli-behavior',
     description: 'Skip automatic browser OAuth flow and use manual code entry',

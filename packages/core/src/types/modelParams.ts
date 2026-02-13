@@ -205,6 +205,7 @@ export interface EphemeralSettings {
   'compression.density.fileDedupe'?: boolean;
   'compression.density.recencyPruning'?: boolean;
   'compression.density.recencyRetention'?: number;
+  'compression.density.compressHeadroom'?: number;
 }
 
 /**

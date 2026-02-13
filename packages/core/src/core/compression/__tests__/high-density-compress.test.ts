@@ -166,6 +166,7 @@ function buildCompressContext(
         compressionProfile: () => undefined,
         compressionStrategy: () => 'high-density',
         toolFormatOverride: () => undefined,
+        densityCompressHeadroom: () => 0.6,
         reasoning: {
           enabled: () => false,
           includeInContext: () => false,

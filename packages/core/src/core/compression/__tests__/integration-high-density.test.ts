@@ -36,6 +36,7 @@ function makeMinimalContext(
         densityFileDedupe: () => true,
         densityRecencyPruning: () => false,
         densityRecencyRetention: () => 3,
+        densityCompressHeadroom: () => 0.6,
       },
     } as unknown as AgentRuntimeContext,
     runtimeState: { model: 'test-model' } as unknown as AgentRuntimeState,

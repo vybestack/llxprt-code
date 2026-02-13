@@ -64,6 +64,7 @@ export interface ReadonlySettingsSnapshot {
   'compression.density.fileDedupe'?: boolean;
   'compression.density.recencyPruning'?: boolean;
   'compression.density.recencyRetention'?: number;
+  'compression.density.compressHeadroom'?: number;
 }
 
 /**
@@ -210,6 +211,7 @@ export interface AgentRuntimeContext {
     densityFileDedupe(): boolean;
     densityRecencyPruning(): boolean;
     densityRecencyRetention(): number;
+    densityCompressHeadroom(): number;
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006

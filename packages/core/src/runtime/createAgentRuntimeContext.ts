@@ -161,6 +161,13 @@ export function createAgentRuntimeContext(
       );
       return typeof value === 'number' && value >= 1 ? value : 3;
     },
+    densityCompressHeadroom: (): number => {
+      const value = getLiveSetting<number>(
+        'compression.density.compressHeadroom',
+        options.settings['compression.density.compressHeadroom'],
+      );
+      return typeof value === 'number' && value > 0 && value <= 1 ? value : 0.6;
+    },
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006
