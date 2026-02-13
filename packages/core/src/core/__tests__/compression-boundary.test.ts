@@ -268,7 +268,7 @@ describe('Compression Boundary Logic (Issue #982)', () => {
             (b) =>
               b.type === 'text' &&
               (b.text.includes('state_snapshot') ||
-                b.text === 'Got it. Thanks for the additional context!'),
+                b.text === 'Understood. Continuing with the current task.'),
           ),
       );
 

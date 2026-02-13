@@ -398,6 +398,13 @@ export class GeminiChat {
   private lastPromptTokenCount: number | null = null;
 
   /**
+   * Optional callback that supplies formatted active todo items for compression.
+   * Set by the owning client so the compression context can include todo awareness
+   * without GeminiChat depending on the todo system directly.
+   */
+  private activeTodosProvider?: () => Promise<string | undefined>;
+
+  /**
    * Density dirty flag — tracks whether new content has been added since last optimization.
    * @plan PLAN-20260211-HIGHDENSITY.P20
    * @requirement REQ-HD-002.6, REQ-HD-002.7
@@ -1695,6 +1702,14 @@ export class GeminiChat {
   }
 
   /**
+   * Register a callback that provides formatted active todo items.
+   * Called during compression to supply todo context to the summarizer.
+   */
+  setActiveTodosProvider(provider: () => Promise<string | undefined>): void {
+    this.activeTodosProvider = provider;
+  }
+
+  /**
    * Calculate effective token count based on reasoning settings.
    * This accounts for whether reasoning will be included in API calls.
    *
@@ -2138,7 +2153,7 @@ export class GeminiChat {
         this.runtimeContext.ephemerals.compressionStrategy(),
       );
       const strategy = getCompressionStrategy(strategyName);
-      const context = this.buildCompressionContext(prompt_id);
+      const context = await this.buildCompressionContext(prompt_id);
       const result = await strategy.compress(context);
 
       // Apply result: clear history, add each entry from newHistory
@@ -2166,9 +2181,24 @@ export class GeminiChat {
    * @plan PLAN-20260211-COMPRESSION.P14
    * @requirement REQ-CS-001.6
    */
-  private buildCompressionContext(promptId: string): CompressionContext {
+  private async buildCompressionContext(
+    promptId: string,
+  ): Promise<CompressionContext> {
     const promptResolver = new PromptResolver();
     const promptBaseDir = path.join(os.homedir(), '.llxprt', 'prompts');
+
+    let activeTodos: string | undefined;
+    if (this.activeTodosProvider) {
+      try {
+        activeTodos = await this.activeTodosProvider();
+      } catch (error) {
+        this.logger.debug(
+          'Failed to fetch active todos for compression',
+          error,
+        );
+      }
+    }
+
     return {
       history: this.historyService.getCurated(),
       runtimeContext: this.runtimeContext,
@@ -2186,6 +2216,7 @@ export class GeminiChat {
         model: this.runtimeState.model,
       },
       promptId,
+      ...(activeTodos ? { activeTodos } : {}),
     };
   }
 

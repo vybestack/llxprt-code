@@ -1084,7 +1084,7 @@ export class GeminiClient {
       this.updateTodoToolAvailabilityFromDeclarations(filteredDeclarations);
       const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
 
-      return new GeminiChat(
+      const chat = new GeminiChat(
         runtimeBundle.runtimeContext,
         runtimeBundle.contentGenerator,
         {
@@ -1094,6 +1094,15 @@ export class GeminiClient {
         },
         [], // Empty initial history since we're using HistoryService
       );
+
+      chat.setActiveTodosProvider(async () => {
+        const todos = await this.readTodoSnapshot();
+        const active = this.getActiveTodos(todos);
+        if (active.length === 0) return undefined;
+        return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
+      });
+
+      return chat;
     } catch (error) {
       await reportError(
         error,

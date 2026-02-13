@@ -272,7 +272,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
             (b) =>
               b.type === 'text' &&
               (b.text.includes('state_snapshot') ||
-                b.text === 'Got it. Thanks for the additional context!'),
+                b.text === 'Understood. Continuing with the current task.'),
           ),
       );
 
@@ -372,7 +372,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
       expect(ackMessage.speaker).toBe('ai');
       expect(ackMessage.blocks[0]).toMatchObject({
         type: 'text',
-        text: 'Got it. Thanks for the additional context!',
+        text: 'Understood. Continuing with the current task.',
       });
     });
   });

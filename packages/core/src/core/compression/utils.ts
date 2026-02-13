@@ -165,3 +165,37 @@ export function findBackwardValidSplitPoint(
 
   return startIndex;
 }
+
+/**
+ * Build a context-aware continuation directive to replace the static
+ * compression acknowledgment. When active todos exist the directive
+ * references the first task and points the model at todo_read for
+ * full recovery; otherwise it emits a simple "continue" statement.
+ */
+export function buildContinuationDirective(activeTodos?: string): string {
+  if (activeTodos && activeTodos.trim().length > 0) {
+    const firstTask = extractFirstTaskContent(activeTodos);
+    if (firstTask) {
+      return `Understood. Continue with current task: "${firstTask}". Use todo_read for full context.`;
+    }
+  }
+  return 'Understood. Continuing with the current task.';
+}
+
+/**
+ * Extract the content description from the first line of a formatted
+ * active-todos string. Expected format per line:
+ *   `- [status] description text`
+ */
+function extractFirstTaskContent(activeTodos: string): string | undefined {
+  const firstLine = activeTodos.trim().split('\n')[0];
+  if (!firstLine) return undefined;
+
+  const firstCloseBracket = firstLine.indexOf(']');
+  if (firstCloseBracket === -1) {
+    return firstLine.trim() || undefined;
+  }
+
+  const task = firstLine.slice(firstCloseBracket + 1).trim();
+  return task.length > 0 ? task : undefined;
+}
