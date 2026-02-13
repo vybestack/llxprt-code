@@ -71,9 +71,13 @@ import {
   SettingsService,
   DebugLogger,
   ProfileManager,
-  SessionPersistenceService,
-  type PersistedSession,
   parseAndFormatApiError,
+  SessionRecordingService,
+  RecordingIntegration,
+  resumeSession,
+  listSessions,
+  deleteSession,
+  getProjectHash,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
@@ -193,6 +197,7 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
 };
 
 import { existsSync, mkdirSync } from 'fs';
+import { promises as fsPromises } from 'fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'os';
@@ -238,56 +243,18 @@ function handleError(error: Error, errorInfo: ErrorInfo) {
   }
 }
 
+/**
+ * @plan:PLAN-20260211-SESSIONRECORDING.P26
+ * @pseudocode recording-integration.md lines 115-132
+ */
 export async function startInteractiveUI(
   config: Config,
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
+  recordingIntegration?: RecordingIntegration,
 ) {
   const version = await getCliVersion();
-
-  // Load previous session if --continue flag was used
-  let restoredSession: PersistedSession | null = null;
-  const initialPrompt = config.getQuestion();
-
-  if (config.isContinueSession()) {
-    const persistence = new SessionPersistenceService(
-      config.storage,
-      config.getSessionId(),
-    );
-    restoredSession = await persistence.loadMostRecent();
-
-    if (restoredSession) {
-      const formattedTime =
-        SessionPersistenceService.formatSessionTime(restoredSession);
-
-      if (initialPrompt) {
-        // User provided both --continue and --prompt
-        console.log(chalk.cyan(`Resuming session from ${formattedTime}`));
-        const truncatedPrompt =
-          initialPrompt.length > 50
-            ? `${initialPrompt.slice(0, 50)}...`
-            : initialPrompt;
-        console.log(
-          chalk.dim(
-            `Your prompt "${truncatedPrompt}" will be submitted after session loads.`,
-          ),
-        );
-      } else {
-        console.log(chalk.green(`Resumed session from ${formattedTime}`));
-      }
-    } else {
-      if (initialPrompt) {
-        console.log(
-          chalk.yellow(
-            'No previous session found. Starting fresh with your prompt.',
-          ),
-        );
-      } else {
-        console.log(chalk.yellow('No previous session found. Starting fresh.'));
-      }
-    }
-  }
 
   // Detect and enable Kitty keyboard protocol once at startup
   await detectAndEnableKittyProtocol();
@@ -319,7 +286,7 @@ export async function startInteractiveUI(
             settings={settings}
             startupWarnings={startupWarnings}
             version={version}
-            restoredSession={restoredSession ?? undefined}
+            recordingIntegration={recordingIntegration}
           />
         </SettingsContext.Provider>
       </ErrorBoundary>
@@ -873,6 +840,108 @@ export async function main() {
   // Cleanup sessions after config initialization
   await cleanupExpiredSessions(config, settings.merged);
 
+  /**
+   * @plan:PLAN-20260211-SESSIONRECORDING.P26
+   * @pseudocode recording-integration.md lines 115-132
+   *
+   * Set up session recording: compute project hash, create chats directory,
+   * handle --list-sessions / --delete-session early exits, then create
+   * SessionRecordingService (new or resumed) and RecordingIntegration.
+   */
+  const projectHash = getProjectHash(config.getProjectRoot());
+  const chatsDir = join(config.getProjectTempDir(), 'chats');
+  await fsPromises.mkdir(chatsDir, { recursive: true });
+
+  // --list-sessions: display sessions and exit
+  if (argv.listSessions) {
+    const { sessions } = await listSessions(chatsDir, projectHash);
+    if (sessions.length === 0) {
+      console.log('No recorded sessions for this project.');
+    } else {
+      console.log(`Sessions for this project (${sessions.length}):
+`);
+      for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        const modified = s.lastModified.toLocaleString();
+        const sizeKb = (s.fileSize / 1024).toFixed(1);
+        console.log(
+          `  ${i + 1}. ${s.sessionId.slice(0, 8)}  ${modified}  ${sizeKb} KB  ${s.provider}/${s.model}`,
+        );
+      }
+    }
+    process.exit(0);
+  }
+
+  // --delete-session: delete session and exit
+  if (argv.deleteSession) {
+    const result = await deleteSession(
+      argv.deleteSession,
+      chatsDir,
+      projectHash,
+    );
+    if (result.ok) {
+      console.log(
+        chalk.green(`Deleted session ${result.deletedSessionId.slice(0, 8)}`),
+      );
+      process.exit(0);
+    } else {
+      console.error(chalk.red(result.error));
+      process.exit(1);
+    }
+  }
+
+  // Create recording service (resume or new)
+  let recordingService: SessionRecordingService;
+
+  const continueRef = config.getContinueSessionRef();
+  if (continueRef) {
+    const resumeResult = await resumeSession({
+      continueRef,
+      projectHash,
+      chatsDir,
+      currentProvider: config.getProvider() ?? 'unknown',
+      currentModel: config.getModel(),
+      workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+    });
+    if (resumeResult.ok) {
+      recordingService = resumeResult.recording;
+      if (resumeResult.warnings.length > 0) {
+        for (const warning of resumeResult.warnings) {
+          console.warn(chalk.yellow(warning));
+        }
+      }
+    } else {
+      console.warn(
+        chalk.yellow(`Could not resume session: ${resumeResult.error}`),
+      );
+      // Fall back to new session
+      recordingService = new SessionRecordingService({
+        sessionId,
+        projectHash,
+        chatsDir,
+        workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+        provider: config.getProvider() ?? 'unknown',
+        model: config.getModel(),
+      });
+    }
+  } else {
+    recordingService = new SessionRecordingService({
+      sessionId,
+      projectHash,
+      chatsDir,
+      workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+      provider: config.getProvider() ?? 'unknown',
+      model: config.getModel(),
+    });
+  }
+
+  const recordingIntegration = new RecordingIntegration(recordingService);
+
+  registerCleanup(async () => {
+    recordingIntegration.dispose();
+    await recordingService.dispose();
+  });
+
   if (config.getListExtensions()) {
     console.log('Installed extensions:');
     for (const extension of extensions) {
@@ -1059,7 +1128,13 @@ export async function main() {
 
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {
-    await startInteractiveUI(config, settings, startupWarnings, workspaceRoot);
+    await startInteractiveUI(
+      config,
+      settings,
+      startupWarnings,
+      workspaceRoot,
+      recordingIntegration,
+    );
     return;
   }
   // If not a TTY, read from stdin

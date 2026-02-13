@@ -139,8 +139,8 @@ export class SessionRecordingService {
    */
   private materialize(): void {
     const now = new Date();
-    const timestamp = now.toISOString().slice(0, 16).replace(':', '-');
-    const prefix = this.sessionId.substring(0, 8);
+    const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+    const prefix = this.sessionId.substring(0, 12);
     const fileName = `session-${timestamp}-${prefix}.jsonl`;
     this.filePath = path.join(this.chatsDir, fileName);
     mkdirSync(this.chatsDir, { recursive: true });

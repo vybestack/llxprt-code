@@ -2273,13 +2273,12 @@ export class GeminiChat {
   /**
    * Records completed tool calls with full metadata.
    * This is called by external components when tool calls complete, before sending responses to Gemini.
-   * NOTE: llxprt does not use ChatRecordingService, so this is a no-op stub for compatibility.
    */
   recordCompletedToolCalls(
     _model: string,
     _toolCalls: CompletedToolCall[],
   ): void {
-    // No-op: llxprt does not record chat sessions like gemini-cli
+    // No-op stub for compatibility
   }
 
   private recordHistory(

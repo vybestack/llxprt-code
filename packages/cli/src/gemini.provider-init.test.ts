@@ -145,6 +145,11 @@ describe('gemini main provider initialization', () => {
       getExperimentalZedIntegration: vi.fn(() => false),
       getZedIntegrationEnabled: vi.fn(() => false),
       getTrustedFolder: vi.fn(() => true),
+      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getContinueSessionRef: vi.fn(() => null),
+      getWorkspaceContext: vi.fn(() => ({
+        getDirectories: () => ['/tmp/project'],
+      })),
     } as unknown as Config;
 
     const { loadCliConfig, parseArguments } = await import(

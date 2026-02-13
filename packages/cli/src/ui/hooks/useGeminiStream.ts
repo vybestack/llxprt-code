@@ -37,6 +37,7 @@ import {
   tokenLimit,
   DebugLogger,
   uiTelemetryService,
+  type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -200,6 +201,10 @@ const geminiStreamLogger = new DebugLogger('llxprt:ui:gemini-stream');
  * Manages the Gemini stream, including user input, command processing,
  * API interaction, and tool call lifecycle.
  */
+/**
+ * @plan:PLAN-20260211-SESSIONRECORDING.P26
+ * @pseudocode recording-integration.md lines 100-108
+ */
 export const useGeminiStream = (
   geminiClient: GeminiClient,
   history: HistoryItem[],
@@ -222,6 +227,7 @@ export const useGeminiStream = (
   onTodoPause?: () => void,
   onEditorOpen: () => void = () => {},
   activeProfileName: string | null = null,
+  recordingIntegration?: RecordingIntegration,
 ) => {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -1285,6 +1291,17 @@ export const useGeminiStream = (
         }
       } finally {
         setIsResponding(false);
+
+        /**
+         * @plan:PLAN-20260211-SESSIONRECORDING.P26
+         * @pseudocode recording-integration.md lines 100-108
+         * Flush recording at turn boundary for durability.
+         */
+        try {
+          await recordingIntegration?.flushAtTurnBoundary();
+        } catch {
+          // Non-fatal — session continues even if flush fails
+        }
       }
     },
     [
@@ -1305,6 +1322,7 @@ export const useGeminiStream = (
       scheduleNextQueuedSubmission,
       activeProfileName,
       settings?.merged?.showProfileChangeInChat,
+      recordingIntegration,
     ],
   );
 

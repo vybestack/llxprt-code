@@ -1,3 +1,4 @@
+/* eslint-disable vitest/no-standalone-expect */
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -36,7 +37,6 @@ import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   type SessionRecordingServiceConfig,
   type SessionRecordLine,
-  type SessionEventType,
 } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
 
@@ -845,6 +845,8 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
               case 'rewind':
                 svc.recordRewind(1);
                 break;
+              default:
+                break;
             }
           }
 
@@ -1061,6 +1063,8 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
             case 'directories_changed':
               svc.recordDirectoriesChanged(['/dir']);
               break;
+            default:
+              break;
           }
 
           await svc.flush();
@@ -1123,6 +1127,8 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
                 break;
               case 'session_event':
                 svc.recordSessionEvent('info', 'event');
+                break;
+              default:
                 break;
             }
           }

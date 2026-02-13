@@ -1,3 +1,4 @@
+/* eslint-disable vitest/no-standalone-expect */
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -39,7 +40,6 @@ import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   type SessionRecordingServiceConfig,
   type SessionStartPayload,
-  type SessionEventPayload,
 } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
 
@@ -76,15 +76,17 @@ function makeContent(
   };
 }
 
-function makeContentWithToolCall(
-  toolName: string,
-  params: unknown,
-): IContent {
+function makeContentWithToolCall(toolName: string, params: unknown): IContent {
   return {
     speaker: 'ai',
     blocks: [
       { type: 'text', text: `Calling ${toolName}` },
-      { type: 'tool_call', id: `call_${toolName}`, name: toolName, parameters: params },
+      {
+        type: 'tool_call',
+        id: `call_${toolName}`,
+        name: toolName,
+        parameters: params,
+      },
     ],
   };
 }
@@ -193,10 +195,7 @@ function sessionEventLine(
 /**
  * Build a valid JSONL line for a directories_changed event.
  */
-function directoriesChangedLine(
-  seq: number,
-  directories: string[],
-): string {
+function _directoriesChangedLine(seq: number, directories: string[]): string {
   return JSON.stringify({
     v: 1,
     seq,
@@ -333,12 +332,11 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     it('compression resets history to summary + post-compression content', async () => {
       const filePath = await createValidFile(chatsDir, (svc) => {
         for (let i = 0; i < 5; i++) {
-          svc.recordContent(makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'));
+          svc.recordContent(
+            makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
+          );
         }
-        svc.recordCompressed(
-          makeContent('Summary of 5 messages', 'ai'),
-          5,
-        );
+        svc.recordCompressed(makeContent('Summary of 5 messages', 'ai'), 5);
         svc.recordContent(makeContent('post-compression 1', 'human'));
         svc.recordContent(makeContent('post-compression 2', 'ai'));
       });
@@ -374,16 +372,10 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
         for (let i = 0; i < 5; i++) {
           svc.recordContent(makeContent(`batch1-msg ${i}`, 'human'));
         }
-        svc.recordCompressed(
-          makeContent('First summary', 'ai'),
-          5,
-        );
+        svc.recordCompressed(makeContent('First summary', 'ai'), 5);
         svc.recordContent(makeContent('mid 1', 'human'));
         svc.recordContent(makeContent('mid 2', 'ai'));
-        svc.recordCompressed(
-          makeContent('Second summary', 'ai'),
-          3,
-        );
+        svc.recordCompressed(makeContent('Second summary', 'ai'), 3);
         svc.recordContent(makeContent('final 1', 'human'));
         svc.recordContent(makeContent('final 2', 'ai'));
       });
@@ -422,7 +414,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     it('rewind removes last N items from accumulated history', async () => {
       const filePath = await createValidFile(chatsDir, (svc) => {
         for (let i = 0; i < 5; i++) {
-          svc.recordContent(makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'));
+          svc.recordContent(
+            makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
+          );
         }
         svc.recordRewind(2);
       });
@@ -433,9 +427,18 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       if (!result.ok) return;
 
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({ type: 'text', text: 'msg 0' });
-      expect(result.history[1].blocks[0]).toEqual({ type: 'text', text: 'msg 1' });
-      expect(result.history[2].blocks[0]).toEqual({ type: 'text', text: 'msg 2' });
+      expect(result.history[0].blocks[0]).toEqual({
+        type: 'text',
+        text: 'msg 0',
+      });
+      expect(result.history[1].blocks[0]).toEqual({
+        type: 'text',
+        text: 'msg 1',
+      });
+      expect(result.history[2].blocks[0]).toEqual({
+        type: 'text',
+        text: 'msg 2',
+      });
     });
 
     /**
@@ -482,9 +485,18 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       // summary + 2 remaining post-compression items
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({ type: 'text', text: 'Summary' });
-      expect(result.history[1].blocks[0]).toEqual({ type: 'text', text: 'post 1' });
-      expect(result.history[2].blocks[0]).toEqual({ type: 'text', text: 'post 2' });
+      expect(result.history[0].blocks[0]).toEqual({
+        type: 'text',
+        text: 'Summary',
+      });
+      expect(result.history[1].blocks[0]).toEqual({
+        type: 'text',
+        text: 'post 1',
+      });
+      expect(result.history[2].blocks[0]).toEqual({
+        type: 'text',
+        text: 'post 2',
+      });
     });
   });
 
@@ -645,7 +657,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       expect(result.history).toHaveLength(2);
       expect(result.warnings.length).toBeGreaterThanOrEqual(1);
-      expect(result.warnings.some((w) => w.includes('custom_event'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('custom_event'))).toBe(
+        true,
+      );
     });
 
     /**
@@ -670,7 +684,11 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       expect(result.history).toHaveLength(3);
       expect(result.warnings.length).toBeGreaterThanOrEqual(1);
-      expect(result.warnings.some((w) => w.includes('non-monotonic') || w.includes('seq'))).toBe(true);
+      expect(
+        result.warnings.some(
+          (w) => w.includes('non-monotonic') || w.includes('seq'),
+        ),
+      ).toBe(true);
     });
   });
 
@@ -717,7 +735,10 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.metadata.workspaceDirs).toEqual(['/new/project', '/other/dir']);
+      expect(result.metadata.workspaceDirs).toEqual([
+        '/new/project',
+        '/other/dir',
+      ]);
     });
 
     /**
@@ -852,7 +873,11 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
         sessionStartLine(1),
         contentLine(2, makeContent('original msg', 'human')),
         contentLine(3, makeContent('original response', 'ai')),
-        sessionEventLine(4, 'info', 'Session resumed at 2026-02-11T17:00:00.000Z'),
+        sessionEventLine(
+          4,
+          'info',
+          'Session resumed at 2026-02-11T17:00:00.000Z',
+        ),
         contentLine(5, makeContent('resumed msg', 'human')),
       ];
       const filePath = path.join(chatsDir, 'resumed.jsonl');
@@ -956,9 +981,18 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       if (!result.ok) return;
 
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({ type: 'text', text: 'Summary of 4 msgs' });
-      expect(result.history[1].blocks[0]).toEqual({ type: 'text', text: 'post-comp 1' });
-      expect(result.history[2].blocks[0]).toEqual({ type: 'text', text: 'post-comp 2' });
+      expect(result.history[0].blocks[0]).toEqual({
+        type: 'text',
+        text: 'Summary of 4 msgs',
+      });
+      expect(result.history[1].blocks[0]).toEqual({
+        type: 'text',
+        text: 'post-comp 1',
+      });
+      expect(result.history[2].blocks[0]).toEqual({
+        type: 'text',
+        text: 'post-comp 2',
+      });
     });
 
     /**
@@ -1021,9 +1055,18 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       // summary + post-comp + final msg = 3
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({ type: 'text', text: 'Big summary' });
-      expect(result.history[1].blocks[0]).toEqual({ type: 'text', text: 'post-comp' });
-      expect(result.history[2].blocks[0]).toEqual({ type: 'text', text: 'final msg' });
+      expect(result.history[0].blocks[0]).toEqual({
+        type: 'text',
+        text: 'Big summary',
+      });
+      expect(result.history[1].blocks[0]).toEqual({
+        type: 'text',
+        text: 'post-comp',
+      });
+      expect(result.history[2].blocks[0]).toEqual({
+        type: 'text',
+        text: 'final msg',
+      });
     });
   });
 
@@ -1059,9 +1102,18 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       // summary + post 1 (post 2 rewound) + replacement = 3
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({ type: 'text', text: 'Summary' });
-      expect(result.history[1].blocks[0]).toEqual({ type: 'text', text: 'post 1' });
-      expect(result.history[2].blocks[0]).toEqual({ type: 'text', text: 'replacement' });
+      expect(result.history[0].blocks[0]).toEqual({
+        type: 'text',
+        text: 'Summary',
+      });
+      expect(result.history[1].blocks[0]).toEqual({
+        type: 'text',
+        text: 'post 1',
+      });
+      expect(result.history[2].blocks[0]).toEqual({
+        type: 'text',
+        text: 'replacement',
+      });
     });
 
     /**
@@ -1091,7 +1143,10 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       // summary + e + f = 3
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({ type: 'text', text: 'AB summary' });
+      expect(result.history[0].blocks[0]).toEqual({
+        type: 'text',
+        text: 'AB summary',
+      });
       expect(result.history[1].blocks[0]).toEqual({ type: 'text', text: 'e' });
       expect(result.history[2].blocks[0]).toEqual({ type: 'text', text: 'f' });
     });
@@ -1113,7 +1168,11 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
         seq: 1,
         ts: new Date().toISOString(),
         type: 'session_start',
-        payload: { projectHash: PROJECT_HASH, provider: 'anthropic', model: 'claude-4' },
+        payload: {
+          projectHash: PROJECT_HASH,
+          provider: 'anthropic',
+          model: 'claude-4',
+        },
       });
       const lines = [badStart, contentLine(2, makeContent('msg', 'human'))];
       const filePath = path.join(chatsDir, 'bad-start.jsonl');
@@ -1516,7 +1575,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       // 20 total events, 2 malformed = 10% > 5%
       const lines: string[] = [sessionStartLine(1)];
       for (let i = 2; i <= 19; i++) {
-        lines.push(contentLine(i, makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai')));
+        lines.push(
+          contentLine(i, makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai')),
+        );
       }
       // Replace 2 mid-file content lines with malformed ones
       lines[3] = 'NOT JSON';
@@ -1531,7 +1592,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       // Should have a threshold warning
-      expect(result.warnings.some((w) => w.includes('5%') || w.includes('WARNING'))).toBe(true);
+      expect(
+        result.warnings.some((w) => w.includes('5%') || w.includes('WARNING')),
+      ).toBe(true);
     });
   });
 
@@ -1609,7 +1672,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'any sequence of content events produces history of same length @requirement:REQ-RPL-002',
       async (contents) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-replay-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-replay-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -1636,13 +1701,12 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-003
      */
-    it.prop([
-      fc.integer({ min: 1, max: 10 }),
-      fc.integer({ min: 0, max: 10 }),
-    ])(
+    it.prop([fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 10 })])(
       'compression always resets to exactly 1+post items @requirement:REQ-RPL-003',
       async (preCount, postCount) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-comp-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-comp-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -1674,13 +1738,12 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002d
      */
-    it.prop([
-      fc.integer({ min: 1, max: 15 }),
-      fc.integer({ min: 0, max: 20 }),
-    ])(
+    it.prop([fc.integer({ min: 1, max: 15 }), fc.integer({ min: 0, max: 20 })])(
       'rewind(N) on history of size M produces max(0, M-N) items @requirement:REQ-RPL-002d',
       async (historySize, rewindCount) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-rewind-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-rewind-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -1696,7 +1759,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
           expect(result.ok).toBe(true);
           if (!result.ok) return;
-          expect(result.history).toHaveLength(Math.max(0, historySize - rewindCount));
+          expect(result.history).toHaveLength(
+            Math.max(0, historySize - rewindCount),
+          );
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -1719,7 +1784,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'replaying the same file twice produces identical results @requirement:REQ-RPL-001',
       async (contents) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-idem-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-idem-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -1765,7 +1832,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'session metadata always present after replay @requirement:REQ-RPL-007',
       async (eventTypes) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-meta-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-meta-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -1786,6 +1855,8 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
                   break;
                 case 'directories_changed':
                   svc.recordDirectoriesChanged(['/test']);
+                  break;
+                default:
                   break;
               }
             }
@@ -1812,14 +1883,18 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     it.prop([fc.integer({ min: 1, max: 30 })])(
       'lastSeq always equals the final event seq regardless of event count @requirement:REQ-RPL-001',
       async (eventCount) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-lastseq-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-lastseq-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
         try {
           const filePath = await createValidFile(localChatsDir, (svc) => {
             for (let i = 0; i < eventCount; i++) {
-              svc.recordContent(makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'));
+              svc.recordContent(
+                makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
+              );
             }
           });
 
@@ -1840,13 +1915,12 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([
-      fc.integer({ min: 1, max: 20 }),
-      fc.boolean(),
-    ])(
+    it.prop([fc.integer({ min: 1, max: 20 }), fc.boolean()])(
       'eventCount matches total valid events regardless of optional corrupt last line @requirement:REQ-RPL-001',
       async (contentCount, hasCorruptLastLine) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-evcount-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-evcount-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -1856,9 +1930,14 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
             lines.push(contentLine(i + 2, makeContent(`msg ${i}`, 'human')));
           }
           if (hasCorruptLastLine) {
-            lines.push('{"v":1,"seq":999,"type":"content","payload":{"content":{"spea');
+            lines.push(
+              '{"v":1,"seq":999,"type":"content","payload":{"content":{"spea',
+            );
           }
-          const filePath = path.join(localChatsDir, `evcount-${contentCount}.jsonl`);
+          const filePath = path.join(
+            localChatsDir,
+            `evcount-${contentCount}.jsonl`,
+          );
           await writeJsonlFile(filePath, lines);
 
           const result = await replaySession(filePath, PROJECT_HASH);
@@ -1886,7 +1965,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'any valid IContent round-trips through record -> replay losslessly @requirement:REQ-RPL-002',
       async ({ speaker, text }) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-roundtrip-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-roundtrip-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -1928,7 +2009,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'warnings array is always present regardless of input @requirement:REQ-RPL-001',
       async (contents) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-warn-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-warn-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -1955,13 +2038,12 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([
-      fc.integer({ min: 1, max: 5 }),
-      fc.integer({ min: 1, max: 10 }),
-    ])(
+    it.prop([fc.integer({ min: 1, max: 5 }), fc.integer({ min: 1, max: 10 })])(
       'seq monotonicity preserved across N resumes @requirement:REQ-RPL-001',
       async (resumeCount, turnsPerSegment) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-resume-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-resume-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -1972,7 +2054,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
           for (let r = 0; r <= resumeCount; r++) {
             if (r > 0) {
               seq++;
-              lines.push(sessionEventLine(seq, 'info', `Session resumed at T${r}`));
+              lines.push(
+                sessionEventLine(seq, 'info', `Session resumed at T${r}`),
+              );
             }
             for (let t = 0; t < turnsPerSegment; t++) {
               seq++;
@@ -1980,7 +2064,10 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
             }
           }
 
-          const filePath = path.join(localChatsDir, `resume-mono-${resumeCount}.jsonl`);
+          const filePath = path.join(
+            localChatsDir,
+            `resume-mono-${resumeCount}.jsonl`,
+          );
           await writeJsonlFile(filePath, lines);
 
           const result = await replaySession(filePath, PROJECT_HASH);
@@ -2016,7 +2103,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'arbitrary interleaving of content/compressed/rewind produces valid history @requirement:REQ-RPL-002',
       async (eventTypes) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-interleave-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-interleave-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -2032,13 +2121,19 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
             seq++;
             switch (eventType) {
               case 'content':
-                lines.push(contentLine(seq, makeContent(`msg-${seq}`, 'human')));
+                lines.push(
+                  contentLine(seq, makeContent(`msg-${seq}`, 'human')),
+                );
                 break;
               case 'compressed':
-                lines.push(compressedLine(seq, makeContent('summary', 'ai'), 1));
+                lines.push(
+                  compressedLine(seq, makeContent('summary', 'ai'), 1),
+                );
                 break;
               case 'rewind':
                 lines.push(rewindLine(seq, 1));
+                break;
+              default:
                 break;
             }
           }
@@ -2082,7 +2177,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'malformed payload for any known event type is skipped without crash @requirement:REQ-RPL-005',
       async (eventType) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-malformed-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-malformed-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -2101,7 +2198,10 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
             malformedEvent,
             contentLine(4, makeContent('after', 'ai')),
           ];
-          const filePath = path.join(localChatsDir, `malformed-${eventType}.jsonl`);
+          const filePath = path.join(
+            localChatsDir,
+            `malformed-${eventType}.jsonl`,
+          );
           await writeJsonlFile(filePath, lines);
 
           const result = await replaySession(filePath, PROJECT_HASH);
@@ -2123,13 +2223,12 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002d, REQ-RPL-003
      */
-    it.prop([
-      fc.integer({ min: 1, max: 10 }),
-      fc.integer({ min: 0, max: 15 }),
-    ])(
+    it.prop([fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 15 })])(
       'rewind after compression: max(0, 1+postCount - rewindN) items @requirement:REQ-RPL-002d, REQ-RPL-003',
       async (postCount, rewindN) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-comp-rw-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-comp-rw-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -2172,7 +2271,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'provider switch always updates metadata to latest provider/model @requirement:REQ-RPL-007',
       async (switches) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-pswitch-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-pswitch-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -2205,13 +2306,18 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it.prop([
       fc.array(
-        fc.array(fc.string({ minLength: 1, maxLength: 30 }), { minLength: 1, maxLength: 3 }),
+        fc.array(fc.string({ minLength: 1, maxLength: 30 }), {
+          minLength: 1,
+          maxLength: 3,
+        }),
         { minLength: 1, maxLength: 5 },
       ),
     ])(
       'directories_changed always updates metadata to latest directories @requirement:REQ-RPL-007',
       async (dirChanges) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-dirs-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-dirs-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -2241,13 +2347,12 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-008
      */
-    it.prop([
-      fc.integer({ min: 1, max: 10 }),
-      fc.integer({ min: 1, max: 10 }),
-    ])(
+    it.prop([fc.integer({ min: 1, max: 10 }), fc.integer({ min: 1, max: 10 })])(
       'session_events never appear in history regardless of count @requirement:REQ-RPL-008',
       async (contentCount, eventCount) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-sevt-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-sevt-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -2267,7 +2372,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
           if (!result.ok) return;
 
           expect(result.history).toHaveLength(contentCount);
-          expect(result.sessionEvents).toHaveLength(Math.min(contentCount, eventCount));
+          expect(result.sessionEvents).toHaveLength(
+            Math.min(contentCount, eventCount),
+          );
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -2279,13 +2386,12 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-005
      */
-    it.prop([
-      fc.integer({ min: 1, max: 10 }),
-      fc.boolean(),
-    ])(
+    it.prop([fc.integer({ min: 1, max: 10 }), fc.boolean()])(
       'BOM on first line never prevents replay @requirement:REQ-RPL-005',
       async (contentCount, hasBom) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-bom-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-bom-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -2322,7 +2428,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'multiple compressions: only post-last-compression content survives @requirement:REQ-RPL-003',
       async (preFirst, preLast, postLast) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-multicomp-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-multicomp-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -2335,7 +2443,10 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
             for (let i = 0; i < preLast; i++) {
               svc.recordContent(makeContent(`batch2-${i}`, 'human'));
             }
-            svc.recordCompressed(makeContent('Last summary', 'ai'), preLast + 1);
+            svc.recordCompressed(
+              makeContent('Last summary', 'ai'),
+              preLast + 1,
+            );
             for (let i = 0; i < postLast; i++) {
               svc.recordContent(makeContent(`batch3-${i}`, 'human'));
             }
@@ -2371,14 +2482,20 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     ])(
       'readSessionHeader returns matching metadata for valid files @requirement:REQ-RPL-001',
       async ({ sessionId, provider, model }) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-header-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-header-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
         try {
-          const filePath = await createValidFile(localChatsDir, (svc) => {
-            svc.recordContent(makeContent('trigger', 'human'));
-          }, { sessionId, provider, model });
+          const filePath = await createValidFile(
+            localChatsDir,
+            (svc) => {
+              svc.recordContent(makeContent('trigger', 'human'));
+            },
+            { sessionId, provider, model },
+          );
 
           const header = await readSessionHeader(filePath);
 
@@ -2401,7 +2518,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     it.prop([fc.integer({ min: 1, max: 15 })])(
       'corrupt last line is always silently discarded regardless of event count @requirement:REQ-RPL-005',
       async (contentCount) => {
-        const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-corrupt-'));
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-corrupt-'),
+        );
         const localChatsDir = path.join(localTempDir, 'chats');
         await fs.mkdir(localChatsDir, { recursive: true });
 
@@ -2411,7 +2530,9 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
             lines.push(contentLine(i + 2, makeContent(`msg ${i}`, 'human')));
           }
           // Add truncated last line
-          lines.push('{"v":1,"seq":999,"type":"content","payload":{"content":{"spe');
+          lines.push(
+            '{"v":1,"seq":999,"type":"content","payload":{"content":{"spe',
+          );
           const filePath = path.join(localChatsDir, 'corrupt-last.jsonl');
           await writeJsonlFile(filePath, lines);
 

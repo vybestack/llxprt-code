@@ -258,6 +258,11 @@ describe('gemini.tsx main function', () => {
       getTrustedFolder: vi.fn(() => true),
       getScreenReader: vi.fn(() => false),
       storage: {},
+      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getContinueSessionRef: vi.fn(() => null),
+      getWorkspaceContext: vi.fn(() => ({
+        getDirectories: () => ['/tmp/project'],
+      })),
     } as unknown as Config;
 
     const loadSettingsMock = vi.mocked(loadSettings);
@@ -313,6 +318,8 @@ describe('gemini.tsx main function', () => {
       set: undefined,
       continue: undefined,
       nobrowser: undefined,
+      listSessions: undefined,
+      deleteSession: undefined,
     });
 
     const originalIsTTY = process.stdin.isTTY;
