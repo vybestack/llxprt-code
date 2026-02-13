@@ -39,7 +39,7 @@ vi.mock('./config/settings.js', () => ({
     merged: {
       advanced: {},
       security: { auth: {} },
-      ui: {},
+      ui: { useAlternateBuffer: true },
     },
     setValue: vi.fn(),
     forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
