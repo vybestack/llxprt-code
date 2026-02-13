@@ -22,3 +22,4 @@
 
 export * from './types.js';
 export { SessionRecordingService } from './SessionRecordingService.js';
+export { replaySession, readSessionHeader } from './ReplayEngine.js';
