@@ -52,6 +52,22 @@ describe('extensionsCommand', () => {
         expect.any(Number),
       );
     });
+
+    it('should show a message if no extensions are installed', async () => {
+      mockGetExtensions.mockReturnValue([]);
+      const command = extensionsCommand();
+      if (!command.action) throw new Error('Action not defined');
+      await command.action(mockContext, '');
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: 'No extensions installed. Run `/extensions explore` to check out the gallery.',
+        },
+        expect.any(Number),
+      );
+    });
+
   });
 
   describe('update', () => {
@@ -219,6 +235,21 @@ describe('extensionsCommand', () => {
         expect.any(Number),
       );
     });
+
+
+    it('should show a message if no extensions are installed', async () => {
+      mockGetExtensions.mockReturnValue([]);
+      await updateAction(mockContext, 'ext-one');
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: 'No extensions installed. Run `/extensions explore` to check out the gallery.',
+        },
+        expect.any(Number),
+      );
+    });
+
 
     describe('completion', () => {
       const updateCompletion = extensionsCommand.subCommands?.find(
