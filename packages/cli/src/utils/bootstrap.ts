@@ -70,3 +70,65 @@ export function shouldRelaunchForMemory(debugMode: boolean): string[] {
 
   return [];
 }
+
+/**
+ * Parse a Docker/Podman memory format string into megabytes.
+ * Docker format: plain number = bytes, k = kilobytes, m = megabytes, g = gigabytes.
+ *
+ * @param memoryStr - Memory string in Docker format (e.g. "6g", "4096m", "1073741824")
+ * @returns Memory in MB, or undefined if unparseable
+ */
+export function parseDockerMemoryToMB(memoryStr: string): number | undefined {
+  if (!memoryStr) {
+    return undefined;
+  }
+
+  const match = memoryStr.match(/^(\d+(?:\.\d+)?)\s*([bkmg])?$/i);
+  if (!match) {
+    return undefined;
+  }
+
+  const value = parseFloat(match[1]);
+  const suffix = (match[2] ?? '').toLowerCase();
+
+  switch (suffix) {
+    case 'g':
+      return value * 1024;
+    case 'm':
+      return value;
+    case 'k':
+      return value / 1024;
+    case 'b':
+    default:
+      // Plain number or 'b' suffix is bytes
+      return value / (1024 * 1024);
+  }
+}
+
+/**
+ * Compute --max-old-space-size for a NEW sandbox process.
+ * Unlike shouldRelaunchForMemory(), this ALWAYS returns memory args
+ * because the sandbox process starts fresh with Node.js defaults (~950MB).
+ *
+ * @param debugMode - Whether to log debug information
+ * @param containerMemoryMB - Container memory limit in MB, or undefined to use host memory
+ * @returns Array containing a single --max-old-space-size argument
+ */
+export function computeSandboxMemoryArgs(
+  debugMode: boolean,
+  containerMemoryMB?: number,
+): string[] {
+  const totalMemoryMB = containerMemoryMB ?? os.totalmem() / (1024 * 1024);
+  const targetMaxOldSpaceSizeInMB = Math.max(
+    128,
+    Math.floor(totalMemoryMB * 0.5),
+  );
+
+  if (debugMode) {
+    console.debug(
+      `Sandbox memory: total=${totalMemoryMB.toFixed(2)} MB, target heap=${targetMaxOldSpaceSizeInMB} MB`,
+    );
+  }
+
+  return [`--max-old-space-size=${targetMaxOldSpaceSizeInMB}`];
+}
