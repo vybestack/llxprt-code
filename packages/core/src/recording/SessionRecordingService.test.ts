@@ -298,7 +298,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
 
       // Only session_start is buffered in constructor — no explicit content
       await service.flush();
-      service.dispose();
+      await service.dispose();
 
       expect(service.getFilePath()).toBeNull();
 
@@ -586,7 +586,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
       const eventsBefore = await readJsonlFile(filePath);
       const lineCountBefore = eventsBefore.length;
 
-      service.dispose();
+      await service.dispose();
 
       // Enqueue after dispose — should be no-op
       service.recordContent(makeContent('after dispose'));
@@ -600,13 +600,13 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-003, REQ-REC-007
      */
-    it('dispose sets isActive() to false', () => {
+    it('dispose sets isActive() to false', async () => {
       const config = makeConfig({ chatsDir });
       service = new SessionRecordingService(config);
 
       expect(service.isActive()).toBe(true);
 
-      service.dispose();
+      await service.dispose();
 
       expect(service.isActive()).toBe(false);
     });

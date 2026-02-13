@@ -259,13 +259,16 @@ export class SessionRecordingService {
   }
 
   /**
-   * Dispose of the service, stopping all recording activity.
+   * Dispose of the service: flush any remaining events, then stop recording.
    *
    * @plan PLAN-20260211-SESSIONRECORDING.P05
    * @requirement REQ-REC-003
    * @pseudocode session-recording-service.md lines 181-185
    */
-  dispose(): void {
+  async dispose(): Promise<void> {
+    if (this.active) {
+      await this.flush();
+    }
     this.active = false;
     this.queue = [];
     this.preContentBuffer = [];
