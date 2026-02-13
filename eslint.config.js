@@ -36,7 +36,6 @@ export default tseslint.config(
       '**/.yalc/**',
       'yalc.lock',
       '**/yalc.lock',
-      '.integration-tests/**',
       'eslint.config.js',
       'packages/**/dist/**',
       'bundle/**',
