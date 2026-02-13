@@ -606,8 +606,7 @@ describe('ShellTool', () => {
           type: 'data',
           chunk: 'hello ',
         });
-        expect(updateOutputMock).toHaveBeenCalledOnce();
-        expect(updateOutputMock).toHaveBeenCalledWith('hello ');
+        expect(updateOutputMock).toHaveBeenCalledExactlyOnceWith('hello ');
 
         // Second chunk also updates immediately (no throttle for data events).
         mockShellOutputCallback({
