@@ -64,8 +64,20 @@ vi.mock('./config/extension.js', () => ({
 vi.mock('./utils/cleanup.js', () => ({
   cleanupCheckpoints: vi.fn(() => Promise.resolve()),
   registerCleanup: vi.fn(),
+  registerSyncCleanup: vi.fn(),
   runExitCleanup: vi.fn(),
 }));
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...actual,
+    writeToStdout: vi.fn().mockReturnValue(true),
+    writeToStderr: vi.fn().mockReturnValue(true),
+    patchStdio: vi.fn(() => vi.fn()),
+  };
+});
 
 vi.mock('./ui/utils/kittyProtocolDetector.js', () => ({
   detectAndEnableKittyProtocol: vi.fn(() => Promise.resolve()),
@@ -88,6 +100,8 @@ vi.mock('./utils/sandbox.js', () => ({
 
 vi.mock('./utils/bootstrap.js', () => ({
   shouldRelaunchForMemory: vi.fn(() => []),
+  computeSandboxMemoryArgs: vi.fn(() => ['--max-old-space-size=3072']),
+  parseDockerMemoryToMB: vi.fn(() => undefined),
   isDebugMode: vi.fn(() => false),
 }));
 

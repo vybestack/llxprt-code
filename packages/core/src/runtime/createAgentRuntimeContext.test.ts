@@ -293,7 +293,7 @@ describe('createAgentRuntimeContext', () => {
       };
 
       const context = createAgentRuntimeContext(options);
-      expect(context.ephemerals.compressionThreshold()).toBe(0.8);
+      expect(context.ephemerals.compressionThreshold()).toBe(0.5);
     });
 
     it('should return preserve threshold with fallback', () => {

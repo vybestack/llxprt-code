@@ -5,7 +5,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { openBrowserSecurely } from './secure-browser-launcher.js';
+import {
+  openBrowserSecurely,
+  shouldLaunchBrowser,
+} from './secure-browser-launcher.js';
 
 // Create mock function using vi.hoisted
 const mockExecFile = vi.hoisted(() => vi.fn());
@@ -237,6 +240,56 @@ describe('secure-browser-launcher', () => {
         ['https://example.com'],
         expect.any(Object),
       );
+    });
+  });
+
+  describe('shouldLaunchBrowser', () => {
+    let savedEnv: NodeJS.ProcessEnv;
+
+    beforeEach(() => {
+      savedEnv = { ...process.env };
+      delete process.env.CI;
+      delete process.env.BROWSER;
+      delete process.env.DEBIAN_FRONTEND;
+      delete process.env.SSH_CONNECTION;
+      delete process.env.DISPLAY;
+      delete process.env.WAYLAND_DISPLAY;
+      delete process.env.MIR_SOCKET;
+    });
+
+    afterEach(() => {
+      process.env = savedEnv;
+    });
+
+    it('returns false when forceManual is true', () => {
+      setPlatform('darwin');
+      expect(shouldLaunchBrowser({ forceManual: true })).toBe(false);
+    });
+
+    it('returns true when forceManual is false on a desktop environment', () => {
+      setPlatform('darwin');
+      expect(shouldLaunchBrowser({ forceManual: false })).toBe(true);
+    });
+
+    it('returns true when no options are provided on a desktop environment', () => {
+      setPlatform('darwin');
+      expect(shouldLaunchBrowser()).toBe(true);
+    });
+
+    it('returns true when options is undefined on a desktop environment', () => {
+      setPlatform('darwin');
+      expect(shouldLaunchBrowser(undefined)).toBe(true);
+    });
+
+    it('returns false when forceManual is true even if environment allows browser', () => {
+      setPlatform('darwin');
+      expect(shouldLaunchBrowser({ forceManual: true })).toBe(false);
+    });
+
+    it('returns false in CI even without forceManual', () => {
+      setPlatform('darwin');
+      process.env.CI = 'true';
+      expect(shouldLaunchBrowser()).toBe(false);
     });
   });
 });

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import process from 'node:process';
+import { writeToStdout } from '@vybestack/llxprt-code-core';
 import {
   SGR_MOUSE_REGEX,
   X11_MOUSE_REGEX,
@@ -255,12 +255,14 @@ export function enableMouseEvents() {
   // Enable mouse tracking with SGR format
   // ?1002h = button event tracking (clicks + drags + scroll wheel)
   // ?1006h = SGR extended mouse mode (better coordinate handling)
-  process.stdout.write(ENABLE_MOUSE_EVENTS);
+  // Use writeToStdout to bypass patchStdio — terminal escape sequences
+  // must reach the real stdout, not the event system.
+  writeToStdout(ENABLE_MOUSE_EVENTS);
   mouseEventsActive = true;
 }
 
 export function disableMouseEvents() {
   // Disable mouse tracking with SGR format
-  process.stdout.write(DISABLE_MOUSE_EVENTS);
+  writeToStdout(DISABLE_MOUSE_EVENTS);
   mouseEventsActive = false;
 }

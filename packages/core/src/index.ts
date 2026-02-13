@@ -296,6 +296,8 @@ export * from './providers/tokenizers/OpenAITokenizer.js';
 export * from './providers/tokenizers/AnthropicTokenizer.js';
 export * from './utils/browser.js';
 export * from './utils/generateContentResponseUtilities.js';
+export * from './utils/stdio.js';
+export * from './utils/terminal.js';
 
 // Export adapters
 export * from './adapters/IStreamAdapter.js';

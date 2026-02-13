@@ -503,6 +503,9 @@ function* emitKeys(
               codeNumber <= 'z'.charCodeAt(0)
             ) {
               name = String.fromCharCode(codeNumber);
+            } else if (codeNumber === '\\'.charCodeAt(0)) {
+              // Ctrl+Backslash arrives as CSI 92;5u under Kitty protocol
+              name = '\\';
             }
           }
         }

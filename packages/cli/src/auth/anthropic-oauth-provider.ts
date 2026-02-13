@@ -188,7 +188,17 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       async () => {
         await this.ensureInitialized();
         const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
-        const interactive = shouldLaunchBrowser();
+        let noBrowser = false;
+        try {
+          const { getEphemeralSetting } = await import(
+            '../runtime/runtimeSettings.js'
+          );
+          noBrowser =
+            (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+        } catch {
+          // Runtime not initialized (e.g., tests) — use default
+        }
+        const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
         let localCallback: LocalOAuthCallbackServer | null = null;
 
         if (interactive) {
@@ -404,15 +414,8 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     }
 
     return this.errorHandler.handleGracefully(
-      async () => {
-        // @pseudocode line 72: Return token from store, but check if refresh is needed
-        const token = await this._tokenStore!.getToken('anthropic');
-        if (token && this.isTokenExpired(token)) {
-          // Token is expired or near expiry, try to refresh
-          return await this.refreshIfNeeded();
-        }
-        return token;
-      },
+      // Issue #1378: Return token as-is; OAuthManager owns all refresh operations
+      async () => this._tokenStore!.getToken('anthropic'),
       null, // Return null on error
       this.name,
       'getToken',
@@ -432,6 +435,11 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * 4. If lock not acquired, wait and re-check disk
    */
   async refreshIfNeeded(): Promise<OAuthToken | null> {
+    // Issue #1378: OAuthManager should handle all refresh operations
+    this.logger.debug(
+      () =>
+        'refreshIfNeeded() called directly on provider (deprecated: OAuthManager should handle refresh)',
+    );
     await this.ensureInitialized();
     if (!this._tokenStore) {
       return null;

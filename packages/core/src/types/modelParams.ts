@@ -198,6 +198,16 @@ export interface EphemeralSettings {
   'compression.strategy'?: string;
   /** @plan PLAN-20260211-COMPRESSION.P12 - Compression profile name for LLM calls */
   'compression.profile'?: string;
+
+  /**
+   * @plan PLAN-20260211-HIGHDENSITY.P15
+   * @requirement REQ-HD-009.6
+   */
+  'compression.density.readWritePruning'?: boolean;
+  'compression.density.fileDedupe'?: boolean;
+  'compression.density.recencyPruning'?: boolean;
+  'compression.density.recencyRetention'?: number;
+  'compression.density.compressHeadroom'?: number;
 }
 
 /**

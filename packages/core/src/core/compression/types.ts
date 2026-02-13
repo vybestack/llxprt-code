@@ -6,7 +6,10 @@
 
 /**
  * @plan PLAN-20260211-COMPRESSION.P02
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @plan PLAN-20260211-HIGHDENSITY.P05
  * @requirement REQ-CS-001.1, REQ-CS-001.4, REQ-CS-001.5, REQ-CS-001.6, REQ-CS-010.3
+ * @requirement REQ-HD-001.1, REQ-HD-001.2, REQ-HD-001.5, REQ-HD-001.8, REQ-HD-001.9, REQ-HD-004.1
  *
  * Types and constants for the compression strategy module.
  */
@@ -20,13 +23,79 @@ import type { PromptResolver } from '../../prompt-config/prompt-resolver.js';
 import type { PromptContext } from '../../prompt-config/types.js';
 
 // ---------------------------------------------------------------------------
+// Strategy trigger
+// ---------------------------------------------------------------------------
+
+/**
+ * Declares how a strategy is activated.
+ *
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @requirement REQ-HD-001.1
+ * @pseudocode strategy-interface.md lines 11-13
+ */
+export type StrategyTrigger =
+  | { mode: 'threshold'; defaultThreshold: number }
+  | { mode: 'continuous'; defaultThreshold: number };
+
+// ---------------------------------------------------------------------------
+// High-density result types
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of a density-optimization pass.
+ *
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @requirement REQ-HD-001.5
+ * @pseudocode strategy-interface.md lines 16-19
+ */
+export interface DensityResult {
+  readonly removals: readonly number[];
+  readonly replacements: ReadonlyMap<number, IContent>;
+  readonly metadata: DensityResultMetadata;
+}
+
+/**
+ * Metadata counts for each pruning type applied during density optimization.
+ *
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @requirement REQ-HD-001.8
+ * @pseudocode strategy-interface.md lines 22-25
+ */
+export interface DensityResultMetadata {
+  readonly readWritePairsPruned: number;
+  readonly fileDeduplicationsPruned: number;
+  readonly recencyPruned: number;
+}
+
+/**
+ * Configuration for density-optimization passes.
+ *
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @requirement REQ-HD-001.9
+ * @pseudocode strategy-interface.md lines 28-33
+ */
+export interface DensityConfig {
+  readonly readWritePruning: boolean;
+  readonly fileDedupe: boolean;
+  readonly recencyPruning: boolean;
+  readonly recencyRetention: number;
+  readonly workspaceRoot: string;
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @requirement REQ-HD-004.1
+ * @pseudocode strategy-interface.md lines 36-41
+ */
 export const COMPRESSION_STRATEGIES = [
   'middle-out',
   'top-down-truncation',
   'one-shot',
+  'high-density',
 ] as const;
 
 export type CompressionStrategyName = (typeof COMPRESSION_STRATEGIES)[number];
@@ -47,12 +116,23 @@ export interface CompressionContext {
   readonly promptBaseDir: string;
   readonly promptContext: Readonly<Partial<PromptContext>>;
   readonly promptId: string;
+  /** @plan PLAN-20260211-HIGHDENSITY.P03 */
+  readonly activeTodos?: string;
+  /** @plan PLAN-20260211-HIGHDENSITY.P03 */
+  readonly transcriptPath?: string;
 }
 
+/**
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @requirement REQ-HD-001.1, REQ-HD-001.2
+ * @pseudocode strategy-interface.md lines 47-59
+ */
 export interface CompressionStrategy {
   readonly name: CompressionStrategyName;
   readonly requiresLLM: boolean;
+  readonly trigger: StrategyTrigger;
   compress(context: CompressionContext): Promise<CompressionResult>;
+  optimize?(history: readonly IContent[], config: DensityConfig): DensityResult;
 }
 
 export interface CompressionResult {

@@ -4,29 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-let detectionComplete = false;
-let protocolSupported = false;
-let protocolEnabled = false;
+import * as fs from 'node:fs';
 
-function enableProtocolSequence() {
-  process.stdout.write('\x1b[>1u');
-  protocolEnabled = true;
-}
+let detectionComplete = false;
+
+let kittySupported = false;
+let sgrMouseSupported = false;
+
+let kittyEnabled = false;
+let sgrMouseEnabled = false;
 
 /**
  * Detects Kitty keyboard protocol support.
  * Definitive document about this protocol lives at https://sw.kovidgoyal.net/kitty/keyboard-protocol/
  * This function should be called once at app startup.
  */
-export async function detectAndEnableKittyProtocol(): Promise<boolean> {
+export async function detectAndEnableKittyProtocol(): Promise<void> {
   if (detectionComplete) {
-    return protocolSupported;
+    return;
   }
 
   return new Promise((resolve) => {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       detectionComplete = true;
-      resolve(false);
+      resolve();
       return;
     }
 
@@ -38,14 +39,38 @@ export async function detectAndEnableKittyProtocol(): Promise<boolean> {
       } catch (_err) {
         // If setRawMode fails, protocol detection cannot proceed
         detectionComplete = true;
-        resolve(false);
+        resolve();
         return;
       }
     }
 
     let responseBuffer = '';
     let progressiveEnhancementReceived = false;
-    let checkFinished = false;
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    const finish = () => {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+        timeoutId = undefined;
+      }
+      process.stdin.removeListener('data', handleData);
+      process.stdin.removeListener('error', handleDetectionError);
+      if (!originalRawMode) {
+        try {
+          process.stdin.setRawMode(false);
+        } catch (_err) {
+          // Ignore restore failures
+        }
+      }
+
+      if (kittySupported || sgrMouseSupported) {
+        enableSupportedProtocol();
+        process.on('exit', disableAllProtocols);
+      }
+
+      detectionComplete = true;
+      resolve();
+    };
 
     const handleData = (data: Buffer) => {
       responseBuffer += data.toString();
@@ -53,104 +78,79 @@ export async function detectAndEnableKittyProtocol(): Promise<boolean> {
       // Check for progressive enhancement response (CSI ? <flags> u)
       if (responseBuffer.includes('\x1b[?') && responseBuffer.includes('u')) {
         progressiveEnhancementReceived = true;
+        // Give more time to get the full set of kitty responses if we have an
+        // indication the terminal probably supports kitty and we just need to
+        // wait a bit longer for a response.
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(finish, 1000);
       }
 
       // Check for device attributes response (CSI ? <attrs> c)
       if (responseBuffer.includes('\x1b[?') && responseBuffer.includes('c')) {
-        if (!checkFinished) {
-          checkFinished = true;
-          process.stdin.removeListener('data', handleData);
-
-          if (!originalRawMode) {
-            try {
-              process.stdin.setRawMode(false);
-            } catch (_err) {
-              // Restore failed, but protocol detection is complete
-              // Log only in debug mode (if we had access to config)
-            }
-          }
-
-          if (progressiveEnhancementReceived) {
-            protocolSupported = true;
-            enableProtocolSequence();
-
-            // Set up cleanup on exit
-            process.on('exit', disableProtocol);
-            process.on('SIGTERM', disableProtocol);
-          }
-
-          detectionComplete = true;
-          resolve(protocolSupported);
+        if (progressiveEnhancementReceived) {
+          kittySupported = true;
         }
+
+        // Broaden mouse support by enabling SGR mode if we get any device
+        // attribute response, which is a strong signal of a modern terminal.
+        sgrMouseSupported = true;
+
+        finish();
       }
     };
 
     // Issue #1020: Add a minimal error handler for the protocol detection window
-    // Since we're only temporarily switching to raw mode, we just need to prevent crashes
     const handleDetectionError = (_err: Error) => {
-      // Don't crash the process during protocol detection
-      // Just log and continue
-      if (!checkFinished) {
-        checkFinished = true;
-        process.stdin.removeListener('data', handleData);
-        process.stdin.removeListener('error', handleDetectionError);
-
-        if (!originalRawMode) {
-          try {
-            process.stdin.setRawMode(false);
-          } catch {
-            // Ignore restore failures
-          }
-        }
-        detectionComplete = true;
-        resolve(false);
-      }
+      finish();
     };
 
     process.stdin.on('data', handleData);
     process.stdin.on('error', handleDetectionError);
 
-    // Send queries
-    process.stdout.write('\x1b[?u'); // Query progressive enhancement
-    process.stdout.write('\x1b[c'); // Query device attributes
+    // Send queries (synchronous to avoid interleaving with async output)
+    fs.writeSync(process.stdout.fd, '\x1b[?u\x1b[c');
 
-    // Timeout after 50ms
-    setTimeout(() => {
-      if (!checkFinished) {
-        process.stdin.removeListener('data', handleData);
-        process.stdin.removeListener('error', handleDetectionError);
-        if (!originalRawMode) {
-          try {
-            process.stdin.setRawMode(false);
-          } catch (_err) {
-            // Ignore restore failures
-          }
-        }
-        detectionComplete = true;
-        resolve(false);
-      }
-    }, 50);
+    // Timeout after 200ms
+    // When an iterm2 terminal does not have focus this can take over 90ms on a
+    // fast macbook so we need a somewhat longer threshold than would be ideal.
+    timeoutId = setTimeout(finish, 200);
   });
 }
 
-function disableProtocol() {
-  if (protocolEnabled) {
-    process.stdout.write('\x1b[<u');
-    protocolEnabled = false;
-  }
-}
-
-export function enableSupportedProtocol(): void {
-  if (!protocolSupported) {
-    return;
-  }
-  enableProtocolSequence();
-}
-
 export function isKittyProtocolEnabled(): boolean {
-  return protocolEnabled;
+  return kittyEnabled;
 }
 
-export function isKittyProtocolSupported(): boolean {
-  return protocolSupported;
+function disableAllProtocols() {
+  try {
+    if (kittyEnabled) {
+      fs.writeSync(process.stdout.fd, '\x1b[<u');
+      kittyEnabled = false;
+    }
+    if (sgrMouseEnabled) {
+      fs.writeSync(process.stdout.fd, '\x1b[?1006l');
+      sgrMouseEnabled = false;
+    }
+  } catch (_err) {
+    // Ignore errors during disable (terminal may already be closed)
+  }
+}
+
+/**
+ * This is exported so we can reenable this after exiting an editor which might
+ * change the mode.
+ */
+export function enableSupportedProtocol(): void {
+  try {
+    if (kittySupported) {
+      fs.writeSync(process.stdout.fd, '\x1b[>1u');
+      kittyEnabled = true;
+    }
+    if (sgrMouseSupported) {
+      fs.writeSync(process.stdout.fd, '\x1b[?1006h');
+      sgrMouseEnabled = true;
+    }
+  } catch (_err) {
+    // Ignore errors during enable (terminal may not support these modes)
+  }
 }

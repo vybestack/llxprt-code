@@ -14,6 +14,8 @@ export const useLoadingIndicator = (
   streamingState: StreamingState,
   wittyPhraseStyle: WittyPhraseStyle = 'default',
   customWittyPhrases?: string[],
+  isInteractiveShellWaiting: boolean = false,
+  lastOutputTime: number = 0,
 ) => {
   const [timerResetKey, setTimerResetKey] = useState(0);
   const isTimerActive = streamingState === StreamingState.Responding;
@@ -26,6 +28,8 @@ export const useLoadingIndicator = (
     isPhraseCyclingActive,
     isWaiting,
     wittyPhraseStyle,
+    isInteractiveShellWaiting,
+    lastOutputTime,
     customWittyPhrases,
   );
 

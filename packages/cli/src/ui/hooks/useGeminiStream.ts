@@ -215,7 +215,7 @@ export const useGeminiStream = (
   onAuthError: () => void,
   performMemoryRefresh: () => Promise<void>,
   onEditorClose: () => void,
-  onCancelSubmit: () => void,
+  onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,
   terminalHeight?: number,
@@ -369,6 +369,7 @@ export const useGeminiStream = (
     scheduleToolCalls,
     markToolsAsSubmitted,
     cancelAllToolCalls,
+    lastToolOutputTime,
   ] = useReactToolScheduler(
     async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) {
@@ -442,18 +443,19 @@ export const useGeminiStream = (
     await done;
     setIsResponding(false);
   }, []);
-  const { handleShellCommand, activeShellPtyId } = useShellCommandProcessor(
-    addItem,
-    setPendingHistoryItem,
-    onExec,
-    onDebugMessage,
-    config,
-    geminiClient,
-    setShellInputFocused,
-    terminalWidth,
-    terminalHeight,
-    pendingHistoryItemRef,
-  );
+  const { handleShellCommand, activeShellPtyId, lastShellOutputTime } =
+    useShellCommandProcessor(
+      addItem,
+      setPendingHistoryItem,
+      onExec,
+      onDebugMessage,
+      config,
+      geminiClient,
+      setShellInputFocused,
+      terminalWidth,
+      terminalHeight,
+      pendingHistoryItemRef,
+    );
 
   const streamingState = useMemo(() => {
     if (toolCalls.some((tc) => tc.status === 'awaiting_approval')) {
@@ -964,7 +966,7 @@ export const useGeminiStream = (
 
   const handleContextWindowWillOverflowEvent = useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
-      onCancelSubmit();
+      onCancelSubmit(true);
 
       const limit = tokenLimit(config.getModel());
 
@@ -1348,20 +1350,13 @@ export const useGeminiStream = (
       const pendingTools = [...pendingToolCompletionsRef.current];
       pendingToolCompletionsRef.current = [];
       geminiStreamLogger.debug(
-        `pendingToolCompletions effect: processing ${pendingTools.length} queued tools after waiting for history`,
+        `pendingToolCompletions effect: processing ${pendingTools.length} queued tools`,
       );
-
-      // Wait for history commit before processing tool completions
-      (async () => {
-        try {
-          await geminiClient.waitForIdle();
-        } catch (e) {
-          geminiStreamLogger.debug(`History wait failed (non-fatal): ${e}`);
-        }
-        void handleCompletedToolsRef.current?.(pendingTools, true);
-      })();
+      // Now that isResponding is false, we can safely process the completions
+      // Pass skipRespondingCheck=true because we already verified isResponding is false
+      void handleCompletedToolsRef.current?.(pendingTools, true);
     }
-  }, [isResponding, geminiClient]);
+  }, [isResponding]);
 
   // Ref to hold the latest handleCompletedTools for the effect above
   const handleCompletedToolsRef = useRef<
@@ -1563,13 +1558,6 @@ export const useGeminiStream = (
 
       if (allToolsCancelled) {
         if (geminiClient) {
-          // Wait for any pending history commit before adding cancelled tool history
-          try {
-            await geminiClient.waitForIdle();
-          } catch (e) {
-            geminiStreamLogger.debug(`History wait failed (non-fatal): ${e}`);
-          }
-
           // We need to manually add the function responses to the history
           // so the model knows the tools were cancelled.
           const combinedParts = geminiTools.flatMap(
@@ -1794,6 +1782,11 @@ export const useGeminiStream = (
     storage,
   ]);
 
+  const lastOutputTime = Math.max(
+    lastToolOutputTime ?? 0,
+    lastShellOutputTime ?? 0,
+  );
+
   return {
     streamingState,
     submitQuery,
@@ -1802,5 +1795,6 @@ export const useGeminiStream = (
     thought,
     cancelOngoingRequest,
     activeShellPtyId,
+    lastOutputTime,
   };
 };

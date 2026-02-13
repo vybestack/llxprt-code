@@ -1192,6 +1192,13 @@ export class Config {
     this.userMemory = newUserMemory;
   }
 
+  async updateSystemInstructionIfInitialized(): Promise<void> {
+    const geminiClient = this.geminiClient;
+    if (geminiClient?.isInitialized()) {
+      await geminiClient.updateSystemInstruction();
+    }
+  }
+
   getLlxprtMdFileCount(): number {
     return this.llxprtMdFileCount;
   }

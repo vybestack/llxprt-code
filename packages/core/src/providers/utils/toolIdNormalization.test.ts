@@ -19,7 +19,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { normalizeToOpenAIToolId } from './toolIdNormalization.js';
+import {
+  normalizeToOpenAIToolId,
+  normalizeToHistoryToolId,
+} from './toolIdNormalization.js';
 
 describe('normalizeToOpenAIToolId', () => {
   it('preserves call_ format unchanged', () => {
@@ -54,5 +57,39 @@ describe('normalizeToOpenAIToolId', () => {
 
   it('returns call_ for empty input', () => {
     expect(normalizeToOpenAIToolId('')).toBe('call_');
+  });
+
+  it('sanitizes invalid characters in suffix', () => {
+    expect(normalizeToOpenAIToolId('call_abc.123')).toBe('call_abc123');
+  });
+});
+
+describe('normalizeToHistoryToolId', () => {
+  it('preserves hist_tool_ format', () => {
+    expect(normalizeToHistoryToolId('hist_tool_abc123')).toBe(
+      'hist_tool_abc123',
+    );
+  });
+
+  it('converts call_XXX to hist_tool_XXX', () => {
+    expect(normalizeToHistoryToolId('call_abc123')).toBe('hist_tool_abc123');
+  });
+
+  it('converts toolu_XXX to hist_tool_XXX', () => {
+    expect(normalizeToHistoryToolId('toolu_abc123')).toBe('hist_tool_abc123');
+  });
+
+  it('prefixes unknown formats with hist_tool_', () => {
+    expect(normalizeToHistoryToolId('unknown_abc')).toBe(
+      'hist_tool_unknown_abc',
+    );
+  });
+
+  it('returns hist_tool_ for empty input', () => {
+    expect(normalizeToHistoryToolId('')).toBe('hist_tool_');
+  });
+
+  it('sanitizes invalid characters in suffix', () => {
+    expect(normalizeToHistoryToolId('call_abc.123')).toBe('hist_tool_abc123');
   });
 });

@@ -353,7 +353,22 @@ class TaskToolInvocation extends BaseToolInvocation<
       );
     }
 
+    let xmlOutputOpen = false;
+    const emitClosingSubagentTag = () => {
+      if (!xmlOutputOpen || !updateOutput) {
+        return;
+      }
+      updateOutput(
+        `</subagent name="${launchRequest.name}" id="${agentId}">\n`,
+      );
+      xmlOutputOpen = false;
+    };
+
     if (updateOutput) {
+      // Send opening XML tag to identify the subagent
+      updateOutput(`<subagent name="${launchRequest.name}" id="${agentId}">\n`);
+      xmlOutputOpen = true;
+
       const existingHandler = scope.onMessage;
       // Ensure each streamed chunk renders on its own line in TTY/CLI UIs.
       // - Normalize CR/CRLF to LF
@@ -368,7 +383,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       scope.onMessage = (message: string) => {
         const cleaned = normalizeForStreaming(message);
         if (cleaned.trim().length > 0) {
-          updateOutput(`[${agentId}] ${cleaned}`);
+          updateOutput(cleaned);
         }
         // Preserve any existing handler behavior
         existingHandler?.(message);
@@ -455,6 +470,8 @@ class TaskToolInvocation extends BaseToolInvocation<
           `Subagent '${launchRequest.name}' execution error: ${result.error?.message ?? 'unknown'}`,
       );
       return result;
+    } finally {
+      emitClosingSubagentTag();
     }
   }
 
@@ -770,7 +787,25 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     // Set up message streaming (same as sync)
+    let asyncXmlOutputOpen = false;
+    const emitAsyncClosingSubagentTag = () => {
+      if (!asyncXmlOutputOpen || !updateOutput) {
+        return;
+      }
+      updateOutput(
+        `</subagent name="${this.normalized.subagentName}" id="${agentId}">\n`,
+      );
+      asyncXmlOutputOpen = false;
+    };
+
     if (updateOutput) {
+      // Send opening XML tag to identify the subagent
+      // Use normalized.subagentName since launchRequest is scoped to inner try block
+      updateOutput(
+        `<subagent name="${this.normalized.subagentName}" id="${agentId}">\n`,
+      );
+      asyncXmlOutputOpen = true;
+
       const existingHandler = scope.onMessage;
       const normalizeForStreaming = (text: string): string => {
         if (!text) {
@@ -782,7 +817,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       scope.onMessage = (message: string) => {
         const cleaned = normalizeForStreaming(message);
         if (cleaned.trim().length > 0) {
-          updateOutput(`[${agentId}] ${cleaned}`);
+          updateOutput(cleaned);
         }
         existingHandler?.(message);
       };
@@ -797,6 +832,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       dispose,
       asyncAbortController.signal,
       timeoutId,
+      emitAsyncClosingSubagentTag,
     );
 
     // Return immediately with launch status
@@ -830,6 +866,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     dispose: () => Promise<void>,
     signal: AbortSignal,
     timeoutId: ReturnType<typeof setTimeout> | null,
+    emitClosingSubagentTag?: () => void,
   ): void {
     // Use IIFE to avoid returning promise
     (async () => {
@@ -879,6 +916,8 @@ class TaskToolInvocation extends BaseToolInvocation<
           error instanceof Error ? error.message : String(error);
         asyncTaskManager.failTask(agentId, errorMessage);
       } finally {
+        emitClosingSubagentTag?.();
+
         // Clear timeout
         if (timeoutId !== null) {
           clearTimeout(timeoutId);

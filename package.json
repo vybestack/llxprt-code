@@ -52,7 +52,7 @@
     "test:integration:sandbox:none": "cross-env LLXPRT_SANDBOX=false vitest run --root ./integration-tests",
     "test:integration:sandbox:docker": "cross-env LLXPRT_SANDBOX=docker npm run build:sandbox && cross-env LLXPRT_SANDBOX=docker vitest run --root ./integration-tests",
     "test:integration:sandbox:podman": "cross-env LLXPRT_SANDBOX=podman vitest run --root ./integration-tests",
-    "lint": "eslint . --ext .ts,.tsx && eslint integration-tests",
+    "lint": "eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0",
     "lint:fix": "eslint . --fix && eslint integration-tests --fix",
     "lint:ci": "eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0",
     "lint:all": "./scripts/lint-all.sh",

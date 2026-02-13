@@ -5,10 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import os from 'node:os';
 import {
   shouldRelaunchForMemory,
   isDebugMode,
   RELAUNCH_EXIT_CODE,
+  parseDockerMemoryToMB,
+  computeSandboxMemoryArgs,
 } from './bootstrap.js';
 
 describe('bootstrap utilities', () => {
@@ -121,6 +124,87 @@ describe('bootstrap utilities', () => {
     it('should have a specific value for process coordination', () => {
       // The exit code 75 is used by upstream to signal relaunch
       expect(RELAUNCH_EXIT_CODE).toBe(75);
+    });
+  });
+
+  describe('parseDockerMemoryToMB', () => {
+    it('should parse gigabytes suffix', () => {
+      expect(parseDockerMemoryToMB('6g')).toBe(6144);
+    });
+
+    it('should parse gigabytes suffix case-insensitively', () => {
+      expect(parseDockerMemoryToMB('6G')).toBe(6144);
+    });
+
+    it('should parse megabytes suffix', () => {
+      expect(parseDockerMemoryToMB('4096m')).toBe(4096);
+    });
+
+    it('should parse kilobytes suffix', () => {
+      expect(parseDockerMemoryToMB('512k')).toBe(0.5);
+    });
+
+    it('should parse plain number as bytes', () => {
+      expect(parseDockerMemoryToMB('1073741824')).toBe(1024);
+    });
+
+    it('should parse explicit bytes suffix', () => {
+      expect(parseDockerMemoryToMB('1048576b')).toBe(1);
+    });
+
+    it('should return undefined for empty string', () => {
+      expect(parseDockerMemoryToMB('')).toBeUndefined();
+    });
+
+    it('should return undefined for invalid input', () => {
+      expect(parseDockerMemoryToMB('invalid')).toBeUndefined();
+    });
+
+    it('should parse fractional gigabytes', () => {
+      expect(parseDockerMemoryToMB('6.5g')).toBe(6656);
+    });
+  });
+
+  describe('computeSandboxMemoryArgs', () => {
+    it('should return 50% of container memory when containerMemoryMB is provided', () => {
+      const result = computeSandboxMemoryArgs(false, 6144);
+      expect(result).toEqual(['--max-old-space-size=3072']);
+    });
+
+    it('should return 50% of 4GB container memory', () => {
+      const result = computeSandboxMemoryArgs(false, 4096);
+      expect(result).toEqual(['--max-old-space-size=2048']);
+    });
+
+    it('should fall back to os.totalmem() when no containerMemoryMB', () => {
+      const result = computeSandboxMemoryArgs(false);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatch(/--max-old-space-size=\d+/);
+      const expectedMB = Math.floor((os.totalmem() / (1024 * 1024)) * 0.5);
+      expect(result[0]).toBe(`--max-old-space-size=${expectedMB}`);
+    });
+
+    it('should log debug info when debugMode is true', () => {
+      const consoleSpy = vi
+        .spyOn(console, 'debug')
+        .mockImplementation(() => {});
+      computeSandboxMemoryArgs(true, 6144);
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it('should not log debug info when debugMode is false', () => {
+      const consoleSpy = vi
+        .spyOn(console, 'debug')
+        .mockImplementation(() => {});
+      computeSandboxMemoryArgs(false, 6144);
+      expect(consoleSpy).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it('should clamp to minimum 128 MB for very small container memory', () => {
+      const result = computeSandboxMemoryArgs(false, 64);
+      expect(result).toEqual(['--max-old-space-size=128']);
     });
   });
 });

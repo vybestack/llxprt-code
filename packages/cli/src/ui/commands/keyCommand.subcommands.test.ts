@@ -236,7 +236,9 @@ describe('/key save (R13)', () => {
       'save existing new-key-value',
     );
     expect(result).toBeDefined();
-    expect((result as Record<string, unknown>).type).toBe('confirm_action');
+    expect((result as unknown as Record<string, unknown>).type).toBe(
+      'confirm_action',
+    );
   });
 
   /**
@@ -505,7 +507,9 @@ describe('/key delete (R17)', () => {
     // overwriteConfirmed not set — should prompt
     const result = await keyCommand.action!(context, 'delete mykey');
     expect(result).toBeDefined();
-    expect((result as Record<string, unknown>).type).toBe('confirm_action');
+    expect((result as unknown as Record<string, unknown>).type).toBe(
+      'confirm_action',
+    );
   });
 });
 
