@@ -1,4 +1,4 @@
-# Review Bundle: issue1351_1352 Specs (Round 14)
+# Review Bundle: issue1351_1352
 
 ## Issue #1351 Text (authoritative)
 
@@ -13,6 +13,8 @@ Depends on: #1350 (SecureStore)
 
 New `KeyringTokenStore` class implementing the existing `TokenStore` interface (`core/src/auth/token-store.ts`), backed by `SecureStore` from #1350.
 
+`KeyringTokenStore` is a **host-side component**. Sandbox credential access is handled by a separate proxy defined in #1358 — out of scope here.
+
 ### Storage mapping
 
 - Service name: `llxprt-code-oauth`
@@ -23,15 +25,17 @@ New `KeyringTokenStore` class implementing the existing `TokenStore` interface (
 ### Interface implementation
 
 ```
-saveToken(provider, token, bucket?)    -> secureStore.set('{provider}:{bucket}', JSON.stringify(token))
-getToken(provider, bucket?)            -> secureStore.get('{provider}:{bucket}') -> JSON.parse -> OAuthTokenSchema.parse
-removeToken(provider, bucket?)         -> secureStore.delete('{provider}:{bucket}')
+saveToken(provider, token, bucket?)    -> validate with OAuthTokenSchema.passthrough().parse() -> secureStore.set(provider:bucket, JSON.stringify(validated))
+getToken(provider, bucket?)            -> secureStore.get(provider:bucket) -> JSON.parse -> OAuthTokenSchema.passthrough().parse()
+removeToken(provider, bucket?)         -> secureStore.delete(provider:bucket)
 listProviders()                        -> secureStore.list() -> parse account names -> unique providers
 listBuckets(provider)                  -> secureStore.list() -> filter by provider prefix -> extract bucket names
 getBucketStats(provider, bucket)       -> read token, compute stats from expiry/scope
 acquireRefreshLock(provider, options?)  -> file-based advisory lock (unchanged from MultiProviderTokenStore)
 releaseRefreshLock(provider, bucket?)  -> release file-based lock
 ```
+
+Note: `.passthrough()` is used instead of bare `.parse()` to preserve provider-specific fields (e.g., Codex tokens include `account_id` and `id_token` which are not in the base `OAuthTokenSchema`). Without `.passthrough()`, Zod's default `.strip()` mode would silently drop these fields during round-trip storage.
 
 ### Invalid token handling
 
@@ -43,15 +47,15 @@ When `getToken` reads a value that fails `OAuthTokenSchema` validation (corrupt 
 
 ### Refresh lock coordination
 
-Keeps the existing file-based advisory locks. Lock files live in `~/.llxprt/oauth/locks/` on the host. These are coordination primitives, not credentials, so they are unaffected by the keyring migration. In sandbox mode (post-proxy), refresh locks are managed by the host-side proxy — the inner process never touches lock files directly.
+Keeps the existing file-based advisory locks. Lock files live in `~/.llxprt/oauth/locks/` on the host. These are coordination primitives, not credentials, so they are unaffected by the keyring migration.
 
 The lock uses PID + timestamp for stale detection, same as today. This preserves multi-instance coordination behavior.
 
 ### Fallback policy
 
-- Non-sandbox: keyring primary, AES-256-GCM encrypted file fallback (via `SecureStore`)
-- Sandbox pre-proxy (before #1358 ships): `KeyringTokenStore` is not accessible from inside the container. Users must use `--key` to pass an API key, `SANDBOX_ENV` to pass a token, or use seatbelt mode. Clear error message explaining this with `UNAVAILABLE` taxonomy code.
-- Sandbox post-proxy (after #1358 ships): inner process uses `ProxyTokenStore` which routes through the credential proxy to the host-side `KeyringTokenStore`. The `KeyringTokenStore` itself is never instantiated inside the container.
+- Keyring primary, AES-256-GCM encrypted file fallback (via `SecureStore`)
+- Transparent fallback — user sees no difference in behavior when keyring is unavailable
+- Matches the existing behavior of `ProviderKeyStorage`, `KeychainTokenStorage`, `ToolKeyStorage`, and `ExtensionSettingsStorage`
 
 ### No migration
 
@@ -61,15 +65,13 @@ Old `~/.llxprt/oauth/*.json` plaintext files become inert. Users run `/auth logi
 
 - Implements all methods of the `TokenStore` interface
 - Passes behavioral tests matching the patterns in `token-store.spec.ts` and `token-store.refresh-race.spec.ts`
-- Validates tokens on read with `OAuthTokenSchema` — corrupt/invalid entries return null with logged warning, never throw
+- Validates tokens on read with `OAuthTokenSchema.passthrough()` — corrupt/invalid entries return null with logged warning, never throw
 - Provider:bucket account naming validated — rejects special characters in provider/bucket names
 - `listProviders()` and `listBuckets()` correctly parse the `{provider}:{bucket}` account naming
 - File-based refresh locks work identically to current behavior
-- Encrypted file fallback works when keyring is unavailable in non-sandbox mode
+- Encrypted file fallback works when keyring is unavailable
 - **Multiprocess race condition tests**: concurrent refresh + removeToken (logout during refresh), concurrent saveToken from two processes — tested via spawned child processes, not just in-memory concurrency
-- Clear error message when accessed from sandbox without proxy
 - Error messages use the shared error taxonomy from #1349
-
 
 ---
 
@@ -145,7 +147,7 @@ This is the critical integration point where keyring storage meets the full OAut
 
 ## 1. Problem Statement
 
-OAuth tokens for providers (Gemini, Qwen, Anthropic, Codex) are currently stored as plaintext JSON files in `~/.llxprt/oauth/`. Each provider's token is a file like `gemini.json` or `qwen-work.json` containing the raw `access_token`, `refresh_token`, `expiry`, and related fields in cleartext.
+OAuth tokens for providers (Gemini, Qwen, Anthropic, Codex) are currently stored as plaintext JSON files in `~/.llxprt/oauth/`. Each provider's token is a file like `gemini-default.json` or `qwen-work.json` (named `{provider}-{bucket}.json`) containing the raw `access_token`, `refresh_token`, `expiry`, and related fields in cleartext.
 
 This means:
 - Any process running as the same user can read tokens without privilege escalation.
@@ -164,9 +166,9 @@ This is a one-time action per provider+bucket combination. The CLI will behave a
 
 ### Where Tokens Go
 
-Tokens are stored in the OS keyring (macOS Keychain, GNOME Keyring / KWallet on Linux, Windows Credential Manager) under the service name `llxprt-code-oauth`. Each token appears as an account entry like `anthropic:default` or `gemini:work`.
+Tokens are stored in the OS keyring (macOS Keychain, GNOME Keyring / KWallet on Linux, Windows Credential Manager). Each provider+bucket combination is a separate entry.
 
-If the OS keyring is unavailable (headless Linux without a keyring daemon, SSH sessions without `DBUS_SESSION_BUS_ADDRESS`, CI environments), tokens are stored in AES-256-GCM encrypted files under `~/.llxprt/secure-store/llxprt-code-oauth/`. This fallback is automatic and transparent — the user is not asked to choose.
+If the OS keyring is unavailable (headless Linux, SSH sessions, CI environments), tokens are stored in encrypted files automatically. This fallback is transparent — the user is not asked to choose.
 
 ### What Stays the Same
 
@@ -184,26 +186,24 @@ If the OS keyring is unavailable (headless Linux without a keyring daemon, SSH s
 
 1. User runs `/auth login <provider>` (optionally with `--bucket <name>`).
 2. OAuth device flow executes (browser opens, user authorizes).
-3. Token response is validated against `OAuthTokenSchema`.
-4. Token is serialized to JSON and stored via `SecureStore.set()` under account `<provider>:<bucket>` (bucket defaults to `default`).
-5. SecureStore attempts the OS keyring first. If that fails, it writes an AES-256-GCM encrypted file.
-6. `/auth status` confirms active session.
+3. Token response is validated.
+4. Token is stored securely — the OS keyring is attempted first; if unavailable, an encrypted file fallback is used.
+5. `/auth status` confirms active session.
 
 ### Token Read (Startup / API Call)
 
 1. Application requests token for a provider+bucket pair.
-2. `SecureStore.get()` checks keyring first, then encrypted fallback file.
-3. Raw JSON string is parsed and validated against `OAuthTokenSchema.passthrough()`.
+2. Token is retrieved from secure storage (keyring or encrypted fallback).
+3. Token is validated against the expected schema. Provider-specific fields (e.g., Codex's `account_id`) are preserved during validation.
 4. If validation succeeds, token is returned to the caller.
-5. If validation fails (corrupt data, schema mismatch), a warning is logged with a hashed provider:bucket identifier (not raw) and the error code `CORRUPT`. No secret values are logged. `null` is returned. The corrupt entry is NOT deleted — it is preserved for potential manual inspection.
-6. If `null` is returned, the application treats the provider as unauthenticated.
+5. If validation fails (corrupt data, schema mismatch), a warning is logged with a hashed identifier (not raw provider:bucket). No secret values are logged. The provider is treated as unauthenticated. The corrupt entry is NOT deleted — it is preserved for potential manual inspection.
 
 ### Token Refresh
 
 1. Before making an API call, the application checks if the token is expired or near expiry.
-2. A file-based advisory lock is acquired in `~/.llxprt/oauth/locks/` to prevent concurrent refresh attempts across processes.
+2. A file-based advisory lock prevents concurrent refresh attempts across processes.
 3. The provider's refresh endpoint is called with the `refresh_token`.
-4. The refreshed token is validated and stored, replacing the previous token at the same account key.
+4. The refreshed token is validated and stored, replacing the previous token.
 5. The advisory lock is released.
 6. If refresh fails and no valid token remains, the user must `/auth login` again.
 
@@ -211,21 +211,19 @@ If the OS keyring is unavailable (headless Linux without a keyring daemon, SSH s
 
 1. After a successful token read, the application may schedule a background renewal timer.
 2. When the timer fires, the same refresh flow executes.
-3. This is unchanged — proactive renewal operates against the `TokenStore` interface.
+3. This is unchanged from current behavior.
 
 ### Logout
 
 1. User runs `/auth logout <provider>` (optionally with `--bucket <name>`).
-2. `SecureStore.delete()` removes the entry from both keyring and encrypted fallback file (if either exists). Deletion is best-effort — errors are logged but do not prevent logout from completing.
-3. Any advisory lock file for that provider+bucket is cleaned up on a best-effort basis.
-4. `/auth status` confirms no active session.
+2. Token is removed from secure storage. Deletion is best-effort — errors are logged but do not prevent logout from completing.
+3. `/auth status` confirms no active session.
 
 ### Bucket Failover
 
-1. If the active bucket's token is expired and non-refreshable, the bucket failover handler iterates other buckets for the same provider.
-2. Each bucket's token is read via the same `SecureStore.get()` path.
-3. The first valid, non-expired token's bucket becomes the active bucket.
-4. This logic is in `BucketFailoverHandlerImpl` and operates against the `TokenStore` interface — no changes needed.
+1. If the active bucket's token is expired and non-refreshable, other buckets for the same provider are checked.
+2. The first valid, non-expired token's bucket becomes the active bucket.
+3. This behavior is unchanged.
 
 ## 4. User-Visible Behaviors
 
@@ -249,13 +247,13 @@ If the OS keyring is unavailable (headless Linux without a keyring daemon, SSH s
 | Keyring locked (GNOME Keyring locked) | Error: "Keyring is locked. Unlock your keyring and retry." |
 | Keyring access denied | Error: "Keyring access denied. Check permissions, run as correct user." |
 | Corrupt token data read from store | Warning logged. Provider treated as unauthenticated. User runs `/auth login`. |
-| Lock contention during refresh | Second process waits up to 10s for the lock. Each lock file covers one provider (default bucket) or one provider+bucket combination (named buckets). If timeout, refresh skipped (next request retries). |
-| Stale lock (process crashed) | Lock older than 30s is automatically broken. Next process acquires and proceeds. |
+| Lock contention during refresh | Second process waits briefly for the lock. If timeout, refresh skipped (next request retries). |
+| Stale lock (process crashed) | Stale locks are automatically broken. Next process acquires and proceeds. |
 | Both keyring and fallback fail | Error: "Credential storage unavailable. Use --key to provide API key directly, or install a keyring backend." |
 
 ## 5. Error Taxonomy
 
-All storage errors surface through `SecureStoreError` with a code, message, and remediation string. The `KeyringTokenStore` translates these into user-appropriate behaviors:
+Storage errors surface through `SecureStoreError` with a code, message, and remediation string. The `KeyringTokenStore` translates these into user-appropriate behaviors for CRUD operations (`saveToken`, `getToken`, `removeToken`). List operations (`listProviders`, `listBuckets`) degrade to empty arrays on any error — see below.
 
 | Code | Meaning | User-Facing Behavior |
 |---|---|---|
@@ -272,50 +270,55 @@ For `getToken`: `CORRUPT` returns `null` with a warning log. `NOT_FOUND` returns
 
 For `removeToken`: errors during deletion are logged but do not propagate (best-effort cleanup).
 
+For `listProviders` / `listBuckets`: on any `SecureStoreError`, return an empty array rather than propagating the error. These are informational methods used in `/auth status` and bucket enumeration — a degraded empty result keeps the UI functional when the keyring is temporarily inaccessible. This means the error taxonomy codes (`LOCKED`, `DENIED`, etc.) do not surface through list methods. The same pattern is used by other SecureStore wrappers' list operations.
+
 ## 6. Multi-Instance Behavior
 
-Multiple llxprt-code processes running simultaneously share the same keyring and fallback storage. This is the same shared-state model as before (plaintext files were also shared). Coordination specifics:
+Multiple llxprt-code processes running simultaneously share the same credential storage. This is the same shared-state model as before (plaintext files were also shared).
 
-- **Token reads**: Concurrent reads are safe — keyring and file reads are atomic from the consumer's perspective.
-- **Token writes**: Last writer wins. This is acceptable because writes only occur during login (user-initiated) and refresh (lock-protected).
-- **Refresh locks**: File-based advisory locks in `~/.llxprt/oauth/locks/` ensure only one process refreshes a given provider+bucket at a time. Lock files contain `{pid, timestamp}` for stale detection.
+- **Token reads**: Concurrent reads are safe.
+- **Token writes**: Last writer wins. Acceptable because writes only occur during login (user-initiated) and refresh (lock-protected).
+- **Refresh locks**: File-based advisory locks ensure only one process refreshes a given provider+bucket at a time. Stale locks from crashed processes are automatically broken.
 
-## 7. Sandbox Behavior
+## 7. Keyring-Unavailable Experience
 
-### Pre-Proxy (before credential proxy ships — #1358)
+When the OS keyring is unavailable (common in CI, headless servers, SSH without agent forwarding):
 
-`KeyringTokenStore` is not accessible from inside Docker/Podman containers. If `KeyringTokenStore` is invoked inside a sandbox environment (`process.env.SANDBOX` is set) and keyring is unavailable:
+1. Unavailability is detected automatically.
+2. All operations transparently use encrypted file fallback.
+3. The user sees no difference in behavior — login, status, refresh, logout all work normally.
+4. The only observable difference: tokens cannot be accessed if the user's home directory moves to a different machine (the fallback encryption is machine-bound).
 
-- Operations fail with error code `UNAVAILABLE` and a clear message: "Credential storage unavailable in sandbox mode. Use `--key` to provide an API key directly, or use seatbelt mode (macOS)."
-- Users must use `--key`, `--key-name` (resolved on host before sandbox launch), or seatbelt mode.
+This matches the existing behavior of `ProviderKeyStorage`, `KeychainTokenStorage`, `ToolKeyStorage`, and `ExtensionSettingsStorage`.
 
-### Post-Proxy (after credential proxy ships — #1358)
+`KeyringTokenStore` is a host-side component. Sandbox credential access is handled by a separate proxy (#1358) — out of scope here.
 
-The inner (sandbox) process uses `ProxyTokenStore` — a separate `TokenStore` implementation that routes all credential operations through a Unix socket to the host process. `KeyringTokenStore` is never instantiated inside the container. The host-side proxy uses `KeyringTokenStore` to access the real keyring.
+## 8. Acceptance Criteria (from Issues)
 
-`ProxyTokenStore` is out of scope for this specification — it is defined in issue #1358.
+From #1351:
+- All `TokenStore` interface behaviors have equivalent coverage in new tests
+- Multiprocess race conditions (concurrent refresh, refresh+logout) are tested with spawned child processes
+- Corrupt token handling verified (returns null, logs warning, does not delete)
 
-## 8. Keyring-Unavailable Experience
-
-When the OS keyring is completely unavailable (common in CI, Docker containers, headless servers, SSH without agent forwarding):
-
-1. `SecureStore` detects unavailability during its probe (writes a test value, reads it back, deletes it).
-2. All operations transparently use AES-256-GCM encrypted file fallback in `~/.llxprt/secure-store/llxprt-code-oauth/`.
-3. Encrypted files are scoped to the machine (key derived from hostname + username via scrypt).
-4. The user sees no difference in behavior — login, status, refresh, logout all work normally.
-5. The only observable difference: tokens cannot be accessed if the user's home directory moves to a different machine (the encryption key derivation is machine-bound).
-
-This matches the existing behavior of `ProviderKeyStorage` (API keys), `KeychainTokenStorage` (MCP tokens), `ToolKeyStorage`, and `ExtensionSettingsStorage` — all use SecureStore with the same fallback mechanism.
+From #1352:
+- All existing OAuth integration tests pass with the new storage backend
+- `/auth login` stores tokens in keyring (not plaintext files)
+- `/auth status` reads tokens from keyring
+- Token refresh cycle works: expire → lock → refresh → save → unlock
+- Token lifecycle works end-to-end: login → store → read → refresh → logout
+- Multiple providers work simultaneously
+- CI runs both keyring-available and keyring-unavailable paths in separate jobs
+- Keyring probe happens once per process, not once per provider/bucket
 
 ---
 
 ## technical-overview.md (Technical Specification)
 
-# Technical Specification: KeyringTokenStore & Wiring
+# Technical Specification: KeyringTokenStore
 
 **Issues**: #1351 (KeyringTokenStore), #1352 (Wire as Default)
 **Epic**: #1349 — Unified Credential Management, Phase A
-**Status**: Specification — describes WHAT the system does, not how to build it
+**Status**: Specification — describes the technical design, not implementation steps
 
 ---
 
@@ -324,7 +327,7 @@ This matches the existing behavior of `ProviderKeyStorage` (API keys), `Keychain
 - **NO backward compatibility shims.** No code reads `~/.llxprt/oauth/*.json` plaintext files. No detection of old format.
 - **NO feature flags.** No environment variable, setting, or toggle selects between old and new storage. `KeyringTokenStore` unconditionally replaces `MultiProviderTokenStore` as the host-side `TokenStore` implementation. (A future `ProxyTokenStore` for sandbox mode is defined in #1358 — out of scope here.)
 - **NO migrations.** Old plaintext files become inert. Users re-authenticate with `/auth login`.
-- **Clean cut.** `MultiProviderTokenStore` is deleted entirely. Its export is removed from `packages/core/index.ts` and `packages/cli/src/auth/types.ts`.
+- **Clean cut.** `MultiProviderTokenStore` is deleted from the codebase.
 
 ---
 
@@ -374,8 +377,6 @@ This mirrors the pattern established by `ProviderKeyStorage`, which wraps `Secur
 ## 2. Class Design
 
 ### KeyringTokenStore
-
-**Location**: `packages/core/src/auth/keyring-token-store.ts`
 
 **Implements**: `TokenStore` (from `packages/core/src/auth/token-store.ts`)
 
@@ -436,7 +437,7 @@ The colon separator is safe because both provider and bucket names are validated
 
 The value stored in SecureStore is `JSON.stringify(validatedToken)`, where `validatedToken` is the output of `OAuthTokenSchema.passthrough().parse(token)`.
 
-The `.passthrough()` is critical: it preserves provider-specific extra fields (e.g., `account_id` for Codex tokens, which extends `OAuthTokenSchema` with additional fields). Without `.passthrough()`, Zod's default `.strip()` behavior would silently drop these fields.
+The `.passthrough()` is critical: it preserves provider-specific extra fields (e.g., `account_id` for Codex tokens, which extends `OAuthTokenSchema` with additional fields). Without `.passthrough()`, Zod's default `.strip()` behavior would silently drop these fields. Note: issue #1351 references `OAuthTokenSchema.parse`; `.passthrough()` is used here deliberately to avoid data loss.
 
 SecureStore wraps this JSON string in its own versioned envelope `{"v":1,...}` for the encrypted file fallback. The keyring stores the raw JSON string directly.
 
@@ -485,7 +486,7 @@ The "do not delete" policy is deliberate: the corrupt data may be recoverable, m
 
 ## 5. Refresh Lock Mechanism
 
-The file-based advisory lock mechanism is carried forward unchanged from `MultiProviderTokenStore`. It is NOT moved into SecureStore because locks are coordination primitives, not credentials.
+The file-based advisory lock mechanism is carried forward from `MultiProviderTokenStore`. It is NOT moved into SecureStore because locks are coordination primitives, not credentials.
 
 ### Lock File Location
 
@@ -494,8 +495,6 @@ The file-based advisory lock mechanism is carried forward unchanged from `MultiP
 Lock files live in `~/.llxprt/oauth/locks/`, a dedicated subdirectory separating coordination primitives from inert token data. The naming convention uses `{provider}-refresh.lock` for the default bucket and `{provider}-{bucket}-refresh.lock` for named buckets. The `locks/` subdirectory is created on demand with mode `0o700`.
 
 Lock files are plaintext `{pid, timestamp}` JSON — they contain no secrets and do not need encryption.
-
-The `~/.llxprt/oauth/` directory is created on demand with mode `0o700`.
 
 ### Lock File Format
 
@@ -522,169 +521,7 @@ Delete the lock file. ENOENT is ignored (idempotent release).
 
 Lock file names use `{provider}-{bucket}-refresh.lock` format (dash-separated), NOT the `{provider}:{bucket}` colon-separated format used for SecureStore account keys. The two naming conventions serve different purposes: account keys identify entries in SecureStore (colon-separated), lock files coordinate processes on the filesystem (dash-separated).
 
-## 6. Wiring: Production Instantiation Sites
-
-Two sites currently construct `MultiProviderTokenStore`. Both change to construct `KeyringTokenStore`.
-
-### Site 1: `packages/cli/src/runtime/runtimeContextFactory.ts`
-
-**Current** (line ~263):
-```typescript
-const tokenStore =
-  sharedTokenStore ?? (sharedTokenStore = new MultiProviderTokenStore());
-```
-
-**After**:
-```typescript
-const tokenStore =
-  sharedTokenStore ?? (sharedTokenStore = new KeyringTokenStore());
-```
-
-This is the primary runtime path. The `sharedTokenStore` module-level variable ensures a single `KeyringTokenStore` instance is shared across all runtimes in the process. The `SecureStore` inside it caches its keyring probe result. Because there is a single shared instance and `SecureStore` has a probe TTL of 60 seconds, the OS keyring is effectively probed once at startup and not again for the lifetime of most sessions. The shared instance satisfies issue #1352's requirement that the probe happens "once per process, not once per provider/bucket."
-
-### Site 2: `packages/cli/src/providers/providerManagerInstance.ts`
-
-**Current** (line ~242):
-```typescript
-const tokenStore = new MultiProviderTokenStore();
-```
-
-**After**:
-```typescript
-const tokenStore = new KeyringTokenStore();
-```
-
-This site is used in the `createProviderManager` factory. Rather than creating a local instance per call, it should use the same shared `KeyringTokenStore` singleton as Site 1. All construction sites must converge on a single shared instance to satisfy issue #1352's requirement that the keyring probe happens "once per process, not once per provider/bucket."
-
-### Additional Construction Sites
-
-There are additional `new MultiProviderTokenStore()` calls in:
-- `packages/cli/src/ui/commands/authCommand.ts` (lines ~40, ~662) — used in `/auth` command handlers
-- `packages/cli/src/ui/commands/profileCommand.ts` (lines ~100, ~347) — used in profile bucket enumeration
-
-All of these change to use the shared `KeyringTokenStore` singleton (same instance as Sites 1 and 2). No additional `new KeyringTokenStore()` calls — all sites import and use the shared module-level instance.
-
-### Sandbox Considerations
-
-In sandbox (Docker/Podman) environments where `process.env.SANDBOX` is set:
-- **Pre-proxy** (before #1358): If keyring is unavailable inside the container, `KeyringTokenStore` operations fail with `UNAVAILABLE`. Users must use `--key` for API key auth, or seatbelt mode (macOS).
-- **Post-proxy** (after #1358): The inner process uses `ProxyTokenStore` (a future `TokenStore` implementation from #1358) instead of `KeyringTokenStore`. The host-side proxy uses `KeyringTokenStore` to access the real keyring.
-
-`ProxyTokenStore` is out of scope for this specification.
-
-### Import Changes
-
-All files that import `MultiProviderTokenStore` switch to import `KeyringTokenStore`:
-- From `@vybestack/llxprt-code-core` in packages that depend on core
-- From relative paths within core
-
-## 7. Deletion: What Gets Removed
-
-### MultiProviderTokenStore Class
-
-The entire `MultiProviderTokenStore` class in `packages/core/src/auth/token-store.ts` is deleted. The `TokenStore` interface in the same file is preserved — it is the contract that `KeyringTokenStore` implements.
-
-The `LockInfo` interface (private to `MultiProviderTokenStore`) is either deleted or moved to `KeyringTokenStore` if the lock mechanism is defined there.
-
-### Exports
-
-- `packages/core/index.ts`: Remove `export { MultiProviderTokenStore } from './src/auth/token-store.js'`. Add `export { KeyringTokenStore } from './src/auth/keyring-token-store.js'`.
-- `packages/cli/src/auth/types.ts`: Remove `export { MultiProviderTokenStore } from '@vybestack/llxprt-code-core'`. Add `export { KeyringTokenStore } from '@vybestack/llxprt-code-core'`.
-
-### Test Files
-
-- `packages/core/src/auth/token-store.spec.ts` — currently tests `MultiProviderTokenStore`. Deleted along with the class it tests.
-- `packages/core/src/auth/token-store.refresh-race.spec.ts` — currently tests refresh lock race conditions against `MultiProviderTokenStore`. Deleted along with the class it tests.
-- New test files `packages/core/src/auth/keyring-token-store.spec.ts` (and optionally `keyring-token-store.lock.spec.ts`) are created to test `KeyringTokenStore` against the `TokenStore` interface with a real (injected) `SecureStore` using a test `keyringLoader`. These are new files, not renames.
-- Integration and command tests in `packages/cli/` that construct `MultiProviderTokenStore` are updated to construct `KeyringTokenStore`.
-
-### What Is NOT Deleted
-
-- `TokenStore` interface — kept, it is the contract.
-- `OAuthTokenSchema` — kept, used for validation.
-- `BucketStats` type — kept, used by the interface.
-- `~/.llxprt/oauth/` directory on user systems — not touched. Old files are simply ignored.
-- `~/.llxprt/oauth/locks/` directory — used for refresh lock files.
-
-## 8. Test Strategy
-
-Tests are behavioral — they verify observable `TokenStore` interface behaviors, not implementation details.
-
-### Core Behavioral Tests (`KeyringTokenStore`)
-
-Tests inject a real `SecureStore` configured with an in-memory `KeyringAdapter` (a test double that stores values in a `Map`). This tests the actual integration between `KeyringTokenStore` and `SecureStore` without hitting the OS keyring.
-
-The new tests must cover the same behavioral patterns as the deleted `token-store.spec.ts` and `token-store.refresh-race.spec.ts` — all observable `TokenStore` interface behaviors must have equivalent coverage.
-
-**Token CRUD behaviors:**
-- Save a token, read it back — values match including passthrough fields.
-- Save to different providers and buckets — isolated correctly.
-- Read a non-existent token — returns `null`.
-- Remove a token — subsequent read returns `null`.
-- Remove a non-existent token — succeeds silently.
-
-**Listing behaviors:**
-- `listProviders()` returns sorted unique provider names from stored tokens.
-- `listProviders()` with no tokens returns empty array.
-- `listBuckets(provider)` returns sorted bucket names for that provider.
-- `listBuckets(provider)` with no tokens for that provider returns empty array.
-
-**Validation behaviors:**
-- Save with invalid provider name (contains `:`, `/`, spaces) — throws.
-- Save with invalid bucket name — throws.
-- Read corrupt data (invalid JSON in SecureStore) — returns `null`, logs warning.
-- Read schema-invalid data (valid JSON, wrong shape) — returns `null`, logs warning.
-- Corrupt data is NOT deleted from SecureStore after failed read.
-
-**Bucket stats behaviors:**
-- `getBucketStats()` for existing token returns stats object.
-- `getBucketStats()` for non-existent token returns `null`.
-
-**Default bucket behaviors:**
-- `saveToken('gemini', token)` without bucket uses `default` → account key `gemini:default`.
-- `saveToken('gemini', token, 'default')` is equivalent.
-
-### Refresh Lock Behavioral Tests
-
-Tests use the real filesystem (temp directory) for lock files since locks are file-based.
-
-- Acquire lock — returns `true`.
-- Acquire already-held lock — blocks, returns `false` after timeout.
-- Release lock then acquire — returns `true`.
-- Stale lock (old timestamp) — automatically broken, new lock acquired.
-- Corrupt lock file — automatically broken, new lock acquired.
-- Concurrent acquisition — only one succeeds (other waits/timeouts).
-
-### SecureStore Error Handling Tests
-
-Tests inject a `KeyringAdapter` that throws specific errors to verify `KeyringTokenStore`'s error translation:
-
-- Keyring throws "locked" → `saveToken` propagates `SecureStoreError` with code `LOCKED`.
-- Keyring throws "denied" → `saveToken` propagates `SecureStoreError` with code `DENIED`.
-- Keyring unavailable, fallback allowed → operations succeed via fallback.
-- Keyring unavailable, fallback denied → `saveToken` throws `UNAVAILABLE`.
-
-### Wiring Verification
-
-- The production sites construct `KeyringTokenStore`.
-- `OAuthManager` receives a `TokenStore` and calls its methods — this is already tested by existing `OAuthManager` tests which program against the interface.
-
-### CI Dual-Path Requirement
-
-Per issue #1352, CI must run `KeyringTokenStore` behavioral tests in **separate CI jobs** for two configurations:
-- **Keyring-available job**: default mode — the injected `KeyringAdapter` (in-memory test double) is present. Tests exercise the keyring → SecureStore path.
-- **Keyring-unavailable job**: the injected `keyringLoader` returns `null` (simulating missing `@napi-rs/keyring` module). Tests exercise the AES-256-GCM encrypted file fallback path exclusively.
-
-Both jobs run the same behavioral test suite. Both must pass. This ensures the fallback path is not a second-class citizen and that failures in either path are caught independently.
-
-### What Is NOT Tested
-
-- OS keyring integration (requires real keyring daemon — covered by SecureStore's own tests).
-- Encrypted file fallback encryption/decryption (covered by SecureStore's own tests).
-- `OAuthManager` internals (unchanged, already tested).
-- Old `MultiProviderTokenStore` behavior (deleted).
-
-## 9. Error Mapping
+## 6. Error Mapping
 
 `KeyringTokenStore` methods handle `SecureStoreError` as follows:
 
@@ -724,58 +561,22 @@ When `SecureStore.get()` returns `null` (entry not found in either keyring or fa
 |---|---|
 | (any) | Return empty array — degraded but functional |
 
-## 10. Current Codebase State
+## 7. Probe-Once Constraint
 
-### Already Exists (Merged on Main)
+Per issue #1352, the keyring availability probe must happen once per process, not once per provider/bucket. The `SecureStore` instance inside `KeyringTokenStore` caches its probe result for the lifetime of the instance. Sharing a single `KeyringTokenStore` instance across all production call sites is the simplest way to satisfy this, but the constraint is about probe frequency, not about instance cardinality — any approach that ensures the probe runs at most once is acceptable.
 
-| Component | Location | Status |
+## 8. Dual-Mode Operation
+
+`KeyringTokenStore` must function correctly in both keyring-available and keyring-unavailable environments. This is not a toggle — SecureStore transparently handles the fallback. Both code paths must have equivalent behavioral coverage to ensure the fallback path is not a second-class citizen.
+
+## 9. Deliberate Divergences from Issue Text
+
+| Issue Text | Spec Behavior | Rationale |
 |---|---|---|
-| `SecureStore` | `packages/core/src/storage/secure-store.ts` | Done (#1350) |
-| `SecureStoreError`, `SecureStoreErrorCode` | Same file | Done (#1350) |
-| `KeyringAdapter` interface | Same file | Done (#1350) |
-| `createDefaultKeyringAdapter()` | Same file | Done (#1350) |
-| `ProviderKeyStorage` | `packages/core/src/storage/provider-key-storage.ts` | Done (#1353) |
-| `ToolKeyStorage` (refactored) | `packages/core/src/tools/tool-key-storage.ts` | Done (#1355) |
-| `KeychainTokenStorage` (refactored) | `packages/core/src/mcp/token-storage/keychain-token-storage.ts` | Done (#1356) |
-| `ExtensionSettingsStorage` (refactored) | Refactored to SecureStore | Done (#1355) |
-| `TokenStore` interface | `packages/core/src/auth/token-store.ts` | Exists, preserved |
-| `MultiProviderTokenStore` | Same file | Exists, TO BE DELETED |
-| `OAuthTokenSchema` | `packages/core/src/auth/types.ts` | Exists, preserved |
-| `OAuthManager` | `packages/cli/src/auth/oauth-manager.ts` | Exists, unchanged (programs against `TokenStore`) |
+| #1351 says `OAuthTokenSchema.parse` on read | Spec uses `OAuthTokenSchema.passthrough().parse()` on both read and write | Zod's default `.parse()` strips unknown fields. Codex tokens include `account_id` and `id_token` which are not in the base schema. `.passthrough()` preserves these provider-specific fields. Without it, round-tripping a Codex token through save+load would silently lose data. |
+| #1351 defines sandbox pre-proxy behavior (fail with `UNAVAILABLE`, suggest `--key`/`SANDBOX_ENV`/seatbelt) | Spec scopes sandbox behavior out entirely | Sandbox credential access is handled by a separate proxy defined in #1358. `KeyringTokenStore` is a host-side component — its behavior inside a container is #1358's concern. The pre-proxy fallback described in #1351 will be addressed in that issue's spec. |
 
-### Created by #1351
-
-| Component | Location |
-|---|---|
-| `KeyringTokenStore` class | `packages/core/src/auth/keyring-token-store.ts` |
-| `KeyringTokenStore` tests | `packages/core/src/auth/keyring-token-store.spec.ts` |
-| `KeyringTokenStore` lock tests | `packages/core/src/auth/keyring-token-store.lock.spec.ts` (or combined) |
-
-### Modified by #1352
-
-| File | Change |
-|---|---|
-| `packages/core/src/auth/token-store.ts` | `MultiProviderTokenStore` class deleted. `TokenStore` interface preserved. |
-| `packages/core/index.ts` | `MultiProviderTokenStore` export removed, `KeyringTokenStore` export added |
-| `packages/cli/src/auth/types.ts` | `MultiProviderTokenStore` re-export removed, `KeyringTokenStore` re-export added |
-| `packages/cli/src/runtime/runtimeContextFactory.ts` | Import + construction changed |
-| `packages/cli/src/providers/providerManagerInstance.ts` | Import + construction changed |
-| `packages/cli/src/ui/commands/authCommand.ts` | Import + construction changed |
-| `packages/cli/src/ui/commands/profileCommand.ts` | Import + construction changed |
-| `packages/cli/src/providers/oauth-provider-registration.ts` | Type import changed |
-| Integration/command tests referencing `MultiProviderTokenStore` | Updated to `KeyringTokenStore` |
-
-### Deleted by #1352
-
-| What | Where |
-|---|---|
-| `MultiProviderTokenStore` class | `packages/core/src/auth/token-store.ts` |
-| `MultiProviderTokenStore` export | `packages/core/index.ts` |
-| `MultiProviderTokenStore` re-export | `packages/cli/src/auth/types.ts` |
-| `token-store.spec.ts` | `packages/core/src/auth/token-store.spec.ts` (tests deleted class) |
-| `token-store.refresh-race.spec.ts` | `packages/core/src/auth/token-store.refresh-race.spec.ts` (tests deleted class) |
-
-## 11. Consistency with Existing SecureStore Wrappers
+## 10. Consistency with Existing SecureStore Wrappers
 
 `KeyringTokenStore` follows the established thin-wrapper pattern:
 
@@ -793,3 +594,347 @@ All wrappers:
 - Handle their own serialization format
 - Delegate all keyring/fallback logic to SecureStore
 - Use `fallbackPolicy: 'allow'` for graceful degradation
+
+---
+
+## requirements.md (EARS Requirements)
+
+# Requirements (EARS Format)
+
+Issues: #1351 (KeyringTokenStore), #1352 (Wire as Default)
+Parent Epic: #1349 (Unified Credential Management — Keyring-First)
+
+EARS patterns used:
+- **Ubiquitous**: The [system] shall [behavior].
+- **Event-driven**: When [trigger], the [system] shall [behavior].
+- **State-driven**: While [state], the [system] shall [behavior].
+- **Unwanted behavior**: If [condition], then the [system] shall [behavior].
+- **Optional**: Where [feature/condition], the [system] shall [behavior].
+
+---
+
+## R1: TokenStore Interface Implementation
+
+### R1.1 — Ubiquitous
+
+KeyringTokenStore shall implement the `TokenStore` interface from `packages/core/src/auth/token-store.ts`.
+
+### R1.2 — Ubiquitous
+
+KeyringTokenStore shall delegate all credential storage operations (set, get, delete, list) to a `SecureStore` instance configured with service name `llxprt-code-oauth` and fallback policy `allow`.
+
+### R1.3 — Ubiquitous
+
+KeyringTokenStore shall accept an optional `SecureStore` instance in its constructor for testability and shared-instance wiring. When not provided, it shall construct a default instance.
+
+---
+
+## R2: Account Naming
+
+### R2.1 — Ubiquitous
+
+KeyringTokenStore shall map each provider+bucket combination to a SecureStore account key using the format `{provider}:{bucket}`.
+
+### R2.2 — Event-Driven
+
+When `bucket` is omitted from a TokenStore method call, KeyringTokenStore shall use `default` as the bucket name, producing account key `{provider}:default`.
+
+### R2.3 — Ubiquitous
+
+KeyringTokenStore shall validate both provider and bucket names against the pattern `[a-zA-Z0-9_-]+`. Names containing characters outside this set (including colons, slashes, spaces) shall be rejected.
+
+### R2.4 — Event-Driven
+
+When a provider or bucket name fails validation, KeyringTokenStore shall throw an error immediately, before any storage operation is attempted.
+
+---
+
+## R3: Token Serialization
+
+### R3.1 — Event-Driven
+
+When `saveToken` is called, KeyringTokenStore shall validate the token with `OAuthTokenSchema.passthrough().parse()` and store the result as `JSON.stringify(validatedToken)` via SecureStore.
+
+### R3.2 — Event-Driven
+
+When `getToken` retrieves a non-null value from SecureStore, KeyringTokenStore shall parse it with `JSON.parse()` and validate with `OAuthTokenSchema.passthrough().parse()`.
+
+### R3.3 — Ubiquitous
+
+KeyringTokenStore shall use `.passthrough()` (not `.parse()`) for schema validation to preserve provider-specific fields (e.g., `account_id`, `id_token`) that are not in the base `OAuthTokenSchema`. This is a deliberate divergence from issue #1351 text to prevent silent data loss during round-trip storage.
+
+---
+
+## R4: Corrupt Token Handling
+
+### R4.1 — Unwanted Behavior
+
+If `getToken` retrieves a value that fails `JSON.parse()`, then KeyringTokenStore shall log a warning with a hashed provider:bucket identifier and the error message, and return `null`.
+
+### R4.2 — Unwanted Behavior
+
+If `getToken` retrieves a value that passes `JSON.parse()` but fails `OAuthTokenSchema.passthrough().parse()`, then KeyringTokenStore shall log a warning with a hashed provider:bucket identifier and the validation error, and return `null`.
+
+### R4.3 — Ubiquitous
+
+KeyringTokenStore shall NOT delete corrupt entries from SecureStore after a failed read. Corrupt data shall be preserved for manual inspection.
+
+### R4.4 — Ubiquitous
+
+Warning logs for corrupt tokens shall include a hashed provider:bucket identifier (not the raw value) and shall never include secret values (tokens, keys).
+
+---
+
+## R5: Token Removal
+
+### R5.1 — Event-Driven
+
+When `removeToken` is called, KeyringTokenStore shall call `secureStore.delete()` for the corresponding account key.
+
+### R5.2 — Unwanted Behavior
+
+If `removeToken` encounters a `SecureStoreError` during deletion, then KeyringTokenStore shall log the error and return normally. Deletion is best-effort — errors do not propagate.
+
+---
+
+## R6: Provider and Bucket Listing
+
+### R6.1 — Event-Driven
+
+When `listProviders` is called, KeyringTokenStore shall call `secureStore.list()`, parse the returned account keys to extract unique provider names (the portion before `:`), and return them sorted.
+
+### R6.2 — Event-Driven
+
+When `listBuckets(provider)` is called, KeyringTokenStore shall call `secureStore.list()`, filter to keys starting with `{provider}:`, extract the bucket portion (after `:`), and return them sorted.
+
+### R6.3 — Unwanted Behavior
+
+If `listProviders` or `listBuckets` encounters a `SecureStoreError`, then KeyringTokenStore shall return an empty array. List operations degrade gracefully rather than propagating errors.
+
+---
+
+## R7: Bucket Stats
+
+### R7.1 — Event-Driven
+
+When `getBucketStats(provider, bucket)` is called and a token exists for that provider+bucket, KeyringTokenStore shall return a stats object with `{ bucket, requestCount: 0, percentage: 0, lastUsed: undefined }`.
+
+### R7.2 — Event-Driven
+
+When `getBucketStats(provider, bucket)` is called and no token exists for that provider+bucket, KeyringTokenStore shall return `null`.
+
+---
+
+## R8: Refresh Lock — Acquisition
+
+### R8.1 — Ubiquitous
+
+KeyringTokenStore shall implement file-based advisory locks for refresh coordination. Lock files shall be stored in `~/.llxprt/oauth/locks/`.
+
+### R8.2 — Event-Driven
+
+When `acquireRefreshLock` is called, KeyringTokenStore shall attempt to create a lock file using exclusive write (`wx` flag) containing `{pid, timestamp}` as JSON.
+
+### R8.3 — Event-Driven
+
+When the lock file already exists and its age exceeds the stale threshold (default 30 seconds), KeyringTokenStore shall break the stale lock (delete the file) and retry acquisition.
+
+### R8.4 — Event-Driven
+
+When the lock file already exists and is fresh, KeyringTokenStore shall poll at 100ms intervals until the lock is released or the wait timeout (default 10 seconds) is reached.
+
+### R8.5 — Event-Driven
+
+When the wait timeout is reached without acquiring the lock, `acquireRefreshLock` shall return `false`.
+
+### R8.6 — Unwanted Behavior
+
+If the lock file is unreadable or corrupt, then KeyringTokenStore shall break the lock (delete the file) and retry acquisition.
+
+---
+
+## R9: Refresh Lock — Release
+
+### R9.1 — Event-Driven
+
+When `releaseRefreshLock` is called, KeyringTokenStore shall delete the corresponding lock file.
+
+### R9.2 — Unwanted Behavior
+
+If the lock file does not exist (ENOENT) during release, then KeyringTokenStore shall ignore the error. Release is idempotent.
+
+---
+
+## R10: Refresh Lock — File Naming
+
+### R10.1 — Ubiquitous
+
+Lock files shall use dash-separated naming: `{provider}-refresh.lock` for the default bucket, `{provider}-{bucket}-refresh.lock` for named buckets.
+
+### R10.2 — Ubiquitous
+
+The `~/.llxprt/oauth/locks/` directory shall be created on demand with mode `0o700`.
+
+---
+
+## R11: Error Propagation — saveToken
+
+### R11.1 — Unwanted Behavior
+
+If `saveToken` encounters a `SecureStoreError` with code `UNAVAILABLE`, `LOCKED`, `DENIED`, or `TIMEOUT`, then KeyringTokenStore shall propagate the error to the caller.
+
+### R11.2 — Unwanted Behavior
+
+If `saveToken` encounters an unexpected `SecureStoreError` (any code not listed above), then KeyringTokenStore shall propagate it.
+
+---
+
+## R12: Error Propagation — getToken
+
+### R12.1 — Event-Driven
+
+When `secureStore.get()` returns `null`, `getToken` shall return `null`. This is the normal unauthenticated path.
+
+### R12.2 — Unwanted Behavior
+
+If `secureStore.get()` throws a `SecureStoreError` with code `UNAVAILABLE`, `LOCKED`, `DENIED`, or `TIMEOUT`, then `getToken` shall propagate the error.
+
+### R12.3 — Unwanted Behavior
+
+If `secureStore.get()` throws a `SecureStoreError` with code `CORRUPT`, then `getToken` shall log a warning and return `null`.
+
+---
+
+## R13: Wiring — Replace MultiProviderTokenStore
+
+### R13.1 — Ubiquitous
+
+All production sites that instantiate `MultiProviderTokenStore` shall be changed to use `KeyringTokenStore`.
+
+### R13.2 — Ubiquitous
+
+`MultiProviderTokenStore` shall be deleted from the codebase. The `TokenStore` interface shall be preserved.
+
+### R13.3 — Ubiquitous
+
+All exports and re-exports of `MultiProviderTokenStore` shall be replaced with `KeyringTokenStore`.
+
+---
+
+## R14: Probe-Once Constraint
+
+### R14.1 — Ubiquitous
+
+The keyring availability probe shall happen at most once per process, not once per provider/bucket. The implementation must ensure that the probe result is shared across all TokenStore usage sites.
+
+---
+
+## R15: Dual-Mode Operation
+
+### R15.1 — Ubiquitous
+
+KeyringTokenStore shall function correctly in both keyring-available and keyring-unavailable (fallback-only) environments. SecureStore handles the fallback transparently.
+
+### R15.2 — Ubiquitous
+
+Both the keyring path and the fallback path shall have equivalent behavioral test coverage, exercised in separate CI jobs.
+
+---
+
+## R16: Scope Boundaries
+
+### R16.1 — Ubiquitous
+
+KeyringTokenStore is a host-side component. Sandbox credential access is handled by a separate proxy (#1358) and is out of scope.
+
+### R16.2 — Ubiquitous
+
+No code shall read, migrate, or acknowledge the old `~/.llxprt/oauth/*.json` plaintext token files. Old files are inert.
+
+### R16.3 — Ubiquitous
+
+The `--key` flag for API key authentication shall remain unaffected.
+
+---
+
+## R17: Acceptance Criteria (from Issue Text)
+
+### R17.1 — Ubiquitous
+
+All `TokenStore` interface behaviors shall have equivalent coverage in new tests.
+
+### R17.2 — Ubiquitous
+
+Multiprocess race conditions (concurrent refresh, refresh+logout) shall be tested with spawned child processes.
+
+### R17.3 — Ubiquitous
+
+The full token lifecycle shall work end-to-end: login → store → read → refresh → logout.
+
+### R17.4 — Ubiquitous
+
+Multiple providers shall work simultaneously (e.g., anthropic + gemini each in keyring).
+
+### R17.5 — Ubiquitous
+
+`/auth login` shall store tokens in keyring (not plaintext files).
+
+### R17.6 — Ubiquitous
+
+`/auth status` shall read tokens from keyring.
+
+### R17.7 — Ubiquitous
+
+Token refresh shall work as a complete cycle: expire → lock → refresh → save → unlock.
+
+### R17.8 — Ubiquitous
+
+CI shall exercise both keyring-available and keyring-unavailable (fallback-only) paths in separate test jobs.
+
+---
+
+## R18: End-to-End Verification Flows (from Issue #1352)
+
+### R18.1 — Event-Driven
+
+When `/auth login` completes, the token shall be stored in keyring (or encrypted fallback), not in plaintext files.
+
+### R18.2 — Event-Driven
+
+When a session starts and a valid token exists, `getToken` shall retrieve it from keyring (or encrypted fallback) for API calls.
+
+### R18.3 — Event-Driven
+
+When a token expires, the refresh cycle shall acquire lock → refresh → save → release lock, all through KeyringTokenStore.
+
+### R18.4 — Event-Driven
+
+When a proactive renewal timer fires, the same refresh flow (R18.3) shall execute through KeyringTokenStore.
+
+### R18.5 — Event-Driven
+
+When the active bucket's token is expired and non-refreshable, bucket failover shall iterate other buckets via `getToken` through KeyringTokenStore.
+
+### R18.6 — Ubiquitous
+
+Multi-bucket configurations shall store each bucket as a separate keyring entry (e.g., `anthropic:default`, `anthropic:work`).
+
+### R18.7 — Ubiquitous
+
+Multiple llxprt-code processes running simultaneously shall share the same keyring storage. File-based refresh locks shall prevent double-refresh.
+
+### R18.8 — Event-Driven
+
+When `/auth logout` is called, `removeToken` shall delete the token from keyring (or encrypted fallback).
+
+### R18.9 — Event-Driven
+
+When `/auth status` is called, `getToken` and `listBuckets` shall read from keyring (or encrypted fallback) to display status.
+
+---
+
+## R19: Name Validation Errors
+
+### R19.1 — Event-Driven
+
+When a provider or bucket name is rejected by validation, KeyringTokenStore shall throw an error with a clear message identifying the invalid name and the allowed character set.

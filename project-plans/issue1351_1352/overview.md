@@ -17,7 +17,7 @@
 
 ## 1. Problem Statement
 
-OAuth tokens for providers (Gemini, Qwen, Anthropic, Codex) are currently stored as plaintext JSON files in `~/.llxprt/oauth/`. Each provider's token is a file like `gemini.json` or `qwen-work.json` containing the raw `access_token`, `refresh_token`, `expiry`, and related fields in cleartext.
+OAuth tokens for providers (Gemini, Qwen, Anthropic, Codex) are currently stored as plaintext JSON files in `~/.llxprt/oauth/`. Each provider's token is a file like `gemini-default.json` or `qwen-work.json` (named `{provider}-{bucket}.json`) containing the raw `access_token`, `refresh_token`, `expiry`, and related fields in cleartext.
 
 This means:
 - Any process running as the same user can read tokens without privilege escalation.
@@ -36,9 +36,9 @@ This is a one-time action per provider+bucket combination. The CLI will behave a
 
 ### Where Tokens Go
 
-Tokens are stored in the OS keyring (macOS Keychain, GNOME Keyring / KWallet on Linux, Windows Credential Manager) under the service name `llxprt-code-oauth`. Each token appears as an account entry like `anthropic:default` or `gemini:work`.
+Tokens are stored in the OS keyring (macOS Keychain, GNOME Keyring / KWallet on Linux, Windows Credential Manager). Each provider+bucket combination is a separate entry.
 
-If the OS keyring is unavailable (headless Linux without a keyring daemon, SSH sessions without `DBUS_SESSION_BUS_ADDRESS`, CI environments), tokens are stored in AES-256-GCM encrypted files under `~/.llxprt/secure-store/llxprt-code-oauth/`. This fallback is automatic and transparent — the user is not asked to choose.
+If the OS keyring is unavailable (headless Linux, SSH sessions, CI environments), tokens are stored in encrypted files automatically. This fallback is transparent — the user is not asked to choose.
 
 ### What Stays the Same
 
@@ -56,26 +56,24 @@ If the OS keyring is unavailable (headless Linux without a keyring daemon, SSH s
 
 1. User runs `/auth login <provider>` (optionally with `--bucket <name>`).
 2. OAuth device flow executes (browser opens, user authorizes).
-3. Token response is validated against `OAuthTokenSchema`.
-4. Token is serialized to JSON and stored via `SecureStore.set()` under account `<provider>:<bucket>` (bucket defaults to `default`).
-5. SecureStore attempts the OS keyring first. If that fails, it writes an AES-256-GCM encrypted file.
-6. `/auth status` confirms active session.
+3. Token response is validated.
+4. Token is stored securely — the OS keyring is attempted first; if unavailable, an encrypted file fallback is used.
+5. `/auth status` confirms active session.
 
 ### Token Read (Startup / API Call)
 
 1. Application requests token for a provider+bucket pair.
-2. `SecureStore.get()` checks keyring first, then encrypted fallback file.
-3. Raw JSON string is parsed and validated against `OAuthTokenSchema.passthrough()`.
+2. Token is retrieved from secure storage (keyring or encrypted fallback).
+3. Token is validated against the expected schema. Provider-specific fields (e.g., Codex's `account_id`) are preserved during validation.
 4. If validation succeeds, token is returned to the caller.
-5. If validation fails (corrupt data, schema mismatch), a warning is logged with a hashed provider:bucket identifier (not raw) and the error code `CORRUPT`. No secret values are logged. `null` is returned. The corrupt entry is NOT deleted — it is preserved for potential manual inspection.
-6. If `null` is returned, the application treats the provider as unauthenticated.
+5. If validation fails (corrupt data, schema mismatch), a warning is logged with a hashed identifier (not raw provider:bucket). No secret values are logged. The provider is treated as unauthenticated. The corrupt entry is NOT deleted — it is preserved for potential manual inspection.
 
 ### Token Refresh
 
 1. Before making an API call, the application checks if the token is expired or near expiry.
-2. A file-based advisory lock is acquired in `~/.llxprt/oauth/locks/` to prevent concurrent refresh attempts across processes.
+2. A file-based advisory lock prevents concurrent refresh attempts across processes.
 3. The provider's refresh endpoint is called with the `refresh_token`.
-4. The refreshed token is validated and stored, replacing the previous token at the same account key.
+4. The refreshed token is validated and stored, replacing the previous token.
 5. The advisory lock is released.
 6. If refresh fails and no valid token remains, the user must `/auth login` again.
 
@@ -83,21 +81,19 @@ If the OS keyring is unavailable (headless Linux without a keyring daemon, SSH s
 
 1. After a successful token read, the application may schedule a background renewal timer.
 2. When the timer fires, the same refresh flow executes.
-3. This is unchanged — proactive renewal operates against the `TokenStore` interface.
+3. This is unchanged from current behavior.
 
 ### Logout
 
 1. User runs `/auth logout <provider>` (optionally with `--bucket <name>`).
-2. `SecureStore.delete()` removes the entry from both keyring and encrypted fallback file (if either exists). Deletion is best-effort — errors are logged but do not prevent logout from completing.
-3. Any advisory lock file for that provider+bucket is cleaned up on a best-effort basis.
-4. `/auth status` confirms no active session.
+2. Token is removed from secure storage. Deletion is best-effort — errors are logged but do not prevent logout from completing.
+3. `/auth status` confirms no active session.
 
 ### Bucket Failover
 
-1. If the active bucket's token is expired and non-refreshable, the bucket failover handler iterates other buckets for the same provider.
-2. Each bucket's token is read via the same `SecureStore.get()` path.
-3. The first valid, non-expired token's bucket becomes the active bucket.
-4. This logic is in `BucketFailoverHandlerImpl` and operates against the `TokenStore` interface — no changes needed.
+1. If the active bucket's token is expired and non-refreshable, other buckets for the same provider are checked.
+2. The first valid, non-expired token's bucket becomes the active bucket.
+3. This behavior is unchanged.
 
 ## 4. User-Visible Behaviors
 
@@ -121,13 +117,13 @@ If the OS keyring is unavailable (headless Linux without a keyring daemon, SSH s
 | Keyring locked (GNOME Keyring locked) | Error: "Keyring is locked. Unlock your keyring and retry." |
 | Keyring access denied | Error: "Keyring access denied. Check permissions, run as correct user." |
 | Corrupt token data read from store | Warning logged. Provider treated as unauthenticated. User runs `/auth login`. |
-| Lock contention during refresh | Second process waits up to 10s for the lock. Each lock file covers one provider (default bucket) or one provider+bucket combination (named buckets). If timeout, refresh skipped (next request retries). |
-| Stale lock (process crashed) | Lock older than 30s is automatically broken. Next process acquires and proceeds. |
+| Lock contention during refresh | Second process waits briefly for the lock. If timeout, refresh skipped (next request retries). |
+| Stale lock (process crashed) | Stale locks are automatically broken. Next process acquires and proceeds. |
 | Both keyring and fallback fail | Error: "Credential storage unavailable. Use --key to provide API key directly, or install a keyring backend." |
 
 ## 5. Error Taxonomy
 
-All storage errors surface through `SecureStoreError` with a code, message, and remediation string. The `KeyringTokenStore` translates these into user-appropriate behaviors:
+Storage errors surface through `SecureStoreError` with a code, message, and remediation string. The `KeyringTokenStore` translates these into user-appropriate behaviors for CRUD operations (`saveToken`, `getToken`, `removeToken`). List operations (`listProviders`, `listBuckets`) degrade to empty arrays on any error — see below.
 
 | Code | Meaning | User-Facing Behavior |
 |---|---|---|
@@ -144,37 +140,42 @@ For `getToken`: `CORRUPT` returns `null` with a warning log. `NOT_FOUND` returns
 
 For `removeToken`: errors during deletion are logged but do not propagate (best-effort cleanup).
 
+For `listProviders` / `listBuckets`: on any `SecureStoreError`, return an empty array rather than propagating the error. These are informational methods used in `/auth status` and bucket enumeration — a degraded empty result keeps the UI functional when the keyring is temporarily inaccessible. This means the error taxonomy codes (`LOCKED`, `DENIED`, etc.) do not surface through list methods. The same pattern is used by other SecureStore wrappers' list operations.
+
 ## 6. Multi-Instance Behavior
 
-Multiple llxprt-code processes running simultaneously share the same keyring and fallback storage. This is the same shared-state model as before (plaintext files were also shared). Coordination specifics:
+Multiple llxprt-code processes running simultaneously share the same credential storage. This is the same shared-state model as before (plaintext files were also shared).
 
-- **Token reads**: Concurrent reads are safe — keyring and file reads are atomic from the consumer's perspective.
-- **Token writes**: Last writer wins. This is acceptable because writes only occur during login (user-initiated) and refresh (lock-protected).
-- **Refresh locks**: File-based advisory locks in `~/.llxprt/oauth/locks/` ensure only one process refreshes a given provider+bucket at a time. Lock files contain `{pid, timestamp}` for stale detection.
+- **Token reads**: Concurrent reads are safe.
+- **Token writes**: Last writer wins. Acceptable because writes only occur during login (user-initiated) and refresh (lock-protected).
+- **Refresh locks**: File-based advisory locks ensure only one process refreshes a given provider+bucket at a time. Stale locks from crashed processes are automatically broken.
 
-## 7. Sandbox Behavior
+## 7. Keyring-Unavailable Experience
 
-### Pre-Proxy (before credential proxy ships — #1358)
+When the OS keyring is unavailable (common in CI, headless servers, SSH without agent forwarding):
 
-`KeyringTokenStore` is not accessible from inside Docker/Podman containers. If `KeyringTokenStore` is invoked inside a sandbox environment (`process.env.SANDBOX` is set) and keyring is unavailable:
+1. Unavailability is detected automatically.
+2. All operations transparently use encrypted file fallback.
+3. The user sees no difference in behavior — login, status, refresh, logout all work normally.
+4. The only observable difference: tokens cannot be accessed if the user's home directory moves to a different machine (the fallback encryption is machine-bound).
 
-- Operations fail with error code `UNAVAILABLE` and a clear message: "Credential storage unavailable in sandbox mode. Use `--key` to provide an API key directly, or use seatbelt mode (macOS)."
-- Users must use `--key`, `--key-name` (resolved on host before sandbox launch), or seatbelt mode.
+This matches the existing behavior of `ProviderKeyStorage`, `KeychainTokenStorage`, `ToolKeyStorage`, and `ExtensionSettingsStorage`.
 
-### Post-Proxy (after credential proxy ships — #1358)
+`KeyringTokenStore` is a host-side component. Sandbox credential access is handled by a separate proxy (#1358) — out of scope here.
 
-The inner (sandbox) process uses `ProxyTokenStore` — a separate `TokenStore` implementation that routes all credential operations through a Unix socket to the host process. `KeyringTokenStore` is never instantiated inside the container. The host-side proxy uses `KeyringTokenStore` to access the real keyring.
+## 8. Acceptance Criteria (from Issues)
 
-`ProxyTokenStore` is out of scope for this specification — it is defined in issue #1358.
+From #1351:
+- All `TokenStore` interface behaviors have equivalent coverage in new tests
+- Multiprocess race conditions (concurrent refresh, refresh+logout) are tested with spawned child processes
+- Corrupt token handling verified (returns null, logs warning, does not delete)
 
-## 8. Keyring-Unavailable Experience
-
-When the OS keyring is completely unavailable (common in CI, Docker containers, headless servers, SSH without agent forwarding):
-
-1. `SecureStore` detects unavailability during its probe (writes a test value, reads it back, deletes it).
-2. All operations transparently use AES-256-GCM encrypted file fallback in `~/.llxprt/secure-store/llxprt-code-oauth/`.
-3. Encrypted files are scoped to the machine (key derived from hostname + username via scrypt).
-4. The user sees no difference in behavior — login, status, refresh, logout all work normally.
-5. The only observable difference: tokens cannot be accessed if the user's home directory moves to a different machine (the encryption key derivation is machine-bound).
-
-This matches the existing behavior of `ProviderKeyStorage` (API keys), `KeychainTokenStorage` (MCP tokens), `ToolKeyStorage`, and `ExtensionSettingsStorage` — all use SecureStore with the same fallback mechanism.
+From #1352:
+- All existing OAuth integration tests pass with the new storage backend
+- `/auth login` stores tokens in keyring (not plaintext files)
+- `/auth status` reads tokens from keyring
+- Token refresh cycle works: expire → lock → refresh → save → unlock
+- Token lifecycle works end-to-end: login → store → read → refresh → logout
+- Multiple providers work simultaneously
+- CI runs both keyring-available and keyring-unavailable paths in separate jobs
+- Keyring probe happens once per process, not once per provider/bucket
