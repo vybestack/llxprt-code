@@ -1586,7 +1586,6 @@ describe('Gemini Client (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-
     it('should recursively call sendMessageStream with "Please continue." when InvalidStream event is received', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
         true,
