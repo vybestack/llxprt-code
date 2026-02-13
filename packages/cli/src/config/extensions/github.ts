@@ -83,10 +83,61 @@ export async function cloneFromGit(
   }
 }
 
+export interface GithubRepoInfo {
+  owner: string;
+  repo: string;
+}
+
+export function tryParseGithubUrl(source: string): GithubRepoInfo | null {
+  // Handle SCP-style SSH URLs.
+  if (source.startsWith('git@')) {
+    if (source.startsWith('git@github.com:')) {
+      // It's a GitHub SSH URL, so normalize it for the URL parser.
+      source = source.replace('git@github.com:', '');
+    } else {
+      // It's another provider's SSH URL (e.g., gitlab), so not a GitHub repo.
+      return null;
+    }
+  }
+  // Default to a github repo path, so `source` can be just an org/repo
+  const parsedUrl = URL.parse(source, 'https://github.com');
+  if (!parsedUrl) {
+    throw new Error(`Invalid repo URL: ${source}`);
+  }
+  if (parsedUrl?.host !== 'github.com') {
+    return null;
+  }
+  // The pathname should be "/owner/repo".
+  const parts = parsedUrl?.pathname
+    .split('/')
+    // Remove the empty segments, fixes trailing and leading slashes
+    .filter((part) => part !== '');
+
+  if (parts?.length !== 2) {
+    throw new Error(
+      `Invalid GitHub repository source: ${source}. Expected "owner/repo" or a github repo uri.`,
+    );
+  }
+  const owner = parts[0];
+  const repo = parts[1].replace('.git', '');
+
+  return {
+    owner,
+    repo,
+  };
+}
+
 export function parseGitHubRepoForReleases(source: string): {
   owner: string;
   repo: string;
 } {
+  // Handle SCP-style SSH URLs.
+  if (source.startsWith('git@')) {
+    if (source.startsWith('git@github.com:')) {
+      // It's a GitHub SSH URL, so normalize it for the URL parser.
+      source = source.replace('git@github.com:', '');
+    }
+  }
   // Default to a github repo path, so `source` can be just an org/repo
   const parsedUrl = URL.parse(source, 'https://github.com');
   // The pathname should be "/owner/repo".
