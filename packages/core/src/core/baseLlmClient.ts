@@ -188,9 +188,7 @@ export class BaseLLMClient {
     const prefix = '```json';
     const suffix = '```';
     if (text.startsWith(prefix) && text.endsWith(suffix)) {
-      text = text
-        .substring(prefix.length, text.length - suffix.length)
-        .trim();
+      text = text.substring(prefix.length, text.length - suffix.length).trim();
     }
 
     try {
@@ -199,9 +197,7 @@ export class BaseLLMClient {
       return JSON.parse(cleanedText) as T;
     } catch (parseError) {
       throw new Error(
-        `Failed to parse API response as JSON: ${getErrorMessage(
-          parseError,
-        )}`,
+        `Failed to parse API response as JSON: ${getErrorMessage(parseError)}`,
       );
     }
   }

@@ -143,12 +143,18 @@ export function parseGitHubRepoForReleases(source: string): {
   // Handle SCP-style SSH URLs.
   if (source.startsWith('git@')) {
     if (source.startsWith('git@github.com:')) {
-      // It's a GitHub SSH URL, so normalize it for the URL parser.
-      source = source.replace('git@github.com:', '');
+      throw new Error(
+        `GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via SSH.`,
+      );
     }
   }
   // Default to a github repo path, so `source` can be just an org/repo
-  const parsedUrl = URL.parse(source, 'https://github.com');
+  let parsedUrl: URL | null = null;
+  try {
+    parsedUrl = new URL(source, 'https://github.com');
+  } catch {
+    // invalid URL
+  }
   // The pathname should be "/owner/repo".
   const parts = parsedUrl?.pathname
     .substring(1)
@@ -162,12 +168,6 @@ export function parseGitHubRepoForReleases(source: string): {
   }
   const owner = parts[0];
   const repo = parts[1].replace('.git', '');
-
-  if (owner.startsWith('git@github.com')) {
-    throw new Error(
-      `GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via SSH.`,
-    );
-  }
 
   return { owner, repo };
 }
