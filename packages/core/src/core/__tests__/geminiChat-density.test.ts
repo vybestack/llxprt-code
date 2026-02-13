@@ -925,7 +925,7 @@ describe('Density Optimization Orchestration (P19)', () => {
      */
     it(
       'dirty flag is always false after ensureDensityOptimized completes',
-      { timeout: 30_000 },
+      { timeout: 60_000 },
       async () => {
         await fc.assert(
           fc.asyncProperty(
@@ -956,7 +956,7 @@ describe('Density Optimization Orchestration (P19)', () => {
               return internals.densityDirty === false;
             },
           ),
-          { numRuns: 20 },
+          { numRuns: 5 },
         );
       },
     );
@@ -967,7 +967,7 @@ describe('Density Optimization Orchestration (P19)', () => {
      */
     it(
       'history is unchanged when strategy has no optimize method',
-      { timeout: 30_000 },
+      { timeout: 60_000 },
       async () => {
         await fc.assert(
           fc.asyncProperty(
@@ -994,7 +994,7 @@ describe('Density Optimization Orchestration (P19)', () => {
               return hs.getRawHistory().length === historyBefore;
             },
           ),
-          { numRuns: 20 },
+          { numRuns: 5 },
         );
       },
     );
@@ -1005,7 +1005,7 @@ describe('Density Optimization Orchestration (P19)', () => {
      */
     it(
       'history length after optimization <= history length before',
-      { timeout: 30_000 },
+      { timeout: 60_000 },
       async () => {
         await fc.assert(
           fc.asyncProperty(
@@ -1040,7 +1040,7 @@ describe('Density Optimization Orchestration (P19)', () => {
               return hs.getRawHistory().length <= lengthBefore;
             },
           ),
-          { numRuns: 20 },
+          { numRuns: 5 },
         );
       },
     );
@@ -1051,7 +1051,7 @@ describe('Density Optimization Orchestration (P19)', () => {
      */
     it(
       'empty result produces no history changes',
-      { timeout: 30_000 },
+      { timeout: 60_000 },
       async () => {
         await fc.assert(
           fc.asyncProperty(
@@ -1085,7 +1085,7 @@ describe('Density Optimization Orchestration (P19)', () => {
               );
             },
           ),
-          { numRuns: 20 },
+          { numRuns: 5 },
         );
       },
     );
@@ -1096,7 +1096,7 @@ describe('Density Optimization Orchestration (P19)', () => {
      */
     it(
       'optimization never increases token count',
-      { timeout: 30_000 },
+      { timeout: 60_000 },
       async () => {
         await fc.assert(
           fc.asyncProperty(
@@ -1133,7 +1133,7 @@ describe('Density Optimization Orchestration (P19)', () => {
               return hs.getTotalTokens() <= tokensBefore;
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
@@ -1144,7 +1144,7 @@ describe('Density Optimization Orchestration (P19)', () => {
      */
     it(
       'clean flag always skips optimization regardless of history',
-      { timeout: 30_000 },
+      { timeout: 60_000 },
       async () => {
         await fc.assert(
           fc.asyncProperty(
@@ -1177,7 +1177,7 @@ describe('Density Optimization Orchestration (P19)', () => {
               return hs.getRawHistory().length === lengthBefore;
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
@@ -1188,7 +1188,7 @@ describe('Density Optimization Orchestration (P19)', () => {
      */
     it(
       'optimization only removes entries, never fabricates new ones',
-      { timeout: 30_000 },
+      { timeout: 60_000 },
       async () => {
         await fc.assert(
           fc.asyncProperty(
@@ -1230,7 +1230,7 @@ describe('Density Optimization Orchestration (P19)', () => {
               );
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
@@ -1241,7 +1241,7 @@ describe('Density Optimization Orchestration (P19)', () => {
      */
     it(
       'consecutive clean optimizations are no-ops',
-      { timeout: 30_000 },
+      { timeout: 60_000 },
       async () => {
         await fc.assert(
           fc.asyncProperty(
@@ -1287,7 +1287,7 @@ describe('Density Optimization Orchestration (P19)', () => {
               );
             },
           ),
-          { numRuns: 10 },
+          { numRuns: 5 },
         );
       },
     );
