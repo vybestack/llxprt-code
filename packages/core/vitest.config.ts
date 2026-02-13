@@ -7,6 +7,9 @@
 import { defineConfig } from 'vitest/config';
 
 const isWindows = process.platform === 'win32';
+const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
+const shouldUseForkPool = isWindows || isMacCi;
+
 const coverageReporter = isWindows
   ? [
       ['text', { file: 'full-text-summary.txt' }],
@@ -30,7 +33,8 @@ export default defineConfig({
     silent: true,
     setupFiles: ['./test-setup.ts'],
     dangerouslyIgnoreUnhandledErrors: isWindows,
-    poolOptions: isWindows
+    pool: shouldUseForkPool ? 'forks' : undefined,
+    poolOptions: shouldUseForkPool
       ? {
           forks: {
             minForks: 1,
