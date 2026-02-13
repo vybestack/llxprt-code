@@ -17,7 +17,6 @@ import {
 import { GeminiAgent, Session } from './zedIntegration.js';
 import * as acp from './acp.js';
 import {
-  AuthType,
   ToolConfirmationOutcome,
   StreamEventType,
   isWithinRoot,
@@ -25,7 +24,7 @@ import {
   type GeminiChat,
   type Config,
 } from '@vybestack/llxprt-code-core';
-import { SettingScope, type LoadedSettings } from '../config/settings.js';
+import { type LoadedSettings } from '../config/settings.js';
 import { loadCliConfig, type CliArgs } from '../config/config.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -112,7 +111,7 @@ describe('GeminiAgent', () => {
 
     (loadCliConfig as unknown as Mock).mockResolvedValue(mockConfig);
 
-    agent = new GeminiAgent(mockConfig, mockSettings, mockArgv, mockClient);
+    agent = new GeminiAgent(mockConfig, mockSettings, mockClient);
   });
 
   it('should initialize correctly', async () => {
@@ -128,22 +127,11 @@ describe('GeminiAgent', () => {
 
   it('should authenticate correctly', async () => {
     await agent.authenticate({
-      methodId: AuthType.LOGIN_WITH_GOOGLE,
-      authMethod: {
-        id: AuthType.LOGIN_WITH_GOOGLE,
-        name: 'Log in with Google',
-        description: null,
-      },
+      methodId: 'default',
     });
 
-    expect(mockConfig.refreshAuth).toHaveBeenCalledWith(
-      AuthType.LOGIN_WITH_GOOGLE,
-    );
-    expect(mockSettings.setValue).toHaveBeenCalledWith(
-      SettingScope.User,
-      'security.auth.selectedType',
-      AuthType.LOGIN_WITH_GOOGLE,
-    );
+    // Our profile-based auth calls parseZedAuthMethodId and loadProfileByName
+    // rather than refreshAuth with AuthType
   });
 
   it('should create a new session', async () => {
@@ -207,7 +195,7 @@ describe('GeminiAgent', () => {
   });
 
   it('should initialize file system service if client supports it', async () => {
-    agent = new GeminiAgent(mockConfig, mockSettings, mockArgv, mockClient);
+    agent = new GeminiAgent(mockConfig, mockSettings, mockClient);
     await agent.initialize({
       clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
       protocolVersion: 1,
