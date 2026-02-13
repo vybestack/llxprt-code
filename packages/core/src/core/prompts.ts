@@ -180,10 +180,18 @@ function compactFolderStructureSnapshot(
  * (<cwd>/.llxprt/.LLXPRT_SYSTEM) files and concatenates them.
  */
 export async function loadCoreMemoryContent(cwd: string): Promise<string> {
-  const paths = [
-    { path: getGlobalCoreMemoryFilePath(), label: 'global' },
-    { path: getProjectCoreMemoryFilePath(cwd), label: 'project' },
+  const candidates = [
+    { path: path.resolve(getGlobalCoreMemoryFilePath()), label: 'global' },
+    { path: path.resolve(getProjectCoreMemoryFilePath(cwd)), label: 'project' },
   ];
+
+  // Dedupe in case global and project resolve to the same file (e.g. cwd is $HOME)
+  const seen = new Set<string>();
+  const paths = candidates.filter(({ path: p }) => {
+    if (seen.has(p)) return false;
+    seen.add(p);
+    return true;
+  });
 
   const parts: string[] = [];
   for (const { path: filePath } of paths) {

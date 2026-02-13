@@ -128,6 +128,15 @@ export const memoryCommand: SlashCommand = {
                 writeFile: fs.writeFile,
                 mkdir: fs.mkdir,
               });
+              // Reload cached core memory so the change takes effect immediately
+              try {
+                const coreContent = await loadCoreMemoryContent(workingDir);
+                context.services.config?.setCoreMemory(coreContent);
+                await context.services.config?.updateSystemInstructionIfInitialized();
+              } catch {
+                // Non-fatal: memory is written to disk; cache will sync on next refresh
+              }
+
               context.ui.addItem(
                 {
                   type: MessageType.INFO,

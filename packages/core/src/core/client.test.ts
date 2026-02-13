@@ -382,6 +382,7 @@ describe('Gemini Client (client.ts)', () => {
       getVertexAI: vi.fn().mockReturnValue(false),
       getUserAgent: vi.fn().mockReturnValue('test-agent'),
       getUserMemory: vi.fn().mockReturnValue(''),
+      getCoreMemory: vi.fn().mockReturnValue(''),
 
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getProxy: vi.fn().mockReturnValue(undefined),
@@ -582,10 +583,8 @@ describe('Gemini Client (client.ts)', () => {
 
       const config = client['config'] as unknown as {
         getUserMemory: () => string;
-        getCoreMemory: () => string;
       };
       vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
-      config.getCoreMemory = vi.fn().mockReturnValue('');
 
       const toolNamesSpy = vi
         .spyOn(
@@ -631,6 +630,63 @@ describe('Gemini Client (client.ts)', () => {
         'test-model',
       );
       expect(setBaseTokenOffset).toHaveBeenCalledWith(321);
+    });
+
+    it('passes non-empty coreMemory to getCoreSystemPromptAsync', async () => {
+      const setSystemInstruction = vi.fn();
+      const estimateTokensForText = vi.fn().mockResolvedValue(100);
+      const setBaseTokenOffset = vi.fn();
+      const getHistoryService = vi.fn().mockReturnValue({
+        estimateTokensForText,
+        setBaseTokenOffset,
+      });
+
+      const mockChat = {
+        setSystemInstruction,
+        getHistoryService,
+      };
+
+      client['chat'] = mockChat as unknown as GeminiChat;
+      client['contentGenerator'] = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+
+      const config = client['config'] as unknown as {
+        getUserMemory: () => string;
+        getCoreMemory: () => string;
+      };
+      vi.spyOn(config, 'getUserMemory').mockReturnValue('');
+      vi.spyOn(config, 'getCoreMemory').mockReturnValue(
+        'Always respond in JSON',
+      );
+
+      vi.spyOn(
+        client as unknown as {
+          getEnabledToolNamesForPrompt: () => string[];
+        },
+        'getEnabledToolNamesForPrompt',
+      ).mockReturnValue([]);
+
+      vi.spyOn(
+        client as unknown as {
+          shouldIncludeSubagentDelegation: (
+            tools: string[],
+          ) => Promise<boolean>;
+        },
+        'shouldIncludeSubagentDelegation',
+      ).mockResolvedValue(false);
+
+      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
+        'prompt with core directives',
+      );
+
+      await client.updateSystemInstruction();
+
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          coreMemory: 'Always respond in JSON',
+        }),
+      );
     });
   });
 
