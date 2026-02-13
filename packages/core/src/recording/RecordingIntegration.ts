@@ -18,21 +18,6 @@ import { type IContent } from '../services/history/IContent.js';
 import { type HistoryService } from '../services/history/HistoryService.js';
 import { type SessionRecordingService } from './SessionRecordingService.js';
 
-type HistoryEventEmitter = {
-  on(event: 'contentAdded', listener: (content: IContent) => void): unknown;
-  on(event: 'compressionStarted', listener: () => void): unknown;
-  on(
-    event: 'compressionEnded',
-    listener: (summary: IContent, itemsCompressed: number) => void,
-  ): unknown;
-  off(event: 'contentAdded', listener: (content: IContent) => void): unknown;
-  off(event: 'compressionStarted', listener: () => void): unknown;
-  off(
-    event: 'compressionEnded',
-    listener: (summary: IContent, itemsCompressed: number) => void,
-  ): unknown;
-};
-
 /**
  * Bridges HistoryService events to SessionRecordingService.
  *
@@ -61,8 +46,6 @@ export class RecordingIntegration {
       return;
     }
 
-    const historyEvents = historyService as unknown as HistoryEventEmitter;
-
     const onContentAdded = (content: IContent) => {
       if (this.disposed || this.compressionInProgress) {
         return;
@@ -85,14 +68,14 @@ export class RecordingIntegration {
       this.recording.recordCompressed(summary, itemsCompressed);
     };
 
-    historyEvents.on('contentAdded', onContentAdded);
-    historyEvents.on('compressionStarted', onCompressionStarted);
-    historyEvents.on('compressionEnded', onCompressionEnded);
+    historyService.on('contentAdded', onContentAdded);
+    historyService.on('compressionStarted', onCompressionStarted);
+    historyService.on('compressionEnded', onCompressionEnded);
 
     this.historySubscription = () => {
-      historyEvents.off('contentAdded', onContentAdded);
-      historyEvents.off('compressionStarted', onCompressionStarted);
-      historyEvents.off('compressionEnded', onCompressionEnded);
+      historyService.off('contentAdded', onContentAdded);
+      historyService.off('compressionStarted', onCompressionStarted);
+      historyService.off('compressionEnded', onCompressionEnded);
     };
   }
 

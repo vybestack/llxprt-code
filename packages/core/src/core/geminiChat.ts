@@ -2010,7 +2010,10 @@ export class GeminiChat {
    */
   async performCompression(prompt_id: string): Promise<void> {
     this.logger.debug('Starting compression');
+    const preCompressionCount =
+      this.historyService.getStatistics().totalMessages;
     this.historyService.startCompression();
+    let compressionSummary: IContent | undefined;
     try {
       const strategyName = parseCompressionStrategyName(
         this.runtimeContext.ephemerals.compressionStrategy(),
@@ -2025,12 +2028,17 @@ export class GeminiChat {
         this.historyService.add(content, this.runtimeState.model);
       }
 
+      compressionSummary = result.newHistory[0];
+
       this.logger.debug('Compression completed', result.metadata);
     } catch (error) {
       this.logger.error('Compression failed:', error);
       throw error;
     } finally {
-      this.historyService.endCompression();
+      this.historyService.endCompression(
+        compressionSummary,
+        preCompressionCount,
+      );
     }
 
     await this.historyService.waitForTokenUpdates();
