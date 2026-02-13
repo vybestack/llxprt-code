@@ -22,7 +22,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
 import { HistoryService } from '../HistoryService.js';
 import type { IContent } from '../IContent.js';
-import type { DensityResult, DensityResultMetadata } from '../../../core/compression/types.js';
+import type {
+  DensityResult,
+  DensityResultMetadata,
+} from '../../../core/compression/types.js';
 import { CompressionStrategyError } from '../../../core/compression/types.js';
 
 // ---------------------------------------------------------------------------
@@ -65,10 +68,7 @@ function makeDensityResult(
 }
 
 /** Seed a HistoryService with N labeled entries: [A, B, C, D, E, …] */
-function seedHistory(
-  service: HistoryService,
-  count: number,
-): IContent[] {
+function seedHistory(service: HistoryService, count: number): IContent[] {
   const entries: IContent[] = [];
   for (let i = 0; i < count; i++) {
     const label = String.fromCharCode(65 + i); // A, B, C, …
@@ -436,19 +436,26 @@ describe('HistoryService — Density Extensions', () => {
           // Generate a history size between 1 and 15
           fc.integer({ min: 1, max: 15 }),
           // Generate a set of unique removal indices (will be filtered to bounds)
-          fc.array(fc.integer({ min: 0, max: 14 }), { minLength: 0, maxLength: 10 }),
+          fc.array(fc.integer({ min: 0, max: 14 }), {
+            minLength: 0,
+            maxLength: 10,
+          }),
           async (histSize, rawRemovals) => {
             const svc = new HistoryService();
             seedHistory(svc, histSize);
             await svc.waitForTokenUpdates();
 
             // Deduplicate and keep only in-bounds indices
-            const removals = [...new Set(rawRemovals)].filter((i) => i >= 0 && i < histSize);
+            const removals = [...new Set(rawRemovals)].filter(
+              (i) => i >= 0 && i < histSize,
+            );
 
             const result = makeDensityResult(removals, new Map());
             await svc.applyDensityResult(result);
 
-            expect(svc.getRawHistory()).toHaveLength(histSize - removals.length);
+            expect(svc.getRawHistory()).toHaveLength(
+              histSize - removals.length,
+            );
           },
         ),
         { numRuns: 50 },
@@ -462,8 +469,14 @@ describe('HistoryService — Density Extensions', () => {
       await fc.assert(
         fc.asyncProperty(
           fc.integer({ min: 2, max: 12 }),
-          fc.array(fc.integer({ min: 0, max: 11 }), { minLength: 0, maxLength: 6 }),
-          fc.array(fc.integer({ min: 0, max: 11 }), { minLength: 0, maxLength: 4 }),
+          fc.array(fc.integer({ min: 0, max: 11 }), {
+            minLength: 0,
+            maxLength: 6,
+          }),
+          fc.array(fc.integer({ min: 0, max: 11 }), {
+            minLength: 0,
+            maxLength: 4,
+          }),
           async (histSize, rawRemovals, rawReplacements) => {
             const svc = new HistoryService();
             const entries = seedHistory(svc, histSize);
@@ -511,10 +524,10 @@ describe('HistoryService — Density Extensions', () => {
       await fc.assert(
         fc.asyncProperty(
           fc.integer({ min: 2, max: 10 }),
-          fc.array(
-            fc.integer({ min: 0, max: 9 }),
-            { minLength: 1, maxLength: 5 },
-          ),
+          fc.array(fc.integer({ min: 0, max: 9 }), {
+            minLength: 1,
+            maxLength: 5,
+          }),
           async (histSize, rawReplacements) => {
             const svc = new HistoryService();
             seedHistory(svc, histSize);
@@ -575,16 +588,13 @@ describe('HistoryService — Density Extensions', () => {
      */
     it('getRawHistory length equals number of add() calls', () => {
       fc.assert(
-        fc.property(
-          fc.integer({ min: 0, max: 20 }),
-          (n) => {
-            const svc = new HistoryService();
-            for (let i = 0; i < n; i++) {
-              svc.add(makeEntry('human', `msg-${i}`));
-            }
-            expect(svc.getRawHistory()).toHaveLength(n);
-          },
-        ),
+        fc.property(fc.integer({ min: 0, max: 20 }), (n) => {
+          const svc = new HistoryService();
+          for (let i = 0; i < n; i++) {
+            svc.add(makeEntry('human', `msg-${i}`));
+          }
+          expect(svc.getRawHistory()).toHaveLength(n);
+        }),
         { numRuns: 50 },
       );
     });
@@ -621,13 +631,18 @@ describe('HistoryService — Density Extensions', () => {
       await fc.assert(
         fc.asyncProperty(
           fc.integer({ min: 1, max: 10 }),
-          fc.array(fc.integer({ min: 0, max: 9 }), { minLength: 0, maxLength: 5 }),
+          fc.array(fc.integer({ min: 0, max: 9 }), {
+            minLength: 0,
+            maxLength: 5,
+          }),
           async (histSize, rawRemovals) => {
             const svc = new HistoryService();
             seedHistory(svc, histSize);
             await svc.waitForTokenUpdates();
 
-            const removals = [...new Set(rawRemovals)].filter((i) => i >= 0 && i < histSize);
+            const removals = [...new Set(rawRemovals)].filter(
+              (i) => i >= 0 && i < histSize,
+            );
             const result = makeDensityResult(removals, new Map());
             await svc.applyDensityResult(result);
             await svc.waitForTokenUpdates();

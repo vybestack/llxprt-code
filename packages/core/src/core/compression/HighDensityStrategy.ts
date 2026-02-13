@@ -275,7 +275,11 @@ export class HighDensityStrategy implements CompressionStrategy {
     const compressionThreshold =
       context.runtimeContext.ephemerals.compressionThreshold();
     const contextLimit = context.runtimeContext.ephemerals.contextLimit();
-    const targetTokens = Math.floor(compressionThreshold * contextLimit * 0.6);
+    const compressHeadroom =
+      context.runtimeContext.ephemerals.densityCompressHeadroom();
+    const targetTokens = Math.floor(
+      compressionThreshold * contextLimit * compressHeadroom,
+    );
 
     context.logger.debug(
       `[HighDensity compress] originalCount=${originalCount} tailStart=${tailStartIndex} target=${targetTokens}`,
@@ -377,7 +381,7 @@ export class HighDensityStrategy implements CompressionStrategy {
    * Non-tool_response blocks are passed through unchanged.
    */
   private summarizeToolResponseBlocks(
-    entry: IContent | (typeof this.name extends string ? IContent : never),
+    entry: IContent,
     fullHistory: readonly IContent[],
   ): IContent {
     const newBlocks: ContentBlock[] = entry.blocks.map((block) => {
@@ -459,17 +463,17 @@ export class HighDensityStrategy implements CompressionStrategy {
     targetTokens: number,
     context: CompressionContext,
   ): Promise<IContent[]> {
-    const result = [...history];
-    let currentHeadEnd = headEnd;
-    let estimatedTokens = await context.estimateTokens(result);
+    let removeCount = 0;
+    let estimatedTokens = await context.estimateTokens(history);
 
-    while (estimatedTokens > targetTokens && currentHeadEnd > 0) {
-      result.splice(0, 1);
-      currentHeadEnd--;
-      estimatedTokens = await context.estimateTokens(result);
+    while (estimatedTokens > targetTokens && removeCount < headEnd) {
+      removeCount++;
+      estimatedTokens = await context.estimateTokens(
+        history.slice(removeCount),
+      );
     }
 
-    return result;
+    return removeCount > 0 ? history.slice(removeCount) : history;
   }
 
   /**
@@ -615,31 +619,18 @@ export class HighDensityStrategy implements CompressionStrategy {
     for (const [aiIndex, staleCalls] of aiEntryStaleBlocks) {
       const totalCalls = aiEntryTotalToolCalls.get(aiIndex) ?? 0;
 
-      if (staleCalls.size === totalCalls) {
-        const nonToolCallBlocks = history[aiIndex].blocks.filter(
-          (b) => b.type !== 'tool_call',
-        );
-        if (
-          nonToolCallBlocks.length === 0 ||
-          nonToolCallBlocks.every((b) => isEmptyTextBlock(b))
-        ) {
-          removals.add(aiIndex);
-        } else {
-          const filteredBlocks = history[aiIndex].blocks.filter(
-            (b) =>
-              b.type !== 'tool_call' ||
-              !staleCalls.has((b as ToolCallBlock).id),
-          );
-          replacements.set(aiIndex, {
-            ...history[aiIndex],
-            blocks: filteredBlocks,
-          });
-        }
+      const filteredBlocks = history[aiIndex].blocks.filter(
+        (b) =>
+          b.type !== 'tool_call' || !staleCalls.has((b as ToolCallBlock).id),
+      );
+
+      if (
+        staleCalls.size === totalCalls &&
+        (filteredBlocks.length === 0 ||
+          filteredBlocks.every((b) => isEmptyTextBlock(b)))
+      ) {
+        removals.add(aiIndex);
       } else {
-        const filteredBlocks = history[aiIndex].blocks.filter(
-          (b) =>
-            b.type !== 'tool_call' || !staleCalls.has((b as ToolCallBlock).id),
-        );
         replacements.set(aiIndex, {
           ...history[aiIndex],
           blocks: filteredBlocks,
