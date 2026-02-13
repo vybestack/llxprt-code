@@ -396,7 +396,9 @@ export async function getCoreSystemPromptAsync(
     toolsArg = tools;
   }
 
-  // Load core memory from .LLXPRT_SYSTEM files if not provided
+  // Load core memory from disk if not explicitly provided by caller.
+  // The interactive path (client.ts) caches and passes coreMemory;
+  // stateless provider paths don't, so we fall back to disk reads.
   if (coreMemory === undefined) {
     try {
       coreMemory = await loadCoreMemoryContent(process.cwd());

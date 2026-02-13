@@ -582,8 +582,10 @@ describe('Gemini Client (client.ts)', () => {
 
       const config = client['config'] as unknown as {
         getUserMemory: () => string;
+        getCoreMemory: () => string;
       };
       vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
+      config.getCoreMemory = vi.fn().mockReturnValue('');
 
       const toolNamesSpy = vi
         .spyOn(

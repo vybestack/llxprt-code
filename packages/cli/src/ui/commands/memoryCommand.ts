@@ -8,6 +8,7 @@ import {
   getErrorMessage,
   getGlobalCoreMemoryFilePath,
   getProjectCoreMemoryFilePath,
+  loadCoreMemoryContent,
   MemoryTool,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs/promises';
@@ -222,6 +223,17 @@ export const memoryCommand: SlashCommand = {
                 config.getFileFilteringOptions(),
               );
             config.setUserMemory(memoryContent);
+
+            // Refresh core (system) memory from .LLXPRT_SYSTEM files
+            try {
+              const coreContent = await loadCoreMemoryContent(
+                config.getWorkingDir(),
+              );
+              config.setCoreMemory(coreContent);
+            } catch {
+              // Non-fatal: keep existing core memory
+            }
+
             try {
               await config.updateSystemInstructionIfInitialized();
             } catch {

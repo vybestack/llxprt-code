@@ -34,6 +34,7 @@ import {
   SHELL_TOOL_NAMES,
   isRipgrepAvailable,
   normalizeShellReplacement,
+  loadCoreMemoryContent,
   type GeminiCLIExtension,
   type Profile,
 } from '@vybestack/llxprt-code-core';
@@ -1097,6 +1098,14 @@ export async function loadCliConfig(
       memoryFileFiltering,
     );
 
+  // Load core (system) memory from .LLXPRT_SYSTEM files
+  let coreMemoryContent = '';
+  try {
+    coreMemoryContent = await loadCoreMemoryContent(cwd);
+  } catch {
+    // Non-fatal: proceed without core memory
+  }
+
   let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
   const question =
     argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
@@ -1353,6 +1362,7 @@ export async function loadCliConfig(
     mcpServerCommand: effectiveSettings.mcpServerCommand,
     mcpServers,
     userMemory: memoryContent,
+    coreMemory: coreMemoryContent,
     llxprtMdFileCount: fileCount,
     llxprtMdFilePaths: filePaths,
     approvalMode,
