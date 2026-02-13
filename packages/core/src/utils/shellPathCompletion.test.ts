@@ -380,21 +380,24 @@ describe('getPathSuggestions', () => {
 
     it('should preserve tilde prefix with escaped names', async () => {
       const homeDir = os.homedir();
-      const tildeStructure: FileSystemStructure = {
-        'space dir': {
-          'inner.txt': '',
-        },
-      };
-      const tildeTestDir = await createTmpDir(tildeStructure);
+      const tildeTestDirName = `llxprt-test-spaces-${Date.now()}`;
+      const tildeTestDir = path.join(homeDir, tildeTestDirName);
+
+      await fs.mkdir(path.join(tildeTestDir, 'space dir'), {
+        recursive: true,
+      });
+      await fs.writeFile(path.join(tildeTestDir, 'space dir', 'inner.txt'), '');
+
       try {
-        const tildePrefix = '~' + tildeTestDir.slice(homeDir.length) + '/space';
-        const results = await getPathSuggestions(tildePrefix, tildeTestDir);
-        if (results.length > 0) {
-          expect(results[0].value).toContain('space\\ dir/');
-          expect(results[0].value.startsWith('~/')).toBe(true);
-        }
+        const results = await getPathSuggestions(
+          `~/${tildeTestDirName}/space`,
+          homeDir,
+        );
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].value).toContain('space\\ dir/');
+        expect(results[0].value.startsWith('~/')).toBe(true);
       } finally {
-        await cleanupTmpDir(tildeTestDir);
+        await fs.rm(tildeTestDir, { recursive: true, force: true });
       }
     });
 
