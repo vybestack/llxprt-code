@@ -73,6 +73,7 @@ export * from './core/geminiRequest.js';
 export * from './core/coreToolScheduler.js';
 export * from './core/nonInteractiveToolExecutor.js';
 export type { SubagentSchedulerFactory } from './core/subagentScheduler.js';
+export { buildContinuationDirective } from './core/compression/utils.js';
 
 export * from './code_assist/codeAssist.js';
 export * from './code_assist/oauth2.js';

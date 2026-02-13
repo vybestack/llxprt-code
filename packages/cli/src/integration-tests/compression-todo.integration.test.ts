@@ -26,12 +26,14 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { TodoStore, Todo } from '@vybestack/llxprt-code-core';
+import { buildContinuationDirective } from '../../../core/src/core/compression/utils.js';
 
 describe('Compression Todo Integration (Issues #1387, #1388)', () => {
   let tempDir: string;
   let todoStore: TodoStore;
   let sessionId: string;
   let tmpDir: string;
+  let originalHome: string | undefined;
 
   const createTodo = (
     id: string,
@@ -44,9 +46,11 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
   });
 
   beforeEach(async () => {
+    originalHome = process.env.HOME;
     tempDir = await fs.mkdtemp(
       path.join(os.tmpdir(), 'llxprt-compression-test-'),
     );
+    process.env.HOME = tempDir;
 
     // Create local ./tmp directory (not /tmp)
     tmpDir = path.join(tempDir, 'tmp');
@@ -57,6 +61,12 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
   });
 
   afterEach(async () => {
+    if (originalHome !== undefined) {
+      process.env.HOME = originalHome;
+    } else {
+      delete process.env.HOME;
+    }
+
     try {
       await fs.rm(tempDir, { recursive: true, force: true });
     } catch {
@@ -227,19 +237,7 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
 - [pending] Write integration tests
 - [pending] Update documentation`;
 
-      // When: Building continuation directive (from utils.ts)
-      const buildContinuationDirective = (todos?: string): string => {
-        if (todos && todos.trim().length > 0) {
-          const firstLine = todos.trim().split('\n')[0];
-          const match = firstLine.match(/^-\s*\[.*?]\s*(.+)$/);
-          const firstTask = match?.[1]?.trim();
-          if (firstTask) {
-            return `Understood. Continue with current task: "${firstTask}". Use todo_read for full context.`;
-          }
-        }
-        return 'Understood. Continuing with the current task.';
-      };
-
+      // When: Building continuation directive
       const directive = buildContinuationDirective(activeTodos);
 
       // Then: Directive should reference first task
@@ -249,20 +247,7 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
     });
 
     it('@requirement REQ-HD-012.3 should build simple directive when no todos', () => {
-      // Given: No active todos
-      const buildContinuationDirective = (todos?: string): string => {
-        if (todos && todos.trim().length > 0) {
-          const firstLine = todos.trim().split('\n')[0];
-          const match = firstLine.match(/^-\s*\[.*?]\s*(.+)$/);
-          const firstTask = match?.[1]?.trim();
-          if (firstTask) {
-            return `Understood. Continue with current task: "${firstTask}". Use todo_read for full context.`;
-          }
-        }
-        return 'Understood. Continuing with the current task.';
-      };
-
-      // When: Building directive without todos
+      // Given/When: Building directive without todos
       const directiveWithout = buildContinuationDirective();
       const directiveEmpty = buildContinuationDirective('');
       const directiveWhitespace = buildContinuationDirective('   \n  ');
@@ -281,18 +266,6 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
 
     it('@requirement REQ-HD-012.3 should extract first task correctly from single todo', () => {
       const activeTodos = '- [pending] Fix the critical auth bug';
-
-      const buildContinuationDirective = (todos?: string): string => {
-        if (todos && todos.trim().length > 0) {
-          const firstLine = todos.trim().split('\n')[0];
-          const match = firstLine.match(/^-\s*\[.*?]\s*(.+)$/);
-          const firstTask = match?.[1]?.trim();
-          if (firstTask) {
-            return `Understood. Continue with current task: "${firstTask}". Use todo_read for full context.`;
-          }
-        }
-        return 'Understood. Continuing with the current task.';
-      };
 
       const directive = buildContinuationDirective(activeTodos);
       expect(directive).toBe(
@@ -349,18 +322,6 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
       expect(compressionContext.activeTodos).toBeDefined();
 
       // Step 4: Strategy builds continuation directive
-      const buildContinuationDirective = (todos?: string): string => {
-        if (todos && todos.trim().length > 0) {
-          const firstLine = todos.trim().split('\n')[0];
-          const match = firstLine.match(/^-\s*\[.*?]\s*(.+)$/);
-          const firstTask = match?.[1]?.trim();
-          if (firstTask) {
-            return `Understood. Continue with current task: "${firstTask}". Use todo_read for full context.`;
-          }
-        }
-        return 'Understood. Continuing with the current task.';
-      };
-
       const directive = buildContinuationDirective(
         compressionContext.activeTodos,
       );
@@ -393,9 +354,9 @@ Status: In Progress
       expect(writtenContent).toContain('Read existing project files');
       expect(writtenContent).toContain('Analyze code structure');
 
-      // Verify the tmp directory is under tempDir (local), not /tmp
-      expect(tmpDir).not.toMatch(/^\/tmp/);
-      expect(tmpDir).toContain('tmp');
+      // Verify the tmp directory is scoped under this test's temp root
+      expect(tmpDir.startsWith(tempDir)).toBe(true);
+      expect(tmpDir).toContain(`${path.sep}tmp`);
     });
 
     it('@requirement REQ-HD-011.5 should handle todo updates during session', async () => {
