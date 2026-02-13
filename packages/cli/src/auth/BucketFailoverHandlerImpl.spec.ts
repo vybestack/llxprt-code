@@ -149,4 +149,42 @@ describe('BucketFailoverHandlerImpl', () => {
     expect(handler.getCurrentBucket()).toBe('bucket-a');
     expect(oauthManager.getSessionBucket('anthropic')).toBe('bucket-a');
   });
+
+  it('wraps around to earlier buckets when later buckets are exhausted', async () => {
+    await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+    await tokenStore.saveToken('anthropic', makeToken('t3'), 'bucket-c');
+
+    // Start on bucket-c (the last one)
+    oauthManager.setSessionBucket('anthropic', 'bucket-c');
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b', 'bucket-c'],
+      'anthropic',
+      oauthManager,
+    );
+
+    const result = await handler.tryFailover();
+
+    expect(result).toBe(true);
+    expect(handler.getCurrentBucket()).toBe('bucket-a');
+    expect(oauthManager.getSessionBucket('anthropic')).toBe('bucket-a');
+  });
+
+  it('tries all other buckets before giving up', async () => {
+    // Only the current bucket has a token; no other bucket has one
+    await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+    oauthManager.setSessionBucket('anthropic', 'bucket-b');
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b', 'bucket-c'],
+      'anthropic',
+      oauthManager,
+    );
+
+    const result = await handler.tryFailover();
+
+    expect(result).toBe(false);
+    // Should remain on the current bucket since all others failed
+    expect(handler.getCurrentBucket()).toBe('bucket-b');
+  });
 });

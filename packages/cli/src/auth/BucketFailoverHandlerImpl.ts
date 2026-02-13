@@ -84,13 +84,9 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    */
   async tryFailover(): Promise<boolean> {
     const currentBucket = this.getCurrentBucket();
-    const startIndex = this.currentBucketIndex + 1;
 
-    for (
-      let nextIndex = startIndex;
-      nextIndex < this.buckets.length;
-      nextIndex++
-    ) {
+    for (let i = 1; i < this.buckets.length; i++) {
+      const nextIndex = (this.currentBucketIndex + i) % this.buckets.length;
       const nextBucket = this.buckets[nextIndex];
       logger.debug('Attempting bucket failover', {
         provider: this.provider,
@@ -115,6 +111,9 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
         this.currentBucketIndex = nextIndex;
         this.oauthManager.setSessionBucket(this.provider, nextBucket);
 
+        console.warn(
+          `Bucket failover: switching from ${currentBucket} to ${nextBucket}`,
+        );
         logger.debug('Bucket failover successful', {
           provider: this.provider,
           newBucket: nextBucket,
@@ -132,6 +131,9 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       }
     }
 
+    console.error(
+      `Bucket failover: all buckets exhausted for provider ${this.provider}`,
+    );
     logger.debug('No more buckets available for failover', {
       provider: this.provider,
       currentBucket,
