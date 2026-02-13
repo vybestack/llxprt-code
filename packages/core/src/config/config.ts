@@ -360,6 +360,7 @@ export interface ConfigParameters {
   mcpServerCommand?: string;
   mcpServers?: Record<string, MCPServerConfig>;
   userMemory?: string;
+  coreMemory?: string;
   llxprtMdFileCount?: number;
   llxprtMdFilePaths?: string[];
   approvalMode?: ApprovalMode;
@@ -460,6 +461,7 @@ export class Config {
   private readonly mcpServerCommand: string | undefined;
   private mcpServers: Record<string, MCPServerConfig> | undefined;
   private userMemory: string;
+  private coreMemory: string;
   private llxprtMdFileCount: number;
   private llxprtMdFilePaths: string[];
   private approvalMode: ApprovalMode;
@@ -669,6 +671,7 @@ export class Config {
     this.allowedMcpServers = params.allowedMcpServers ?? [];
     this.blockedMcpServers = params.blockedMcpServers ?? [];
     this.userMemory = params.userMemory ?? '';
+    this.coreMemory = params.coreMemory ?? '';
     this.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
     this.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
     this.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
@@ -1190,6 +1193,14 @@ export class Config {
 
   setUserMemory(newUserMemory: string): void {
     this.userMemory = newUserMemory;
+  }
+
+  getCoreMemory(): string {
+    return this.coreMemory;
+  }
+
+  setCoreMemory(newCoreMemory: string): void {
+    this.coreMemory = newCoreMemory;
   }
 
   async updateSystemInstructionIfInitialized(): Promise<void> {

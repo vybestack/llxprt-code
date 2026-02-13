@@ -34,6 +34,14 @@ vi.mock('fs', () => ({
 
 vi.mock('os');
 
+const mockSettingsService = {
+  get: vi.fn().mockReturnValue(undefined),
+  set: vi.fn(),
+};
+vi.mock('../settings/settingsServiceInstance.js', () => ({
+  getSettingsService: () => mockSettingsService,
+}));
+
 const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
 
 // Define a type for our fsAdapter to ensure consistency
@@ -227,9 +235,8 @@ describe('MemoryTool', () => {
           },
           scope: {
             type: 'string',
-            enum: ['global', 'project'],
-            description:
-              'Where to save the memory: "global" or "project" (default, saves to project-local .llxprt directory)',
+            enum: ['global', 'project', 'core.global', 'core.project'],
+            description: expect.stringContaining('Where to save the memory'),
             default: 'project',
           },
         },
@@ -482,7 +489,7 @@ describe('MemoryTool', () => {
       ).properties.scope;
       expect(scopeProperty).toEqual({
         type: 'string',
-        enum: ['global', 'project'],
+        enum: ['global', 'project', 'core.global', 'core.project'],
         description: expect.stringContaining('Where to save'),
         default: 'project',
       });
@@ -623,6 +630,65 @@ describe('MemoryTool', () => {
       expect(normalizedTitle).toContain('.llxprt/LLXPRT.md');
       expect(normalizedFileName).toContain(mockWorkingDir);
       expect(normalizedFileName).toContain('.llxprt');
+    });
+  });
+
+  describe('Core memory scopes', () => {
+    let coreMemoryTool: MemoryTool;
+
+    beforeEach(() => {
+      coreMemoryTool = new MemoryTool({ getWorkingDir: () => mockWorkingDir });
+    });
+
+    it('should include core.global and core.project in the schema', () => {
+      const schema = coreMemoryTool.schema;
+      const scopeEnum = (
+        schema.parametersJsonSchema as {
+          properties: { scope: { enum: string[] } };
+        }
+      ).properties.scope.enum;
+      expect(scopeEnum).toContain('core.global');
+      expect(scopeEnum).toContain('core.project');
+    });
+
+    it('should reject core scopes when model.canSaveCore is disabled', () => {
+      mockSettingsService.get.mockReturnValue(undefined);
+      expect(() =>
+        coreMemoryTool.build({
+          fact: 'some directive',
+          scope: 'core.global',
+        }),
+      ).toThrow(/core memory scopes/i);
+    });
+
+    it('should resolve core.global file path to .LLXPRT_SYSTEM in global dir', () => {
+      mockSettingsService.get.mockReturnValue(true);
+      vi.mocked(fs.readFile).mockResolvedValue('');
+
+      const params = {
+        fact: 'Test core directive',
+        scope: 'core.global' as const,
+      };
+      const invocation = coreMemoryTool.build(params);
+      const filePath = invocation.getMemoryFilePath();
+      expect(filePath).toContain('.llxprt');
+      expect(filePath).toContain('.LLXPRT_SYSTEM');
+    });
+
+    it('should resolve core.project file path to .LLXPRT_SYSTEM in project dir', () => {
+      mockSettingsService.get.mockReturnValue(true);
+      vi.mocked(fs.readFile).mockResolvedValue('');
+
+      const params = {
+        fact: 'Test core directive',
+        scope: 'core.project' as const,
+      };
+      const invocation = coreMemoryTool.build(params);
+      invocation.setWorkingDir(mockWorkingDir);
+      const filePath = invocation.getMemoryFilePath();
+      expect(filePath).toContain(mockWorkingDir);
+      expect(filePath).toContain('.llxprt');
+      expect(filePath).toContain('.LLXPRT_SYSTEM');
     });
   });
 });

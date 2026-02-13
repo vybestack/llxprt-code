@@ -7,11 +7,17 @@
 import path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
+import * as fs from 'node:fs/promises';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import { getFolderStructure } from '../utils/getFolderStructure.js';
 import { DebugLogger } from '../debug/index.js';
+import {
+  getGlobalCoreMemoryFilePath,
+  getProjectCoreMemoryFilePath,
+} from '../tools/memoryTool.js';
+import { tildeifyPath } from '../utils/paths.js';
 import type {
   PromptContext,
   PromptEnvironment,
@@ -169,10 +175,52 @@ function compactFolderStructureSnapshot(
 }
 
 /**
+ * Loads core (system) memory content from .LLXPRT_SYSTEM files.
+ * Reads both global (~/.llxprt/.LLXPRT_SYSTEM) and project-level
+ * (<cwd>/.llxprt/.LLXPRT_SYSTEM) files and concatenates them.
+ */
+export async function loadCoreMemoryContent(cwd: string): Promise<string> {
+  const candidates = [
+    { path: path.resolve(getGlobalCoreMemoryFilePath()), label: 'global' },
+    { path: path.resolve(getProjectCoreMemoryFilePath(cwd)), label: 'project' },
+  ];
+
+  // Dedupe in case global and project resolve to the same file (e.g. cwd is $HOME)
+  const seen = new Set<string>();
+  const paths = candidates.filter(({ path: p }) => {
+    if (seen.has(p)) return false;
+    seen.add(p);
+    return true;
+  });
+
+  const parts: string[] = [];
+  for (const { path: filePath } of paths) {
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      if (content.trim()) {
+        parts.push(
+          `--- Core System Memory from: ${tildeifyPath(filePath)} ---\n${content.trim()}\n--- End of Core System Memory ---`,
+        );
+      }
+    } catch (err) {
+      const error = err as Error & { code?: string };
+      if (error.code !== 'ENOENT') {
+        logger.warn(
+          () => `Failed to read core memory file ${filePath}: ${error.message}`,
+        );
+      }
+    }
+  }
+
+  return parts.join('\n\n');
+}
+
+/**
  * Options for getCoreSystemPromptAsync
  */
 export interface CoreSystemPromptOptions {
   userMemory?: string;
+  coreMemory?: string;
   model?: string;
   tools?: string[];
   provider?: string;
@@ -334,6 +382,7 @@ export async function getCoreSystemPromptAsync(
 
   // Handle both legacy positional args and options object
   let userMemory: string | undefined = undefined;
+  let coreMemory: string | undefined = undefined;
   let modelArg: string | undefined = undefined;
   let toolsArg: string[] | undefined = undefined;
   let providerArg: string | undefined = undefined;
@@ -343,6 +392,7 @@ export async function getCoreSystemPromptAsync(
     // Options object mode
     const opts = userMemoryOrOptions as CoreSystemPromptOptions;
     userMemory = opts.userMemory;
+    coreMemory = opts.coreMemory;
     modelArg = opts.model;
     toolsArg = opts.tools;
     providerArg = opts.provider;
@@ -354,6 +404,38 @@ export async function getCoreSystemPromptAsync(
     toolsArg = tools;
   }
 
+  // Load core memory from disk if not explicitly provided by caller.
+  // The interactive path (client.ts) caches and passes coreMemory;
+  // stateless provider paths don't, so we fall back to disk reads.
+  if (coreMemory === undefined) {
+    try {
+      coreMemory = await loadCoreMemoryContent(process.cwd());
+    } catch {
+      // Non-fatal: proceed without core memory
+    }
+  }
+
+  // Handle allMemoriesAreCore: when enabled, user memory is promoted
+  // to core (system) memory so models treat it as directives
+  let effectiveUserMemory = userMemory;
+  let effectiveCoreMemory = coreMemory;
+  try {
+    const settingsService = getSettingsService();
+    const allMemoriesAreCore = settingsService.get(
+      'model.allMemoriesAreCore',
+    ) as boolean | undefined;
+    if (allMemoriesAreCore) {
+      // Merge user memory into core memory; leave user memory empty
+      const parts = [effectiveCoreMemory, effectiveUserMemory].filter(
+        (p) => p && p.trim(),
+      );
+      effectiveCoreMemory = parts.join('\n\n') || undefined;
+      effectiveUserMemory = undefined;
+    }
+  } catch {
+    // Settings service may not be available (e.g. during tests)
+  }
+
   const context = await buildPromptContext({
     model: modelArg,
     tools: toolsArg,
@@ -361,7 +443,11 @@ export async function getCoreSystemPromptAsync(
     includeSubagentDelegation,
   });
 
-  return await service.getPrompt(context, userMemory);
+  return await service.getPrompt(
+    context,
+    effectiveUserMemory,
+    effectiveCoreMemory,
+  );
 }
 
 /**

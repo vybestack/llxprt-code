@@ -593,12 +593,14 @@ export class GeminiClient {
     envParts?: Array<{ text?: string }>,
   ): Promise<string> {
     const userMemory = this.config.getUserMemory();
+    const coreMemory = this.config.getCoreMemory();
     const model = this.runtimeState.model;
     const includeSubagentDelegation =
       await this.shouldIncludeSubagentDelegation(enabledToolNames);
 
     let systemInstruction = await getCoreSystemPromptAsync({
       userMemory,
+      coreMemory,
       model,
       tools: enabledToolNames,
       includeSubagentDelegation,
