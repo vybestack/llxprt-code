@@ -28,6 +28,7 @@ export interface PromptEnvironment {
   workspaceDirectories?: string[];
   workingDirectory?: string;
   folderStructure?: string;
+  interactionMode?: 'interactive' | 'non-interactive' | 'subagent';
 }
 
 // Runtime context for prompt assembly

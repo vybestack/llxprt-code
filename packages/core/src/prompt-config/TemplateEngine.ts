@@ -251,6 +251,37 @@ export class TemplateEngine {
       variables['SUBAGENT_DELEGATION'] = '';
     }
 
+    // Add interaction mode variables
+    const interactionMode =
+      context.environment?.interactionMode || 'interactive';
+    variables['INTERACTION_MODE'] = interactionMode;
+
+    // Add interaction mode label
+    if (interactionMode === 'interactive') {
+      variables['INTERACTION_MODE_LABEL'] = 'an interactive';
+    } else if (interactionMode === 'non-interactive') {
+      variables['INTERACTION_MODE_LABEL'] = 'a non-interactive';
+    } else if (interactionMode === 'subagent') {
+      variables['INTERACTION_MODE_LABEL'] = 'a subagent';
+    }
+
+    // Add interactive confirm variable
+    if (interactionMode === 'interactive') {
+      variables['INTERACTIVE_CONFIRM'] =
+        "- **Confirm Ambiguity/Expansion:** Do not take significant actions beyond the clear scope of the request without confirming with the user. If asked _how_ to do something, explain first, don't just do it.";
+    } else {
+      variables['INTERACTIVE_CONFIRM'] =
+        '- **Handle Ambiguity:** Do not ask the user for clarification. Use your best judgment to interpret ambiguous requests and proceed with the most reasonable approach.';
+    }
+
+    // Add non-interactive continue variable
+    if (interactionMode === 'non-interactive' || interactionMode === 'subagent') {
+      variables['NON_INTERACTIVE_CONTINUE'] =
+        '- **Continue the work:** Do your best to complete the task. Do not stop to ask the user for input or confirmation. If you encounter issues, work around them or document them and continue.';
+    } else {
+      variables['NON_INTERACTIVE_CONTINUE'] = '';
+    }
+
     return variables;
   }
 

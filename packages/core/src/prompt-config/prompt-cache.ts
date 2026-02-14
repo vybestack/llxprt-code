@@ -90,6 +90,11 @@ export class PromptCache {
       envFlags.push('ide');
     }
 
+    // Include interaction mode in cache key
+    const interactionMode =
+      context.environment?.interactionMode || 'interactive';
+    envFlags.push(interactionMode);
+
     // Include subagent delegation flag in cache key
     if (context.includeSubagentDelegation === true) {
       envFlags.push('subagent-delegation');

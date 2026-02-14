@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
+import * as fs from 'node:fs/promises';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
@@ -175,18 +175,6 @@ function compactFolderStructureSnapshot(
 }
 
 /**
- * Options for getCoreSystemPromptAsync
- */
-export interface CoreSystemPromptOptions {
-  userMemory?: string;
-  coreMemory?: string;
-  model?: string;
-  tools?: string[];
-  provider?: string;
-  includeSubagentDelegation?: boolean;
-}
-
-/**
  * Loads core (system) memory content from .LLXPRT_SYSTEM files.
  * Reads both global (~/.llxprt/.LLXPRT_SYSTEM) and project-level
  * (<cwd>/.llxprt/.LLXPRT_SYSTEM) files and concatenates them.
@@ -211,9 +199,7 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
       const content = await fs.readFile(filePath, 'utf-8');
       if (content.trim()) {
         parts.push(
-          `--- Core System Memory from: ${tildeifyPath(filePath)} ---
-${content.trim()}
---- End of Core System Memory ---`,
+          `--- Core System Memory from: ${tildeifyPath(filePath)} ---\n${content.trim()}\n--- End of Core System Memory ---`,
         );
       }
     } catch (err) {
@@ -230,12 +216,26 @@ ${content.trim()}
 }
 
 /**
+ * Options for getCoreSystemPromptAsync
+ */
+export interface CoreSystemPromptOptions {
+  userMemory?: string;
+  coreMemory?: string;
+  model?: string;
+  tools?: string[];
+  provider?: string;
+  includeSubagentDelegation?: boolean;
+  interactionMode?: 'interactive' | 'non-interactive' | 'subagent';
+}
+
+/**
  * Build PromptContext from current environment and parameters
  */
 async function buildPromptContext(
   options: CoreSystemPromptOptions,
 ): Promise<PromptContext> {
-  const { model, tools, provider, includeSubagentDelegation } = options;
+  const { model, tools, provider, includeSubagentDelegation, interactionMode } =
+    options;
   const cwd = process.cwd();
 
   // Check if folder structure should be included (default: false for better cache hit rates)
@@ -285,6 +285,7 @@ async function buildPromptContext(
     workspaceName: path.basename(cwd),
     workspaceDirectories,
     folderStructure,
+    interactionMode,
   };
 
   // Determine sandbox type
@@ -389,6 +390,11 @@ export async function getCoreSystemPromptAsync(
   let toolsArg: string[] | undefined = undefined;
   let providerArg: string | undefined = undefined;
   let includeSubagentDelegation: boolean | undefined = undefined;
+  let interactionModeArg:
+    | 'interactive'
+    | 'non-interactive'
+    | 'subagent'
+    | undefined = undefined;
 
   if (typeof userMemoryOrOptions === 'object' && userMemoryOrOptions !== null) {
     // Options object mode
@@ -399,6 +405,7 @@ export async function getCoreSystemPromptAsync(
     toolsArg = opts.tools;
     providerArg = opts.provider;
     includeSubagentDelegation = opts.includeSubagentDelegation;
+    interactionModeArg = opts.interactionMode;
   } else {
     // Legacy positional args mode
     userMemory = userMemoryOrOptions as string | undefined;
@@ -432,7 +439,6 @@ export async function getCoreSystemPromptAsync(
         (p) => p && p.trim(),
       );
       effectiveCoreMemory = parts.join('\n\n') || undefined;
-
       effectiveUserMemory = undefined;
     }
   } catch {
@@ -444,6 +450,7 @@ export async function getCoreSystemPromptAsync(
     tools: toolsArg,
     provider: providerArg,
     includeSubagentDelegation,
+    interactionMode: interactionModeArg,
   });
 
   return service.getPrompt(context, effectiveUserMemory, effectiveCoreMemory);

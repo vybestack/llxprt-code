@@ -97,6 +97,24 @@ describe('prompts async integration', () => {
       expect(prompt).toContain('Core Mandates');
     });
 
+    it('renders non-interactive mode instructions when interactionMode is non-interactive', async () => {
+      const prompt = await callPrompt({ interactionMode: 'non-interactive' });
+
+      expect(prompt).toContain('a non-interactive CLI agent');
+      expect(prompt).toContain('Do not ask the user for clarification');
+      expect(prompt).toContain('Continue the work');
+      expect(prompt).not.toContain('confirming with the user');
+    });
+
+    it('renders subagent mode instructions when interactionMode is subagent', async () => {
+      const prompt = await callPrompt({ interactionMode: 'subagent' });
+
+      expect(prompt).toContain('a subagent CLI agent');
+      expect(prompt).toContain('Do not ask the user for clarification');
+      expect(prompt).toContain('Continue the work');
+      expect(prompt).not.toContain('confirming with the user');
+    });
+
     it('should include user memory when provided', async () => {
       const userMemory = 'Remember: The user prefers concise responses.';
       const prompt = await callPrompt({ userMemory });
