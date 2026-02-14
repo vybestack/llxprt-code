@@ -374,6 +374,116 @@ describe('ShellExecutionService', () => {
     });
   });
 
+  describe('Inactivity Timeout', () => {
+    it('should reset inactivity timer when output is received', async () => {
+      const abortController = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'test command',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+        {
+          ...defaultShellConfig,
+          inactivityTimeoutMs: 100, // 100ms for fast test
+        },
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Emit output every 50ms (within the 100ms inactivity window)
+      const outputInterval = setInterval(() => {
+        if (mockPtyProcess.onData.mock.calls[0]) {
+          mockPtyProcess.onData.mock.calls[0][0]('output\n');
+        }
+      }, 50);
+
+      // Wait 250ms (should reset timer multiple times)
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      clearInterval(outputInterval);
+
+      // Command exits normally
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      const result = await handle.result;
+
+      // Command should complete successfully, not be killed by inactivity timeout
+      expect(result.exitCode).toBe(0);
+      expect(result.aborted).toBe(false);
+    });
+
+    it('should kill command when no output for inactivityTimeout duration', async () => {
+      const abortController = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'hanging command',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+        {
+          ...defaultShellConfig,
+          inactivityTimeoutMs: 100, // 100ms for fast test
+        },
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Emit one line of output
+      mockPtyProcess.onData.mock.calls[0][0]('initial output\n');
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Then go silent for longer than inactivity timeout
+      // Wait for the timeout to trigger and kill signal to be sent
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Simulate the PTY exiting after being killed
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 1, signal: 15 });
+
+      const result = await handle.result;
+
+      // Command should be terminated by SIGTERM due to inactivity
+      expect(result.signal).toBe(15); // SIGTERM
+      // Verify SIGTERM was sent
+      expect(mockProcessKill).toHaveBeenCalledWith(-12345, 'SIGTERM');
+    });
+
+    it('should handle inactivity timeout independently from total timeout', async () => {
+      const abortController = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'test command',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+        {
+          ...defaultShellConfig,
+          inactivityTimeoutMs: 50, // 50ms inactivity timeout
+        },
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Set up a total timeout of 200ms
+      const totalTimeout = setTimeout(() => abortController.abort(), 200);
+
+      // Emit output at intervals shorter than inactivity timeout
+      mockPtyProcess.onData.mock.calls[0][0]('output 1\n');
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      mockPtyProcess.onData.mock.calls[0][0]('output 2\n');
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      mockPtyProcess.onData.mock.calls[0][0]('output 3\n');
+
+      // Now go silent - inactivity timeout should fire before total timeout (at ~110ms)
+      const result = await handle.result;
+      clearTimeout(totalTimeout);
+
+      // Should be killed by inactivity timeout, not total timeout
+      expect(result.aborted).toBe(true);
+      expect(mockProcessKill).toHaveBeenCalled();
+    });
+  });
+
   describe('Binary Output', () => {
     it('should detect binary output and switch to progress events', async () => {
       // Must use mockReturnValue since isBinary is called asynchronously in the processing chain
