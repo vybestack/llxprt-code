@@ -162,11 +162,13 @@ const ModelUsageTable: React.FC<{
 interface StatsDisplayProps {
   duration: string;
   title?: string;
+  quotaLines?: string[];
 }
 
 export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   duration,
   title,
+  quotaLines,
 }) => {
   const runtime = useRuntimeApi();
   const { stats } = useSessionStats();
@@ -333,6 +335,17 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
           totalCachedTokens={computed.totalCachedTokens}
           cacheEfficiency={computed.cacheEfficiency}
         />
+      )}
+
+      {/* Quota Information Section */}
+      {quotaLines && quotaLines.length > 0 && (
+        <Section title="Quota Information">
+          {quotaLines.map((line, index) => (
+            <Text key={index} color={theme.text.primary}>
+              {line}
+            </Text>
+          ))}
+        </Section>
       )}
     </Box>
   );

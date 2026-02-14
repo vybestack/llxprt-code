@@ -138,6 +138,7 @@ export type HistoryItemHelp = HistoryItemBase & {
 export type HistoryItemStats = HistoryItemBase & {
   type: 'stats';
   duration: string;
+  quotaLines?: string[];
 };
 
 export type HistoryItemModelStats = HistoryItemBase & {

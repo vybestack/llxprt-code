@@ -182,6 +182,88 @@ exports[`<StatsDisplay /> > Conditional Rendering Tests > hides User Agreement w
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
+exports[`<StatsDisplay /> > Quota Display > does not render quota section when quotaLines are not provided 1`] = `
+"
+  ERROR  RuntimeContextProvider is missing from the component tree.
+
+ src/ui/contexts/RuntimeContext.tsx:182:11
+
+ 179: export function useRuntimeBridge(): RuntimeContextBridge {
+ 180:   const context = useContext(RuntimeContext);
+ 181:   if (!context) {
+ 182:     throw new Error(
+ 183:       'RuntimeContextProvider is missing from the component tree.',
+ 184:     );
+ 185:   }
+
+ - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:182:11)
+ - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:190:10)
+ - StatsDisplay (src/ui/components/StatsDisplay.tsx:171:19)
+ -Object.react-stack-bott
+  m-frame                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-r
+                         econciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -beginWor
+          (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cjs/r
+          eact-reconciler.development.js:8009:18)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+"
+`;
+
+exports[`<StatsDisplay /> > Quota Display > handles empty quotaLines gracefully 1`] = `
+"
+  ERROR  RuntimeContextProvider is missing from the component tree.
+
+ src/ui/contexts/RuntimeContext.tsx:182:11
+
+ 179: export function useRuntimeBridge(): RuntimeContextBridge {
+ 180:   const context = useContext(RuntimeContext);
+ 181:   if (!context) {
+ 182:     throw new Error(
+ 183:       'RuntimeContextProvider is missing from the component tree.',
+ 184:     );
+ 185:   }
+
+ - useRuntimeBridge (src/ui/contexts/RuntimeContext.tsx:182:11)
+ - useRuntimeApi (src/ui/contexts/RuntimeContext.tsx:190:10)
+ - StatsDisplay (src/ui/components/StatsDisplay.tsx:171:19)
+ -Object.react-stack-bott
+  m-frame                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-r
+                         econciler/cjs/react-reconciler.development.js:15859:20)
+ -renderWithHoo
+  s            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/
+               cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComp
+  nent              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconc
+                    iler/cjs/react-reconciler.development.js:6475:19)
+ -beginWor
+          (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cjs/r
+          eact-reconciler.development.js:8009:18)
+ -runWithFiberIn
+  EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:1738:13)
+ -performUnitOfW
+  rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
+                /cjs/react-reconciler.development.js:12834:22)
+ -workLoopSyn
+             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
+             s/react-reconciler.development.js:12644:41)
+"
+`;
+
 exports[`<StatsDisplay /> > Title Rendering > renders the custom title when a title prop is provided 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │

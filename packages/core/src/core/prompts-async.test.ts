@@ -329,9 +329,7 @@ This is a test instruction from an MCP server.
         mcpInstructions,
       });
 
-      expect(prompt).toContain(
-        "Instructions from MCP server 'test-server'",
-      );
+      expect(prompt).toContain("Instructions from MCP server 'test-server'");
       expect(prompt).toContain(
         'This is a test instruction from an MCP server.',
       );
