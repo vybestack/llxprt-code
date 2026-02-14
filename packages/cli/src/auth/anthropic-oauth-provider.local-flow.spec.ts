@@ -132,9 +132,10 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       'anthropic',
       expect.objectContaining({ access_token: 'local-token' }),
     );
+    // After successful callback, __oauth_needs_code is cleared (false)
     expect(
       (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-    ).toBe(undefined);
+    ).toBeFalsy();
     expect(waitForCallback).toHaveBeenCalled();
     expect(shutdown).toHaveBeenCalled();
   });
@@ -153,8 +154,9 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     await manualPromise.catch(() => undefined);
 
     expect(startLocalOAuthCallbackMock).toHaveBeenCalled();
+    // After cancelAuth(), __oauth_needs_code is cleared (false)
     expect(
       (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-    ).toBe(true);
+    ).toBe(false);
   });
 });

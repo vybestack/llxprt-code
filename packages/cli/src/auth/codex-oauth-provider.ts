@@ -246,18 +246,31 @@ export class CodexOAuthProvider implements OAuthProvider {
     await openBrowserSecurely(authUrl);
     this.logger.debug(() => '[FLOW] Browser opened');
 
-    // Wait for callback
+    // Wait for callback — fall back to device auth if it fails
     this.logger.debug(() => '[FLOW] Waiting for OAuth callback...');
-    const { code, state: callbackState } = await waitForCallback();
-    this.logger.debug(
-      () =>
-        `[FLOW] Callback received! code: ${code.substring(0, 10)}..., state: ${callbackState.substring(0, 8)}...`,
-    );
+    try {
+      const { code, state: callbackState } = await waitForCallback();
+      this.logger.debug(
+        () =>
+          `[FLOW] Callback received! code: ${code.substring(0, 10)}..., state: ${callbackState.substring(0, 8)}...`,
+      );
 
-    // Exchange code for tokens with state
-    this.logger.debug(() => '[FLOW] Calling completeAuth()...');
-    await this.completeAuth(code, redirectUri, callbackState);
-    this.logger.debug(() => '[FLOW] completeAuth() finished');
+      await localCallback.shutdown().catch(() => undefined);
+
+      // Exchange code for tokens with state
+      this.logger.debug(() => '[FLOW] Calling completeAuth()...');
+      await this.completeAuth(code, redirectUri, callbackState);
+      this.logger.debug(() => '[FLOW] completeAuth() finished');
+    } catch (error) {
+      await localCallback.shutdown().catch(() => undefined);
+      this.logger.debug(
+        () =>
+          `[FLOW] Callback failed, falling back to device auth: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+      await this.performDeviceAuth();
+    }
   }
 
   /**

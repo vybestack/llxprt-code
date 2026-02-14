@@ -115,6 +115,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
    * Cancel OAuth flow
    */
   cancelAuth(): void {
+    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
+      false;
     if (this.authCodeRejecter) {
       const error = OAuthErrorFactory.fromUnknown(
         this.name,
