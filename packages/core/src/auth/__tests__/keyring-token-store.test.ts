@@ -688,7 +688,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    */
   it('acquireRefreshLock breaks stale locks', async () => {
     // Create a lock directory and file with an old timestamp
-    const lockDir = path.join(os.homedir(), '.llxprt', 'oauth', 'locks');
+    const lockDir = path.join(tempDir, 'locks');
     await fs.mkdir(lockDir, { recursive: true, mode: 0o700 });
     const lockFile = path.join(lockDir, 'stale-test-refresh.lock');
     const staleLockInfo = {
@@ -715,7 +715,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    * @then Breaks corrupt lock and acquires, returns true
    */
   it('acquireRefreshLock handles corrupt lock files', async () => {
-    const lockDir = path.join(os.homedir(), '.llxprt', 'oauth', 'locks');
+    const lockDir = path.join(tempDir, 'locks');
     await fs.mkdir(lockDir, { recursive: true, mode: 0o700 });
     const lockFile = path.join(lockDir, 'corrupt-lock-test-refresh.lock');
     await fs.writeFile(lockFile, 'this is not json!!!', { mode: 0o600 });
