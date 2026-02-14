@@ -564,6 +564,238 @@ describe('ShellExecutionService', () => {
       expect(onDataDispose).toHaveBeenCalled();
       expect(onExitDispose).toHaveBeenCalled();
     });
+
+    it('should kill the PTY process on normal exit cleanup', async () => {
+      await simulateExecution('echo cleanup-kill', async (pty) => {
+        pty.onData.mock.calls[0][0]('output\n');
+        await new Promise((resolve) => setImmediate(resolve));
+        pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      });
+
+      expect(mockPtyProcess.kill).toHaveBeenCalled();
+    });
+
+    it('should not throw when PTY kill fails during cleanup', async () => {
+      mockPtyProcess.kill.mockImplementation(() => {
+        throw new Error('PTY already exited');
+      });
+
+      const { result } = await simulateExecution(
+        'echo cleanup-safe',
+        async (pty) => {
+          pty.onData.mock.calls[0][0]('output\n');
+          await new Promise((resolve) => setImmediate(resolve));
+          pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+    });
+  });
+
+  describe('destroyAllPtys', () => {
+    it('should terminate and clean up all active PTYs', async () => {
+      const secondMockPty = {
+        pid: 99999,
+        kill: vi.fn(),
+        onData: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        onExit: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        write: vi.fn(),
+      };
+
+      mockPtySpawn.mockReturnValueOnce(mockPtyProcess);
+
+      const ac1 = new AbortController();
+      const handle1 = await ShellExecutionService.execute(
+        'sleep 100',
+        '/test/dir',
+        onOutputEventMock,
+        ac1.signal,
+        true,
+        defaultShellConfig,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+
+      mockPtySpawn.mockReturnValueOnce(secondMockPty);
+
+      const ac2 = new AbortController();
+      const handle2 = await ShellExecutionService.execute(
+        'sleep 200',
+        '/test/dir',
+        onOutputEventMock,
+        ac2.signal,
+        true,
+        defaultShellConfig,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(ShellExecutionService.isActivePty(mockPtyProcess.pid)).toBe(true);
+      expect(ShellExecutionService.isActivePty(secondMockPty.pid)).toBe(true);
+
+      ShellExecutionService.destroyAllPtys();
+
+      expect(mockPtyProcess.kill).toHaveBeenCalled();
+      expect(secondMockPty.kill).toHaveBeenCalled();
+      expect(ShellExecutionService.isActivePty(mockPtyProcess.pid)).toBe(false);
+      expect(ShellExecutionService.isActivePty(secondMockPty.pid)).toBe(false);
+
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 1, signal: null });
+      secondMockPty.onExit.mock.calls[0][0]({ exitCode: 1, signal: null });
+      await Promise.all([handle1.result, handle2.result]);
+    });
+
+    it('should be safe to call when no PTYs are active', () => {
+      expect(() => ShellExecutionService.destroyAllPtys()).not.toThrow();
+    });
+
+    it('should prefer destroy() over kill() when destroy is available', async () => {
+      const destroyMock = vi.fn();
+      const ptyWithDestroy = {
+        pid: 77777,
+        kill: vi.fn(),
+        destroy: destroyMock,
+        onData: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        onExit: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        write: vi.fn(),
+      };
+
+      mockPtySpawn.mockReturnValueOnce(ptyWithDestroy);
+
+      const ac = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'sleep 1',
+        '/test/dir',
+        onOutputEventMock,
+        ac.signal,
+        true,
+        defaultShellConfig,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(ShellExecutionService.isActivePty(77777)).toBe(true);
+
+      ShellExecutionService.destroyAllPtys();
+
+      expect(destroyMock).toHaveBeenCalled();
+      expect(ptyWithDestroy.kill).not.toHaveBeenCalled();
+      expect(ShellExecutionService.isActivePty(77777)).toBe(false);
+
+      ptyWithDestroy.onExit.mock.calls[0][0]({ exitCode: 1, signal: null });
+      await handle.result;
+    });
+
+    it('should fall back to kill() when destroy is not available', async () => {
+      mockPtySpawn.mockReturnValueOnce(mockPtyProcess);
+
+      const ac = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'sleep 1',
+        '/test/dir',
+        onOutputEventMock,
+        ac.signal,
+        true,
+        defaultShellConfig,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+
+      ShellExecutionService.destroyAllPtys();
+
+      expect(mockPtyProcess.kill).toHaveBeenCalled();
+
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 1, signal: null });
+      await handle.result;
+    });
+  });
+
+  describe('abort-race listener cleanup', () => {
+    it('should remove the race abort listener after processing completes', async () => {
+      const abortController = new AbortController();
+      const addSpy = vi.spyOn(abortController.signal, 'addEventListener');
+      const removeSpy = vi.spyOn(abortController.signal, 'removeEventListener');
+
+      const handle = await ShellExecutionService.execute(
+        'echo listener-test',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+        defaultShellConfig,
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      mockPtyProcess.onData.mock.calls[0][0]('output\n');
+
+      await new Promise((resolve) => setImmediate(resolve));
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      await handle.result;
+
+      // Collect every abort callback that was added
+      const addedCallbacks = addSpy.mock.calls
+        .filter((call) => call[0] === 'abort')
+        .map((call) => call[1]);
+
+      // Collect every abort callback that was removed
+      const removedCallbacks = removeSpy.mock.calls
+        .filter((call) => call[0] === 'abort')
+        .map((call) => call[1]);
+
+      // Every added callback must have been removed with the exact same reference
+      for (const cb of addedCallbacks) {
+        expect(removedCallbacks).toContain(cb);
+      }
+    });
+
+    it('should clean up the race abort listener when processing rejects (catch path)', async () => {
+      const abortController = new AbortController();
+      const addSpy = vi.spyOn(abortController.signal, 'addEventListener');
+      const removeSpy = vi.spyOn(abortController.signal, 'removeEventListener');
+
+      const handle = await ShellExecutionService.execute(
+        'echo race-error',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+        defaultShellConfig,
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Inject a rejection into the processing chain by providing data whose
+      // handling will throw inside the headless terminal write callback.
+      // We accomplish this by making isBinary throw, which poisons the
+      // processingChain promise with a rejection.
+      mockIsBinary.mockImplementationOnce(() => {
+        throw new Error('simulated processing failure');
+      });
+      mockPtyProcess.onData.mock.calls[0][0]('trigger-error');
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Now fire onExit — the race will hit the .catch() path because
+      // processingChain (which isBinary poisoned) rejects.
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      const result = await handle.result;
+
+      // The command should still resolve successfully despite the processing error
+      expect(result.exitCode).toBe(0);
+
+      // Collect every abort callback that was added
+      const addedCallbacks = addSpy.mock.calls
+        .filter((call) => call[0] === 'abort')
+        .map((call) => call[1]);
+
+      // Collect every abort callback that was removed
+      const removedCallbacks = removeSpy.mock.calls
+        .filter((call) => call[0] === 'abort')
+        .map((call) => call[1]);
+
+      // Every added callback must have been removed with the exact same reference
+      for (const cb of addedCallbacks) {
+        expect(removedCallbacks).toContain(cb);
+      }
+    });
   });
 });
 

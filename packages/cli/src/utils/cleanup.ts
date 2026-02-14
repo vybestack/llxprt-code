@@ -6,7 +6,7 @@
 
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { Storage } from '@vybestack/llxprt-code-core';
+import { Storage, ShellExecutionService } from '@vybestack/llxprt-code-core';
 
 const cleanupFunctions: Array<(() => void) | (() => Promise<void>)> = [];
 const syncCleanupFunctions: Array<() => void> = [];
@@ -24,6 +24,13 @@ export async function runExitCleanup() {
   // Guard against concurrent cleanup if signal handlers fire multiple times
   if (cleanupInProgress) return;
   cleanupInProgress = true;
+
+  // Tear down any active PTYs first to release FDs/sockets promptly
+  try {
+    ShellExecutionService.destroyAllPtys();
+  } catch (_) {
+    // Ignore errors during cleanup.
+  }
 
   // Run sync cleanups first (e.g., stdio restoration)
   for (const fn of syncCleanupFunctions) {
