@@ -1471,7 +1471,6 @@ export async function createTransport(
   );
 }
 
-
 interface NamedTool {
   name?: string;
 }
