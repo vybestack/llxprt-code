@@ -4,7 +4,7 @@ import net from 'node:net';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 
 const findAvailablePort = async (): Promise<number> =>
-  await new Promise((resolve, reject) => {
+  new Promise((resolve, reject) => {
     const server = net.createServer();
     server.once('error', (error) => {
       server.close();

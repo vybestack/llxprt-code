@@ -485,11 +485,7 @@ export async function getCoreSystemPromptAsync(
     profileAsyncEnabled: profileAsyncEnabledArg,
   });
 
-  return await service.getPrompt(
-    context,
-    effectiveUserMemory,
-    effectiveCoreMemory,
-  );
+  return service.getPrompt(context, effectiveUserMemory, effectiveCoreMemory);
 }
 
 /**

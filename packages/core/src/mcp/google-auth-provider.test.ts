@@ -39,6 +39,12 @@ describe('GoogleCredentialProvider', () => {
       quotaProjectId?: string;
     };
 
+    const validConfig = {
+      oauth: {
+        scopes: ['scope1', 'scope2'],
+      },
+    } as MCPServerConfig;
+
     beforeEach(() => {
       const config = {
         oauth: {

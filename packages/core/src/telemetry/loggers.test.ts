@@ -269,6 +269,8 @@ describe('loggers', () => {
           total_token_count: 0,
           response_text: 'test-response',
           prompt_id: 'prompt-id-1',
+          error: undefined,
+          finish_reasons: [],
         },
       });
 

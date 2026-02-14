@@ -390,7 +390,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
             returnDisplay: 'No content found.',
           };
         }
-        return this.executeFallback(signal);
+        return await this.executeFallback(signal);
       }
 
       const sourceListFormatted: string[] = [];

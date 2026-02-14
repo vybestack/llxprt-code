@@ -195,6 +195,7 @@ export async function openDiff(
       case 'zed':
         // Use spawn for GUI-based editors to avoid blocking the entire process
         // Use shell: true on Windows to handle paths with spaces correctly
+        // eslint-disable-next-line @typescript-eslint/return-await
         return new Promise((resolve, reject) => {
           const childProcess = spawn(diffCommand.command, diffCommand.args, {
             stdio: 'inherit',

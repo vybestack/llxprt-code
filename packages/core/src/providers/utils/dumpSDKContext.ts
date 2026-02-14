@@ -49,7 +49,7 @@ export async function dumpSDKContext(
       `Dumping SDK context for ${providerName}: endpoint=${endpoint}, isError=${isError}`,
   );
 
-  return await dumpContext(request, dumpResponse, providerName);
+  return dumpContext(request, dumpResponse, providerName);
 }
 
 // Re-export shouldDump as shouldDumpSDKContext for backwards compatibility

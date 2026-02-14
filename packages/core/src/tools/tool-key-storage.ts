@@ -352,7 +352,7 @@ export class ToolKeyStorage {
         throw error;
       }
     }
-    return await this.getFromFile(toolName);
+    return this.getFromFile(toolName);
   }
 
   async deleteKey(toolName: string): Promise<void> {

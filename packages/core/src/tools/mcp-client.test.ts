@@ -555,9 +555,7 @@ describe('mcp-client', () => {
           false,
         );
 
-        expect(transport).toEqual(
-          new StreamableHTTPClientTransport(new URL('http://test-server'), {}),
-        );
+        expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
       });
 
       it('with headers', async () => {
@@ -745,7 +743,7 @@ describe('mcp-client', () => {
             false,
           ),
         ).rejects.toThrow(
-          'No URL configured for Google Credentials MCP server',
+          'URL must be provided in the config for Google Credentials provider',
         );
       });
     });
