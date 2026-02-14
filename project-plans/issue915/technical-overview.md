@@ -56,6 +56,8 @@ Current architecture must satisfy strict provider tool protocol rules at request
 
 The technical requirement is not mid-stream reroute correctness; it is **deterministic, protocol-valid transcript rendering at turn boundary** from canonical conversation state.
 
+A compounding issue is that the codebase currently has **three divergent tool execution paths** that process tool results differently, with inconsistent filtering, sequencing, and history integration. These divergent paths independently create or fail to prevent the invalid transcript states described above. See [tool-execution-unification.md](./tool-execution-unification.md) for detailed analysis.
+
 ### 2.1 In-flight binding invariant
 
 Any in-flight assistant generation and associated tool execution remain bound to the provider selected for that in-flight turn until terminal turn state (completion or cancellation finalization). Provider changes only affect subsequent request assembly.
@@ -240,7 +242,48 @@ Technical contract:
 
 ---
 
-## 9) Observability and Diagnostics Requirements
+## 9) Tool Execution Path Unification
+
+### 9.1 Current divergence
+
+Three distinct tool execution patterns exist:
+
+| Path | Scheduler lifetime | Parallelism | functionCall filtering | History writes |
+|------|-------------------|-------------|----------------------|----------------|
+| **Interactive CLI** (`useGeminiStream.ts`) | Long-lived, session-scoped | Parallel (batched) | Manual split into separate history entries | 4 ad-hoc manual writes in cancellation paths |
+| **Non-interactive CLI** (`nonInteractiveCli.ts`) | Per-tool throwaway via `executeToolCall()` | Sequential (one tool at a time) | **None** — pushes all `responseParts` unfiltered | Implicit via `sendMessageStream` |
+| **Subagent non-interactive** (`subagent.ts` `processFunctionCalls`) | Per-tool throwaway via `executeToolCall()` | Sequential (one tool at a time) | Explicit: filters out `functionCall` parts (Issue #244) | Implicit via `sendMessageStream` |
+
+The subagent's `runInteractive()` path uses a fourth variation: long-lived `CoreToolScheduler` with promise-based await and proper filtering — essentially the correct pattern that the other non-interactive paths should adopt.
+
+### 9.2 Problems caused by divergence
+
+1. **Inconsistent `functionCall` filtering**: The non-interactive CLI does not filter `functionCall` parts from `responseParts`. Today this is masked because `CoreToolScheduler` only emits `functionResponse` parts, but the invariant is undocumented and unenforceable. The subagent defensively filters (with Issue #244 comment); the non-interactive CLI does not.
+
+2. **Lost parallelism**: `executeToolCall()` creates a throwaway `CoreToolScheduler` per tool call, executing tools sequentially. For a model turn returning 5 tool calls, this means 5 serial executions instead of parallel batched execution.
+
+3. **Maintenance hazard**: Bug fixes and invariant enforcement must be applied to three separate code paths. History shows fixes applied to some paths but not others (Issue #244 filtering present in subagent, absent in non-interactive CLI).
+
+4. **Incompatible with single write boundary**: A validated `HistoryService.add()` boundary requires all tool result paths to feed through the same contract. Three divergent paths means three integration points to maintain.
+
+### 9.3 Required unified behavior
+
+All execution modes must:
+- Use a single long-lived `CoreToolScheduler` per session (or per subagent session).
+- Schedule all tool calls from a model turn as a batch (enabling parallel execution).
+- Apply identical `functionCall` filtering on results before feeding back to `GeminiChat`.
+- Write tool interaction state through the same boundary.
+- Handle cancellation through the same scheduler lifecycle (not ad-hoc manual history writes).
+
+The subagent `runInteractive()` pattern (long-lived scheduler, promise-based await, explicit filtering) demonstrates that this works without requiring the interactive CLI's callback-driven UI machinery.
+
+### 9.4 Scope relationship
+
+`executeToolCall()` may remain as a utility for genuinely single-tool-execution use cases (e.g., `agents/executor.ts`), but the non-interactive CLI turn loop and subagent non-interactive turn loop must not use it as a per-tool-call wrapper in a sequential loop. They should schedule full batches through a session-scoped scheduler.
+
+---
+
+## 10) Observability and Diagnostics Requirements
 
 To diagnose protocol failures, renderer/provider boundary must emit structured diagnostics (at least in debug/error paths) containing:
 - canonical call IDs seen
@@ -257,7 +300,7 @@ Diagnostics should allow distinguishing:
 
 ---
 
-## 10) Compatibility and Behavioral Guarantees
+## 11) Compatibility and Behavioral Guarantees
 
 1. No change to user-facing command workflow is required.
 2. No requirement for mid-stream provider rerouting support.
@@ -266,7 +309,7 @@ Diagnostics should allow distinguishing:
 
 ---
 
-## 11) Acceptance Conditions (Technical)
+## 12) Acceptance Conditions (Technical)
 
 A transcript render is technically acceptable iff:
 
@@ -275,3 +318,4 @@ A transcript render is technically acceptable iff:
 3. ID projection invariant holds for selected provider format, including Kimi/Mistral strict formats.
 4. Dedup invariant holds (no duplicate effective completion that violates provider protocol).
 5. Mixed thinking/tool/text transcript remains valid under reasoning inclusion policy.
+6. Tool execution path invariant holds: all execution modes (interactive CLI, non-interactive CLI, subagent) use session-scoped batch scheduling, identical result filtering, and the same history write path — no ad-hoc manual history writes for tool results or cancellations.

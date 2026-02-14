@@ -29,6 +29,7 @@ The user-facing failure is an HTTP 400 from strict providers caused by malformed
 - Correct handling of mixed content turns (thinking + tool calls + tool results + text).
 - Deterministic tool ID projection for providers with non-standard ID constraints (including Kimi and Mistral).
 - Compression/summarization safety relative to tool interaction integrity.
+- Unification of tool execution paths: all modes (interactive CLI, non-interactive CLI, subagent) must use the same tool execution and result-handling flow. See [tool-execution-unification.md](./tool-execution-unification.md).
 
 ### Out of scope
 - Mid-stream rerouting while a model is still producing a response.
@@ -44,6 +45,7 @@ The user-facing failure is an HTTP 400 from strict providers caused by malformed
 3. **Thinking blocks and tool blocks must coexist** without corrupting tool protocol rendering.
 4. **For any emitted tool-call set, provider-facing transcripts must emit a protocol-valid completion set** (real completions when present; otherwise policy-defined synthetic cancellation/interruption completions).
 5. **Tool IDs must remain canonical internally and be projected per provider format at egress** while preserving call/result pairing.
+6. **All execution modes must use the same tool execution and result-handling path.** Interactive CLI, non-interactive CLI, and subagent must not have divergent tool-result processing, filtering, or history-write behavior.
 
 ---
 
@@ -182,7 +184,14 @@ Required behavior:
 
 5. **Kimi and Mistral ID scenario**
    - Given canonical internal tool IDs,
-   - outbound IDs satisfy each provider’s required format while preserving exact call/result pairing.
+   - outbound IDs satisfy each provider's required format while preserving exact call/result pairing.
+
+6. **Execution path unification scenario**
+   - Given the same model turn producing 5 tool calls,
+   - interactive CLI, non-interactive CLI, and subagent all:
+     - execute tools through the same scheduler-based batch pattern,
+     - apply identical result filtering,
+     - feed results back through GeminiChat without ad-hoc manual history writes.
 
 ---
 
