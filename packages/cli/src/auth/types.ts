@@ -12,3 +12,4 @@ export type {
 } from '@vybestack/llxprt-code-core';
 
 export { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
+export { KeyringTokenStore } from '@vybestack/llxprt-code-core';

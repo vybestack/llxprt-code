@@ -14,6 +14,7 @@ export {
 export { QwenDeviceFlow } from './src/auth/qwen-device-flow.js';
 export type { DeviceFlowConfig } from './src/auth/qwen-device-flow.js';
 export { MultiProviderTokenStore } from './src/auth/token-store.js';
+export { KeyringTokenStore } from './src/auth/keyring-token-store.js';
 export {
   openBrowserSecurely,
   shouldLaunchBrowser,
