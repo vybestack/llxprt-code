@@ -255,6 +255,8 @@ export class CodexOAuthProvider implements OAuthProvider {
           `[FLOW] Callback received! code: ${code.substring(0, 10)}..., state: ${callbackState.substring(0, 8)}...`,
       );
 
+      await localCallback.shutdown().catch(() => undefined);
+
       // Exchange code for tokens with state
       this.logger.debug(() => '[FLOW] Calling completeAuth()...');
       await this.completeAuth(code, redirectUri, callbackState);

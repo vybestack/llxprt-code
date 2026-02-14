@@ -240,7 +240,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           : null;
 
         // Always display the device code URL to the user (never the callback URL)
-        const message = `Please visit the following URL to authorize with Anthropic Claude:\\n${deviceCodeUrl}`;
+        const message = `Please visit the following URL to authorize with Anthropic Claude:\n${deviceCodeUrl}`;
         const historyItem: HistoryItemOAuthURL = {
           type: 'oauth_url',
           text: message,

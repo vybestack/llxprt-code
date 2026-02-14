@@ -235,8 +235,10 @@ export class OAuthManager {
   private getMessageBus?: () => MessageBus | undefined;
   // Getter function for config (lazy resolution for bucket failover handler)
   private getConfig?: () => Config | undefined;
-  // Session-scoped flag: user declined the BucketAuthConfirmation dialog
-  private userDeclinedAuthPrompt = false;
+  // Session-scoped flag: user dismissed the BucketAuthConfirmation dialog.
+  // When true, subsequent auth attempts skip the dialog and proceed directly
+  // (i.e. "don't bother me again" rather than "block auth").
+  private userDismissedAuthPrompt = false;
 
   constructor(tokenStore: TokenStore, settings?: LoadedSettings) {
     this.providers = new Map();
@@ -2079,10 +2081,10 @@ export class OAuthManager {
       provider: string,
       bucket: string,
     ): Promise<boolean> => {
-      // If user already declined in this session, skip the dialog and proceed directly
-      if (this.userDeclinedAuthPrompt) {
+      // If user already dismissed in this session, skip the dialog and proceed directly
+      if (this.userDismissedAuthPrompt) {
         logger.debug(
-          'User previously declined auth prompt in this session, proceeding directly',
+          'User previously dismissed auth prompt in this session, proceeding directly',
           { provider, bucket },
         );
         return true;
@@ -2122,7 +2124,7 @@ export class OAuthManager {
               result,
             });
             if (!result) {
-              this.userDeclinedAuthPrompt = true;
+              this.userDismissedAuthPrompt = true;
             }
             return result;
           }
@@ -2141,7 +2143,7 @@ export class OAuthManager {
               result,
             });
             if (!result) {
-              this.userDeclinedAuthPrompt = true;
+              this.userDismissedAuthPrompt = true;
             }
             return result;
           }

@@ -176,8 +176,6 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
     }
 
     // Second attempt - should skip the dialog and proceed directly
-    // Reset the mock to track new calls
-    const secondCallCount = confirmationCount;
     try {
       await manager.getToken('anthropic');
     } catch {
@@ -186,7 +184,7 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
 
     // The confirmation dialog should NOT have been shown again
     // (confirmationCount should still be 1 from the first attempt)
-    expect(secondCallCount).toBe(1);
+    expect(confirmationCount).toBe(1);
   });
 
   it('should reset declined state on new OAuthManager instance', async () => {
