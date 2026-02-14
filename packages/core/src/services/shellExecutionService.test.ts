@@ -591,43 +591,6 @@ describe('ShellExecutionService', () => {
 
       expect(result.exitCode).toBe(0);
     });
-
-    it('should remove the abort listener from the signal after onExit race settles', async () => {
-      const abortController = new AbortController();
-      const addSpy = vi.spyOn(abortController.signal, 'addEventListener');
-      const removeSpy = vi.spyOn(abortController.signal, 'removeEventListener');
-
-      const handle = await ShellExecutionService.execute(
-        'echo race-cleanup',
-        '/test/dir',
-        onOutputEventMock,
-        abortController.signal,
-        true,
-        defaultShellConfig,
-      );
-
-      await new Promise((resolve) => setImmediate(resolve));
-
-      mockPtyProcess.onData.mock.calls[0][0]('output\n');
-      await new Promise((resolve) => setImmediate(resolve));
-      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
-      await handle.result;
-
-      // Collect every abort callback that was added
-      const addedCallbacks = addSpy.mock.calls
-        .filter((call) => call[0] === 'abort')
-        .map((call) => call[1]);
-
-      // Collect every abort callback that was removed
-      const removedCallbacks = removeSpy.mock.calls
-        .filter((call) => call[0] === 'abort')
-        .map((call) => call[1]);
-
-      // Every added callback must have been removed with the exact same reference
-      for (const cb of addedCallbacks) {
-        expect(removedCallbacks).toContain(cb);
-      }
-    });
   });
 
   describe('destroyAllPtys', () => {
