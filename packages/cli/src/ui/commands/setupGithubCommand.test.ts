@@ -115,7 +115,7 @@ describe('setupGithubCommand', async () => {
 
     if (gitignoreExists) {
       const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
-      expect(gitignoreContent).toContain('.gemini/');
+      expect(gitignoreContent).toContain('.llxprt/');
       expect(gitignoreContent).toContain('gha-creds-*.json');
     }
   });

@@ -309,7 +309,7 @@ describe.skip('Conversation Logging Performance Impact', () => {
       // Reduced from 100 for faster test execution
       await measurer.measure(async () => {
         const stream = wrapper.generateChatCompletion(message);
-        return await consumeAsyncIterable(stream);
+        return consumeAsyncIterable(stream);
       });
     }
     const wrappedMetrics = measurer.getMetrics();
@@ -319,7 +319,7 @@ describe.skip('Conversation Logging Performance Impact', () => {
     for (let i = 0; i < 50; i++) {
       await measurer.measure(async () => {
         const stream = provider.generateChatCompletion(message);
-        return await consumeAsyncIterable(stream);
+        return consumeAsyncIterable(stream);
       });
     }
     const unwrappedMetrics = measurer.getMetrics();
@@ -372,7 +372,7 @@ describe.skip('Conversation Logging Performance Impact', () => {
     for (let i = 0; i < 20; i++) {
       await measurer.measure(async () => {
         const stream = disabledWrapper.generateChatCompletion(conversation);
-        return await consumeAsyncIterable(stream);
+        return consumeAsyncIterable(stream);
       });
     }
     const disabledMetrics = measurer.getMetrics();
@@ -382,7 +382,7 @@ describe.skip('Conversation Logging Performance Impact', () => {
     for (let i = 0; i < 20; i++) {
       await measurer.measure(async () => {
         const stream = enabledWrapper.generateChatCompletion(conversation);
-        return await consumeAsyncIterable(stream);
+        return consumeAsyncIterable(stream);
       });
     }
     const enabledMetrics = measurer.getMetrics();
@@ -473,8 +473,8 @@ describe.skip('Conversation Logging Performance Impact', () => {
 
       measurer.reset();
       for (let i = 0; i < 20; i++) {
-        await measurer.measure(
-          async () => await fastStorage.writeConversationEntry(entry),
+        await measurer.measure(async () =>
+          fastStorage.writeConversationEntry(entry),
         );
       }
 
@@ -563,7 +563,7 @@ describe.skip('Conversation Logging Performance Impact', () => {
           // 10 operations per concurrent thread
           await measurer.measure(async () => {
             const stream = wrapper.generateChatCompletion(messages);
-            return await consumeAsyncIterable(stream);
+            return consumeAsyncIterable(stream);
           });
         }
       });
@@ -613,7 +613,7 @@ describe.skip('Conversation Logging Performance Impact', () => {
         // Fewer iterations for large conversations
         await measurer.measure(async () => {
           const stream = wrapper.generateChatCompletion(largeConversation);
-          return await consumeAsyncIterable(stream);
+          return consumeAsyncIterable(stream);
         });
       }
 
@@ -663,7 +663,7 @@ describe.skip('Conversation Logging Performance Impact', () => {
       const wrapperIndex = i % wrappers.length;
       await measurer.measure(async () => {
         const stream = wrappers[wrapperIndex].generateChatCompletion(message);
-        return await consumeAsyncIterable(stream);
+        return consumeAsyncIterable(stream);
       });
     }
 
@@ -674,7 +674,7 @@ describe.skip('Conversation Logging Performance Impact', () => {
     for (let i = 0; i < 30; i++) {
       await measurer.measure(async () => {
         const stream = wrappers[0].generateChatCompletion(message);
-        return await consumeAsyncIterable(stream);
+        return consumeAsyncIterable(stream);
       });
     }
 

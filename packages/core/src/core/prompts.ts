@@ -446,11 +446,7 @@ export async function getCoreSystemPromptAsync(
     includeSubagentDelegation,
   });
 
-  return await service.getPrompt(
-    context,
-    effectiveUserMemory,
-    effectiveCoreMemory,
-  );
+  return service.getPrompt(context, effectiveUserMemory, effectiveCoreMemory);
 }
 
 /**

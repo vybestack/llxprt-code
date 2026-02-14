@@ -352,7 +352,7 @@ export class QwenOAuthProvider implements OAuthProvider {
 
         // If token exists and is expired/near expiry, try to refresh it
         if (token && this.isTokenExpired(token)) {
-          return await this.refreshIfNeeded();
+          return this.refreshIfNeeded();
         }
 
         return token;

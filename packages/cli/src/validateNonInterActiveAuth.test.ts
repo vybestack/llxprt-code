@@ -164,11 +164,11 @@ describe('validateNonInterActiveAuth', () => {
       getProviderManager: () => undefined,
     };
     const promise = validateNonInteractiveAuth(undefined, nonInteractiveConfig);
-    await expect(promise).rejects.toThrow('process.exit(1) called');
+    await expect(promise).rejects.toThrow('process.exit(41) called');
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Please set an Auth method'),
     );
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    expect(processExitSpy).toHaveBeenCalledWith(41);
   });
 
   it('skips refreshAuth when useExternalAuth is true', async () => {

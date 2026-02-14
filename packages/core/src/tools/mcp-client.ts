@@ -48,6 +48,8 @@ import type {
 import type { ToolRegistry } from './tool-registry.js';
 import { DebugLogger } from '../debug/index.js';
 
+const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
+
 export const MCP_DEFAULT_TIMEOUT_MSEC = 10 * 60 * 1000; // default to 10 minutes
 
 export type DiscoveredMCPPrompt = Prompt & {
@@ -1425,7 +1427,7 @@ export async function createTransport(
 
           if (accessToken) {
             hasOAuthConfig = true;
-            debug.log(
+            debugLogger.log(
               `Found stored OAuth token for server '${mcpServerName}'`,
             );
           }

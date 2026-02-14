@@ -443,7 +443,7 @@ export class Task {
     if (!sessionId) {
       throw new Error('Scheduler sessionId is required');
     }
-    return await this.config.getOrCreateScheduler(sessionId, {
+    return this.config.getOrCreateScheduler(sessionId, {
       outputUpdateHandler: this._schedulerOutputUpdate.bind(this),
       onAllToolCallsComplete: this._schedulerAllToolCallsComplete.bind(this),
       onToolCallsUpdate: this._schedulerToolCallsUpdate.bind(this),

@@ -117,7 +117,7 @@ export async function runZedIntegration(
   logger.debug(() => 'Zed integration ready, waiting for messages');
 
   // Keep the process alive - the Connection's #receive method will handle messages
-  return await new Promise<never>(() => {
+  return new Promise<never>(() => {
     // This promise never resolves, keeping the process alive
   });
 }

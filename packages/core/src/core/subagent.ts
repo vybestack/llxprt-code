@@ -713,7 +713,7 @@ export class SubAgentScope {
         )
       : (async () => {
           const sessionId = schedulerConfig.getSessionId();
-          return await schedulerConfig.getOrCreateScheduler(sessionId, {
+          return schedulerConfig.getOrCreateScheduler(sessionId, {
             outputUpdateHandler,
             onAllToolCallsComplete: handleCompletion,
             onToolCallsUpdate: undefined,

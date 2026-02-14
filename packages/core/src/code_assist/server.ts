@@ -124,10 +124,7 @@ export class CodeAssistServer implements ContentGenerator {
   async loadCodeAssist(
     req: LoadCodeAssistRequest,
   ): Promise<LoadCodeAssistResponse> {
-    return await this.requestPost<LoadCodeAssistResponse>(
-      'loadCodeAssist',
-      req,
-    );
+    return this.requestPost<LoadCodeAssistResponse>('loadCodeAssist', req);
   }
 
   async getCodeAssistGlobalUserSetting(): Promise<CodeAssistGlobalUserSettingResponse> {

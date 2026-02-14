@@ -407,7 +407,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
 
         const runGit = async (args: string[]) => {
           const { spawn } = await import('child_process');
-          return await new Promise<void>((resolve, reject) => {
+          return new Promise<void>((resolve, reject) => {
             const child = spawn('git', args, {
               cwd: repoDir,
               windowsHide: true,
@@ -465,7 +465,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
 
         const runGit = async (args: string[]) => {
           const { spawn } = await import('child_process');
-          return await new Promise<void>((resolve, reject) => {
+          return new Promise<void>((resolve, reject) => {
             const child = spawn('git', args, {
               cwd: repoDir,
               windowsHide: true,
@@ -525,7 +525,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
 
         const runGit = async (args: string[]) => {
           const { spawn } = await import('child_process');
-          return await new Promise<void>((resolve, reject) => {
+          return new Promise<void>((resolve, reject) => {
             const child = spawn('git', args, {
               cwd: repoDir,
               windowsHide: true,
