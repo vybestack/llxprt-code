@@ -1349,12 +1349,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       options.userMemory,
       () => options.invocation?.userMemory,
     );
+    const mcpInstructions = options.config
+      ?.getMcpClientManager?.()
+      ?.getMcpInstructions();
     const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
       toolNamesArg ?? [],
       () => options.config?.getSubagentManager?.(),
     );
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
+      mcpInstructions,
       model,
       tools: toolNamesArg,
       includeSubagentDelegation,
@@ -2901,12 +2905,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       options.userMemory,
       () => options.invocation?.userMemory,
     );
+    const mcpInstructions = options.config
+      ?.getMcpClientManager?.()
+      ?.getMcpInstructions();
     const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
       toolNamesArg ?? [],
       () => options.config?.getSubagentManager?.(),
     );
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
+      mcpInstructions,
       model,
       tools: toolNamesArg,
       includeSubagentDelegation,

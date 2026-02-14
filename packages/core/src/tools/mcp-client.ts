@@ -223,6 +223,17 @@ export class McpClient {
   getServerConfig(): MCPServerConfig {
     return this.serverConfig;
   }
+
+  /**
+   * Returns the instructions from the MCP server's capabilities.
+   * Returns empty string if no instructions are available.
+   */
+  getInstructions(): string {
+    if (!this.client) {
+      return '';
+    }
+    return this.client.getInstructions() ?? '';
+  }
 }
 
 /**

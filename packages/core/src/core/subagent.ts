@@ -1838,7 +1838,11 @@ export class SubAgentScope {
       ),
     );
 
+    const mcpInstructions = this.config
+      .getMcpClientManager()
+      ?.getMcpInstructions();
     const coreSystemPrompt = await getCoreSystemPromptAsync({
+      mcpInstructions,
       model: this.modelConfig.model,
       tools: toolNames,
       includeSubagentDelegation: false,

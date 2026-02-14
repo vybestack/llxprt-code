@@ -317,4 +317,50 @@ describe('prompts async integration', () => {
       expect(prompt).not.toContain('{{SUBAGENT_DELEGATION}}');
     });
   });
+
+  describe('MCP Instructions Integration', () => {
+    it('should include MCP instructions when provided', async () => {
+      const mcpInstructions = `--- Instructions from MCP server 'test-server' ---
+This is a test instruction from an MCP server.
+--- End of instructions from 'test-server' ---`;
+
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        mcpInstructions,
+      });
+
+      expect(prompt).toContain(
+        "Instructions from MCP server 'test-server'",
+      );
+      expect(prompt).toContain(
+        'This is a test instruction from an MCP server.',
+      );
+    });
+
+    it('should not include MCP instructions when not provided', async () => {
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+      });
+
+      expect(prompt).not.toContain('Instructions from MCP server');
+    });
+
+    it('should handle empty MCP instructions', async () => {
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        mcpInstructions: '',
+      });
+
+      expect(prompt).not.toContain('Instructions from MCP server');
+    });
+
+    it('should handle whitespace-only MCP instructions', async () => {
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        mcpInstructions: '   \n\n   ',
+      });
+
+      expect(prompt).not.toContain('Instructions from MCP server');
+    });
+  });
 });
