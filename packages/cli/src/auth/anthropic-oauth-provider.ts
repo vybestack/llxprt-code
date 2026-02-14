@@ -317,6 +317,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
               this.pendingAuthPromise,
             ]);
 
+            // Suppress unhandled rejection from the losing branch
+            this.pendingAuthPromise.catch(() => {});
+            callbackPromise.catch(() => {});
+
             // Whichever succeeded, clean up the other
             await localCallback.shutdown().catch(() => undefined);
             (
