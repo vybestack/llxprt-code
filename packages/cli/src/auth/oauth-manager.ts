@@ -667,6 +667,31 @@ export class OAuthManager {
       return token.access_token;
     }
 
+    // @fix issue1191: Try bucket failover before triggering full OAuth re-authentication
+    const failoverConfig = this.getConfig?.();
+    const failoverHandler = failoverConfig?.getBucketFailoverHandler?.();
+    if (failoverHandler?.isEnabled()) {
+      logger.debug(
+        () =>
+          `[issue1191] Session bucket has no token for ${providerName}, attempting bucket failover before OAuth`,
+      );
+      const failoverResult = await failoverHandler.tryFailover();
+      if (failoverResult) {
+        const failoverToken = await this.getOAuthToken(providerName);
+        if (failoverToken) {
+          logger.debug(
+            () =>
+              `[issue1191] Bucket failover succeeded for ${providerName}, returning token`,
+          );
+          return failoverToken.access_token;
+        }
+      }
+      logger.debug(
+        () =>
+          `[issue1191] Bucket failover did not yield a token for ${providerName}, falling through to OAuth`,
+      );
+    }
+
     // For other providers, trigger OAuth flow
     // Check if the current profile has multiple buckets - if so, use MultiBucketAuthenticator
     // Issue 913: Also check if auth-bucket-prompt is enabled for single/default buckets
