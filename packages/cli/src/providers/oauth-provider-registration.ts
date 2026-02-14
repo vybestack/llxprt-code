@@ -9,7 +9,7 @@ import { GeminiOAuthProvider } from '../auth/gemini-oauth-provider.js';
 import { QwenOAuthProvider } from '../auth/qwen-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
 import { CodexOAuthProvider } from '../auth/codex-oauth-provider.js';
-import { MultiProviderTokenStore } from '../auth/types.js';
+import { KeyringTokenStore } from '../auth/types.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { HistoryItemWithoutId } from '../ui/types.js';
 
@@ -27,7 +27,7 @@ let registeredProviders = new WeakMap<OAuthManager, Set<string>>();
 export function ensureOAuthProviderRegistered(
   providerName: string,
   oauthManager: OAuthManager,
-  tokenStore?: MultiProviderTokenStore,
+  tokenStore?: KeyringTokenStore,
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,

@@ -12,10 +12,7 @@ import {
   MessageActionReturn,
 } from './types.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
-import {
-  MultiProviderTokenStore,
-  DebugLogger,
-} from '@vybestack/llxprt-code-core';
+import { KeyringTokenStore, DebugLogger } from '@vybestack/llxprt-code-core';
 import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
@@ -37,7 +34,7 @@ function getOAuthManager(): OAuthManager {
   let oauthManager = runtime.getCliOAuthManager();
 
   if (!oauthManager) {
-    const tokenStore = new MultiProviderTokenStore();
+    const tokenStore = new KeyringTokenStore();
     oauthManager = new OAuthManager(tokenStore);
     oauthManager.registerProvider(new GeminiOAuthProvider());
     oauthManager.registerProvider(new QwenOAuthProvider());
@@ -659,7 +656,7 @@ export const authCommand: SlashCommand = {
     // If for some reason it doesn't exist yet, create it
     if (!oauthManager) {
       // This should rarely happen, but handle it as a fallback
-      const tokenStore = new MultiProviderTokenStore();
+      const tokenStore = new KeyringTokenStore();
       oauthManager = new OAuthManager(tokenStore, context.services.settings);
 
       // Register OAuth providers

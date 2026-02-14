@@ -36,7 +36,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
-    MultiProviderTokenStore: vi.fn().mockImplementation(() => tokenStoreMocks),
+    KeyringTokenStore: vi.fn().mockImplementation(() => tokenStoreMocks),
   };
 });
 
