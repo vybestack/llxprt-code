@@ -56,6 +56,11 @@ export function useCommandCompletion(
   shellModeActive: boolean,
   config?: Config,
 ): UseCommandCompletionReturn {
+  const dirs = useMemo(
+    () => config?.getWorkspaceContext().getDirectories() ?? [cwd],
+    [config, cwd],
+  );
+
   const {
     suggestions,
     activeSuggestionIndex,
