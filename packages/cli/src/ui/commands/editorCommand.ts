@@ -14,6 +14,7 @@ export const editorCommand: SlashCommand = {
   name: 'editor',
   description: 'set external editor preference',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: (): OpenDialogActionReturn => ({
     type: 'dialog',
     dialog: 'editor',

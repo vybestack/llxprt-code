@@ -307,6 +307,11 @@ export interface SlashCommand {
   // Optional metadata for extension commands
   extensionName?: string;
 
+  // When true, pressing Enter on this command's suggestion submits it immediately
+  // instead of just autocompleting. Tab always autocompletes regardless.
+  // Defaults to false (undefined = false).
+  autoExecute?: boolean;
+
   // The action to run. Optional for parent commands that only group sub-commands.
   action?: (
     context: CommandContext,

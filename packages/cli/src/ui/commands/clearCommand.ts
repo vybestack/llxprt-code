@@ -26,6 +26,7 @@ export const clearCommand: SlashCommand = {
   name: 'clear',
   description: 'clear the screen and conversation history',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: async (context, _args) => {
     const geminiClient = resolveForegroundGeminiClient(context);
 

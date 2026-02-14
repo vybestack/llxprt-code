@@ -128,6 +128,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     name: 'status',
     description: 'check status of IDE integration',
     kind: CommandKind.BUILT_IN,
+    autoExecute: true,
     action: async (): Promise<SlashCommandActionReturn> => {
       const { messageType, content } =
         await getIdeStatusMessageWithFiles(ideClient);

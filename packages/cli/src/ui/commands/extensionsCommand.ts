@@ -146,6 +146,7 @@ const listExtensionsCommand: SlashCommand = {
   name: 'list',
   description: 'List active extensions',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: listAction,
 };
 
