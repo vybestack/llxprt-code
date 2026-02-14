@@ -20,16 +20,16 @@ import {
   getToolKeyEntry,
   getSupportedToolNames,
   maskKeyForDisplay,
-  type KeytarAdapter,
+  type KeyringAdapter,
 } from './tool-key-storage.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
 /**
  * Creates an in-memory mock keytar adapter for testing keychain operations.
- * This is injected via ToolKeyStorageOptions.keytarLoader — no mock theater.
+ * This is injected via ToolKeyStorageOptions.keyringLoader — no mock theater.
  */
-function createMockKeytar(): KeytarAdapter & { store: Map<string, string> } {
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
     store,
@@ -169,10 +169,10 @@ describe('ToolKeyStorage', () => {
      * @requirement REQ-001.1
      */
     it('saves and retrieves a key via keychain when available', async () => {
-      const mockKeytar = createMockKeytar();
+      const mockKeyring = createMockKeyring();
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => mockKeytar,
+        keyringLoader: async () => mockKeyring,
       });
 
       await storage.saveKey('exa', 'sk-123');
@@ -185,10 +185,10 @@ describe('ToolKeyStorage', () => {
      * @requirement REQ-001.1
      */
     it('returns null when no key stored in keychain', async () => {
-      const mockKeytar = createMockKeytar();
+      const mockKeyring = createMockKeyring();
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => mockKeytar,
+        keyringLoader: async () => mockKeyring,
       });
 
       const result = await storage.getKey('exa');
@@ -200,10 +200,10 @@ describe('ToolKeyStorage', () => {
      * @requirement REQ-001.4
      */
     it('deleteKey removes key from keychain', async () => {
-      const mockKeytar = createMockKeytar();
+      const mockKeyring = createMockKeyring();
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => mockKeytar,
+        keyringLoader: async () => mockKeyring,
       });
 
       await storage.saveKey('exa', 'sk-to-delete');
@@ -217,10 +217,10 @@ describe('ToolKeyStorage', () => {
      * @requirement REQ-001.4
      */
     it('deleteKey on non-existent key does not throw', async () => {
-      const mockKeytar = createMockKeytar();
+      const mockKeyring = createMockKeyring();
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => mockKeytar,
+        keyringLoader: async () => mockKeyring,
       });
 
       await expect(storage.deleteKey('exa')).resolves.not.toThrow();
@@ -231,19 +231,19 @@ describe('ToolKeyStorage', () => {
      * @requirement REQ-001.5
      */
     it('uses service name llxprt-code-tool-keys (not llxprt-code)', async () => {
-      const mockKeytar = createMockKeytar();
+      const mockKeyring = createMockKeyring();
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => mockKeytar,
+        keyringLoader: async () => mockKeyring,
       });
 
       await storage.saveKey('exa', 'sk-isolation-test');
 
       // Verify the key was stored under the correct service name
-      const correctServiceKey = mockKeytar.store.has(
+      const correctServiceKey = mockKeyring.store.has(
         'llxprt-code-tool-keys:exa',
       );
-      const wrongServiceKey = mockKeytar.store.has('llxprt-code:exa');
+      const wrongServiceKey = mockKeyring.store.has('llxprt-code:exa');
       expect(correctServiceKey).toBe(true);
       expect(wrongServiceKey).toBe(false);
     });
@@ -259,7 +259,7 @@ describe('ToolKeyStorage', () => {
     it('saves and retrieves a key via encrypted file when keychain unavailable', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null, // keychain unavailable
+        keyringLoader: async () => null, // keychain unavailable
       });
 
       await storage.saveKey('exa', 'sk-file-fallback');
@@ -274,7 +274,7 @@ describe('ToolKeyStorage', () => {
     it('encrypted file is created in tools directory', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.saveKey('exa', 'sk-check-file');
@@ -290,7 +290,7 @@ describe('ToolKeyStorage', () => {
     it('encrypted file content is not plaintext', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.saveKey('exa', 'sk-secret-value');
@@ -308,7 +308,7 @@ describe('ToolKeyStorage', () => {
     it('returns null when no encrypted file exists', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       const result = await storage.getKey('exa');
@@ -322,7 +322,7 @@ describe('ToolKeyStorage', () => {
     it('deleteKey removes encrypted file', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.saveKey('exa', 'sk-to-remove');
@@ -347,7 +347,7 @@ describe('ToolKeyStorage', () => {
     it('setKeyfilePath persists path in keyfiles.json', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', '/path/to/key');
@@ -365,7 +365,7 @@ describe('ToolKeyStorage', () => {
     it('getKeyfilePath retrieves persisted path', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', '/path/to/exa.key');
@@ -380,7 +380,7 @@ describe('ToolKeyStorage', () => {
     it('clearKeyfilePath removes entry from keyfiles.json', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', '/path/to/key');
@@ -396,7 +396,7 @@ describe('ToolKeyStorage', () => {
     it('getKeyfilePath returns null when not configured', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       const result = await storage.getKeyfilePath('exa');
@@ -410,7 +410,7 @@ describe('ToolKeyStorage', () => {
     it('overwrites keyfile path for same tool on repeated setKeyfilePath', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', '/path/to/exa.key');
@@ -429,10 +429,10 @@ describe('ToolKeyStorage', () => {
      * @requirement REQ-001.3
      */
     it('returns keychain key when available (priority 1)', async () => {
-      const mockKeytar = createMockKeytar();
+      const mockKeyring = createMockKeyring();
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => mockKeytar,
+        keyringLoader: async () => mockKeyring,
       });
 
       await storage.saveKey('exa', 'sk-keychain-value');
@@ -447,7 +447,7 @@ describe('ToolKeyStorage', () => {
     it('returns encrypted file key when keychain unavailable (priority 2)', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null, // keychain unavailable
+        keyringLoader: async () => null, // keychain unavailable
       });
 
       await storage.saveKey('exa', 'sk-file-value');
@@ -465,7 +465,7 @@ describe('ToolKeyStorage', () => {
 
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', keyfilePath);
@@ -483,7 +483,7 @@ describe('ToolKeyStorage', () => {
 
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', keyfilePath);
@@ -510,7 +510,7 @@ describe('ToolKeyStorage', () => {
 
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', keyfilePath);
@@ -528,7 +528,7 @@ describe('ToolKeyStorage', () => {
 
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', keyfilePath);
@@ -543,7 +543,7 @@ describe('ToolKeyStorage', () => {
     it('returns null when keyfile missing', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', '/nonexistent/path/key.txt');
@@ -561,7 +561,7 @@ describe('ToolKeyStorage', () => {
 
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await storage.setKeyfilePath('exa', keyfilePath);
@@ -576,7 +576,7 @@ describe('ToolKeyStorage', () => {
     it('returns null when no key configured anywhere', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       const result = await storage.resolveKey('exa');
@@ -588,13 +588,13 @@ describe('ToolKeyStorage', () => {
      * @requirement REQ-001.3
      */
     it('prefers stored key over keyfile when both configured', async () => {
-      const mockKeytar = createMockKeytar();
+      const mockKeyring = createMockKeyring();
       const keyfilePath = path.join(tempDir, 'override-exa.key');
       await fs.writeFile(keyfilePath, 'sk-from-file\n', 'utf-8');
 
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => mockKeytar,
+        keyringLoader: async () => mockKeyring,
       });
 
       await storage.saveKey('exa', 'sk-from-keychain');
@@ -613,10 +613,10 @@ describe('ToolKeyStorage', () => {
      * @requirement REQ-001.1
      */
     it('returns true when key stored', async () => {
-      const mockKeytar = createMockKeytar();
+      const mockKeyring = createMockKeyring();
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => mockKeytar,
+        keyringLoader: async () => mockKeyring,
       });
 
       await storage.saveKey('exa', 'sk-exists');
@@ -629,10 +629,10 @@ describe('ToolKeyStorage', () => {
      * @requirement REQ-001.1
      */
     it('returns false when no key', async () => {
-      const mockKeytar = createMockKeytar();
+      const mockKeyring = createMockKeyring();
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => mockKeytar,
+        keyringLoader: async () => mockKeyring,
       });
 
       const result = await storage.hasKey('exa');
@@ -646,7 +646,7 @@ describe('ToolKeyStorage', () => {
     it('rejects path-traversal tool name in saveKey', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await expect(storage.saveKey('../etc/passwd', 'sk-bad')).rejects.toThrow(
@@ -657,7 +657,7 @@ describe('ToolKeyStorage', () => {
     it('rejects unregistered tool name in getKey', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await expect(storage.getKey('not-a-tool')).rejects.toThrow(
@@ -668,7 +668,7 @@ describe('ToolKeyStorage', () => {
     it('rejects invalid tool name in setKeyfilePath', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await expect(
@@ -679,7 +679,7 @@ describe('ToolKeyStorage', () => {
     it('rejects invalid tool name in getKeyfilePath', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await expect(storage.getKeyfilePath('../../etc/shadow')).rejects.toThrow(
@@ -690,7 +690,7 @@ describe('ToolKeyStorage', () => {
     it('rejects invalid tool name in resolveKey', async () => {
       const storage = new ToolKeyStorage({
         toolsDir: tempDir,
-        keytarLoader: async () => null,
+        keyringLoader: async () => null,
       });
 
       await expect(storage.resolveKey('unknown')).rejects.toThrow(

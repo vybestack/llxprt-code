@@ -4,7 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { getErrorMessage } from '@vybestack/llxprt-code-core';
+import {
+  getErrorMessage,
+  getGlobalCoreMemoryFilePath,
+  getProjectCoreMemoryFilePath,
+  loadCoreMemoryContent,
+  MemoryTool,
+} from '@vybestack/llxprt-code-core';
+import * as fs from 'fs/promises';
 import { MessageType } from '../types.js';
 import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 import type { SlashCommand, SlashCommandActionReturn } from './types.js';
@@ -40,14 +47,17 @@ export const memoryCommand: SlashCommand = {
     {
       name: 'add',
       description:
-        'Add content to the memory. Usage: /memory add <global|project> <text to remember>',
+        'Add content to the memory. Usage: /memory add <global|project|core.global|core.project> <text>',
       kind: CommandKind.BUILT_IN,
       action: (context, args): SlashCommandActionReturn | void => {
+        const USAGE =
+          'Usage: /memory add <global|project|core.global|core.project> <text to remember>';
+
         if (!args || args.trim() === '') {
           return {
             type: 'message',
             messageType: 'error',
-            content: 'Usage: /memory add <global|project> <text to remember>',
+            content: USAGE,
           };
         }
 
@@ -58,11 +68,16 @@ export const memoryCommand: SlashCommand = {
         // If no space, check if it's just a scope keyword without content
         if (firstSpaceIndex === -1) {
           const arg = trimmedArgs.toLowerCase();
-          if (arg === 'global' || arg === 'project') {
+          if (
+            arg === 'global' ||
+            arg === 'project' ||
+            arg === 'core.global' ||
+            arg === 'core.project'
+          ) {
             return {
               type: 'message',
               messageType: 'error',
-              content: 'Usage: /memory add <global|project> <text to remember>',
+              content: USAGE,
             };
           }
           // No scope specified, default to global
@@ -87,6 +102,62 @@ export const memoryCommand: SlashCommand = {
           .toLowerCase();
         const remainingArgs = trimmedArgs.substring(firstSpaceIndex + 1).trim();
 
+        // Handle core.project and core.global — write directly to .LLXPRT_SYSTEM
+        if (firstArg === 'core.project' || firstArg === 'core.global') {
+          if (remainingArgs === '') {
+            return {
+              type: 'message',
+              messageType: 'error',
+              content: USAGE,
+            };
+          }
+
+          const fact = remainingArgs;
+          const workingDir =
+            context.services.config?.getWorkingDir() || process.cwd();
+          const filePath =
+            firstArg === 'core.project'
+              ? getProjectCoreMemoryFilePath(workingDir)
+              : getGlobalCoreMemoryFilePath();
+
+          // Write core memory asynchronously using the shared entry logic
+          void (async () => {
+            try {
+              await MemoryTool.performAddMemoryEntry(fact, filePath, {
+                readFile: fs.readFile,
+                writeFile: fs.writeFile,
+                mkdir: fs.mkdir,
+              });
+              // Reload cached core memory so the change takes effect immediately
+              try {
+                const coreContent = await loadCoreMemoryContent(workingDir);
+                context.services.config?.setCoreMemory(coreContent);
+                await context.services.config?.updateSystemInstructionIfInitialized();
+              } catch {
+                // Non-fatal: memory is written to disk; cache will sync on next refresh
+              }
+
+              context.ui.addItem(
+                {
+                  type: MessageType.INFO,
+                  text: `Core memory saved to ${firstArg}: "${fact}"`,
+                },
+                Date.now(),
+              );
+            } catch (error) {
+              context.ui.addItem(
+                {
+                  type: MessageType.ERROR,
+                  text: `Error saving core memory: ${getErrorMessage(error)}`,
+                },
+                Date.now(),
+              );
+            }
+          })();
+
+          return;
+        }
+
         let scope: 'global' | 'project' | undefined;
         let fact: string;
 
@@ -96,7 +167,7 @@ export const memoryCommand: SlashCommand = {
             return {
               type: 'message',
               messageType: 'error',
-              content: 'Usage: /memory add <global|project> <text to remember>',
+              content: USAGE,
             };
           }
           scope = firstArg;
@@ -161,6 +232,23 @@ export const memoryCommand: SlashCommand = {
                 config.getFileFilteringOptions(),
               );
             config.setUserMemory(memoryContent);
+
+            // Refresh core (system) memory from .LLXPRT_SYSTEM files
+            try {
+              const coreContent = await loadCoreMemoryContent(
+                config.getWorkingDir(),
+              );
+              config.setCoreMemory(coreContent);
+            } catch {
+              // Non-fatal: keep existing core memory
+            }
+
+            try {
+              await config.updateSystemInstructionIfInitialized();
+            } catch {
+              // Best-effort: memory is already stored; instruction update
+              // can fail before the chat is initialized.
+            }
             config.setLlxprtMdFileCount(fileCount);
             config.setLlxprtMdFilePaths(filePaths);
             context.ui.setGeminiMdFileCount(fileCount);

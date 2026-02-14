@@ -586,7 +586,7 @@ export const SETTINGS_SCHEMA = {
         label: 'Use Alternate Screen Buffer',
         category: 'UI',
         requiresRestart: true,
-        default: true,
+        default: false,
         description:
           'Use an alternate screen buffer for the UI, preserving shell history.',
         showInDialog: true,
@@ -625,7 +625,7 @@ export const SETTINGS_SCHEMA = {
         label: 'Show Line Numbers',
         category: 'UI',
         requiresRestart: false,
-        default: false,
+        default: true,
         description: 'Show line numbers in the chat.',
         showInDialog: true,
       },

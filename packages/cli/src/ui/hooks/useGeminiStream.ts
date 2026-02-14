@@ -220,7 +220,7 @@ export const useGeminiStream = (
   onAuthError: () => void,
   performMemoryRefresh: () => Promise<void>,
   onEditorClose: () => void,
-  onCancelSubmit: () => void,
+  onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,
   terminalHeight?: number,
@@ -375,6 +375,7 @@ export const useGeminiStream = (
     scheduleToolCalls,
     markToolsAsSubmitted,
     cancelAllToolCalls,
+    lastToolOutputTime,
   ] = useReactToolScheduler(
     async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) {
@@ -448,18 +449,19 @@ export const useGeminiStream = (
     await done;
     setIsResponding(false);
   }, []);
-  const { handleShellCommand, activeShellPtyId } = useShellCommandProcessor(
-    addItem,
-    setPendingHistoryItem,
-    onExec,
-    onDebugMessage,
-    config,
-    geminiClient,
-    setShellInputFocused,
-    terminalWidth,
-    terminalHeight,
-    pendingHistoryItemRef,
-  );
+  const { handleShellCommand, activeShellPtyId, lastShellOutputTime } =
+    useShellCommandProcessor(
+      addItem,
+      setPendingHistoryItem,
+      onExec,
+      onDebugMessage,
+      config,
+      geminiClient,
+      setShellInputFocused,
+      terminalWidth,
+      terminalHeight,
+      pendingHistoryItemRef,
+    );
 
   const streamingState = useMemo(() => {
     if (toolCalls.some((tc) => tc.status === 'awaiting_approval')) {
@@ -914,6 +916,9 @@ export const useGeminiStream = (
           'Response stopped due to image safety violations.',
         [FinishReason.UNEXPECTED_TOOL_CALL]:
           'Response stopped due to unexpected tool call.',
+        [FinishReason.IMAGE_PROHIBITED_CONTENT]:
+          'Response stopped due to prohibited content.',
+        [FinishReason.NO_IMAGE]: 'Response stopped due to no image.',
       };
 
       const message = finishReasonMessages[finishReason];
@@ -970,7 +975,7 @@ export const useGeminiStream = (
 
   const handleContextWindowWillOverflowEvent = useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
-      onCancelSubmit();
+      onCancelSubmit(true);
 
       const limit = tokenLimit(config.getModel());
 
@@ -1798,6 +1803,11 @@ export const useGeminiStream = (
     storage,
   ]);
 
+  const lastOutputTime = Math.max(
+    lastToolOutputTime ?? 0,
+    lastShellOutputTime ?? 0,
+  );
+
   return {
     streamingState,
     submitQuery,
@@ -1806,5 +1816,6 @@ export const useGeminiStream = (
     thought,
     cancelOngoingRequest,
     activeShellPtyId,
+    lastOutputTime,
   };
 };

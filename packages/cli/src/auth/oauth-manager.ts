@@ -235,6 +235,10 @@ export class OAuthManager {
   private getMessageBus?: () => MessageBus | undefined;
   // Getter function for config (lazy resolution for bucket failover handler)
   private getConfig?: () => Config | undefined;
+  // Session-scoped flag: user dismissed the BucketAuthConfirmation dialog.
+  // When true, subsequent auth attempts skip the dialog and proceed directly
+  // (i.e. "don't bother me again" rather than "block auth").
+  private userDismissedAuthPrompt = false;
 
   constructor(tokenStore: TokenStore, settings?: LoadedSettings) {
     this.providers = new Map();
@@ -665,6 +669,31 @@ export class OAuthManager {
           `[FLOW] Returning existing token for ${providerName}: ${token.access_token.substring(0, 10)}...`,
       );
       return token.access_token;
+    }
+
+    // @fix issue1191: Try bucket failover before triggering full OAuth re-authentication
+    const failoverConfig = this.getConfig?.();
+    const failoverHandler = failoverConfig?.getBucketFailoverHandler?.();
+    if (failoverHandler?.isEnabled()) {
+      logger.debug(
+        () =>
+          `[issue1191] Session bucket has no token for ${providerName}, attempting bucket failover before OAuth`,
+      );
+      const failoverResult = await failoverHandler.tryFailover();
+      if (failoverResult) {
+        const failoverToken = await this.getOAuthToken(providerName);
+        if (failoverToken) {
+          logger.debug(
+            () =>
+              `[issue1191] Bucket failover succeeded for ${providerName}, returning token`,
+          );
+          return failoverToken.access_token;
+        }
+      }
+      logger.debug(
+        () =>
+          `[issue1191] Bucket failover did not yield a token for ${providerName}, falling through to OAuth`,
+      );
     }
 
     // For other providers, trigger OAuth flow
@@ -2052,6 +2081,15 @@ export class OAuthManager {
       provider: string,
       bucket: string,
     ): Promise<boolean> => {
+      // If user already dismissed in this session, skip the dialog and proceed directly
+      if (this.userDismissedAuthPrompt) {
+        logger.debug(
+          'User previously dismissed auth prompt in this session, proceeding directly',
+          { provider, bucket },
+        );
+        return true;
+      }
+
       // Check if prompt mode is enabled FIRST - this determines timeout behavior
       // Issue 913: When prompt mode is enabled, wait indefinitely for user approval
       const showPrompt = getEphemeralSetting<boolean>('auth-bucket-prompt');
@@ -2085,6 +2123,9 @@ export class OAuthManager {
             logger.debug('User responded to bucket auth confirmation', {
               result,
             });
+            if (!result) {
+              this.userDismissedAuthPrompt = true;
+            }
             return result;
           }
 
@@ -2101,6 +2142,9 @@ export class OAuthManager {
             logger.debug('TUI responded to bucket auth confirmation', {
               result,
             });
+            if (!result) {
+              this.userDismissedAuthPrompt = true;
+            }
             return result;
           }
           // TUI didn't respond in time - fall back to delay

@@ -299,6 +299,7 @@ export class TestRig {
       },
       ui: {
         theme: 'Green Screen',
+        useAlternateBuffer: true,
         ...uiOverrides,
       },
       telemetry: {

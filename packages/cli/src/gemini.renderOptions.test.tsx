@@ -31,7 +31,19 @@ vi.mock('./ui/utils/updateCheck.js', () => ({
 
 vi.mock('./utils/cleanup.js', () => ({
   registerCleanup: vi.fn(),
+  registerSyncCleanup: vi.fn(),
 }));
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...actual,
+    writeToStdout: vi.fn().mockReturnValue(true),
+    writeToStderr: vi.fn().mockReturnValue(true),
+    patchStdio: vi.fn(() => vi.fn()),
+  };
+});
 
 vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),
@@ -96,13 +108,15 @@ describe('startInteractiveUI ink render options', () => {
 
     expect(renderSpy).toHaveBeenCalledTimes(1);
     const [_reactElement, options] = renderSpy.mock.calls[0];
-    expect(options).toEqual({
-      exitOnCtrlC: false,
-      patchConsole: false,
-      isScreenReaderEnabled: false,
-      alternateBuffer: true,
-      incrementalRendering: true,
-    });
+    expect(options).toEqual(
+      expect.objectContaining({
+        exitOnCtrlC: false,
+        patchConsole: false,
+        isScreenReaderEnabled: false,
+        alternateBuffer: false,
+        incrementalRendering: false,
+      }),
+    );
   });
 
   it('forces alternate buffer off when screen reader mode is enabled', async () => {
@@ -123,12 +137,14 @@ describe('startInteractiveUI ink render options', () => {
 
     expect(renderSpy).toHaveBeenCalledTimes(1);
     const [_reactElement, options] = renderSpy.mock.calls[0];
-    expect(options).toEqual({
-      exitOnCtrlC: false,
-      patchConsole: false,
-      isScreenReaderEnabled: true,
-      alternateBuffer: false,
-      incrementalRendering: false,
-    });
+    expect(options).toEqual(
+      expect.objectContaining({
+        exitOnCtrlC: false,
+        patchConsole: false,
+        isScreenReaderEnabled: true,
+        alternateBuffer: false,
+        incrementalRendering: false,
+      }),
+    );
   });
 });

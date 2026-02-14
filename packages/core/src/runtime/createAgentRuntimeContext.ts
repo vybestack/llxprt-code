@@ -23,7 +23,7 @@ import { tokenLimit } from '../core/tokenLimits.js';
 import { getSettingSpec } from '../settings/settingsRegistry.js';
 
 const EPHEMERAL_DEFAULTS = {
-  compressionThreshold: 0.8,
+  compressionThreshold: 0.5,
   preserveThreshold: 0.2,
   topPreserveThreshold: 0.2,
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */
@@ -128,6 +128,46 @@ export function createAgentRuntimeContext(
         'compression.profile',
         options.settings.compressionProfile,
       ),
+    /**
+     * @plan PLAN-20260211-HIGHDENSITY.P15
+     * @requirement REQ-HD-009.5
+     * @pseudocode settings-factory.md lines 90-121
+     */
+    densityReadWritePruning: (): boolean => {
+      const value = getLiveSetting<boolean>(
+        'compression.density.readWritePruning',
+        options.settings['compression.density.readWritePruning'],
+      );
+      return typeof value === 'boolean' ? value : true;
+    },
+    densityFileDedupe: (): boolean => {
+      const value = getLiveSetting<boolean>(
+        'compression.density.fileDedupe',
+        options.settings['compression.density.fileDedupe'],
+      );
+      return typeof value === 'boolean' ? value : true;
+    },
+    densityRecencyPruning: (): boolean => {
+      const value = getLiveSetting<boolean>(
+        'compression.density.recencyPruning',
+        options.settings['compression.density.recencyPruning'],
+      );
+      return typeof value === 'boolean' ? value : false;
+    },
+    densityRecencyRetention: (): number => {
+      const value = getLiveSetting<number>(
+        'compression.density.recencyRetention',
+        options.settings['compression.density.recencyRetention'],
+      );
+      return typeof value === 'number' && value >= 1 ? value : 3;
+    },
+    densityCompressHeadroom: (): number => {
+      const value = getLiveSetting<number>(
+        'compression.density.compressHeadroom',
+        options.settings['compression.density.compressHeadroom'],
+      );
+      return typeof value === 'number' && value > 0 && value <= 1 ? value : 0.6;
+    },
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006

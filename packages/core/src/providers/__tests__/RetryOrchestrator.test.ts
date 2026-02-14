@@ -785,6 +785,49 @@ describe('RetryOrchestrator', () => {
       expect(result).toHaveLength(1);
     });
 
+    it('should find failover handler from options.config when runtime.config is missing', async () => {
+      const paymentError = createPaymentRequiredError();
+      let currentBucket = 'bucket1';
+      const buckets = ['bucket1', 'bucket2'];
+      let bucketIndex = 0;
+
+      const provider = createTestProvider({
+        responses: [{ error: paymentError }, 'success'],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => buckets,
+        getCurrentBucket: () => currentBucket,
+        tryFailover: async () => {
+          bucketIndex++;
+          if (bucketIndex >= buckets.length) return false;
+          currentBucket = buckets[bucketIndex];
+          return true;
+        },
+        isEnabled: () => true,
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        config: {
+          getBucketFailoverHandler: () => failoverHandler,
+        } as unknown as GenerateChatOptions['config'],
+        // No runtime.config set
+      };
+
+      const result = await consumeStream(
+        orchestrator.generateChatCompletion(options),
+      );
+
+      expect(result).toHaveLength(1);
+      expect(currentBucket).toBe('bucket2');
+    });
+
     it('should work with no buckets configured (legacy mode)', async () => {
       const rateLimitError = createRateLimitError();
 

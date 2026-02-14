@@ -360,7 +360,7 @@ describe('TopDownTruncationStrategy', () => {
               'state_snapshot',
             );
             expect((block as { text: string }).text).not.toContain(
-              'Got it. Thanks for the additional context',
+              'Understood. Continuing with the current task.',
             );
           }
         }

@@ -83,12 +83,78 @@ export async function cloneFromGit(
   }
 }
 
+export interface GithubRepoInfo {
+  owner: string;
+  repo: string;
+}
+
+export function tryParseGithubUrl(source: string): GithubRepoInfo | null {
+  // Handle SCP-style SSH URLs.
+  if (source.startsWith('git@')) {
+    if (source.startsWith('git@github.com:')) {
+      // It's a GitHub SSH URL, so normalize it for the URL parser.
+      source = source.replace('git@github.com:', '');
+    } else {
+      // It's another provider's SSH URL (e.g., gitlab), so not a GitHub repo.
+      return null;
+    }
+  }
+  // Default to a github repo path, so `source` can be just an org/repo
+  let parsedUrl: URL;
+  try {
+    // Use the standard URL constructor for backward compatibility.
+    parsedUrl = new URL(source, 'https://github.com');
+  } catch (e) {
+    // Throw a TypeError to maintain a consistent error contract for invalid URLs.
+    // This avoids a breaking change for consumers who might expect a TypeError.
+    throw new TypeError(`Invalid repo URL: ${source}`, { cause: e });
+  }
+
+  if (!parsedUrl) {
+    throw new Error(`Invalid repo URL: ${source}`);
+  }
+  if (parsedUrl?.host !== 'github.com') {
+    return null;
+  }
+  // The pathname should be "/owner/repo".
+  const parts = parsedUrl?.pathname
+    .split('/')
+    // Remove the empty segments, fixes trailing and leading slashes
+    .filter((part) => part !== '');
+
+  if (parts?.length !== 2) {
+    throw new Error(
+      `Invalid GitHub repository source: ${source}. Expected "owner/repo" or a github repo uri.`,
+    );
+  }
+  const owner = parts[0];
+  const repo = parts[1].replace(/\.git$/, '');
+
+  return {
+    owner,
+    repo,
+  };
+}
+
 export function parseGitHubRepoForReleases(source: string): {
   owner: string;
   repo: string;
 } {
+  // Handle SCP-style SSH URLs.
+  if (source.startsWith('git@')) {
+    if (source.startsWith('git@github.com:')) {
+      throw new Error(
+        `GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via HTTPS.`,
+      );
+    }
+  }
   // Default to a github repo path, so `source` can be just an org/repo
-  const parsedUrl = URL.parse(source, 'https://github.com');
+  let parsedUrl: URL | null = null;
+  try {
+    parsedUrl = new URL(source, 'https://github.com');
+  } catch {
+    // invalid URL
+  }
   // The pathname should be "/owner/repo".
   const parts = parsedUrl?.pathname
     .substring(1)
@@ -101,13 +167,7 @@ export function parseGitHubRepoForReleases(source: string): {
     );
   }
   const owner = parts[0];
-  const repo = parts[1].replace('.git', '');
-
-  if (owner.startsWith('git@github.com')) {
-    throw new Error(
-      `GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via SSH.`,
-    );
-  }
+  const repo = parts[1].replace(/\.git$/, '');
 
   return { owner, repo };
 }

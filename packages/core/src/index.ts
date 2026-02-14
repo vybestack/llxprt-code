@@ -73,6 +73,7 @@ export * from './core/geminiRequest.js';
 export * from './core/coreToolScheduler.js';
 export * from './core/nonInteractiveToolExecutor.js';
 export type { SubagentSchedulerFactory } from './core/subagentScheduler.js';
+export { buildContinuationDirective } from './core/compression/utils.js';
 
 export * from './code_assist/codeAssist.js';
 export * from './code_assist/oauth2.js';
@@ -195,6 +196,20 @@ export * from './tools/todo-events.js';
 export * from './tools/list-subagents.js';
 export * from './tools/task.js';
 export * from './tools/tool-key-storage.js';
+export {
+  ProviderKeyStorage,
+  getProviderKeyStorage,
+  resetProviderKeyStorage,
+  validateKeyName,
+  KEY_NAME_REGEX,
+} from './storage/provider-key-storage.js';
+export {
+  SecureStore,
+  SecureStoreError,
+  createDefaultKeyringAdapter,
+  type SecureStoreErrorCode,
+  type SecureStoreOptions,
+} from './storage/secure-store.js';
 export * from './todo/todoFormatter.js';
 
 // MCP OAuth
@@ -282,6 +297,8 @@ export * from './providers/tokenizers/OpenAITokenizer.js';
 export * from './providers/tokenizers/AnthropicTokenizer.js';
 export * from './utils/browser.js';
 export * from './utils/generateContentResponseUtilities.js';
+export * from './utils/stdio.js';
+export * from './utils/terminal.js';
 
 // Export adapters
 export * from './adapters/IStreamAdapter.js';

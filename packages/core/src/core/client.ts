@@ -50,6 +50,7 @@ import {
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { tokenLimit } from './tokenLimits.js';
+
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext, type IdeContext, type File } from '../ide/ideContext.js';
 import {
@@ -68,9 +69,8 @@ import type { IContent } from '../services/history/IContent.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
-function isThinkingSupported(model: string) {
-  if (model.startsWith('gemini-2.5')) return true;
-  return false;
+export function isThinkingSupported(model: string) {
+  return !model.startsWith('gemini-2.0');
 }
 
 /**
@@ -148,6 +148,44 @@ export function findCompressSplitPoint(
   return lastSplitPoint;
 }
 
+/**
+ * Estimates the character length of text-only parts in a request.
+ * Binary data (inline_data, fileData) is excluded from the estimation
+ * because Gemini counts these as fixed token values, not based on their size.
+ * @param request The request to estimate tokens for
+ * @returns Estimated character length of text content
+ */
+function estimateTextOnlyLength(request: PartListUnion): number {
+  if (typeof request === 'string') {
+    return request.length;
+  }
+
+  // Ensure request is an array before iterating
+  if (!Array.isArray(request)) {
+    return 0;
+  }
+
+  let textLength = 0;
+  for (const part of request) {
+    // Handle string elements in the array
+    if (typeof part === 'string') {
+      textLength += part.length;
+    }
+    // Handle object elements with text property
+    else if (
+      typeof part === 'object' &&
+      part !== null &&
+      'text' in part &&
+      part.text
+    ) {
+      textLength += part.text.length;
+    }
+    // inlineData, fileData, and other binary parts are ignored
+    // as they are counted as fixed tokens by Gemini
+  }
+  return textLength;
+}
+
 export class GeminiClient {
   private chat?: GeminiChat;
   private contentGenerator?: ContentGenerator;
@@ -180,8 +218,6 @@ export class GeminiClient {
   private toolCallReminderLevel: 'none' | 'base' | 'escalated' = 'none';
   private lastTodoSnapshot?: Todo[];
 
-  /**
-   * At any point in this conversation, was compression triggered without
   /**
    * Runtime state for stateless operation (Phase 5)
    * @plan PLAN-20251027-STATELESS5.P10
@@ -554,6 +590,69 @@ export class GeminiClient {
     this.getChat().addHistory(content);
   }
 
+  async updateSystemInstruction(): Promise<void> {
+    if (!this.isInitialized()) {
+      return;
+    }
+
+    const enabledToolNames = this.getEnabledToolNamesForPrompt();
+    const envParts = await getEnvironmentContext(this.config);
+    const systemInstruction = await this.buildSystemInstruction(
+      enabledToolNames,
+      envParts,
+    );
+
+    this.getChat().setSystemInstruction(systemInstruction);
+
+    const model = this.runtimeState.model;
+    const historyService = this.getHistoryService();
+    if (historyService) {
+      try {
+        const systemPromptTokens = await historyService.estimateTokensForText(
+          systemInstruction,
+          model,
+        );
+        historyService.setBaseTokenOffset(systemPromptTokens);
+      } catch (_error) {
+        historyService.setBaseTokenOffset(
+          estimateTextTokens(systemInstruction),
+        );
+      }
+    }
+  }
+
+  /**
+   * Builds the full system instruction by combining environment context with
+   * the core system prompt.  Shared by both startChat and
+   * updateSystemInstruction so the prompt is assembled consistently.
+   */
+  private async buildSystemInstruction(
+    enabledToolNames: string[],
+    envParts?: Array<{ text?: string }>,
+  ): Promise<string> {
+    const userMemory = this.config.getUserMemory();
+    const coreMemory = this.config.getCoreMemory();
+    const model = this.runtimeState.model;
+    const includeSubagentDelegation =
+      await this.shouldIncludeSubagentDelegation(enabledToolNames);
+
+    let systemInstruction = await getCoreSystemPromptAsync({
+      userMemory,
+      coreMemory,
+      model,
+      tools: enabledToolNames,
+      includeSubagentDelegation,
+    });
+
+    const envContextText = (envParts ?? [])
+      .map((part) => ('text' in part && part.text ? part.text : ''))
+      .join('\n');
+    if (envContextText) {
+      systemInstruction = envContextText + '\n\n' + systemInstruction;
+    }
+    return systemInstruction;
+  }
+
   getChat(): GeminiChat {
     if (!this.chat) {
       throw new Error('Chat not initialized');
@@ -888,31 +987,17 @@ export class GeminiClient {
     }
 
     try {
-      const userMemory = this.config.getUserMemory();
       // @plan PLAN-20251027-STATELESS5.P10
       // @requirement REQ-STAT5-003.1
       const model = this.runtimeState.model;
-      // Provider name removed from prompt call signature
       const logger = new DebugLogger('llxprt:client:start');
       logger.debug(
         () => `DEBUG [client.startChat]: Model from config: ${model}`,
       );
-      const includeSubagentDelegation =
-        await this.shouldIncludeSubagentDelegation(enabledToolNames);
-      let systemInstruction = await getCoreSystemPromptAsync({
-        userMemory,
-        model,
-        tools: enabledToolNames,
-        includeSubagentDelegation,
-      });
-
-      // Add environment context to system instruction
-      const envContextText = envParts
-        .map((part) => ('text' in part ? part.text : ''))
-        .join('\n');
-      if (envContextText) {
-        systemInstruction = `${envContextText}\n\n${systemInstruction}`;
-      }
+      const systemInstruction = await this.buildSystemInstruction(
+        enabledToolNames,
+        envParts,
+      );
 
       let systemPromptTokens = 0;
       try {
@@ -978,7 +1063,7 @@ export class GeminiClient {
           : undefined;
 
       const settings: ReadonlySettingsSnapshot = {
-        compressionThreshold: compressionThreshold ?? 0.8,
+        compressionThreshold: compressionThreshold ?? 0.5,
         contextLimit,
         preserveThreshold: preserveThreshold ?? 0.2,
         telemetry: {
@@ -1039,7 +1124,7 @@ export class GeminiClient {
       this.updateTodoToolAvailabilityFromDeclarations(filteredDeclarations);
       const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
 
-      return new GeminiChat(
+      const chat = new GeminiChat(
         runtimeBundle.runtimeContext,
         runtimeBundle.contentGenerator,
         {
@@ -1049,6 +1134,15 @@ export class GeminiClient {
         },
         [], // Empty initial history since we're using HistoryService
       );
+
+      chat.setActiveTodosProvider(async () => {
+        const todos = await this.readTodoSnapshot();
+        const active = this.getActiveTodos(todos);
+        if (active.length === 0) return undefined;
+        return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
+      });
+
+      return chat;
     } catch (error) {
       await reportError(
         error,
@@ -1327,8 +1421,11 @@ export class GeminiClient {
     // Check for context window overflow
     const modelForLimitCheck = this._getEffectiveModelForCurrentTurn();
 
+    // Estimate tokens based on text content only.
+    // Binary data (PDFs, images) are counted as fixed tokens by Gemini,
+    // not based on their base64-encoded size.
     const estimatedRequestTokenCount = Math.floor(
-      JSON.stringify(initialRequest).length / 4,
+      estimateTextOnlyLength(initialRequest) / 4,
     );
 
     const remainingTokenCount =

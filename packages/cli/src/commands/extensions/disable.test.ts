@@ -19,6 +19,10 @@ import { FatalConfigError } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../config/settings.js';
 import type * as extensionModule from '../../config/extension.js';
 
+vi.mock('../utils.js', () => ({
+  exitCli: vi.fn(),
+}));
+
 const mockDisableExtension: Mock<typeof extensionModule.disableExtension> =
   vi.hoisted(() => vi.fn());
 

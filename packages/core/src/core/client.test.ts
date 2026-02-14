@@ -31,7 +31,11 @@ import {
   Part,
   PartListUnion,
 } from '@google/genai';
-import { findCompressSplitPoint, GeminiClient } from './client.js';
+import {
+  findCompressSplitPoint,
+  GeminiClient,
+  isThinkingSupported,
+} from './client.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import {
   ContentGenerator,
@@ -155,6 +159,22 @@ async function fromAsync<T>(promise: AsyncGenerator<T>): Promise<readonly T[]> {
   }
   return results;
 }
+
+describe('isThinkingSupported', () => {
+  it('should return true for gemini-2.5', () => {
+    expect(isThinkingSupported('gemini-2.5')).toBe(true);
+    expect(isThinkingSupported('gemini-2.5-flash')).toBe(true);
+  });
+
+  it('should return false for gemini-2.0 models', () => {
+    expect(isThinkingSupported('gemini-2.0-flash')).toBe(false);
+    expect(isThinkingSupported('gemini-2.0-pro')).toBe(false);
+  });
+
+  it('should return true for other models', () => {
+    expect(isThinkingSupported('some-other-model')).toBe(true);
+  });
+});
 
 describe('findCompressSplitPoint', () => {
   it('should throw an error for non-positive numbers', () => {
@@ -362,6 +382,7 @@ describe('Gemini Client (client.ts)', () => {
       getVertexAI: vi.fn().mockReturnValue(false),
       getUserAgent: vi.fn().mockReturnValue('test-agent'),
       getUserMemory: vi.fn().mockReturnValue(''),
+      getCoreMemory: vi.fn().mockReturnValue(''),
 
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getProxy: vi.fn().mockReturnValue(undefined),
@@ -536,6 +557,135 @@ describe('Gemini Client (client.ts)', () => {
 
       await expect(client.generateEmbedding(texts)).rejects.toThrow(
         'API Failure',
+      );
+    });
+  });
+
+  describe('updateSystemInstruction', () => {
+    it('updates chat system instruction and history token offset', async () => {
+      const setSystemInstruction = vi.fn();
+      const estimateTokensForText = vi.fn().mockResolvedValue(321);
+      const setBaseTokenOffset = vi.fn();
+      const getHistoryService = vi.fn().mockReturnValue({
+        estimateTokensForText,
+        setBaseTokenOffset,
+      });
+
+      const mockChat = {
+        setSystemInstruction,
+        getHistoryService,
+      };
+
+      client['chat'] = mockChat as unknown as GeminiChat;
+      client['contentGenerator'] = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+
+      const config = client['config'] as unknown as {
+        getUserMemory: () => string;
+      };
+      vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
+
+      const toolNamesSpy = vi
+        .spyOn(
+          client as unknown as {
+            getEnabledToolNamesForPrompt: () => string[];
+          },
+          'getEnabledToolNamesForPrompt',
+        )
+        .mockReturnValue(['tool_a']);
+
+      const subagentSpy = vi
+        .spyOn(
+          client as unknown as {
+            shouldIncludeSubagentDelegation: (
+              tools: string[],
+            ) => Promise<boolean>;
+          },
+          'shouldIncludeSubagentDelegation',
+        )
+        .mockResolvedValue(true);
+
+      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
+        'prompt body with new memory',
+      );
+
+      await client.updateSystemInstruction();
+
+      expect(toolNamesSpy).toHaveBeenCalled();
+      expect(subagentSpy).toHaveBeenCalledWith(['tool_a']);
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userMemory: 'new memory',
+          model: 'test-model',
+          tools: ['tool_a'],
+          includeSubagentDelegation: true,
+        }),
+      );
+      expect(setSystemInstruction).toHaveBeenCalledWith(
+        expect.stringContaining('prompt body with new memory'),
+      );
+      expect(estimateTokensForText).toHaveBeenCalledWith(
+        expect.any(String),
+        'test-model',
+      );
+      expect(setBaseTokenOffset).toHaveBeenCalledWith(321);
+    });
+
+    it('passes non-empty coreMemory to getCoreSystemPromptAsync', async () => {
+      const setSystemInstruction = vi.fn();
+      const estimateTokensForText = vi.fn().mockResolvedValue(100);
+      const setBaseTokenOffset = vi.fn();
+      const getHistoryService = vi.fn().mockReturnValue({
+        estimateTokensForText,
+        setBaseTokenOffset,
+      });
+
+      const mockChat = {
+        setSystemInstruction,
+        getHistoryService,
+      };
+
+      client['chat'] = mockChat as unknown as GeminiChat;
+      client['contentGenerator'] = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+
+      const config = client['config'] as unknown as {
+        getUserMemory: () => string;
+        getCoreMemory: () => string;
+      };
+      vi.spyOn(config, 'getUserMemory').mockReturnValue('');
+      vi.spyOn(config, 'getCoreMemory').mockReturnValue(
+        'Always respond in JSON',
+      );
+
+      vi.spyOn(
+        client as unknown as {
+          getEnabledToolNamesForPrompt: () => string[];
+        },
+        'getEnabledToolNamesForPrompt',
+      ).mockReturnValue([]);
+
+      vi.spyOn(
+        client as unknown as {
+          shouldIncludeSubagentDelegation: (
+            tools: string[],
+          ) => Promise<boolean>;
+        },
+        'shouldIncludeSubagentDelegation',
+      ).mockResolvedValue(false);
+
+      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
+        'prompt with core directives',
+      );
+
+      await client.updateSystemInstruction();
+
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          coreMemory: 'Always respond in JSON',
+        }),
       );
     });
   });
@@ -1352,9 +1502,8 @@ describe('Gemini Client (client.ts)', () => {
       // A string of length 400 is roughly 100 tokens.
       const longText = 'a'.repeat(400);
       const request: Part[] = [{ text: longText }];
-      const estimatedRequestTokenCount = Math.floor(
-        JSON.stringify(request).length / 4,
-      );
+      // estimateTextOnlyLength counts only text content (400 chars), not JSON structure
+      const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
 
       // Act
@@ -1416,9 +1565,8 @@ describe('Gemini Client (client.ts)', () => {
       // We need a request > 95 tokens.
       const longText = 'a'.repeat(400);
       const request: Part[] = [{ text: longText }];
-      const estimatedRequestTokenCount = Math.floor(
-        JSON.stringify(request).length / 4,
-      );
+      // estimateTextOnlyLength counts only text content (400 chars), not JSON structure
+      const estimatedRequestTokenCount = Math.floor(longText.length / 4);
       const remainingTokenCount = STICKY_MODEL_LIMIT - lastPromptTokenCount;
 
       // Act
@@ -1441,6 +1589,59 @@ describe('Gemini Client (client.ts)', () => {
       });
       expect(tokenLimit).toHaveBeenCalledWith(STICKY_MODEL);
       expect(mockTurnRunFn).not.toHaveBeenCalled();
+    });
+
+    it('should not trigger overflow warning for requests with large binary data (PDFs/images)', async () => {
+      // Arrange
+      const MOCKED_TOKEN_LIMIT = 1000000; // 1M tokens
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+
+      const lastPromptTokenCount = 10000;
+      const mockChat: Partial<GeminiChat> = {
+        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      // Simulate a PDF file with large base64 data (11MB when encoded)
+      // In the old implementation, this would incorrectly estimate ~2.7M tokens
+      // In the new implementation, only the text part is counted
+      const largePdfBase64 = 'A'.repeat(11 * 1024 * 1024);
+      const request: Part[] = [
+        { text: 'Please analyze this PDF document' }, // ~35 chars = ~8 tokens
+        {
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: largePdfBase64, // This should be ignored in token estimation
+          },
+        },
+      ];
+
+      // Mock Turn.run to simulate successful processing
+      const mockStream = (async function* () {
+        yield { type: 'content', value: 'Analysis complete' };
+      })();
+      mockTurnRunFn.mockReturnValue(mockStream);
+
+      // Act
+      const stream = client.sendMessageStream(
+        request,
+        new AbortController().signal,
+        'prompt-id-pdf-test',
+      );
+
+      const events = await fromAsync(stream);
+
+      // Assert
+      // Should NOT contain overflow warning
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: GeminiEventType.ContextWindowWillOverflow,
+        }),
+      );
+
+      // Turn.run should be called (processing should continue)
+      expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
     it('should recursively call sendMessageStream with "Please continue." when InvalidStream event is received', async () => {

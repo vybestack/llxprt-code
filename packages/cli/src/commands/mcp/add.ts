@@ -8,6 +8,7 @@
 import type { CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 import { MCPServerConfig } from '@vybestack/llxprt-code-core';
+import { exitCli } from '../utils.js';
 
 async function addMcpServer(
   name: string,
@@ -44,7 +45,7 @@ async function addMcpServer(
     console.error(
       'Error: Please use --scope user to edit settings in the home directory.',
     );
-    process.exit(1);
+    await exitCli(1);
   }
 
   const settingsScope =
@@ -228,5 +229,6 @@ export const addCommand: CommandModule = {
         excludeTools: argv.excludeTools as string[] | undefined,
       },
     );
+    await exitCli();
   },
 };

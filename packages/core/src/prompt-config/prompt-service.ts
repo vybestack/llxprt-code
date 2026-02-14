@@ -183,13 +183,15 @@ export class PromptService {
   /**
    * Get assembled prompt for the given context
    * @param context Runtime context with provider, model, tools, and environment
-   * @param userMemory Optional user-specific content to include
+   * @param userMemory Optional user-specific content to include as context
+   * @param coreMemory Optional core (system) memory to include as system directives
    * @returns Assembled prompt string
    * @throws Error if context is invalid or core prompt is missing
    */
   async getPrompt(
     context: PromptContext,
     userMemory?: string | null,
+    coreMemory?: string | null,
   ): Promise<string> {
     // Ensure initialized
     if (!this.initialized) {
@@ -207,18 +209,18 @@ export class PromptService {
       throw new Error('Model is required');
     }
 
-    // Check cache - we'll add user memory after cache retrieval if needed
+    // Check cache - we'll add core memory and user memory after cache retrieval
     const cached = this.cache.get(context);
     if (cached) {
       if (this.config.debugMode) {
         const cacheKey = this.cache.generateKey(context);
         this.logger.debug(() => `Cache hit: ${cacheKey}`);
       }
-      // If we have user memory, append it to the cached base prompt
-      if (userMemory && userMemory.trim()) {
-        return cached.assembledPrompt + `\n\n---\n\n${userMemory.trim()}`;
-      }
-      return cached.assembledPrompt;
+      return this.appendMemoryContent(
+        cached.assembledPrompt,
+        coreMemory,
+        userMemory,
+      );
     }
 
     // Resolve files
@@ -278,7 +280,7 @@ export class PromptService {
     const baseAssembled = processedParts.join('\n\n');
     const assemblyTime = Date.now() - startTime;
 
-    // Cache the base result (without user memory)
+    // Cache the base result (without memory content)
     const metadata = {
       files: fileMetadata,
       assemblyTimeMs: assemblyTime,
@@ -286,12 +288,32 @@ export class PromptService {
     };
     this.cache.set(context, baseAssembled, metadata);
 
-    // Add user memory if provided
-    if (userMemory && userMemory.trim()) {
-      return baseAssembled + `\n\n---\n\n${userMemory.trim()}`;
+    return this.appendMemoryContent(baseAssembled, coreMemory, userMemory);
+  }
+
+  /**
+   * Appends core memory (system directives) and user memory (context) to
+   * the base assembled prompt. Core memory is placed directly after the base
+   * prompt as system-level content. User memory follows with a `---` separator.
+   */
+  private appendMemoryContent(
+    basePrompt: string,
+    coreMemory?: string | null,
+    userMemory?: string | null,
+  ): string {
+    let result = basePrompt;
+
+    // Core memory: injected as system directives (no --- separator)
+    if (coreMemory && coreMemory.trim()) {
+      result += `\n\n${coreMemory.trim()}`;
     }
 
-    return baseAssembled;
+    // User memory: injected as user context with --- separator
+    if (userMemory && userMemory.trim()) {
+      result += `\n\n---\n\n${userMemory.trim()}`;
+    }
+
+    return result;
   }
 
   /**

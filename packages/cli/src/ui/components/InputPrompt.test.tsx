@@ -10,8 +10,8 @@ import { act } from 'react';
 import type { InputPromptProps } from './InputPrompt.js';
 import { InputPrompt } from './InputPrompt.js';
 import type { TextBuffer } from './shared/text-buffer.js';
-import type { Config } from '@google/gemini-cli-core';
-import { ApprovalMode } from '@google/gemini-cli-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
@@ -204,7 +204,6 @@ describe('InputPrompt', () => {
     );
 
     mockedUseKittyKeyboardProtocol.mockReturnValue({
-      supported: false,
       enabled: false,
       checking: false,
     });
@@ -1200,7 +1199,6 @@ describe('InputPrompt', () => {
     beforeEach(() => {
       vi.useFakeTimers();
       mockedUseKittyKeyboardProtocol.mockReturnValue({
-        supported: false,
         enabled: false,
         checking: false,
       });
@@ -1284,7 +1282,6 @@ describe('InputPrompt', () => {
         name: 'kitty',
         setup: () =>
           mockedUseKittyKeyboardProtocol.mockReturnValue({
-            supported: true,
             enabled: true,
             checking: false,
           }),

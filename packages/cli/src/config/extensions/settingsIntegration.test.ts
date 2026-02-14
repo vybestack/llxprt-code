@@ -15,23 +15,31 @@ import {
 } from './settingsIntegration.js';
 import type { ExtensionSetting } from './extensionSettings.js';
 
-// Mock keychain module with default implementation
-vi.mock('@napi-rs/keyring', () => ({
-  AsyncEntry: vi.fn().mockImplementation((_service, _account) => ({
-    getPassword: vi.fn().mockResolvedValue(null),
-    setPassword: vi.fn().mockResolvedValue(undefined),
-    deletePassword: vi.fn().mockResolvedValue(true),
-    setSecret: vi.fn().mockResolvedValue(undefined),
-    getSecret: vi.fn().mockResolvedValue(undefined),
-    deleteCredential: vi.fn().mockResolvedValue(true),
-  })),
-  findCredentialsAsync: vi.fn().mockResolvedValue([]),
-}));
+// In-memory store used by the mock SecureStore instances
+const mockSecureStore = new Map<string, string>();
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...original,
+    SecureStore: vi.fn().mockImplementation(() => ({
+      get: vi.fn(async (key: string) => mockSecureStore.get(key) ?? null),
+      set: vi.fn(async (key: string, value: string) => {
+        mockSecureStore.set(key, value);
+      }),
+      delete: vi.fn(async (key: string) => mockSecureStore.delete(key)),
+      list: vi.fn(async () => Array.from(mockSecureStore.keys())),
+      has: vi.fn(async (key: string) => mockSecureStore.has(key)),
+    })),
+  };
+});
 
 // Create temp directory for tests
 let tempDir: string;
 
 beforeEach(async () => {
+  mockSecureStore.clear();
   tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'settings-int-'));
 });
 
@@ -291,20 +299,8 @@ describe('getExtensionEnvironment', () => {
       'API_URL=https://api.example.com\n',
     );
 
-    // Mock keychain to return sensitive value
-    const keyringModule = await import('@napi-rs/keyring');
-    vi.mocked(keyringModule.AsyncEntry).mockImplementation(
-      (_service, account) => ({
-        getPassword: vi
-          .fn()
-          .mockResolvedValue(account === 'API_KEY' ? 'secret-api-key' : null),
-        setPassword: vi.fn().mockResolvedValue(undefined),
-        deletePassword: vi.fn().mockResolvedValue(true),
-        setSecret: vi.fn().mockResolvedValue(undefined),
-        getSecret: vi.fn().mockResolvedValue(undefined),
-        deleteCredential: vi.fn().mockResolvedValue(true),
-      }),
-    );
+    // Pre-populate SecureStore with sensitive value
+    mockSecureStore.set('API_KEY', 'secret-api-key');
 
     const env = await getExtensionEnvironment(extDir);
 
@@ -328,15 +324,8 @@ describe('getExtensionEnvironment', () => {
 
     // No .env file
 
-    const keyringModule = await import('@napi-rs/keyring');
-    vi.mocked(keyringModule.AsyncEntry).mockImplementation(() => ({
-      getPassword: vi.fn().mockResolvedValue('my-secret'),
-      setPassword: vi.fn().mockResolvedValue(undefined),
-      deletePassword: vi.fn().mockResolvedValue(true),
-      setSecret: vi.fn().mockResolvedValue(undefined),
-      getSecret: vi.fn().mockResolvedValue(undefined),
-      deleteCredential: vi.fn().mockResolvedValue(true),
-    }));
+    // Pre-populate SecureStore with sensitive value
+    mockSecureStore.set('SECRET', 'my-secret');
 
     const env = await getExtensionEnvironment(extDir);
 
@@ -356,15 +345,7 @@ describe('getExtensionEnvironment', () => {
       }),
     );
 
-    const keyringModule = await import('@napi-rs/keyring');
-    vi.mocked(keyringModule.AsyncEntry).mockImplementation(() => ({
-      getPassword: vi.fn().mockResolvedValue(null), // Not in keychain
-      setPassword: vi.fn().mockResolvedValue(undefined),
-      deletePassword: vi.fn().mockResolvedValue(true),
-      setSecret: vi.fn().mockResolvedValue(undefined),
-      getSecret: vi.fn().mockResolvedValue(undefined),
-      deleteCredential: vi.fn().mockResolvedValue(true),
-    }));
+    // SecureStore has no value for SECRET (mockSecureStore is cleared in beforeEach)
 
     const env = await getExtensionEnvironment(extDir);
 

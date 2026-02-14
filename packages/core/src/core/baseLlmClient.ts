@@ -9,10 +9,15 @@ import type {
   Content,
   CountTokensResponse,
   EmbedContentResponse,
+  Part,
+  GenerateContentParameters,
 } from '@google/genai';
 import type { ContentGenerator } from './contentGenerator.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { getErrorMessage } from '../utils/errors.js';
+import { retryWithBackoff } from '../utils/retry.js';
+
+const DEFAULT_MAX_ATTEMPTS = 3;
 
 /**
  * Options for generateJson method
@@ -24,6 +29,10 @@ export interface GenerateJsonOptions {
   temperature?: number;
   systemInstruction?: string;
   promptId?: string;
+  /**
+   * The maximum number of attempts for the request.
+   */
+  maxAttempts?: number;
 }
 
 /**
@@ -41,6 +50,31 @@ export interface CountTokensOptions {
   text?: string;
   contents?: Content[];
   model: string;
+}
+
+/**
+ * Options for the generateContent utility function.
+ */
+export interface GenerateContentOptions {
+  /** The input prompt or history. */
+  contents: Content[];
+  /** The model to use. */
+  model: string;
+  /**
+   * Task-specific system instructions.
+   * If omitted, no system instruction is sent.
+   */
+  systemInstruction?: string | Part | Part[] | Content;
+  /** Signal for cancellation. */
+  abortSignal: AbortSignal;
+  /**
+   * A unique ID for the prompt, used for logging/telemetry correlation.
+   */
+  promptId: string;
+  /**
+   * The maximum number of attempts for the request.
+   */
+  maxAttempts?: number;
 }
 
 /**
@@ -97,66 +131,73 @@ export class BaseLLMClient {
       promptId = 'baseLlmClient-generateJson',
     } = options;
 
-    try {
-      const contents: Content[] = [
-        {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ];
+    const contents: Content[] = [
+      {
+        role: 'user',
+        parts: [{ text: prompt }],
+      },
+    ];
 
-      const config: Record<string, unknown> = {
-        temperature,
-        topP: 1,
-      };
+    const config: Record<string, unknown> = {
+      temperature,
+      topP: 1,
+    };
 
-      if (systemInstruction) {
-        config.systemInstruction = { text: systemInstruction };
-      }
+    if (systemInstruction) {
+      config.systemInstruction = { text: systemInstruction };
+    }
 
-      if (schema) {
-        config.responseJsonSchema = schema;
-        config.responseMimeType = 'application/json';
-      }
+    if (schema) {
+      config.responseJsonSchema = schema;
+      config.responseMimeType = 'application/json';
+    }
 
-      const result: GenerateContentResponse =
-        await this.contentGenerator!.generateContent(
-          {
-            model,
-            config,
-            contents,
-          },
-          promptId,
-        );
-
-      let text = getResponseText(result);
+    const shouldRetryOnContent = (response: GenerateContentResponse) => {
+      const text = getResponseText(response)?.trim();
       if (!text) {
-        throw new Error('API returned an empty response for generateJson.');
+        return true; // Retry on empty response
       }
-
-      // Handle markdown wrapping
-      const prefix = '```json';
-      const suffix = '```';
-      if (text.startsWith(prefix) && text.endsWith(suffix)) {
-        text = text
-          .substring(prefix.length, text.length - suffix.length)
-          .trim();
-      }
-
       try {
         // Extract JSON from potential markdown wrapper
         const cleanedText = extractJsonFromMarkdown(text);
-        return JSON.parse(cleanedText) as T;
-      } catch (parseError) {
-        throw new Error(
-          `Failed to parse API response as JSON: ${getErrorMessage(
-            parseError,
-          )}`,
-        );
+        JSON.parse(cleanedText);
+        return false; // Valid JSON, don't retry
+      } catch (_e) {
+        return true; // Invalid JSON, retry
       }
-    } catch (error) {
+    };
+
+    const result = await this._generateWithRetry(
+      {
+        model,
+        contents,
+        config,
+      },
+      promptId,
+      options.maxAttempts,
+      shouldRetryOnContent,
+      'generateJson',
+    );
+
+    let text = getResponseText(result);
+    if (!text) {
+      throw new Error('API returned an empty response for generateJson.');
+    }
+
+    // Handle markdown wrapping
+    const prefix = '```json';
+    const suffix = '```';
+    if (text.startsWith(prefix) && text.endsWith(suffix)) {
+      text = text.substring(prefix.length, text.length - suffix.length).trim();
+    }
+
+    try {
+      // Extract JSON from potential markdown wrapper
+      const cleanedText = extractJsonFromMarkdown(text);
+      return JSON.parse(cleanedText) as T;
+    } catch (parseError) {
       throw new Error(
-        `Failed to generate JSON content: ${getErrorMessage(error)}`,
+        `Failed to parse API response as JSON: ${getErrorMessage(parseError)}`,
       );
     }
   }
@@ -253,6 +294,82 @@ export class BaseLLMClient {
       return response.totalTokens ?? 0;
     } catch (error) {
       throw new Error(`Failed to count tokens: ${getErrorMessage(error)}`);
+    }
+  }
+
+  /**
+   * Generate content from a prompt.
+   * This is a general-purpose content generation method that doesn't enforce JSON output.
+   *
+   * @param options - Generation options
+   * @returns Raw GenerateContentResponse
+   * @throws Error if generation fails
+   */
+  async generateContent(
+    options: GenerateContentOptions,
+  ): Promise<GenerateContentResponse> {
+    const {
+      contents,
+      model,
+      systemInstruction,
+      abortSignal,
+      promptId,
+      maxAttempts,
+    } = options;
+
+    const config: Record<string, unknown> = {
+      temperature: 0,
+      topP: 1,
+      abortSignal,
+    };
+
+    if (systemInstruction) {
+      config.systemInstruction = systemInstruction;
+    }
+
+    const shouldRetryOnContent = (response: GenerateContentResponse) => {
+      const text = getResponseText(response)?.trim();
+      return !text; // Retry on empty response
+    };
+
+    return this._generateWithRetry(
+      {
+        model,
+        contents,
+        config,
+      },
+      promptId,
+      maxAttempts,
+      shouldRetryOnContent,
+      'generateContent',
+    );
+  }
+
+  private async _generateWithRetry(
+    requestParams: GenerateContentParameters,
+    promptId: string,
+    maxAttempts: number | undefined,
+    shouldRetryOnContent: (response: GenerateContentResponse) => boolean,
+    _errorContext: 'generateJson' | 'generateContent',
+  ): Promise<GenerateContentResponse> {
+    const abortSignal = requestParams.config?.abortSignal as
+      | AbortSignal
+      | undefined;
+
+    try {
+      const apiCall = () =>
+        this.contentGenerator!.generateContent(requestParams, promptId);
+
+      return await retryWithBackoff(apiCall, {
+        shouldRetryOnContent,
+        maxAttempts: maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+      });
+    } catch (error) {
+      if (abortSignal?.aborted) {
+        throw error;
+      }
+
+      throw new Error(`Failed to generate content: ${getErrorMessage(error)}`);
     }
   }
 }

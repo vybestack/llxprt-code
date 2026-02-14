@@ -7,6 +7,7 @@
 import type { CommandModule } from 'yargs';
 import { loadUserExtensions, toOutputString } from '../../config/extension.js';
 import { getErrorMessage } from '../../utils/errors.js';
+import { exitCli } from '../utils.js';
 
 export async function handleList() {
   try {
@@ -22,7 +23,7 @@ export async function handleList() {
     );
   } catch (error) {
     console.error(getErrorMessage(error));
-    process.exit(1);
+    await exitCli(1);
   }
 }
 
@@ -32,5 +33,6 @@ export const listCommand: CommandModule = {
   builder: (yargs) => yargs,
   handler: async () => {
     await handleList();
+    await exitCli();
   },
 };

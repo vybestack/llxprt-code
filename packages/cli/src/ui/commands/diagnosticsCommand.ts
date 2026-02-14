@@ -390,47 +390,53 @@ export const diagnosticsCommand: SlashCommand = {
             }
           }
 
-          const mcpTokenStorage = new MCPOAuthTokenStorage();
-          const mcpTokens = await mcpTokenStorage.getAllCredentials();
+          try {
+            const mcpTokenStorage = new MCPOAuthTokenStorage();
+            const mcpTokens = await mcpTokenStorage.getAllCredentials();
 
-          if (mcpTokens.size > 0) {
-            hasMCPTokens = true;
-            diagnostics.push('\n### MCP Server Tokens');
+            if (mcpTokens.size > 0) {
+              hasMCPTokens = true;
+              diagnostics.push('\n### MCP Server Tokens');
 
-            for (const [serverName, credentials] of mcpTokens) {
-              const token = credentials.token;
-              const isExpired = MCPOAuthTokenStorage.isTokenExpired(token);
+              for (const [serverName, credentials] of mcpTokens) {
+                const token = credentials.token;
+                const isExpired = MCPOAuthTokenStorage.isTokenExpired(token);
 
-              diagnostics.push(`- ${serverName}:`);
-              diagnostics.push(
-                `  - Status: ${isExpired ? 'Expired' : 'Valid'}`,
-              );
-
-              if (token.expiresAt) {
-                const expiryDate = new Date(token.expiresAt);
-                const timeUntilExpiry = Math.max(
-                  0,
-                  (token.expiresAt - Date.now()) / 1000,
+                diagnostics.push(`- ${serverName}:`);
+                diagnostics.push(
+                  `  - Status: ${isExpired ? 'Expired' : 'Valid'}`,
                 );
-                const hours = Math.floor(timeUntilExpiry / 3600);
-                const minutes = Math.floor((timeUntilExpiry % 3600) / 60);
 
-                diagnostics.push(`  - Expires: ${expiryDate.toISOString()}`);
-                diagnostics.push(`  - Time Remaining: ${hours}h ${minutes}m`);
-              }
+                if (token.expiresAt) {
+                  const expiryDate = new Date(token.expiresAt);
+                  const timeUntilExpiry = Math.max(
+                    0,
+                    (token.expiresAt - Date.now()) / 1000,
+                  );
+                  const hours = Math.floor(timeUntilExpiry / 3600);
+                  const minutes = Math.floor((timeUntilExpiry % 3600) / 60);
 
-              diagnostics.push(
-                `  - Refresh Token: ${token.refreshToken ? 'Available' : 'None'}`,
-              );
+                  diagnostics.push(`  - Expires: ${expiryDate.toISOString()}`);
+                  diagnostics.push(`  - Time Remaining: ${hours}h ${minutes}m`);
+                }
 
-              if (token.tokenType) {
-                diagnostics.push(`  - Token Type: ${token.tokenType}`);
-              }
+                diagnostics.push(
+                  `  - Refresh Token: ${token.refreshToken ? 'Available' : 'None'}`,
+                );
 
-              if (token.scope) {
-                diagnostics.push(`  - Scopes: ${token.scope}`);
+                if (token.tokenType) {
+                  diagnostics.push(`  - Token Type: ${token.tokenType}`);
+                }
+
+                if (token.scope) {
+                  diagnostics.push(`  - Scopes: ${token.scope}`);
+                }
               }
             }
+          } catch (error) {
+            logger.debug(
+              () => `[diagnostics] Failed to retrieve MCP tokens: ${error}`,
+            );
           }
 
           if (!hasProviderTokens && !hasMCPTokens) {

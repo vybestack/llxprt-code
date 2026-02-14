@@ -4,24 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// These imports will be needed when the command is re-enabled
-import path from 'path';
-import fs from 'fs';
-// import { CommandContext } from '../../ui/commands/types.js';
-// import {
-//   getGitRepoRoot,
-//   getLatestGitHubRelease,
-//   isGitHubRepository,
-// } from '../../utils/gitUtils.js';
+import path from 'node:path';
+import * as fs from 'node:fs';
+import { Writable } from 'node:stream';
+import { ProxyAgent } from 'undici';
 
+import type { CommandContext } from '../../ui/commands/types.js';
 import {
-  CommandKind,
-  SlashCommand,
-  SlashCommandActionReturn,
-} from './types.js';
-// TODO: Re-add imports when the setup-github command is re-enabled
-// import { getUrlOpenCommand } from '../../ui/utils/commandUtils.js';
-// import { getGitHubRepoInfo } from '../../utils/gitUtils.js';
+  getGitRepoRoot,
+  getLatestGitHubRelease,
+  isGitHubRepository,
+  getGitHubRepoInfo,
+} from '../../utils/gitUtils.js';
+
+import type { SlashCommand, SlashCommandActionReturn } from './types.js';
+import { CommandKind } from './types.js';
+import { getUrlOpenCommand } from '../../ui/utils/commandUtils.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+
+const debugLogger = DebugLogger.getLogger('setupGithubCommand');
 
 export const GITHUB_WORKFLOW_PATHS = [
   'gemini-dispatch/gemini-dispatch.yml',
@@ -31,30 +32,39 @@ export const GITHUB_WORKFLOW_PATHS = [
   'pr-review/gemini-review.yml',
 ];
 
-// TODO: Reimplement getOpenUrlsCommands when the setup-github command is re-enabled
-// This function was removed because it's currently unused but kept for reference
-// function getOpenUrlsCommands(readmeUrl: string): string[] {
-//   // Determine the OS-specific command to open URLs, ex: 'open', 'xdg-open', etc
-//   const openCmd = getUrlOpenCommand();
-//
-//   // Build a list of URLs to open
-//   const urlsToOpen = [readmeUrl];
-//
-//   const repoInfo = getGitHubRepoInfo();
-//   if (repoInfo) {
-//     urlsToOpen.push(
-//       `https://github.com/${repoInfo.owner}/${repoInfo.repo}/settings/secrets/actions`,
-//     );
-//   }
-//
-//   // Create and join the individual commands
-//   const commands = urlsToOpen.map((url) => `${openCmd} "${url}"`);
-//   return commands;
-// }
+export const GITHUB_COMMANDS_PATHS = [
+  'gemini-assistant/gemini-invoke.toml',
+  'issue-triage/gemini-scheduled-triage.toml',
+  'issue-triage/gemini-triage.toml',
+  'pr-review/gemini-review.toml',
+];
 
-// Add Gemini CLI specific entries to .gitignore file
+const REPO_DOWNLOAD_URL =
+  'https://raw.githubusercontent.com/acoliver/run-llxprt-code';
+const SOURCE_DIR = 'examples/workflows';
+// Generate OS-specific commands to open the GitHub pages needed for setup.
+function getOpenUrlsCommands(readmeUrl: string): string[] {
+  // Determine the OS-specific command to open URLs, ex: 'open', 'xdg-open', etc
+  const openCmd = getUrlOpenCommand();
+
+  // Build a list of URLs to open
+  const urlsToOpen = [readmeUrl];
+
+  const repoInfo = getGitHubRepoInfo();
+  if (repoInfo) {
+    urlsToOpen.push(
+      `https://github.com/${repoInfo.owner}/${repoInfo.repo}/settings/secrets/actions`,
+    );
+  }
+
+  // Create and join the individual commands
+  const commands = urlsToOpen.map((url) => `${openCmd} "${url}"`);
+  return commands;
+}
+
+// Add LLxprt Code specific entries to .gitignore file
 export async function updateGitignore(gitRepoRoot: string): Promise<void> {
-  const gitignoreEntries = ['.gemini/', 'gha-creds-*.json'];
+  const gitignoreEntries = ['.llxprt/', 'gha-creds-*.json'];
 
   const gitignorePath = path.join(gitRepoRoot, '.gitignore');
   try {
@@ -87,46 +97,114 @@ export async function updateGitignore(gitRepoRoot: string): Promise<void> {
       }
     }
   } catch (error) {
-    console.debug('Failed to update .gitignore:', error);
+    debugLogger.debug('Failed to update .gitignore:', error);
     // Continue without failing the whole command
+  }
+}
+
+async function downloadFiles({
+  paths,
+  releaseTag,
+  targetDir,
+  proxy,
+  abortController,
+}: {
+  paths: string[];
+  releaseTag: string;
+  targetDir: string;
+  proxy: string | undefined;
+  abortController: AbortController;
+}): Promise<void> {
+  const downloads = [];
+  for (const fileBasename of paths) {
+    downloads.push(
+      (async () => {
+        const endpoint = `${REPO_DOWNLOAD_URL}/refs/tags/${releaseTag}/${SOURCE_DIR}/${fileBasename}`;
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          dispatcher: proxy ? new ProxyAgent(proxy) : undefined,
+          signal: AbortSignal.any([
+            AbortSignal.timeout(30_000),
+            abortController.signal,
+          ]),
+        } as RequestInit);
+
+        if (!response.ok) {
+          throw new Error(
+            `Invalid response code downloading ${endpoint}: ${response.status} - ${response.statusText}`,
+          );
+        }
+        const body = response.body;
+        if (!body) {
+          throw new Error(
+            `Empty body while downloading ${endpoint}: ${response.status} - ${response.statusText}`,
+          );
+        }
+
+        const destination = path.resolve(
+          targetDir,
+          path.basename(fileBasename),
+        );
+
+        const fileStream = fs.createWriteStream(destination, {
+          mode: 0o644, // -rw-r--r--, user(rw), group(r), other(r)
+          flags: 'w', // write and overwrite
+          flush: true,
+        });
+
+        await body.pipeTo(Writable.toWeb(fileStream));
+      })(),
+    );
+  }
+
+  await Promise.all(downloads).finally(() => {
+    abortController.abort();
+  });
+}
+
+async function createDirectory(dirPath: string): Promise<void> {
+  try {
+    await fs.promises.mkdir(dirPath, { recursive: true });
+  } catch (_error) {
+    debugLogger.debug(`Failed to create ${dirPath} directory:`, _error);
+    throw new Error(
+      `Unable to create ${dirPath} directory. Do you have file permissions in the current directory?`,
+    );
+  }
+}
+
+async function downloadSetupFiles({
+  configs,
+  releaseTag,
+  proxy,
+}: {
+  configs: Array<{ paths: string[]; targetDir: string }>;
+  releaseTag: string;
+  proxy: string | undefined;
+}): Promise<void> {
+  try {
+    await Promise.all(
+      configs.map(({ paths, targetDir }) => {
+        const abortController = new AbortController();
+        return downloadFiles({
+          paths,
+          releaseTag,
+          targetDir,
+          proxy,
+          abortController,
+        });
+      }),
+    );
+  } catch (error) {
+    debugLogger.debug('Failed to download required setup files: ', error);
+    throw error;
   }
 }
 
 export const setupGithubCommand: SlashCommand = {
   name: 'setup-github',
-  description:
-    'Set up GitHub Actions (currently disabled - needs adaptation for llxprt)',
+  description: 'Set up GitHub Actions',
   kind: CommandKind.BUILT_IN,
-  action: (): SlashCommandActionReturn =>
-    // TODO: Adapt this command for llxprt-code
-    // Need to:
-    // 1. Create our own GitHub Actions repository (e.g., acoliver/run-llxprt-code or vybestack/run-llxprt-code)
-    // 2. Adapt the workflows to use llxprt instead of gemini
-    // 3. Support multi-provider configuration in the workflows
-    // 4. Update the URLs below to point to our repository
-    // 5. Consider including the cherry-picker workflow as part of the setup
-
-    // For now, return an informative message
-    ({
-      type: 'message',
-      messageType: 'info',
-      content: `The /setup-github command is currently disabled and needs adaptation for llxprt-code.
-
-This command would download GitHub Actions workflows for:
-- Automated PR reviews using llxprt
-- Issue triage and labeling
-- General AI assistance via @llxprt-cli mentions
-- (Potentially) Automated upstream sync via cherry-picking
-
-To implement this feature:
-1. Fork https://github.com/acoliver/run-llxprt-code
-2. Adapt it for multi-provider support
-3. Update this command to point to the new repository
-
-For now, you can manually set up GitHub Actions by creating workflows that use llxprt-code.`,
-    }),
-
-  /* Original gemini implementation with GitHub API integration - kept for reference:
   action: async (
     context: CommandContext,
   ): Promise<SlashCommandActionReturn> => {
@@ -141,76 +219,33 @@ For now, you can manually set up GitHub Actions by creating workflows that use l
     try {
       gitRepoRoot = getGitRepoRoot();
     } catch (_error) {
-      console.debug(`Failed to get git repo root:`, _error);
+      debugLogger.debug(`Failed to get git repo root:`, _error);
       throw new Error(
         'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
       );
     }
 
-    // Get the latest release tag from GitHub API
-    // For llxprt, this would call getLatestGitHubRelease() which points to acoliver/run-llxprt-code
+    // Get the latest release tag from GitHub
     const proxy = context?.services?.config?.getProxy();
     const releaseTag = await getLatestGitHubRelease(proxy);
+    const readmeUrl = `https://github.com/acoliver/run-llxprt-code/blob/${releaseTag}/README.md#quick-start`;
 
-    // Create the .github/workflows directory to download the files into
-    const githubWorkflowsDir = path.join(gitRepoRoot, '.github', 'workflows');
-    try {
-      await fs.promises.mkdir(githubWorkflowsDir, { recursive: true });
-    } catch (_error) {
-      console.debug(
-        `Failed to create ${githubWorkflowsDir} directory:`,
-        _error,
-      );
-      throw new Error(
-        `Unable to create ${githubWorkflowsDir} directory. Do you have file permissions in the current directory?`,
-      );
-    }
+    // Create workflows directory
+    const workflowsDir = path.join(gitRepoRoot, '.github', 'workflows');
+    await createDirectory(workflowsDir);
 
-    // Download each workflow in parallel - there aren't enough files to warrant
-    // a full workerpool model here.
-    const downloads = [];
-    for (const workflow of GITHUB_WORKFLOW_PATHS) {
-      downloads.push(
-        (async () => {
-          const endpoint = `https://raw.githubusercontent.com/google-github-actions/run-gemini-cli/refs/tags/${releaseTag}/examples/workflows/${workflow}`;
-          const response = await fetch(endpoint, {
-            method: 'GET',
-            dispatcher: proxy ? new ProxyAgent(proxy) : undefined,
-            signal: AbortSignal.any([
-              AbortSignal.timeout(30_000),
-              abortController.signal,
-            ]),
-          } as RequestInit);
+    // Create commands directory
+    const commandsDir = path.join(gitRepoRoot, '.github', 'commands');
+    await createDirectory(commandsDir);
 
-          if (!response.ok) {
-            throw new Error(
-              `Invalid response code downloading ${endpoint}: ${response.status} - ${response.statusText}`,
-            );
-          }
-          const body = response.body;
-          if (!body) {
-            throw new Error(
-              `Empty body while downloading ${endpoint}: ${response.status} - ${response.statusText}`,
-            );
-          }
-
-          const destination = path.resolve(
-            githubWorkflowsDir,
-            path.basename(workflow),
-          );
-
-          const fileStream = fs.createWriteStream(destination, {
-            mode: 0o644, // -rw-r--r--, user(rw), group(r), other(r)
-            flags: 'w', // write and overwrite
-            flush: true,
-          });
-
-          await body.pipeTo(Writable.toWeb(fileStream));
-        })(),
-      );
-    }
-
-    const readmeUrl = `https://github.com/google-github-actions/run-gemini-cli/blob/${releaseTag}/README.md#quick-start`;
+    await downloadSetupFiles({
+      configs: [
+        { paths: GITHUB_WORKFLOW_PATHS, targetDir: workflowsDir },
+        { paths: GITHUB_COMMANDS_PATHS, targetDir: commandsDir },
+      ],
+      releaseTag,
+      proxy,
+    });
 
     // Add entries to .gitignore file
     await updateGitignore(gitRepoRoot);
@@ -219,9 +254,8 @@ For now, you can manually set up GitHub Actions by creating workflows that use l
     const commands = [];
     commands.push('set -eEuo pipefail');
     commands.push(
-      `echo "Successfully downloaded ${GITHUB_WORKFLOW_PATHS.length} workflows and updated .gitignore. Follow the steps in ${readmeUrl} (skipping the /setup-github step) to complete setup."`,
+      `echo "Successfully downloaded ${GITHUB_WORKFLOW_PATHS.length} workflows, ${GITHUB_COMMANDS_PATHS.length} commands and updated .gitignore. Follow the steps in ${readmeUrl} (skipping the /setup-github step) to complete setup."`,
     );
-
     commands.push(...getOpenUrlsCommands(readmeUrl));
 
     const command = `(${commands.join(' && ')})`;
@@ -230,28 +264,9 @@ For now, you can manually set up GitHub Actions by creating workflows that use l
       toolName: 'run_shell_command',
       toolArgs: {
         description:
-          'Setting up GitHub Actions to triage issues and review PRs with llxprt.',
+          'Setting up GitHub Actions to triage issues and review PRs with LLxprt.',
         command,
       },
     };
   },
-  */
 };
-
-// buildCurlCommand is a helper for constructing a consistent curl command.
-// Commented out until the command is re-enabled
-// function buildCurlCommand(u: string, additionalArgs?: string[]): string {
-//   const args = [];
-//   args.push('--fail');
-//   args.push('--location');
-//   args.push('--show-error');
-//   args.push('--silent');
-//
-//   for (const val of additionalArgs || []) {
-//     args.push(val);
-//   }
-//
-//   args.sort();
-//
-//   return `curl ${args.join(' ')} "${u}"`;
-// }

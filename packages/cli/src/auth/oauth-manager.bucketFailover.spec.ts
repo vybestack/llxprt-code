@@ -50,6 +50,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
 
 import { OAuthManager, type OAuthProvider } from './oauth-manager.js';
 import type {
+  BucketFailoverHandler,
   Config,
   OAuthToken,
   TokenStore,
@@ -115,5 +116,83 @@ describe('OAuthManager bucket failover integration (CLI)', () => {
     expect(oauthManager.getSessionBucket('anthropic')).toBe('bucket-a');
     expect(config.setBucketFailoverHandler).toHaveBeenCalledTimes(1);
     expect(tokenStore.getToken).toHaveBeenCalledWith('anthropic', 'bucket-a');
+  });
+
+  it('getToken tries bucket failover before triggering full OAuth when session bucket has no token', async () => {
+    // Set up: session bucket is bucket-b (no token), but bucket-a has a valid token
+    // The failover handler should switch to bucket-a and return that token
+    const failoverHandler: BucketFailoverHandler = {
+      getBuckets: () => ['bucket-a', 'bucket-b'],
+      getCurrentBucket: () => 'bucket-b',
+      tryFailover: vi.fn(async () => {
+        // Simulate what BucketFailoverHandlerImpl does: switch the session bucket
+        oauthManager.setSessionBucket('anthropic', 'bucket-a');
+        return true;
+      }),
+      isEnabled: () => true,
+    };
+
+    const config: Pick<
+      Config,
+      'getBucketFailoverHandler' | 'setBucketFailoverHandler'
+    > = {
+      getBucketFailoverHandler: vi.fn(() => failoverHandler),
+      setBucketFailoverHandler: vi.fn(),
+    };
+
+    oauthManager.setConfigGetter(() => config as unknown as Config);
+    await oauthManager.toggleOAuthEnabled('anthropic');
+
+    // Force session bucket to bucket-b (which has no token)
+    oauthManager.setSessionBucket('anthropic', 'bucket-b');
+
+    // Token store: bucket-a has a token, bucket-b does not
+    (tokenStore.getToken as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_provider: string, bucket?: string) => {
+        if (bucket === 'bucket-a') {
+          return makeToken('token-bucket-a');
+        }
+        return null;
+      },
+    );
+
+    const token = await oauthManager.getToken('anthropic');
+
+    expect(failoverHandler.tryFailover).toHaveBeenCalled();
+    expect(token).toBe('token-bucket-a');
+  });
+
+  it('getToken falls through to full OAuth when failover fails', async () => {
+    const failoverHandler: BucketFailoverHandler = {
+      getBuckets: () => ['bucket-a', 'bucket-b'],
+      getCurrentBucket: () => 'bucket-b',
+      tryFailover: vi.fn(async () => false),
+      isEnabled: () => true,
+    };
+
+    const config: Pick<
+      Config,
+      'getBucketFailoverHandler' | 'setBucketFailoverHandler'
+    > = {
+      getBucketFailoverHandler: vi.fn(() => failoverHandler),
+      setBucketFailoverHandler: vi.fn(),
+    };
+
+    oauthManager.setConfigGetter(() => config as unknown as Config);
+    await oauthManager.toggleOAuthEnabled('anthropic');
+
+    // Force session bucket to bucket-b (which has no token)
+    oauthManager.setSessionBucket('anthropic', 'bucket-b');
+
+    // All buckets return null tokens
+    (tokenStore.getToken as ReturnType<typeof vi.fn>).mockImplementation(
+      async () => null,
+    );
+
+    // getToken should fall through to full OAuth flow which will call authenticate
+    // Since the mock provider's initiateAuth and getToken return null/undefined,
+    // this should throw (authentication completed but no token was returned)
+    await expect(oauthManager.getToken('anthropic')).rejects.toThrow();
+    expect(failoverHandler.tryFailover).toHaveBeenCalled();
   });
 });

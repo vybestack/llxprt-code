@@ -6,12 +6,6 @@
 
 /// <reference types="vitest/globals" />
 
-/**
- * @license
- * Copyright 2025 Google LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { Assertion, expect } from 'vitest';
 import type { TextBuffer } from '../ui/components/shared/text-buffer.js';
 

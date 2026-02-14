@@ -11,6 +11,7 @@ import {
   ExtensionStorage,
   requestConsentNonInteractive,
 } from '../../config/extension.js';
+import { exitCli } from '../utils.js';
 import {
   updateAllUpdatableExtensions,
   type ExtensionUpdateInfo,
@@ -161,5 +162,6 @@ export const updateCommand: CommandModule = {
       name: argv['name'] as string | undefined,
       all: argv['all'] as boolean | undefined,
     });
+    await exitCli();
   },
 };

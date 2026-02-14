@@ -23,6 +23,11 @@ export interface BootstrapProfileArgs {
   modelOverride: string | null;
   keyOverride: string | null;
   keyfileOverride: string | null;
+  /**
+   * @plan PLAN-20260211-SECURESTORE.P16
+   * @requirement R22.2
+   */
+  keyNameOverride: string | null;
   baseurlOverride: string | null;
   setOverrides: string[] | null;
 }
@@ -109,6 +114,7 @@ ${baseProfile.error}`);
     modelOverride: null,
     keyOverride: null,
     keyfileOverride: null,
+    keyNameOverride: null,
     baseurlOverride: null,
     setOverrides: null,
   };
@@ -231,6 +237,19 @@ ${baseProfile.error}`);
         index = nextIndex;
         break;
       }
+      /**
+       * @plan PLAN-20260211-SECURESTORE.P16
+       * @requirement R22.2
+       */
+      case '--key-name': {
+        const { value, nextIndex } = consumeValue(argv, index, inline);
+        if (value === null) {
+          throw new Error('--key-name requires a value');
+        }
+        bootstrapArgs.keyNameOverride = value;
+        index = nextIndex;
+        break;
+      }
       case '--baseurl': {
         const { value, nextIndex } = consumeValue(argv, index, inline);
         bootstrapArgs.baseurlOverride = value;
@@ -311,6 +330,7 @@ ${baseProfile.error}`);
         modelOverride: bootstrapArgs.modelOverride,
         keyOverride: bootstrapArgs.keyOverride ? '***' : null,
         keyfileOverride: bootstrapArgs.keyfileOverride,
+        keyNameOverride: bootstrapArgs.keyNameOverride,
         baseurlOverride: bootstrapArgs.baseurlOverride,
         setOverrides: bootstrapArgs.setOverrides,
       })}`,

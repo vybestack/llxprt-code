@@ -36,6 +36,7 @@ describe('clearCommand', () => {
 
   beforeEach(() => {
     mockResetChat = vi.fn().mockResolvedValue(undefined);
+    const mockGetChatRecordingService = vi.fn();
     vi.clearAllMocks();
     vi.mocked(getCliRuntimeServices).mockReset();
 
@@ -45,7 +46,11 @@ describe('clearCommand', () => {
           getGeminiClient: () =>
             ({
               resetChat: mockResetChat,
+              getChat: () => ({
+                getChatRecordingService: mockGetChatRecordingService,
+              }),
             }) as unknown as GeminiClient,
+          setSessionId: vi.fn(),
         },
       },
     });

@@ -5,6 +5,7 @@
  */
 
 import type { RenderOptions } from 'ink';
+import { createInkStdio } from '@vybestack/llxprt-code-core';
 
 type InkRenderOptionsConfig = {
   getScreenReader(): boolean;
@@ -18,6 +19,9 @@ type InkRenderOptionsSettings = {
     };
   };
 };
+
+// Create stdio streams once so they are reused across calls.
+const sharedStdio = createInkStdio();
 
 /**
  * @plan PLAN-20251215-OLDUI-SCROLL.P04
@@ -34,6 +38,8 @@ export const inkRenderOptions = (
     useAlternateBuffer && settings.merged.ui?.incrementalRendering !== false;
 
   return {
+    stdout: sharedStdio.stdout,
+    stderr: sharedStdio.stderr,
     exitOnCtrlC: false,
     patchConsole: false,
     isScreenReaderEnabled,

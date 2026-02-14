@@ -5,6 +5,11 @@
  */
 
 /**
+ * @plan PLAN-20260211-HIGHDENSITY.P03
+ * @plan PLAN-20260211-HIGHDENSITY.P05
+ * @requirement REQ-HD-001.3
+ * @pseudocode strategy-interface.md lines 90-94
+ *
  * One-shot compression strategy: summarizes the entire history except
  * the last N messages in a single LLM call. The preserved tail is
  * determined by the preserveThreshold ephemeral setting.
@@ -22,14 +27,18 @@ import type {
   CompressionResult,
   CompressionResultMetadata,
   CompressionStrategy,
+  StrategyTrigger,
 } from './types.js';
 import { CompressionExecutionError, PromptResolutionError } from './types.js';
-import { adjustForToolCallBoundary, aggregateTextFromBlocks } from './utils.js';
+import {
+  adjustForToolCallBoundary,
+  aggregateTextFromBlocks,
+  buildContinuationDirective,
+} from './utils.js';
 import { getCompressionPrompt } from '../prompts.js';
 
 const MINIMUM_COMPRESS_MESSAGES = 4;
 
-const ACK_TEXT = 'Got it. Thanks for the additional context!';
 const TRIGGER_INSTRUCTION =
   'First, reason in your scratchpad. Then, generate the <state_snapshot>.';
 
@@ -40,6 +49,11 @@ const TRIGGER_INSTRUCTION =
 export class OneShotStrategy implements CompressionStrategy {
   readonly name = 'one-shot' as const;
   readonly requiresLLM = true;
+  /** @plan PLAN-20260211-HIGHDENSITY.P03 @requirement REQ-HD-001.3 */
+  readonly trigger: StrategyTrigger = {
+    mode: 'threshold',
+    defaultThreshold: 0.85,
+  };
 
   async compress(context: CompressionContext): Promise<CompressionResult> {
     const { history } = context;
@@ -64,12 +78,15 @@ export class OneShotStrategy implements CompressionStrategy {
     const provider = context.resolveProvider(compressionProfile);
 
     // Build the LLM request
+    // @plan PLAN-20260211-HIGHDENSITY.P23
+    // @requirement REQ-HD-011.3, REQ-HD-012.2
     const compressionRequest: IContent[] = [
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: prompt }],
       },
       ...toCompress,
+      ...this.buildContextInjections(context),
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: TRIGGER_INSTRUCTION }],
@@ -86,7 +103,7 @@ export class OneShotStrategy implements CompressionStrategy {
       );
     }
 
-    // Assemble result: summary + ack + preserved tail
+    // Assemble result: summary + continuation directive + preserved tail
     const newHistory: IContent[] = [
       {
         speaker: 'human' as const,
@@ -94,7 +111,12 @@ export class OneShotStrategy implements CompressionStrategy {
       },
       {
         speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: ACK_TEXT }],
+        blocks: [
+          {
+            type: 'text' as const,
+            text: buildContinuationDirective(context.activeTodos),
+          },
+        ],
       },
       ...toKeep,
     ];
@@ -211,5 +233,41 @@ export class OneShotStrategy implements CompressionStrategy {
         middleCompressed: 0,
       },
     };
+  }
+
+  /**
+   * @plan PLAN-20260211-HIGHDENSITY.P23
+   * @requirement REQ-HD-011.3, REQ-HD-012.2
+   */
+  private buildContextInjections(context: CompressionContext): IContent[] {
+    const injections: IContent[] = [];
+
+    if (context.activeTodos && context.activeTodos.trim().length > 0) {
+      injections.push({
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: `The following are the current active todo/task items. When summarizing, preserve context about why each task exists and what has been tried:
+
+${context.activeTodos}`,
+          },
+        ],
+      });
+    }
+
+    if (context.transcriptPath) {
+      injections.push({
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: `Note: The full pre-compression transcript is available at: ${context.transcriptPath}`,
+          },
+        ],
+      });
+    }
+
+    return injections;
   }
 }

@@ -309,7 +309,7 @@ describe('OneShotStrategy', () => {
       expect(result.newHistory[1].blocks[0]).toEqual(
         expect.objectContaining({
           type: 'text',
-          text: 'Got it. Thanks for the additional context!',
+          text: 'Understood. Continuing with the current task.',
         }),
       );
 

@@ -158,7 +158,12 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`defaultDisabledTools`** (array):
   - **Description:** Tool names disabled by default. Users can re-enable them with /tools enable.
-  - **Default:** `["google_web_fetch"]`
+  - **Default:**
+
+    ```json
+    ["google_web_fetch"]
+    ```
+
   - **Requires restart:** Yes
 
 #### `coreToolSettings`
@@ -259,7 +264,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`ui.useAlternateBuffer`** (boolean):
   - **Description:** Use an alternate screen buffer for the UI, preserving shell history.
-  - **Default:** `true`
+  - **Default:** `false`
   - **Requires restart:** Yes
 
 - **`ui.incrementalRendering`** (boolean):
@@ -278,7 +283,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`ui.showLineNumbers`** (boolean):
   - **Description:** Show line numbers in the chat.
-  - **Default:** `false`
+  - **Default:** `true`
 
 - **`ui.showCitations`** (boolean):
   - **Description:** Show citations for generated text in the chat.
@@ -536,7 +541,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`excludedProjectEnvVars`** (array):
   - **Description:** Environment variables to exclude from project context.
-  - **Default:** `["DEBUG","DEBUG_MODE"]`
+  - **Default:**
+
+    ```json
+    ["DEBUG", "DEBUG_MODE"]
+    ```
 
 #### `disableUpdateNag`
 

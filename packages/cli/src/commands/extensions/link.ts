@@ -13,6 +13,7 @@ import {
 } from '../../config/extension.js';
 
 import { getErrorMessage } from '../../utils/errors.js';
+import { exitCli } from '../utils.js';
 
 interface InstallArgs {
   path: string;
@@ -36,7 +37,7 @@ export async function handleLink(args: InstallArgs) {
     );
   } catch (error) {
     console.error(getErrorMessage(error));
-    process.exit(1);
+    await exitCli(1);
   }
 }
 
@@ -55,5 +56,6 @@ export const linkCommand: CommandModule = {
     await handleLink({
       path: argv['path'] as string,
     });
+    await exitCli();
   },
 };
