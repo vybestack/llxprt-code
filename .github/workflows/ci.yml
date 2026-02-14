@@ -374,7 +374,7 @@ jobs:
   # Test: Node (Linux and macOS - always run)
   #
   test:
-    name: 'Test'
+    name: 'Test (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
     runs-on: '${{ matrix.os }}'
     needs:
       - 'lint'
@@ -393,6 +393,9 @@ jobs:
           - 'macos-latest'
         node-version:
           - '24.x'
+        secure-store-mode:
+          - 'keyring'
+          - 'fallback'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -464,6 +467,8 @@ jobs:
           CI: true
           # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
           VITEST_TEST_TIMEOUT: 15000
+          # Force SecureStore to use encrypted-file fallback instead of keyring (R15.2)
+          LLXPRT_SECURE_STORE_FORCE_FALLBACK: ${{ matrix.secure-store-mode == 'fallback' && 'true' || '' }}
         run: 'npm run test'
 
       - name: 'Run script harness tests (macOS)'
@@ -499,7 +504,7 @@ jobs:
           ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
-          name: 'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}'
+          name: 'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}-${{ matrix.secure-store-mode }}'
           path: 'packages/*/junit.xml'
 
       - name: 'Upload coverage reports'
@@ -507,7 +512,7 @@ jobs:
           ${{ always() }}
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
-          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}'
+          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}-${{ matrix.secure-store-mode }}'
           path: 'packages/*/coverage'
 
   post_coverage_comment:
@@ -534,7 +539,7 @@ jobs:
       - name: 'Download coverage reports artifact'
         uses: 'actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0' # ratchet:actions/download-artifact@v5
         with:
-          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}'
+          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}-keyring'
           path: 'coverage_artifact' # Download to a specific directory
 
       - name: 'Post Coverage Comment using Composite Action'
