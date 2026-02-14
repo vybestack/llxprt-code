@@ -423,7 +423,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     this.logger.debug(() => '[FLOW] getToken() called');
     await this.ensureInitialized();
 
-    // Get token from ~/.llxprt/oauth/codex.json
+    // Get token from KeyringTokenStore (keyring or encrypted fallback)
     this.logger.debug(() => '[FLOW] Reading token from tokenStore...');
     const token = await this.tokenStore.getToken('codex');
 

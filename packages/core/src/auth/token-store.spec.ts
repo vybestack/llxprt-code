@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  *
- * Legacy behavioral tests migrated from MultiProviderTokenStore to KeyringTokenStore.
+ * Legacy behavioral tests for KeyringTokenStore.
  * More comprehensive tests live in __tests__/keyring-token-store.test.ts and
  * __tests__/keyring-token-store.integration.test.ts.
  */

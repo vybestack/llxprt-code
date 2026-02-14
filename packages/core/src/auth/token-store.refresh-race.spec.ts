@@ -5,7 +5,7 @@
  *
  * Test for issue #1159: Token refresh race condition
  *
- * Migrated from MultiProviderTokenStore to KeyringTokenStore.
+ * Tests KeyringTokenStore refresh lock behavior.
  * When multiple clients use the same OAuth token and try refreshing concurrently,
  * Anthropic may revoke the token. We need to:
  * 1. Check store for updated token before refreshing
