@@ -64,6 +64,11 @@ import type {
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import {
+  triggerBeforeModelHook,
+  triggerAfterModelHook,
+  triggerBeforeToolSelectionHook,
+} from './geminiChatHookTriggers.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -1320,6 +1325,18 @@ export class GeminiChat {
                   }>;
                 }>)
               : undefined;
+
+          // Get config for hook triggers
+          const configForHooks = this.runtimeContext.providerRuntime.config;
+
+          // Trigger BeforeToolSelection hook (non-blocking)
+          if (configForHooks && toolsFromConfig) {
+            void triggerBeforeToolSelectionHook(
+              configForHooks,
+              toolsFromConfig,
+            );
+          }
+
           const directOverrides = this.extractDirectGeminiOverrides(
             params.config as GenerateContentConfig | undefined,
           );
@@ -1348,6 +1365,18 @@ export class GeminiChat {
                 : {}),
             },
           );
+
+          // Trigger BeforeModel hook (non-blocking)
+          if (configForHooks) {
+            const requestForHook = {
+              contents: userIContents,
+              tools:
+                toolsFromConfig && toolsFromConfig.length > 0
+                  ? (toolsFromConfig as ProviderToolset)
+                  : undefined,
+            };
+            void triggerBeforeModelHook(configForHooks, requestForHook);
+          }
 
           const streamResponse = provider.generateChatCompletion({
             contents: userIContents,
@@ -1380,6 +1409,11 @@ export class GeminiChat {
           }
 
           const directResponse = this.convertIContentToResponse(lastResponse);
+
+          // Trigger AfterModel hook (non-blocking)
+          if (configForHooks && lastResponse) {
+            void triggerAfterModelHook(configForHooks, lastResponse);
+          }
 
           if (aggregatedText.trim()) {
             const candidate = directResponse.candidates?.[0];

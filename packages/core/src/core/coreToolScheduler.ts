@@ -60,6 +60,10 @@ import {
 import { DebugLogger } from '../debug/index.js';
 import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import {
+  triggerBeforeToolHook,
+  triggerAfterToolHook,
+} from './coreToolHookTriggers.js';
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
 export type ValidatingToolCall = {
@@ -1733,10 +1737,13 @@ export class CoreToolScheduler {
     executionIndex: number,
     signal: AbortSignal,
   ): Promise<void> {
-    const { callId, name: toolName } = scheduledCall.request;
+    const { callId, name: toolName, args } = scheduledCall.request;
     const invocation = scheduledCall.invocation;
 
     this.setStatusInternal(callId, 'executing');
+
+    // Trigger BeforeTool hook (non-blocking)
+    void triggerBeforeToolHook(this.config, toolName, args);
 
     const liveOutputCallback = scheduledCall.tool.canUpdateOutput
       ? (outputChunk: string | AnsiOutput) => {
@@ -1783,6 +1790,14 @@ export class CoreToolScheduler {
             toolResult,
             scheduledCall,
             executionIndex,
+          );
+
+          // Trigger AfterTool hook (non-blocking)
+          void triggerAfterToolHook(
+            this.config,
+            toolName,
+            scheduledCall.request.args,
+            toolResult as unknown as Record<string, unknown>,
           );
 
           await this.publishBufferedResults(signal);
