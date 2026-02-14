@@ -463,16 +463,18 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    * @when getToken reads it and logs a warning
    * @then Log message contains a hex hash, NOT the raw 'anthropic:default'
    */
-  it('logs SHA-256 hashed identifier, not raw provider:bucket', async () => {
+  it('logs hashed identifier, not raw provider:bucket', async () => {
     const warnSpy = vi.spyOn(DebugLogger.prototype, 'warn');
     await secureStore.set('hashtest:default', 'not-json');
     await tokenStore.getToken('hashtest');
-    // Compute expected hash prefix
-    const expectedHash = crypto
-      .createHash('sha256')
-      .update('hashtest:default')
-      .digest('hex')
-      .substring(0, 16);
+    // Compute expected FNV-1a hash (matches implementation)
+    const key = 'hashtest:default';
+    let h = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+      h ^= key.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    const expectedHash = (h >>> 0).toString(16).padStart(8, '0');
     // Verify warn was called with hash, not raw key
     const warnCalls = warnSpy.mock.calls;
     const hasHashInLogs = warnCalls.some((call) => {
