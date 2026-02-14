@@ -5,12 +5,13 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatsDisplay } from './StatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import { SessionMetrics } from '../contexts/SessionContext.js';
+import * as RuntimeContext from '../contexts/RuntimeContext.js';
 
-// Mock the context to provide controlled data for testing
+// Mock the SessionContext to provide controlled data for testing
 vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
   const actual = await importOriginal<typeof SessionContext>();
   return {
@@ -19,7 +20,17 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
   };
 });
 
+// Mock the RuntimeContext to provide controlled data for testing
+vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof RuntimeContext>();
+  return {
+    ...actual,
+    useRuntimeApi: vi.fn(),
+  };
+});
+
 const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
+const useRuntimeApiMock = vi.mocked(RuntimeContext.useRuntimeApi);
 
 const renderWithMockedStats = (metrics: SessionMetrics) => {
   useSessionStatsMock.mockReturnValue({
@@ -35,10 +46,31 @@ const renderWithMockedStats = (metrics: SessionMetrics) => {
     startNewPrompt: vi.fn(),
   });
 
+  // Mock RuntimeContext to provide default provider metrics
+  useRuntimeApiMock.mockReturnValue({
+    getActiveProviderMetrics: vi.fn().mockReturnValue({
+      tokensPerMinute: 0,
+      throttleWaitTimeMs: 0,
+      totalTokens: 0,
+      totalRequests: 0,
+    }),
+    getSessionTokenUsage: vi.fn().mockReturnValue({
+      input: 0,
+      output: 0,
+      cache: 0,
+      tool: 0,
+      thought: 0,
+      total: 0,
+    }),
+  } as unknown as ReturnType<typeof RuntimeContext.useRuntimeApi>);
+
   return render(<StatsDisplay duration="1s" />);
 };
 
 describe('<StatsDisplay />', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   it('renders only the Performance section in its zero state', () => {
     const zeroMetrics: SessionMetrics = {
       models: {},
@@ -395,6 +427,158 @@ describe('<StatsDisplay />', () => {
       const output = lastFrame();
       expect(output).toContain('Agent powering down. Goodbye!');
       expect(output).not.toContain('Session Stats');
+      expect(output).toMatchSnapshot();
+    });
+  });
+
+  describe('Quota Display', () => {
+    it('renders quota information when quotaLines are provided', () => {
+      const metrics: SessionMetrics = {
+        models: {
+          'gemini-2.5-pro': {
+            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
+            tokens: {
+              prompt: 100,
+              candidates: 100,
+              total: 250,
+              cached: 50,
+              thoughts: 0,
+              tool: 0,
+            },
+          },
+        },
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          byName: {},
+        },
+        files: {
+          totalLinesAdded: 0,
+          totalLinesRemoved: 0,
+        },
+      };
+
+      const quotaLines = [
+        '## Anthropic Quota Information\n',
+        '**Daily Usage**',
+        'Used: 1000 / 10000 tokens (10.0%)',
+        'Remaining: 9000 tokens',
+        'Resets: 2026-02-15 00:00:00 UTC',
+      ];
+
+      useSessionStatsMock.mockReturnValue({
+        stats: {
+          sessionId: 'test-session-id',
+          sessionStartTime: new Date(),
+          metrics,
+          lastPromptTokenCount: 0,
+          promptCount: 5,
+        },
+
+        getPromptCount: () => 5,
+        startNewPrompt: vi.fn(),
+      });
+
+      const { lastFrame } = render(
+        <StatsDisplay duration="1s" quotaLines={quotaLines} />,
+      );
+      const output = lastFrame();
+
+      expect(output).toContain('Quota Information');
+      expect(output).toContain('Anthropic Quota Information');
+      expect(output).toContain('Daily Usage');
+      expect(output).toContain('Used: 1000 / 10000 tokens');
+      expect(output).toMatchSnapshot();
+    });
+
+    it('does not render quota section when quotaLines are not provided', () => {
+      const metrics: SessionMetrics = {
+        models: {
+          'gemini-2.5-pro': {
+            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
+            tokens: {
+              prompt: 100,
+              candidates: 100,
+              total: 250,
+              cached: 50,
+              thoughts: 0,
+              tool: 0,
+            },
+          },
+        },
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          byName: {},
+        },
+        files: {
+          totalLinesAdded: 0,
+          totalLinesRemoved: 0,
+        },
+      };
+
+      useSessionStatsMock.mockReturnValue({
+        stats: {
+          sessionId: 'test-session-id',
+          sessionStartTime: new Date(),
+          metrics,
+          lastPromptTokenCount: 0,
+          promptCount: 5,
+        },
+
+        getPromptCount: () => 5,
+        startNewPrompt: vi.fn(),
+      });
+
+      const { lastFrame } = render(<StatsDisplay duration="1s" />);
+      const output = lastFrame();
+
+      expect(output).not.toContain('Quota Information');
+      expect(output).toMatchSnapshot();
+    });
+
+    it('handles empty quotaLines gracefully', () => {
+      const metrics: SessionMetrics = {
+        models: {},
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          byName: {},
+        },
+        files: {
+          totalLinesAdded: 0,
+          totalLinesRemoved: 0,
+        },
+      };
+
+      useSessionStatsMock.mockReturnValue({
+        stats: {
+          sessionId: 'test-session-id',
+          sessionStartTime: new Date(),
+          metrics,
+          lastPromptTokenCount: 0,
+          promptCount: 5,
+        },
+
+        getPromptCount: () => 5,
+        startNewPrompt: vi.fn(),
+      });
+
+      const { lastFrame } = render(
+        <StatsDisplay duration="1s" quotaLines={[]} />,
+      );
+      const output = lastFrame();
+
+      expect(output).not.toContain('Quota Information');
       expect(output).toMatchSnapshot();
     });
   });
