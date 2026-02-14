@@ -323,4 +323,29 @@ export class McpClientManager {
     }
     return mcpServers;
   }
+
+  /**
+   * Aggregates instructions from all connected MCP servers.
+   * Instructions are formatted with server name headers for attribution.
+   * Returns empty string if no servers have instructions.
+   */
+  getMcpInstructions(): string {
+    const sections: string[] = [];
+
+    for (const [name, client] of this.clients.entries()) {
+      // Only include instructions from connected servers
+      if (client.getStatus() !== 'connected') {
+        continue;
+      }
+
+      const instructions = client.getInstructions();
+      if (instructions.trim()) {
+        sections.push(
+          `--- Instructions from MCP server '${name}' ---\n${instructions.trim()}\n--- End of instructions from '${name}' ---`,
+        );
+      }
+    }
+
+    return sections.join('\n\n');
+  }
 }

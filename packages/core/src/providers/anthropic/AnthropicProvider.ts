@@ -1780,6 +1780,9 @@ ${block.code}
     }
 
     // Determine whether to include subagent delegation prompt
+    const mcpInstructions = options.config
+      ?.getMcpClientManager?.()
+      ?.getMcpInstructions();
     const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
       toolNamesForPrompt ?? [],
       () => options.config?.getSubagentManager?.(),
@@ -1789,6 +1792,7 @@ ${block.code}
     if (isOAuth) {
       const corePrompt = await getCoreSystemPromptAsync({
         userMemory,
+        mcpInstructions,
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
@@ -1824,6 +1828,7 @@ ${block.code}
     const systemPrompt = !isOAuth
       ? await getCoreSystemPromptAsync({
           userMemory,
+          mcpInstructions,
           model: currentModel,
           tools: toolNamesForPrompt,
           includeSubagentDelegation,

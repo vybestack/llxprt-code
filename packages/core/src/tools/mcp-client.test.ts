@@ -962,4 +962,71 @@ describe('connectToMcpServer with OAuth', () => {
       capturedTransport._requestInit?.headers?.['Authorization'];
     expect(authHeader).toBe('Bearer test-access-token-from-discovery');
   });
+
+  describe('getInstructions', () => {
+    it('should return instructions from server capabilities', async () => {
+      const instructionsText = 'These are server instructions for the agent.';
+      const mockedClient = {
+        connect: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({ tools: {} }),
+        getInstructions: vi.fn().mockReturnValue(instructionsText),
+        listTools: vi.fn().mockResolvedValue({ tools: [] }),
+        listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        close: vi.fn(),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+
+      const mcpClient = new McpClient(
+        'test-server',
+        { command: 'test', args: [] },
+        {} as ToolRegistry,
+        {} as PromptRegistry,
+        workspaceContext,
+        false,
+      );
+
+      await mcpClient.connect();
+      const instructions = mcpClient.getInstructions();
+      expect(instructions).toBe(instructionsText);
+    });
+
+    it('should return empty string when server has no instructions', async () => {
+      const mockedClient = {
+        connect: vi.fn(),
+        getServerCapabilities: vi.fn().mockReturnValue({ tools: {} }),
+        getInstructions: vi.fn().mockReturnValue(undefined),
+        listTools: vi.fn().mockResolvedValue({ tools: [] }),
+        listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        close: vi.fn(),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+
+      const mcpClient = new McpClient(
+        'test-server',
+        { command: 'test', args: [] },
+        {} as ToolRegistry,
+        {} as PromptRegistry,
+        workspaceContext,
+        false,
+      );
+
+      await mcpClient.connect();
+      const instructions = mcpClient.getInstructions();
+      expect(instructions).toBe('');
+    });
+  });
 });

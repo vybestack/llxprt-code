@@ -527,12 +527,16 @@ export class OpenAIResponsesProvider extends BaseProvider {
       () => options.invocation?.userMemory,
     );
 
+    const mcpInstructions = options.config
+      ?.getMcpClientManager?.()
+      ?.getMcpInstructions();
     const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
       toolNamesForPrompt ?? [],
       () => options.config?.getSubagentManager?.(),
     );
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
+      mcpInstructions,
       model: resolvedModel,
       tools: toolNamesForPrompt,
       includeSubagentDelegation,

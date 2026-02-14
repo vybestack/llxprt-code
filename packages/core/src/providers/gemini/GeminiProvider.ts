@@ -1616,12 +1616,16 @@ export class GeminiProvider extends BaseProvider {
       );
       const subagentConfig =
         options.config ?? options.runtime?.config ?? this.globalConfig;
+      const mcpInstructions = subagentConfig
+        ?.getMcpClientManager?.()
+        ?.getMcpInstructions();
       const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
         toolNamesForPrompt ?? [],
         () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
+        mcpInstructions,
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
@@ -1795,12 +1799,16 @@ export class GeminiProvider extends BaseProvider {
       );
       const subagentConfig =
         options.config ?? options.runtime?.config ?? this.globalConfig;
+      const mcpInstructions = subagentConfig
+        ?.getMcpClientManager?.()
+        ?.getMcpInstructions();
       const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
         toolNamesForPrompt ?? [],
         () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
+        mcpInstructions,
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,

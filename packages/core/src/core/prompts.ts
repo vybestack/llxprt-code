@@ -236,6 +236,7 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
 export interface CoreSystemPromptOptions {
   userMemory?: string;
   coreMemory?: string;
+  mcpInstructions?: string;
   model?: string;
   tools?: string[];
   provider?: string;
@@ -444,11 +445,14 @@ export async function getCoreSystemPromptAsync(
     | 'subagent'
     | undefined = undefined;
 
+  let mcpInstructions: string | undefined = undefined;
+
   if (typeof userMemoryOrOptions === 'object' && userMemoryOrOptions !== null) {
     // Options object mode
     const opts = userMemoryOrOptions as CoreSystemPromptOptions;
     userMemory = opts.userMemory;
     coreMemory = opts.coreMemory;
+    mcpInstructions = opts.mcpInstructions;
     modelArg = opts.model;
     toolsArg = opts.tools;
     providerArg = opts.provider;
@@ -493,6 +497,14 @@ export async function getCoreSystemPromptAsync(
     }
   } catch {
     // Settings service may not be available (e.g. during tests)
+  }
+
+  // Append MCP instructions to core memory if available
+  if (mcpInstructions && mcpInstructions.trim()) {
+    const parts = [effectiveCoreMemory, mcpInstructions.trim()].filter(
+      (p) => p && p.trim(),
+    );
+    effectiveCoreMemory = parts.join('\n\n') || undefined;
   }
 
   const context = await buildPromptContext({

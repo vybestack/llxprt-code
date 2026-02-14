@@ -632,6 +632,9 @@ export class GeminiClient {
   ): Promise<string> {
     const userMemory = this.config.getUserMemory();
     const coreMemory = this.config.getCoreMemory();
+    const mcpInstructions = this.config
+      .getMcpClientManager()
+      ?.getMcpInstructions();
     const model = this.runtimeState.model;
     const includeSubagentDelegation =
       await this.shouldIncludeSubagentDelegation(enabledToolNames);
@@ -639,6 +642,7 @@ export class GeminiClient {
     let systemInstruction = await getCoreSystemPromptAsync({
       userMemory,
       coreMemory,
+      mcpInstructions,
       model,
       tools: enabledToolNames,
       includeSubagentDelegation,
@@ -1812,11 +1816,15 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
+      const mcpInstructions = this.config
+        .getMcpClientManager()
+        ?.getMcpInstructions();
       const enabledToolNames = this.getEnabledToolNamesForPrompt();
       const includeSubagentDelegation =
         await this.shouldIncludeSubagentDelegation(enabledToolNames);
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
+        mcpInstructions,
         model: modelToUse,
         tools: enabledToolNames,
         includeSubagentDelegation,
@@ -1910,12 +1918,16 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
+      const mcpInstructions = this.config
+        .getMcpClientManager()
+        ?.getMcpInstructions();
       const enabledToolNames = this.getEnabledToolNamesForPrompt();
       const includeSubagentDelegation =
         await this.shouldIncludeSubagentDelegation(enabledToolNames);
       // Provider name removed from prompt call signature
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
+        mcpInstructions,
         model: modelToUse,
         tools: enabledToolNames,
         includeSubagentDelegation,
