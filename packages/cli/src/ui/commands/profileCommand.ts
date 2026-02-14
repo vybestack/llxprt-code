@@ -19,7 +19,7 @@ import {
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   DebugLogger,
-  MultiProviderTokenStore,
+  KeyringTokenStore,
   getProtectedSettingKeys,
 } from '@vybestack/llxprt-code-core';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
@@ -97,7 +97,7 @@ const bucketCompleter: CompleterFn = withFuzzyFilter(
         return [];
       }
 
-      const tokenStore = new MultiProviderTokenStore();
+      const tokenStore = new KeyringTokenStore();
       const buckets = await tokenStore.listBuckets(provider);
 
       // tokens.tokens format: ["save", "model", "profile-name", "bucket1", "bucket2", ...]
@@ -344,7 +344,7 @@ const saveCommand: SlashCommand = {
           }
 
           // Get token store to check bucket existence
-          const tokenStore = new MultiProviderTokenStore();
+          const tokenStore = new KeyringTokenStore();
           const availableBuckets = await tokenStore.listBuckets(provider);
 
           for (const bucket of bucketArgs) {

@@ -11,12 +11,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GeminiOAuthProvider } from '../../src/auth/gemini-oauth-provider.js';
-import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
+import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { HistoryItemWithoutId } from '../../src/ui/types.js';
 
 describe('GeminiOAuthProvider - Fallback Dialog', () => {
   let provider: GeminiOAuthProvider;
-  let tokenStore: MultiProviderTokenStore;
+  let tokenStore: KeyringTokenStore;
   let addItemSpy: ReturnType<typeof vi.fn>;
   let historyItems: HistoryItemWithoutId[];
 
@@ -31,7 +31,7 @@ describe('GeminiOAuthProvider - Fallback Dialog', () => {
       saveToken: vi.fn(),
       getToken: vi.fn().mockResolvedValue(null),
       clearToken: vi.fn(),
-    } as unknown as MultiProviderTokenStore;
+    } as unknown as KeyringTokenStore;
 
     provider = new GeminiOAuthProvider(tokenStore, addItemSpy);
   });

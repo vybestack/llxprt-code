@@ -16,9 +16,11 @@ import * as fc from 'fast-check';
 import { AuthCommandExecutor } from '../../../src/ui/commands/authCommand.js';
 import { OAuthManager } from '../../../src/auth/oauth-manager.js';
 import {
-  MultiProviderTokenStore,
+  KeyringTokenStore,
+  SecureStore,
   OAuthToken,
   Logger,
+  type KeyringAdapter,
 } from '@vybestack/llxprt-code-core';
 import { QwenOAuthProvider } from '../../../src/auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../../src/auth/gemini-oauth-provider.js';
@@ -29,6 +31,38 @@ import {
 } from '../../../src/ui/commands/types.js';
 import { LoadedSettings } from '../../../src/config/settings.js';
 import { SessionStatsState } from '../../../src/ui/contexts/SessionContext.js';
+import { promises as fsP } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+
+function createMockKeyring(): KeyringAdapter {
+  const store = new Map<string, string>();
+  return {
+    getPassword: async (_s: string, a: string) => store.get(a) ?? null,
+    setPassword: async (_s: string, a: string, p: string) => {
+      store.set(a, p);
+    },
+    deletePassword: async (_s: string, a: string) => store.delete(a),
+    findCredentials: async () => {
+      const results: Array<{ account: string; password: string }> = [];
+      for (const [account, password] of store.entries()) {
+        results.push({ account, password });
+      }
+      return results;
+    },
+  };
+}
+
+let _tempDir: string | undefined;
+async function createTestTokenStore(): Promise<KeyringTokenStore> {
+  _tempDir = await fsP.mkdtemp(join(tmpdir(), 'authcmd-logout-test-'));
+  const secureStore = new SecureStore('llxprt-code-oauth', {
+    fallbackDir: _tempDir,
+    fallbackPolicy: 'allow',
+    keyringLoader: async () => createMockKeyring(),
+  });
+  return new KeyringTokenStore({ secureStore });
+}
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -64,13 +98,13 @@ function createMockContext(): CommandContext {
 describe.skipIf(skipInCI)(
   'AuthCommand - Logout Command Parsing (REQ-002)',
   () => {
-    let tokenStore: MultiProviderTokenStore;
+    let tokenStore: KeyringTokenStore;
     let oauthManager: OAuthManager;
     let authCommand: AuthCommandExecutor;
     let context: CommandContext;
 
-    beforeEach(() => {
-      tokenStore = new MultiProviderTokenStore();
+    beforeEach(async () => {
+      tokenStore = await createTestTokenStore();
       oauthManager = new OAuthManager(tokenStore);
       authCommand = new AuthCommandExecutor(oauthManager);
       context = createMockContext();
@@ -88,6 +122,12 @@ describe.skipIf(skipInCI)(
         await tokenStore.removeToken('anthropic');
       } catch {
         // Ignore cleanup errors
+      }
+      if (_tempDir) {
+        await fsP
+          .rm(_tempDir, { recursive: true, force: true })
+          .catch(() => {});
+        _tempDir = undefined;
       }
     });
 
@@ -290,13 +330,13 @@ describe.skipIf(skipInCI)(
 describe.skipIf(skipInCI)(
   'AuthCommand - Logout Provider Validation (REQ-002)',
   () => {
-    let tokenStore: MultiProviderTokenStore;
+    let tokenStore: KeyringTokenStore;
     let oauthManager: OAuthManager;
     let authCommand: AuthCommandExecutor;
     let context: CommandContext;
 
-    beforeEach(() => {
-      tokenStore = new MultiProviderTokenStore();
+    beforeEach(async () => {
+      tokenStore = await createTestTokenStore();
       oauthManager = new OAuthManager(tokenStore);
       authCommand = new AuthCommandExecutor(oauthManager);
       context = createMockContext();
@@ -314,6 +354,12 @@ describe.skipIf(skipInCI)(
         await tokenStore.removeToken('anthropic');
       } catch {
         // Ignore cleanup errors
+      }
+      if (_tempDir) {
+        await fsP
+          .rm(_tempDir, { recursive: true, force: true })
+          .catch(() => {});
+        _tempDir = undefined;
       }
     });
 
@@ -421,13 +467,13 @@ describe.skipIf(skipInCI)(
 describe.skipIf(skipInCI)(
   'AuthCommand - Logout User Feedback (REQ-002)',
   () => {
-    let tokenStore: MultiProviderTokenStore;
+    let tokenStore: KeyringTokenStore;
     let oauthManager: OAuthManager;
     let authCommand: AuthCommandExecutor;
     let context: CommandContext;
 
-    beforeEach(() => {
-      tokenStore = new MultiProviderTokenStore();
+    beforeEach(async () => {
+      tokenStore = await createTestTokenStore();
       oauthManager = new OAuthManager(tokenStore);
       authCommand = new AuthCommandExecutor(oauthManager);
       context = createMockContext();
@@ -445,6 +491,12 @@ describe.skipIf(skipInCI)(
         await tokenStore.removeToken('anthropic');
       } catch {
         // Ignore cleanup errors
+      }
+      if (_tempDir) {
+        await fsP
+          .rm(_tempDir, { recursive: true, force: true })
+          .catch(() => {});
+        _tempDir = undefined;
       }
     });
 
@@ -581,13 +633,13 @@ describe.skipIf(skipInCI)(
 
 // Property-Based Tests (30%+ of total tests)
 describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
-  let tokenStore: MultiProviderTokenStore;
+  let tokenStore: KeyringTokenStore;
   let oauthManager: OAuthManager;
   let authCommand: AuthCommandExecutor;
   let context: CommandContext;
 
-  beforeEach(() => {
-    tokenStore = new MultiProviderTokenStore();
+  beforeEach(async () => {
+    tokenStore = await createTestTokenStore();
     oauthManager = new OAuthManager(tokenStore);
     authCommand = new AuthCommandExecutor(oauthManager);
     context = createMockContext();
@@ -605,6 +657,10 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
       await tokenStore.removeToken('anthropic');
     } catch {
       // Ignore cleanup errors
+    }
+    if (_tempDir) {
+      await fsP.rm(_tempDir, { recursive: true, force: true }).catch(() => {});
+      _tempDir = undefined;
     }
   });
 

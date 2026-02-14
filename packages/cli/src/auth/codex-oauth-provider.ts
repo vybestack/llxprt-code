@@ -302,7 +302,7 @@ export class CodexOAuthProvider implements OAuthProvider {
         `[FLOW] Token received: access_token=${token.access_token.substring(0, 10)}..., account_id=${token.account_id?.substring(0, 8) ?? 'MISSING'}..., expiry=${token.expiry}`,
     );
 
-    // Save to MultiProviderTokenStore location (~/.llxprt/oauth/codex.json)
+    // Save to KeyringTokenStore (keyring or encrypted fallback)
     this.logger.debug(() => '[FLOW] Saving token to tokenStore...');
     await this.tokenStore.saveToken('codex', token);
     this.logger.debug(() => '[FLOW] Token saved to tokenStore');
@@ -436,7 +436,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     this.logger.debug(() => '[FLOW] getToken() called');
     await this.ensureInitialized();
 
-    // Get token from ~/.llxprt/oauth/codex.json
+    // Get token from KeyringTokenStore (keyring or encrypted fallback)
     this.logger.debug(() => '[FLOW] Reading token from tokenStore...');
     const token = await this.tokenStore.getToken('codex');
 

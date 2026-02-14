@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CodexOAuthProvider } from '../codex-oauth-provider.js';
 import {
-  MultiProviderTokenStore,
+  KeyringTokenStore,
   CodexOAuthTokenSchema,
 } from '@vybestack/llxprt-code-core';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
@@ -36,7 +36,7 @@ describe('CodexOAuthProvider', () => {
     process.env.HOME = tempDir;
 
     // tokenStore constructor uses homedir() which reads from process.env.HOME
-    tokenStore = new MultiProviderTokenStore();
+    tokenStore = new KeyringTokenStore();
     provider = new CodexOAuthProvider(tokenStore);
   });
 
