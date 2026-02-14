@@ -235,6 +235,8 @@ export class OAuthManager {
   private getMessageBus?: () => MessageBus | undefined;
   // Getter function for config (lazy resolution for bucket failover handler)
   private getConfig?: () => Config | undefined;
+  // Session-scoped flag: user declined the BucketAuthConfirmation dialog
+  private userDeclinedAuthPrompt = false;
 
   constructor(tokenStore: TokenStore, settings?: LoadedSettings) {
     this.providers = new Map();
@@ -2077,6 +2079,15 @@ export class OAuthManager {
       provider: string,
       bucket: string,
     ): Promise<boolean> => {
+      // If user already declined in this session, skip the dialog and proceed directly
+      if (this.userDeclinedAuthPrompt) {
+        logger.debug(
+          'User previously declined auth prompt in this session, proceeding directly',
+          { provider, bucket },
+        );
+        return true;
+      }
+
       // Check if prompt mode is enabled FIRST - this determines timeout behavior
       // Issue 913: When prompt mode is enabled, wait indefinitely for user approval
       const showPrompt = getEphemeralSetting<boolean>('auth-bucket-prompt');
@@ -2110,6 +2121,9 @@ export class OAuthManager {
             logger.debug('User responded to bucket auth confirmation', {
               result,
             });
+            if (!result) {
+              this.userDeclinedAuthPrompt = true;
+            }
             return result;
           }
 
@@ -2126,6 +2140,9 @@ export class OAuthManager {
             logger.debug('TUI responded to bucket auth confirmation', {
               result,
             });
+            if (!result) {
+              this.userDeclinedAuthPrompt = true;
+            }
             return result;
           }
           // TUI didn't respond in time - fall back to delay
