@@ -117,7 +117,8 @@ async function createTestStore(): Promise<{
     fallbackPolicy: 'allow',
     keyringLoader: loader,
   });
-  const tokenStore = new KeyringTokenStore({ secureStore });
+  const lockDir = path.join(tempDir, 'locks');
+  const tokenStore = new KeyringTokenStore({ secureStore, lockDir });
   return { tokenStore, secureStore, tempDir, mockKeyring };
 }
 
@@ -766,13 +767,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    */
   it('lock file uses {provider}-refresh.lock for default bucket', async () => {
     await tokenStore.acquireRefreshLock('lockname');
-    const lockPath = path.join(
-      os.homedir(),
-      '.llxprt',
-      'oauth',
-      'locks',
-      'lockname-refresh.lock',
-    );
+    const lockPath = path.join(tempDir, 'locks', 'lockname-refresh.lock');
     const exists = await fs
       .access(lockPath)
       .then(() => true)
@@ -790,13 +785,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    */
   it('lock file uses {provider}-{bucket}-refresh.lock for non-default bucket', async () => {
     await tokenStore.acquireRefreshLock('lockbkt', { bucket: 'work' });
-    const lockPath = path.join(
-      os.homedir(),
-      '.llxprt',
-      'oauth',
-      'locks',
-      'lockbkt-work-refresh.lock',
-    );
+    const lockPath = path.join(tempDir, 'locks', 'lockbkt-work-refresh.lock');
     const exists = await fs
       .access(lockPath)
       .then(() => true)
@@ -813,13 +802,13 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    * @then Directory ~/.llxprt/oauth/locks/ is created
    */
   it('creates lock directory on demand', async () => {
-    const lockDir = path.join(os.homedir(), '.llxprt', 'oauth', 'locks');
-    // Remove lock dir if it exists (to test creation)
-    await fs.rm(lockDir, { recursive: true, force: true }).catch(() => {});
+    const lockDirPath = path.join(tempDir, 'locks');
+    // Ensure lock dir doesn't exist before test
+    await fs.rm(lockDirPath, { recursive: true, force: true }).catch(() => {});
     const acquired = await tokenStore.acquireRefreshLock('dircreate');
     expect(acquired).toBe(true);
     const dirExists = await fs
-      .access(lockDir)
+      .access(lockDirPath)
       .then(() => true)
       .catch(() => false);
     expect(dirExists).toBe(true);

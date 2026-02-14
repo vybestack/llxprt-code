@@ -101,8 +101,9 @@ async function createSharedStoreSetup(): Promise<{
     fallbackPolicy: 'allow',
     keyringLoader: async () => mock,
   });
-  const storeA = new KeyringTokenStore({ secureStore });
-  const storeB = new KeyringTokenStore({ secureStore });
+  const lockDir = path.join(tempDir, 'locks');
+  const storeA = new KeyringTokenStore({ secureStore, lockDir });
+  const storeB = new KeyringTokenStore({ secureStore, lockDir });
   return { storeA, storeB, secureStore, tempDir };
 }
 
@@ -119,7 +120,8 @@ async function createTestStore(): Promise<{
     fallbackPolicy: 'allow',
     keyringLoader: async () => mockKeyring,
   });
-  const tokenStore = new KeyringTokenStore({ secureStore });
+  const lockDir = path.join(tempDir, 'locks');
+  const tokenStore = new KeyringTokenStore({ secureStore, lockDir });
   return { tokenStore, secureStore, tempDir, mockKeyring };
 }
 
@@ -337,9 +339,9 @@ describe('KeyringTokenStore Integration', () => {
    * @then Stale lock is broken and new lock is acquired
    */
   it('stale lock recovery: breaks stale lock and acquires', async () => {
-    const lockDir = path.join(os.homedir(), '.llxprt', 'oauth', 'locks');
-    await fs.mkdir(lockDir, { recursive: true, mode: 0o700 });
-    const lockFile = path.join(lockDir, 'stale-integ-refresh.lock');
+    const lockDirPath = path.join(tempDir, 'locks');
+    await fs.mkdir(lockDirPath, { recursive: true, mode: 0o700 });
+    const lockFile = path.join(lockDirPath, 'stale-integ-refresh.lock');
 
     // Write a lock file with old timestamp
     const staleLockInfo = {

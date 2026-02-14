@@ -61,14 +61,16 @@ const sleep = (ms: number): Promise<void> =>
 export class KeyringTokenStore implements TokenStore {
   private readonly secureStore: SecureStore;
   private readonly logger: DebugLogger;
+  private readonly lockDir: string;
 
-  constructor(options?: { secureStore?: SecureStore }) {
+  constructor(options?: { secureStore?: SecureStore; lockDir?: string }) {
     this.secureStore =
       options?.secureStore ??
       new SecureStore(SERVICE_NAME, {
         fallbackDir: join(homedir(), '.llxprt', 'secure-store', SERVICE_NAME),
         fallbackPolicy: 'allow',
       });
+    this.lockDir = options?.lockDir ?? getLockDir();
     this.logger = new DebugLogger('llxprt:keyring-token-store');
   }
 
@@ -98,9 +100,9 @@ export class KeyringTokenStore implements TokenStore {
   private lockFilePath(provider: string, bucket?: string): string {
     const resolved = bucket ?? DEFAULT_BUCKET;
     if (resolved === DEFAULT_BUCKET) {
-      return join(getLockDir(), `${provider}-refresh.lock`);
+      return join(this.lockDir, `${provider}-refresh.lock`);
     }
-    return join(getLockDir(), `${provider}-${resolved}-refresh.lock`);
+    return join(this.lockDir, `${provider}-${resolved}-refresh.lock`);
   }
 
   /**
@@ -108,7 +110,7 @@ export class KeyringTokenStore implements TokenStore {
    * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
    */
   private async ensureLockDir(): Promise<void> {
-    await fs.mkdir(getLockDir(), { recursive: true, mode: 0o700 });
+    await fs.mkdir(this.lockDir, { recursive: true, mode: 0o700 });
   }
 
   /**

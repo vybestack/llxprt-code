@@ -63,12 +63,13 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(join(tmpdir(), 'token-refresh-race-test-'));
+    const lockDir = join(tempDir, 'locks');
     const secureStore = new SecureStore('llxprt-code-oauth', {
       fallbackDir: tempDir,
       fallbackPolicy: 'allow',
       keyringLoader: async () => createMockKeyring(),
     });
-    tokenStore = new KeyringTokenStore({ secureStore });
+    tokenStore = new KeyringTokenStore({ secureStore, lockDir });
   });
 
   afterEach(async () => {
@@ -134,21 +135,28 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
   });
 
   it('should break stale lock if older than threshold', async () => {
-    // Manually create a stale lock file in the lock directory
-    const lockDir = join(tmpdir(), 'llxprt-code-oauth-locks');
+    // Create a lock file with an old timestamp to simulate a stale lock
+    const lockDir = join(tempDir, 'locks');
     await fs.mkdir(lockDir, { recursive: true });
-
-    // The lock file name uses a hash, but acquireRefreshLock handles it
-    // Just acquire and release to establish the pattern, then test stale break
-    const acquired1 = await tokenStore.acquireRefreshLock('anthropic');
-    expect(acquired1).toBe(true);
-    await tokenStore.releaseRefreshLock('anthropic');
-
-    // Now acquire again - should work since we released
-    const acquired2 = await tokenStore.acquireRefreshLock('anthropic', {
-      staleMs: 30000,
+    const lockFile = join(lockDir, 'anthropic-refresh.lock');
+    const staleLockInfo = {
+      pid: 99999,
+      timestamp: Date.now() - 120_000, // 2 minutes ago — well past threshold
+    };
+    await fs.writeFile(lockFile, JSON.stringify(staleLockInfo), {
+      mode: 0o600,
     });
-    expect(acquired2).toBe(true);
+
+    // Acquire should detect the stale lock and break it
+    const acquired = await tokenStore.acquireRefreshLock('anthropic', {
+      staleMs: 30_000,
+    });
+    expect(acquired).toBe(true);
+
+    // Verify our PID now owns the lock
+    const content = await fs.readFile(lockFile, 'utf8');
+    const lockInfo = JSON.parse(content);
+    expect(lockInfo.pid).toBe(process.pid);
 
     await tokenStore.releaseRefreshLock('anthropic');
   });
