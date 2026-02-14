@@ -954,7 +954,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     } catch (e) {
       const msg = (e as Error).message;
       expect(msg).toContain('my provider');
-      expect(msg).toMatch(/[a-zA-Z0-9_-]/);
+      expect(msg).toContain('Allowed: letters, numbers, dashes, underscores.');
     }
   });
 
