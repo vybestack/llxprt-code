@@ -137,6 +137,23 @@ function isIgnorablePtyExitError(e: unknown): boolean {
   );
 }
 
+/**
+ * Safely tears down a PTY process, preferring destroy() (which closes the
+ * underlying FD/socket) when available at runtime, with a kill() fallback.
+ */
+function safePtyDestroy(ptyProcess: IPty): void {
+  try {
+    const pty = ptyProcess as IPty & { destroy?: () => void };
+    if (typeof pty.destroy === 'function') {
+      pty.destroy();
+    } else {
+      ptyProcess.kill();
+    }
+  } catch (_) {
+    /* ignore – PTY may already be exited */
+  }
+}
+
 export class ShellExecutionService {
   private static activePtys = new Map<number, ActivePty>();
   private static lastActivePtyId: number | null = null;
@@ -550,6 +567,7 @@ export class ShellExecutionService {
             if (entry.terminationTimeout) {
               clearTimeout(entry.terminationTimeout);
             }
+            safePtyDestroy(entry.ptyProcess);
             ShellExecutionService.activePtys.delete(ptyProcess.pid);
           }
           if (ShellExecutionService.lastActivePtyId === ptyProcess.pid) {
@@ -798,6 +816,9 @@ export class ShellExecutionService {
                 }
               }),
           );
+          // Prevent unhandled rejection warnings; errors are caught later
+          // by the Promise.race in onExit.
+          processingChain.catch(() => {});
         };
 
         activePtyEntry.onDataDisposable = ptyProcess.onData((data: string) => {
@@ -816,19 +837,35 @@ export class ShellExecutionService {
             }
 
             const processingComplete = processingChain.then(() => 'processed');
+            let raceAbortListener: (() => void) | null = null;
+
+            const cleanupRaceListener = () => {
+              if (raceAbortListener) {
+                abortSignal.removeEventListener('abort', raceAbortListener);
+                raceAbortListener = null;
+              }
+            };
+
             const abortFired = new Promise<'aborted'>((res) => {
               if (abortSignal.aborted) {
                 res('aborted');
                 return;
               }
-              abortSignal.addEventListener('abort', () => res('aborted'), {
+              raceAbortListener = () => res('aborted');
+              abortSignal.addEventListener('abort', raceAbortListener, {
                 once: true,
               });
             });
 
-            Promise.race([processingComplete, abortFired]).then(() => {
-              finalizeResult(exitCode, signal ?? null);
-            });
+            Promise.race([processingComplete, abortFired])
+              .then(() => {
+                cleanupRaceListener();
+                finalizeResult(exitCode, signal ?? null);
+              })
+              .catch(() => {
+                cleanupRaceListener();
+                finalizeResult(exitCode, signal ?? null);
+              });
           },
         );
 
@@ -1049,5 +1086,42 @@ export class ShellExecutionService {
         throw e;
       }
     }
+  }
+
+  /**
+   * Destroys all active PTY processes by sending kill signals and cleaning up
+   * resources. Safe to call when no PTYs are active.
+   */
+  static destroyAllPtys(): void {
+    for (const [pid, entry] of this.activePtys) {
+      try {
+        entry.onDataDisposable?.dispose();
+      } catch (_) {
+        /* ignore */
+      }
+      try {
+        entry.onExitDisposable?.dispose();
+      } catch (_) {
+        /* ignore */
+      }
+      try {
+        entry.onScrollDisposable?.dispose();
+      } catch (_) {
+        /* ignore */
+      }
+      if (entry.terminationTimeout) {
+        clearTimeout(entry.terminationTimeout);
+      }
+      safePtyDestroy(entry.ptyProcess);
+      try {
+        if (typeof entry.headlessTerminal.dispose === 'function') {
+          entry.headlessTerminal.dispose();
+        }
+      } catch (_) {
+        /* ignore */
+      }
+      this.activePtys.delete(pid);
+    }
+    this.lastActivePtyId = null;
   }
 }
