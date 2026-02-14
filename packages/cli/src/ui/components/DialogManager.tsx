@@ -61,7 +61,8 @@ export const DialogManager = ({
   const uiState = useUIState();
   const uiActions = useUIActions();
   const runtime = useRuntimeApi();
-  const { constrainHeight, terminalHeight, mainAreaWidth } = uiState;
+  const { constrainHeight, terminalHeight, mainAreaWidth, commandContext } =
+    uiState;
   // staticExtraHeight not yet implemented in LLxprt
   const staticExtraHeight = 0;
 
@@ -126,6 +127,11 @@ export const DialogManager = ({
           for (const msg of messages) {
             addItem({ type: 'info', text: msg }, Date.now());
           }
+
+          commandContext.recordingIntegration?.recordProviderSwitch(
+            selectedProvider,
+            model.id,
+          );
         } else {
           // Same provider — just set model
           const result = await runtime.setActiveModel(model.id);
@@ -135,6 +141,10 @@ export const DialogManager = ({
               text: `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
             },
             Date.now(),
+          );
+          commandContext.recordingIntegration?.recordProviderSwitch(
+            result.providerName,
+            result.nextModel,
           );
         }
       } catch (e) {
@@ -149,7 +159,7 @@ export const DialogManager = ({
       }
       uiActions.closeModelsDialog();
     },
-    [runtime, addItem, uiActions, currentProvider],
+    [runtime, addItem, uiActions, currentProvider, commandContext],
   );
 
   // TODO: IdeTrustChangeDialog not yet ported from upstream

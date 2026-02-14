@@ -16,6 +16,7 @@ import type {
   GitService,
   Logger,
   ProfileManager,
+  RecordingIntegration,
   SubagentManager,
   Todo,
 } from '@vybestack/llxprt-code-core';
@@ -107,6 +108,8 @@ export interface CommandContext {
   };
   // Flag to indicate if an overwrite has been confirmed
   overwriteConfirmed?: boolean;
+  // Recording integration for session recording
+  recordingIntegration?: RecordingIntegration;
 }
 
 /**

@@ -426,7 +426,8 @@ export interface ConfigParameters {
   enableToolOutputTruncation?: boolean;
   continueOnFailedApiCall?: boolean;
   enableShellOutputEfficiency?: boolean;
-  continueSession?: boolean;
+  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — widened to support --continue <session-id> */
+  continueSession?: boolean | string;
   disableYoloMode?: boolean;
   enableMessageBusIntegration?: boolean;
   enableHooks?: boolean;
@@ -602,7 +603,8 @@ export class Config {
   enableToolOutputTruncation: boolean;
   private readonly continueOnFailedApiCall: boolean;
   private readonly enableShellOutputEfficiency: boolean;
-  private readonly continueSession: boolean;
+  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — widened to support --continue <session-id> */
+  private readonly continueSession: boolean | string;
   private readonly disableYoloMode: boolean;
   private readonly enableHooks: boolean;
   private readonly hooks:
@@ -1001,8 +1003,17 @@ export class Config {
     return this.sessionId;
   }
 
+  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — truthy check handles both boolean and string */
   isContinueSession(): boolean {
-    return this.continueSession;
+    return !!this.continueSession;
+  }
+
+  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — returns session ref for resume */
+  getContinueSessionRef(): string | null {
+    if (typeof this.continueSession === 'string') {
+      return this.continueSession;
+    }
+    return this.continueSession ? '__CONTINUE_LATEST__' : null;
   }
 
   shouldLoadMemoryFromIncludeDirectories(): boolean {

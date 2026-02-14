@@ -5,7 +5,11 @@
  */
 
 import { useReducer } from 'react';
-import type { Config, PersistedSession } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  IContent,
+  RecordingIntegration,
+} from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../config/settings.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
 import { MouseProvider } from './contexts/MouseContext.js';
@@ -26,8 +30,10 @@ interface AppProps {
   config: Config;
   settings: LoadedSettings;
   startupWarnings?: string[];
+  resumedHistory?: IContent[];
   version: string;
-  restoredSession?: PersistedSession;
+  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
+  recordingIntegration?: RecordingIntegration;
 }
 
 /**

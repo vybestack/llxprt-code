@@ -250,6 +250,11 @@ export const providerCommand: SlashCommand = {
         );
       }
 
+      context.recordingIntegration?.recordProviderSwitch(
+        switchResult.nextProvider,
+        switchResult.defaultModel ?? runtime.getActiveModelName(),
+      );
+
       // Trigger payment mode check if available
       const extendedContext = context as CommandContext & {
         checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
