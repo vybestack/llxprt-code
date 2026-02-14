@@ -83,7 +83,7 @@ Replace `MultiProviderTokenStore` (plaintext JSON files) with `KeyringTokenStore
 | R13.3 | Replace all exports/re-exports | P07 (stub), P09 (impl) |
 | R14.1 | Keyring probe once per process | P05 (test), P06 (impl), P08 (integration test) |
 | R15.1 | Works in keyring-available and keyring-unavailable | P05 (test), P06 (impl) |
-| R15.2 | Both paths have equivalent test coverage (env-var–driven dual-mode) | P05 (test structure + env var `LLXPRT_SECURE_STORE_FORCE_FALLBACK`), P11 (CI workflow edit: `.github/workflows/ci.yml` `secure-store-mode` matrix + verification) |
+| R15.2 | Both paths have equivalent test coverage (env-var–driven dual-mode) | P05 (test strategy: tests read `LLXPRT_SECURE_STORE_FORCE_FALLBACK` to select keytarLoader), P11 (CI enforcement: add `secure-store-mode` matrix dimension to `.github/workflows/ci.yml`) |
 | R16.1 | Host-side only; sandbox is out of scope | P04 (stub), P06 (impl) |
 | R16.2 | No code reads/migrates old plaintext files | P10 (eliminate), P11 (final) |
 | R16.3 | --key flag unaffected | P11 (final) |
@@ -94,7 +94,7 @@ Replace `MultiProviderTokenStore` (plaintext JSON files) with `KeyringTokenStore
 | R17.5 | /auth login stores in keyring | P08 (integration test), P09 (impl) |
 | R17.6 | /auth status reads from keyring | P08 (integration test), P09 (impl) |
 | R17.7 | Refresh cycle: expire → lock → refresh → save → unlock | P05 (test), P08 (integration test) |
-| R17.8 | CI exercises keyring + fallback paths | P05 (test env-var support), P11 (CI workflow edit: `.github/workflows/ci.yml` `secure-store-mode` matrix + dual-mode verification) |
+| R17.8 | CI exercises keyring + fallback paths | P05 (test env-var support only), P11 (CI enforcement: add `secure-store-mode` matrix dimension to `.github/workflows/ci.yml` + verification) |
 | R18.1 | /auth login stores in keyring/fallback | P08 (integration test), P09 (impl) |
 | R18.2 | Session start retrieves from keyring/fallback | P08 (integration test) |
 | R18.3 | Token refresh through KeyringTokenStore | P08 (integration test) |
