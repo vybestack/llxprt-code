@@ -155,14 +155,15 @@ function makeCodexToken(): OAuthToken & {
 // ─── fast-check Arbitraries ──────────────────────────────────────────────────
 
 const validNameArb = fc
-  .stringOf(
-    fc.constantFrom(
+  .string({
+    unit: fc.constantFrom(
       ...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-'.split(
         '',
       ),
     ),
-    { minLength: 1, maxLength: 30 },
-  );
+    minLength: 1,
+    maxLength: 30,
+  });
 
 const invalidNameArb = fc.oneof(
   fc.constant(''),
@@ -175,7 +176,8 @@ const invalidNameArb = fc.oneof(
 );
 
 const extraFieldsArb = fc.dictionary(
-  fc.stringOf(fc.constantFrom(...'abcdefghijklmnop'.split('')), {
+  fc.string({
+    unit: fc.constantFrom(...'abcdefghijklmnop'.split('')),
     minLength: 1,
     maxLength: 10,
   }),
@@ -185,7 +187,6 @@ const extraFieldsArb = fc.dictionary(
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line no-console
 console.log(
   `[keyring-token-store.test] Running in mode: ${MODE_LABEL} (LLXPRT_SECURE_STORE_FORCE_FALLBACK=${FORCE_FALLBACK})`,
 );
@@ -194,14 +195,14 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
   let tokenStore: KeyringTokenStore;
   let secureStore: SecureStore;
   let tempDir: string;
-  let mockKeyring: (KeyringAdapter & { store: Map<string, string> }) | null;
+  let _mockKeyring: (KeyringAdapter & { store: Map<string, string> }) | null;
 
   beforeEach(async () => {
     const setup = await createTestStore();
     tokenStore = setup.tokenStore;
     secureStore = setup.secureStore;
     tempDir = setup.tempDir;
-    mockKeyring = setup.mockKeyring;
+    _mockKeyring = setup.mockKeyring;
   });
 
   afterEach(async () => {

@@ -11,16 +11,17 @@
  * file fallback) and uses filesystem-based advisory locks for refresh
  * concurrency control.
  *
- * @plan PLAN-20260213-KEYRINGTOKENSTORE.P04
+ * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
  * @requirement R1.1, R1.2, R1.3
  */
 
 import * as crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { type OAuthToken, type BucketStats } from './types.js';
+import { OAuthTokenSchema, type OAuthToken, type BucketStats } from './types.js';
 import { type TokenStore } from './token-store.js';
-import { SecureStore } from '../storage/secure-store.js';
+import { SecureStore, SecureStoreError } from '../storage/secure-store.js';
 import { DebugLogger } from '../debug/index.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -33,8 +34,17 @@ const DEFAULT_LOCK_WAIT_MS = 10_000;
 const DEFAULT_STALE_THRESHOLD_MS = 30_000;
 const LOCK_POLL_INTERVAL_MS = 100;
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 // ─── KeyringTokenStore Class ─────────────────────────────────────────────────
 
+/**
+ * Keyring-backed token store with filesystem advisory locks.
+ *
+ * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+ */
 export class KeyringTokenStore implements TokenStore {
   private readonly secureStore: SecureStore;
   private readonly logger: DebugLogger;
@@ -76,63 +86,232 @@ export class KeyringTokenStore implements TokenStore {
     return join(LOCK_DIR, `${provider}-${resolved}-refresh.lock`);
   }
 
+  /**
+   * Ensures the lock directory exists.
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+   */
   private async ensureLockDir(): Promise<void> {
-    throw new Error('NotYetImplemented');
+    await fs.mkdir(LOCK_DIR, { recursive: true, mode: 0o700 });
   }
 
+  /**
+   * Validates and persists an OAuth token to SecureStore.
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+   */
   async saveToken(provider: string, token: OAuthToken, bucket?: string): Promise<void> {
     const key = this.accountKey(provider, bucket);
     this.logger.debug(() => `[saveToken] [${this.hashIdentifier(key)}] type=${token.token_type}`);
-    throw new Error('NotYetImplemented');
+    const validatedToken = OAuthTokenSchema.passthrough().parse(token);
+    const serialized = JSON.stringify(validatedToken);
+    await this.secureStore.set(key, serialized);
   }
 
+  /**
+   * Retrieves and validates an OAuth token from SecureStore.
+   * Returns null for missing or corrupt data (logged with hashed identifier).
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+   */
   async getToken(provider: string, bucket?: string): Promise<OAuthToken | null> {
     const key = this.accountKey(provider, bucket);
     this.logger.debug(() => `[getToken] [${this.hashIdentifier(key)}]`);
-    throw new Error('NotYetImplemented');
+
+    let raw: string | null;
+    try {
+      raw = await this.secureStore.get(key);
+    } catch (error) {
+      if (error instanceof SecureStoreError && error.code === 'CORRUPT') {
+        this.logger.warn(
+          () => `Corrupt token envelope for [${this.hashIdentifier(key)}]: ${error.message}`,
+        );
+        return null;
+      }
+      throw error;
+    }
+
+    if (raw === null) {
+      return null;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseError) {
+      const msg = parseError instanceof Error ? parseError.message : String(parseError);
+      this.logger.warn(() => `Corrupt token JSON for [${this.hashIdentifier(key)}]: ${msg}`);
+      return null;
+    }
+
+    try {
+      return OAuthTokenSchema.passthrough().parse(parsed);
+    } catch (zodError) {
+      const msg = zodError instanceof Error ? zodError.message : String(zodError);
+      this.logger.warn(() => `Invalid token schema for [${this.hashIdentifier(key)}]: ${msg}`);
+      return null;
+    }
   }
 
+  /**
+   * Removes a token from SecureStore. Best-effort — errors are swallowed.
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+   */
   async removeToken(provider: string, bucket?: string): Promise<void> {
     const key = this.accountKey(provider, bucket);
     this.logger.debug(() => `[removeToken] [${this.hashIdentifier(key)}]`);
-    throw new Error('NotYetImplemented');
+    try {
+      await this.secureStore.delete(key);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(() => `Failed to remove token for [${this.hashIdentifier(key)}]: ${msg}`);
+    }
   }
 
+  /**
+   * Lists all unique provider names from SecureStore keys.
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+   */
   async listProviders(): Promise<string[]> {
     this.logger.debug(() => `[listProviders] store=${this.secureStore.constructor.name}`);
-    throw new Error('NotYetImplemented');
+    try {
+      const allKeys = await this.secureStore.list();
+      const providerSet = new Set<string>();
+      for (const key of allKeys) {
+        if (key.includes(':')) {
+          const provider = key.split(':')[0];
+          providerSet.add(provider);
+        }
+      }
+      return Array.from(providerSet).sort();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(() => `Failed to list providers: ${msg}`);
+      return [];
+    }
   }
 
+  /**
+   * Lists all bucket names for a given provider.
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+   */
   async listBuckets(provider: string): Promise<string[]> {
     this.validateName(provider, 'provider');
-    throw new Error('NotYetImplemented');
+    try {
+      const allKeys = await this.secureStore.list();
+      const prefix = `${provider}:`;
+      const buckets: string[] = [];
+      for (const key of allKeys) {
+        if (key.startsWith(prefix)) {
+          const bucket = key.substring(prefix.length);
+          buckets.push(bucket);
+        }
+      }
+      return buckets.sort();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        () => `Failed to list buckets for [${this.hashIdentifier(provider + ':')}]: ${msg}`,
+      );
+      return [];
+    }
   }
 
+  /**
+   * Returns placeholder bucket statistics if a token exists for the given bucket.
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+   */
   async getBucketStats(provider: string, bucket: string): Promise<BucketStats | null> {
-    this.accountKey(provider, bucket);
-    throw new Error('NotYetImplemented');
+    const token = await this.getToken(provider, bucket);
+    if (token === null) {
+      return null;
+    }
+    return {
+      bucket,
+      requestCount: 0,
+      percentage: 0,
+      lastUsed: undefined,
+    };
   }
 
+  /**
+   * Acquires a filesystem-based advisory lock for token refresh.
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+   */
   async acquireRefreshLock(
     provider: string,
     options?: { waitMs?: number; staleMs?: number; bucket?: string },
   ): Promise<boolean> {
     this.validateName(provider, 'provider');
     if (options?.bucket) this.validateName(options.bucket, 'bucket');
+
+    const lockPath = this.lockFilePath(provider, options?.bucket);
     const waitMs = options?.waitMs ?? DEFAULT_LOCK_WAIT_MS;
     const staleMs = options?.staleMs ?? DEFAULT_STALE_THRESHOLD_MS;
-    this.lockFilePath(provider, options?.bucket);
+    const startTime = Date.now();
+
     await this.ensureLockDir();
+
     this.logger.debug(
       () => `[acquireRefreshLock] wait=${waitMs} stale=${staleMs} poll=${LOCK_POLL_INTERVAL_MS}`,
     );
-    throw new Error('NotYetImplemented');
+
+    while (Date.now() - startTime < waitMs) {
+      try {
+        const lockInfo = { pid: process.pid, timestamp: Date.now() };
+        await fs.writeFile(lockPath, JSON.stringify(lockInfo), { flag: 'wx', mode: 0o600 });
+        return true;
+      } catch (writeError) {
+        const err = writeError as NodeJS.ErrnoException;
+        if (err.code !== 'EEXIST') {
+          throw writeError;
+        }
+      }
+
+      // Lock file exists — read and check staleness
+      try {
+        const content = await fs.readFile(lockPath, 'utf8');
+        const existing = JSON.parse(content) as { pid: number; timestamp: number };
+        const lockAge = Date.now() - existing.timestamp;
+
+        if (lockAge > staleMs) {
+          // Stale lock — break it
+          try {
+            await fs.unlink(lockPath);
+          } catch {
+            // Ignore ENOENT — another process may have broken it
+          }
+          continue;
+        }
+      } catch {
+        // Lock file unreadable or corrupt — break it
+        try {
+          await fs.unlink(lockPath);
+        } catch {
+          // Ignore ENOENT
+        }
+        continue;
+      }
+
+      // Lock is fresh — wait and retry
+      await sleep(LOCK_POLL_INTERVAL_MS);
+    }
+
+    return false;
   }
 
+  /**
+   * Releases a filesystem-based advisory lock. Idempotent.
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+   */
   async releaseRefreshLock(provider: string, bucket?: string): Promise<void> {
     this.validateName(provider, 'provider');
     if (bucket) this.validateName(bucket, 'bucket');
-    this.lockFilePath(provider, bucket);
-    throw new Error('NotYetImplemented');
+    const lockPath = this.lockFilePath(provider, bucket);
+    try {
+      await fs.unlink(lockPath);
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw error;
+      }
+    }
   }
 }
