@@ -78,6 +78,7 @@ import {
   listSessions,
   deleteSession,
   getProjectHash,
+  type IContent,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
@@ -253,6 +254,7 @@ export async function startInteractiveUI(
   startupWarnings: string[],
   workspaceRoot: string,
   recordingIntegration?: RecordingIntegration,
+  resumedHistory?: IContent[],
 ) {
   const version = await getCliVersion();
 
@@ -287,6 +289,7 @@ export async function startInteractiveUI(
             startupWarnings={startupWarnings}
             version={version}
             recordingIntegration={recordingIntegration}
+            resumedHistory={resumedHistory}
           />
         </SettingsContext.Provider>
       </ErrorBoundary>
@@ -892,6 +895,7 @@ export async function main() {
 
   // Create recording service (resume or new)
   let recordingService: SessionRecordingService;
+  let resumedHistory: IContent[] | null = null;
 
   const continueRef = config.getContinueSessionRef();
   if (continueRef) {
@@ -905,6 +909,7 @@ export async function main() {
     });
     if (resumeResult.ok) {
       recordingService = resumeResult.recording;
+      resumedHistory = resumeResult.history;
       if (resumeResult.warnings.length > 0) {
         for (const warning of resumeResult.warnings) {
           console.warn(chalk.yellow(warning));
@@ -936,6 +941,20 @@ export async function main() {
   }
 
   const recordingIntegration = new RecordingIntegration(recordingService);
+
+  if (resumedHistory && resumedHistory.length > 0) {
+    try {
+      const geminiClient = config.getGeminiClient();
+      if (geminiClient) {
+        await geminiClient.restoreHistory(resumedHistory);
+      }
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : String(err);
+      console.warn(
+        chalk.yellow('Could not restore conversation history: ' + messageText),
+      );
+    }
+  }
 
   registerCleanup(async () => {
     recordingIntegration.dispose();
@@ -1134,6 +1153,7 @@ export async function main() {
       startupWarnings,
       workspaceRoot,
       recordingIntegration,
+      resumedHistory ?? undefined,
     );
     return;
   }

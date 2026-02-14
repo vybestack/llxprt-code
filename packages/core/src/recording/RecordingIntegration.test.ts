@@ -216,6 +216,21 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       expect(events.some((event) => event.type === 'content')).toBe(true);
     });
 
+    it('does not record content emitted before subscribeToHistory', async () => {
+      emitter.emit('contentAdded', textContent('before-subscribe'));
+      integration.subscribeToHistory(historyService);
+      emitter.emit('contentAdded', textContent('after-subscribe'));
+
+      const events = await flushAndRead(integration, recordingService);
+      const contentEvents = events.filter((event) => event.type === 'content');
+      expect(contentEvents).toHaveLength(1);
+
+      const payload = contentEvents[0].payload as { content: IContent };
+      const text = (payload.content.blocks[0] as { type: 'text'; text: string })
+        .text;
+      expect(text).toBe('after-subscribe');
+    });
+
     it('records multiple content events in the same order as emitted', async () => {
       integration.subscribeToHistory(historyService);
       emitter.emit('contentAdded', textContent('a'));

@@ -67,6 +67,7 @@ import {
   getErrorMessage,
   type Config,
   getAllLlxprtMdFilenames,
+  type IContent,
   isEditorAvailable,
   EditorType,
   type IdeContext,
@@ -136,6 +137,7 @@ import {
   SHOW_CURSOR,
 } from './utils/terminalSequences.js';
 import { calculateMainAreaWidth } from './utils/ui-sizing.js';
+import { iContentToHistoryItems } from './utils/iContentToHistoryItems.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
@@ -146,6 +148,7 @@ interface AppContainerProps {
   config: Config;
   settings: LoadedSettings;
   startupWarnings?: string[];
+  resumedHistory?: IContent[];
   version: string;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
@@ -170,6 +173,7 @@ export const AppContainer = (props: AppContainerProps) => {
     config,
     settings,
     startupWarnings = [],
+    resumedHistory,
     appState,
     appDispatch,
     recordingIntegration,
@@ -197,6 +201,24 @@ export const AppContainer = (props: AppContainerProps) => {
   );
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
+  const hasSeededResumedHistory = useRef(false);
+  useEffect(() => {
+    if (hasSeededResumedHistory.current) {
+      return;
+    }
+
+    if (!resumedHistory || resumedHistory.length === 0) {
+      hasSeededResumedHistory.current = true;
+      return;
+    }
+
+    const uiItems = iContentToHistoryItems(resumedHistory);
+    if (uiItems.length > 0) {
+      loadHistory(uiItems);
+    }
+
+    hasSeededResumedHistory.current = true;
+  }, [loadHistory, resumedHistory]);
   useMemoryMonitor({ addItem });
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
