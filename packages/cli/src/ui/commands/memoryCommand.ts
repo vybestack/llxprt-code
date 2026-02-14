@@ -26,6 +26,7 @@ export const memoryCommand: SlashCommand = {
       name: 'show',
       description: 'Show the current memory contents.',
       kind: CommandKind.BUILT_IN,
+      autoExecute: true,
       action: async (context) => {
         const memoryContent = context.services.config?.getUserMemory() || '';
         const fileCount = context.services.config?.getLlxprtMdFileCount() || 0;
@@ -203,6 +204,7 @@ export const memoryCommand: SlashCommand = {
       name: 'refresh',
       description: 'Refresh the memory from the source.',
       kind: CommandKind.BUILT_IN,
+      autoExecute: true,
       action: async (context) => {
         context.ui.addItem(
           {

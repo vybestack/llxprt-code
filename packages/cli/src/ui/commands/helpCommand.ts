@@ -12,6 +12,7 @@ export const helpCommand: SlashCommand = {
   altNames: ['?'],
   description: 'for help on LLxprt Code',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: async (context) => {
     const helpItem = {
       type: MessageType.HELP,

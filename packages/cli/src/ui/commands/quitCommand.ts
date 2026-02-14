@@ -12,6 +12,7 @@ export const quitCommand: SlashCommand = {
   altNames: ['exit'],
   description: 'exit the cli',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: (context) => {
     const now = Date.now();
     const { sessionStartTime } = context.session.stats;

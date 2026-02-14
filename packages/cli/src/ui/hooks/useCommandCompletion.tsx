@@ -45,6 +45,7 @@ export interface UseCommandCompletionReturn {
   navigateDown: () => void;
   handleAutocomplete: (indexToUse: number) => void;
   promptCompletion: PromptCompletion;
+  getCommandFromSuggestion: (suggestionIndex: number) => SlashCommand | null;
 }
 
 export function useCommandCompletion(
@@ -279,6 +280,7 @@ export function useCommandCompletion(
       navigateUp: slashCompletionResults.navigateUp,
       navigateDown: slashCompletionResults.navigateDown,
       handleAutocomplete: slashCompletionResults.handleAutocomplete,
+      getCommandFromSuggestion: slashCompletionResults.getCommandFromSuggestion,
       promptCompletion,
     };
   }
@@ -297,6 +299,7 @@ export function useCommandCompletion(
     navigateUp,
     navigateDown,
     handleAutocomplete,
+    getCommandFromSuggestion: () => null, // Not in slash mode, so no command mapping
     promptCompletion,
   };
 }

@@ -136,6 +136,7 @@ export const statsCommand: SlashCommand = {
       name: 'session',
       description: 'Show session-specific usage statistics.',
       kind: CommandKind.BUILT_IN,
+      autoExecute: true,
       action: (context: CommandContext) => {
         defaultSessionView(context);
       },
@@ -144,6 +145,7 @@ export const statsCommand: SlashCommand = {
       name: 'model',
       description: 'Show model-specific usage statistics.',
       kind: CommandKind.BUILT_IN,
+      autoExecute: true,
       action: (context: CommandContext) => {
         context.ui.addItem(
           {
@@ -157,6 +159,7 @@ export const statsCommand: SlashCommand = {
       name: 'tools',
       description: 'Show tool-specific usage statistics.',
       kind: CommandKind.BUILT_IN,
+      autoExecute: true,
       action: (context: CommandContext) => {
         context.ui.addItem(
           {

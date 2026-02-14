@@ -593,7 +593,21 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                 ? 0 // Default to the first if none is active
                 : completion.activeSuggestionIndex;
             if (targetIndex < completion.suggestions.length) {
+              // Check if this is Enter key and command has autoExecute
+              const isEnterKey = key.name === 'return';
+              const command = completion.getCommandFromSuggestion(targetIndex);
+              const shouldAutoExecute = isEnterKey && command?.autoExecute;
+
               completion.handleAutocomplete(targetIndex);
+
+              // If autoExecute is true, also submit the command
+              if (shouldAutoExecute) {
+                // We need to wait for the autocomplete to update the buffer
+                // Use setTimeout to defer submission to next tick
+                setTimeout(() => {
+                  handleSubmit(buffer.text);
+                }, 0);
+              }
             }
           }
           return;
