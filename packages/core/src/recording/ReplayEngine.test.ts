@@ -228,7 +228,7 @@ async function createValidFile(
   setup(svc);
   await svc.flush();
   const filePath = svc.getFilePath()!;
-  svc.dispose();
+  await svc.dispose();
   return filePath;
 }
 

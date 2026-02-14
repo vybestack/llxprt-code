@@ -77,7 +77,13 @@ export class SessionLockManager {
       if (code === 'EEXIST') {
         const isStale = await SessionLockManager.checkStale(lockPath);
         if (isStale) {
-          await fs.unlink(lockPath);
+          try {
+            await fs.unlink(lockPath);
+          } catch (unlinkErr: unknown) {
+            if ((unlinkErr as NodeJS.ErrnoException).code !== 'ENOENT') {
+              throw unlinkErr;
+            }
+          }
           try {
             await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
           } catch {

@@ -100,7 +100,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
   });
 
   afterEach(async () => {
-    service?.dispose();
+    await service?.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -788,7 +788,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
           expect(payload.content.speaker).toBe(speaker);
           expect(payload.content.blocks[0]).toEqual({ type: 'text', text });
 
-          svc.dispose();
+          await svc.dispose();
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -858,7 +858,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
             expect(events[i].seq).toBeGreaterThan(events[i - 1].seq);
           }
 
-          svc.dispose();
+          await svc.dispose();
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -897,7 +897,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
           // session_start + eventCount content events
           expect(events).toHaveLength(eventCount + 1);
 
-          svc.dispose();
+          await svc.dispose();
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -932,7 +932,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
           const startPayload = events[0].payload as { sessionId: string };
           expect(startPayload.sessionId).toBe(sessionId);
 
-          svc.dispose();
+          await svc.dispose();
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -966,7 +966,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
           const events = await readJsonlFile(svc.getFilePath()!);
           expect(events).toHaveLength(eventCount + 1);
 
-          svc.dispose();
+          await svc.dispose();
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -1002,7 +1002,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
             expect(isValidIso8601(event.ts)).toBe(true);
           }
 
-          svc.dispose();
+          await svc.dispose();
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -1080,7 +1080,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
             expect(event.payload).not.toBeNull();
           }
 
-          svc.dispose();
+          await svc.dispose();
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -1159,7 +1159,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
             expect(events[i].seq).toBe(i + 1);
           }
 
-          svc.dispose();
+          await svc.dispose();
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -1210,7 +1210,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
           expect(typeof startPayload.startTime).toBe('string');
           expect(isValidIso8601(startPayload.startTime as string)).toBe(true);
 
-          svc.dispose();
+          await svc.dispose();
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }

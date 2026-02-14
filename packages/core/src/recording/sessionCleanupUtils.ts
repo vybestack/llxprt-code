@@ -27,6 +27,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { SessionLockManager } from './SessionLockManager.js';
 
 /**
  * Represents a .jsonl session file entry for cleanup evaluation.
@@ -179,7 +180,13 @@ export async function getAllJsonlSessionFiles(
 export async function shouldDeleteSession(
   entry: JsonlSessionFileEntry,
 ): Promise<'delete' | 'skip' | 'stale-lock-only'> {
-  const lockPath = entry.filePath + '.lock';
+  let lockPath: string;
+  try {
+    lockPath = SessionLockManager.getLockPathFromFilePath(entry.filePath);
+  } catch {
+    // File name doesn't match session-<id>.jsonl pattern — safe to delete
+    return 'delete';
+  }
 
   let lockExists: boolean;
   try {
@@ -228,7 +235,8 @@ export async function cleanupStaleLocks(chatsDir: string): Promise<number> {
   for (const lockFileName of lockFiles) {
     const lockPath = path.join(chatsDir, lockFileName);
 
-    const dataFileName = lockFileName.replace(/\.lock$/, '');
+    const sessionId = lockFileName.replace(/\.lock$/, '');
+    const dataFileName = `session-${sessionId}.jsonl`;
     const dataPath = path.join(chatsDir, dataFileName);
 
     let dataExists: boolean;

@@ -177,7 +177,7 @@ async function withFreshHarness(
     });
   } finally {
     integration.dispose();
-    recordingService.dispose();
+    await recordingService.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 }
@@ -203,7 +203,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
 
   afterEach(async () => {
     integration.dispose();
-    recordingService.dispose();
+    await recordingService.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 

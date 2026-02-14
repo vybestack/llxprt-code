@@ -9,7 +9,6 @@ import {
   type TextBlock,
   type ToolCallBlock,
   type ThinkingBlock,
-  type CodeBlock,
 } from '@vybestack/llxprt-code-core';
 import {
   type HistoryItem,
@@ -65,24 +64,29 @@ export function iContentToHistoryItems(contents: IContent[]): HistoryItem[] {
     }
 
     if (content.speaker === 'ai') {
-      const textBlocks = content.blocks.filter(
-        (b): b is TextBlock => b.type === 'text',
-      );
-      const thinkingBlocks = content.blocks.filter(
-        (b): b is ThinkingBlock => b.type === 'thinking',
-      );
-      const codeBlocks = content.blocks.filter(
-        (b): b is CodeBlock => b.type === 'code',
-      );
-      const toolCallBlocks = content.blocks.filter(
-        (b): b is ToolCallBlock => b.type === 'tool_call',
-      );
+      const textParts: string[] = [];
+      const thinkingBlocks: ThinkingBlock[] = [];
+      const toolCallBlocks: ToolCallBlock[] = [];
 
-      const textParts = textBlocks.map((b) => b.text);
-      for (const codeBlock of codeBlocks) {
-        textParts.push(
-          `\`\`\`${codeBlock.language ?? ''}\n${codeBlock.code}\n\`\`\``,
-        );
+      for (const block of content.blocks) {
+        switch (block.type) {
+          case 'text':
+            textParts.push(block.text);
+            break;
+          case 'code':
+            textParts.push(
+              `\`\`\`${block.language ?? ''}\n${block.code}\n\`\`\``,
+            );
+            break;
+          case 'thinking':
+            thinkingBlocks.push(block);
+            break;
+          case 'tool_call':
+            toolCallBlocks.push(block);
+            break;
+          default:
+            break;
+        }
       }
       const combinedText = textParts.join('\n');
 

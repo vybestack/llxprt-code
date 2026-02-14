@@ -186,6 +186,26 @@ describe('iContentToHistoryItems', () => {
     expect(iContentToHistoryItems(input)).toEqual([]);
   });
 
+  it('preserves original order of mixed text and code blocks', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'hello' },
+          { type: 'code', code: 'const x = 1', language: 'ts' },
+          { type: 'text', text: 'world' },
+        ],
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+    expect(output).toHaveLength(1);
+    expect(output[0]).toMatchObject({
+      type: 'gemini',
+      text: 'hello\n```ts\nconst x = 1\n```\nworld',
+    });
+  });
+
   it('silently drops tool response with no matching tool call', () => {
     const input: IContent[] = [
       {

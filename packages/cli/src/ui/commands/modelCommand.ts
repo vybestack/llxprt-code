@@ -110,10 +110,14 @@ export const modelCommand: SlashCommand = {
       try {
         const runtime = getRuntimeApi();
         const result = await runtime.setActiveModel(parsedArgs.search);
-        context.recordingIntegration?.recordProviderSwitch(
-          result.providerName,
-          result.nextModel,
-        );
+        try {
+          context.recordingIntegration?.recordProviderSwitch(
+            result.providerName,
+            result.nextModel,
+          );
+        } catch {
+          // Recording failure should not mask a successful model switch
+        }
         return {
           type: 'message',
           messageType: 'info',

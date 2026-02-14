@@ -40,6 +40,7 @@ import {
   cleanupStaleLocks,
   type JsonlSessionFileEntry,
 } from './sessionCleanupUtils.js';
+import { SessionLockManager } from './SessionLockManager.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -83,7 +84,7 @@ function writeSessionFile(
  * Returns the absolute path to the created lock file.
  */
 function writeLockFile(sessionFilePath: string, pid: number): string {
-  const lockPath = sessionFilePath + '.lock';
+  const lockPath = SessionLockManager.getLockPathFromFilePath(sessionFilePath);
   fs.writeFileSync(
     lockPath,
     JSON.stringify({
@@ -318,7 +319,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @requirement REQ-CLN-004
      */
     it('removes orphaned .lock file with no matching .jsonl', async () => {
-      const orphanedLockPath = path.join(chatsDir, 'session-orphan.jsonl.lock');
+      const orphanedLockPath = path.join(chatsDir, 'orphan.lock');
       fs.writeFileSync(
         orphanedLockPath,
         JSON.stringify({
@@ -372,7 +373,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
     it('returns the count of lock files cleaned up', async () => {
       // Create 3 orphaned locks
       for (let i = 0; i < 3; i++) {
-        const orphanLock = path.join(chatsDir, `session-orphan${i}.jsonl.lock`);
+        const orphanLock = path.join(chatsDir, `orphan${i}.lock`);
         fs.writeFileSync(
           orphanLock,
           JSON.stringify({
@@ -513,7 +514,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
           for (let i = 0; i < orphanCount; i++) {
             const lockPath = path.join(
               localChats,
-              `session-orphan-${i}-${Date.now()}.jsonl.lock`,
+              `orphan-${i}-${Date.now()}.lock`,
             );
             fs.writeFileSync(
               lockPath,
@@ -685,7 +686,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
           for (let i = 0; i < orphanCount; i++) {
             const lockPath = path.join(
               localChats,
-              `session-orph-${i}-${Date.now()}.jsonl.lock`,
+              `orph-${i}-${Date.now()}.lock`,
             );
             fs.writeFileSync(
               lockPath,

@@ -106,7 +106,7 @@ async function createAndRecordSession(
   }
   await svc.flush();
   const fp = svc.getFilePath()!;
-  svc.dispose();
+  await svc.dispose();
   return { filePath: fp, sessionId: sid };
 }
 
@@ -288,7 +288,7 @@ describe('integration: full session recording lifecycle', () => {
     svc.recordContent(makeContent('post-2', 'ai'));
     await svc.flush();
     const fp = svc.getFilePath()!;
-    svc.dispose();
+    await svc.dispose();
 
     const replay = await replaySession(fp, PROJECT_HASH);
     expect(replay.ok).toBe(true);
@@ -323,7 +323,7 @@ describe('integration: full session recording lifecycle', () => {
     svc.recordRewind(2);
     await svc.flush();
     const fp = svc.getFilePath()!;
-    svc.dispose();
+    await svc.dispose();
 
     const replay = await replaySession(fp, PROJECT_HASH);
     expect(replay.ok).toBe(true);
@@ -353,7 +353,7 @@ describe('integration: full session recording lifecycle', () => {
     svc.recordContent(makeContent('hello', 'ai'));
     await svc.flush();
     const fp = svc.getFilePath()!;
-    svc.dispose();
+    await svc.dispose();
 
     const replay = await replaySession(fp, PROJECT_HASH);
     expect(replay.ok).toBe(true);
@@ -380,7 +380,7 @@ describe('integration: full session recording lifecycle', () => {
     svc.recordDirectoriesChanged(['/new/dir-a', '/new/dir-b']);
     await svc.flush();
     const fp = svc.getFilePath()!;
-    svc.dispose();
+    await svc.dispose();
 
     const replay = await replaySession(fp, PROJECT_HASH);
     expect(replay.ok).toBe(true);
@@ -399,7 +399,7 @@ describe('integration: full session recording lifecycle', () => {
     svc.recordSessionEvent('info', 'started');
     await svc.flush();
     expect(svc.getFilePath()).toBeNull();
-    svc.dispose();
+    await svc.dispose();
 
     // Verify no session files were created
     const files = await fs.readdir(chatsDir);
@@ -674,7 +674,7 @@ describe('integration: full session recording lifecycle', () => {
         svc.recordContent(makeContent(`resume-${r}-h`, 'human'));
         svc.recordContent(makeContent(`resume-${r}-a`, 'ai'));
         await svc.flush();
-        svc.dispose();
+        await svc.dispose();
       }
 
       const lines = await readJsonlLines(currentFilePath);
@@ -750,7 +750,7 @@ describe('integration: full session recording lifecycle', () => {
       }
       await svc.flush();
       const fp = svc.getFilePath()!;
-      svc.dispose();
+      await svc.dispose();
 
       const replay = await replaySession(fp, PROJECT_HASH);
       expect(replay.ok).toBe(true);
@@ -779,7 +779,7 @@ describe('integration: full session recording lifecycle', () => {
       }
       await svc.flush();
       const fp = svc.getFilePath()!;
-      svc.dispose();
+      await svc.dispose();
 
       const replay = await replaySession(fp, PROJECT_HASH);
       expect(replay.ok).toBe(true);
@@ -828,7 +828,7 @@ describe('integration: full session recording lifecycle', () => {
       const sessionEventLines = lines.filter((l) => l.type === 'session_event');
       expect(sessionEventLines).toHaveLength(eventCount);
 
-      svc.dispose();
+      await svc.dispose();
     },
   );
 
@@ -858,7 +858,7 @@ describe('integration: full session recording lifecycle', () => {
       svc.recordRewind(rewindCount);
       await svc.flush();
       const fp = svc.getFilePath()!;
-      svc.dispose();
+      await svc.dispose();
 
       const replay = await replaySession(fp, PROJECT_HASH);
       expect(replay.ok).toBe(true);
@@ -1006,7 +1006,7 @@ describe('integration: full session recording lifecycle', () => {
     // Flush (simulates signal handler running)
     await svc.flush();
     const fp = svc.getFilePath()!;
-    svc.dispose();
+    await svc.dispose();
 
     // Verify all committed content is persisted
     const replay = await replaySession(fp, PROJECT_HASH);
@@ -1056,7 +1056,7 @@ describe('integration: full session recording lifecycle', () => {
     // Flush + dispose (simulates cancellation)
     await svc.flush();
     const fp = svc.getFilePath()!;
-    svc.dispose();
+    await svc.dispose();
 
     const replay = await replaySession(fp, PROJECT_HASH);
     expect(replay.ok).toBe(true);
@@ -1158,7 +1158,7 @@ describe('integration: full session recording lifecycle', () => {
     svc.recordContent(makeContent('after-crash', 'human'));
     svc.recordContent(makeContent('response-after-crash', 'ai'));
     await svc.flush();
-    svc.dispose();
+    await svc.dispose();
 
     // Re-replay: corrupt line is skipped, original 4 + new 2 = 6
     const replay2 = await replaySession(filePath, PROJECT_HASH);
@@ -1203,7 +1203,7 @@ describe('integration: full session recording lifecycle', () => {
     svc.initializeForResume(filePath, replay1.lastSeq);
     svc.recordContent(makeContent('from-process-a', 'human'));
     await svc.flush();
-    svc.dispose();
+    await svc.dispose();
 
     // Verify file integrity
     const replay2 = await replaySession(filePath, PROJECT_HASH);
@@ -1318,7 +1318,7 @@ describe('integration: full session recording lifecycle', () => {
     svc.recordContent(makeContent('m2', 'ai'));
     await svc.flush();
     const fp = svc.getFilePath()!;
-    svc.dispose();
+    await svc.dispose();
 
     // Read existing content, inject garbage, append more valid lines
     const existingContent = await fs.readFile(fp, 'utf-8');

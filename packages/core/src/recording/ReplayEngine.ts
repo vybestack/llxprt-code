@@ -229,7 +229,7 @@ export async function replaySession(
         // @pseudocode line 122-126: session_event
         case 'session_event': {
           const sePayload = payload as unknown as SessionEventPayload;
-          if (sePayload.severity) {
+          if (sePayload.severity && typeof sePayload.message === 'string') {
             sessionEvents.push({
               severity: sePayload.severity,
               message: sePayload.message,

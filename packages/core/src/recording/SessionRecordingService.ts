@@ -167,25 +167,28 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 126-146
    */
   private async drain(): Promise<void> {
-    while (this.queue.length > 0) {
-      const batch = [...this.queue];
-      this.queue = [];
-      let lines = '';
-      for (const event of batch) {
-        lines += JSON.stringify(event) + '\n';
-      }
-      try {
-        await fs.appendFile(this.filePath!, lines, 'utf-8');
-      } catch (error: unknown) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === 'ENOSPC' || code === 'EACCES') {
-          this.active = false;
-          return;
+    try {
+      while (this.queue.length > 0) {
+        const batch = [...this.queue];
+        this.queue = [];
+        let lines = '';
+        for (const event of batch) {
+          lines += JSON.stringify(event) + '\n';
         }
-        throw error;
+        try {
+          await fs.appendFile(this.filePath!, lines, 'utf-8');
+        } catch (error: unknown) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code === 'ENOSPC' || code === 'EACCES') {
+            this.active = false;
+            return;
+          }
+          throw error;
+        }
       }
+    } finally {
+      this.draining = false;
     }
-    this.draining = false;
   }
 
   /**
