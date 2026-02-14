@@ -1425,7 +1425,7 @@ export async function createTransport(
 
           if (accessToken) {
             hasOAuthConfig = true;
-            debugLogger.log(
+            debug.log(
               `Found stored OAuth token for server '${mcpServerName}'`,
             );
           }
