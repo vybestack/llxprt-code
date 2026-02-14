@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OAuthManager } from './oauth-manager.js';
-import { MultiProviderTokenStore } from './types.js';
+import { KeyringTokenStore } from './types.js';
 import { GeminiOAuthProvider } from './gemini-oauth-provider.js';
 import { QwenOAuthProvider } from './qwen-oauth-provider.js';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
@@ -28,12 +28,12 @@ vi.mock('node:fs', async (importOriginal) => {
 const mockFs = vi.mocked(fs);
 
 describe('OAuth Provider Premature Initialization', () => {
-  let tokenStore: MultiProviderTokenStore;
+  let tokenStore: KeyringTokenStore;
   let oauthManager: OAuthManager;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    tokenStore = new MultiProviderTokenStore();
+    tokenStore = new KeyringTokenStore();
     oauthManager = new OAuthManager(tokenStore);
 
     // Mock the OAuth credentials file to not exist

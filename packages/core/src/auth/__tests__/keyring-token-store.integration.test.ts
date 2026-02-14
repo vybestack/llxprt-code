@@ -37,11 +37,7 @@ function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
     store,
     getPassword: async (service: string, account: string) =>
       store.get(`${service}:${account}`) ?? null,
-    setPassword: async (
-      service: string,
-      account: string,
-      password: string,
-    ) => {
+    setPassword: async (service: string, account: string, password: string) => {
       store.set(`${service}:${account}`, password);
     },
     deletePassword: async (service: string, account: string) =>
@@ -62,9 +58,7 @@ function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
 }
 
 async function createTempDir(): Promise<string> {
-  return fs.mkdtemp(
-    path.join(os.tmpdir(), 'keyring-token-store-integ-'),
-  );
+  return fs.mkdtemp(path.join(os.tmpdir(), 'keyring-token-store-integ-'));
 }
 
 function makeToken(overrides?: Partial<OAuthToken>): OAuthToken {
@@ -183,7 +177,10 @@ describe('KeyringTokenStore Integration', () => {
     expect(retrieved1!.expiry).toBe(originalToken.expiry);
 
     // Step 3: Update (overwrite with new token)
-    const updatedToken = makeToken({ access_token: 'updated-at', expiry: originalToken.expiry + 7200 });
+    const updatedToken = makeToken({
+      access_token: 'updated-at',
+      expiry: originalToken.expiry + 7200,
+    });
     await tokenStore.saveToken('anthropic', updatedToken);
 
     // Step 4: Get and verify update overwrote
@@ -466,7 +463,11 @@ describe('KeyringTokenStore Integration', () => {
    * @then Token is retrievable via instance B
    */
   it('multi-instance: save in A, get in B → consistent', async () => {
-    const { storeA, storeB, tempDir: sharedTempDir } = await createSharedStoreSetup();
+    const {
+      storeA,
+      storeB,
+      tempDir: sharedTempDir,
+    } = await createSharedStoreSetup();
 
     const token = makeToken({ access_token: 'shared-at' });
     await storeA.saveToken('anthropic', token);
@@ -486,7 +487,11 @@ describe('KeyringTokenStore Integration', () => {
    * @then listProviders via instance B sees all saved providers
    */
   it('multi-instance: save in A, listProviders in B → B sees all', async () => {
-    const { storeA, storeB, tempDir: sharedTempDir } = await createSharedStoreSetup();
+    const {
+      storeA,
+      storeB,
+      tempDir: sharedTempDir,
+    } = await createSharedStoreSetup();
 
     await storeA.saveToken('anthropic', makeToken());
     await storeA.saveToken('gemini', makeToken());
@@ -506,7 +511,11 @@ describe('KeyringTokenStore Integration', () => {
    * @then getToken via instance B returns null
    */
   it('multi-instance: remove in A, get in B → null', async () => {
-    const { storeA, storeB, tempDir: sharedTempDir } = await createSharedStoreSetup();
+    const {
+      storeA,
+      storeB,
+      tempDir: sharedTempDir,
+    } = await createSharedStoreSetup();
 
     await storeA.saveToken('anthropic', makeToken());
 
@@ -539,7 +548,9 @@ describe('KeyringTokenStore Integration', () => {
         fc.array(
           fc.record({
             provider: validNameArb,
-            op: fc.constantFrom('save', 'remove') as fc.Arbitrary<'save' | 'remove'>,
+            op: fc.constantFrom('save', 'remove') as fc.Arbitrary<
+              'save' | 'remove'
+            >,
           }),
           { minLength: 1, maxLength: 15 },
         ),

@@ -15,7 +15,37 @@ import type { OAuthToken, TokenStore } from './types.js';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
+import {
+  KeyringTokenStore,
+  SecureStore,
+  type KeyringAdapter,
+} from '@vybestack/llxprt-code-core';
+
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
+  const store = new Map<string, string>();
+  return {
+    store,
+    getPassword: async (service: string, account: string) =>
+      store.get(`${service}:${account}`) ?? null,
+    setPassword: async (service: string, account: string, password: string) => {
+      store.set(`${service}:${account}`, password);
+    },
+    deletePassword: async (service: string, account: string) =>
+      store.delete(`${service}:${account}`),
+    findCredentials: async (service: string) => {
+      const results: Array<{ account: string; password: string }> = [];
+      for (const [key, value] of store.entries()) {
+        if (key.startsWith(`${service}:`)) {
+          results.push({
+            account: key.slice(service.length + 1),
+            password: value,
+          });
+        }
+      }
+      return results;
+    },
+  };
+}
 
 describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
   let tempDir: string;
@@ -35,7 +65,12 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
   beforeEach(async () => {
     // Create a temporary directory for testing
     tempDir = await fs.mkdtemp(join(tmpdir(), 'oauth-refresh-race-test-'));
-    tokenStore = new MultiProviderTokenStore(tempDir);
+    const secureStore = new SecureStore('llxprt-code-oauth', {
+      fallbackDir: tempDir,
+      fallbackPolicy: 'allow',
+      keyringLoader: async () => createMockKeyring(),
+    });
+    tokenStore = new KeyringTokenStore({ secureStore });
     oauthManager = new OAuthManager(tokenStore);
 
     // Reset refresh call counter

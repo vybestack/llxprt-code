@@ -127,6 +127,7 @@ export {
   type OAuthTokenRequestMetadata,
 } from './auth/precedence.js';
 export * from './auth/token-store.js';
+export { KeyringTokenStore } from './auth/keyring-token-store.js';
 export * from './auth/types.js';
 export * from './auth/qwen-device-flow.js';
 export * from './auth/anthropic-device-flow.js';
@@ -207,6 +208,7 @@ export {
   SecureStore,
   SecureStoreError,
   createDefaultKeyringAdapter,
+  type KeyringAdapter,
   type SecureStoreErrorCode,
   type SecureStoreOptions,
 } from './storage/secure-store.js';

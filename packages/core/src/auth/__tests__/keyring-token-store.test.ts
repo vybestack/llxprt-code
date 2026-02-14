@@ -46,11 +46,7 @@ function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
     store,
     getPassword: async (service: string, account: string) =>
       store.get(`${service}:${account}`) ?? null,
-    setPassword: async (
-      service: string,
-      account: string,
-      password: string,
-    ) => {
+    setPassword: async (service: string, account: string, password: string) => {
       store.set(`${service}:${account}`, password);
     },
     deletePassword: async (service: string, account: string) =>
@@ -100,9 +96,7 @@ function createKeytarLoader(): {
  * Creates a temp directory for use as SecureStore fallbackDir in tests.
  */
 async function createTempDir(): Promise<string> {
-  return fs.mkdtemp(
-    path.join(os.tmpdir(), 'keyring-token-store-test-'),
-  );
+  return fs.mkdtemp(path.join(os.tmpdir(), 'keyring-token-store-test-'));
 }
 
 /**
@@ -154,16 +148,15 @@ function makeCodexToken(): OAuthToken & {
 
 // ─── fast-check Arbitraries ──────────────────────────────────────────────────
 
-const validNameArb = fc
-  .string({
-    unit: fc.constantFrom(
-      ...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-'.split(
-        '',
-      ),
+const validNameArb = fc.string({
+  unit: fc.constantFrom(
+    ...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-'.split(
+      '',
     ),
-    minLength: 1,
-    maxLength: 30,
-  });
+  ),
+  minLength: 1,
+  maxLength: 30,
+});
 
 const invalidNameArb = fc.oneof(
   fc.constant(''),
@@ -320,9 +313,9 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    */
   it('rejects invalid provider name with space', async () => {
     const token = makeMinimalToken();
-    await expect(
-      tokenStore.saveToken('invalid name', token),
-    ).rejects.toThrow(/invalid.*provider.*name/i);
+    await expect(tokenStore.saveToken('invalid name', token)).rejects.toThrow(
+      /invalid.*provider.*name/i,
+    );
   });
 
   /**
@@ -350,9 +343,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     const token = makeMinimalToken();
     // Pre-verify SecureStore is empty
     const keysBefore = await secureStore.list();
-    await expect(
-      tokenStore.saveToken('bad/name', token),
-    ).rejects.toThrow();
+    await expect(tokenStore.saveToken('bad/name', token)).rejects.toThrow();
     // Verify no keys were written
     const keysAfter = await secureStore.list();
     expect(keysAfter).toEqual(keysBefore);
@@ -485,7 +476,9 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     const warnCalls = warnSpy.mock.calls;
     const hasHashInLogs = warnCalls.some((call) => {
       const msg =
-        typeof call[0] === 'function' ? (call[0] as () => string)() : String(call[0]);
+        typeof call[0] === 'function'
+          ? (call[0] as () => string)()
+          : String(call[0]);
       return msg.includes(expectedHash) && !msg.includes('hashtest:default');
     });
     expect(hasHashInLogs).toBe(true);
@@ -1016,9 +1009,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     await fc.assert(
       fc.asyncProperty(invalidNameArb, async (badName) => {
         const token = makeMinimalToken();
-        await expect(
-          tokenStore.saveToken(badName, token),
-        ).rejects.toThrow();
+        await expect(tokenStore.saveToken(badName, token)).rejects.toThrow();
       }),
       { numRuns: 20 },
     );
@@ -1345,9 +1336,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
           await setup.secureStore.set(`${provider}:default`, corruptData);
           const result = await setup.tokenStore.getToken(provider);
           expect(result).toBeNull();
-          const stillThere = await setup.secureStore.get(
-            `${provider}:default`,
-          );
+          const stillThere = await setup.secureStore.get(`${provider}:default`);
           expect(stillThere).toBe(corruptData);
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });

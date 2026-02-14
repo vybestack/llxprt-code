@@ -19,7 +19,11 @@ import * as crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { OAuthTokenSchema, type OAuthToken, type BucketStats } from './types.js';
+import {
+  OAuthTokenSchema,
+  type OAuthToken,
+  type BucketStats,
+} from './types.js';
 import { type TokenStore } from './token-store.js';
 import { SecureStore, SecureStoreError } from '../storage/secure-store.js';
 import { DebugLogger } from '../debug/index.js';
@@ -29,14 +33,23 @@ import { DebugLogger } from '../debug/index.js';
 const SERVICE_NAME = 'llxprt-code-oauth';
 const NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 const DEFAULT_BUCKET = 'default';
-const LOCK_DIR = join(homedir(), '.llxprt', 'oauth', 'locks');
 const DEFAULT_LOCK_WAIT_MS = 10_000;
 const DEFAULT_STALE_THRESHOLD_MS = 30_000;
 const LOCK_POLL_INTERVAL_MS = 100;
 
+/** Lazily resolved to avoid crashing when homedir() is undefined at import time. */
+let _lockDir: string | undefined;
+function getLockDir(): string {
+  if (!_lockDir) {
+    _lockDir = join(homedir(), '.llxprt', 'oauth', 'locks');
+  }
+  return _lockDir;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 // ─── KeyringTokenStore Class ─────────────────────────────────────────────────
 
@@ -75,15 +88,19 @@ export class KeyringTokenStore implements TokenStore {
   }
 
   private hashIdentifier(key: string): string {
-    return crypto.createHash('sha256').update(key).digest('hex').substring(0, 16);
+    return crypto
+      .createHash('sha256')
+      .update(key)
+      .digest('hex')
+      .substring(0, 16);
   }
 
   private lockFilePath(provider: string, bucket?: string): string {
     const resolved = bucket ?? DEFAULT_BUCKET;
     if (resolved === DEFAULT_BUCKET) {
-      return join(LOCK_DIR, `${provider}-refresh.lock`);
+      return join(getLockDir(), `${provider}-refresh.lock`);
     }
-    return join(LOCK_DIR, `${provider}-${resolved}-refresh.lock`);
+    return join(getLockDir(), `${provider}-${resolved}-refresh.lock`);
   }
 
   /**
@@ -91,16 +108,23 @@ export class KeyringTokenStore implements TokenStore {
    * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
    */
   private async ensureLockDir(): Promise<void> {
-    await fs.mkdir(LOCK_DIR, { recursive: true, mode: 0o700 });
+    await fs.mkdir(getLockDir(), { recursive: true, mode: 0o700 });
   }
 
   /**
    * Validates and persists an OAuth token to SecureStore.
    * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
    */
-  async saveToken(provider: string, token: OAuthToken, bucket?: string): Promise<void> {
+  async saveToken(
+    provider: string,
+    token: OAuthToken,
+    bucket?: string,
+  ): Promise<void> {
     const key = this.accountKey(provider, bucket);
-    this.logger.debug(() => `[saveToken] [${this.hashIdentifier(key)}] type=${token.token_type}`);
+    this.logger.debug(
+      () =>
+        `[saveToken] [${this.hashIdentifier(key)}] type=${token.token_type}`,
+    );
     const validatedToken = OAuthTokenSchema.passthrough().parse(token);
     const serialized = JSON.stringify(validatedToken);
     await this.secureStore.set(key, serialized);
@@ -111,7 +135,10 @@ export class KeyringTokenStore implements TokenStore {
    * Returns null for missing or corrupt data (logged with hashed identifier).
    * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
    */
-  async getToken(provider: string, bucket?: string): Promise<OAuthToken | null> {
+  async getToken(
+    provider: string,
+    bucket?: string,
+  ): Promise<OAuthToken | null> {
     const key = this.accountKey(provider, bucket);
     this.logger.debug(() => `[getToken] [${this.hashIdentifier(key)}]`);
 
@@ -121,7 +148,8 @@ export class KeyringTokenStore implements TokenStore {
     } catch (error) {
       if (error instanceof SecureStoreError && error.code === 'CORRUPT') {
         this.logger.warn(
-          () => `Corrupt token envelope for [${this.hashIdentifier(key)}]: ${error.message}`,
+          () =>
+            `Corrupt token envelope for [${this.hashIdentifier(key)}]: ${error.message}`,
         );
         return null;
       }
@@ -136,16 +164,22 @@ export class KeyringTokenStore implements TokenStore {
     try {
       parsed = JSON.parse(raw);
     } catch (parseError) {
-      const msg = parseError instanceof Error ? parseError.message : String(parseError);
-      this.logger.warn(() => `Corrupt token JSON for [${this.hashIdentifier(key)}]: ${msg}`);
+      const msg =
+        parseError instanceof Error ? parseError.message : String(parseError);
+      this.logger.warn(
+        () => `Corrupt token JSON for [${this.hashIdentifier(key)}]: ${msg}`,
+      );
       return null;
     }
 
     try {
       return OAuthTokenSchema.passthrough().parse(parsed);
     } catch (zodError) {
-      const msg = zodError instanceof Error ? zodError.message : String(zodError);
-      this.logger.warn(() => `Invalid token schema for [${this.hashIdentifier(key)}]: ${msg}`);
+      const msg =
+        zodError instanceof Error ? zodError.message : String(zodError);
+      this.logger.warn(
+        () => `Invalid token schema for [${this.hashIdentifier(key)}]: ${msg}`,
+      );
       return null;
     }
   }
@@ -161,7 +195,10 @@ export class KeyringTokenStore implements TokenStore {
       await this.secureStore.delete(key);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      this.logger.warn(() => `Failed to remove token for [${this.hashIdentifier(key)}]: ${msg}`);
+      this.logger.warn(
+        () =>
+          `Failed to remove token for [${this.hashIdentifier(key)}]: ${msg}`,
+      );
     }
   }
 
@@ -170,7 +207,9 @@ export class KeyringTokenStore implements TokenStore {
    * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
    */
   async listProviders(): Promise<string[]> {
-    this.logger.debug(() => `[listProviders] store=${this.secureStore.constructor.name}`);
+    this.logger.debug(
+      () => `[listProviders] store=${this.secureStore.constructor.name}`,
+    );
     try {
       const allKeys = await this.secureStore.list();
       const providerSet = new Set<string>();
@@ -208,7 +247,8 @@ export class KeyringTokenStore implements TokenStore {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        () => `Failed to list buckets for [${this.hashIdentifier(provider + ':')}]: ${msg}`,
+        () =>
+          `Failed to list buckets for [${this.hashIdentifier(provider + ':')}]: ${msg}`,
       );
       return [];
     }
@@ -218,7 +258,10 @@ export class KeyringTokenStore implements TokenStore {
    * Returns placeholder bucket statistics if a token exists for the given bucket.
    * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
    */
-  async getBucketStats(provider: string, bucket: string): Promise<BucketStats | null> {
+  async getBucketStats(
+    provider: string,
+    bucket: string,
+  ): Promise<BucketStats | null> {
     const token = await this.getToken(provider, bucket);
     if (token === null) {
       return null;
@@ -250,13 +293,17 @@ export class KeyringTokenStore implements TokenStore {
     await this.ensureLockDir();
 
     this.logger.debug(
-      () => `[acquireRefreshLock] wait=${waitMs} stale=${staleMs} poll=${LOCK_POLL_INTERVAL_MS}`,
+      () =>
+        `[acquireRefreshLock] wait=${waitMs} stale=${staleMs} poll=${LOCK_POLL_INTERVAL_MS}`,
     );
 
     while (Date.now() - startTime < waitMs) {
       try {
         const lockInfo = { pid: process.pid, timestamp: Date.now() };
-        await fs.writeFile(lockPath, JSON.stringify(lockInfo), { flag: 'wx', mode: 0o600 });
+        await fs.writeFile(lockPath, JSON.stringify(lockInfo), {
+          flag: 'wx',
+          mode: 0o600,
+        });
         return true;
       } catch (writeError) {
         const err = writeError as NodeJS.ErrnoException;
@@ -268,7 +315,10 @@ export class KeyringTokenStore implements TokenStore {
       // Lock file exists — read and check staleness
       try {
         const content = await fs.readFile(lockPath, 'utf8');
-        const existing = JSON.parse(content) as { pid: number; timestamp: number };
+        const existing = JSON.parse(content) as {
+          pid: number;
+          timestamp: number;
+        };
         const lockAge = Date.now() - existing.timestamp;
 
         if (lockAge > staleMs) {
