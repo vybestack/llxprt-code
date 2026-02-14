@@ -1952,11 +1952,22 @@ export class Config {
   }
 
   getShellExecutionConfig(): ShellExecutionConfig {
+    const ephemeralSettings = this.getEphemeralSettings();
+    const inactivityTimeoutSeconds =
+      (ephemeralSettings['shell-inactivity-timeout-seconds'] as
+        | number
+        | undefined) ?? 120; // Default 120 seconds
+    const inactivityTimeoutMs =
+      inactivityTimeoutSeconds === -1
+        ? undefined
+        : inactivityTimeoutSeconds * 1000;
+
     return {
       terminalWidth: this.getPtyTerminalWidth(),
       terminalHeight: this.getPtyTerminalHeight(),
       showColor: this.getAllowPtyThemeOverride(),
       scrollback: this.getPtyScrollbackLimit(),
+      inactivityTimeoutMs,
     };
   }
 

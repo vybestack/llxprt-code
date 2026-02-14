@@ -95,6 +95,7 @@ export interface ShellExecutionConfig {
   // Used for testing
   disableDynamicLineTrimming?: boolean;
   scrollback?: number;
+  inactivityTimeoutMs?: number;
 }
 
 export type ShellOutputEvent =
@@ -235,6 +236,7 @@ export class ShellExecutionService {
       cwd,
       onOutputEvent,
       abortSignal,
+      shellExecutionConfig,
     );
   }
 
@@ -273,6 +275,7 @@ export class ShellExecutionService {
     cwd: string,
     onOutputEvent: (event: ShellOutputEvent) => void,
     abortSignal: AbortSignal,
+    shellExecutionConfig: ShellExecutionConfig = {},
   ): ShellExecutionHandle {
     try {
       const isWindows = os.platform() === 'win32';
@@ -314,8 +317,58 @@ export class ShellExecutionService {
         let sniffedBytes = 0;
         let sniffBuffer = Buffer.alloc(0);
         let totalBytesReceived = 0;
+        let inactivityTimeout: NodeJS.Timeout | null = null;
+        const inactivityTimeoutMs = shellExecutionConfig?.inactivityTimeoutMs;
+        const inactivityAbortController = new AbortController();
+
+        const resetInactivityTimer = () => {
+          if (!inactivityTimeoutMs || exited) {
+            return;
+          }
+
+          if (inactivityTimeout) {
+            clearTimeout(inactivityTimeout);
+          }
+
+          inactivityTimeout = setTimeout(() => {
+            if (!exited) {
+              // Kill the process due to inactivity
+              inactivityAbortController.abort();
+            }
+          }, inactivityTimeoutMs);
+        };
+
+        // Set up inactivity abort handler
+        if (inactivityTimeoutMs) {
+          inactivityAbortController.signal.addEventListener(
+            'abort',
+            async () => {
+              if (child.pid && !exited) {
+                const pid = child.pid;
+                if (isWindows) {
+                  cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+                } else {
+                  try {
+                    process.kill(-pid, 'SIGTERM');
+                  } catch (_e) {
+                    // ignore
+                  }
+                  try {
+                    child.kill('SIGTERM');
+                  } catch (_e) {
+                    // ignore
+                  }
+                }
+              }
+            },
+            { once: true },
+          );
+          resetInactivityTimer();
+        }
 
         const handleOutput = (data: Buffer, stream: 'stdout' | 'stderr') => {
+          // Reset inactivity timer on each output
+          resetInactivityTimer();
           if (!stdoutDecoder || !stderrDecoder) {
             const encoding = getCachedEncodingForBuffer(data);
             try {
@@ -466,6 +519,11 @@ export class ShellExecutionService {
           exited = true;
           abortSignal.removeEventListener('abort', abortHandler);
 
+          if (inactivityTimeout) {
+            clearTimeout(inactivityTimeout);
+            inactivityTimeout = null;
+          }
+
           if (!cleanedUp) {
             cleanedUp = true;
             child.stdout?.removeAllListeners('data');
@@ -579,6 +637,9 @@ export class ShellExecutionService {
         };
         ShellExecutionService.activePtys.set(ptyProcess.pid, activePtyEntry);
         ShellExecutionService.lastActivePtyId = ptyProcess.pid;
+        let inactivityTimeout: NodeJS.Timeout | null = null;
+        const inactivityTimeoutMs = shellExecutionConfig.inactivityTimeoutMs;
+        const inactivityAbortController = new AbortController();
 
         const cleanupActivePty = () => {
           const entry = ShellExecutionService.activePtys.get(ptyProcess.pid);
@@ -588,6 +649,10 @@ export class ShellExecutionService {
           }
           if (ShellExecutionService.lastActivePtyId === ptyProcess.pid) {
             ShellExecutionService.lastActivePtyId = null;
+          }
+          if (inactivityTimeout) {
+            clearTimeout(inactivityTimeout);
+            inactivityTimeout = null;
           }
         };
 
@@ -775,7 +840,55 @@ export class ShellExecutionService {
           }
         });
 
+        const resetInactivityTimer = () => {
+          if (!inactivityTimeoutMs || exited) {
+            return;
+          }
+
+          if (inactivityTimeout) {
+            clearTimeout(inactivityTimeout);
+          }
+
+          inactivityTimeout = setTimeout(() => {
+            if (!exited) {
+              // Kill the process due to inactivity
+              inactivityAbortController.abort();
+            }
+          }, inactivityTimeoutMs);
+        };
+
+        // Set up inactivity abort handler
+        if (inactivityTimeoutMs) {
+          inactivityAbortController.signal.addEventListener(
+            'abort',
+            async () => {
+              if (ptyProcess.pid && !exited) {
+                const pid = ptyProcess.pid;
+                if (isWindows) {
+                  cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+                } else {
+                  try {
+                    process.kill(-pid, 'SIGTERM');
+                  } catch (_e) {
+                    // ignore
+                  }
+                  try {
+                    ptyProcess.kill('SIGTERM');
+                  } catch (_e) {
+                    // ignore
+                  }
+                }
+              }
+            },
+            { once: true },
+          );
+          resetInactivityTimer();
+        }
+
         const handleOutput = (data: Buffer) => {
+          // Reset inactivity timer on each output
+          resetInactivityTimer();
+
           processingChain = processingChain.then(
             () =>
               new Promise<void>((resolve) => {

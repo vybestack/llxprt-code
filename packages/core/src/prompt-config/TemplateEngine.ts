@@ -294,7 +294,10 @@ export class TemplateEngine {
     }
 
     // Add non-interactive continue variable
-    if (interactionMode === 'non-interactive' || interactionMode === 'subagent') {
+    if (
+      interactionMode === 'non-interactive' ||
+      interactionMode === 'subagent'
+    ) {
       variables['NON_INTERACTIVE_CONTINUE'] =
         '- **Continue the work:** Do your best to complete the task. Do not stop to ask the user for input or confirmation. If you encounter issues, work around them or document them and continue.';
     } else {

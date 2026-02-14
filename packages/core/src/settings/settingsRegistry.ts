@@ -770,6 +770,24 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     },
   },
   {
+    key: 'shell-inactivity-timeout-seconds',
+    category: 'cli-behavior',
+    description:
+      'Inactivity timeout in seconds for shell commands. Kills commands that produce no output for this duration. Resets on each output event.',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && (value === -1 || value > 0)) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'shell-inactivity-timeout-seconds must be a positive number in seconds or -1 for unlimited',
+      };
+    },
+  },
+  {
     key: 'temperature',
     category: 'model-param',
     description: 'Sampling temperature',
