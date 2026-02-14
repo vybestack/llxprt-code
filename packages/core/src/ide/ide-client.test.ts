@@ -203,8 +203,8 @@ describe('IdeClient', () => {
           (path: fs.PathLike) => Promise<string[]>
         >
       ).mockResolvedValue([]);
-      process.env['GEMINI_CLI_IDE_SERVER_PORT'] = '9090';
-      process.env['GEMINI_CLI_IDE_AUTH_TOKEN'] = 'env-auth-token';
+      process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = '9090';
+      process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'] = 'env-auth-token';
 
       const ideClient = await IdeClient.getInstance();
       await ideClient.connect();

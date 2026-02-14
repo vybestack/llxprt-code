@@ -445,6 +445,28 @@ describe('PromptService', () => {
       expect(prompt).toContain('You are an interactive CLI agent');
     });
 
+    it('should apply gemini-3-pro-preview prompt overrides', async () => {
+      const baseDir = path.join(tempDir, 'gemini-prompts');
+      const service = new PromptService({ baseDir });
+      await service.initialize();
+
+      const context: PromptContext = {
+        provider: 'gemini',
+        model: 'gemini-3-pro-preview',
+        enabledTools: [],
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const prompt = await service.getPrompt(context);
+      expect(prompt).toContain('Do not call tools in silence');
+      expect(prompt).not.toContain('No Chitchat');
+      expect(prompt).toContain('Clarity over Brevity (When Needed)');
+    });
+
     it('should continue if tool prompt is missing and log warning in debug mode', async () => {
       const baseDir = path.join(tempDir, 'test-prompts');
       await fs.mkdir(path.join(baseDir, 'core'), { recursive: true });
