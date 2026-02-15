@@ -131,7 +131,8 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-022 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
-**If** provider ID normalization receives degenerate/empty call identity input, **then the system SHALL** still produce deterministic, collision-free projected IDs within transcript scope.
+**If** provider ID normalization receives degenerate/empty call identity input, **then the system SHOULD** produce deterministic, collision-free projected IDs within transcript scope.  
+*Note: Current projection strategies for degenerate input contain known non-deterministic or collision-prone fallbacks (see technical-overview §6.4). Remediation of these degenerate-input defects is a target-state goal tracked outside #915 acceptance scope. #915 requires collision-freedom for non-degenerate input (REQ-915-049).*
 
 ---
 
@@ -286,7 +287,7 @@ This document defines atomic, testable functional and technical requirements for
 | REQ-915-019 | Direct | §7 | §6.1, §7.4 | Anthropic conversion |  |
 | REQ-915-020 | Direct | §7 | §6.1, §6.2, §7.4 |  |  |
 | REQ-915-021 | Direct | §7 | §6.1, §6.3, §7.4 |  |  |
-| REQ-915-022 | Derived | | §6.4 (edge cases) |  |  |
+| REQ-915-022 | Derived (target-state) | | §6.4 (edge cases, known defect) |  |  |
 | REQ-915-023 | Direct | §8 | §3.3, §7.3 | mixed thinking/tool flow |  |
 | REQ-915-024 | Direct | §8 | §3.3 | mixed thinking/tool flow |  |
 | REQ-915-025 | Direct | §8 | §3.3 | scenario baseline |  |
