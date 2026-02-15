@@ -8,7 +8,7 @@
 - `project-plans/issue915/dataflow-before-after.md`  
 - `project-plans/issue915/tool-execution-unification.md`  
 **Notation**: Strict EARS (Ubiquitous, Event-Driven, State-Driven, Optional Feature, Unwanted Behavior)  
-**Normative Language**: SHALL
+**Normative Language**: SHALL (required behavior), SHOULD (target-state architectural direction with accepted current deviation)
 
 ---
 
@@ -34,7 +34,11 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-004 (Event-Driven)
 **Pattern**: Event-Driven  
-**When** provider-family selection changes due to manual switch, round-robin, or failover, **the system SHALL** preserve conversation continuity by producing a protocol-valid outbound transcript for the selected provider.
+**When** provider-family selection changes due to manual switch, round-robin, or failover, **the system SHALL** produce a protocol-valid outbound transcript for the newly selected provider that includes all prior conversation state relevant to the next request.
+
+### REQ-915-050 (Unwanted Behavior)
+**Pattern**: Unwanted Behavior  
+**If** a provider/model switch is requested while a model turn is in-flight and not terminal, **then the system SHALL NOT** apply the switch to the in-flight turn; the switch SHALL be deferred until the current turn reaches terminal state. Violating this invariant would invalidate tool call/result binding for the in-flight turn (see overview §6, technical-overview §2.1).
 
 ### REQ-915-005 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
@@ -66,8 +70,8 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-049 (State-Driven)
 **Pattern**: State-Driven  
-**While** canonical interaction state is valid, **the system SHALL** produce collision-free projected IDs within a single provider render scope such that distinct canonical call identities map to distinct provider IDs.  
-*Known defect note: Some projection strategies (e.g., Anthropic empty-ID fallback) currently contain non-deterministic elements that may produce different projected IDs across separate render invocations. These are tracked defects to be remediated, not accepted behavior (see technical-overview §3.2, §6.4).*
+**While** canonical interaction state is valid and canonical call identities are non-empty, **the system SHALL** produce collision-free projected IDs within a single provider render scope such that distinct canonical call identities map to distinct provider IDs.  
+*Degenerate input note: When canonical call identity is empty or degenerate, REQ-915-022 applies. Some current projection strategies (e.g., Anthropic empty-ID fallback using `Date.now() + Math.random()`) produce non-deterministic projected IDs in this degenerate case. These are tracked defects (technical-overview §6.4) and not accepted design; however, they are outside #915 acceptance scope. #915 requires collision-freedom for non-degenerate input.*
 
 ### REQ-915-047 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
@@ -310,6 +314,7 @@ This document defines atomic, testable functional and technical requirements for
 | REQ-915-047 | Direct | §3(8), §4 | §1.2 |  |  |
 | REQ-915-048 | Direct |  | §5.2 |  |  |
 | REQ-915-049 | Direct |  | §3.2, §6.4 |  |  |
+| REQ-915-050 | Direct | §6 | §2.1 |  |  |
 
 ---
 
