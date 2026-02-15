@@ -197,7 +197,7 @@ export class SessionLockManager {
 
     for (const lockFile of lockFiles) {
       const lockPath = path.join(chatsDir, lockFile);
-      const isStale = await SessionLockManager.checkStale(lockPath);
+      const isStale = await SessionLockManager.checkStaleWithPidReuse(lockPath);
 
       if (!isStale) {
         continue;

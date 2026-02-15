@@ -798,6 +798,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
               );
             }
             await result.recording.dispose();
+            await result.lockHandle.release();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -858,6 +859,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             expect(payload.provider).toBe(currentProvider);
 
             await result.recording.dispose();
+            await result.lockHandle.release();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -909,6 +911,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             }
 
             await result.recording.dispose();
+            await result.lockHandle.release();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -951,6 +954,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             expect(result.recording.getFilePath()).not.toBeNull();
             expect(result.recording.isActive()).toBe(true);
             await result.recording.dispose();
+            await result.lockHandle.release();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -1011,6 +1015,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             // history = 1 (summary) + postCompressCount
             expect(result.history).toHaveLength(1 + postCompressCount);
             await result.recording.dispose();
+            await result.lockHandle.release();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -1052,6 +1057,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           if (result.ok) {
             expect(result.history).toHaveLength(contentCount);
             await result.recording.dispose();
+            await result.lockHandle.release();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
