@@ -7,7 +7,11 @@ import { ModalShell } from './ModalShell';
 import { RadioSelect, type RadioSelectOption } from '../components/RadioSelect';
 import { DiffViewer } from '../components/DiffViewer';
 
-export type ToolApprovalOutcome = 'allow_once' | 'allow_always' | 'cancel';
+export type ToolApprovalOutcome =
+  | 'allow_once'
+  | 'allow_always'
+  | 'suggest_edit'
+  | 'cancel';
 
 export interface ToolApprovalDetails {
   readonly callId: string;
@@ -23,7 +27,11 @@ export interface ToolApprovalDetails {
 
 export interface ToolApprovalModalProps {
   readonly details: ToolApprovalDetails;
-  readonly onDecision: (callId: string, outcome: ToolApprovalOutcome) => void;
+  readonly onDecision: (
+    callId: string,
+    outcome: ToolApprovalOutcome,
+    editedCommand?: string,
+  ) => void;
   readonly onClose: () => void;
   readonly theme?: ThemeDefinition;
 }
@@ -214,6 +222,14 @@ export function ToolApprovalModal(
       });
     }
 
+    if (details.confirmationType === 'exec') {
+      result.push({
+        label: 'No, suggest changes',
+        value: 'suggest_edit',
+        key: 'suggest_edit',
+      });
+    }
+
     result.push({
       label: 'No, cancel (esc)',
       value: 'cancel',
@@ -221,7 +237,7 @@ export function ToolApprovalModal(
     });
 
     return result;
-  }, [details.canAllowAlways]);
+  }, [details.canAllowAlways, details.confirmationType]);
 
   const handleSelect = useCallback(
     (outcome: ToolApprovalOutcome): void => {

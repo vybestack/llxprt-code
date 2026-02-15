@@ -146,7 +146,9 @@ export class MessageBus {
               response.confirmed ??
               (response.outcome !== undefined
                 ? response.outcome !== ToolConfirmationOutcome.Cancel &&
-                  response.outcome !== ToolConfirmationOutcome.ModifyWithEditor
+                  response.outcome !==
+                    ToolConfirmationOutcome.ModifyWithEditor &&
+                  response.outcome !== ToolConfirmationOutcome.SuggestEdit
                 : false);
             resolve(resolvedConfirmation);
           }
@@ -179,7 +181,8 @@ export class MessageBus {
   ): void {
     const confirmed =
       outcome !== ToolConfirmationOutcome.Cancel &&
-      outcome !== ToolConfirmationOutcome.ModifyWithEditor;
+      outcome !== ToolConfirmationOutcome.ModifyWithEditor &&
+      outcome !== ToolConfirmationOutcome.SuggestEdit;
     this.publish({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       correlationId,

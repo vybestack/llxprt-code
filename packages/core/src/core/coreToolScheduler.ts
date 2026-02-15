@@ -1116,7 +1116,10 @@ export class CoreToolScheduler {
 
   async handleConfirmationResponse(
     callId: string,
-    originalOnConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>,
+    originalOnConfirm: (
+      outcome: ToolConfirmationOutcome,
+      payload?: ToolConfirmationPayload,
+    ) => Promise<void>,
     outcome: ToolConfirmationOutcome,
     signal: AbortSignal,
     payload?: ToolConfirmationPayload,
@@ -1143,7 +1146,7 @@ export class CoreToolScheduler {
     const previousCorrelationId =
       waitingToolCall?.confirmationDetails?.correlationId;
 
-    await originalOnConfirm(outcome);
+    await originalOnConfirm(outcome, payload);
 
     if (outcome === ToolConfirmationOutcome.ProceedAlways) {
       await this.autoApproveCompatiblePendingTools(signal, callId);
@@ -1236,8 +1239,23 @@ export class CoreToolScheduler {
         }
       }
     } else {
-      if (payload?.newContent && waitingToolCall) {
-        await this._applyInlineModify(waitingToolCall, payload, signal);
+      if (outcome === ToolConfirmationOutcome.SuggestEdit && waitingToolCall) {
+        if (
+          waitingToolCall.confirmationDetails.type === 'exec' &&
+          payload?.editedCommand
+        ) {
+          const updatedArgs = {
+            ...waitingToolCall.request.args,
+            command: payload.editedCommand,
+          };
+          this.setArgsInternal(callId, updatedArgs);
+        }
+      } else if (payload?.newContent && waitingToolCall) {
+        await this._applyInlineModify(
+          waitingToolCall,
+          payload.newContent,
+          signal,
+        );
       }
       this.setStatusInternal(callId, 'scheduled');
     }
@@ -1249,7 +1267,8 @@ export class CoreToolScheduler {
       if (!skipBusPublish) {
         const confirmed =
           outcome !== ToolConfirmationOutcome.Cancel &&
-          outcome !== ToolConfirmationOutcome.ModifyWithEditor;
+          outcome !== ToolConfirmationOutcome.ModifyWithEditor &&
+          outcome !== ToolConfirmationOutcome.SuggestEdit;
         this.config.getMessageBus().publish({
           type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
           correlationId,
@@ -1351,7 +1370,7 @@ export class CoreToolScheduler {
    */
   private async _applyInlineModify(
     toolCall: WaitingToolCall,
-    payload: ToolConfirmationPayload,
+    newContent: string,
     signal: AbortSignal,
   ): Promise<void> {
     if (
@@ -1368,13 +1387,13 @@ export class CoreToolScheduler {
 
     const updatedParams = modifyContext.createUpdatedParams(
       currentContent,
-      payload.newContent,
+      newContent,
       toolCall.request.args,
     );
     const updatedDiff = Diff.createPatch(
       modifyContext.getFilePath(toolCall.request.args),
       currentContent,
-      payload.newContent,
+      newContent,
       'Current',
       'Proposed',
     );

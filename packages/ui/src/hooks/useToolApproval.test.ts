@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PendingApproval, UseToolApprovalResult } from './useToolApproval';
 import type { ToolConfirmationType } from '../types/events';
+import type { ToolApprovalOutcome } from '../ui/components/ChatLayout';
 
 describe('useToolApproval', () => {
   describe('PendingApproval type', () => {
@@ -118,7 +119,7 @@ describe('useToolApproval', () => {
 
     it('handleDecision receives callId and outcome', () => {
       let receivedCallId: string | null = null;
-      let receivedOutcome: string | null = null;
+      let receivedOutcome: ToolApprovalOutcome | null = null;
 
       const mockResult: UseToolApprovalResult = {
         pendingApproval: null,

@@ -26,6 +26,7 @@ import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { theme } from '../../semantic-colors.js';
+import { TextInput } from '../ProfileCreateWizard/TextInput.js';
 
 export interface ToolConfirmationMessageProps {
   confirmationDetails: ToolCallConfirmationDetails;
@@ -49,6 +50,8 @@ export const ToolConfirmationMessage: React.FC<
 
   const [ideClient, setIdeClient] = useState<IdeClient | null>(null);
   const [isDiffingEnabled, setIsDiffingEnabled] = useState(false);
+  const [isEditingCommand, setIsEditingCommand] = useState(false);
+  const [editedCommand, setEditedCommand] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -81,10 +84,33 @@ export const ToolConfirmationMessage: React.FC<
           );
         }
       }
+
+      if (outcome === ToolConfirmationOutcome.SuggestEdit) {
+        if (confirmationDetails.type === 'exec') {
+          setEditedCommand(confirmationDetails.command);
+          setIsEditingCommand(true);
+          return;
+        }
+      }
+
       onConfirm(outcome);
     },
     [confirmationDetails, config, isDiffingEnabled, ideClient, onConfirm],
   );
+
+  const handleEditSubmit = useCallback(() => {
+    const trimmed = editedCommand.trim();
+    if (trimmed.length > 0) {
+      onConfirm(ToolConfirmationOutcome.SuggestEdit, {
+        editedCommand: trimmed,
+      });
+    }
+    setIsEditingCommand(false);
+  }, [editedCommand, onConfirm]);
+
+  const handleEditCancel = useCallback(() => {
+    setIsEditingCommand(false);
+  }, []);
 
   const isTrustedFolder = config.isTrustedFolder();
 
@@ -92,7 +118,11 @@ export const ToolConfirmationMessage: React.FC<
     (key) => {
       if (!isFocused) return;
       if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
-        handleConfirm(ToolConfirmationOutcome.Cancel);
+        if (isEditingCommand) {
+          handleEditCancel();
+        } else {
+          handleConfirm(ToolConfirmationOutcome.Cancel);
+        }
       }
     },
     { isActive: isFocused },
@@ -246,9 +276,14 @@ export const ToolConfirmationMessage: React.FC<
       });
     }
     options.push({
-      label: 'No, suggest changes (esc)',
+      label: 'No, suggest changes',
+      value: ToolConfirmationOutcome.SuggestEdit,
+      key: 'No, suggest changes',
+    });
+    options.push({
+      label: 'No, cancel (esc)',
       value: ToolConfirmationOutcome.Cancel,
-      key: 'No, suggest changes (esc)',
+      key: 'No, cancel (esc)',
     });
 
     let bodyContentHeight = availableBodyContentHeight();
@@ -344,6 +379,24 @@ export const ToolConfirmationMessage: React.FC<
       value: ToolConfirmationOutcome.Cancel,
       key: 'No, suggest changes (esc)',
     });
+  }
+
+  if (isEditingCommand) {
+    return (
+      <Box flexDirection="column" padding={1} width={childWidth}>
+        <Box marginBottom={1}>
+          <Text color={theme.text.primary}>
+            Edit command (Enter to submit, Esc to cancel):
+          </Text>
+        </Box>
+        <TextInput
+          value={editedCommand}
+          onChange={setEditedCommand}
+          onSubmit={handleEditSubmit}
+          isFocused={isFocused}
+        />
+      </Box>
+    );
   }
 
   return (

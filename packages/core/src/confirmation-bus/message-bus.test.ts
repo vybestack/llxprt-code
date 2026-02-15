@@ -270,6 +270,37 @@ describe('MessageBus', () => {
         expect(result).toBe(false);
       });
 
+      it('resolves false when user selects suggest edit', async () => {
+        const config: PolicyEngineConfig = {
+          defaultDecision: PolicyDecision.ASK_USER,
+        };
+        policyEngine = new PolicyEngine(config);
+        messageBus = new MessageBus(policyEngine);
+
+        const handler = vi.fn();
+        messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, handler);
+
+        const toolCall: FunctionCall = { name: 'run_shell_command', args: {} };
+        const confirmationPromise = messageBus.requestConfirmation(
+          toolCall,
+          {},
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const request = handler.mock.calls[0][0] as ToolConfirmationRequest;
+        messageBus.respondToConfirmation(
+          request.correlationId,
+          ToolConfirmationOutcome.SuggestEdit,
+          {
+            editedCommand: 'ls -la',
+          },
+        );
+
+        const result = await confirmationPromise;
+        expect(result).toBe(false);
+      });
+
       it('only responds to matching correlation ID', async () => {
         const config: PolicyEngineConfig = {
           defaultDecision: PolicyDecision.ASK_USER,
@@ -417,6 +448,31 @@ describe('MessageBus', () => {
           outcome: ToolConfirmationOutcome.ProceedAlways,
           confirmed: true,
           requiresUserConfirmation: true,
+        }),
+      );
+    });
+
+    it('marks suggest edit responses as not confirmed', () => {
+      const handler = vi.fn();
+      messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_RESPONSE, handler);
+
+      messageBus.respondToConfirmation(
+        'test-id',
+        ToolConfirmationOutcome.SuggestEdit,
+        {
+          editedCommand: 'git status',
+        },
+      );
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+          correlationId: 'test-id',
+          outcome: ToolConfirmationOutcome.SuggestEdit,
+          confirmed: false,
+          payload: {
+            editedCommand: 'git status',
+          },
         }),
       );
     });

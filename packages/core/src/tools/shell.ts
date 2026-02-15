@@ -50,6 +50,7 @@ import { formatMemoryUsage } from '../utils/formatters.js';
 import {
   getCommandRoots,
   isCommandAllowed,
+  splitCommands,
   stripShellWrapper,
 } from '../utils/shell-utils.js';
 import { isShellInvocationAllowlisted } from '../utils/tool-utils.js';
@@ -188,9 +189,18 @@ class ShellToolInvocation extends BaseToolInvocation<
       title: 'Confirm Shell Command',
       command: this.params.command,
       rootCommand: commandsToConfirm.join(', '),
-      onConfirm: async (outcome: ToolConfirmationOutcome) => {
+      onConfirm: async (outcome: ToolConfirmationOutcome, payload) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           commandsToConfirm.forEach((command) => this.allowlist.add(command));
+          return;
+        }
+
+        if (outcome === ToolConfirmationOutcome.SuggestEdit) {
+          const editedCommand = payload?.editedCommand?.trim();
+          if (!editedCommand) {
+            return;
+          }
+          this.params.command = editedCommand;
         }
       },
     };
@@ -282,20 +292,10 @@ class ShellToolInvocation extends BaseToolInvocation<
             let command = strippedCommand.trim();
             // Instrument chained commands with a lightweight marker to indicate which subcommand is starting.
             // This helps the UI display the currently running segment without guessing.
-            // Only apply when using a POSIX shell and when a simple && chain is present.
-            //
-            // Limitations: This simple split('&&') approach does not handle:
-            // - Quoted strings containing && (e.g., echo "foo && bar" && echo baz)
-            // - Escaped delimiters or other shell operators (||, ;, |)
-            // - Complex shell syntax (if/for/while loops, functions, etc.)
-            // For such cases, instrumentation is skipped and the command runs as-is.
-            const hasComplexSyntax =
-              /["'`\\]|\|\||;|\||^if\s|^for\s|^while\s/.test(command);
-            const parts = command
-              .split('&&')
-              .map((s) => s.trim())
-              .filter((s) => s.length > 0);
-            if (parts.length > 1 && !hasComplexSyntax) {
+            // Uses the parser-backed splitCommands utility for robust handling of quotes,
+            // escaped delimiters, and other shell operators (||, ;, |).
+            const parts = splitCommands(command);
+            if (parts.length > 1) {
               command = parts
                 .map((seg) => `echo __LLXPRT_CMD__:${seg}; ${seg}`)
                 .join(' && ');

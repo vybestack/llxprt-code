@@ -5,10 +5,44 @@ import { getLogger } from '../lib/logger';
 
 const logger = getLogger('nui:approval-keyboard');
 
+function isPrintableKeyName(keyName: string): boolean {
+  return keyName.length === 1;
+}
+
+function shouldHandleEditedCommandInput(
+  keyName: string,
+  keySequence?: string,
+): boolean {
+  return (
+    isPrintableKeyName(keyName) ||
+    keySequence === ' ' ||
+    keyName === 'backspace' ||
+    keyName === 'delete'
+  );
+}
+
+function applyEditedCommandKey(
+  keyName: string,
+  keySequence: string | undefined,
+  currentValue: string,
+): string {
+  if (keyName === 'backspace' || keyName === 'delete') {
+    return currentValue.slice(0, -1);
+  }
+  if (isPrintableKeyName(keyName)) {
+    return currentValue + keyName;
+  }
+  if (keySequence === ' ') {
+    return currentValue + ' ';
+  }
+  return currentValue;
+}
+
 /** Approval options in order */
 const APPROVAL_OPTIONS: ToolApprovalOutcome[] = [
   'allow_once',
   'allow_always',
+  'suggest_edit',
   'cancel',
 ];
 
@@ -17,6 +51,12 @@ interface UseApprovalKeyboardOptions {
   isActive: boolean;
   /** Whether "allow always" option is available */
   canAllowAlways: boolean;
+  /** Whether "suggest edit" option is available */
+  canSuggestEdit: boolean;
+  /** Current edited command text for suggest-edit */
+  editedCommand?: string;
+  /** Callback when edited command changes */
+  onEditedCommandChange?: (command: string) => void;
   /** Callback when user selects an option */
   onSelect: (outcome: ToolApprovalOutcome) => void;
   /** Callback when user cancels (Esc) */
@@ -26,8 +66,8 @@ interface UseApprovalKeyboardOptions {
 interface UseApprovalKeyboardResult {
   /** Currently selected index */
   selectedIndex: number;
-  /** Total number of options */
-  optionCount: number;
+  /** Currently selected outcome */
+  selectedOutcome: ToolApprovalOutcome | undefined;
 }
 
 /**
@@ -37,12 +77,23 @@ interface UseApprovalKeyboardResult {
 export function useApprovalKeyboard(
   options: UseApprovalKeyboardOptions,
 ): UseApprovalKeyboardResult {
-  const { isActive, canAllowAlways, onSelect, onCancel } = options;
+  const {
+    isActive,
+    canAllowAlways,
+    canSuggestEdit,
+    editedCommand,
+    onEditedCommandChange,
+    onSelect,
+    onCancel,
+  } = options;
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Use refs to avoid stale closures in keyboard handler
   const isActiveRef = useRef(isActive);
   const canAllowAlwaysRef = useRef(canAllowAlways);
+  const canSuggestEditRef = useRef(canSuggestEdit);
+  const editedCommandRef = useRef(editedCommand);
+  const onEditedCommandChangeRef = useRef(onEditedCommandChange);
   const onSelectRef = useRef(onSelect);
   const onCancelRef = useRef(onCancel);
   const selectedIndexRef = useRef(selectedIndex);
@@ -55,6 +106,15 @@ export function useApprovalKeyboard(
     canAllowAlwaysRef.current = canAllowAlways;
   }, [canAllowAlways]);
   useEffect(() => {
+    canSuggestEditRef.current = canSuggestEdit;
+  }, [canSuggestEdit]);
+  useEffect(() => {
+    editedCommandRef.current = editedCommand;
+  }, [editedCommand]);
+  useEffect(() => {
+    onEditedCommandChangeRef.current = onEditedCommandChange;
+  }, [onEditedCommandChange]);
+  useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
   useEffect(() => {
@@ -64,10 +124,16 @@ export function useApprovalKeyboard(
     selectedIndexRef.current = selectedIndex;
   }, [selectedIndex]);
 
-  // Get available options based on canAllowAlways
-  const availableOptions = canAllowAlways
-    ? APPROVAL_OPTIONS
-    : APPROVAL_OPTIONS.filter((o) => o !== 'allow_always');
+  // Get available options based on confirmation capabilities
+  const availableOptions = APPROVAL_OPTIONS.filter((option) => {
+    if (option === 'allow_always') {
+      return canAllowAlways;
+    }
+    if (option === 'suggest_edit') {
+      return canSuggestEdit;
+    }
+    return true;
+  });
 
   const optionCount = availableOptions.length;
 
@@ -78,16 +144,52 @@ export function useApprovalKeyboard(
     }
   }, [isActive]);
 
+  // Clamp selection when available options change
+  useEffect(() => {
+    if (selectedIndex >= optionCount) {
+      setSelectedIndex(optionCount > 0 ? optionCount - 1 : 0);
+    }
+  }, [optionCount, selectedIndex]);
+
   // Use useKeyboard hook to intercept keys when approval is active
   useKeyboard((key) => {
     logger.debug('key received', key.name, 'isActive:', isActiveRef.current);
-    if (!isActiveRef.current) return;
+    if (!isActiveRef.current || key.eventType !== 'press') {
+      return;
+    }
 
     const currentCanAllowAlways = canAllowAlwaysRef.current;
-    const currentOptions = currentCanAllowAlways
-      ? APPROVAL_OPTIONS
-      : APPROVAL_OPTIONS.filter((o) => o !== 'allow_always');
+    const currentCanSuggestEdit = canSuggestEditRef.current;
+    const currentOptions = APPROVAL_OPTIONS.filter((option) => {
+      if (option === 'allow_always') {
+        return currentCanAllowAlways;
+      }
+      if (option === 'suggest_edit') {
+        return currentCanSuggestEdit;
+      }
+      return true;
+    });
     const currentOptionCount = currentOptions.length;
+
+    if (currentOptionCount === 0) {
+      return;
+    }
+
+    const currentSelectedOutcome = currentOptions[selectedIndexRef.current];
+    if (
+      currentSelectedOutcome === 'suggest_edit' &&
+      shouldHandleEditedCommandInput(key.name, key.sequence)
+    ) {
+      const nextValue = applyEditedCommandKey(
+        key.name,
+        key.sequence,
+        editedCommandRef.current ?? '',
+      );
+      editedCommandRef.current = nextValue;
+      onEditedCommandChangeRef.current?.(nextValue);
+      key.preventDefault();
+      return;
+    }
 
     let handled = false;
 
@@ -114,8 +216,10 @@ export function useApprovalKeyboard(
           'outcome:',
           outcome,
         );
-        onSelectRef.current(outcome);
-        handled = true;
+        if (outcome !== undefined) {
+          onSelectRef.current(outcome);
+          handled = true;
+        }
         break;
       }
       case 'escape':
@@ -124,24 +228,18 @@ export function useApprovalKeyboard(
         handled = true;
         break;
       case '1':
-        logger.debug('1 pressed, selecting allow_once');
-        onSelectRef.current('allow_once');
-        handled = true;
-        break;
       case '2':
-        if (currentCanAllowAlways) {
-          onSelectRef.current('allow_always');
-        } else {
-          onSelectRef.current('cancel');
-        }
-        handled = true;
-        break;
       case '3':
-        if (currentCanAllowAlways) {
-          onSelectRef.current('cancel');
+      case '4': {
+        const numericIndex = parseInt(key.name, 10) - 1;
+        const outcome = currentOptions[numericIndex];
+        if (outcome !== undefined) {
+          logger.debug(key.name + ' pressed, selecting', outcome);
+          onSelectRef.current(outcome);
           handled = true;
         }
         break;
+      }
     }
 
     if (handled) {
@@ -151,6 +249,6 @@ export function useApprovalKeyboard(
 
   return {
     selectedIndex,
-    optionCount,
+    selectedOutcome: availableOptions[selectedIndex],
   };
 }

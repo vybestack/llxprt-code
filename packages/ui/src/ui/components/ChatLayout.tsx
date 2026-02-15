@@ -17,7 +17,11 @@ import { SuggestionPanel } from './SuggestionPanel';
 import { renderMessage, type MessageRole } from './messages';
 import { DiffViewer } from './DiffViewer';
 
-export type ToolApprovalOutcome = 'allow_once' | 'allow_always' | 'cancel';
+export type ToolApprovalOutcome =
+  | 'allow_once'
+  | 'allow_always'
+  | 'suggest_edit'
+  | 'cancel';
 
 type Role = MessageRole;
 
@@ -60,6 +64,8 @@ interface ToolCall {
 export interface PendingApprovalState {
   readonly callId: string;
   readonly selectedIndex: number;
+  readonly selectedOutcome?: ToolApprovalOutcome;
+  readonly editedCommand?: string;
 }
 
 type ToolBlock = ToolBlockLegacy | ToolCall;
@@ -110,6 +116,7 @@ export interface ChatLayoutProps {
   readonly onApprovalSelect?: (
     callId: string,
     outcome: ToolApprovalOutcome,
+    editedCommand?: string,
   ) => void;
   /** Whether input is disabled (e.g., during approval) */
   readonly inputDisabled?: boolean;
@@ -122,6 +129,11 @@ interface ScrollbackProps {
   readonly onScroll: (event: { type: string }) => void;
   readonly theme: ThemeDefinition;
   readonly pendingApproval?: PendingApprovalState;
+  readonly onApprovalSelect?: (
+    callId: string,
+    outcome: ToolApprovalOutcome,
+    editedCommand?: string,
+  ) => void;
 }
 
 interface InputAreaProps {
@@ -206,19 +218,30 @@ const TOOL_OUTPUT_MAX_HEIGHT = 10;
 const APPROVAL_OPTIONS: { label: string; outcome: ToolApprovalOutcome }[] = [
   { label: '[1] Yes, allow once', outcome: 'allow_once' },
   { label: '[2] Yes, allow always', outcome: 'allow_always' },
-  { label: '[3] No, cancel (esc)', outcome: 'cancel' },
+  { label: '[3] No, suggest changes', outcome: 'suggest_edit' },
+  { label: '[4] No, cancel (esc)', outcome: 'cancel' },
 ];
 
 interface InlineApprovalProps {
   readonly tool: ToolCall;
   readonly theme: ThemeDefinition;
   readonly selectedIndex: number;
+  readonly selectedOutcome?: ToolApprovalOutcome;
+  readonly editedCommand?: string;
+  readonly onApprovalSelect?: (
+    callId: string,
+    outcome: ToolApprovalOutcome,
+    editedCommand?: string,
+  ) => void;
 }
 
 function renderInlineApproval({
   tool,
   theme,
   selectedIndex,
+  selectedOutcome,
+  editedCommand,
+  onApprovalSelect,
 }: InlineApprovalProps): React.ReactNode {
   const confirmation = tool.confirmation;
   if (!confirmation) {
@@ -271,9 +294,21 @@ function renderInlineApproval({
   };
 
   // Build options (skip "allow always" if not available)
-  const options = confirmation.canAllowAlways
-    ? APPROVAL_OPTIONS
-    : APPROVAL_OPTIONS.filter((o) => o.outcome !== 'allow_always');
+  const options = APPROVAL_OPTIONS.filter((option) => {
+    if (option.outcome === 'allow_always') {
+      return confirmation.canAllowAlways;
+    }
+    if (option.outcome === 'suggest_edit') {
+      return confirmation.confirmationType === 'exec';
+    }
+    return true;
+  });
+  const selectedOption =
+    selectedOutcome !== undefined
+      ? options.find((option) => option.outcome === selectedOutcome)
+      : options[selectedIndex];
+  const selectedEditedCommand =
+    editedCommand?.trim().length === 0 ? undefined : editedCommand?.trim();
 
   return (
     <box flexDirection="column" style={{ gap: 0, marginTop: 1 }}>
@@ -282,21 +317,48 @@ function renderInlineApproval({
       </text>
       {renderPreview()}
       <box flexDirection="column" style={{ gap: 0, marginTop: 1 }}>
-        {options.map((opt, idx) => (
-          <text
-            key={opt.outcome}
-            fg={
-              idx === selectedIndex
-                ? theme.colors.selection.fg
-                : theme.colors.text.primary
-            }
-            bg={idx === selectedIndex ? theme.colors.selection.bg : undefined}
-          >
-            {idx === selectedIndex ? '► ' : '  '}
-            {opt.label}
-          </text>
-        ))}
+        {options.map((opt, idx) => {
+          const isSelected =
+            selectedOption !== undefined
+              ? selectedOption.outcome === opt.outcome
+              : idx === selectedIndex;
+          return (
+            <text
+              key={opt.outcome}
+              fg={
+                isSelected
+                  ? theme.colors.selection.fg
+                  : theme.colors.text.primary
+              }
+              bg={isSelected ? theme.colors.selection.bg : undefined}
+              onMouse={() => {
+                onApprovalSelect?.(tool.callId, opt.outcome, editedCommand);
+              }}
+            >
+              {isSelected ? '► ' : '  '}
+              {opt.label}
+            </text>
+          );
+        })}
       </box>
+      {confirmation.confirmationType === 'exec' &&
+        selectedOption?.outcome === 'suggest_edit' && (
+          <box flexDirection="column" style={{ gap: 0, marginTop: 1 }}>
+            <text fg={theme.colors.text.muted}>Edited command:</text>
+            <text
+              fg={theme.colors.accent.warning ?? theme.colors.text.primary}
+              bg={theme.colors.panel.bg}
+            >
+              {selectedEditedCommand ??
+                (coreDetails?.type === 'exec'
+                  ? coreDetails.command
+                  : confirmation.preview)}
+            </text>
+            <text fg={theme.colors.text.muted}>
+              Type to edit, Backspace to delete, Enter to apply
+            </text>
+          </box>
+        )}
       <text fg={theme.colors.text.muted} style={{ marginTop: 1 }}>
         ↑/↓ to navigate, Enter to select, Esc to cancel
       </text>
@@ -311,6 +373,11 @@ export function renderToolCall(
   tool: ToolCall,
   theme: ThemeDefinition,
   pendingApproval?: PendingApprovalState,
+  onApprovalSelect?: (
+    callId: string,
+    outcome: ToolApprovalOutcome,
+    editedCommand?: string,
+  ) => void,
 ): React.ReactNode {
   const { symbol, color } = getStatusIndicator(tool.status, theme);
   const paramLines = formatParams(tool.params);
@@ -379,6 +446,9 @@ export function renderToolCall(
           tool,
           theme,
           selectedIndex: pendingApproval.selectedIndex,
+          selectedOutcome: pendingApproval.selectedOutcome,
+          editedCommand: pendingApproval.editedCommand,
+          onApprovalSelect,
         })}
 
       {/* Output (shown after execution) - in scrollbox if large */}
@@ -561,7 +631,12 @@ function ScrollbackView(props: ScrollbackProps): React.ReactNode {
             return renderChatMessage(entry, props.theme);
           }
           if (entry.kind === 'toolcall') {
-            return renderToolCall(entry, props.theme, props.pendingApproval);
+            return renderToolCall(
+              entry,
+              props.theme,
+              props.pendingApproval,
+              props.onApprovalSelect,
+            );
           }
           // Legacy tool block
           return renderToolBlock(entry, props.theme);
@@ -667,6 +742,7 @@ export function ChatLayout(props: ChatLayoutProps): React.ReactNode {
         onScroll={props.onScroll}
         theme={props.theme}
         pendingApproval={props.pendingApproval}
+        onApprovalSelect={props.onApprovalSelect}
       />
       <InputArea
         textareaRef={props.textareaRef}

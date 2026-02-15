@@ -37,6 +37,7 @@ export function getDecisionFromOutcome(
     case ToolConfirmationOutcome.ProceedAlwaysTool:
       return ToolCallDecision.AUTO_ACCEPT;
     case ToolConfirmationOutcome.ModifyWithEditor:
+    case ToolConfirmationOutcome.SuggestEdit:
       return ToolCallDecision.MODIFY;
     case ToolConfirmationOutcome.Cancel:
     default:

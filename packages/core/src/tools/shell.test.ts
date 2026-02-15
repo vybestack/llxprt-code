@@ -700,10 +700,11 @@ describe('ShellTool', () => {
       expect(confirmation).not.toBe(false);
       expect(confirmation && confirmation.type).toBe('exec');
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (confirmation as any).onConfirm(
-        ToolConfirmationOutcome.ProceedAlways,
-      );
+      if (!confirmation || confirmation.type !== 'exec') {
+        throw new Error('Expected exec confirmation details');
+      }
+
+      await confirmation.onConfirm(ToolConfirmationOutcome.ProceedAlways);
 
       // Should now be allowlisted
       const secondInvocation = shellTool.build({ command: 'npm test' });
@@ -711,6 +712,40 @@ describe('ShellTool', () => {
         new AbortController().signal,
       );
       expect(secondConfirmation).toBe(false);
+    });
+
+    it('should replace command when SuggestEdit includes edited command', async () => {
+      const invocation = shellTool.build({ command: 'npm instal' });
+      const confirmation = await invocation.shouldConfirmExecute(
+        new AbortController().signal,
+      );
+
+      expect(confirmation).not.toBe(false);
+      if (!confirmation || confirmation.type !== 'exec') {
+        throw new Error('Expected exec confirmation details');
+      }
+
+      await confirmation.onConfirm(ToolConfirmationOutcome.SuggestEdit, {
+        editedCommand: 'npm install',
+      });
+
+      expect(invocation.params.command).toBe('npm install');
+    });
+
+    it('should not replace command when SuggestEdit payload is missing edited command', async () => {
+      const invocation = shellTool.build({ command: 'npm instal' });
+      const confirmation = await invocation.shouldConfirmExecute(
+        new AbortController().signal,
+      );
+
+      expect(confirmation).not.toBe(false);
+      if (!confirmation || confirmation.type !== 'exec') {
+        throw new Error('Expected exec confirmation details');
+      }
+
+      await confirmation.onConfirm(ToolConfirmationOutcome.SuggestEdit, {});
+
+      expect(invocation.params.command).toBe('npm instal');
     });
 
     it('should throw an error if validation fails', () => {
