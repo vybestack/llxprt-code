@@ -1098,5 +1098,70 @@ included directory memory
       // Ensure outer memory is NOT loaded
       expect(result.files.find((f) => f.path === outerMemory)).toBeUndefined();
     });
+
+    it('should skip JIT memory when jitContextEnabled is false', async () => {
+      const rootDir = await createEmptyDir(path.join(testRootDir, 'jit_root'));
+      const subDir = await createEmptyDir(path.join(rootDir, 'subdir'));
+      const targetFile = path.join(subDir, 'target.txt');
+
+      await createTestFile(
+        path.join(subDir, DEFAULT_CONTEXT_FILENAME),
+        'Subdir JIT content',
+      );
+
+      const result = await loadJitSubdirectoryMemory(
+        targetFile,
+        [rootDir],
+        new Set(),
+        false, // debugMode
+        false, // jitContextEnabled
+      );
+
+      expect(result.files).toHaveLength(0);
+    });
+
+    it('should load JIT memory when jitContextEnabled is true', async () => {
+      const rootDir = await createEmptyDir(path.join(testRootDir, 'jit_root'));
+      const subDir = await createEmptyDir(path.join(rootDir, 'subdir'));
+      const targetFile = path.join(subDir, 'target.txt');
+
+      const subDirMemory = await createTestFile(
+        path.join(subDir, DEFAULT_CONTEXT_FILENAME),
+        'Subdir JIT content',
+      );
+
+      const result = await loadJitSubdirectoryMemory(
+        targetFile,
+        [rootDir],
+        new Set(),
+        false, // debugMode
+        true, // jitContextEnabled
+      );
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].path).toBe(subDirMemory);
+      expect(result.files[0].content).toBe('Subdir JIT content');
+    });
+
+    it('should load JIT memory by default when jitContextEnabled is not specified', async () => {
+      const rootDir = await createEmptyDir(path.join(testRootDir, 'jit_root'));
+      const subDir = await createEmptyDir(path.join(rootDir, 'subdir'));
+      const targetFile = path.join(subDir, 'target.txt');
+
+      const subDirMemory = await createTestFile(
+        path.join(subDir, DEFAULT_CONTEXT_FILENAME),
+        'Subdir JIT content',
+      );
+
+      const result = await loadJitSubdirectoryMemory(
+        targetFile,
+        [rootDir],
+        new Set(),
+      );
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].path).toBe(subDirMemory);
+      expect(result.files[0].content).toBe('Subdir JIT content');
+    });
   });
 });
