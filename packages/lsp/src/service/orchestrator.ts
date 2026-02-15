@@ -8,9 +8,14 @@
  * @pseudocode orchestrator.md lines 101-120
  */
 
+import { readFile } from 'node:fs/promises';
 import { extname, normalize, resolve } from 'node:path';
 
-import type { Diagnostic } from './diagnostics.js';
+import {
+  normalizeLspDiagnostic,
+  type Diagnostic,
+  type RawLspDiagnostic,
+} from './diagnostics.js';
 import { LspClient, type DocumentSymbol, type Location } from './lsp-client.js';
 import type { LspServerConfig } from '../types.js';
 
@@ -39,6 +44,7 @@ interface OrchestratorServerConfig extends LspServerConfig {
 interface OrchestratorConfig {
   servers?: OrchestratorServerConfig[];
   diagnosticsTimeoutMs?: number;
+  firstTouchTimeoutMs?: number;
   navigationTimeoutMs?: number;
 }
 
@@ -76,6 +82,15 @@ export class Orchestrator {
       return [];
     }
 
+    let fileContent = text;
+    if (!fileContent) {
+      try {
+        fileContent = await readFile(normalizedFile, 'utf-8');
+      } catch {
+        return [];
+      }
+    }
+
     const servers = this.getServersForFile(normalizedFile);
     if (servers.length === 0) {
       return [];
@@ -98,8 +113,13 @@ export class Orchestrator {
 
         const diagnostics = await this.enqueueClientOp(key, async () => {
           try {
-            await client.touchFile(normalizedFile, text);
-            const waitMs = this.config.diagnosticsTimeoutMs ?? DEFAULT_WAIT_MS;
+            await client.touchFile(normalizedFile, fileContent);
+            const isFirstTouch = !this.firstTouchServers.has(key);
+            const baseWaitMs =
+              this.config.diagnosticsTimeoutMs ?? DEFAULT_WAIT_MS;
+            const waitMs = isFirstTouch
+              ? Math.max(baseWaitMs, this.config.firstTouchTimeoutMs ?? 10_000)
+              : baseWaitMs;
             const output = await client.waitForDiagnostics(
               normalizedFile,
               waitMs,
@@ -112,7 +132,13 @@ export class Orchestrator {
               this.startupPromises.delete(key);
               return [];
             }
-            return output;
+            return output.map((raw) =>
+              normalizeLspDiagnostic(
+                raw as unknown as RawLspDiagnostic,
+                normalizedFile,
+                this.workspaceRootAbs,
+              ),
+            );
           } catch {
             this.brokenServers.add(key);
             this.clients.delete(key);

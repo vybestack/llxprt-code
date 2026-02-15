@@ -1,10 +1,11 @@
 import { EventEmitter } from 'node:events';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { basename } from 'node:path';
+import { basename, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type { Diagnostic } from './diagnostics.js';
+import { getLanguageId } from './language-map.js';
 import type { LspServerConfig } from '../types.js';
 
 export interface LspServerRegistryEntry {
@@ -179,7 +180,23 @@ export class LspClient {
     const initializeResult = await this.sendRequest('initialize', {
       processId: process.pid,
       rootUri,
-      capabilities: {},
+      capabilities: {
+        textDocument: {
+          publishDiagnostics: {
+            relatedInformation: true,
+          },
+          definition: { dynamicRegistration: false },
+          references: { dynamicRegistration: false },
+          hover: {
+            dynamicRegistration: false,
+            contentFormat: ['plaintext'],
+          },
+          documentSymbol: { dynamicRegistration: false },
+        },
+        workspace: {
+          symbol: { dynamicRegistration: false },
+        },
+      },
       workspaceFolders: [
         {
           uri: rootUri,
@@ -215,6 +232,8 @@ export class LspClient {
 
     const normalizedPath = fromFileUri(filePath);
     const uri = toFileUri(normalizedPath);
+    const ext = extname(normalizedPath);
+    const languageId = getLanguageId(ext) ?? this.config.config.id;
     const previousVersion = this.documentVersions.get(normalizedPath);
 
     if (previousVersion === undefined) {
@@ -222,7 +241,7 @@ export class LspClient {
       this.sendNotification('textDocument/didOpen', {
         textDocument: {
           uri,
-          languageId: this.config.config.id,
+          languageId,
           version: 1,
           text: content,
         },
