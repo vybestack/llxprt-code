@@ -64,6 +64,7 @@ export class LoggingContentGenerator implements ContentGenerator {
     prompt_id: string,
     usageMetadata?: GenerateContentResponseUsageMetadata,
     responseText?: string,
+    finishReasons?: string[],
   ): void {
     logApiResponse(
       this.config,
@@ -73,7 +74,19 @@ export class LoggingContentGenerator implements ContentGenerator {
         prompt_id,
         usageMetadata,
         responseText,
+        undefined,
+        finishReasons,
       ),
+    );
+  }
+
+  private static extractFinishReasons(
+    response: GenerateContentResponse,
+  ): string[] {
+    return (
+      response.candidates
+        ?.map((c) => c.finishReason as string | undefined)
+        .filter((r): r is string => typeof r === 'string') ?? []
     );
   }
 
@@ -116,6 +129,7 @@ export class LoggingContentGenerator implements ContentGenerator {
         userPromptId,
         response.usageMetadata,
         JSON.stringify(response),
+        LoggingContentGenerator.extractFinishReasons(response),
       );
       return response;
     } catch (error) {
@@ -183,6 +197,7 @@ export class LoggingContentGenerator implements ContentGenerator {
         userPromptId,
         lastUsageMetadata,
         JSON.stringify(lastResponse),
+        LoggingContentGenerator.extractFinishReasons(lastResponse),
       );
     }
   }

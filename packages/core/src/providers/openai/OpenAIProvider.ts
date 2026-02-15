@@ -1362,6 +1362,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       model,
       tools: toolNamesArg,
       includeSubagentDelegation,
+      interactionMode: options.config?.isInteractive?.()
+        ? 'interactive'
+        : 'non-interactive',
     });
 
     // Add system prompt as the first message in the array
@@ -2918,6 +2921,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       model,
       tools: toolNamesArg,
       includeSubagentDelegation,
+      interactionMode: options.config?.isInteractive?.()
+        ? 'interactive'
+        : 'non-interactive',
     });
 
     // Add system prompt as the first message in the array

@@ -1788,6 +1788,10 @@ ${block.code}
       () => options.config?.getSubagentManager?.(),
     );
 
+    const interactionMode = options.config?.isInteractive?.()
+      ? 'interactive'
+      : 'non-interactive';
+
     // For OAuth mode, inject core system prompt as the first human message
     if (isOAuth) {
       const corePrompt = await getCoreSystemPromptAsync({
@@ -1796,6 +1800,7 @@ ${block.code}
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
+        interactionMode,
       });
       if (corePrompt) {
         if (wantCaching) {
@@ -1832,6 +1837,7 @@ ${block.code}
           model: currentModel,
           tools: toolNamesForPrompt,
           includeSubagentDelegation,
+          interactionMode,
         })
       : undefined;
 

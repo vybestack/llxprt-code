@@ -540,6 +540,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
       model: resolvedModel,
       tools: toolNamesForPrompt,
       includeSubagentDelegation,
+      interactionMode: options.config?.isInteractive?.()
+        ? 'interactive'
+        : 'non-interactive',
     });
 
     // Responses API input types: messages, function_call, function_call_output, reasoning
