@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'vitest';
 import EventEmitter from 'events';
 import { Readable } from 'stream';
 import { type ChildProcess } from 'child_process';
@@ -1368,6 +1376,245 @@ describe('ShellExecutionService child_process fallback', () => {
         (call) => call[0] === 'error',
       );
       expect(errorCalls.length).toBe(1);
+    });
+  });
+});
+
+describe('Shell Environment Sanitization', () => {
+  describe('sanitizeEnvironment', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      // Reset process.env before each test
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it('should strip sensitive environment variables (API keys, tokens, secrets)', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        HOME: '/home/user',
+        API_KEY: 'secret-key-12345',
+        AWS_SECRET_ACCESS_KEY: 'aws-secret',
+        GITHUB_TOKEN: 'ghp_token123',
+        SECRET_PASSWORD: 'password123',
+        DATABASE_PASSWORD: 'db-pass',
+        PRIVATE_KEY: 'private-key-data',
+        SAFE_VAR: 'safe-value',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // Safe vars should be preserved
+      expect(sanitized.PATH).toBe('/usr/bin');
+      expect(sanitized.HOME).toBe('/home/user');
+      expect(sanitized.SAFE_VAR).toBe('safe-value');
+
+      // Sensitive vars should be stripped
+      expect(sanitized.API_KEY).toBeUndefined();
+      expect(sanitized.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+      expect(sanitized.GITHUB_TOKEN).toBeUndefined();
+      expect(sanitized.SECRET_PASSWORD).toBeUndefined();
+      expect(sanitized.DATABASE_PASSWORD).toBeUndefined();
+      expect(sanitized.PRIVATE_KEY).toBeUndefined();
+    });
+
+    it('should preserve LLXPRT_* and LLXPRT_CODE_* environment variables', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        LLXPRT_DEBUG: '1',
+        LLXPRT_CODE: '1',
+        LLXPRT_TEST_MODE: 'true',
+        LLXPRT_CONFIG_PATH: '/path/to/config',
+        API_KEY: 'secret',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // LLXPRT_* vars should be preserved
+      expect(sanitized.LLXPRT_DEBUG).toBe('1');
+      expect(sanitized.LLXPRT_CODE).toBe('1');
+      expect(sanitized.LLXPRT_TEST_MODE).toBe('true');
+      expect(sanitized.LLXPRT_CONFIG_PATH).toBe('/path/to/config');
+
+      // API_KEY should be stripped
+      expect(sanitized.API_KEY).toBeUndefined();
+    });
+
+    it('should preserve standard safe environment variables', () => {
+      const testEnv = {
+        PATH: '/usr/bin:/bin',
+        HOME: '/home/user',
+        USER: 'testuser',
+        SHELL: '/bin/bash',
+        TERM: 'xterm-256color',
+        TMPDIR: '/tmp',
+        LANG: 'en_US.UTF-8',
+        LC_ALL: 'en_US.UTF-8',
+        LC_CTYPE: 'en_US.UTF-8',
+        EDITOR: 'vim',
+        PAGER: 'less',
+        NODE_ENV: 'test',
+        NPM_CONFIG_PREFIX: '/usr/local',
+        API_KEY: 'should-be-stripped',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // Safe vars should be preserved
+      expect(sanitized.PATH).toBe('/usr/bin:/bin');
+      expect(sanitized.HOME).toBe('/home/user');
+      expect(sanitized.USER).toBe('testuser');
+      expect(sanitized.SHELL).toBe('/bin/bash');
+      expect(sanitized.TERM).toBe('xterm-256color');
+      expect(sanitized.TMPDIR).toBe('/tmp');
+      expect(sanitized.LANG).toBe('en_US.UTF-8');
+      expect(sanitized.LC_ALL).toBe('en_US.UTF-8');
+      expect(sanitized.LC_CTYPE).toBe('en_US.UTF-8');
+      expect(sanitized.EDITOR).toBe('vim');
+      expect(sanitized.PAGER).toBe('less');
+      expect(sanitized.NODE_ENV).toBe('test');
+      expect(sanitized.NPM_CONFIG_PREFIX).toBe('/usr/local');
+
+      // API_KEY should be stripped
+      expect(sanitized.API_KEY).toBeUndefined();
+    });
+
+    it('should preserve CI and GitHub Actions environment variables', () => {
+      const testEnv = {
+        CI: 'true',
+        GITHUB_ACTIONS: 'true',
+        GITHUB_WORKSPACE: '/workspace',
+        GITHUB_SHA: 'abc123',
+        RUNNER_OS: 'Linux',
+        RUNNER_TEMP: '/tmp/runner',
+        SECRET_TOKEN: 'should-be-stripped',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // CI/GitHub vars should be preserved
+      expect(sanitized.CI).toBe('true');
+      expect(sanitized.GITHUB_ACTIONS).toBe('true');
+      expect(sanitized.GITHUB_WORKSPACE).toBe('/workspace');
+      expect(sanitized.GITHUB_SHA).toBe('abc123');
+      expect(sanitized.RUNNER_OS).toBe('Linux');
+      expect(sanitized.RUNNER_TEMP).toBe('/tmp/runner');
+
+      // SECRET_TOKEN should be stripped
+      expect(sanitized.SECRET_TOKEN).toBeUndefined();
+    });
+
+    it('should preserve user-specified allowlist variables', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        CUSTOM_VAR: 'custom-value',
+        SPECIAL_CONFIG: 'special',
+        API_KEY: 'secret',
+      };
+
+      const allowlist = ['CUSTOM_VAR', 'SPECIAL_CONFIG'];
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+        allowlist,
+      );
+
+      // Allowlisted vars should be preserved
+      expect(sanitized.CUSTOM_VAR).toBe('custom-value');
+      expect(sanitized.SPECIAL_CONFIG).toBe('special');
+
+      // API_KEY should still be stripped
+      expect(sanitized.API_KEY).toBeUndefined();
+    });
+
+    it('should not sanitize when isSandboxOrCI is false (local dev mode)', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        API_KEY: 'secret-key',
+        AWS_SECRET_ACCESS_KEY: 'aws-secret',
+        GITHUB_TOKEN: 'token',
+        CUSTOM_VAR: 'value',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        false, // Not in CI/sandbox mode
+      );
+
+      // All vars should be preserved in local dev mode
+      expect(sanitized.PATH).toBe('/usr/bin');
+      expect(sanitized.API_KEY).toBe('secret-key');
+      expect(sanitized.AWS_SECRET_ACCESS_KEY).toBe('aws-secret');
+      expect(sanitized.GITHUB_TOKEN).toBe('token');
+      expect(sanitized.CUSTOM_VAR).toBe('value');
+    });
+
+    it('should preserve GIT_* and SSH_AUTH_SOCK for git operations', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        GIT_AUTHOR_NAME: 'Test User',
+        GIT_AUTHOR_EMAIL: 'test@example.com',
+        GIT_COMMITTER_NAME: 'Test User',
+        GIT_COMMITTER_EMAIL: 'test@example.com',
+        SSH_AUTH_SOCK: '/tmp/ssh-agent.sock',
+        API_KEY: 'secret',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // Git and SSH vars should be preserved
+      expect(sanitized.GIT_AUTHOR_NAME).toBe('Test User');
+      expect(sanitized.GIT_AUTHOR_EMAIL).toBe('test@example.com');
+      expect(sanitized.GIT_COMMITTER_NAME).toBe('Test User');
+      expect(sanitized.GIT_COMMITTER_EMAIL).toBe('test@example.com');
+      expect(sanitized.SSH_AUTH_SOCK).toBe('/tmp/ssh-agent.sock');
+
+      // API_KEY should be stripped
+      expect(sanitized.API_KEY).toBeUndefined();
+    });
+
+    it('should preserve XDG_* variables for freedesktop standards', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        XDG_CONFIG_HOME: '/home/user/.config',
+        XDG_DATA_HOME: '/home/user/.local/share',
+        XDG_CACHE_HOME: '/home/user/.cache',
+        XDG_RUNTIME_DIR: '/run/user/1000',
+        API_KEY: 'secret',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // XDG_* vars should be preserved
+      expect(sanitized.XDG_CONFIG_HOME).toBe('/home/user/.config');
+      expect(sanitized.XDG_DATA_HOME).toBe('/home/user/.local/share');
+      expect(sanitized.XDG_CACHE_HOME).toBe('/home/user/.cache');
+      expect(sanitized.XDG_RUNTIME_DIR).toBe('/run/user/1000');
+
+      // API_KEY should be stripped
+      expect(sanitized.API_KEY).toBeUndefined();
     });
   });
 });
