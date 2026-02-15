@@ -81,8 +81,35 @@ export function patchStdio(): () => void {
  * Creates proxies for process.stdout and process.stderr that use the real write methods
  * (writeToStdout and writeToStderr) bypassing any monkey patching.
  * This is used by Ink to render to the real output.
+ *
+ * Also adds error event handlers to prevent EPIPE crashes when output is piped
+ * to a process that exits early.
  */
 export function createInkStdio() {
+  // Add error handlers to prevent EPIPE crashes
+  // These handlers are idempotent - adding multiple times is safe
+  const handleStdoutError = (err: NodeJS.ErrnoException) => {
+    // Ignore EPIPE errors which happen when the output is piped to a process that exits early
+    if (err.code !== 'EPIPE') {
+      console.warn(`stdout error: ${err.message}`);
+    }
+  };
+
+  const handleStderrError = (err: NodeJS.ErrnoException) => {
+    // Ignore EPIPE errors which happen when the output is piped to a process that exits early
+    if (err.code !== 'EPIPE') {
+      console.warn(`stderr error: ${err.message}`);
+    }
+  };
+
+  // Remove any existing handlers for these functions to avoid duplicates
+  process.stdout.removeListener('error', handleStdoutError);
+  process.stderr.removeListener('error', handleStderrError);
+
+  // Add the error handlers
+  process.stdout.on('error', handleStdoutError);
+  process.stderr.on('error', handleStderrError);
+
   const inkStdout = new Proxy(process.stdout, {
     get(target, prop, receiver) {
       if (prop === 'write') {
