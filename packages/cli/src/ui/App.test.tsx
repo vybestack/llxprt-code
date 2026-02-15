@@ -1734,57 +1734,6 @@ describe('App UI', () => {
     });
   });
 
-  describe('debug keystroke logging', () => {
-    let consoleLogSpy: ReturnType<typeof vi.spyOn>;
-
-    beforeEach(() => {
-      consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    });
-
-    afterEach(() => {
-      consoleLogSpy.mockRestore();
-    });
-
-    it('should pass debugKeystrokeLogging setting to KeypressProvider', () => {
-      const mockSettingsWithDebug = createMockSettings({
-        workspace: {
-          theme: 'Default',
-          debugKeystrokeLogging: true,
-        },
-      });
-
-      const { lastFrame, unmount } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettingsWithDebug}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      const output = lastFrame();
-
-      expect(output).toBeDefined();
-      expect(mockSettingsWithDebug.merged.debugKeystrokeLogging).toBe(true);
-    });
-
-    it('should use default false value when debugKeystrokeLogging is not set', () => {
-      const { lastFrame, unmount } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      const output = lastFrame();
-
-      expect(output).toBeDefined();
-      expect(mockSettings.merged.debugKeystrokeLogging).toBe(false);
-    });
-  });
-
   describe('Ctrl+C behavior', () => {
     it('should call cancel but only clear the prompt when a tool is executing', async () => {
       const mockCancel = vi.fn();

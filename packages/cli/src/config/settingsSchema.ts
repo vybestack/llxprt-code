@@ -1574,15 +1574,7 @@ export const SETTINGS_SCHEMA = {
       'Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., "prd" to match "production"). When disabled, only exact prefix matches are shown.',
     showInDialog: true,
   },
-  debugKeystrokeLogging: {
-    type: 'boolean',
-    label: 'Debug Keystroke Logging',
-    category: 'General',
-    requiresRestart: false,
-    default: false,
-    description: 'Enable debug logging of keystrokes to the console.',
-    showInDialog: true,
-  },
+
   customWittyPhrases: {
     type: 'array',
     label: 'Custom Witty Phrases',

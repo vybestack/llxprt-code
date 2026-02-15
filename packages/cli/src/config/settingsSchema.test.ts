@@ -46,7 +46,6 @@ describe('SettingsSchema', () => {
         'hasSeenIdeIntegrationNudge',
         'folderTrustFeature',
         'useRipgrep',
-        'debugKeystrokeLogging',
         'toolCallProcessingMode',
         'enableFuzzyFiltering',
         'shouldUseNodePtyShell',
@@ -274,18 +273,6 @@ describe('SettingsSchema', () => {
       ]);
       expect(SETTINGS_SCHEMA.defaultDisabledTools.showInDialog).toBe(false);
       expect(SETTINGS_SCHEMA.defaultDisabledTools.requiresRestart).toBe(true);
-    });
-
-    it('should have debugKeystrokeLogging setting in schema', () => {
-      expect(SETTINGS_SCHEMA.debugKeystrokeLogging).toBeDefined();
-      expect(SETTINGS_SCHEMA.debugKeystrokeLogging.type).toBe('boolean');
-      expect(SETTINGS_SCHEMA.debugKeystrokeLogging.category).toBe('General');
-      expect(SETTINGS_SCHEMA.debugKeystrokeLogging.default).toBe(false);
-      expect(SETTINGS_SCHEMA.debugKeystrokeLogging.requiresRestart).toBe(false);
-      expect(SETTINGS_SCHEMA.debugKeystrokeLogging.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.debugKeystrokeLogging.description).toBe(
-        'Enable debug logging of keystrokes to the console.',
-      );
     });
 
     it('has JSON schema definitions for every referenced ref', () => {

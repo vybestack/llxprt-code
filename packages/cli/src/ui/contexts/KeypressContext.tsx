@@ -617,11 +617,9 @@ export function useKeypressContext() {
 export function KeypressProvider({
   children,
   config,
-  debugKeystrokeLogging,
 }: {
   children: React.ReactNode;
   config?: Config;
-  debugKeystrokeLogging?: boolean;
 }) {
   const { stdin, setRawMode } = useStdin();
 
@@ -686,17 +684,7 @@ export function KeypressProvider({
     let processor = nonKeyboardEventFilter(handleDragDropAndBroadcast);
     processor = bufferBackslashEnter(processor);
     processor = bufferPaste(processor);
-    let dataListener = createDataListener(processor);
-
-    if (debugKeystrokeLogging) {
-      const old = dataListener;
-      dataListener = (data: string) => {
-        if (data.length > 0) {
-          debugLogger.log(`[DEBUG] Raw StdIn: ${JSON.stringify(data)}`);
-        }
-        old(data);
-      };
-    }
+    const dataListener = createDataListener(processor);
 
     stdin.on('data', dataListener);
     return () => {
@@ -718,7 +706,7 @@ export function KeypressProvider({
         dragBuffer = '';
       }
     };
-  }, [stdin, setRawMode, config, debugKeystrokeLogging, broadcast]);
+  }, [stdin, setRawMode, config, broadcast]);
 
   const contextValue = useMemo(
     () => ({ subscribe, unsubscribe }),
