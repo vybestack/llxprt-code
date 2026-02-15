@@ -108,10 +108,29 @@ Running notes during execution. Append after each batch.
 
 ---
 
+## Post-Audit Remediation (B7 + B12)
+
+Deepthinker review flagged two issues across all 14 batches:
+
+**B7 — auto-execute stale-buffer + missing classifications** (41e990c56):
+- `handleAutocomplete` now returns the completed text so `InputPrompt` submits the fresh value instead of reading stale `buffer.text`.
+- Added `autoExecute: true` to auth, ide, mcp, memory, and model commands that were missing the classification.
+- Rewrote autoexecute test to use static imports (Vite SSR doesn't support variable dynamic imports).
+
+**B12 — JIT memory wiring** (51a0dea53):
+- Added `Config.getJitMemoryForPath()` which calls `loadJitSubdirectoryMemory` with trusted roots and already-loaded paths.
+- `client.ts` now calls `getJitMemoryForPath()` during system prompt assembly and appends the result to user memory.
+- `loadJitSubdirectoryMemory` now has a production caller (was previously dead code).
+
+Both fixes passed deepthinker re-review and full verification (test, typecheck, lint, format, build, haiku).
+
+---
+
 ## Summary
 
 - 14 batches executed: 3 PICK batches (13 upstream commits), 11 REIMPLEMENT batches.
-- 29 total commits on gmerge/0.20.2 branch.
+- 31 total commits on gmerge/0.20.2 branch (29 original + 2 remediation fixes).
 - Multiple subagent timeouts handled gracefully (B5, B10, B12) — partial work completed manually.
 - One latent test failure introduced in B5, caught and fixed in B12.
-- All full verify cycles passed.
+- Post-audit remediation: B7 stale-buffer + missing classifications, B12 dead-code wiring.
+- All full verify cycles passed. Branch is PR-ready.

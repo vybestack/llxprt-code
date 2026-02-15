@@ -13,8 +13,9 @@
 | 9 | REIMPLEMENT | bc365f1e + 844d3a4d | DONE | f9600bae9 | MCP server instructions |
 | 10 | REIMPLEMENT | 69188c85 | DONE | fd1226801 | Stats quota display; full verify |
 | 11 | REIMPLEMENT | 806cd112 | DONE | e9f314cf9 | A2A modelInfo propagation |
-| 12 | REIMPLEMENT | 752a5214 | DONE | 7966fb970 | JIT context manager; full verify; fixed prompt-service test |
+| 12 | REIMPLEMENT | 752a5214 | DONE | 7966fb970 + 51a0dea53 | JIT context manager; full verify; fixed prompt-service test; wired JIT into client |
 | 13 | REIMPLEMENT | f9997f92 | DONE | 081822780 | Stdio hardening (EPIPE resilience) |
 | 14 | REIMPLEMENT | 8872ee0a | DONE | 01280e89d | Shell env sanitization; full verify |
 
 **Total**: 14/14 batches complete. 29 commits on gmerge/0.20.2 branch.
+merge/0.20.2 branch.

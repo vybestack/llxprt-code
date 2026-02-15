@@ -20,7 +20,7 @@ Post-implementation reconciliation. Updated as batches complete.
 | 1187c7fd | REIMPLEMENTED | 055fe608c | Batch 4 — gemini-3 prompts |
 | 4a82b0d8 | REIMPLEMENTED | 1c1efb004 | Batch 5 — interactive mode |
 | 0d29385e | REIMPLEMENTED | 58460743c | Batch 6 — inactivity timeout |
-| f918af82 | REIMPLEMENTED | 68755ca4d | Batch 7 — auto-execute slash |
+| f918af82 | REIMPLEMENTED | 68755ca4d + 41e990c56 | Batch 7 — auto-execute slash + stale-buffer fix + missing classifications |
 | 558c8ece | REIMPLEMENTED | 0c876702d | Batch 8 — hook tool integration |
 | 5bed9706 | REIMPLEMENTED | 0c876702d | Batch 8 — hook LLM integration |
 | bc365f1e | REIMPLEMENTED | f9600bae9 | Batch 9 — MCP instructions |
