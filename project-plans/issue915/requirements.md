@@ -26,7 +26,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-002 (State-Driven)
 **Pattern**: State-Driven  
-**While** a prior model turn is in-flight and not terminal, **the system SHALL** keep tool execution and generation bound to the currently selected provider for that in-flight turn.
+**While** a prior model turn is in-flight and not terminal, **the system SHALL** keep tool execution and generation bound to the currently selected provider for that in-flight turn. The system **SHALL NOT** apply a provider/model switch to an in-flight turn; any requested switch SHALL be deferred until the current turn reaches terminal state (see overview §6, technical-overview §2.1).
 
 ### REQ-915-003 (Event-Driven)
 **Pattern**: Event-Driven  
@@ -35,10 +35,6 @@ This document defines atomic, testable functional and technical requirements for
 ### REQ-915-004 (Event-Driven)
 **Pattern**: Event-Driven  
 **When** provider-family selection changes due to manual switch, round-robin, or failover, **the system SHALL** produce a protocol-valid outbound transcript for the newly selected provider that includes all prior conversation state relevant to the next request.
-
-### REQ-915-050 (Unwanted Behavior)
-**Pattern**: Unwanted Behavior  
-**If** a provider/model switch is requested while a model turn is in-flight and not terminal, **then the system SHALL NOT** apply the switch to the in-flight turn; the switch SHALL be deferred until the current turn reaches terminal state. Violating this invariant would invalidate tool call/result binding for the in-flight turn (see overview §6, technical-overview §2.1).
 
 ### REQ-915-005 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
@@ -107,7 +103,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-016 (Ubiquitous)
 **Pattern**: Ubiquitous  
-**Requirement**: The system SHALL apply injective ID mapping within a transcript render, such that one canonical call identity maps to exactly one provider ID and distinct canonical call identities map to distinct provider IDs.
+**Requirement**: The system SHALL apply injective ID mapping within a transcript render for non-degenerate canonical call identities, such that one canonical call identity maps to exactly one provider ID and distinct non-degenerate canonical call identities map to distinct provider IDs. Behavior for degenerate/empty canonical call identities is governed by REQ-915-022.
 
 ### REQ-915-017 (State-Driven)
 **Pattern**: State-Driven  
@@ -206,14 +202,14 @@ This document defines atomic, testable functional and technical requirements for
 **Pattern**: Ubiquitous  
 **Requirement**: The system SHALL separate responsibilities such that transcript rendering enforces interaction validity and provider adapters enforce provider syntax/shape projection.
 
-### REQ-915-037 (Ubiquitous)
+### REQ-915-037 (Ubiquitous) — Non-Blocking Architectural Guidance
 **Pattern**: Ubiquitous  
 **Requirement**: The system SHALL centralize interaction-validity repair responsibilities in the transcript renderer. Provider adapters SHOULD limit themselves to provider syntax/shape projection without duplicating validity repair logic.  
-*Note: The Anthropic adapter currently performs its own validity repair as a known deviation (see technical-overview §4.2). Consolidation of this deviation into the renderer is a target-state goal, not a hard acceptance criterion for #915. REQ-915-037 defines the architectural direction; existing adapter-level repair is acceptable until consolidation is completed.*
+*Classification: Non-blocking architectural guidance. The Anthropic adapter currently performs its own validity repair as a known deviation (see technical-overview §4.2). Consolidation of this deviation into the renderer is a target-state goal, not a hard acceptance criterion for #915. Existing adapter-level repair is acceptable until consolidation is completed. This requirement is excluded from the #915 acceptance test gate.*
 
-### REQ-915-038 (Ubiquitous) — Non-Regression
-**Pattern**: Ubiquitous  
-**Requirement**: The system SHALL perform final transcript serialization safely for provider send even when tool call parameters contain complex object structures.  
+### REQ-915-038 (Unwanted Behavior) — Non-Regression
+**Pattern**: Unwanted Behavior  
+**If** tool call parameters contain circular references or complex object structures at the provider send boundary, **then the system SHALL** serialize the outbound transcript without throwing, by applying a cycle-safe deep-clone transform before provider serialization.  
 *Classification: Non-regression constraint derived from existing behavior (technical-overview §1.2, deepClone pass). Not a new behavioral requirement introduced by #915; included to guard against regression during refactoring.*
 
 ### REQ-915-046 (Ubiquitous)
@@ -230,7 +226,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-039 (Event-Driven)
 **Pattern**: Event-Driven  
-**When** debug/error diagnostics are emitted for transcript rendering and provider boundary handling, **the system SHALL** include, at minimum, canonical call IDs, emitted call IDs, emitted result IDs, dedupe decision outcome and rationale, synthetic completion reason code, and selected provider format.
+**When** the transcript renderer performs synthetic completion injection, deduplication, reordering, or speaker-attribution correction, **the system SHALL** emit a diagnostic event at debug level that includes, at minimum, canonical call IDs, emitted call IDs, emitted result IDs, the specific repair action taken, and selected provider format.
 
 ### REQ-915-040 (Ubiquitous)
 **Pattern**: Ubiquitous  
@@ -303,7 +299,7 @@ This document defines atomic, testable functional and technical requirements for
 | REQ-915-035 | Derived |  | §9.4 |  | §4.3 |
 | REQ-915-036 | Direct |  | §4.1, §4.2 | flow layering |  |
 | REQ-915-037 | Derived |  | §4.2 (known deviation — target-state) |  |  |
-| REQ-915-038 | Non-regression |  | §1.2 (deepClone pass) |  |  |
+| REQ-915-038 | Non-regression |  | §1.2 (deepClone pass) | serialization in today flow |  |
 | REQ-915-039 | Derived |  | §10 |  |  |
 | REQ-915-040 | Derived |  | §10 |  |  |
 | REQ-915-041 | Direct | §10(1) | §11, §12 | provider switch section |  |
@@ -314,8 +310,7 @@ This document defines atomic, testable functional and technical requirements for
 | REQ-915-046 | Direct |  | §5.1 | ledger lifetime / reconstruction |  |
 | REQ-915-047 | Direct | §3(8), §4 | §1.2 |  |  |
 | REQ-915-048 | Direct |  | §5.2 |  |  |
-| REQ-915-049 | Direct |  | §3.2, §6.4 |  |  |
-| REQ-915-050 | Direct | §6 | §2.1 |  |  |
+| REQ-915-049 | Derived | | §3.2, §6.4 (scoped from source + REQ-022 interplay) |  |  |
 
 ---
 
