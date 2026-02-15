@@ -135,6 +135,7 @@ import {
   enableBracketedPaste,
 } from './utils/bracketedPaste.js';
 import { enableSupportedProtocol } from './utils/kittyProtocolDetector.js';
+import { restoreTerminalProtocolsSync } from './utils/terminalProtocolCleanup.js';
 import {
   ENABLE_FOCUS_TRACKING,
   DISABLE_FOCUS_TRACKING,
@@ -1918,6 +1919,9 @@ export const AppContainer = (props: AppContainerProps) => {
     if (quittingMessages) {
       // Allow UI to render the quit message briefly before exiting
       const timer = setTimeout(() => {
+        // Flush protocol restore before process.exit() so script/pty wrappers
+        // don't drop the final disable sequences.
+        restoreTerminalProtocolsSync();
         // Note: We don't call runExitCleanup() here because it includes
         // instance.waitUntilExit() which would deadlock. The cleanup is
         // triggered by process.exit() which fires SIGTERM/exit handlers.

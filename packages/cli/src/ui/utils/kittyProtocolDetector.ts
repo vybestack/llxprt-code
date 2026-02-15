@@ -7,12 +7,20 @@
 import * as fs from 'node:fs';
 
 let detectionComplete = false;
+let detectionPromise: Promise<void> | null = null;
+let exitCleanupRegistered = false;
 
 let kittySupported = false;
 let sgrMouseSupported = false;
 
 let kittyEnabled = false;
-let sgrMouseEnabled = false;
+
+function registerExitCleanup(): void {
+  if (!exitCleanupRegistered) {
+    process.on('exit', disableDetectedTerminalProtocolsSync);
+    exitCleanupRegistered = true;
+  }
+}
 
 /**
  * Detects Kitty keyboard protocol support.
@@ -24,12 +32,19 @@ export async function detectAndEnableKittyProtocol(): Promise<void> {
     return;
   }
 
-  return new Promise((resolve) => {
+  if (detectionPromise) {
+    return detectionPromise;
+  }
+
+  detectionPromise = new Promise((resolve) => {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       detectionComplete = true;
+      detectionPromise = null;
       resolve();
       return;
     }
+
+    registerExitCleanup();
 
     const originalRawMode = process.stdin.isRaw;
     if (!originalRawMode) {
@@ -39,6 +54,7 @@ export async function detectAndEnableKittyProtocol(): Promise<void> {
       } catch (_err) {
         // If setRawMode fails, protocol detection cannot proceed
         detectionComplete = true;
+        detectionPromise = null;
         resolve();
         return;
       }
@@ -46,9 +62,15 @@ export async function detectAndEnableKittyProtocol(): Promise<void> {
 
     let responseBuffer = '';
     let progressiveEnhancementReceived = false;
+    let finished = false;
     let timeoutId: NodeJS.Timeout | undefined;
 
     const finish = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);
         timeoutId = undefined;
@@ -65,10 +87,10 @@ export async function detectAndEnableKittyProtocol(): Promise<void> {
 
       if (kittySupported || sgrMouseSupported) {
         enableSupportedProtocol();
-        process.on('exit', disableAllProtocols);
       }
 
       detectionComplete = true;
+      detectionPromise = null;
       resolve();
     };
 
@@ -115,25 +137,35 @@ export async function detectAndEnableKittyProtocol(): Promise<void> {
     // fast macbook so we need a somewhat longer threshold than would be ideal.
     timeoutId = setTimeout(finish, 200);
   });
+
+  return detectionPromise;
 }
 
 export function isKittyProtocolEnabled(): boolean {
   return kittyEnabled;
 }
 
-function disableAllProtocols() {
+export function disableDetectedTerminalProtocolsSync(): void {
   try {
-    if (kittyEnabled) {
-      fs.writeSync(process.stdout.fd, '\x1b[<u');
-      kittyEnabled = false;
+    if (!process.stdout.isTTY || typeof process.stdout.fd !== 'number') {
+      return;
     }
-    if (sgrMouseEnabled) {
-      fs.writeSync(process.stdout.fd, '\x1b[?1006l');
-      sgrMouseEnabled = false;
-    }
+
+    // Kitty progressive enhancement flags are managed per screen buffer.
+    // We may have enabled in main screen but be cleaning up while still in
+    // alternate screen, so disable in both contexts defensively.
+    fs.writeSync(process.stdout.fd, '\x1b[<u');
+    fs.writeSync(process.stdout.fd, '\x1b[?1049l');
+    fs.writeSync(process.stdout.fd, '\x1b[<u');
+    // Explicitly reset all progressive enhancement flags (mode 1) to cover
+    // terminals that implement flag-setting but not stack pop semantics.
+    fs.writeSync(process.stdout.fd, '\x1b[=0;1u');
+    fs.writeSync(process.stdout.fd, '\x1b[?1006l');
   } catch (_err) {
     // Ignore errors during disable (terminal may already be closed)
   }
+
+  kittyEnabled = false;
 }
 
 /**
@@ -148,7 +180,6 @@ export function enableSupportedProtocol(): void {
     }
     if (sgrMouseSupported) {
       fs.writeSync(process.stdout.fd, '\x1b[?1006h');
-      sgrMouseEnabled = true;
     }
   } catch (_err) {
     // Ignore errors during enable (terminal may not support these modes)

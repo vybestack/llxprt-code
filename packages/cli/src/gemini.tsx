@@ -109,6 +109,7 @@ import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
 import { drainStdinBuffer } from './ui/utils/terminalContract.js';
+import { restoreTerminalProtocolsSync } from './ui/utils/terminalProtocolCleanup.js';
 import {
   DISABLE_BRACKETED_PASTE,
   DISABLE_FOCUS_TRACKING,
@@ -322,6 +323,9 @@ export async function startInteractiveUI(
       }
     });
   }
+
+  process.on('exit', restoreTerminalProtocolsSync);
+  registerSyncCleanup(restoreTerminalProtocolsSync);
 
   const instance = render(
     <React.StrictMode>
