@@ -216,10 +216,8 @@ export function useApprovalKeyboard(
           'outcome:',
           outcome,
         );
-        if (outcome !== undefined) {
-          onSelectRef.current(outcome);
-          handled = true;
-        }
+        onSelectRef.current(outcome);
+        handled = true;
         break;
       }
       case 'escape':
@@ -232,8 +230,8 @@ export function useApprovalKeyboard(
       case '3':
       case '4': {
         const numericIndex = parseInt(key.name, 10) - 1;
-        const outcome = currentOptions[numericIndex];
-        if (outcome) {
+        if (numericIndex >= 0 && numericIndex < currentOptionCount) {
+          const outcome = currentOptions[numericIndex];
           logger.debug(key.name + ' pressed, selecting', outcome);
           onSelectRef.current(outcome);
           handled = true;
