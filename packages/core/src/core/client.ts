@@ -630,8 +630,21 @@ export class GeminiClient {
     enabledToolNames: string[],
     envParts?: Array<{ text?: string }>,
   ): Promise<string> {
-    const userMemory = this.config.getUserMemory();
+    let userMemory = this.config.getUserMemory();
     const coreMemory = this.config.getCoreMemory();
+
+    // Load JIT subdirectory context for the current working directory
+    const jitMemory = await this.config.getJitMemoryForPath(
+      this.config.getWorkingDir(),
+    );
+    if (jitMemory) {
+      userMemory = userMemory
+        ? `${userMemory}
+
+${jitMemory}`
+        : jitMemory;
+    }
+
     const mcpInstructions = this.config
       .getMcpClientManager()
       ?.getMcpInstructions();

@@ -383,6 +383,7 @@ describe('Gemini Client (client.ts)', () => {
       getUserAgent: vi.fn().mockReturnValue('test-agent'),
       getUserMemory: vi.fn().mockReturnValue(''),
       getCoreMemory: vi.fn().mockReturnValue(''),
+      getJitMemoryForPath: vi.fn().mockResolvedValue(''),
 
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getProxy: vi.fn().mockReturnValue(undefined),
@@ -687,6 +688,130 @@ describe('Gemini Client (client.ts)', () => {
       expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           coreMemory: 'Always respond in JSON',
+        }),
+      );
+    });
+
+    it('appends JIT subdirectory memory to userMemory', async () => {
+      const setSystemInstruction = vi.fn();
+      const estimateTokensForText = vi.fn().mockResolvedValue(100);
+      const setBaseTokenOffset = vi.fn();
+      const getHistoryService = vi.fn().mockReturnValue({
+        estimateTokensForText,
+        setBaseTokenOffset,
+      });
+
+      const mockChat = {
+        setSystemInstruction,
+        getHistoryService,
+      };
+
+      client['chat'] = mockChat as unknown as GeminiChat;
+      client['contentGenerator'] = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+
+      const config = client['config'] as unknown as {
+        getUserMemory: () => string;
+        getCoreMemory: () => string;
+        getJitMemoryForPath: (path: string) => Promise<string>;
+        getWorkingDir: () => string;
+      };
+      vi.spyOn(config, 'getUserMemory').mockReturnValue('base memory');
+      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
+      vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue(
+        `--- JIT Context from: sub/LLXPRT.md ---
+sub memory
+--- End of JIT Context from: sub/LLXPRT.md ---`,
+      );
+      vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
+
+      vi.spyOn(
+        client as unknown as {
+          getEnabledToolNamesForPrompt: () => string[];
+        },
+        'getEnabledToolNamesForPrompt',
+      ).mockReturnValue([]);
+
+      vi.spyOn(
+        client as unknown as {
+          shouldIncludeSubagentDelegation: (
+            tools: string[],
+          ) => Promise<boolean>;
+        },
+        'shouldIncludeSubagentDelegation',
+      ).mockResolvedValue(false);
+
+      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt with jit');
+
+      await client.updateSystemInstruction();
+
+      expect(config.getJitMemoryForPath).toHaveBeenCalledWith('/test/dir');
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userMemory: expect.stringContaining('base memory'),
+        }),
+      );
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userMemory: expect.stringContaining('sub memory'),
+        }),
+      );
+    });
+
+    it('does not modify userMemory when JIT returns empty', async () => {
+      const setSystemInstruction = vi.fn();
+      const estimateTokensForText = vi.fn().mockResolvedValue(100);
+      const setBaseTokenOffset = vi.fn();
+      const getHistoryService = vi.fn().mockReturnValue({
+        estimateTokensForText,
+        setBaseTokenOffset,
+      });
+
+      const mockChat = {
+        setSystemInstruction,
+        getHistoryService,
+      };
+
+      client['chat'] = mockChat as unknown as GeminiChat;
+      client['contentGenerator'] = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+
+      const config = client['config'] as unknown as {
+        getUserMemory: () => string;
+        getCoreMemory: () => string;
+        getJitMemoryForPath: (path: string) => Promise<string>;
+        getWorkingDir: () => string;
+      };
+      vi.spyOn(config, 'getUserMemory').mockReturnValue('base memory');
+      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
+      vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue('');
+      vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
+
+      vi.spyOn(
+        client as unknown as {
+          getEnabledToolNamesForPrompt: () => string[];
+        },
+        'getEnabledToolNamesForPrompt',
+      ).mockReturnValue([]);
+
+      vi.spyOn(
+        client as unknown as {
+          shouldIncludeSubagentDelegation: (
+            tools: string[],
+          ) => Promise<boolean>;
+        },
+        'shouldIncludeSubagentDelegation',
+      ).mockResolvedValue(false);
+
+      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt no jit');
+
+      await client.updateSystemInstruction();
+
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userMemory: 'base memory',
         }),
       );
     });
@@ -2618,6 +2743,7 @@ describe('Gemini Client (client.ts)', () => {
         getWorkingDir: vi.fn().mockReturnValue('/test'),
 
         getUserMemory: vi.fn().mockReturnValue(''),
+        getJitMemoryForPath: vi.fn().mockResolvedValue(''),
         getLlxprtMdFileCount: vi.fn().mockReturnValue(0),
         getFileService: vi.fn().mockReturnValue(null),
         getCheckpointingEnabled: vi.fn().mockReturnValue(false),

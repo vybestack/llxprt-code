@@ -153,6 +153,7 @@ export function createRuntimeConfigStub(
     getEphemeralSetting: () => undefined,
     setEphemeralSetting: noop,
     getUserMemory: () => '',
+    getJitMemoryForPath: () => Promise.resolve(''),
     setUserMemory: noop,
     getModel: () => 'test-model',
     setModel: noop,

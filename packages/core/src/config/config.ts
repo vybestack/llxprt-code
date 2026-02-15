@@ -63,7 +63,10 @@ import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.j
 import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
 // @plan PLAN-20260130-ASYNCTASK.P14
 import { CheckAsyncTasksTool } from '../tools/check-async-tasks.js';
-import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
+import {
+  loadServerHierarchicalMemory,
+  loadJitSubdirectoryMemory,
+} from '../utils/memoryDiscovery.js';
 import { OutputFormat } from '../utils/output-format.js';
 import {
   // TELEMETRY: Re-enabled for local file logging only
@@ -2002,6 +2005,43 @@ export class Config {
       return settingsValue as boolean;
     }
     return this.jitContextEnabled;
+  }
+
+  /**
+   * Lazily loads JIT subdirectory memory for a given path.
+   * Returns formatted memory content from LLXPRT.md files found between
+   * the target path and the trusted root, excluding already-loaded paths.
+   */
+  async getJitMemoryForPath(targetPath: string): Promise<string> {
+    if (!this.getJitContextEnabled()) {
+      return '';
+    }
+
+    const trustedRoots = [this.getTargetDir()];
+    const alreadyLoadedPaths = new Set(this.getLlxprtMdFilePaths());
+
+    const result = await loadJitSubdirectoryMemory(
+      targetPath,
+      trustedRoots,
+      alreadyLoadedPaths,
+      this.getDebugMode(),
+      true,
+    );
+
+    if (result.files.length === 0) {
+      return '';
+    }
+
+    return result.files
+      .map((f) => {
+        const trimmed = f.content.trim();
+        if (!trimmed) return null;
+        return `--- JIT Context from: ${f.path} ---
+${trimmed}
+--- End of JIT Context from: ${f.path} ---`;
+      })
+      .filter((block): block is string => block !== null)
+      .join('\n\n');
   }
 
   async getGitService(): Promise<GitService> {
