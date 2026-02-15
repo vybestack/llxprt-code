@@ -384,8 +384,15 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         .option('continue', {
           alias: 'C',
           type: 'string',
+          skipValidation: true,
           description:
             'Resume a previous session. Bare --continue resumes the most recent. --continue <id> resumes a specific session.',
+          coerce: (value: string): string => {
+            if (value === '') {
+              return value;
+            }
+            return value;
+          },
         })
         .option('list-sessions', {
           type: 'boolean',

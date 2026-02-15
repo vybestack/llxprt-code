@@ -542,6 +542,32 @@ describe('parseArguments', () => {
     }
   });
 
+  it('should normalize bare --continue to true using loadCliConfig continue sentinel semantics', async () => {
+    process.argv = ['node', 'script.js', '--continue'];
+    const argv = await parseArguments({} as Settings);
+
+    const continueSession =
+      argv.continue === '' || argv.continue === true
+        ? true
+        : argv.continue || false;
+
+    expect(continueSession).toBe(true);
+    expect(argv.continue).not.toBe('true');
+  });
+
+  it('should preserve explicit --continue session id string', async () => {
+    process.argv = ['node', 'script.js', '--continue', 'session-123'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.continue).toBe('session-123');
+  });
+
+  it('should not consume following flag as --continue session id', async () => {
+    process.argv = ['node', 'script.js', '--continue', '--debug'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.continue === '' || argv.continue === true).toBe(true);
+    expect(argv.debug).toBe(true);
+  });
+
   it('should support comma-separated values for --allowed-tools', async () => {
     process.argv = [
       'node',

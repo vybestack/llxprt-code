@@ -28,7 +28,7 @@
  * the Phase 09 stub — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
+import { describe, expect, beforeEach, afterEach, vi } from 'vitest';
 import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
@@ -491,6 +491,31 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       expect(stale).toBe(true);
     });
 
+    it('checkStale returns false when process.kill throws EPERM', async () => {
+      const sessionId = 'test-session-eperm-stale';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      await writeFakeLock(lockPath, 12345, sessionId);
+
+      const killSpy = vi
+        .spyOn(process, 'kill')
+        .mockImplementation(
+          (_pid: number, _signal?: number | NodeJS.Signals) => {
+            const error = new Error(
+              'operation not permitted',
+            ) as NodeJS.ErrnoException;
+            error.code = 'EPERM';
+            throw error;
+          },
+        );
+
+      try {
+        const stale = await SessionLockManager.checkStale(lockPath);
+        expect(stale).toBe(false);
+      } finally {
+        killSpy.mockRestore();
+      }
+    });
+
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-005
@@ -710,6 +735,31 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       const staleOld =
         await SessionLockManager.checkStaleWithPidReuse(lockPath);
       expect(staleOld).toBe(true);
+    });
+
+    it('checkStaleWithPidReuse returns false when process.kill throws EPERM', async () => {
+      const sessionId = 'test-session-eperm-pid-reuse';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      await writeFakeLock(lockPath, 12345, sessionId);
+
+      const killSpy = vi
+        .spyOn(process, 'kill')
+        .mockImplementation(
+          (_pid: number, _signal?: number | NodeJS.Signals) => {
+            const error = new Error(
+              'operation not permitted',
+            ) as NodeJS.ErrnoException;
+            error.code = 'EPERM';
+            throw error;
+          },
+        );
+
+      try {
+        const stale = await SessionLockManager.checkStaleWithPidReuse(lockPath);
+        expect(stale).toBe(false);
+      } finally {
+        killSpy.mockRestore();
+      }
     });
   });
 

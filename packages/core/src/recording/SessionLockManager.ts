@@ -125,7 +125,11 @@ export class SessionLockManager {
       try {
         process.kill(lockPid, 0);
         return false;
-      } catch {
+      } catch (error: unknown) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'EPERM') {
+          return false;
+        }
         return true;
       }
     } catch {
@@ -209,8 +213,13 @@ export class SessionLockManager {
       try {
         process.kill(lockPid, 0);
         pidAlive = true;
-      } catch {
-        return true;
+      } catch (error: unknown) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'EPERM') {
+          pidAlive = true;
+        } else {
+          return true;
+        }
       }
 
       if (pidAlive && lockData.timestamp) {
