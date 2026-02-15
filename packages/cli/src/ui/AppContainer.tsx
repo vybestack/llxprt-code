@@ -19,7 +19,6 @@ import {
   ToolCallStatus,
   type HistoryItemWithoutId,
   type HistoryItem,
-  type IndividualToolCallDisplay,
 } from './types.js';
 import { type ModelsDialogData } from './commands/types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
@@ -68,6 +67,7 @@ import {
   getErrorMessage,
   type Config,
   getAllLlxprtMdFilenames,
+  type IContent,
   isEditorAvailable,
   EditorType,
   type IdeContext,
@@ -76,15 +76,11 @@ import {
   getSettingsService,
   DebugLogger,
   uiTelemetryService,
-  SessionPersistenceService,
-  type PersistedSession,
-  type IContent,
-  type ToolCallBlock,
-  type ToolResponseBlock,
   coreEvents,
   CoreEvent,
   type UserFeedbackPayload,
   ShellExecutionService,
+  type RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { useLogger } from './hooks/useLogger.js';
@@ -141,6 +137,7 @@ import {
   SHOW_CURSOR,
 } from './utils/terminalSequences.js';
 import { calculateMainAreaWidth } from './utils/ui-sizing.js';
+import { iContentToHistoryItems } from './utils/iContentToHistoryItems.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
@@ -151,10 +148,12 @@ interface AppContainerProps {
   config: Config;
   settings: LoadedSettings;
   startupWarnings?: string[];
+  resumedHistory?: IContent[];
   version: string;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
-  restoredSession?: PersistedSession;
+  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
+  recordingIntegration?: RecordingIntegration;
 }
 
 function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
@@ -168,41 +167,16 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
   });
 }
 
-// Valid history item types for session restore validation (must be module-level for stable reference)
-const VALID_HISTORY_TYPES = new Set([
-  'user',
-  'gemini',
-  'gemini_content',
-  'oauth_url',
-  'info',
-  'error',
-  'warning',
-  'about',
-  'help',
-  'stats',
-  'model_stats',
-  'tool_stats',
-  'cache_stats',
-  'lb_stats',
-  'quit',
-  'tool_group',
-  'user_shell',
-  'compression',
-  'extensions_list',
-  'tools_list',
-  'mcp_status',
-  'chat_list',
-]);
-
 export const AppContainer = (props: AppContainerProps) => {
   debug.log('AppContainer architecture active (v2)');
   const {
     config,
     settings,
     startupWarnings = [],
+    resumedHistory,
     appState,
     appDispatch,
-    restoredSession,
+    recordingIntegration,
   } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
@@ -227,6 +201,24 @@ export const AppContainer = (props: AppContainerProps) => {
   );
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
+  const hasSeededResumedHistory = useRef(false);
+  useEffect(() => {
+    if (hasSeededResumedHistory.current) {
+      return;
+    }
+
+    if (!resumedHistory || resumedHistory.length === 0) {
+      hasSeededResumedHistory.current = true;
+      return;
+    }
+
+    const uiItems = iContentToHistoryItems(resumedHistory);
+    if (uiItems.length > 0) {
+      loadHistory(uiItems);
+    }
+
+    hasSeededResumedHistory.current = true;
+  }, [loadHistory, resumedHistory]);
   useMemoryMonitor({ addItem });
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
@@ -313,6 +305,12 @@ export const AppContainer = (props: AppContainerProps) => {
         content: payload.message,
         count: 1,
       });
+      if (payload.severity === 'error' || payload.severity === 'warning') {
+        recordingIntegration?.recordSessionEvent(
+          payload.severity,
+          payload.message,
+        );
+      }
     };
 
     coreEvents.on(CoreEvent.UserFeedback, handleUserFeedback);
@@ -321,7 +319,7 @@ export const AppContainer = (props: AppContainerProps) => {
     return () => {
       coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
     };
-  }, [handleNewMessage]);
+  }, [handleNewMessage, recordingIntegration]);
 
   useEffect(() => {
     const consolePatcher = new ConsolePatcher({
@@ -417,342 +415,43 @@ export const AppContainer = (props: AppContainerProps) => {
     };
   }, [config, updateHistoryTokenCount, tokenLogger]);
 
-  // Convert IContent[] to UI HistoryItem[] for display
-  const convertToUIHistory = useCallback(
-    (history: IContent[]): HistoryItem[] => {
-      const items: HistoryItem[] = [];
-      let id = 1;
-
-      // First pass: collect all tool responses by callId for lookup
-      const toolResponseMap = new Map<string, ToolResponseBlock>();
-      for (const content of history) {
-        if (content.speaker === 'tool') {
-          const responseBlocks = content.blocks.filter(
-            (b): b is ToolResponseBlock => b.type === 'tool_response',
-          );
-          for (const resp of responseBlocks) {
-            toolResponseMap.set(resp.callId, resp);
-          }
-        }
-      }
-
-      for (const content of history) {
-        // Extract text blocks
-        const textBlocks = content.blocks.filter(
-          (b): b is { type: 'text'; text: string } => b.type === 'text',
-        );
-        const text = textBlocks.map((b) => b.text).join('\n');
-
-        // Extract tool call blocks for AI
-        const toolCallBlocks = content.blocks.filter(
-          (b): b is ToolCallBlock => b.type === 'tool_call',
-        );
-
-        if (content.speaker === 'human' && text) {
-          items.push({
-            id: id++,
-            type: 'user',
-            text,
-          } as HistoryItem);
-        } else if (content.speaker === 'ai') {
-          // Add text response if present
-          if (text) {
-            items.push({
-              id: id++,
-              type: 'gemini',
-              text,
-              model: content.metadata?.model,
-            } as HistoryItem);
-          }
-          // Add tool calls as proper tool_group items
-          if (toolCallBlocks.length > 0) {
-            const tools: IndividualToolCallDisplay[] = toolCallBlocks.map(
-              (tc) => {
-                const response = toolResponseMap.get(tc.id);
-                // Format result display from tool response
-                let resultDisplay: string | undefined;
-                if (response) {
-                  if (response.error) {
-                    resultDisplay = `Error: ${response.error}`;
-                  } else if (response.result !== undefined) {
-                    // Convert result to string for display
-                    const result = response.result as Record<string, unknown>;
-                    if (typeof result === 'string') {
-                      resultDisplay = result;
-                    } else if (result && typeof result === 'object') {
-                      // Handle common result formats
-                      if (
-                        'output' in result &&
-                        typeof result.output === 'string'
-                      ) {
-                        resultDisplay = result.output;
-                      } else {
-                        resultDisplay = JSON.stringify(result, null, 2);
-                      }
-                    }
-                  }
-                }
-                return {
-                  callId: tc.id,
-                  name: tc.name,
-                  description: tc.description || '',
-                  resultDisplay,
-                  status: response
-                    ? ToolCallStatus.Success
-                    : ToolCallStatus.Pending,
-                  confirmationDetails: undefined,
-                };
-              },
-            );
-            items.push({
-              id: id++,
-              type: 'tool_group',
-              agentId: 'primary',
-              tools,
-            } as HistoryItem);
-          }
-        }
-        // Skip tool speaker entries - already processed via map
-      }
-
-      return items;
-    },
-    [],
-  );
-
-  // Session restoration for --continue functionality
-  // Split into two parts: UI restoration (immediate) and core history (when available)
-  const sessionRestoredRef = useRef(false);
-  const coreHistoryRestoredRef = useRef(false);
-
   /**
-   * Validates that an item matches the HistoryItem schema.
-   * Uses duck typing for flexibility with minor schema changes.
+   * @plan:PLAN-20260211-SESSIONRECORDING.P26
+   * @pseudocode recording-integration.md lines 38-59
+   *
+   * Subscribe RecordingIntegration to HistoryService events when the
+   * HistoryService becomes available. Re-subscribes when the HistoryService
+   * instance changes (e.g. after compression creates a new instance, or
+   * after provider switch triggers GeminiClient.startChat()).
    */
-  const isValidHistoryItem = useCallback(
-    (item: unknown): item is HistoryItem => {
-      if (typeof item !== 'object' || item === null) {
-        return false;
-      }
-
-      const obj = item as Record<string, unknown>;
-
-      // Required fields
-      if (typeof obj.id !== 'number') return false;
-      if (typeof obj.type !== 'string') return false;
-
-      // Check if type is valid (allow unknown types from newer versions)
-      if (!VALID_HISTORY_TYPES.has(obj.type)) {
-        debug.warn(`Unknown history item type: ${obj.type}`);
-        // Allow unknown types to pass - might be from newer version
-      }
-
-      // Type-specific validation
-      switch (obj.type) {
-        case 'user':
-        case 'gemini':
-        case 'gemini_content':
-        case 'info':
-        case 'warning':
-        case 'error':
-        case 'user_shell':
-          // Text types should have text (but might be empty)
-          return typeof obj.text === 'string' || obj.text === undefined;
-
-        case 'tool_group':
-          // Tool groups must have tools array
-          if (!Array.isArray(obj.tools)) return false;
-          return obj.tools.every(
-            (tool) =>
-              typeof tool === 'object' &&
-              tool !== null &&
-              typeof (tool as Record<string, unknown>).callId === 'string' &&
-              typeof (tool as Record<string, unknown>).name === 'string',
-          );
-
-        default:
-          // For other types, just having id and type is enough
-          return true;
-      }
-    },
-    [],
-  );
-
-  /**
-   * Validates all items in a history array.
-   * Returns valid items, filters invalid ones.
-   */
-  const validateUIHistory = useCallback(
-    (items: unknown[]): { valid: HistoryItem[]; invalidCount: number } => {
-      const valid: HistoryItem[] = [];
-      let invalidCount = 0;
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (isValidHistoryItem(item)) {
-          valid.push(item);
-        } else {
-          debug.warn(`Invalid history item at index ${i}:`, item);
-          invalidCount++;
-        }
-      }
-
-      return { valid, invalidCount };
-    },
-    [isValidHistoryItem],
-  );
-
-  // Part 1: Restore UI history immediately on mount
+  const recordingSubscribedServiceRef = useRef<unknown>(null);
   useEffect(() => {
-    if (!restoredSession || sessionRestoredRef.current) {
-      return;
-    }
-    sessionRestoredRef.current = true;
+    if (!recordingIntegration) return;
 
-    try {
-      // Use saved UI history if available (preserves exact display), otherwise convert from core history
-      let uiHistoryItems: HistoryItem[];
-      let usedFallback = false;
-      let invalidCount = 0;
+    let intervalCleared = false;
+    const checkInterval = setInterval(() => {
+      if (intervalCleared) return;
 
-      if (
-        restoredSession.uiHistory &&
-        Array.isArray(restoredSession.uiHistory)
-      ) {
-        // Validate UI history items before loading
-        const validation = validateUIHistory(restoredSession.uiHistory);
-        invalidCount = validation.invalidCount;
-
-        if (invalidCount > 0) {
-          debug.warn(`${invalidCount} invalid UI history items found`);
-
-          if (validation.valid.length === 0) {
-            // All items invalid - fall back to conversion
-            debug.warn('All UI history invalid, falling back to conversion');
-            uiHistoryItems = convertToUIHistory(restoredSession.history);
-            usedFallback = true;
-          } else {
-            // Some items valid - use them
-            uiHistoryItems = validation.valid;
-          }
-        } else {
-          uiHistoryItems = validation.valid;
-        }
-
-        if (!usedFallback) {
-          debug.log(`Using saved UI history (${uiHistoryItems.length} items)`);
-        }
-      } else {
-        uiHistoryItems = convertToUIHistory(restoredSession.history);
-        usedFallback = true;
-        debug.log(
-          `Converted core history to UI (${uiHistoryItems.length} items)`,
-        );
-      }
-      loadHistory(uiHistoryItems);
-
-      debug.log(
-        `Restored ${restoredSession.history.length} messages (${uiHistoryItems.length} UI items) for display`,
-      );
-
-      // Add info message about restoration
-      const sessionTime = new Date(
-        restoredSession.updatedAt || restoredSession.createdAt,
-      ).toLocaleString();
-      const source = usedFallback
-        ? 'converted from core'
-        : 'restored from UI cache';
-      addItem(
-        {
-          type: 'info',
-          text: `Session restored (${uiHistoryItems.length} messages ${source} from ${sessionTime})`,
-        },
-        Date.now(),
-      );
-
-      // Warn if some items were corrupted
-      if (invalidCount > 0 && !usedFallback) {
-        addItem(
-          {
-            type: 'warning',
-            text: `${invalidCount} corrupted message(s) could not be displayed.`,
-          },
-          Date.now(),
-        );
-      }
-    } catch (err) {
-      debug.error('Failed to restore UI history:', err);
-      addItem(
-        {
-          type: 'warning',
-          text: 'Failed to restore previous session display.',
-        },
-        Date.now(),
-      );
-    }
-  }, [
-    restoredSession,
-    convertToUIHistory,
-    loadHistory,
-    addItem,
-    validateUIHistory,
-  ]);
-
-  // Part 2: Restore core history using the new restoreHistory API (for AI context)
-  // P0 Fix: Use synchronous API that ensures chat is initialized before returning
-  useEffect(() => {
-    if (!restoredSession || coreHistoryRestoredRef.current) {
-      return;
-    }
-
-    coreHistoryRestoredRef.current = true;
-
-    const geminiClient = config.getGeminiClient();
-    if (!geminiClient) {
-      debug.error('GeminiClient not available for session restore');
-      addItem(
-        {
-          type: 'error',
-          text: 'Could not restore AI context - client not initialized.',
-        },
-        Date.now(),
-      );
-      return;
-    }
-
-    // Use the new restoreHistory API that ensures chat/content generator are ready
-    geminiClient
-      .restoreHistory(restoredSession.history)
-      .then(() => {
-        debug.log(
-          `Restored ${restoredSession.history.length} items to core history for AI context`,
-        );
-      })
-      .catch((err: unknown) => {
-        debug.error('Failed to restore core history:', err);
-        const errorMessage = err instanceof Error ? err.message : String(err);
-
-        // Surface specific error details to help diagnose the issue
-        let userMessage =
-          'Previous session display restored, but AI context could not be loaded. The AI will not remember the previous conversation.';
+      const geminiClient = config.getGeminiClient();
+      if (geminiClient?.hasChatInitialized?.()) {
+        const historyService = geminiClient.getHistoryService?.();
         if (
-          errorMessage.includes('Content generator') ||
-          errorMessage.includes('auth')
+          historyService &&
+          historyService !== recordingSubscribedServiceRef.current
         ) {
-          userMessage += ' (Authentication may be required)';
-        } else if (errorMessage.includes('Chat initialization')) {
-          userMessage += ' (Chat service unavailable)';
+          recordingSubscribedServiceRef.current = historyService;
+          recordingIntegration.onHistoryServiceReplaced(historyService);
+          debug.log('RecordingIntegration subscribed to HistoryService');
         }
+      }
+    }, 100);
 
-        addItem(
-          {
-            type: 'warning',
-            text: userMessage,
-          },
-          Date.now(),
-        );
-      });
-  }, [restoredSession, config, addItem]);
+    return () => {
+      clearInterval(checkInterval);
+      intervalCleared = true;
+      recordingSubscribedServiceRef.current = null;
+    };
+  }, [config, recordingIntegration]);
 
   const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
@@ -1159,6 +858,7 @@ export const AppContainer = (props: AppContainerProps) => {
       ),
     appState,
     config,
+    recordingIntegration,
   });
 
   // Watch for model changes from config
@@ -1513,6 +1213,7 @@ export const AppContainer = (props: AppContainerProps) => {
     extensionsUpdateState,
     true, // isConfigInitialized
     todoContextForCommands, // @plan PLAN-20260129-TODOPERSIST.P07
+    recordingIntegration,
   );
 
   // Memoize viewport to ensure it updates when inputWidth changes
@@ -1596,6 +1297,7 @@ export const AppContainer = (props: AppContainerProps) => {
     registerTodoPause,
     handleExternalEditorOpen,
     activeProfileName,
+    recordingIntegration,
   );
 
   const pendingHistoryItems = useMemo(
@@ -2073,15 +1775,6 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [streamingState, refreshStatic, _staticNeedsRefresh]);
 
-  // Session persistence - always save so sessions can be resumed with --continue
-  // Use stable dependencies to avoid recreating service (and new file path) on config changes
-  const storage = config.storage;
-  const sessionId = config.getSessionId();
-  const sessionPersistence = useMemo(
-    () => new SessionPersistenceService(storage, sessionId),
-    [storage, sessionId],
-  );
-
   /**
    * @plan PLAN-20260129-TODOPERSIST.P12
    * Wire up todo continuation detection to trigger continuation prompts
@@ -2126,7 +1819,7 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [history, pendingHistoryItems, streamingState]);
 
-  // Save session when turn completes (streaming goes idle)
+  // Detect turn completion (streaming goes idle) for continuation logic
   useEffect(() => {
     const wasActive =
       prevStreamingStateRef.current === StreamingState.Responding ||
@@ -2147,33 +1840,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Reset for next turn
     hadToolCallsRef.current = false;
-
-    // Get history from gemini client and save
-    const geminiClient = config.getGeminiClient();
-    const historyService = geminiClient?.getHistoryService?.();
-    if (!historyService) {
-      return;
-    }
-
-    const historyToSave = historyService.getComprehensive();
-    if (historyToSave.length === 0) {
-      return;
-    }
-
-    sessionPersistence
-      .save(
-        historyToSave,
-        {
-          provider: config.getProvider?.() ?? undefined,
-          model: config.getModel(),
-          tokenCount: historyService.getTotalTokens(),
-        },
-        history, // Save UI history for exact display restoration
-      )
-      .catch((err: unknown) => {
-        debug.error('Failed to save session:', err);
-      });
-  }, [streamingState, sessionPersistence, config, history, todoContinuation]);
+  }, [streamingState, todoContinuation]);
 
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {

@@ -41,10 +41,29 @@ interface HistoryServiceEventEmitter {
     event: 'tokensUpdated',
     listener: (eventData: TokensUpdatedEvent) => void,
   ): this;
+  on(event: 'contentAdded', listener: (content: IContent) => void): this;
+  on(event: 'compressionStarted', listener: () => void): this;
+  on(
+    event: 'compressionEnded',
+    listener: (summary: IContent, itemsCompressed: number) => void,
+  ): this;
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
+  emit(event: 'contentAdded', content: IContent): boolean;
+  emit(event: 'compressionStarted'): boolean;
+  emit(
+    event: 'compressionEnded',
+    summary: IContent,
+    itemsCompressed: number,
+  ): boolean;
   off(
     event: 'tokensUpdated',
     listener: (eventData: TokensUpdatedEvent) => void,
+  ): this;
+  off(event: 'contentAdded', listener: (content: IContent) => void): this;
+  off(event: 'compressionStarted', listener: () => void): this;
+  off(
+    event: 'compressionEnded',
+    listener: (summary: IContent, itemsCompressed: number) => void,
   ): this;
 }
 
@@ -284,6 +303,8 @@ export class HistoryService
         'Content added successfully, history length:',
         this.history.length,
       );
+
+      this.emit('contentAdded', content);
 
       // Update token count asynchronously but atomically
       this.updateTokenCount(content, modelName);
@@ -1614,13 +1635,16 @@ export class HistoryService
   startCompression(): void {
     this.logger.debug('Starting compression - locking history');
     this.isCompressing = true;
+    this.emit('compressionStarted');
   }
 
   /**
    * Mark compression as complete
-   * This will flush all queued operations
+   * This will flush all queued operations.
+   * When summary and itemsCompressed are provided, emits a compressionEnded
+   * event so the recording service can log the compression.
    */
-  endCompression(): void {
+  endCompression(summary?: IContent, itemsCompressed?: number): void {
     this.logger.debug('Compression complete - unlocking history', {
       pendingCount: this.pendingOperations.length,
     });
@@ -1638,6 +1662,10 @@ export class HistoryService
     this.logger.debug('Flushed pending operations', {
       count: operations.length,
     });
+
+    if (summary && itemsCompressed !== undefined) {
+      this.emit('compressionEnded', summary, itemsCompressed);
+    }
   }
 
   /**
