@@ -236,6 +236,10 @@ export class LspClient {
     const languageId = getLanguageId(ext) ?? this.config.config.id;
     const previousVersion = this.documentVersions.get(normalizedPath);
 
+    // Clear stale cached diagnostics so waitForDiagnostics doesn't
+    // return outdated results from a previous version of the file.
+    this.diagnosticsByFile.delete(normalizedPath);
+
     if (previousVersion === undefined) {
       this.documentVersions.set(normalizedPath, 1);
       this.sendNotification('textDocument/didOpen', {
