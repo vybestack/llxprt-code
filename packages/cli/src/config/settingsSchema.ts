@@ -200,15 +200,15 @@ export const SETTINGS_SCHEMA = {
     },
   },
   lsp: {
-    type: 'object',
-    label: 'LSP',
+    type: 'boolean',
+    label: 'Experimental LSP Servers',
     category: 'Advanced',
     requiresRestart: true,
-    default: undefined as boolean | object | undefined,
+    default: false,
     ref: 'BooleanOrLspConfig',
     description:
-      'Language Server Protocol settings. Set to false to disable, or provide an object to configure servers and diagnostics behavior.',
-    showInDialog: false,
+      'Enable experimental Language Server Protocol integration for real-time type-error diagnostics after file edits.',
+    showInDialog: true,
   },
   emojifilter: {
     type: 'string',
