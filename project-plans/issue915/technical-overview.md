@@ -33,6 +33,8 @@ Provider-facing transcript assembly is currently centralized at:
   - `ensureToolResponseAdjacency(...)` — note: this pass performs destructive reconstruction (strips all tool responses from original positions and re-inserts them adjacent to their calls), not simple reordering
   - `deepCloneWithoutCircularRefs(...)` — final serialization safety pass, required because tool call `parameters` can contain arbitrary objects with circular references
 
+`splitToolCallsOutOfToolMessages(...)` is a normative requirement, not only a descriptive implementation detail: if `tool_call` blocks appear inside a tool-speaker message in canonical history, the system SHALL correct speaker attribution before transcript rendering.
+
 Primary location:
 - `packages/core/src/services/history/HistoryService.ts`
 
@@ -62,6 +64,8 @@ A compounding issue is that the codebase currently has **three divergent tool ex
 
 Any in-flight assistant generation and associated tool execution remain bound to the provider selected for that in-flight turn until terminal turn state (completion or cancellation finalization). Provider changes only affect subsequent request assembly.
 
+Provider/model switching SHALL NOT occur while a model turn is in-flight. Switching SHALL apply only at turn boundaries after the prior turn reaches terminal state.
+
 
 ---
 
@@ -75,12 +79,16 @@ For outbound tool interactions:
 3. Ordering respects provider protocol (strict adjacency where required).
 4. No duplicate effective tool results break provider validation.
 
+Adjacency reconstruction SHALL preserve all real tool completions and SHALL NOT replace real completions with synthetic completions. To satisfy provider adjacency requirements, renderer placement MAY reorder where tool results appear in the rendered transcript, but the underlying set of real completions SHALL be preserved unchanged.
+
 ### 3.2 ID consistency constraints
 
 Within a transcript render, ID projection must be injective (one-to-one) over canonical call identities and reference-consistent for results:
 - `internal call identity` -> one `provider call identity`
 - `internal result.callId identity` -> same `provider call identity` as its paired call
 - distinct internal call identities in that render must not collide to the same provider call identity
+
+Determinism for transcript rendering SHALL mean that, given identical canonical interaction state and identical provider selection, repeated renders produce identical tool call/result pairing and ordering. This determinism requirement does not require identical projected IDs across separate render invocations when a projection strategy currently contains non-deterministic elements; such non-determinism is a known defect and not desired behavior.
 
 ### 3.3 Mixed-content compatibility
 
@@ -123,6 +131,8 @@ Each tool interaction is defined by a canonical call identity and lifecycle stat
 - cancellation/interruption-complete
 - error
 
+Canonical tool interaction state SHALL be session-scoped as the authoritative interaction ledger for transcript rendering. The system SHALL support reconstruction of tool interaction state from conversation history as a fallback when authoritative session-scoped state is unavailable (for example, after crash recovery or state loss).
+
 Required fields conceptually:
 - canonical call id
 - tool name
@@ -133,6 +143,12 @@ Required fields conceptually:
 ### 5.2 Completion status inference
 
 `ToolResponseBlock.isComplete` is optional in the canonical model. Lifecycle state must therefore be inferred from a combination of `isComplete`, `error`, and whether `result` is non-null — not from any single field.
+
+Lifecycle state inference SHALL follow these rules:
+1. If `error` is present, the interaction state SHALL be inferred as errored.
+2. Else if `isComplete` is `true`, the interaction state SHALL be inferred as complete.
+3. Else if `result` is non-null and `error` is absent, the interaction state SHALL be inferred as complete.
+4. Else, the interaction state SHALL be inferred as pending.
 
 ### 5.3 Idempotency semantics
 

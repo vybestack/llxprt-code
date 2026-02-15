@@ -46,6 +46,8 @@ The user-facing failure is an HTTP 400 from strict providers caused by malformed
 4. **For any emitted tool-call set, provider-facing transcripts must emit a protocol-valid completion set** (real completions when present; otherwise policy-defined synthetic cancellation/interruption completions).
 5. **Tool IDs must remain canonical internally and be projected per provider format at egress** while preserving call/result pairing.
 6. **All execution modes must use the same tool execution and result-handling path.** Interactive CLI, non-interactive CLI, and subagent must not have divergent tool-result processing, filtering, or history-write behavior.
+7. **Canonical tool interaction state must survive the session lifetime and be reconstructable from conversation history if lost.** Session-scoped authoritative state is the primary source of truth for tool call/result pairing; if that state is unavailable (e.g., after crash recovery or state loss), the system must be able to rebuild it from the persisted conversation history. This ensures transcript rendering always has access to valid interaction metadata.
+8. **Speaker-attribution corruption in stored history must be corrected before transcript rendering.** If tool_call blocks are found inside tool-speaker messages in canonical history, the system must correct the speaker attribution so that tool_call blocks are attributed to the assistant speaker and tool results remain attributed to the tool speaker. This correction must occur before any provider-facing transcript is assembled.
 
 ---
 
@@ -58,6 +60,18 @@ For any outbound provider transcript (given valid canonical interaction state):
 3. Tool results must appear in provider-valid placement (including strict adjacency where required).
 4. Duplicate effective tool results for the same call must not be emitted in a way that breaks provider protocol.
 5. Tool call/result ID pairing must remain stable after provider-specific ID translation.
+
+### Definition of malformed tool interaction structure
+
+A tool interaction structure is **malformed** if any of the following conditions hold in the outbound transcript:
+
+- **Orphaned tool call**: A tool call with no matching tool result (real or synthetic) in the transcript.
+- **Orphaned tool result**: A tool result whose referenced call ID does not match any tool call in the transcript.
+- **Duplicate tool results**: More than one effective tool result for the same canonical call identity.
+- **Adjacency violation**: Tool results not adjacent to their corresponding tool calls when the target provider requires strict adjacency.
+- **Mixed speaker attribution**: Tool_call blocks appearing inside tool-speaker messages, or tool result blocks appearing inside assistant-speaker messages, such that the logical call/result boundary is ambiguous to the provider.
+
+Transcript assembly must detect and prevent all of the above before provider invocation (see REQ-915-005). The closure policy, deduplication, adjacency enforcement, and speaker-attribution correction invariants defined elsewhere in this document are the mechanisms that address each class.
 
 ### Closure policy for incomplete interactions
 
@@ -113,6 +127,10 @@ Switching is functionally defined at **next request assembly time**, never mid-s
 - New provider/model is selected for the next turn.
 - Transcript assembly must render provider-valid call/result structure from canonical conversation state.
 - Any in-flight assistant generation and associated tool execution remain bound to the provider selected for that in-flight turn until completion or cancellation is finalized.
+
+### Functional invariant: no mid-turn provider switching
+
+Provider/model switching SHALL NOT occur while a model turn is in-flight. While the model is generating a response—including any tool execution triggered by that generation—the turn remains bound to the provider that initiated it. A switch request received during an in-flight turn takes effect only after the current turn reaches terminal state (completion or cancellation). This is a hard functional invariant, not merely an out-of-scope non-goal; violating it would invalidate tool call/result binding, stream continuity, and provider-specific ID projection for the in-flight turn.
 
 This applies equally to:
 - Manual provider/model switch.

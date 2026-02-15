@@ -26,7 +26,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-002 (State-Driven)
 **Pattern**: State-Driven  
-**When** a prior model turn is in-flight and not terminal, **the system SHALL** keep tool execution and generation bound to the currently selected provider for that in-flight turn.
+**While** a prior model turn is in-flight and not terminal, **the system SHALL** keep tool execution and generation bound to the currently selected provider for that in-flight turn.
 
 ### REQ-915-003 (Event-Driven)
 **Pattern**: Event-Driven  
@@ -62,7 +62,11 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-010 (State-Driven)
 **Pattern**: State-Driven  
-**While** canonical interaction state is valid, **the system SHALL** render tool call/result pairing deterministically such that repeated renders from unchanged state produce equivalent pairing outcomes.
+**While** canonical interaction state is valid, **the system SHALL** render tool call/result pairing deterministically such that repeated renders from unchanged state produce structurally identical tool call/result pair sets and projected IDs within a provider render scope.
+
+### REQ-915-047 (Unwanted Behavior)
+**Pattern**: Unwanted Behavior  
+**If** tool_call blocks are found inside a tool-speaker message in canonical history, **then the system SHALL** correct the speaker attribution before transcript rendering.
 
 ---
 
@@ -70,15 +74,15 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-011 (State-Driven)
 **Pattern**: State-Driven  
-**While** an emitted tool-call set is incomplete (K<N real completions), **the system SHALL** emit policy-defined synthetic interruption/cancellation completions for each missing completion to produce a protocol-valid completion set.
+**While** an emitted tool-call set is incomplete (K<N real completions), **the system SHALL** emit exactly one policy-defined synthetic interruption/cancellation completion for each call lacking a real completion, such that the total emitted completion count equals the emitted call count.
 
 ### REQ-915-012 (Event-Driven)
 **Pattern**: Event-Driven  
-**When** a turn includes multiple tool calls and only a subset have real tool responses, **the system SHALL** preserve real completions and add only missing synthetic completions.
+**When** a turn includes multiple tool calls and only a subset have real tool responses, **the system SHALL** preserve every real completion unchanged and SHALL NOT replace, reorder, or duplicate any real completion when adding synthetic completions for the missing calls.
 
 ### REQ-915-013 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
-**If** closure policy would be required to satisfy strict-provider protocol validity, **then the system SHALL** apply closure before outbound send.
+**If** an outbound transcript would otherwise be sent with an incomplete completion set that violates strict-provider protocol validity, **then the system SHALL** apply closure (per REQ-915-011 and REQ-915-012) before outbound send, guaranteeing no incomplete completion set reaches the provider wire.
 
 ---
 
@@ -106,7 +110,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-019 (Event-Driven)
 **Pattern**: Event-Driven  
-**When** the selected provider format is Anthropic-style, **the system SHALL** emit projected tool IDs conforming to `toolu_*`.
+**When** the selected provider format is Anthropic-style, **the system SHALL** emit projected tool IDs conforming to `toolu_*`. *Note: Current Anthropic ID projection bypasses the shared ToolIdStrategy framework via a private method in AnthropicProvider. This is a known architectural deviation, not a behavioral requirement.*
 
 ### REQ-915-020 (Event-Driven)
 **Pattern**: Event-Driven  
@@ -170,11 +174,11 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-032 (Ubiquitous)
 **Pattern**: Ubiquitous  
-**Requirement**: The system SHALL apply identical filtering semantics across all execution modes by excluding functionCall parts from tool results fed back to GeminiChat continuation input.
+**Requirement**: The system SHALL apply identical filtering semantics across all execution modes by excluding functionCall parts from tool results fed back to provider continuation input.
 
 ### REQ-915-033 (Ubiquitous)
 **Pattern**: Ubiquitous  
-**Requirement**: The system SHALL route tool result continuation through GeminiChat sendMessageStream path rather than ad-hoc manual history writes.
+**Requirement**: The system SHALL integrate tool results into conversation history through the same continuation path used for normal user-to-model turns, rather than ad-hoc direct history writes.
 
 ### REQ-915-034 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
@@ -192,13 +196,18 @@ This document defines atomic, testable functional and technical requirements for
 **Pattern**: Ubiquitous  
 **Requirement**: The system SHALL separate responsibilities such that transcript rendering enforces interaction validity and provider adapters enforce provider syntax/shape projection.
 
-### REQ-915-037 (Unwanted Behavior)
-**Pattern**: Unwanted Behavior  
-**If** validity repair responsibilities are duplicated across renderer and provider adapters, **then the system SHALL** maintain equivalent protocol-valid outcomes at provider boundary for strict providers.
+### REQ-915-037 (Ubiquitous)
+**Pattern**: Ubiquitous  
+**Requirement**: The system SHALL centralize interaction-validity repair responsibilities in the transcript renderer, and provider adapters SHALL remain limited to provider syntax/shape projection without duplicating validity repair logic.
 
 ### REQ-915-038 (Ubiquitous)
 **Pattern**: Ubiquitous  
-**Requirement**: The system SHALL perform final transcript serialization safely for provider send even when tool call parameters contain complex object structures.
+**Requirement**: The system SHALL perform final transcript serialization safely for provider send even when tool call parameters contain complex object structures.  
+*Note: This is a non-regression guard for existing serialization safety, not a new requirement introduced by #915.*
+
+### REQ-915-046 (Ubiquitous)
+**Pattern**: Ubiquitous  
+**Requirement**: The system SHALL scope canonical tool interaction state to the session lifetime and SHALL support reconstruction of that state from conversation history as a fallback when authoritative session-scoped state is unavailable.
 
 ---
 
@@ -206,11 +215,11 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-039 (Event-Driven)
 **Pattern**: Event-Driven  
-**When** debug/error diagnostics are emitted for transcript rendering and provider boundary handling, **the system SHALL** include canonical call IDs, emitted call IDs, emitted result IDs, dedupe decisions, synthetic completion reasons, and selected provider format.
+**When** debug/error diagnostics are emitted for transcript rendering and provider boundary handling, **the system SHALL** include, at minimum, canonical call IDs, emitted call IDs, emitted result IDs, dedupe decision outcome and rationale, synthetic completion reason code, and selected provider format.
 
 ### REQ-915-040 (Ubiquitous)
 **Pattern**: Ubiquitous  
-**Requirement**: The system SHALL provide diagnostics sufficient to distinguish canonical-state corruption, renderer pairing/ordering faults, and provider projection faults.
+**Requirement**: The system SHALL emit diagnostics sufficient to distinguish canonical-state corruption from renderer pairing/ordering faults from provider projection faults, at minimum in debug/error paths.
 
 ---
 
@@ -234,7 +243,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-045 (Event-Driven)
 **Pattern**: Event-Driven  
-**When** the same tool-calling model turn is executed in interactive CLI, non-interactive CLI, and subagent modes, **the system SHALL** demonstrate equivalent scheduler batching, equivalent result filtering, and equivalent continuation-path history integration behavior.
+**When** the same tool-calling model turn is executed in interactive CLI, non-interactive CLI, and subagent modes, **the system SHALL** demonstrate identical scheduler batching, identical result filtering, and identical continuation-path history integration behavior.
 
 ---
 
@@ -263,7 +272,7 @@ This document defines atomic, testable functional and technical requirements for
 | REQ-915-019 | §7 | §6.1, §7.4 | Anthropic conversion |  |
 | REQ-915-020 | §7 | §6.1, §6.2, §7.4 |  |  |
 | REQ-915-021 | §7 | §6.1, §6.3, §7.4 |  |  |
-| REQ-915-022 |  | §6.4 edge cases |  |  |
+| REQ-915-022 |  | §6.4 edge cases (derived from technical spec only) |  |  |
 | REQ-915-023 | §8 | §3.3, §7.3 | mixed thinking/tool flow |  |
 | REQ-915-024 | §8 | §3.3 | mixed thinking/tool flow |  |
 | REQ-915-025 | §8 | §3.3 | scenario baseline |  |
@@ -271,15 +280,15 @@ This document defines atomic, testable functional and technical requirements for
 | REQ-915-027 | §9 | §8 | compression case |  |
 | REQ-915-028 | §9 | §8 | compression failure mode |  |
 | REQ-915-029 | §3, §10 | §9 |  | §1–§4 |
-| REQ-915-030 |  | §9.3 | scheduler lifetime comparisons | §1, §4 |
-| REQ-915-031 |  | §9.3 | parallel vs sequential | §1–§4 |
-| REQ-915-032 |  | §9.1, §9.3 | filtering differences | §1.2, §3.1, §4 |
-| REQ-915-033 |  | §9.3 | continuation path | §4.1 |
-| REQ-915-034 |  | §9.3, §9.4 | cancellation corruption narrative | §4.2 |
+| REQ-915-030 |  | §9.3 |  | §1, §4 |
+| REQ-915-031 |  | §9.3 |  | §1–§4 |
+| REQ-915-032 |  | §9.1, §9.3 |  | §1.2, §3.1, §4 |
+| REQ-915-033 |  | §9.3 |  | §4.1 |
+| REQ-915-034 |  | §9.3, §9.4 |  | §4.2 |
 | REQ-915-035 |  | §9.4 |  | §4.3 |
 | REQ-915-036 |  | §4.1, §4.2 | flow layering |  |
 | REQ-915-037 |  | §4.2 (known deviation) |  |  |
-| REQ-915-038 |  | §1.2 deepClone pass | serialization mention |  |
+| REQ-915-038 |  | §1.2 deepClone pass |  |  |
 | REQ-915-039 |  | §10 |  |  |
 | REQ-915-040 |  | §10 |  |  |
 | REQ-915-041 | §10(1) | §11, §12 | provider switch section |  |
@@ -287,6 +296,8 @@ This document defines atomic, testable functional and technical requirements for
 | REQ-915-043 | §10(3) | §11, §12 | failover continuity context |  |
 | REQ-915-044 | §10(4) | §5.4, §7.3 | 5-call examples |  |
 | REQ-915-045 | §10(6) | §9, §12(6) | path comparison in flow | §1–§4 |
+| REQ-915-046 |  | §5 | ledger lifetime / reconstruction narrative |  |
+| REQ-915-047 |  | §1.2 |  |  |
 
 ---
 
