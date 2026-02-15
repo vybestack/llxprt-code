@@ -164,6 +164,17 @@ vi.mock('../ide/ide-client.js', () => ({
   },
 }));
 
+const mockLoadJitSubdirectoryMemory = vi.hoisted(() => vi.fn());
+
+vi.mock('../utils/memoryDiscovery.js', () => ({
+  loadJitSubdirectoryMemory: mockLoadJitSubdirectoryMemory,
+  loadServerHierarchicalMemory: vi.fn().mockResolvedValue({
+    memoryContent: '',
+    fileCount: 0,
+    filePaths: [],
+  }),
+}));
+
 const mockCoreEvents = vi.hoisted(() => ({
   emitFeedback: vi.fn(),
   emitModelChanged: vi.fn(),
@@ -1446,6 +1457,83 @@ describe('Config JIT context', () => {
 
     expect(config.getJitContextEnabled()).toBe(false);
     expect(mockSettingsService.get).toHaveBeenCalledWith('jitContextEnabled');
+  });
+
+  describe('getJitMemoryForPath', () => {
+    beforeEach(() => {
+      mockLoadJitSubdirectoryMemory.mockReset();
+    });
+
+    it('should return JIT memory content when enabled', async () => {
+      mockLoadJitSubdirectoryMemory.mockResolvedValue({
+        files: [
+          { path: '/path/to/target/sub/LLXPRT.md', content: 'sub memory' },
+        ],
+      });
+
+      const config = new Config({
+        ...baseParams,
+        jitContextEnabled: true,
+      });
+
+      const result = await config.getJitMemoryForPath(
+        '/path/to/target/sub/file.ts',
+      );
+
+      expect(result).toContain('sub memory');
+      expect(mockLoadJitSubdirectoryMemory).toHaveBeenCalledWith(
+        '/path/to/target/sub/file.ts',
+        [baseParams.targetDir],
+        expect.any(Set),
+        baseParams.debugMode,
+        true,
+      );
+    });
+
+    it('should return empty string when JIT context is disabled', async () => {
+      const config = new Config({
+        ...baseParams,
+        jitContextEnabled: false,
+      });
+
+      const result = await config.getJitMemoryForPath(
+        '/path/to/target/sub/file.ts',
+      );
+
+      expect(result).toBe('');
+      expect(mockLoadJitSubdirectoryMemory).not.toHaveBeenCalled();
+    });
+
+    it('should return empty string when no JIT files are found', async () => {
+      mockLoadJitSubdirectoryMemory.mockResolvedValue({ files: [] });
+
+      const config = new Config({
+        ...baseParams,
+        jitContextEnabled: true,
+      });
+
+      const result = await config.getJitMemoryForPath(
+        '/path/to/target/sub/file.ts',
+      );
+
+      expect(result).toBe('');
+    });
+
+    it('should exclude already-loaded paths', async () => {
+      mockLoadJitSubdirectoryMemory.mockResolvedValue({ files: [] });
+
+      const config = new Config({
+        ...baseParams,
+        jitContextEnabled: true,
+        llxprtMdFilePaths: ['/path/to/target/LLXPRT.md'],
+      });
+
+      await config.getJitMemoryForPath('/path/to/target/sub/file.ts');
+
+      const calledAlreadyLoaded = mockLoadJitSubdirectoryMemory.mock
+        .calls[0]?.[2] as Set<string>;
+      expect(calledAlreadyLoaded.has('/path/to/target/LLXPRT.md')).toBe(true);
+    });
   });
 });
 
