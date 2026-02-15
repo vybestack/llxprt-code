@@ -639,6 +639,10 @@ export class GeminiClient {
     const includeSubagentDelegation =
       await this.shouldIncludeSubagentDelegation(enabledToolNames);
 
+    const interactionMode = this.config.isInteractive()
+      ? 'interactive'
+      : 'non-interactive';
+
     let systemInstruction = await getCoreSystemPromptAsync({
       userMemory,
       coreMemory,
@@ -646,6 +650,7 @@ export class GeminiClient {
       model,
       tools: enabledToolNames,
       includeSubagentDelegation,
+      interactionMode,
     });
 
     const envContextText = (envParts ?? [])
@@ -1828,6 +1833,9 @@ export class GeminiClient {
         model: modelToUse,
         tools: enabledToolNames,
         includeSubagentDelegation,
+        interactionMode: this.config.isInteractive()
+          ? 'interactive'
+          : 'non-interactive',
       });
 
       // Convert Content[] to a single prompt for BaseLLMClient
@@ -1931,6 +1939,9 @@ export class GeminiClient {
         model: modelToUse,
         tools: enabledToolNames,
         includeSubagentDelegation,
+        interactionMode: this.config.isInteractive()
+          ? 'interactive'
+          : 'non-interactive',
       });
 
       const requestConfig = {

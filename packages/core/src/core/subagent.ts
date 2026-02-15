@@ -1846,6 +1846,7 @@ export class SubAgentScope {
       model: this.modelConfig.model,
       tools: toolNames,
       includeSubagentDelegation: false,
+      interactionMode: 'subagent',
     });
 
     const instructionSections = [

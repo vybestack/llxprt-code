@@ -408,6 +408,8 @@ describe('Gemini Client (client.ts)', () => {
       getChatCompression: vi.fn().mockReturnValue(undefined),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+      isInteractive: vi.fn().mockReturnValue(true),
+      getMcpClientManager: vi.fn().mockReturnValue(undefined),
     };
     MockedConfig.mockImplementation(
       () => mockConfigObject as unknown as Config,
@@ -2906,6 +2908,122 @@ describe('Gemini Client (client.ts)', () => {
 
       // Assert
       expect(client['forceFullIdeContext']).toBe(true);
+    });
+  });
+
+  describe('interactionMode wiring', () => {
+    it('passes interactionMode interactive when config.isInteractive() returns true', async () => {
+      const setSystemInstruction = vi.fn();
+      const estimateTokensForText = vi.fn().mockResolvedValue(100);
+      const setBaseTokenOffset = vi.fn();
+      const getHistoryService = vi.fn().mockReturnValue({
+        estimateTokensForText,
+        setBaseTokenOffset,
+      });
+
+      const mockChat = {
+        setSystemInstruction,
+        getHistoryService,
+      };
+
+      client['chat'] = mockChat as unknown as GeminiChat;
+      client['contentGenerator'] = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+
+      const config = client['config'] as unknown as {
+        getUserMemory: () => string;
+        getCoreMemory: () => string;
+        getMcpClientManager: () => unknown;
+        isInteractive: () => boolean;
+      };
+      vi.spyOn(config, 'getUserMemory').mockReturnValue('');
+      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
+      vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
+      vi.spyOn(config, 'isInteractive').mockReturnValue(true);
+
+      vi.spyOn(
+        client as unknown as {
+          getEnabledToolNamesForPrompt: () => string[];
+        },
+        'getEnabledToolNamesForPrompt',
+      ).mockReturnValue([]);
+
+      vi.spyOn(
+        client as unknown as {
+          shouldIncludeSubagentDelegation: (
+            tools: string[],
+          ) => Promise<boolean>;
+        },
+        'shouldIncludeSubagentDelegation',
+      ).mockResolvedValue(false);
+
+      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
+
+      await client.updateSystemInstruction();
+
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          interactionMode: 'interactive',
+        }),
+      );
+    });
+
+    it('passes interactionMode non-interactive when config.isInteractive() returns false', async () => {
+      const setSystemInstruction = vi.fn();
+      const estimateTokensForText = vi.fn().mockResolvedValue(100);
+      const setBaseTokenOffset = vi.fn();
+      const getHistoryService = vi.fn().mockReturnValue({
+        estimateTokensForText,
+        setBaseTokenOffset,
+      });
+
+      const mockChat = {
+        setSystemInstruction,
+        getHistoryService,
+      };
+
+      client['chat'] = mockChat as unknown as GeminiChat;
+      client['contentGenerator'] = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+
+      const config = client['config'] as unknown as {
+        getUserMemory: () => string;
+        getCoreMemory: () => string;
+        getMcpClientManager: () => unknown;
+        isInteractive: () => boolean;
+      };
+      vi.spyOn(config, 'getUserMemory').mockReturnValue('');
+      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
+      vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
+      vi.spyOn(config, 'isInteractive').mockReturnValue(false);
+
+      vi.spyOn(
+        client as unknown as {
+          getEnabledToolNamesForPrompt: () => string[];
+        },
+        'getEnabledToolNamesForPrompt',
+      ).mockReturnValue([]);
+
+      vi.spyOn(
+        client as unknown as {
+          shouldIncludeSubagentDelegation: (
+            tools: string[],
+          ) => Promise<boolean>;
+        },
+        'shouldIncludeSubagentDelegation',
+      ).mockResolvedValue(false);
+
+      vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
+
+      await client.updateSystemInstruction();
+
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          interactionMode: 'non-interactive',
+        }),
+      );
     });
   });
 });

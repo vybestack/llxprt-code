@@ -78,6 +78,8 @@ vi.mock('./prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
 }));
 
+import { getCoreSystemPromptAsync } from './prompts.js';
+
 function createCompletedToolCallResponse(params: {
   callId: string;
   responseParts?: Part[];
@@ -1091,6 +1093,31 @@ describe('subagent.ts', () => {
           'PromptConfig cannot have both `systemPrompt` and `initialMessages` defined.',
         );
         expect(agent.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+      });
+
+      it('should pass interactionMode subagent when building system prompt', async () => {
+        const { config } = await createMockConfig();
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+        const promptConfig: PromptConfig = { systemPrompt: 'Test subagent.' };
+        const { overrides } = createRuntimeOverrides();
+        const scope = await SubAgentScope.create(
+          'interaction-mode-test',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+        const context = new ContextState();
+        await scope.runNonInteractive(context);
+
+        const promptSpy = vi.mocked(getCoreSystemPromptAsync);
+        const calls = promptSpy.mock.calls;
+        expect(calls.length).toBeGreaterThan(0);
+        const lastCall = calls[calls.length - 1][0] as Record<string, unknown>;
+        expect(lastCall).toHaveProperty('interactionMode', 'subagent');
       });
     });
 
