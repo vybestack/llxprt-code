@@ -233,7 +233,7 @@ export function useApprovalKeyboard(
       case '4': {
         const numericIndex = parseInt(key.name, 10) - 1;
         const outcome = currentOptions[numericIndex];
-        if (outcome !== undefined) {
+        if (outcome) {
           logger.debug(key.name + ' pressed, selecting', outcome);
           onSelectRef.current(outcome);
           handled = true;

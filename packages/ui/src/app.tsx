@@ -330,7 +330,7 @@ function AppInner(): React.ReactNode {
   // Track edited command text for suggest-edit flow
   useEffect(() => {
     const current = pendingApproval;
-    if (!current || current.confirmationType !== 'exec') {
+    if (current?.confirmationType !== 'exec') {
       setEditedApprovalCommand('');
       return;
     }
