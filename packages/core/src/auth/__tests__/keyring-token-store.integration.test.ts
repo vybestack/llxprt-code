@@ -137,6 +137,12 @@ const validNameArb = fc.string({
   maxLength: 20,
 });
 
+const uniqueNameArrayArb = fc.uniqueArray(validNameArb, {
+  minLength: 1,
+  maxLength: 8,
+  selector: (name) => name.toLowerCase(),
+});
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('KeyringTokenStore Integration', () => {
@@ -646,21 +652,18 @@ describe('KeyringTokenStore Integration', () => {
    */
   it('PROP: listProviders after saving for K random providers returns exactly K sorted', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.uniqueArray(validNameArb, { minLength: 1, maxLength: 8 }),
-        async (providers) => {
-          const setup = await createTestStore();
-          try {
-            for (const p of providers) {
-              await setup.tokenStore.saveToken(p, makeToken());
-            }
-            const listed = await setup.tokenStore.listProviders();
-            expect(listed).toEqual([...providers].sort());
-          } finally {
-            await fs.rm(setup.tempDir, { recursive: true, force: true });
+      fc.asyncProperty(uniqueNameArrayArb, async (providers) => {
+        const setup = await createTestStore();
+        try {
+          for (const p of providers) {
+            await setup.tokenStore.saveToken(p, makeToken());
           }
-        },
-      ),
+          const listed = await setup.tokenStore.listProviders();
+          expect(listed).toEqual([...providers].sort());
+        } finally {
+          await fs.rm(setup.tempDir, { recursive: true, force: true });
+        }
+      }),
       { numRuns: 15 },
     );
   });
@@ -674,21 +677,18 @@ describe('KeyringTokenStore Integration', () => {
    */
   it('PROP: listBuckets after saving for K random buckets returns exactly K sorted', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.uniqueArray(validNameArb, { minLength: 1, maxLength: 8 }),
-        async (buckets) => {
-          const setup = await createTestStore();
-          try {
-            for (const b of buckets) {
-              await setup.tokenStore.saveToken('bucketprov', makeToken(), b);
-            }
-            const listed = await setup.tokenStore.listBuckets('bucketprov');
-            expect(listed).toEqual([...buckets].sort());
-          } finally {
-            await fs.rm(setup.tempDir, { recursive: true, force: true });
+      fc.asyncProperty(uniqueNameArrayArb, async (buckets) => {
+        const setup = await createTestStore();
+        try {
+          for (const b of buckets) {
+            await setup.tokenStore.saveToken('bucketprov', makeToken(), b);
           }
-        },
-      ),
+          const listed = await setup.tokenStore.listBuckets('bucketprov');
+          expect(listed).toEqual([...buckets].sort());
+        } finally {
+          await fs.rm(setup.tempDir, { recursive: true, force: true });
+        }
+      }),
       { numRuns: 15 },
     );
   });

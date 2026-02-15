@@ -165,8 +165,6 @@ export interface CliArgs {
   baseurl: string | undefined;
   proxy: string | undefined;
   resume: string | typeof RESUME_LATEST | undefined;
-  listSessions: boolean | undefined;
-  deleteSession: string | undefined;
   includeDirectories: string[] | undefined;
   profileLoad: string | undefined;
   loadMemoryFromIncludeDirectories: boolean | undefined;
@@ -177,8 +175,13 @@ export interface CliArgs {
   promptWords: string[] | undefined;
   query: string | undefined;
   set: string[] | undefined;
-  continue: boolean | undefined;
+  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — widened to support --continue <session-id> */
+  continue: string | boolean | undefined;
   nobrowser: boolean | undefined;
+  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 — list recorded sessions */
+  listSessions: boolean | undefined;
+  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 — delete a recorded session by ref */
+  deleteSession: string | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -356,15 +359,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
             return value;
           },
         })
-        .option('list-sessions', {
-          type: 'boolean',
-          description:
-            'List available sessions for the current project and exit.',
-        })
-        .option('delete-session', {
-          type: 'string',
-          description: 'Delete a session by index and exit.',
-        })
         .option('include-directories', {
           type: 'array',
           string: true,
@@ -389,10 +383,26 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .option('continue', {
           alias: 'C',
-          type: 'boolean',
+          type: 'string',
+          skipValidation: true,
           description:
-            'Resume the most recent session for this project. Can be combined with --prompt to continue with a new message.',
+            'Resume a previous session. Bare --continue resumes the most recent. --continue <id> resumes a specific session.',
+          coerce: (value: string): string => {
+            if (value === '') {
+              return value;
+            }
+            return value;
+          },
+        })
+        .option('list-sessions', {
+          type: 'boolean',
+          description: 'List recorded sessions for the current project.',
           default: false,
+        })
+        .option('delete-session', {
+          type: 'string',
+          description:
+            'Delete a recorded session by ID, prefix, or 1-based index.',
         })
         .option('nobrowser', {
           type: 'boolean',
@@ -675,8 +685,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     baseurl: result.baseurl as string | undefined,
     proxy: result.proxy as string | undefined,
     resume: result.resume as string | typeof RESUME_LATEST | undefined,
-    listSessions: result.listSessions as boolean | undefined,
-    deleteSession: result.deleteSession as string | undefined,
     includeDirectories: result.includeDirectories as string[] | undefined,
     profileLoad: result.profileLoad as string | undefined,
     loadMemoryFromIncludeDirectories:
@@ -689,8 +697,10 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     promptWords: result.promptWords as string[] | undefined,
     query: queryFromPromptWords,
     set: result.set as string[] | undefined,
-    continue: result.continue as boolean | undefined,
+    continue: result.continue as string | boolean | undefined,
     nobrowser: result.nobrowser as boolean | undefined,
+    listSessions: result.listSessions as boolean | undefined,
+    deleteSession: result.deleteSession as string | undefined,
   };
 
   return cliArgs;
@@ -1443,7 +1453,12 @@ export async function loadCliConfig(
     ptyScrollbackLimit: effectiveSettings.ptyScrollbackLimit,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
-    continueSession: argv.continue ?? false,
+    // @plan PLAN-20260211-SESSIONRECORDING.P24 — normalize --continue flag:
+    // bare --continue (yargs gives "") → true, --continue <id> → id string, absent → false
+    continueSession:
+      argv.continue === '' || argv.continue === true
+        ? true
+        : argv.continue || false,
     // TODO: loading of hooks based on workspace trust
     enableHooks: effectiveSettings.tools?.enableHooks ?? false,
     hooks: effectiveSettings.hooks || {},

@@ -151,6 +151,9 @@ export const directoryCommand: SlashCommand = {
             },
             Date.now(),
           );
+          context.recordingIntegration?.recordDirectoriesChanged([
+            ...workspaceContext.getDirectories(),
+          ]);
         }
 
         if (errors.length > 0) {

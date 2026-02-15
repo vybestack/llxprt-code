@@ -542,6 +542,52 @@ describe('parseArguments', () => {
     }
   });
 
+  it('should preserve bare --continue sentinel without coercing to string true', async () => {
+    process.argv = ['node', 'script.js', '--continue'];
+    const argv = await parseArguments({} as Settings);
+
+    expect(argv.continue === '' || argv.continue === true).toBe(true);
+    expect(argv.continue).not.toBe('true');
+  });
+
+  it('should normalize bare --continue to true through loadCliConfig', async () => {
+    process.argv = ['node', 'script.js', '--continue'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {};
+
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    try {
+      const config = await loadCliConfig(
+        settings,
+        [],
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'test-session',
+        argv,
+      );
+
+      expect(config.isContinueSession()).toBe(true);
+      expect(config.getContinueSessionRef()).toBe('__CONTINUE_LATEST__');
+    } finally {
+      clearActiveProviderRuntimeContext();
+    }
+  });
+
+  it('should preserve explicit --continue session id string', async () => {
+    process.argv = ['node', 'script.js', '--continue', 'session-123'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.continue).toBe('session-123');
+  });
+
+  it('should not consume following flag as --continue session id', async () => {
+    process.argv = ['node', 'script.js', '--continue', '--debug'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.continue === '' || argv.continue === true).toBe(true);
+    expect(argv.debug).toBe(true);
+  });
+
   it('should support comma-separated values for --allowed-tools', async () => {
     process.argv = [
       'node',

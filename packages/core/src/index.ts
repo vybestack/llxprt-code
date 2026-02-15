@@ -432,12 +432,9 @@ export {
   type ConversationRecord,
 } from './storage/sessionTypes.js';
 
-export {
-  SessionPersistenceService,
-  type PersistedSession,
-  type PersistedUIHistoryItem,
-  type PersistedToolCall,
-} from './storage/SessionPersistenceService.js';
+// @plan PLAN-20260211-SESSIONRECORDING.P03
+// Export session recording module
+export * from './recording/index.js';
 
 export {
   type SettingCategory,

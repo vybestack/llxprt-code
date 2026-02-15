@@ -98,7 +98,7 @@ export const modelCommand: SlashCommand = {
   description: 'browse, search, or switch models',
   kind: CommandKind.BUILT_IN,
   action: async (
-    _context: CommandContext,
+    context: CommandContext,
     args: string,
   ): Promise<OpenDialogActionReturn | MessageActionReturn> => {
     const parsedArgs = parseArgs(args);
@@ -110,6 +110,14 @@ export const modelCommand: SlashCommand = {
       try {
         const runtime = getRuntimeApi();
         const result = await runtime.setActiveModel(parsedArgs.search);
+        try {
+          context.recordingIntegration?.recordProviderSwitch(
+            result.providerName,
+            result.nextModel,
+          );
+        } catch {
+          // Recording failure should not mask a successful model switch
+        }
         return {
           type: 'message',
           messageType: 'info',

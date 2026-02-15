@@ -2143,7 +2143,10 @@ export class GeminiChat {
    */
   async performCompression(prompt_id: string): Promise<void> {
     this.logger.debug('Starting compression');
+    const preCompressionCount =
+      this.historyService.getStatistics().totalMessages;
     this.historyService.startCompression();
+    let compressionSummary: IContent | undefined;
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
@@ -2162,13 +2165,18 @@ export class GeminiChat {
         this.historyService.add(content, this.runtimeState.model);
       }
 
+      compressionSummary = result.newHistory[0];
+
       this.logger.debug('Compression completed', result.metadata);
     } catch (error) {
       this.logger.error('Compression failed:', error);
       throw error;
     } finally {
       this._suppressDensityDirty = false;
-      this.historyService.endCompression();
+      this.historyService.endCompression(
+        compressionSummary,
+        preCompressionCount,
+      );
     }
 
     await this.historyService.waitForTokenUpdates();
@@ -2427,13 +2435,12 @@ export class GeminiChat {
   /**
    * Records completed tool calls with full metadata.
    * This is called by external components when tool calls complete, before sending responses to Gemini.
-   * NOTE: llxprt does not use ChatRecordingService, so this is a no-op stub for compatibility.
    */
   recordCompletedToolCalls(
     _model: string,
     _toolCalls: CompletedToolCall[],
   ): void {
-    // No-op: llxprt does not record chat sessions like gemini-cli
+    // No-op stub for compatibility
   }
 
   private recordHistory(
