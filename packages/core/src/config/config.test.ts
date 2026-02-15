@@ -1402,6 +1402,53 @@ describe('Config getHooks', () => {
   });
 });
 
+describe('Config JIT context', () => {
+  const baseParams: ConfigParameters = {
+    cwd: '/tmp',
+    targetDir: '/path/to/target',
+    debugMode: false,
+    sessionId: 'test-session-id',
+    model: 'gemini-pro',
+    usageStatisticsEnabled: false,
+  };
+
+  it('should return true by default when JIT context setting is not provided', () => {
+    const config = new Config(baseParams);
+    expect(config.getJitContextEnabled()).toBe(true);
+  });
+
+  it('should return the configured JIT context setting value', () => {
+    const configEnabled = new Config({
+      ...baseParams,
+      jitContextEnabled: true,
+    });
+    expect(configEnabled.getJitContextEnabled()).toBe(true);
+
+    const configDisabled = new Config({
+      ...baseParams,
+      jitContextEnabled: false,
+    });
+    expect(configDisabled.getJitContextEnabled()).toBe(false);
+  });
+
+  it('should respect the settings service value when available', async () => {
+    const mockSettingsService = {
+      get: vi.fn().mockReturnValue(false),
+      set: vi.fn(),
+      getAll: vi.fn(),
+      has: vi.fn(),
+    } as unknown as SettingsService;
+
+    const config = new Config({
+      ...baseParams,
+      settingsService: mockSettingsService,
+    });
+
+    expect(config.getJitContextEnabled()).toBe(false);
+    expect(mockSettingsService.get).toHaveBeenCalledWith('jitContextEnabled');
+  });
+});
+
 describe('Config setModel', () => {
   const baseParams: ConfigParameters = {
     cwd: '/tmp',

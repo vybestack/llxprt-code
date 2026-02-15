@@ -442,6 +442,7 @@ export interface ConfigParameters {
   hooks?: {
     [K in HookEventName]?: HookDefinition[];
   };
+  jitContextEnabled?: boolean;
 }
 
 export class Config {
@@ -625,6 +626,7 @@ export class Config {
   private readonly hooks:
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
+  private jitContextEnabled: boolean;
   private initialized = false;
 
   constructor(params: ConfigParameters) {
@@ -805,6 +807,7 @@ export class Config {
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
     this.disableYoloMode = params.disableYoloMode ?? false;
     this.enableHooks = params.enableHooks ?? false;
+    this.jitContextEnabled = params.jitContextEnabled ?? true;
 
     // Enable MessageBus integration if:
     // 1. Explicitly enabled via setting, OR
@@ -1989,6 +1992,15 @@ export class Config {
 
   getEnablePromptCompletion(): boolean {
     return this.enablePromptCompletion;
+  }
+
+  getJitContextEnabled(): boolean {
+    // Check settings service first, then fall back to instance value
+    const settingsValue = this.settingsService.get('jitContextEnabled');
+    if (settingsValue !== undefined) {
+      return settingsValue as boolean;
+    }
+    return this.jitContextEnabled;
   }
 
   async getGitService(): Promise<GitService> {
