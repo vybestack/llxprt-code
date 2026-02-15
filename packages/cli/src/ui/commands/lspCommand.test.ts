@@ -264,7 +264,7 @@ describe('lspCommand (P34)', () => {
         isAlive: vi.fn().mockReturnValue(true),
         status: vi
           .fn()
-          .mockResolvedValue([{ serverId: 'typescript', status: 'active' }]),
+          .mockResolvedValue([{ serverId: 'ts', status: 'active' }]),
       };
       config.getLspConfig = vi.fn().mockReturnValue({ servers: [] });
       config.getLspServiceClient = vi.fn().mockReturnValue(client);
@@ -272,7 +272,7 @@ describe('lspCommand (P34)', () => {
       const result = await statusCommand.action!(context, '');
       const content = (result as MessageActionReturn).content;
       expect(content.startsWith('LSP server status:\n')).toBe(true);
-      expect(content).toContain('\n  typescript: active');
+      expect(content).toContain('\n  ts: active');
     });
 
     it('normalizes raw statuses to allowed vocabulary', async () => {
@@ -324,9 +324,9 @@ describe('lspCommand (P34)', () => {
       const content = (result as MessageActionReturn).content;
       expect(content).toContain('  eslint: unavailable');
       expect(content).toContain('  gopls: unavailable');
-      expect(content).toContain('  pyright: unavailable');
-      expect(content).toContain('  rust-analyzer: unavailable');
-      expect(content).toContain('  typescript: unavailable');
+      expect(content).toContain('  python: unavailable');
+      expect(content).toContain('  rust: unavailable');
+      expect(content).toContain('  ts: unavailable');
     });
 
     it('includes configured custom server ids in output universe', async () => {

@@ -21,6 +21,10 @@ import {
 import { createMcpChannel } from './channels/mcp-channel.js';
 import { setupRpcChannel } from './channels/rpc-channel.js';
 import { createOrchestrator } from './service/orchestrator.js';
+import {
+  getBuiltinServers,
+  mergeUserConfig,
+} from './service/server-registry.js';
 
 type LspServerConfig = {
   id: string;
@@ -212,8 +216,17 @@ function createWriteStreamFromFd(fd: number) {
 
 export async function main(): Promise<void> {
   const bootstrap = parseBootstrapFromEnv();
+  const mergedServers = mergeUserConfig(
+    getBuiltinServers(),
+    bootstrap.config.servers as any,
+  ).map((s) => ({
+    id: s.id,
+    command: s.command,
+    args: s.args ? [...s.args] : undefined,
+    extensions: [...s.extensions],
+  }));
   const orchestrator = createOrchestrator(
-    bootstrap.config,
+    { ...bootstrap.config, servers: mergedServers },
     bootstrap.workspaceRoot,
   );
 

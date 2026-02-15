@@ -7,8 +7,9 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';
 import { constants as fsConstants } from 'node:fs';
 import { access } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 import {
   createMessageConnection,
   StreamMessageReader,
@@ -86,7 +87,14 @@ export class LspServiceClient {
       return;
     }
 
-    const lspEntry = join(this.workspaceRoot, 'packages/lsp/src/main.ts');
+    // Walk up from current file to find the 'packages' directory.
+    // Works both from source (src/lsp/) and compiled (dist/src/lsp/).
+    let dir = dirname(fileURLToPath(import.meta.url));
+    while (dir !== dirname(dir)) {
+      if (basename(dir) === 'packages') break;
+      dir = dirname(dir);
+    }
+    const lspEntry = join(dir, 'lsp', 'src', 'main.ts');
     if (!(await this.pathIsReadable(lspEntry))) {
       this.disable(`LSP service entry not found: ${lspEntry}`);
       return;

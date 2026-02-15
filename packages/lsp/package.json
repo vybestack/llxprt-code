@@ -14,7 +14,9 @@
     "dist"
   ],
   "dependencies": {
-    "vscode-jsonrpc": "^8.2.1"
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "vscode-jsonrpc": "^8.2.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.2.1",

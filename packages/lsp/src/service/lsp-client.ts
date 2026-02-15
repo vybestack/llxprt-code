@@ -174,13 +174,15 @@ export class LspClient {
       );
     });
 
+    const rootUri =
+      this.config.config.rootUri ?? `file://${this.workspaceRoot}`;
     const initializeResult = await this.sendRequest('initialize', {
       processId: process.pid,
-      rootUri: this.config.config.rootUri,
+      rootUri,
       capabilities: {},
       workspaceFolders: [
         {
-          uri: this.config.config.rootUri,
+          uri: rootUri,
           name: this.workspaceRoot,
         },
       ],

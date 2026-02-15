@@ -42,13 +42,7 @@ type LspConfigAccessor = {
   getLspServiceClient?(): LspServiceClientLike | undefined;
 };
 
-const BUILTIN_SERVER_IDS = [
-  'typescript',
-  'eslint',
-  'gopls',
-  'pyright',
-  'rust-analyzer',
-] as const;
+const BUILTIN_SERVER_IDS = ['ts', 'eslint', 'gopls', 'python', 'rust'] as const;
 
 /**
  * @plan PLAN-20250212-LSP.P34
