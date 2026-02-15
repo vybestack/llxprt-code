@@ -62,7 +62,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-010 (State-Driven)
 **Pattern**: State-Driven  
-**While** canonical interaction state is valid, **the system SHALL** render tool call/result pairing deterministically such that repeated renders from unchanged state produce structurally identical tool call/result pair sets and projected IDs within a provider render scope.
+**While** canonical interaction state is valid, **the system SHALL** render tool call/result pairing deterministically and collision-free within a single provider render scope, such that repeated renders from unchanged state and identical provider selection produce identical pairing and ordering. Note: identical projected IDs across separate render invocations are not required when a projection strategy currently contains non-deterministic elements; such elements are known defects, not desired behavior (see technical-overview §3.2).
 
 ### REQ-915-047 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
@@ -78,7 +78,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-012 (Event-Driven)
 **Pattern**: Event-Driven  
-**When** a turn includes multiple tool calls and only a subset have real tool responses, **the system SHALL** preserve every real completion unchanged and SHALL NOT replace, reorder, or duplicate any real completion when adding synthetic completions for the missing calls.
+**When** a turn includes multiple tool calls and only a subset have real tool responses, **the system SHALL** preserve every real completion unchanged and SHALL NOT replace or duplicate any real completion when adding synthetic completions for the missing calls. Result placement MAY be reordered to satisfy provider adjacency requirements (see technical-overview §3.1).
 
 ### REQ-915-013 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
@@ -209,6 +209,10 @@ This document defines atomic, testable functional and technical requirements for
 **Pattern**: Ubiquitous  
 **Requirement**: The system SHALL scope canonical tool interaction state to the session lifetime and SHALL support reconstruction of that state from conversation history as a fallback when authoritative session-scoped state is unavailable.
 
+### REQ-915-048 (Ubiquitous)
+**Pattern**: Ubiquitous  
+**Requirement**: The system SHALL infer tool interaction completion status from the canonical content model using the following precedence: (1) if `error` is present, the interaction is errored; (2) else if `isComplete` is true, the interaction is complete; (3) else if `result` is non-null and no error is present, the interaction is complete; (4) else the interaction is pending. This inference SHALL be used for state reconstruction and transcript rendering decisions.
+
 ---
 
 ## 10. Domain: Observability and Diagnostics
@@ -219,7 +223,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-040 (Ubiquitous)
 **Pattern**: Ubiquitous  
-**Requirement**: The system SHALL emit diagnostics sufficient to distinguish canonical-state corruption from renderer pairing/ordering faults from provider projection faults, at minimum in debug/error paths.
+**Requirement**: The system SHALL emit diagnostics that distinguish three fault classes — canonical-state corruption, renderer pairing/ordering faults, and provider projection faults — by including at minimum a fault-class identifier and the associated canonical call IDs in each diagnostic event emitted in debug/error paths.
 
 ---
 
@@ -296,8 +300,9 @@ This document defines atomic, testable functional and technical requirements for
 | REQ-915-043 | §10(3) | §11, §12 | failover continuity context |  |
 | REQ-915-044 | §10(4) | §5.4, §7.3 | 5-call examples |  |
 | REQ-915-045 | §10(6) | §9, §12(6) | path comparison in flow | §1–§4 |
-| REQ-915-046 |  | §5 | ledger lifetime / reconstruction narrative |  |
-| REQ-915-047 |  | §1.2 |  |  |
+| REQ-915-046 |  | §5.1 | ledger lifetime / reconstruction narrative |  |
+| REQ-915-047 | §3(8), §4 | §1.2 |  |  |
+| REQ-915-048 |  | §5.2 |  |  |
 
 ---
 
