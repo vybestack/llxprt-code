@@ -513,6 +513,7 @@ const refreshCommand: SlashCommand = {
   name: 'refresh',
   description: 'Restarts MCP servers.',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: async (
     context: CommandContext,
   ): Promise<SlashCommandActionReturn> => {

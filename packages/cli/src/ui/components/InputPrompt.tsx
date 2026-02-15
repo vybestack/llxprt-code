@@ -598,14 +598,15 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
               const command = completion.getCommandFromSuggestion(targetIndex);
               const shouldAutoExecute = isEnterKey && command?.autoExecute;
 
-              completion.handleAutocomplete(targetIndex);
+              const completedText = completion.handleAutocomplete(targetIndex);
 
               // If autoExecute is true, also submit the command
-              if (shouldAutoExecute) {
-                // We need to wait for the autocomplete to update the buffer
-                // Use setTimeout to defer submission to next tick
+              if (shouldAutoExecute && completedText !== undefined) {
+                // Submit the text returned by handleAutocomplete rather
+                // than reading buffer.text, which would be stale here
+                // (buffer is a useMemo snapshot from the current render).
                 setTimeout(() => {
-                  handleSubmit(buffer.text);
+                  handleSubmit(completedText);
                 }, 0);
               }
             }

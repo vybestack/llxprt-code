@@ -284,6 +284,7 @@ export const memoryCommand: SlashCommand = {
       name: 'list',
       description: 'Lists the paths of the LLXPRT.md files in use.',
       kind: CommandKind.BUILT_IN,
+      autoExecute: true,
       action: async (context) => {
         const filePaths = context.services.config?.getLlxprtMdFilePaths() || [];
         const fileCount = filePaths.length;
