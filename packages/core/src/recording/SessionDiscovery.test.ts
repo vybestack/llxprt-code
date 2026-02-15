@@ -97,7 +97,7 @@ async function createTestSession(
   await svc.flush();
 
   const filePath = svc.getFilePath()!;
-  svc.dispose();
+  await svc.dispose();
   return { filePath, sessionId };
 }
 
@@ -716,7 +716,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it.prop([fc.integer({ min: 2, max: 6 })])(
+    it.prop([fc.integer({ min: 2, max: 6 })], { numRuns: 20 })(
       'newest session is always first regardless of count @requirement:REQ-RSM-003',
       async (sessionCount) => {
         const localTempDir = await fs.mkdtemp(
@@ -795,7 +795,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-002
      */
-    it.prop([fc.integer({ min: 1, max: 5 })])(
+    it.prop([fc.integer({ min: 1, max: 5 })], { numRuns: 20 })(
       'numeric index within range always resolves correctly @requirement:REQ-RSM-002',
       async (sessionCount) => {
         const localTempDir = await fs.mkdtemp(

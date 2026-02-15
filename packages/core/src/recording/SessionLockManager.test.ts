@@ -156,6 +156,12 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
   });
 
   afterEach(async () => {
+    const actualFs =
+      await vi.importActual<typeof import('node:fs/promises')>(
+        'node:fs/promises',
+      );
+    vi.mocked(fs.writeFile).mockReset();
+    vi.mocked(fs.writeFile).mockImplementation(actualFs.writeFile);
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 

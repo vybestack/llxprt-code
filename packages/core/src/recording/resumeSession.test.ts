@@ -109,7 +109,7 @@ async function createTestSession(
   await svc.flush();
 
   const filePath = svc.getFilePath()!;
-  svc.dispose();
+  await svc.dispose();
   return { filePath, sessionId, service: svc };
 }
 
@@ -137,17 +137,6 @@ async function readJsonlFile(filePath: string): Promise<SessionRecordLine[]> {
   const raw = await fs.readFile(filePath, 'utf-8');
   const lines = raw.trim().split('\n');
   return lines.map((line) => JSON.parse(line) as SessionRecordLine);
-}
-
-/**
- * Extract the session ID from a session filename.
- * Files are named like: session-2026-02-11T16-52-abcdef12.jsonl
- * The session ID prefix is the last segment before .jsonl.
- */
-function _extractSessionIdFromLockManager(filePath: string): string {
-  const basename = path.basename(filePath);
-  const match = basename.match(/^session-(.+)\.jsonl$/);
-  return match ? match[1] : '';
 }
 
 function delay(ms: number): Promise<void> {
@@ -349,7 +338,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
       svc.recordContent(makeContent('new response', 'ai'));
 
       await svc.flush();
-      svc.dispose();
+      await svc.dispose();
 
       const result = await resumeSession(makeResumeRequest(chatsDir));
 
@@ -623,7 +612,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
         expect(switchPayload.provider).toBe('openai');
         expect(switchPayload.model).toBe('gpt-5');
 
-        result.recording.dispose();
+        await result.recording.dispose();
       }
     });
   });
@@ -681,7 +670,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           expect(events[i].seq).toBeGreaterThan(events[i - 1].seq);
         }
 
-        result.recording.dispose();
+        await result.recording.dispose();
       }
     });
 
@@ -707,7 +696,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
         expect(result.recording.getFilePath()).not.toBeNull();
         expect(result.recording.getSessionId()).toBe(sessionId);
         expect(result.recording.isActive()).toBe(true);
-        result.recording.dispose();
+        await result.recording.dispose();
       }
     });
   });
@@ -752,7 +741,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           (w) => w.includes('parse') || w.includes('JSON'),
         );
         expect(hasParseWarning).toBe(true);
-        result.recording.dispose();
+        await result.recording.dispose();
       }
     });
   });
@@ -808,7 +797,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
                 contents[i].blocks[0],
               );
             }
-            result.recording.dispose();
+            await result.recording.dispose();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -868,7 +857,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             };
             expect(payload.provider).toBe(currentProvider);
 
-            result.recording.dispose();
+            await result.recording.dispose();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -919,7 +908,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
               expect(events[i].seq).toBeGreaterThan(events[i - 1].seq);
             }
 
-            result.recording.dispose();
+            await result.recording.dispose();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -961,7 +950,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             expect(result.recording).toBeDefined();
             expect(result.recording.getFilePath()).not.toBeNull();
             expect(result.recording.isActive()).toBe(true);
-            result.recording.dispose();
+            await result.recording.dispose();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -1013,7 +1002,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           }
 
           await svc.flush();
-          svc.dispose();
+          await svc.dispose();
 
           const result = await resumeSession(makeResumeRequest(localChatsDir));
 
@@ -1021,7 +1010,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           if (result.ok) {
             // history = 1 (summary) + postCompressCount
             expect(result.history).toHaveLength(1 + postCompressCount);
-            result.recording.dispose();
+            await result.recording.dispose();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
@@ -1062,7 +1051,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           expect(result.ok).toBe(true);
           if (result.ok) {
             expect(result.history).toHaveLength(contentCount);
-            result.recording.dispose();
+            await result.recording.dispose();
           }
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });

@@ -956,7 +956,9 @@ export async function main() {
       }
     } else {
       console.warn(
-        chalk.yellow(`Could not resume session: ${resumeResult.error}`),
+        chalk.yellow(
+          `Could not resume session (ref: ${continueRef}): ${resumeResult.error}`,
+        ),
       );
       // Fall back to new session
       recordingService = new SessionRecordingService({

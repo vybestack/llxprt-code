@@ -80,7 +80,10 @@ export interface ResumeError {
 function extractLockId(filePath: string): string {
   const basename = path.basename(filePath);
   const match = basename.match(/^session-(.+)\.jsonl$/);
-  return match ? match[1] : '';
+  if (!match) {
+    throw new Error(`Cannot extract session ID from path: ${filePath}`);
+  }
+  return match[1];
 }
 
 /**
@@ -105,11 +108,11 @@ export async function resumeSession(
   }
 
   // Step 2: Resolve which session to resume
-  let targetFilePath: string;
-  let lockHandle: LockHandle;
+  type LockedSession = { targetFilePath: string; lockHandle: LockHandle };
+
+  let lockedSession: LockedSession | null = null;
 
   if (request.continueRef === CONTINUE_LATEST) {
-    let acquired = false;
     for (const session of sessions) {
       const lockId = extractLockId(session.filePath);
       const locked = await SessionLockManager.isLocked(
@@ -119,16 +122,18 @@ export async function resumeSession(
       if (locked) continue;
 
       try {
-        lockHandle = await SessionLockManager.acquire(request.chatsDir, lockId);
-        targetFilePath = session.filePath;
-        acquired = true;
+        const lockHandle = await SessionLockManager.acquire(
+          request.chatsDir,
+          lockId,
+        );
+        lockedSession = { targetFilePath: session.filePath, lockHandle };
         break;
       } catch {
         continue;
       }
     }
 
-    if (!acquired) {
+    if (!lockedSession) {
       return {
         ok: false,
         error: 'All sessions for this project are in use',
@@ -143,11 +148,15 @@ export async function resumeSession(
       return { ok: false, error: resolved.error };
     }
 
-    targetFilePath = resolved.session.filePath;
+    const targetFilePath = resolved.session.filePath;
     const lockId = extractLockId(targetFilePath);
 
     try {
-      lockHandle = await SessionLockManager.acquire(request.chatsDir, lockId);
+      const lockHandle = await SessionLockManager.acquire(
+        request.chatsDir,
+        lockId,
+      );
+      lockedSession = { targetFilePath, lockHandle };
     } catch {
       return {
         ok: false,
@@ -158,11 +167,11 @@ export async function resumeSession(
 
   // Step 4: Replay session
   const replayResult = await replaySession(
-    targetFilePath!,
+    lockedSession.targetFilePath,
     request.projectHash,
   );
   if (!replayResult.ok) {
-    await lockHandle!.release();
+    await lockedSession.lockHandle.release();
     return {
       ok: false,
       error: `Failed to replay session: ${replayResult.error}`,
@@ -178,7 +187,10 @@ export async function resumeSession(
     provider: request.currentProvider,
     model: request.currentModel,
   });
-  recording.initializeForResume(targetFilePath!, replayResult.lastSeq);
+  recording.initializeForResume(
+    lockedSession.targetFilePath,
+    replayResult.lastSeq,
+  );
 
   // Step 6: Handle provider/model mismatch
   if (
@@ -207,7 +219,7 @@ export async function resumeSession(
     history: replayResult.history,
     metadata: replayResult.metadata,
     recording,
-    lockHandle: lockHandle!,
+    lockHandle: lockedSession.lockHandle,
     warnings: replayResult.warnings,
   };
 }

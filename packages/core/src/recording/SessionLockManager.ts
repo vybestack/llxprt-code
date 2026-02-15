@@ -173,6 +173,11 @@ export class SessionLockManager {
     sessionId: string,
   ): Promise<void> {
     const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+    const isStale = await SessionLockManager.checkStale(lockPath);
+    if (!isStale) {
+      return;
+    }
+
     try {
       await fs.unlink(lockPath);
     } catch {
