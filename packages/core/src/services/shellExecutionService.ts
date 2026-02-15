@@ -74,6 +74,8 @@ export interface ShellExecutionResult {
   error: Error | null;
   /** A boolean indicating if the command was aborted by the user. */
   aborted: boolean;
+  /** Whether the command was killed due to an inactivity timeout. */
+  inactivityTimedOut?: boolean;
   /** The process ID of the spawned shell. */
   pid: number | undefined;
   /** The method used to execute the shell command. */
@@ -326,7 +328,7 @@ export class ShellExecutionService {
         const inactivityAbortController = new AbortController();
 
         const resetInactivityTimer = () => {
-          if (!inactivityTimeoutMs || exited) {
+          if (!inactivityTimeoutMs || inactivityTimeoutMs <= 0 || exited) {
             return;
           }
 
@@ -337,13 +339,13 @@ export class ShellExecutionService {
           inactivityTimeout = setTimeout(() => {
             if (!exited) {
               // Kill the process due to inactivity
-              inactivityAbortController.abort();
+              inactivityAbortController.abort('inactivity_timeout');
             }
           }, inactivityTimeoutMs);
         };
 
-        // Set up inactivity abort handler
-        if (inactivityTimeoutMs) {
+        // Set up inactivity abort handler (mirrors abortHandler's SIGKILL escalation)
+        if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
           inactivityAbortController.signal.addEventListener(
             'abort',
             async () => {
@@ -354,13 +356,14 @@ export class ShellExecutionService {
                 } else {
                   try {
                     process.kill(-pid, 'SIGTERM');
+                    await new Promise((res) =>
+                      setTimeout(res, SIGKILL_TIMEOUT_MS),
+                    );
+                    if (!exited) {
+                      process.kill(-pid, 'SIGKILL');
+                    }
                   } catch (_e) {
-                    // ignore
-                  }
-                  try {
-                    child.kill('SIGTERM');
-                  } catch (_e) {
-                    // ignore
+                    if (!exited) child.kill('SIGKILL');
                   }
                 }
               }
@@ -471,6 +474,7 @@ export class ShellExecutionService {
             signal: signal ? (os.constants.signals[signal] ?? null) : null,
             error,
             aborted: abortSignal.aborted,
+            inactivityTimedOut: inactivityAbortController.signal.aborted,
             pid: child.pid,
             executionMethod: 'child_process',
           });
@@ -814,6 +818,7 @@ export class ShellExecutionService {
             signal: signal ?? null,
             error,
             aborted: abortSignal.aborted,
+            inactivityTimedOut: inactivityAbortController.signal.aborted,
             pid: ptyProcess.pid,
             executionMethod: ptyInfo.name ?? 'node-pty',
           });
@@ -848,7 +853,7 @@ export class ShellExecutionService {
         });
 
         const resetInactivityTimer = () => {
-          if (!inactivityTimeoutMs || exited) {
+          if (!inactivityTimeoutMs || inactivityTimeoutMs <= 0 || exited) {
             return;
           }
 
@@ -859,13 +864,13 @@ export class ShellExecutionService {
           inactivityTimeout = setTimeout(() => {
             if (!exited) {
               // Kill the process due to inactivity
-              inactivityAbortController.abort();
+              inactivityAbortController.abort('inactivity_timeout');
             }
           }, inactivityTimeoutMs);
         };
 
-        // Set up inactivity abort handler
-        if (inactivityTimeoutMs) {
+        // Set up inactivity abort handler (mirrors abortHandler's SIGKILL escalation)
+        if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
           inactivityAbortController.signal.addEventListener(
             'abort',
             async () => {
@@ -876,13 +881,14 @@ export class ShellExecutionService {
                 } else {
                   try {
                     process.kill(-pid, 'SIGTERM');
+                    await new Promise((res) =>
+                      setTimeout(res, SIGKILL_TIMEOUT_MS),
+                    );
+                    if (!exited) {
+                      process.kill(-pid, 'SIGKILL');
+                    }
                   } catch (_e) {
-                    // ignore
-                  }
-                  try {
-                    ptyProcess.kill('SIGTERM');
-                  } catch (_e) {
-                    // ignore
+                    if (!exited) ptyProcess.kill('SIGKILL');
                   }
                 }
               }
@@ -1011,6 +1017,7 @@ export class ShellExecutionService {
                 signal: null,
                 error,
                 aborted: true,
+                inactivityTimedOut: inactivityAbortController.signal.aborted,
                 pid,
                 executionMethod: ptyInfo.name ?? 'node-pty',
               });
@@ -1052,6 +1059,7 @@ export class ShellExecutionService {
                 signal: null,
                 error,
                 aborted: true,
+                inactivityTimedOut: inactivityAbortController.signal.aborted,
                 pid,
                 executionMethod: ptyInfo.name ?? 'node-pty',
               });
@@ -1231,7 +1239,7 @@ export class ShellExecutionService {
 
   /**
    * Sanitizes environment variables to prevent credential leaks in sandbox/CI environments.
-   * Uses an allow-list approach: only known-safe variables are passed through.
+   * Uses an allowlist approach: only known-safe variables are forwarded.
    *
    * @param env The environment variables to sanitize
    * @param isSandboxOrCI Whether running in sandbox or CI mode (true = sanitize, false = pass through all)
@@ -1248,30 +1256,44 @@ export class ShellExecutionService {
       return { ...env };
     }
 
-    // Sensitive variable patterns to block
-    const sensitivePatterns = [
-      /API_KEY/i,
-      /SECRET/i,
-      /TOKEN/i,
-      /PASSWORD/i,
-      /CREDENTIAL/i,
-      /PRIVATE_KEY/i,
-      /AUTH.*KEY/i,
-      /CLIENT_SECRET/i,
-      /ENCRYPTION_KEY/i,
-    ];
+    const SAFE_VARS = new Set([
+      // Cross-platform
+      'PATH',
+      // Windows
+      'Path',
+      'SYSTEMROOT',
+      'SystemRoot',
+      'COMSPEC',
+      'ComSpec',
+      'PATHEXT',
+      'WINDIR',
+      'TEMP',
+      'TMP',
+      'USERPROFILE',
+      'SYSTEMDRIVE',
+      'SystemDrive',
+      // Unix
+      'HOME',
+      'LANG',
+      'SHELL',
+      'TMPDIR',
+      'USER',
+      'LOGNAME',
+      // Terminal
+      'TERM',
+      'PAGER',
+    ]);
+
+    if (allowlist) {
+      for (const name of allowlist) {
+        SAFE_VARS.add(name);
+      }
+    }
 
     const result: NodeJS.ProcessEnv = {};
 
-    // Check each env var - preserve if NOT sensitive OR if explicitly allowlisted
     for (const [key, value] of Object.entries(env)) {
-      const isSensitive = sensitivePatterns.some((pattern) =>
-        pattern.test(key),
-      );
-      const isAllowlisted = allowlist?.includes(key);
-
-      // Preserve if not sensitive OR explicitly allowlisted
-      if (!isSensitive || isAllowlisted) {
+      if (SAFE_VARS.has(key) || /^LLXPRT_CODE/.test(key)) {
         result[key] = value;
       }
     }

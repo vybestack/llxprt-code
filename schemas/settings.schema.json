@@ -1088,13 +1088,6 @@
       "default": true,
       "type": "boolean"
     },
-    "debugKeystrokeLogging": {
-      "title": "Debug Keystroke Logging",
-      "description": "Enable debug logging of keystrokes to the console.",
-      "markdownDescription": "Enable debug logging of keystrokes to the console.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `false`",
-      "default": false,
-      "type": "boolean"
-    },
     "customWittyPhrases": {
       "title": "Custom Witty Phrases",
       "description": "Custom witty phrases to display during loading. When provided, the CLI cycles through these instead of the defaults.",

@@ -1797,7 +1797,7 @@ export class CoreToolScheduler {
             this.config,
             toolName,
             scheduledCall.request.args,
-            toolResult as unknown as Record<string, unknown>,
+            toolResult,
           );
 
           await this.publishBufferedResults(signal);

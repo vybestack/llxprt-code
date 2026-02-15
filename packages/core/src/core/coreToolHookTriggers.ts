@@ -10,6 +10,7 @@ import type { BeforeToolInput, AfterToolInput } from '../hooks/types.js';
 import { HookRegistry } from '../hooks/hookRegistry.js';
 import { HookPlanner } from '../hooks/hookPlanner.js';
 import { HookRunner } from '../hooks/hookRunner.js';
+import type { ToolResult } from '../tools/tools.js';
 import { DebugLogger } from '../debug/index.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hook-triggers:tool');
@@ -27,7 +28,7 @@ export async function triggerBeforeToolHook(
   toolInput: Record<string, unknown>,
 ): Promise<void> {
   // Check if hooks are enabled
-  if (!config.getEnableHooks()) {
+  if (!config.getEnableHooks?.()) {
     return;
   }
 
@@ -96,10 +97,10 @@ export async function triggerAfterToolHook(
   config: Config,
   toolName: string,
   toolInput: Record<string, unknown>,
-  toolOutput: Record<string, unknown>,
+  toolOutput: ToolResult,
 ): Promise<void> {
   // Check if hooks are enabled
-  if (!config.getEnableHooks()) {
+  if (!config.getEnableHooks?.()) {
     return;
   }
 
@@ -129,7 +130,12 @@ export async function triggerAfterToolHook(
       timestamp: new Date().toISOString(),
       tool_name: toolName,
       tool_input: toolInput,
-      tool_response: toolOutput as Record<string, unknown>,
+      tool_response: {
+        llmContent: toolOutput.llmContent,
+        returnDisplay: toolOutput.returnDisplay,
+        ...(toolOutput.metadata && { metadata: toolOutput.metadata }),
+        ...(toolOutput.error && { error: toolOutput.error }),
+      },
     };
 
     // Execute hooks

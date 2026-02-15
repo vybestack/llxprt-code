@@ -26,10 +26,11 @@ describe('mixed input crash prevention', () => {
       expect(error).toBeInstanceOf(Error);
       const err = error as Error;
 
+      // ExitCodes.FATAL_INPUT_ERROR is 42.
       // Windows may exit with 3221226505 (0xC0000409 STATUS_STACK_BUFFER_OVERRUN)
       // due to libuv async.c assertion failure when process exits
       expect(
-        err.message.includes('Process exited with code 1') ||
+        err.message.includes('Process exited with code 42') ||
           err.message.includes('Process exited with code 3221226505'),
       ).toBe(true);
       expect(err.message).toContain(

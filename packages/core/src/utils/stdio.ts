@@ -10,6 +10,24 @@ import { coreEvents } from './events.js';
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 const originalStderrWrite = process.stderr.write.bind(process.stderr);
 
+// Module-level error handlers so the same references are used for add/remove.
+const handleStdoutError = (err: NodeJS.ErrnoException) => {
+  if (err.code !== 'EPIPE') {
+    console.warn(`stdout error: ${err.message}`);
+  }
+};
+
+const handleStderrError = (err: NodeJS.ErrnoException) => {
+  if (err.code !== 'EPIPE') {
+    try {
+      process.stderr.write(`stderr error: ${err.message}
+`);
+    } catch {
+      // Swallow write failures to avoid infinite recursion
+    }
+  }
+};
+
 /**
  * Writes to the real stdout, bypassing any monkey patching on process.stdout.write.
  */
@@ -86,27 +104,11 @@ export function patchStdio(): () => void {
  * to a process that exits early.
  */
 export function createInkStdio() {
-  // Add error handlers to prevent EPIPE crashes
-  // These handlers are idempotent - adding multiple times is safe
-  const handleStdoutError = (err: NodeJS.ErrnoException) => {
-    // Ignore EPIPE errors which happen when the output is piped to a process that exits early
-    if (err.code !== 'EPIPE') {
-      console.warn(`stdout error: ${err.message}`);
-    }
-  };
-
-  const handleStderrError = (err: NodeJS.ErrnoException) => {
-    // Ignore EPIPE errors which happen when the output is piped to a process that exits early
-    if (err.code !== 'EPIPE') {
-      console.warn(`stderr error: ${err.message}`);
-    }
-  };
-
-  // Remove any existing handlers for these functions to avoid duplicates
+  // Remove any existing handlers to avoid duplicates, then re-add.
+  // Handlers are defined at module scope so the same references are used.
   process.stdout.removeListener('error', handleStdoutError);
   process.stderr.removeListener('error', handleStderrError);
 
-  // Add the error handlers
   process.stdout.on('error', handleStdoutError);
   process.stderr.on('error', handleStderrError);
 

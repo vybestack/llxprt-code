@@ -129,7 +129,9 @@ describe('stdio utils', () => {
     });
 
     it('non-EPIPE errors on stderr are logged', () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation();
+      const stderrWriteSpy = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation(() => true);
       // Call createInkStdio to trigger hardening
       createInkStdio();
 
@@ -140,12 +142,12 @@ describe('stdio utils', () => {
       // Emit the error
       process.stderr.emit('error', otherError);
 
-      // Should have been logged
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
+      // Should have been logged via process.stderr.write (not console.warn to avoid infinite loop)
+      expect(stderrWriteSpy).toHaveBeenCalledWith(
         expect.stringContaining('stderr error'),
       );
 
-      consoleWarnSpy.mockRestore();
+      stderrWriteSpy.mockRestore();
     });
   });
 });

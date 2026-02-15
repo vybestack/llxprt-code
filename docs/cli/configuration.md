@@ -342,6 +342,10 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.
   - **Default:** `undefined`
 
+- **`ui.jitContextEnabled`** (boolean):
+  - **Description:** Enable Just-In-Time (JIT) loading of subdirectory-specific context (LLXPRT.md files) on demand when tools access files. When enabled, the system automatically loads context from subdirectories as needed.
+  - **Default:** `true`
+
 - **`ui.contextFileName`** (string | string[]):
   - **Description:** The name of the context file or files to load into memory. Accepts either a single string or an array of strings.
   - **Default:** `undefined`
@@ -719,12 +723,6 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`enableFuzzyFiltering`** (boolean):
   - **Description:** Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., "prd" to match "production"). When disabled, only exact prefix matches are shown.
   - **Default:** `true`
-
-#### `debugKeystrokeLogging`
-
-- **`debugKeystrokeLogging`** (boolean):
-  - **Description:** Enable debug logging of keystrokes to the console.
-  - **Default:** `false`
 
 #### `customWittyPhrases`
 
