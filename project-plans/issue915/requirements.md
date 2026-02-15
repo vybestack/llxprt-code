@@ -54,7 +54,7 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-008 (Ubiquitous)
 **Pattern**: Ubiquitous  
-**Requirement**: The system SHALL enforce provider-required tool result placement, including strict adjacency for providers that require adjacency.
+**Requirement**: The system SHALL enforce provider-required tool result placement, including strict adjacency for providers that require adjacency. Adjacency reconstruction SHALL preserve all real tool completions and SHALL NOT replace any real completion with a synthetic completion.
 
 ### REQ-915-009 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
@@ -62,7 +62,12 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-010 (State-Driven)
 **Pattern**: State-Driven  
-**While** canonical interaction state is valid, **the system SHALL** render tool call/result pairing deterministically and collision-free within a single provider render scope, such that repeated renders from unchanged state and identical provider selection produce identical pairing and ordering. Note: identical projected IDs across separate render invocations are not required when a projection strategy currently contains non-deterministic elements; such elements are known defects, not desired behavior (see technical-overview §3.2).
+**While** canonical interaction state is valid, **the system SHALL** render tool call/result pairing and ordering deterministically within a single provider render scope, such that repeated renders from unchanged state and identical provider selection produce identical pairing and ordering.
+
+### REQ-915-049 (State-Driven)
+**Pattern**: State-Driven  
+**While** canonical interaction state is valid, **the system SHALL** produce collision-free projected IDs within a single provider render scope such that distinct canonical call identities map to distinct provider IDs.  
+*Known defect note: Some projection strategies (e.g., Anthropic empty-ID fallback) currently contain non-deterministic elements that may produce different projected IDs across separate render invocations. These are tracked defects to be remediated, not accepted behavior (see technical-overview §3.2, §6.4).*
 
 ### REQ-915-047 (Unwanted Behavior)
 **Pattern**: Unwanted Behavior  
@@ -128,13 +133,13 @@ This document defines atomic, testable functional and technical requirements for
 
 ## 6. Domain: Thinking and Mixed Content Compatibility
 
-### REQ-915-023 (Optional Feature)
-**Pattern**: Optional Feature  
-**Where** reasoning policy includes thinking blocks in provider context, **the system SHALL** include thinking blocks without violating tool protocol constraints.
+### REQ-915-023 (State-Driven)
+**Pattern**: State-Driven  
+**While** reasoning policy includes thinking blocks in provider context, **the system SHALL** include thinking blocks without violating tool protocol constraints.
 
-### REQ-915-024 (Optional Feature)
-**Pattern**: Optional Feature  
-**Where** reasoning policy excludes thinking blocks from provider context, **the system SHALL** preserve valid tool call/result pairing and placement independently of thinking exclusion.
+### REQ-915-024 (State-Driven)
+**Pattern**: State-Driven  
+**While** reasoning policy excludes thinking blocks from provider context, **the system SHALL** preserve valid tool call/result pairing and placement independently of thinking exclusion.
 
 ### REQ-915-025 (Ubiquitous)
 **Pattern**: Ubiquitous  
@@ -198,12 +203,13 @@ This document defines atomic, testable functional and technical requirements for
 
 ### REQ-915-037 (Ubiquitous)
 **Pattern**: Ubiquitous  
-**Requirement**: The system SHALL centralize interaction-validity repair responsibilities in the transcript renderer, and provider adapters SHALL remain limited to provider syntax/shape projection without duplicating validity repair logic.
+**Requirement**: The system SHALL centralize interaction-validity repair responsibilities in the transcript renderer. Provider adapters SHOULD limit themselves to provider syntax/shape projection without duplicating validity repair logic.  
+*Note: The Anthropic adapter currently performs its own validity repair as a known deviation (see technical-overview §4.2). Consolidation of this deviation into the renderer is a target-state goal, not a hard acceptance criterion for #915. REQ-915-037 defines the architectural direction; existing adapter-level repair is acceptable until consolidation is completed.*
 
-### REQ-915-038 (Ubiquitous)
+### REQ-915-038 (Ubiquitous) — Non-Regression
 **Pattern**: Ubiquitous  
 **Requirement**: The system SHALL perform final transcript serialization safely for provider send even when tool call parameters contain complex object structures.  
-*Note: This is a non-regression guard for existing serialization safety, not a new requirement introduced by #915.*
+*Classification: Non-regression constraint derived from existing behavior (technical-overview §1.2, deepClone pass). Not a new behavioral requirement introduced by #915; included to guard against regression during refactoring.*
 
 ### REQ-915-046 (Ubiquitous)
 **Pattern**: Ubiquitous  
@@ -253,56 +259,57 @@ This document defines atomic, testable functional and technical requirements for
 
 ## 12. Traceability Matrix
 
-| Requirement ID | overview.md | technical-overview.md | dataflow-before-after.md | tool-execution-unification.md |
-|---|---|---|---|---|
-| REQ-915-001 | §6 | §1.3, §7.2 | “Today/After” turn boundary flow |  |
-| REQ-915-002 | §6 | §2.1 | in-flight discussion |  |
-| REQ-915-003 | §6 | §2.1, §7.2 | “Where it changes” |  |
-| REQ-915-004 | §6, §10 | §11 | provider switch section |  |
-| REQ-915-005 | §1, §3 | §2, §3 | “Where it breaks today” |  |
-| REQ-915-006 | §4 | §3.1 | transcript assembly steps |  |
-| REQ-915-007 | §4 | §3.1, §5.4 | repair/closure examples |  |
-| REQ-915-008 | §4 | §3.1 | adjacency discussion |  |
-| REQ-915-009 | §4 | §3.1, §5.3 | duplicate risk discussion |  |
-| REQ-915-010 | §4 | §5, §7.2 | deterministic builder narrative |  |
-| REQ-915-011 | §4, §5 | §5.4, §7.3 | incomplete/cancellation examples |  |
-| REQ-915-012 | §5 | §7.3 | 5-call scenario |  |
-| REQ-915-013 | §4 | §3.1 | strict provider failure context |  |
-| REQ-915-014 | §7 | §4.1, §6 | canonical ID narrative |  |
-| REQ-915-015 | §7 | §4.1, §6 | provider projection flow |  |
-| REQ-915-016 | §7 | §3.2, §6.4 | projection examples |  |
-| REQ-915-017 | §7 | §3.2, §6.4 | projection examples |  |
-| REQ-915-018 | §7 | §6.1, §7.4 | OpenAI conversion |  |
-| REQ-915-019 | §7 | §6.1, §7.4 | Anthropic conversion |  |
-| REQ-915-020 | §7 | §6.1, §6.2, §7.4 |  |  |
-| REQ-915-021 | §7 | §6.1, §6.3, §7.4 |  |  |
-| REQ-915-022 |  | §6.4 edge cases (derived from technical spec only) |  |  |
-| REQ-915-023 | §8 | §3.3, §7.3 | mixed thinking/tool flow |  |
-| REQ-915-024 | §8 | §3.3 | mixed thinking/tool flow |  |
-| REQ-915-025 | §8 | §3.3 | scenario baseline |  |
-| REQ-915-026 | §9 | §8 | compression case |  |
-| REQ-915-027 | §9 | §8 | compression case |  |
-| REQ-915-028 | §9 | §8 | compression failure mode |  |
-| REQ-915-029 | §3, §10 | §9 |  | §1–§4 |
-| REQ-915-030 |  | §9.3 |  | §1, §4 |
-| REQ-915-031 |  | §9.3 |  | §1–§4 |
-| REQ-915-032 |  | §9.1, §9.3 |  | §1.2, §3.1, §4 |
-| REQ-915-033 |  | §9.3 |  | §4.1 |
-| REQ-915-034 |  | §9.3, §9.4 |  | §4.2 |
-| REQ-915-035 |  | §9.4 |  | §4.3 |
-| REQ-915-036 |  | §4.1, §4.2 | flow layering |  |
-| REQ-915-037 |  | §4.2 (known deviation) |  |  |
-| REQ-915-038 |  | §1.2 deepClone pass |  |  |
-| REQ-915-039 |  | §10 |  |  |
-| REQ-915-040 |  | §10 |  |  |
-| REQ-915-041 | §10(1) | §11, §12 | provider switch section |  |
-| REQ-915-042 | §10(2) | §11, §12 | multi-turn flow |  |
-| REQ-915-043 | §10(3) | §11, §12 | failover continuity context |  |
-| REQ-915-044 | §10(4) | §5.4, §7.3 | 5-call examples |  |
-| REQ-915-045 | §10(6) | §9, §12(6) | path comparison in flow | §1–§4 |
-| REQ-915-046 |  | §5.1 | ledger lifetime / reconstruction narrative |  |
-| REQ-915-047 | §3(8), §4 | §1.2 |  |  |
-| REQ-915-048 |  | §5.2 |  |  |
+| Requirement ID | Source | overview.md | technical-overview.md | dataflow-before-after.md | tool-execution-unification.md |
+|---|---|---|---|---|---|
+| REQ-915-001 | Direct | §6 | §1.3, §7.2 | turn boundary flow |  |
+| REQ-915-002 | Direct | §6 | §2.1 | in-flight discussion |  |
+| REQ-915-003 | Direct | §6 | §2.1, §7.2 | "Where it changes" |  |
+| REQ-915-004 | Direct | §6, §10 | §11 | provider switch section |  |
+| REQ-915-005 | Direct | §1, §3, §4 | §2, §3 | "Where it breaks today" |  |
+| REQ-915-006 | Direct | §4 | §3.1 | transcript assembly steps |  |
+| REQ-915-007 | Direct | §4 | §3.1, §5.4 | repair/closure examples |  |
+| REQ-915-008 | Direct | §4 | §3.1 | adjacency discussion |  |
+| REQ-915-009 | Direct | §4 | §3.1, §5.3 | duplicate risk discussion |  |
+| REQ-915-010 | Direct | §4 | §3.2, §7.2 | deterministic builder narrative |  |
+| REQ-915-011 | Direct | §4, §5 | §5.4, §7.3 | incomplete/cancellation examples |  |
+| REQ-915-012 | Direct | §5 | §3.1, §7.3 | 5-call scenario |  |
+| REQ-915-013 | Direct | §4 | §3.1 | strict provider failure context |  |
+| REQ-915-014 | Direct | §7 | §4.1, §6 | canonical ID narrative |  |
+| REQ-915-015 | Direct | §7 | §4.1, §6 | provider projection flow |  |
+| REQ-915-016 | Direct | §7 | §3.2, §6.4 | projection examples |  |
+| REQ-915-017 | Direct | §7 | §3.2, §6.4 | projection examples |  |
+| REQ-915-018 | Direct | §7 | §6.1, §7.4 | OpenAI conversion |  |
+| REQ-915-019 | Direct | §7 | §6.1, §7.4 | Anthropic conversion |  |
+| REQ-915-020 | Direct | §7 | §6.1, §6.2, §7.4 |  |  |
+| REQ-915-021 | Direct | §7 | §6.1, §6.3, §7.4 |  |  |
+| REQ-915-022 | Derived | | §6.4 (edge cases) |  |  |
+| REQ-915-023 | Direct | §8 | §3.3, §7.3 | mixed thinking/tool flow |  |
+| REQ-915-024 | Direct | §8 | §3.3 | mixed thinking/tool flow |  |
+| REQ-915-025 | Direct | §8 | §3.3 | scenario baseline |  |
+| REQ-915-026 | Direct | §9 | §8 | compression case |  |
+| REQ-915-027 | Direct | §9 | §8 | compression case |  |
+| REQ-915-028 | Direct | §9 | §8 | compression failure mode |  |
+| REQ-915-029 | Direct | §3, §10 | §9 |  | §1–§4 |
+| REQ-915-030 | Derived |  | §9.3 |  | §1, §4 |
+| REQ-915-031 | Derived |  | §9.3 |  | §1–§4 |
+| REQ-915-032 | Derived |  | §9.1, §9.3 |  | §1.2, §3.1, §4 |
+| REQ-915-033 | Derived |  | §9.3 |  | §4.1 |
+| REQ-915-034 | Derived |  | §9.3, §9.4 |  | §4.2 |
+| REQ-915-035 | Derived |  | §9.4 |  | §4.3 |
+| REQ-915-036 | Direct |  | §4.1, §4.2 | flow layering |  |
+| REQ-915-037 | Derived |  | §4.2 (known deviation — target-state) |  |  |
+| REQ-915-038 | Non-regression |  | §1.2 (deepClone pass) |  |  |
+| REQ-915-039 | Derived |  | §10 |  |  |
+| REQ-915-040 | Derived |  | §10 |  |  |
+| REQ-915-041 | Direct | §10(1) | §11, §12 | provider switch section |  |
+| REQ-915-042 | Direct | §10(2) | §11, §12 | multi-turn flow |  |
+| REQ-915-043 | Direct | §10(3) | §11, §12 | failover continuity context |  |
+| REQ-915-044 | Direct | §10(4) | §5.4, §7.3 | 5-call examples |  |
+| REQ-915-045 | Direct | §10(6) | §9, §12(6) | path comparison in flow | §1–§4 |
+| REQ-915-046 | Direct |  | §5.1 | ledger lifetime / reconstruction |  |
+| REQ-915-047 | Direct | §3(8), §4 | §1.2 |  |  |
+| REQ-915-048 | Direct |  | §5.2 |  |  |
+| REQ-915-049 | Direct |  | §3.2, §6.4 |  |  |
 
 ---
 
