@@ -631,7 +631,7 @@ describe('mcp-client', () => {
           quotaProjectId: 'myproject',
         };
 
-        GoogleAuth.prototype.getClient = vi.fn().mockResolvedValue(mockClient);
+        vi.mocked(GoogleAuth.prototype.getClient).mockResolvedValue(mockClient);
       });
 
       it('should use GoogleCredentialProvider when specified', async () => {

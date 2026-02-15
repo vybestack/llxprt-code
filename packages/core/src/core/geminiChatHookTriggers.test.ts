@@ -55,12 +55,13 @@ describe('geminiChatHookTriggers', () => {
     });
 
     it('should handle errors gracefully without propagating', async () => {
+      // getHooks throws to force an error inside the try block
+      // (HookRegistry.initialize() calls config.getHooks() during processHooksFromConfig)
       const mockConfig = {
         getEnableHooks: vi.fn().mockReturnValue(true),
-        getSessionId: vi.fn().mockImplementation(() => {
+        getHooks: vi.fn().mockImplementation(() => {
           throw new Error('Test error');
         }),
-        getWorkingDir: vi.fn().mockReturnValue('/test/cwd'),
       } as unknown as Config;
 
       const mockRequest = {

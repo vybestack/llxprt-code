@@ -30,7 +30,7 @@ export async function triggerBeforeModelHook(
   request: { contents: IContent[]; tools?: unknown },
 ): Promise<void> {
   // Check if hooks are enabled
-  if (!config.getEnableHooks()) {
+  if (!config.getEnableHooks?.()) {
     return;
   }
 
@@ -52,17 +52,16 @@ export async function triggerBeforeModelHook(
     }
 
     // Convert request to hook format
-    // IContent has 'speaker' field ('ai', 'human', 'tool'), convert to role
+    // IContent speaker is 'ai' | 'human' | 'tool'; map to hook role
     const llmRequest = {
       messages: request.contents.map((content) => ({
-        role: (content.speaker === 'ai'
-          ? 'model'
-          : content.speaker === 'human'
-            ? 'user'
-            : 'system') as 'model' | 'user' | 'system',
+        role: (content.speaker === 'ai' ? 'model' : 'user') as
+          | 'model'
+          | 'user'
+          | 'system',
         content: JSON.stringify(content.blocks),
       })),
-      model: '', // Model info not available in this context
+      model: config.getModel(),
     };
 
     // Build hook input
@@ -108,7 +107,7 @@ export async function triggerAfterModelHook(
   response: IContent,
 ): Promise<void> {
   // Check if hooks are enabled
-  if (!config.getEnableHooks()) {
+  if (!config.getEnableHooks?.()) {
     return;
   }
 
@@ -188,7 +187,7 @@ export async function triggerBeforeToolSelectionHook(
   _tools: unknown,
 ): Promise<void> {
   // Check if hooks are enabled
-  if (!config.getEnableHooks()) {
+  if (!config.getEnableHooks?.()) {
     return;
   }
 

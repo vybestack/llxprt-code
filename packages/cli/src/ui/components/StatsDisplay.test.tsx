@@ -67,9 +67,57 @@ const renderWithMockedStats = (metrics: SessionMetrics) => {
   return render(<StatsDisplay duration="1s" />);
 };
 
+const defaultZeroMetrics: SessionMetrics = {
+  models: {},
+  tools: {
+    totalCalls: 0,
+    totalSuccess: 0,
+    totalFail: 0,
+    totalDurationMs: 0,
+    totalDecisions: { accept: 0, reject: 0, modify: 0 },
+    byName: {},
+  },
+  files: {
+    totalLinesAdded: 0,
+    totalLinesRemoved: 0,
+  },
+};
+
+const defaultStatsReturnValue = {
+  stats: {
+    sessionId: 'test-session-id',
+    sessionStartTime: new Date(),
+    metrics: defaultZeroMetrics,
+    lastPromptTokenCount: 0,
+    promptCount: 5,
+  },
+
+  getPromptCount: () => 5,
+  startNewPrompt: vi.fn(),
+};
+
 describe('<StatsDisplay />', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    useSessionStatsMock.mockReturnValue(defaultStatsReturnValue);
+
+    useRuntimeApiMock.mockReturnValue({
+      getActiveProviderMetrics: vi.fn().mockReturnValue({
+        tokensPerMinute: 0,
+        throttleWaitTimeMs: 0,
+        totalTokens: 0,
+        totalRequests: 0,
+      }),
+      getSessionTokenUsage: vi.fn().mockReturnValue({
+        input: 0,
+        output: 0,
+        cache: 0,
+        tool: 0,
+        thought: 0,
+        total: 0,
+      }),
+    } as unknown as ReturnType<typeof RuntimeContext.useRuntimeApi>);
   });
   it('renders only the Performance section in its zero state', () => {
     const zeroMetrics: SessionMetrics = {
@@ -408,19 +456,6 @@ describe('<StatsDisplay />', () => {
     });
 
     it('renders the custom title when a title prop is provided', () => {
-      useSessionStatsMock.mockReturnValue({
-        stats: {
-          sessionId: 'test-session-id',
-          sessionStartTime: new Date(),
-          metrics: zeroMetrics,
-          lastPromptTokenCount: 0,
-          promptCount: 5,
-        },
-
-        getPromptCount: () => 5,
-        startNewPrompt: vi.fn(),
-      });
-
       const { lastFrame } = render(
         <StatsDisplay duration="1s" title="Agent powering down. Goodbye!" />,
       );
@@ -470,16 +505,8 @@ describe('<StatsDisplay />', () => {
       ];
 
       useSessionStatsMock.mockReturnValue({
-        stats: {
-          sessionId: 'test-session-id',
-          sessionStartTime: new Date(),
-          metrics,
-          lastPromptTokenCount: 0,
-          promptCount: 5,
-        },
-
-        getPromptCount: () => 5,
-        startNewPrompt: vi.fn(),
+        ...defaultStatsReturnValue,
+        stats: { ...defaultStatsReturnValue.stats, metrics },
       });
 
       const { lastFrame } = render(
@@ -495,47 +522,6 @@ describe('<StatsDisplay />', () => {
     });
 
     it('does not render quota section when quotaLines are not provided', () => {
-      const metrics: SessionMetrics = {
-        models: {
-          'gemini-2.5-pro': {
-            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
-            tokens: {
-              prompt: 100,
-              candidates: 100,
-              total: 250,
-              cached: 50,
-              thoughts: 0,
-              tool: 0,
-            },
-          },
-        },
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-        files: {
-          totalLinesAdded: 0,
-          totalLinesRemoved: 0,
-        },
-      };
-
-      useSessionStatsMock.mockReturnValue({
-        stats: {
-          sessionId: 'test-session-id',
-          sessionStartTime: new Date(),
-          metrics,
-          lastPromptTokenCount: 0,
-          promptCount: 5,
-        },
-
-        getPromptCount: () => 5,
-        startNewPrompt: vi.fn(),
-      });
-
       const { lastFrame } = render(<StatsDisplay duration="1s" />);
       const output = lastFrame();
 
@@ -544,35 +530,6 @@ describe('<StatsDisplay />', () => {
     });
 
     it('handles empty quotaLines gracefully', () => {
-      const metrics: SessionMetrics = {
-        models: {},
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-        files: {
-          totalLinesAdded: 0,
-          totalLinesRemoved: 0,
-        },
-      };
-
-      useSessionStatsMock.mockReturnValue({
-        stats: {
-          sessionId: 'test-session-id',
-          sessionStartTime: new Date(),
-          metrics,
-          lastPromptTokenCount: 0,
-          promptCount: 5,
-        },
-
-        getPromptCount: () => 5,
-        startNewPrompt: vi.fn(),
-      });
-
       const { lastFrame } = render(
         <StatsDisplay duration="1s" quotaLines={[]} />,
       );

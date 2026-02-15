@@ -450,6 +450,7 @@ describe('ShellExecutionService', () => {
 
       // Command should be terminated by SIGTERM due to inactivity
       expect(result.signal).toBe(15); // SIGTERM
+      expect(result.inactivityTimedOut).toBe(true);
       // Verify SIGTERM was sent
       expect(mockProcessKill).toHaveBeenCalledWith(-12345, 'SIGTERM');
     });
@@ -488,6 +489,7 @@ describe('ShellExecutionService', () => {
 
       // Should be killed by inactivity timeout, not total timeout
       expect(result.aborted).toBe(true);
+      expect(result.inactivityTimedOut).toBe(true);
       expect(mockProcessKill).toHaveBeenCalled();
     });
   });
@@ -1393,17 +1395,19 @@ describe('Shell Environment Sanitization', () => {
       process.env = originalEnv;
     });
 
-    it('should strip sensitive environment variables (API keys, tokens, secrets)', () => {
+    it('should only forward allowlisted vars in sandbox/CI mode', () => {
       const testEnv = {
         PATH: '/usr/bin',
         HOME: '/home/user',
-        API_KEY: 'secret-key-12345',
-        AWS_SECRET_ACCESS_KEY: 'aws-secret',
-        GITHUB_TOKEN: 'ghp_token123',
-        SECRET_PASSWORD: 'password123',
-        DATABASE_PASSWORD: 'db-pass',
-        PRIVATE_KEY: 'private-key-data',
+        API_KEY: 'test-api-key-placeholder',
+        AWS_SECRET_ACCESS_KEY: 'test-aws-placeholder',
+        GITHUB_TOKEN: 'test-token-placeholder',
+        SECRET_PASSWORD: 'test-password-placeholder',
+        DATABASE_PASSWORD: 'test-dbpass-placeholder',
+        PRIVATE_KEY: 'test-privkey-placeholder',
         SAFE_VAR: 'safe-value',
+        NODE_ENV: 'test',
+        EDITOR: 'vim',
       };
 
       const sanitized = ShellExecutionService.sanitizeEnvironment(
@@ -1411,28 +1415,30 @@ describe('Shell Environment Sanitization', () => {
         true,
       );
 
-      // Safe vars should be preserved
+      // Built-in allowlisted vars should be preserved
       expect(sanitized.PATH).toBe('/usr/bin');
       expect(sanitized.HOME).toBe('/home/user');
-      expect(sanitized.SAFE_VAR).toBe('safe-value');
 
-      // Sensitive vars should be stripped
+      // Everything not on the allowlist should be excluded
       expect(sanitized.API_KEY).toBeUndefined();
       expect(sanitized.AWS_SECRET_ACCESS_KEY).toBeUndefined();
       expect(sanitized.GITHUB_TOKEN).toBeUndefined();
       expect(sanitized.SECRET_PASSWORD).toBeUndefined();
       expect(sanitized.DATABASE_PASSWORD).toBeUndefined();
       expect(sanitized.PRIVATE_KEY).toBeUndefined();
+      expect(sanitized.SAFE_VAR).toBeUndefined();
+      expect(sanitized.NODE_ENV).toBeUndefined();
+      expect(sanitized.EDITOR).toBeUndefined();
     });
 
-    it('should preserve LLXPRT_* and LLXPRT_CODE_* environment variables', () => {
+    it('should forward LLXPRT_CODE_TEST_* vars but not other LLXPRT vars', () => {
       const testEnv = {
         PATH: '/usr/bin',
+        LLXPRT_CODE_TEST_MODE: 'true',
+        LLXPRT_CODE_TEST_TIMEOUT: '5000',
         LLXPRT_DEBUG: '1',
         LLXPRT_CODE: '1',
-        LLXPRT_TEST_MODE: 'true',
         LLXPRT_CONFIG_PATH: '/path/to/config',
-        API_KEY: 'secret',
       };
 
       const sanitized = ShellExecutionService.sanitizeEnvironment(
@@ -1440,32 +1446,25 @@ describe('Shell Environment Sanitization', () => {
         true,
       );
 
-      // LLXPRT_* vars should be preserved
-      expect(sanitized.LLXPRT_DEBUG).toBe('1');
+      // LLXPRT_CODE* vars should be preserved (product env vars)
+      expect(sanitized.LLXPRT_CODE_TEST_MODE).toBe('true');
+      expect(sanitized.LLXPRT_CODE_TEST_TIMEOUT).toBe('5000');
       expect(sanitized.LLXPRT_CODE).toBe('1');
-      expect(sanitized.LLXPRT_TEST_MODE).toBe('true');
-      expect(sanitized.LLXPRT_CONFIG_PATH).toBe('/path/to/config');
 
-      // API_KEY should be stripped
-      expect(sanitized.API_KEY).toBeUndefined();
+      // Other LLXPRT_* vars (non-product) should NOT be preserved
+      expect(sanitized.LLXPRT_DEBUG).toBeUndefined();
+      expect(sanitized.LLXPRT_CONFIG_PATH).toBeUndefined();
     });
 
-    it('should preserve standard safe environment variables', () => {
+    it('should forward all built-in Unix safe vars', () => {
       const testEnv = {
         PATH: '/usr/bin:/bin',
         HOME: '/home/user',
         USER: 'testuser',
         SHELL: '/bin/bash',
-        TERM: 'xterm-256color',
         TMPDIR: '/tmp',
         LANG: 'en_US.UTF-8',
-        LC_ALL: 'en_US.UTF-8',
-        LC_CTYPE: 'en_US.UTF-8',
-        EDITOR: 'vim',
-        PAGER: 'less',
-        NODE_ENV: 'test',
-        NPM_CONFIG_PREFIX: '/usr/local',
-        API_KEY: 'should-be-stripped',
+        LOGNAME: 'testuser',
       };
 
       const sanitized = ShellExecutionService.sanitizeEnvironment(
@@ -1473,34 +1472,29 @@ describe('Shell Environment Sanitization', () => {
         true,
       );
 
-      // Safe vars should be preserved
       expect(sanitized.PATH).toBe('/usr/bin:/bin');
       expect(sanitized.HOME).toBe('/home/user');
       expect(sanitized.USER).toBe('testuser');
       expect(sanitized.SHELL).toBe('/bin/bash');
-      expect(sanitized.TERM).toBe('xterm-256color');
       expect(sanitized.TMPDIR).toBe('/tmp');
       expect(sanitized.LANG).toBe('en_US.UTF-8');
-      expect(sanitized.LC_ALL).toBe('en_US.UTF-8');
-      expect(sanitized.LC_CTYPE).toBe('en_US.UTF-8');
-      expect(sanitized.EDITOR).toBe('vim');
-      expect(sanitized.PAGER).toBe('less');
-      expect(sanitized.NODE_ENV).toBe('test');
-      expect(sanitized.NPM_CONFIG_PREFIX).toBe('/usr/local');
-
-      // API_KEY should be stripped
-      expect(sanitized.API_KEY).toBeUndefined();
+      expect(sanitized.LOGNAME).toBe('testuser');
     });
 
-    it('should preserve CI and GitHub Actions environment variables', () => {
+    it('should forward all built-in Windows safe vars', () => {
       const testEnv = {
-        CI: 'true',
-        GITHUB_ACTIONS: 'true',
-        GITHUB_WORKSPACE: '/workspace',
-        GITHUB_SHA: 'abc123',
-        RUNNER_OS: 'Linux',
-        RUNNER_TEMP: '/tmp/runner',
-        SECRET_TOKEN: 'should-be-stripped',
+        Path: 'C:\\Windows',
+        SYSTEMROOT: 'C:\\Windows',
+        SystemRoot: 'C:\\Windows',
+        COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
+        ComSpec: 'C:\\Windows\\System32\\cmd.exe',
+        PATHEXT: '.COM;.EXE;.BAT',
+        WINDIR: 'C:\\Windows',
+        TEMP: 'C:\\Users\\test\\AppData\\Local\\Temp',
+        TMP: 'C:\\Users\\test\\AppData\\Local\\Temp',
+        USERPROFILE: 'C:\\Users\\test',
+        SYSTEMDRIVE: 'C:',
+        SystemDrive: 'C:',
       };
 
       const sanitized = ShellExecutionService.sanitizeEnvironment(
@@ -1508,24 +1502,26 @@ describe('Shell Environment Sanitization', () => {
         true,
       );
 
-      // CI/GitHub vars should be preserved
-      expect(sanitized.CI).toBe('true');
-      expect(sanitized.GITHUB_ACTIONS).toBe('true');
-      expect(sanitized.GITHUB_WORKSPACE).toBe('/workspace');
-      expect(sanitized.GITHUB_SHA).toBe('abc123');
-      expect(sanitized.RUNNER_OS).toBe('Linux');
-      expect(sanitized.RUNNER_TEMP).toBe('/tmp/runner');
-
-      // SECRET_TOKEN should be stripped
-      expect(sanitized.SECRET_TOKEN).toBeUndefined();
+      expect(sanitized.Path).toBe('C:\\Windows');
+      expect(sanitized.SYSTEMROOT).toBe('C:\\Windows');
+      expect(sanitized.SystemRoot).toBe('C:\\Windows');
+      expect(sanitized.COMSPEC).toBe('C:\\Windows\\System32\\cmd.exe');
+      expect(sanitized.ComSpec).toBe('C:\\Windows\\System32\\cmd.exe');
+      expect(sanitized.PATHEXT).toBe('.COM;.EXE;.BAT');
+      expect(sanitized.WINDIR).toBe('C:\\Windows');
+      expect(sanitized.TEMP).toBe('C:\\Users\\test\\AppData\\Local\\Temp');
+      expect(sanitized.TMP).toBe('C:\\Users\\test\\AppData\\Local\\Temp');
+      expect(sanitized.USERPROFILE).toBe('C:\\Users\\test');
+      expect(sanitized.SYSTEMDRIVE).toBe('C:');
+      expect(sanitized.SystemDrive).toBe('C:');
     });
 
-    it('should preserve user-specified allowlist variables', () => {
+    it('should forward user-specified allowlist variables', () => {
       const testEnv = {
         PATH: '/usr/bin',
         CUSTOM_VAR: 'custom-value',
         SPECIAL_CONFIG: 'special',
-        API_KEY: 'secret',
+        OTHER_VAR: 'other',
       };
 
       const allowlist = ['CUSTOM_VAR', 'SPECIAL_CONFIG'];
@@ -1536,11 +1532,12 @@ describe('Shell Environment Sanitization', () => {
       );
 
       // Allowlisted vars should be preserved
+      expect(sanitized.PATH).toBe('/usr/bin');
       expect(sanitized.CUSTOM_VAR).toBe('custom-value');
       expect(sanitized.SPECIAL_CONFIG).toBe('special');
 
-      // API_KEY should still be stripped
-      expect(sanitized.API_KEY).toBeUndefined();
+      // Non-allowlisted vars should be excluded
+      expect(sanitized.OTHER_VAR).toBeUndefined();
     });
 
     it('should not sanitize when isSandboxOrCI is false (local dev mode)', () => {
@@ -1565,15 +1562,16 @@ describe('Shell Environment Sanitization', () => {
       expect(sanitized.CUSTOM_VAR).toBe('value');
     });
 
-    it('should preserve GIT_* and SSH_AUTH_SOCK for git operations', () => {
+    it('should exclude vars not on allowlist even if they look safe', () => {
       const testEnv = {
         PATH: '/usr/bin',
         GIT_AUTHOR_NAME: 'Test User',
-        GIT_AUTHOR_EMAIL: 'test@example.com',
-        GIT_COMMITTER_NAME: 'Test User',
-        GIT_COMMITTER_EMAIL: 'test@example.com',
         SSH_AUTH_SOCK: '/tmp/ssh-agent.sock',
-        API_KEY: 'secret',
+        XDG_CONFIG_HOME: '/home/user/.config',
+        CI: 'true',
+        GITHUB_ACTIONS: 'true',
+        NODE_ENV: 'test',
+        TERM: 'xterm-256color',
       };
 
       const sanitized = ShellExecutionService.sanitizeEnvironment(
@@ -1581,25 +1579,29 @@ describe('Shell Environment Sanitization', () => {
         true,
       );
 
-      // Git and SSH vars should be preserved
-      expect(sanitized.GIT_AUTHOR_NAME).toBe('Test User');
-      expect(sanitized.GIT_AUTHOR_EMAIL).toBe('test@example.com');
-      expect(sanitized.GIT_COMMITTER_NAME).toBe('Test User');
-      expect(sanitized.GIT_COMMITTER_EMAIL).toBe('test@example.com');
-      expect(sanitized.SSH_AUTH_SOCK).toBe('/tmp/ssh-agent.sock');
+      // Only PATH is on the built-in allowlist
+      expect(sanitized.PATH).toBe('/usr/bin');
 
-      // API_KEY should be stripped
-      expect(sanitized.API_KEY).toBeUndefined();
+      // TERM is on the allowlist (needed for proper terminal behavior)
+      expect(sanitized.TERM).toBe('xterm-256color');
+
+      // None of these are on the allowlist
+      expect(sanitized.GIT_AUTHOR_NAME).toBeUndefined();
+      expect(sanitized.SSH_AUTH_SOCK).toBeUndefined();
+      expect(sanitized.XDG_CONFIG_HOME).toBeUndefined();
+      expect(sanitized.CI).toBeUndefined();
+      expect(sanitized.GITHUB_ACTIONS).toBeUndefined();
+      expect(sanitized.NODE_ENV).toBeUndefined();
     });
 
-    it('should preserve XDG_* variables for freedesktop standards', () => {
+    it('should return only allowlisted keys with no extras', () => {
       const testEnv = {
         PATH: '/usr/bin',
-        XDG_CONFIG_HOME: '/home/user/.config',
-        XDG_DATA_HOME: '/home/user/.local/share',
-        XDG_CACHE_HOME: '/home/user/.cache',
-        XDG_RUNTIME_DIR: '/run/user/1000',
-        API_KEY: 'secret',
+        HOME: '/home/user',
+        USER: 'testuser',
+        LLXPRT_CODE_TEST_FOO: 'bar',
+        RANDOM_VAR: 'should-not-appear',
+        ANOTHER_SECRET: 'nope',
       };
 
       const sanitized = ShellExecutionService.sanitizeEnvironment(
@@ -1607,14 +1609,10 @@ describe('Shell Environment Sanitization', () => {
         true,
       );
 
-      // XDG_* vars should be preserved
-      expect(sanitized.XDG_CONFIG_HOME).toBe('/home/user/.config');
-      expect(sanitized.XDG_DATA_HOME).toBe('/home/user/.local/share');
-      expect(sanitized.XDG_CACHE_HOME).toBe('/home/user/.cache');
-      expect(sanitized.XDG_RUNTIME_DIR).toBe('/run/user/1000');
-
-      // API_KEY should be stripped
-      expect(sanitized.API_KEY).toBeUndefined();
+      // Result should contain exactly the allowlisted vars that exist in env
+      expect(Object.keys(sanitized).sort()).toEqual(
+        ['HOME', 'LLXPRT_CODE_TEST_FOO', 'PATH', 'USER'].sort(),
+      );
     });
   });
 });
@@ -1748,15 +1746,18 @@ describe('ShellExecutionService environment sanitization wiring', () => {
   };
   let mockChildProcess: EventEmitter & Partial<ChildProcess>;
 
-  const originalEnv = { ...process.env };
+  const originalEnv = process.env;
 
   beforeEach(() => {
     vi.clearAllMocks();
     onOutputEventMock = vi.fn();
 
+    // Reset process.env to a copy, preserving the real special object for afterEach restore
+    process.env = { ...originalEnv };
+
     // Inject a sensitive env var so we can verify it gets stripped
     process.env.MY_API_KEY = 'super-secret';
-    process.env.SAFE_VAR = 'keep-me';
+    process.env.LLXPRT_CODE_TEST_WIRING = 'keep-me';
 
     // Mock for pty
     mockPtyProcess = new EventEmitter() as EventEmitter & {
@@ -1790,7 +1791,7 @@ describe('ShellExecutionService environment sanitization wiring', () => {
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    process.env = originalEnv;
   });
 
   it('should strip sensitive env vars in child_process mode when isSandboxOrCI is true', async () => {
@@ -1808,8 +1809,7 @@ describe('ShellExecutionService environment sanitization wiring', () => {
     const spawnCall = mockCpSpawn.mock.calls[0];
     const spawnEnv = spawnCall[2].env;
     expect(spawnEnv.MY_API_KEY).toBeUndefined();
-    expect(spawnEnv.SAFE_VAR).toBe('keep-me');
-    expect(spawnEnv.LLXPRT_CODE).toBe('1');
+    expect(spawnEnv.LLXPRT_CODE_TEST_WIRING).toBe('keep-me');
 
     // Cleanup
     mockChildProcess.emit('exit', 0, null);
@@ -1835,8 +1835,7 @@ describe('ShellExecutionService environment sanitization wiring', () => {
     const ptySpawnCall = mockPtySpawn.mock.calls[0];
     const ptyEnv = ptySpawnCall[2].env;
     expect(ptyEnv.MY_API_KEY).toBeUndefined();
-    expect(ptyEnv.SAFE_VAR).toBe('keep-me');
-    expect(ptyEnv.LLXPRT_CODE).toBe('1');
+    expect(ptyEnv.LLXPRT_CODE_TEST_WIRING).toBe('keep-me');
 
     // Cleanup
     mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
@@ -1854,11 +1853,11 @@ describe('ShellExecutionService environment sanitization wiring', () => {
       { isSandboxOrCI: false },
     );
 
-    // Verify the env passed to spawn DOES contain the sensitive var
+    // Verify the env passed to spawn DOES contain all vars (local mode)
     const spawnCall = mockCpSpawn.mock.calls[0];
     const spawnEnv = spawnCall[2].env;
     expect(spawnEnv.MY_API_KEY).toBe('super-secret');
-    expect(spawnEnv.SAFE_VAR).toBe('keep-me');
+    expect(spawnEnv.LLXPRT_CODE_TEST_WIRING).toBe('keep-me');
 
     // Cleanup
     mockChildProcess.emit('exit', 0, null);
@@ -1876,11 +1875,11 @@ describe('ShellExecutionService environment sanitization wiring', () => {
       {}, // no isSandboxOrCI
     );
 
-    // Verify the env passed to spawn DOES contain the sensitive var (local mode)
+    // Verify the env passed to spawn DOES contain all vars (local mode)
     const spawnCall = mockCpSpawn.mock.calls[0];
     const spawnEnv = spawnCall[2].env;
     expect(spawnEnv.MY_API_KEY).toBe('super-secret');
-    expect(spawnEnv.SAFE_VAR).toBe('keep-me');
+    expect(spawnEnv.LLXPRT_CODE_TEST_WIRING).toBe('keep-me');
 
     // Cleanup
     mockChildProcess.emit('exit', 0, null);
