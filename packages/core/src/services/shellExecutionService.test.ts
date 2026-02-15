@@ -1737,3 +1737,153 @@ describe('ShellExecutionService execution method selection', () => {
     expect(result.executionMethod).toBe('child_process');
   });
 });
+
+describe('ShellExecutionService environment sanitization wiring', () => {
+  let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
+  let mockPtyProcess: EventEmitter & {
+    pid: number;
+    kill: Mock;
+    onData: Mock;
+    onExit: Mock;
+  };
+  let mockChildProcess: EventEmitter & Partial<ChildProcess>;
+
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onOutputEventMock = vi.fn();
+
+    // Inject a sensitive env var so we can verify it gets stripped
+    process.env.MY_API_KEY = 'super-secret';
+    process.env.SAFE_VAR = 'keep-me';
+
+    // Mock for pty
+    mockPtyProcess = new EventEmitter() as EventEmitter & {
+      pid: number;
+      kill: Mock;
+      onData: Mock;
+      onExit: Mock;
+    };
+    mockPtyProcess.pid = 12345;
+    mockPtyProcess.kill = vi.fn();
+    mockPtyProcess.onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
+    mockPtyProcess.onExit = vi.fn().mockReturnValue({ dispose: vi.fn() });
+    mockPtySpawn.mockReturnValue(mockPtyProcess);
+    mockGetPty.mockResolvedValue({
+      module: { spawn: mockPtySpawn },
+      name: 'mock-pty',
+    });
+
+    // Mock for child_process
+    mockChildProcess = new EventEmitter() as EventEmitter &
+      Partial<ChildProcess>;
+    mockChildProcess.stdout = new EventEmitter() as Readable;
+    mockChildProcess.stderr = new EventEmitter() as Readable;
+    mockChildProcess.kill = vi.fn();
+    Object.defineProperty(mockChildProcess, 'pid', {
+      value: 54321,
+      configurable: true,
+    });
+    mockChildProcess.once = mockChildProcess.on.bind(mockChildProcess);
+    mockCpSpawn.mockReturnValue(mockChildProcess);
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it('should strip sensitive env vars in child_process mode when isSandboxOrCI is true', async () => {
+    const abortController = new AbortController();
+    const handle = await ShellExecutionService.execute(
+      'echo test',
+      '/test/dir',
+      onOutputEventMock,
+      abortController.signal,
+      false, // child_process mode
+      { isSandboxOrCI: true },
+    );
+
+    // Verify the env passed to spawn does NOT contain the sensitive var
+    const spawnCall = mockCpSpawn.mock.calls[0];
+    const spawnEnv = spawnCall[2].env;
+    expect(spawnEnv.MY_API_KEY).toBeUndefined();
+    expect(spawnEnv.SAFE_VAR).toBe('keep-me');
+    expect(spawnEnv.LLXPRT_CODE).toBe('1');
+
+    // Cleanup
+    mockChildProcess.emit('exit', 0, null);
+    await handle.result;
+  });
+
+  it('should strip sensitive env vars in PTY mode when isSandboxOrCI is true', async () => {
+    const abortController = new AbortController();
+    const handle = await ShellExecutionService.execute(
+      'echo test',
+      '/test/dir',
+      onOutputEventMock,
+      abortController.signal,
+      true, // PTY mode
+      {
+        isSandboxOrCI: true,
+        terminalWidth: 80,
+        terminalHeight: 24,
+      },
+    );
+
+    // Verify the env passed to pty spawn does NOT contain the sensitive var
+    const ptySpawnCall = mockPtySpawn.mock.calls[0];
+    const ptyEnv = ptySpawnCall[2].env;
+    expect(ptyEnv.MY_API_KEY).toBeUndefined();
+    expect(ptyEnv.SAFE_VAR).toBe('keep-me');
+    expect(ptyEnv.LLXPRT_CODE).toBe('1');
+
+    // Cleanup
+    mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+    await handle.result;
+  });
+
+  it('should NOT strip sensitive env vars in child_process mode when isSandboxOrCI is false', async () => {
+    const abortController = new AbortController();
+    const handle = await ShellExecutionService.execute(
+      'echo test',
+      '/test/dir',
+      onOutputEventMock,
+      abortController.signal,
+      false, // child_process mode
+      { isSandboxOrCI: false },
+    );
+
+    // Verify the env passed to spawn DOES contain the sensitive var
+    const spawnCall = mockCpSpawn.mock.calls[0];
+    const spawnEnv = spawnCall[2].env;
+    expect(spawnEnv.MY_API_KEY).toBe('super-secret');
+    expect(spawnEnv.SAFE_VAR).toBe('keep-me');
+
+    // Cleanup
+    mockChildProcess.emit('exit', 0, null);
+    await handle.result;
+  });
+
+  it('should NOT strip sensitive env vars when isSandboxOrCI is not set (defaults to local mode)', async () => {
+    const abortController = new AbortController();
+    const handle = await ShellExecutionService.execute(
+      'echo test',
+      '/test/dir',
+      onOutputEventMock,
+      abortController.signal,
+      false, // child_process mode
+      {}, // no isSandboxOrCI
+    );
+
+    // Verify the env passed to spawn DOES contain the sensitive var (local mode)
+    const spawnCall = mockCpSpawn.mock.calls[0];
+    const spawnEnv = spawnCall[2].env;
+    expect(spawnEnv.MY_API_KEY).toBe('super-secret');
+    expect(spawnEnv.SAFE_VAR).toBe('keep-me');
+
+    // Cleanup
+    mockChildProcess.emit('exit', 0, null);
+    await handle.result;
+  });
+});

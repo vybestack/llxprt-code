@@ -1971,6 +1971,7 @@ export class Config {
       showColor: this.getAllowPtyThemeOverride(),
       scrollback: this.getPtyScrollbackLimit(),
       inactivityTimeoutMs,
+      isSandboxOrCI: !!this.getSandbox() || process.env.CI === 'true',
     };
   }
 

@@ -96,6 +96,7 @@ export interface ShellExecutionConfig {
   disableDynamicLineTrimming?: boolean;
   scrollback?: number;
   inactivityTimeoutMs?: number;
+  isSandboxOrCI?: boolean;
 }
 
 export type ShellOutputEvent =
@@ -283,12 +284,15 @@ export class ShellExecutionService {
       const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
       const spawnArgs = [...argsPrefix, guardedCommand];
 
-      const envVars: NodeJS.ProcessEnv = {
-        ...process.env,
-        LLXPRT_CODE: '1',
-        TERM: 'xterm-256color',
-        PAGER: 'cat',
-      };
+      const envVars: NodeJS.ProcessEnv = this.sanitizeEnvironment(
+        {
+          ...process.env,
+          LLXPRT_CODE: '1',
+          TERM: 'xterm-256color',
+          PAGER: 'cat',
+        },
+        !!shellExecutionConfig.isSandboxOrCI,
+      );
       delete envVars.BASH_ENV;
 
       const child = cpSpawn(executable, spawnArgs, {
@@ -590,12 +594,15 @@ export class ShellExecutionService {
       const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
       const args = [...argsPrefix, guardedCommand];
 
-      const envVars: NodeJS.ProcessEnv = {
-        ...process.env,
-        LLXPRT_CODE: '1',
-        TERM: 'xterm-256color',
-        PAGER: shellExecutionConfig.pager ?? 'cat',
-      };
+      const envVars: NodeJS.ProcessEnv = this.sanitizeEnvironment(
+        {
+          ...process.env,
+          LLXPRT_CODE: '1',
+          TERM: 'xterm-256color',
+          PAGER: shellExecutionConfig.pager ?? 'cat',
+        },
+        !!shellExecutionConfig.isSandboxOrCI,
+      );
       delete envVars.BASH_ENV;
 
       const ptyProcess = ptyInfo.module.spawn(executable, args, {
