@@ -1482,11 +1482,6 @@ export const AppContainer = (props: AppContainerProps) => {
         return;
       }
 
-      // Debug log keystrokes if enabled
-      if (settings.merged.debugKeystrokeLogging) {
-        console.log('[DEBUG] Keystroke:', JSON.stringify(key));
-      }
-
       if (
         settings.merged.ui?.useAlternateBuffer === true &&
         keyMatchers[Command.TOGGLE_COPY_MODE](key)
@@ -1610,7 +1605,6 @@ export const AppContainer = (props: AppContainerProps) => {
       handleSlashCommand,
       cancelOngoingRequest,
       addItem,
-      settings.merged.debugKeystrokeLogging,
       refreshStatic,
       setCopyModeEnabled,
       copyModeEnabled,
