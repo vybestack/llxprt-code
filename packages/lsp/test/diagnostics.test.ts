@@ -71,10 +71,10 @@ describe('escapeXml', () => {
     expect(escapeXml('A &amp; B')).toBe('A &amp;amp; B');
   });
 
-  it('is identity over strings that contain no < > & characters', () => {
+  it(`is identity over strings that contain no XML-special characters`, () => {
     fc.assert(
       fc.property(
-        fc.string().filter((value) => !/[<>&]/.test(value)),
+        fc.string().filter((value) => !/[<>&"']/.test(value)),
         (safeText) => {
           expect(escapeXml(safeText)).toBe(safeText);
         },
@@ -517,7 +517,7 @@ describe('formatDiagnosticLine', () => {
     );
 
     expect(line).toBe(
-      "ERROR [10:5] Type '&lt;string&gt;' is not assignable to type '&amp;Record&lt;K, V&gt;' (ts2322)",
+      'ERROR [10:5] Type &apos;&lt;string&gt;&apos; is not assignable to type &apos;&amp;Record&lt;K, V&gt;&apos; (ts2322)',
     );
   });
 
@@ -917,7 +917,7 @@ describe('golden fixture 3', () => {
   it('escapes Type <string> and &Record<K, V> exactly in output', () => {
     const message = "Type '<string>' is not assignable to type '&Record<K, V>'";
     expect(escapeXml(message)).toBe(
-      "Type '&lt;string&gt;' is not assignable to type '&amp;Record&lt;K, V&gt;'",
+      'Type &apos;&lt;string&gt;&apos; is not assignable to type &apos;&amp;Record&lt;K, V&gt;&apos;',
     );
 
     const line = formatDiagnosticLine(
@@ -930,7 +930,7 @@ describe('golden fixture 3', () => {
     );
 
     expect(line).toBe(
-      "ERROR [10:5] Type '&lt;string&gt;' is not assignable to type '&amp;Record&lt;K, V&gt;' (ts2322)",
+      'ERROR [10:5] Type &apos;&lt;string&gt;&apos; is not assignable to type &apos;&amp;Record&lt;K, V&gt;&apos; (ts2322)',
     );
   });
 });

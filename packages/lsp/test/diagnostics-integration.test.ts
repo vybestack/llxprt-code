@@ -142,7 +142,7 @@ describe('diagnostics integration pipeline', () => {
     );
 
     expect(output).toContain(
-      "Type '&lt;string&gt;' is not assignable to type 'A &amp; B'",
+      'Type &apos;&lt;string&gt;&apos; is not assignable to type &apos;A &amp; B&apos;',
     );
   });
 

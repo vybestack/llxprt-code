@@ -115,7 +115,17 @@ async function statusAction(
     };
   }
 
-  const statuses = await lspClient.status();
+  let statuses: LspServiceStatusLike[];
+  try {
+    statuses = await lspClient.status();
+  } catch {
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: 'LSP unavailable: failed to retrieve server status',
+    };
+  }
+
   const configuredIds = (lspConfig.servers ?? []).map((server) => server.id);
   const statusIds = statuses.map((status) => status.serverId);
 

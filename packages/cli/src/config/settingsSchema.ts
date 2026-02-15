@@ -1902,7 +1902,6 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
                 id: { type: 'string' },
                 command: { type: 'string' },
                 args: { type: 'array', items: { type: 'string' } },
-                languages: { type: 'array', items: { type: 'string' } },
               },
               required: ['id', 'command'],
             },

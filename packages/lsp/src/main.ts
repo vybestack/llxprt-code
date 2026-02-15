@@ -262,6 +262,7 @@ export async function main(): Promise<void> {
 
   process.on('uncaughtException', (error) => {
     stderr.write(`Uncaught exception in LSP service: ${String(error)}\n`);
+    void shutdown();
   });
 
   process.on('unhandledRejection', (error) => {

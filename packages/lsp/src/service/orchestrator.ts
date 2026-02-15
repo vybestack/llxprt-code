@@ -293,6 +293,7 @@ export class Orchestrator {
     );
 
     this.clients.clear();
+    this.brokenServers.clear();
     this.firstTouchServers.clear();
     this.startupPromises.clear();
     this.opQueues.clear();
