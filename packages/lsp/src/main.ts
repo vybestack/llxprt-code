@@ -257,11 +257,26 @@ export async function main(): Promise<void> {
     }
     shuttingDown = true;
 
-    await orchestrator.shutdown();
-    if (mcpServer) {
-      await mcpServer.close();
+    try {
+      await orchestrator.shutdown();
+    } catch (error) {
+      stderr.write(`Error during orchestrator shutdown: ${String(error)}
+`);
     }
-    rpcConnection.dispose();
+    if (mcpServer) {
+      try {
+        await mcpServer.close();
+      } catch (error) {
+        stderr.write(`Error during MCP server close: ${String(error)}
+`);
+      }
+    }
+    try {
+      rpcConnection.dispose();
+    } catch (error) {
+      stderr.write(`Error during RPC connection dispose: ${String(error)}
+`);
+    }
     process.exit(0);
   };
 
@@ -276,10 +291,12 @@ export async function main(): Promise<void> {
   process.on('uncaughtException', (error) => {
     stderr.write(`Uncaught exception in LSP service: ${String(error)}\n`);
     void shutdown();
+    process.exit(1);
   });
 
   process.on('unhandledRejection', (error) => {
     stderr.write(`Unhandled rejection in LSP service: ${String(error)}\n`);
+    process.exit(1);
   });
 
   rpcConnection.sendNotification('lsp/ready');
