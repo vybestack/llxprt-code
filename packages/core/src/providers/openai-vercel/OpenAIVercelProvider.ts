@@ -653,6 +653,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       model: modelId,
       tools: toolNamesArg,
       includeSubagentDelegation,
+      interactionMode: options.config?.isInteractive?.()
+        ? 'interactive'
+        : 'non-interactive',
     });
 
     // Filter thinking from context based on settings

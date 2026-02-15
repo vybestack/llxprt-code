@@ -1629,6 +1629,9 @@ export class GeminiProvider extends BaseProvider {
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
+        interactionMode: subagentConfig?.isInteractive?.()
+          ? 'interactive'
+          : 'non-interactive',
       });
 
       const contentsWithSystemPrompt = [
@@ -1812,6 +1815,9 @@ export class GeminiProvider extends BaseProvider {
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
+        interactionMode: subagentConfig?.isInteractive?.()
+          ? 'interactive'
+          : 'non-interactive',
       });
 
       const apiRequest = {
