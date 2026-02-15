@@ -271,6 +271,60 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
     });
 
     /**
+     * Addendum test: First-line overflow falls back to streaming header reader
+     * GIVEN: A valid session file whose first line exceeds the 4096-byte fast-read buffer
+     * WHEN: listSessions is called
+     * THEN: Session is still discovered and metadata is parsed correctly
+     *
+     * @plan PLAN-20260211-SESSIONRECORDING.P19
+     * @requirement REQ-RSM-003
+     */
+    it('discovers sessions when session_start header exceeds fast-read buffer', async () => {
+      const sessionId = 'long-header-session-id';
+      const { filePath } = await createTestSession(chatsDir, {
+        sessionId,
+        projectHash: PROJECT_HASH,
+        provider: 'google',
+        model: 'gemini-3',
+      });
+
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const [firstLine, ...restLines] = raw.split('\n');
+      const firstEvent = JSON.parse(firstLine) as {
+        v: number;
+        seq: number;
+        ts: string;
+        type: string;
+        payload: {
+          sessionId: string;
+          projectHash: string;
+          workspaceDirs: string[];
+          provider: string;
+          model: string;
+          startTime: string;
+        };
+      };
+
+      firstEvent.payload.workspaceDirs = ['/tmp/' + 'x'.repeat(5000)];
+      const oversizedFirstLine = JSON.stringify(firstEvent);
+      expect(oversizedFirstLine.length).toBeGreaterThan(4096);
+
+      await fs.writeFile(
+        filePath,
+        [oversizedFirstLine, ...restLines].join('\n'),
+      );
+
+      const sessions = await SessionDiscovery.listSessions(
+        chatsDir,
+        PROJECT_HASH,
+      );
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].sessionId).toBe(sessionId);
+      expect(sessions[0].provider).toBe('google');
+      expect(sessions[0].model).toBe('gemini-3');
+    });
+
+    /**
      * Addendum test: Identical mtime selects lexicographically greater session ID
      * GIVEN: Two sessions with identical mtime
      * WHEN: listSessions is called

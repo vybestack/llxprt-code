@@ -61,6 +61,7 @@ export interface ResumeResult {
   history: IContent[];
   metadata: SessionMetadata;
   recording: SessionRecordingService;
+  lockHandle: LockHandle;
   warnings: string[];
 }
 
@@ -206,6 +207,7 @@ export async function resumeSession(
     history: replayResult.history,
     metadata: replayResult.metadata,
     recording,
+    lockHandle: lockHandle!,
     warnings: replayResult.warnings,
   };
 }

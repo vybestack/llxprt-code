@@ -143,6 +143,10 @@ function makeResumeResult(historyText = 'resumed'): ResumeResult {
       initializeForResume: vi.fn(),
       enqueue: vi.fn(),
     } as unknown as ResumeResult['recording'],
+    lockHandle: {
+      lockPath: '/tmp/resumed-session.lock',
+      release: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ResumeResult['lockHandle'],
     warnings: [],
   };
 }

@@ -212,6 +212,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           type: 'text',
           text: 'second session message',
         });
+        expect(result.lockHandle).toBeDefined();
+        expect(result.lockHandle.lockPath).toBeTruthy();
+        lockHandles.push(result.lockHandle);
       }
     });
   });
@@ -254,6 +257,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           text: 'target content',
         });
         expect(result.metadata.sessionId).toBe(targetId);
+        expect(result.lockHandle).toBeDefined();
+        expect(result.lockHandle.lockPath).toBeTruthy();
+        lockHandles.push(result.lockHandle);
       }
     });
   });
@@ -288,6 +294,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
+        lockHandles.push(result.lockHandle);
         expect(result.history).toHaveLength(3);
         expect(result.history[0].speaker).toBe('human');
         expect(result.history[0].blocks[0]).toEqual({
@@ -348,6 +355,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
+        lockHandles.push(result.lockHandle);
         // After compression: summary + 2 new content items = 3
         expect(result.history).toHaveLength(3);
         expect(result.history[0].blocks[0]).toEqual({
@@ -398,6 +406,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
+        lockHandles.push(result.lockHandle);
         expect(result.metadata.sessionId).toBe(sessionId);
         expect(result.metadata.provider).toBe('google');
         expect(result.metadata.model).toBe('gemini-3');
@@ -522,6 +531,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
+        lockHandles.push(result.lockHandle);
         expect(result.history[0].blocks[0]).toEqual({
           type: 'text',
           text: 'older unlocked content',
@@ -596,6 +606,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
+        lockHandles.push(result.lockHandle);
         // Flush the recording to ensure the provider_switch is written
         await result.recording.flush();
 
@@ -646,6 +657,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
+        lockHandles.push(result.lockHandle);
         // Record new content
         result.recording.recordContent(makeContent('resumed msg', 'human'));
         await result.recording.flush();
@@ -690,6 +702,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
+        lockHandles.push(result.lockHandle);
         expect(result.recording).toBeDefined();
         expect(result.recording.getFilePath()).not.toBeNull();
         expect(result.recording.getSessionId()).toBe(sessionId);
@@ -733,6 +746,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
+        lockHandles.push(result.lockHandle);
         expect(result.warnings.length).toBeGreaterThan(0);
         const hasParseWarning = result.warnings.some(
           (w) => w.includes('parse') || w.includes('JSON'),

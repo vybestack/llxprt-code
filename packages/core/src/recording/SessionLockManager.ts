@@ -94,7 +94,14 @@ export class SessionLockManager {
         }
       } else if (code === 'ENOENT') {
         await fs.mkdir(path.dirname(lockPath), { recursive: true });
-        await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
+        try {
+          await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
+        } catch (writeErr: unknown) {
+          if ((writeErr as NodeJS.ErrnoException).code === 'EEXIST') {
+            throw new Error('Session is in use by another process');
+          }
+          throw writeErr;
+        }
       } else {
         throw error;
       }

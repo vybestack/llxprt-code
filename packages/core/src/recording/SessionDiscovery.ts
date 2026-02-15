@@ -61,6 +61,15 @@ async function readFirstLineFromFile(
     if (chunk.startsWith('\uFEFF')) chunk = chunk.slice(1);
 
     const newlineIdx = chunk.indexOf('\n');
+
+    // Fallback: if the first line exceeds the 4096-byte buffer, delegate to
+    // readSessionHeader which uses a full readline stream.
+    if (newlineIdx < 0 && bytesRead === buf.length) {
+      await fh.close();
+      fh = undefined;
+      return readSessionHeader(filePath);
+    }
+
     const firstLine = newlineIdx >= 0 ? chunk.slice(0, newlineIdx) : chunk;
     if (firstLine.trim() === '') return null;
 

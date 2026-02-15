@@ -84,6 +84,7 @@ import {
   deleteSession,
   getProjectHash,
   type IContent,
+  type LockHandle,
   coreEvents,
   CoreEvent,
   type OutputPayload,
@@ -932,6 +933,7 @@ export async function main() {
   // Create recording service (resume or new)
   let recordingService: SessionRecordingService;
   let resumedHistory: IContent[] | null = null;
+  let resumedLockHandle: LockHandle | null = null;
 
   const continueRef = config.getContinueSessionRef();
   if (continueRef) {
@@ -946,6 +948,7 @@ export async function main() {
     if (resumeResult.ok) {
       recordingService = resumeResult.recording;
       resumedHistory = resumeResult.history;
+      resumedLockHandle = resumeResult.lockHandle;
       if (resumeResult.warnings.length > 0) {
         for (const warning of resumeResult.warnings) {
           console.warn(chalk.yellow(warning));
@@ -994,7 +997,11 @@ export async function main() {
 
   registerCleanup(async () => {
     recordingIntegration.dispose();
-    await recordingService.dispose();
+    try {
+      await recordingService.dispose();
+    } finally {
+      await resumedLockHandle?.release();
+    }
   });
 
   if (config.getListExtensions()) {

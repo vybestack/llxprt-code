@@ -31,11 +31,20 @@
 import { describe, expect, beforeEach, afterEach, vi } from 'vitest';
 import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { fork, type ChildProcess } from 'child_process';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    writeFile: vi.fn(actual.writeFile),
+  };
+});
+
+const fs = await import('node:fs/promises');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -573,6 +582,36 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       const locked = await SessionLockManager.isLocked(chatsDir, sessionId);
       expect(locked).toBe(false);
     });
+  });
+
+  it('acquire maps ENOENT then EEXIST race to in-use error', async () => {
+    const sessionId = 'test-session-enoent-race';
+    const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+    const writeFileMock = vi.mocked(fs.writeFile);
+
+    writeFileMock.mockClear();
+    writeFileMock
+      .mockRejectedValueOnce(
+        Object.assign(new Error('no such file'), { code: 'ENOENT' }),
+      )
+      .mockRejectedValueOnce(
+        Object.assign(new Error('already exists'), { code: 'EEXIST' }),
+      );
+
+    await expect(
+      SessionLockManager.acquire(chatsDir, sessionId),
+    ).rejects.toThrow('Session is in use by another process');
+
+    const lockWriteCalls = writeFileMock.mock.calls.filter(
+      ([targetPath, , options]) =>
+        targetPath === lockPath &&
+        typeof options === 'object' &&
+        options !== null &&
+        'flag' in options &&
+        (options as { flag?: string }).flag === 'wx',
+    );
+
+    expect(lockWriteCalls).toHaveLength(2);
   });
 
   // -------------------------------------------------------------------------
