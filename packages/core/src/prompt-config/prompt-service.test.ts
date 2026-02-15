@@ -78,9 +78,9 @@ describe('PromptService', () => {
       const stats = await fs.stat(coreDefaultPath);
       expect(stats.isFile()).toBe(true);
 
-      // Check content is correct
+      // Check content is correct (raw template, not rendered)
       const content = await fs.readFile(coreDefaultPath, 'utf-8');
-      expect(content).toContain('You are an interactive CLI agent');
+      expect(content).toContain('You are {{INTERACTION_MODE_LABEL}} CLI agent');
       expect(content).toContain('Workspace name: {{WORKSPACE_NAME}}');
       expect(content).toContain('Sandbox type: {{SANDBOX_TYPE}}');
     });
