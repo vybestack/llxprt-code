@@ -58,6 +58,7 @@ export default tseslint.config(
       'project-plans/**',
       'packages/opentui/**',
       'packages/ui/**',
+      'packages/lsp/**',
     ],
   },
   eslint.configs.recommended,
@@ -142,6 +143,7 @@ export default tseslint.config(
           allow: [
             'react-dom/test-utils',
             'memfs/lib/volume.js',
+            'vscode-jsonrpc/node.js',
             'yargs/**',
             '@anthropic-ai/sdk/**',
             '**/generated/**',

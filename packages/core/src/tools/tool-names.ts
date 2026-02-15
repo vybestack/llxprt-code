@@ -61,6 +61,9 @@ export const SHELL_TOOL = 'shell';
 export const AST_GREP_TOOL = 'ast_grep';
 export const STRUCTURAL_ANALYSIS_TOOL = 'structural_analysis';
 
+// Patch Tools
+export const APPLY_PATCH_TOOL = 'apply_patch';
+
 /**
  * Union type of all tool names for type safety
  */
@@ -90,4 +93,5 @@ export type ToolName =
   | typeof LIST_SUBAGENTS_TOOL
   | typeof SHELL_TOOL
   | typeof AST_GREP_TOOL
-  | typeof STRUCTURAL_ANALYSIS_TOOL;
+  | typeof STRUCTURAL_ANALYSIS_TOOL
+  | typeof APPLY_PATCH_TOOL;

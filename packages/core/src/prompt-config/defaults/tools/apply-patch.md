@@ -1,0 +1,4 @@
+- **Patching files:** When asked to apply a patch or diff to a file, use the '${ApplyPatchTool.Name}' tool
+- The '${ApplyPatchTool.Name}' tool accepts a unified diff format patch in the \`patch_content\` parameter
+- Always provide the \`absolute_path\` parameter to specify which file to apply the patch to
+- The tool will parse, validate, and apply the patch, returning the result

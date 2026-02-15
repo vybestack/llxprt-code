@@ -152,6 +152,7 @@ const AUTO_EDIT_TOOLS = [
   'write_file',
   'insert_at_line',
   'delete_line_range',
+  'apply_patch',
 ] as const;
 
 /**

@@ -199,6 +199,17 @@ export const SETTINGS_SCHEMA = {
       },
     },
   },
+  lsp: {
+    type: 'object',
+    label: 'LSP',
+    category: 'Advanced',
+    requiresRestart: true,
+    default: undefined as boolean | object | undefined,
+    ref: 'BooleanOrLspConfig',
+    description:
+      'Language Server Protocol settings. Set to false to disable, or provide an object to configure servers and diagnostics behavior.',
+    showInDialog: false,
+  },
   emojifilter: {
     type: 'string',
     label: 'Emoji Filter',
@@ -1873,6 +1884,63 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
   BooleanOrString: {
     description: 'Accepts either a boolean flag or a string command name.',
     anyOf: [{ type: 'boolean' }, { type: 'string' }],
+  },
+  BooleanOrLspConfig: {
+    description:
+      'Set to false to disable LSP entirely, or provide an object to configure LSP servers and diagnostics behavior.',
+    anyOf: [
+      { type: 'boolean', const: false },
+      {
+        type: 'object',
+        properties: {
+          servers: {
+            type: 'array',
+            description: 'Custom LSP server definitions.',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                command: { type: 'string' },
+                args: { type: 'array', items: { type: 'string' } },
+                languages: { type: 'array', items: { type: 'string' } },
+              },
+              required: ['id', 'command'],
+            },
+          },
+          includeSeverities: {
+            type: 'array',
+            description: 'Diagnostic severity levels to include.',
+            items: {
+              type: 'string',
+              enum: ['error', 'warning', 'info', 'hint'],
+            },
+          },
+          maxDiagnosticsPerFile: {
+            type: 'number',
+            description: 'Maximum number of diagnostics per file.',
+          },
+          maxProjectDiagnosticsFiles: {
+            type: 'number',
+            description:
+              'Maximum number of files included in project diagnostics.',
+          },
+          diagnosticTimeout: {
+            type: 'number',
+            description: 'Timeout in milliseconds for diagnostic requests.',
+          },
+          firstTouchTimeout: {
+            type: 'number',
+            description:
+              'Timeout in milliseconds for first-touch diagnostic requests.',
+          },
+          navigationTools: {
+            type: 'boolean',
+            description:
+              'Whether to register LSP navigation tools (goto definition, find references, etc.).',
+          },
+        },
+      },
+    ],
   },
 };
 
