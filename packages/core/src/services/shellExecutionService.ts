@@ -1221,4 +1221,54 @@ export class ShellExecutionService {
     }
     this.lastActivePtyId = null;
   }
+
+  /**
+   * Sanitizes environment variables to prevent credential leaks in sandbox/CI environments.
+   * Uses an allow-list approach: only known-safe variables are passed through.
+   *
+   * @param env The environment variables to sanitize
+   * @param isSandboxOrCI Whether running in sandbox or CI mode (true = sanitize, false = pass through all)
+   * @param allowlist Optional array of additional variable names to allow
+   * @returns Sanitized environment variables
+   */
+  static sanitizeEnvironment(
+    env: NodeJS.ProcessEnv,
+    isSandboxOrCI: boolean,
+    allowlist?: string[],
+  ): NodeJS.ProcessEnv {
+    // In local dev mode (not sandbox/CI), pass through all env vars unchanged
+    if (!isSandboxOrCI) {
+      return { ...env };
+    }
+
+    // Sensitive variable patterns to block
+    const sensitivePatterns = [
+      /API_KEY/i,
+      /SECRET/i,
+      /TOKEN/i,
+      /PASSWORD/i,
+      /CREDENTIAL/i,
+      /PRIVATE_KEY/i,
+      /AUTH.*KEY/i,
+      /CLIENT_SECRET/i,
+      /ENCRYPTION_KEY/i,
+    ];
+
+    const result: NodeJS.ProcessEnv = {};
+
+    // Check each env var - preserve if NOT sensitive OR if explicitly allowlisted
+    for (const [key, value] of Object.entries(env)) {
+      const isSensitive = sensitivePatterns.some((pattern) =>
+        pattern.test(key),
+      );
+      const isAllowlisted = allowlist?.includes(key);
+
+      // Preserve if not sensitive OR explicitly allowlisted
+      if (!isSensitive || isAllowlisted) {
+        result[key] = value;
+      }
+    }
+
+    return result;
+  }
 }
