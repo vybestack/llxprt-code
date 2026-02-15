@@ -4,32 +4,32 @@ Post-implementation reconciliation. Updated as batches complete.
 
 | Upstream SHA | Decision | LLxprt Commit(s) | Notes |
 | ------------ | -------- | ----------------- | ----- |
-| d97bbd53 | PICKED | | Batch 1 |
-| 3406dc5b | PICKED | | Batch 1 |
-| 0f12d6c4 | PICKED | | Batch 1 — MCP auth headers |
-| 450734e3 | PICKED | | Batch 1 — LICENSE revert |
-| 6a43b312 | PICKED | | Batch 1 — telemetry finish_reasons |
-| f98e84f0 | PICKED | | Batch 2 |
-| 2fe609cb | PICKED | | Batch 2 — EPIPE fix |
-| f4babf17 | PICKED | | Batch 2 — async error handling |
-| 70a48a3d | PICKED | | Batch 2 — markdown rendering |
-| 98d7238e | PICKED | | Batch 2 |
-| 1689e9b6 | PICKED | | Batch 3 — React state fix |
-| 71b0e7ab | PICKED | | Batch 3 — cleanup error handling |
-| ba864380 | PICKED | | Batch 3 — IDE auth |
-| 1187c7fd | REIMPLEMENTED | | Batch 4 — gemini-3 prompts |
-| 4a82b0d8 | REIMPLEMENTED | | Batch 5 — interactive mode |
-| 0d29385e | REIMPLEMENTED | | Batch 6 — inactivity timeout |
-| f918af82 | REIMPLEMENTED | | Batch 7 — auto-execute slash |
-| 558c8ece | REIMPLEMENTED | | Batch 8 — hook tool integration |
-| 5bed9706 | REIMPLEMENTED | | Batch 8 — hook LLM integration |
-| bc365f1e | REIMPLEMENTED | | Batch 9 — MCP instructions |
-| 844d3a4d | REIMPLEMENTED | | Batch 9 — always use MCP instructions |
-| 69188c85 | REIMPLEMENTED | | Batch 10 — stats quota |
-| 806cd112 | REIMPLEMENTED | | Batch 11 — A2A modelInfo |
-| 752a5214 | REIMPLEMENTED | | Batch 12 — JIT context manager |
-| f9997f92 | REIMPLEMENTED | | Batch 13 — stdio hardening |
-| 8872ee0a | REIMPLEMENTED | | Batch 14 — shell env sanitization |
+| d97bbd53 | PICKED | 359c73a41 | Batch 1 |
+| 3406dc5b | PICKED | 3bfe562a6 | Batch 1 |
+| 0f12d6c4 | PICKED | bf1edc599 | Batch 1 — MCP auth headers |
+| 450734e3 | PICKED | 609c9eb94 | Batch 1 — LICENSE revert |
+| 6a43b312 | PICKED | 5de26eaca | Batch 1 — telemetry finish_reasons |
+| f98e84f0 | PICKED | 71e36562f | Batch 2 |
+| 2fe609cb | PICKED | b0fdbc222 | Batch 2 — EPIPE fix |
+| f4babf17 | PICKED | 29fb1e883 | Batch 2 — async error handling |
+| 70a48a3d | PICKED | bfd242838 | Batch 2 — markdown rendering |
+| 98d7238e | PICKED | 8e6909e08 | Batch 2 |
+| 1689e9b6 | PICKED | 1f9c0598e | Batch 3 — React state fix |
+| 71b0e7ab | PICKED | 1284ff27b | Batch 3 — cleanup error handling |
+| ba864380 | PICKED | 596763831 | Batch 3 — IDE auth |
+| 1187c7fd | REIMPLEMENTED | 055fe608c | Batch 4 — gemini-3 prompts |
+| 4a82b0d8 | REIMPLEMENTED | 1c1efb004 | Batch 5 — interactive mode |
+| 0d29385e | REIMPLEMENTED | 58460743c | Batch 6 — inactivity timeout |
+| f918af82 | REIMPLEMENTED | 68755ca4d | Batch 7 — auto-execute slash |
+| 558c8ece | REIMPLEMENTED | 0c876702d | Batch 8 — hook tool integration |
+| 5bed9706 | REIMPLEMENTED | 0c876702d | Batch 8 — hook LLM integration |
+| bc365f1e | REIMPLEMENTED | f9600bae9 | Batch 9 — MCP instructions |
+| 844d3a4d | REIMPLEMENTED | f9600bae9 | Batch 9 — always use MCP instructions |
+| 69188c85 | REIMPLEMENTED | fd1226801 | Batch 10 — stats quota |
+| 806cd112 | REIMPLEMENTED | e9f314cf9 | Batch 11 — A2A modelInfo |
+| 752a5214 | REIMPLEMENTED | 7966fb970 | Batch 12 — JIT context manager |
+| f9997f92 | REIMPLEMENTED | 081822780 | Batch 13 — stdio hardening |
+| 8872ee0a | REIMPLEMENTED | 01280e89d | Batch 14 — shell env sanitization |
 | 36a0a3d3 | SKIPPED | | Nightly version bump |
 | e1d2653a | SKIPPED | | Gemini-specific token calc |
 | 87edeb4e | SKIPPED | | Fallback/availability absent |
