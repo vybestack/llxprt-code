@@ -144,6 +144,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     name: 'install',
     description: `install required IDE companion for ${ideClient.getDetectedIdeDisplayName()}`,
     kind: CommandKind.BUILT_IN,
+    autoExecute: true,
     action: async (context) => {
       const installer = getIdeInstaller(currentIDE);
       if (!installer) {
@@ -219,6 +220,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     name: 'enable',
     description: 'enable IDE integration',
     kind: CommandKind.BUILT_IN,
+    autoExecute: true,
     action: async (context: CommandContext) => {
       context.services.settings.setValue(SettingScope.User, 'ui.ideMode', true);
       config.setIdeMode(true);
@@ -230,6 +232,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     name: 'disable',
     description: 'disable IDE integration',
     kind: CommandKind.BUILT_IN,
+    autoExecute: true,
     action: async (context: CommandContext) => {
       context.services.settings.setValue(
         SettingScope.User,

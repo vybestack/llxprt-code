@@ -84,7 +84,7 @@ export interface UseSlashCompletionReturn {
   resetCompletionState: () => void;
   navigateUp: () => void;
   navigateDown: () => void;
-  handleAutocomplete: (indexToUse: number) => void;
+  handleAutocomplete: (indexToUse: number) => string | undefined;
   getCommandFromSuggestion: (suggestionIndex: number) => SlashCommand | null;
 }
 
@@ -857,14 +857,14 @@ export function useSlashCompletion(
   );
 
   const handleAutocomplete = useCallback(
-    (indexToUse: number) => {
+    (indexToUse: number): string | undefined => {
       if (indexToUse < 0 || indexToUse >= suggestions.length) {
-        return;
+        return undefined;
       }
       const suggestion = suggestions[indexToUse].value;
 
       if (completionStart.current === -1 || completionEnd.current === -1) {
-        return;
+        return undefined;
       }
 
       const isSlash = (buffer.lines[cursorRow] || '')[commandIndex] === '/';
@@ -882,11 +882,25 @@ export function useSlashCompletion(
 
       suggestionText += ' ';
 
-      buffer.replaceRangeByOffset(
-        logicalPosToOffset(buffer.lines, cursorRow, completionStart.current),
-        logicalPosToOffset(buffer.lines, cursorRow, completionEnd.current),
-        suggestionText,
+      const startOffset = logicalPosToOffset(
+        buffer.lines,
+        cursorRow,
+        completionStart.current,
       );
+      const endOffset = logicalPosToOffset(
+        buffer.lines,
+        cursorRow,
+        completionEnd.current,
+      );
+
+      // Compute the resulting text before dispatching (buffer.text will be
+      // stale in any deferred callback because it is derived via useMemo).
+      const resultingText =
+        buffer.text.substring(0, startOffset) +
+        suggestionText +
+        buffer.text.substring(endOffset);
+
+      buffer.replaceRangeByOffset(startOffset, endOffset, suggestionText);
 
       // Clear current suggestions so we don't re-apply stale entries while
       // the resolver recomputes the next argument context.
@@ -896,6 +910,8 @@ export function useSlashCompletion(
       setVisibleStartIndex(0);
       setActiveHint('');
       setIsLoadingSuggestions(false);
+
+      return resultingText;
     },
     [
       cursorRow,
