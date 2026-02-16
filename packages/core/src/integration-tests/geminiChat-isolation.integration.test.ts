@@ -710,7 +710,7 @@ describe('GeminiChat Isolation Integration Tests', () => {
       const preserve = context.ephemerals.preserveThreshold();
 
       // THEN: Default values used (from createAgentRuntimeContext EPHEMERAL_DEFAULTS)
-      expect(threshold).toBe(0.8);
+      expect(threshold).toBe(0.5);
       expect(limit).toBe(DEFAULT_TOKEN_LIMIT);
       expect(preserve).toBe(0.2);
     });

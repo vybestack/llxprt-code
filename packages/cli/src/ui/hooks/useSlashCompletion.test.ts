@@ -382,7 +382,8 @@ describe('useSlashCompletion', () => {
           {
             name: 'stats',
             altNames: ['usage'],
-            description: 'check session stats. Usage: /stats [model|tools]',
+            description:
+              'check session stats. Usage: /stats [session|model|tools|cache|buckets|quota|lb]',
           },
           {
             name: 'clear',
@@ -447,12 +448,13 @@ describe('useSlashCompletion', () => {
           {
             name: 'stats',
             altNames: ['usage'],
-            description: 'check session stats. Usage: /stats [model|tools]',
+            description:
+              'check session stats. Usage: /stats [session|model|tools|cache|buckets|quota|lb]',
           },
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
-            useTextBufferForTest('/usag'), // part of the word "usage"
+            useTextBufferForTest('/usag'), // partial alt name "usage"
             testDirs,
             testRootDir,
             slashCommands,
@@ -464,7 +466,8 @@ describe('useSlashCompletion', () => {
           {
             label: 'stats',
             value: 'stats',
-            description: 'check session stats. Usage: /stats [model|tools]',
+            description:
+              'check session stats. Usage: /stats [session|model|tools|cache|buckets|quota|lb]',
           },
         ]);
       });
@@ -504,7 +507,8 @@ describe('useSlashCompletion', () => {
             {
               name: 'stats',
               altNames: ['usage'],
-              description: 'check session stats. Usage: /stats [model|tools]',
+              description:
+                'check session stats. Usage: /stats [session|model|tools|cache|buckets|quota|lb]',
               action: vi.fn(),
             },
           ] as unknown as SlashCommand[];

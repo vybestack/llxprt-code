@@ -27,6 +27,15 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
       if (error instanceof Error) return error.message;
       return String(error);
     }),
+    getGlobalCoreMemoryFilePath:
+      original.getGlobalCoreMemoryFilePath ??
+      vi.fn(() => '/mock/home/.llxprt/.LLXPRT_SYSTEM'),
+    getProjectCoreMemoryFilePath:
+      original.getProjectCoreMemoryFilePath ??
+      vi.fn((dir: string) => `${dir}/.llxprt/.LLXPRT_SYSTEM`),
+    MemoryTool: original.MemoryTool ?? {
+      performAddMemoryEntry: vi.fn().mockResolvedValue(undefined),
+    },
   };
 });
 
@@ -129,7 +138,8 @@ describe('memoryCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /memory add <global|project> <text to remember>',
+        content:
+          'Usage: /memory add <global|project|core.global|core.project> <text to remember>',
       });
 
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
@@ -142,7 +152,8 @@ describe('memoryCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /memory add <global|project> <text to remember>',
+        content:
+          'Usage: /memory add <global|project|core.global|core.project> <text to remember>',
       });
 
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
@@ -155,7 +166,8 @@ describe('memoryCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /memory add <global|project> <text to remember>',
+        content:
+          'Usage: /memory add <global|project|core.global|core.project> <text to remember>',
       });
 
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
@@ -286,6 +298,69 @@ describe('memoryCommand', () => {
         toolArgs: { fact },
       });
     });
+
+    it('should return error when core.project is provided without content', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const result = addCommand.action(mockContext, 'core.project');
+
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: expect.stringContaining('Usage'),
+      });
+    });
+
+    it('should return error when core.global is provided without content', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const result = addCommand.action(mockContext, 'core.global');
+
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: expect.stringContaining('Usage'),
+      });
+    });
+
+    it('should handle core.project scope and write directly (async)', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      mockContext = createMockCommandContext({
+        services: {
+          config: {
+            getWorkingDir: vi.fn().mockReturnValue('/test/project'),
+          },
+        },
+      });
+
+      // core.project scope returns void (writes directly)
+      const result = addCommand.action(
+        mockContext,
+        'core.project Always use strict mode',
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should handle core.global scope and write directly (async)', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      mockContext = createMockCommandContext({
+        services: {
+          config: {
+            getWorkingDir: vi.fn().mockReturnValue('/test/project'),
+          },
+        },
+      });
+
+      const result = addCommand.action(
+        mockContext,
+        'core.global Prefer TypeScript',
+      );
+
+      expect(result).toBeUndefined();
+    });
   });
 
   describe('/memory refresh', () => {
@@ -304,6 +379,9 @@ describe('memoryCommand', () => {
         setUserMemory: mockSetUserMemory,
         setLlxprtMdFileCount: mockSetLlxprtMdFileCount,
         setLlxprtMdFilePaths: mockSetLlxprtMdFilePaths,
+        updateSystemInstructionIfInitialized: vi
+          .fn()
+          .mockResolvedValue(undefined),
         getWorkingDir: () => '/test/dir',
         getDebugMode: () => false,
         getFileService: () => ({}) as FileDiscoveryService,

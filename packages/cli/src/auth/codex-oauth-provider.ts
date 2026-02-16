@@ -162,7 +162,16 @@ export class CodexOAuthProvider implements OAuthProvider {
   private async performAuth(): Promise<void> {
     this.logger.debug(() => '[FLOW] performAuth() starting');
 
-    const interactive = shouldLaunchBrowser();
+    let noBrowser = false;
+    try {
+      const { getEphemeralSetting } = await import(
+        '../runtime/runtimeSettings.js'
+      );
+      noBrowser = (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+    } catch {
+      // Runtime not initialized (e.g., tests) — use default
+    }
+    const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
     this.logger.debug(() => `[FLOW] Interactive mode: ${interactive}`);
 
     // Check if we should use device flow (browserless mode)
@@ -237,18 +246,31 @@ export class CodexOAuthProvider implements OAuthProvider {
     await openBrowserSecurely(authUrl);
     this.logger.debug(() => '[FLOW] Browser opened');
 
-    // Wait for callback
+    // Wait for callback — fall back to device auth if it fails
     this.logger.debug(() => '[FLOW] Waiting for OAuth callback...');
-    const { code, state: callbackState } = await waitForCallback();
-    this.logger.debug(
-      () =>
-        `[FLOW] Callback received! code: ${code.substring(0, 10)}..., state: ${callbackState.substring(0, 8)}...`,
-    );
+    try {
+      const { code, state: callbackState } = await waitForCallback();
+      this.logger.debug(
+        () =>
+          `[FLOW] Callback received! code: ${code.substring(0, 10)}..., state: ${callbackState.substring(0, 8)}...`,
+      );
 
-    // Exchange code for tokens with state
-    this.logger.debug(() => '[FLOW] Calling completeAuth()...');
-    await this.completeAuth(code, redirectUri, callbackState);
-    this.logger.debug(() => '[FLOW] completeAuth() finished');
+      await localCallback.shutdown().catch(() => undefined);
+
+      // Exchange code for tokens with state
+      this.logger.debug(() => '[FLOW] Calling completeAuth()...');
+      await this.completeAuth(code, redirectUri, callbackState);
+      this.logger.debug(() => '[FLOW] completeAuth() finished');
+    } catch (error) {
+      await localCallback.shutdown().catch(() => undefined);
+      this.logger.debug(
+        () =>
+          `[FLOW] Callback failed, falling back to device auth: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+      await this.performDeviceAuth();
+    }
   }
 
   /**
@@ -280,7 +302,7 @@ export class CodexOAuthProvider implements OAuthProvider {
         `[FLOW] Token received: access_token=${token.access_token.substring(0, 10)}..., account_id=${token.account_id?.substring(0, 8) ?? 'MISSING'}..., expiry=${token.expiry}`,
     );
 
-    // Save to MultiProviderTokenStore location (~/.llxprt/oauth/codex.json)
+    // Save to KeyringTokenStore (keyring or encrypted fallback)
     this.logger.debug(() => '[FLOW] Saving token to tokenStore...');
     await this.tokenStore.saveToken('codex', token);
     this.logger.debug(() => '[FLOW] Token saved to tokenStore');
@@ -414,7 +436,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     this.logger.debug(() => '[FLOW] getToken() called');
     await this.ensureInitialized();
 
-    // Get token from ~/.llxprt/oauth/codex.json
+    // Get token from KeyringTokenStore (keyring or encrypted fallback)
     this.logger.debug(() => '[FLOW] Reading token from tokenStore...');
     const token = await this.tokenStore.getToken('codex');
 

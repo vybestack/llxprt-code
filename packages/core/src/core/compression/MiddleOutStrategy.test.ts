@@ -512,7 +512,7 @@ describe('MiddleOutStrategy', () => {
       const textBlock = ackMsg.blocks[0];
       expect(textBlock.type).toBe('text');
       expect((textBlock as { text: string }).text).toBe(
-        'Got it. Thanks for the additional context!',
+        'Understood. Continuing with the current task.',
       );
     });
   });

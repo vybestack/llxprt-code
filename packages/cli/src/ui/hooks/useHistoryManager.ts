@@ -97,6 +97,7 @@ export function useHistory(
         }
         return trimHistory([...prevHistory, newItem], limitsRef.current);
       });
+
       return id; // Return the generated ID (even if not added, to keep signature)
     },
     [getNextMessageId],

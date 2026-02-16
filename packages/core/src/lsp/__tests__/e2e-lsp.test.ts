@@ -393,8 +393,16 @@ describe('LSP E2E integration (P36)', () => {
   });
 
   // --- 8. Config: Default Enabled ---
-  it('Config defaults to enabled when lsp key is absent', async () => {
+  it('Config defaults to disabled when lsp key is absent', async () => {
     const config = new Config(createBaseConfigParams());
+    await config.initialize();
+
+    expect(config.getLspConfig()).toBeUndefined();
+    expect(config.getLspServiceClient()).toBeUndefined();
+  });
+
+  it('Config enables LSP when lsp is true', async () => {
+    const config = new Config(createBaseConfigParams({ lsp: true }));
     await config.initialize();
 
     expect(config.getLspConfig()).toEqual({ servers: [] });

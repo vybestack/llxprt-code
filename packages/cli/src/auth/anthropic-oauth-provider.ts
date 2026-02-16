@@ -51,6 +51,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
   private logger: DebugLogger;
+  private currentAuthAttemptId?: string;
   private addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
@@ -128,6 +129,8 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * Cancel OAuth flow
    */
   cancelAuth(): void {
+    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
+      false;
     if (this.authCodeRejecter) {
       const error = OAuthErrorFactory.fromUnknown(
         this.name,
@@ -186,9 +189,26 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   async initiateAuth(): Promise<void> {
     return this.errorHandler.wrapMethod(
       async () => {
+        // Cancel any previous auth attempt's pending dialog
+        const attemptId = crypto.randomUUID();
+        if (this.currentAuthAttemptId) {
+          this.cancelAuth();
+        }
+        this.currentAuthAttemptId = attemptId;
+
         await this.ensureInitialized();
         const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
-        const interactive = shouldLaunchBrowser();
+        let noBrowser = false;
+        try {
+          const { getEphemeralSetting } = await import(
+            '../runtime/runtimeSettings.js'
+          );
+          noBrowser =
+            (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+        } catch {
+          // Runtime not initialized (e.g., tests) — use default
+        }
+        const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
         let localCallback: LocalOAuthCallbackServer | null = null;
 
         if (interactive) {
@@ -209,27 +229,22 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
         }
 
-        // In interactive mode with local callback, use the redirect-based URL
-        // In non-interactive or fallback mode, use the device code URL
-        let authUrl: string;
-        if (localCallback) {
-          // Browser-based OAuth with local callback server
-          authUrl = this.deviceFlow.buildAuthorizationUrl(
-            localCallback.redirectUri,
-          );
-        } else {
-          // Device flow URL (for non-interactive or when callback server fails)
-          authUrl =
-            deviceCodeResponse.verification_uri_complete ||
-            `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
-        }
+        // Always build the device code URL for user-facing display
+        const deviceCodeUrl =
+          deviceCodeResponse.verification_uri_complete ||
+          `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
 
-        // Show the auth URL in the TUI
-        const message = `Please visit the following URL to authorize with Anthropic Claude:\\n${authUrl}`;
+        // Build callback URL for browser if local callback is available
+        const callbackUrl = localCallback
+          ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
+          : null;
+
+        // Always display the device code URL to the user (never the callback URL)
+        const message = `Please visit the following URL to authorize with Anthropic Claude:\n${deviceCodeUrl}`;
         const historyItem: HistoryItemOAuthURL = {
           type: 'oauth_url',
           text: message,
-          url: authUrl,
+          url: deviceCodeUrl,
         };
         // Try instance addItem first, fallback to global
         const addItem = this.addItem || globalOAuthUI.getAddItem();
@@ -238,11 +253,11 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         }
 
         console.log('Visit the following URL to authorize:');
-        console.log(authUrl);
+        console.log(deviceCodeUrl);
 
-        // Copy URL to clipboard with error handling
+        // Copy device code URL to clipboard with error handling
         try {
-          await ClipboardService.copyToClipboard(authUrl);
+          await ClipboardService.copyToClipboard(deviceCodeUrl);
         } catch (error) {
           // Clipboard copy is non-critical, continue without it
           this.logger.debug(
@@ -256,43 +271,17 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         if (interactive) {
           console.log('Opening browser for authentication...');
 
+          // Open browser with callback URL if available, else device code URL
+          const browserUrl = callbackUrl || deviceCodeUrl;
           try {
-            await openBrowserSecurely(authUrl);
+            await openBrowserSecurely(browserUrl);
           } catch (error) {
             this.logger.debug(() => `Browser launch error: ${error}`);
           }
         }
 
-        // If we have a local callback server, wait for it - this is the primary flow
-        // for interactive mode. Only fall back to paste box if callback fails.
-        if (localCallback) {
-          try {
-            const { code, state } = await localCallback.waitForCallback();
-            await localCallback.shutdown();
-            await this.completeAuth(`${code}#${state}`);
-            return; // Success! Don't fall through to paste box.
-          } catch (error) {
-            await localCallback.shutdown().catch(() => undefined);
-            this.logger.debug(
-              () =>
-                `Local OAuth callback failed: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
-            );
-            // Local callback failed - throw the error rather than falling back to paste box
-            // in interactive mode. The user should retry.
-            throw OAuthErrorFactory.fromUnknown(
-              this.name,
-              error instanceof Error
-                ? error
-                : new Error('OAuth callback failed'),
-              'local callback',
-            );
-          }
-        }
-
-        // Only reach here in non-interactive mode (no browser, no local callback)
-        // This is the device code / paste box flow for headless environments
+        // Set up the manual code entry dialog (paste box) for ALL modes
+        // In interactive mode, this races against the callback
         (global as unknown as { __oauth_provider: string }).__oauth_provider =
           'anthropic';
 
@@ -316,9 +305,67 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           global as unknown as { __oauth_needs_code: boolean }
         ).__oauth_needs_code = true;
 
+        // If we have a local callback server, race callback against manual code entry
+        if (localCallback) {
+          const callbackPromise = localCallback
+            .waitForCallback()
+            .then(({ code, state }) => `${code}#${state}`);
+
+          try {
+            const authCode = await Promise.race([
+              callbackPromise,
+              this.pendingAuthPromise,
+            ]);
+
+            // Suppress unhandled rejection from the losing branch
+            this.pendingAuthPromise.catch(() => {});
+            callbackPromise.catch(() => {});
+
+            // Whichever succeeded, clean up the other
+            await localCallback.shutdown().catch(() => undefined);
+            (
+              global as unknown as { __oauth_needs_code: boolean }
+            ).__oauth_needs_code = false;
+
+            if (this.currentAuthAttemptId === attemptId) {
+              await this.completeAuth(authCode);
+            }
+            return;
+          } catch (error) {
+            // Suppress unhandled rejection from the losing branch
+            callbackPromise.catch(() => {});
+            this.pendingAuthPromise.catch(() => {});
+
+            // Both paths failed or callback failed - fall through to manual entry
+            await localCallback.shutdown().catch(() => undefined);
+            this.logger.debug(
+              () =>
+                `Local OAuth callback failed, falling back to manual entry: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+            );
+
+            // If the pending auth promise also rejected (timeout), re-throw
+            // Otherwise, the dialog is still open for manual entry
+            if (this.authCodeResolver) {
+              // Dialog is still open, wait for manual code entry
+              const authCode = await this.pendingAuthPromise;
+              if (this.currentAuthAttemptId === attemptId) {
+                await this.completeAuth(authCode);
+              }
+              return;
+            }
+            throw error;
+          }
+        }
+
+        // Non-interactive mode (no browser, no local callback)
+        // Wait for manual code entry via paste box
         const authCode = await this.pendingAuthPromise;
 
-        await this.completeAuth(authCode);
+        if (this.currentAuthAttemptId === attemptId) {
+          await this.completeAuth(authCode);
+        }
       },
       this.name,
       'initiateAuth',
@@ -358,6 +405,11 @@ export class AnthropicOAuthProvider implements OAuthProvider {
             );
           }
         }
+
+        // Clear the dialog flag on successful auth
+        (
+          global as unknown as { __oauth_needs_code: boolean }
+        ).__oauth_needs_code = false;
 
         this.logger.debug(
           () => 'Successfully authenticated with Anthropic Claude!',
@@ -404,15 +456,8 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     }
 
     return this.errorHandler.handleGracefully(
-      async () => {
-        // @pseudocode line 72: Return token from store, but check if refresh is needed
-        const token = await this._tokenStore!.getToken('anthropic');
-        if (token && this.isTokenExpired(token)) {
-          // Token is expired or near expiry, try to refresh
-          return await this.refreshIfNeeded();
-        }
-        return token;
-      },
+      // Issue #1378: Return token as-is; OAuthManager owns all refresh operations
+      async () => this._tokenStore!.getToken('anthropic'),
       null, // Return null on error
       this.name,
       'getToken',
@@ -432,6 +477,11 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * 4. If lock not acquired, wait and re-check disk
    */
   async refreshIfNeeded(): Promise<OAuthToken | null> {
+    // Issue #1378: OAuthManager should handle all refresh operations
+    this.logger.debug(
+      () =>
+        'refreshIfNeeded() called directly on provider (deprecated: OAuthManager should handle refresh)',
+    );
     await this.ensureInitialized();
     if (!this._tokenStore) {
       return null;

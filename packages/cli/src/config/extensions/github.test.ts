@@ -11,6 +11,7 @@ import {
   extractFile,
   findReleaseAsset,
   parseGitHubRepoForReleases,
+  tryParseGithubUrl,
 } from './github.js';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
@@ -112,6 +113,31 @@ describe('git extension helpers', () => {
 
       await expect(cloneFromGit(installMetadata, destination)).rejects.toThrow(
         'Failed to clone Git repository from http://my-repo.com',
+      );
+    });
+  });
+
+  describe('tryParseGithubUrl', () => {
+    it.each([
+      ['https://github.com/owner/repo', 'owner', 'repo'],
+      ['https://github.com/owner/repo.git', 'owner', 'repo'],
+      ['git@github.com:owner/repo.git', 'owner', 'repo'],
+      ['owner/repo', 'owner', 'repo'],
+    ])('should parse %s to %s/%s', (url, owner, repo) => {
+      expect(tryParseGithubUrl(url)).toEqual({ owner, repo });
+    });
+
+    it.each([
+      'https://gitlab.com/owner/repo',
+      'https://my-git-host.com/owner/group/repo',
+      'git@gitlab.com:some-group/some-project/some-repo.git',
+    ])('should return null for non-GitHub URLs', (url) => {
+      expect(tryParseGithubUrl(url)).toBeNull();
+    });
+
+    it('should throw for invalid formats', () => {
+      expect(() => tryParseGithubUrl('invalid')).toThrow(
+        'Invalid GitHub repository source',
       );
     });
   });
@@ -319,7 +345,7 @@ describe('git extension helpers', () => {
     it('should fail on a GitHub SSH URL', () => {
       const source = 'git@github.com:owner/repo.git';
       expect(() => parseGitHubRepoForReleases(source)).toThrow(
-        'GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via SSH.',
+        'GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via HTTPS.',
       );
     });
 

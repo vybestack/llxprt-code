@@ -17,6 +17,7 @@
  * 3. OAuth respects includeOAuth flag (defaults to false for safety)
  */
 
+import * as path from 'path';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AuthPrecedenceResolver,
@@ -24,6 +25,8 @@ import {
   SettingsService,
   ProfileManager,
   Profile,
+  SecureStore,
+  type KeyringAdapter,
 } from '@vybestack/llxprt-code-core';
 import {
   createTempDirectory,
@@ -32,12 +35,41 @@ import {
   createTempKeyfile,
 } from './test-utils.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
-import { MultiProviderTokenStore } from '../auth/types.js';
+import { KeyringTokenStore } from '../auth/types.js';
+
+/**
+ * Creates an in-memory mock keyring adapter for testing.
+ */
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
+  const store = new Map<string, string>();
+  return {
+    store,
+    getPassword: async (service: string, account: string) =>
+      store.get(`${service}:${account}`) ?? null,
+    setPassword: async (service: string, account: string, password: string) => {
+      store.set(`${service}:${account}`, password);
+    },
+    deletePassword: async (service: string, account: string) =>
+      store.delete(`${service}:${account}`),
+    findCredentials: async (service: string) => {
+      const results: Array<{ account: string; password: string }> = [];
+      for (const [key, value] of store.entries()) {
+        if (key.startsWith(`${service}:`)) {
+          results.push({
+            account: key.slice(service.length + 1),
+            password: value,
+          });
+        }
+      }
+      return results;
+    },
+  };
+}
 
 /**
  * Creates a mock OAuth manager that tracks when methods are called
  */
-function createMockOAuthManager(tokenStore: MultiProviderTokenStore) {
+function createMockOAuthManager(tokenStore: KeyringTokenStore) {
   const manager = new OAuthManager(tokenStore);
 
   const spies = {
@@ -54,7 +86,7 @@ describe('OAuth Timing Integration Tests', () => {
   let originalHome: string | undefined;
   let settingsService: SettingsService;
   let profileManager: ProfileManager;
-  let tokenStore: MultiProviderTokenStore;
+  let tokenStore: KeyringTokenStore;
   let oauthManager: OAuthManager;
   let oauthSpies: ReturnType<typeof createMockOAuthManager>['spies'];
 
@@ -68,8 +100,13 @@ describe('OAuth Timing Integration Tests', () => {
     settingsService = new SettingsService();
     profileManager = new ProfileManager();
 
-    // Set up token store and OAuth manager with spies
-    tokenStore = new MultiProviderTokenStore();
+    // Set up token store backed by in-memory keyring
+    const secureStore = new SecureStore('llxprt-code-oauth', {
+      fallbackDir: path.join(tempDir, '.llxprt', 'oauth'),
+      fallbackPolicy: 'allow',
+      keyringLoader: async () => createMockKeyring(),
+    });
+    tokenStore = new KeyringTokenStore({ secureStore });
     const mockOAuthSetup = createMockOAuthManager(tokenStore);
     oauthManager = mockOAuthSetup.manager;
     oauthSpies = mockOAuthSetup.spies;

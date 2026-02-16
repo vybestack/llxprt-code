@@ -7,6 +7,7 @@
 // File for 'llxprt mcp list' command
 import type { CommandModule } from 'yargs';
 import { loadSettings } from '../../config/settings.js';
+import { exitCli } from '../utils.js';
 import {
   MCPServerConfig,
   MCPServerStatus,
@@ -136,5 +137,6 @@ export const listCommand: CommandModule = {
   describe: 'List all configured MCP servers',
   handler: async () => {
     await listMcpServers();
+    await exitCli();
   },
 };

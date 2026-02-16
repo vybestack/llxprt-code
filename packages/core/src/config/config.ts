@@ -691,11 +691,11 @@ export class Config {
      * @requirement REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
      * Parse LSP config: false = disabled, absent = default enabled, object = use custom config
      */
-    if (params.lsp === false) {
-      // Explicitly disabled
+    if (params.lsp === false || params.lsp === undefined) {
+      // Explicitly disabled or absent (absent = not configured)
       this.lspConfig = undefined;
-    } else if (params.lsp === undefined) {
-      // Absent = default enabled (REQ-CFG-015)
+    } else if (params.lsp === true) {
+      // Boolean true = default enabled (REQ-CFG-015)
       this.lspConfig = { servers: [] };
     } else {
       // Object presence = enabled (REQ-CFG-020), ensure servers field exists

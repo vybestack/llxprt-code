@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from 'vitest';
 
 vi.mock('./local-oauth-callback.js', () => ({
   startLocalOAuthCallback: vi.fn(),
@@ -20,7 +28,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
   let provider: AnthropicOAuthProvider;
   let tokenStore: TokenStore;
   let deviceFlow: coreModule.AnthropicDeviceFlow;
-  let shouldLaunchBrowserSpy: ReturnType<typeof vi.spyOn>;
+  let shouldLaunchBrowserSpy: MockInstance;
 
   beforeEach(() => {
     openBrowserArgs.length = 0;
@@ -124,9 +132,10 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       'anthropic',
       expect.objectContaining({ access_token: 'local-token' }),
     );
+    // After successful callback, __oauth_needs_code is cleared (false)
     expect(
       (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-    ).toBe(undefined);
+    ).toBeFalsy();
     expect(waitForCallback).toHaveBeenCalled();
     expect(shutdown).toHaveBeenCalled();
   });
@@ -145,8 +154,9 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     await manualPromise.catch(() => undefined);
 
     expect(startLocalOAuthCallbackMock).toHaveBeenCalled();
+    // After cancelAuth(), __oauth_needs_code is cleared (false)
     expect(
       (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
-    ).toBe(true);
+    ).toBe(false);
   });
 });

@@ -15,7 +15,37 @@ import type { OAuthToken, TokenStore } from './types.js';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
+import {
+  KeyringTokenStore,
+  SecureStore,
+  type KeyringAdapter,
+} from '@vybestack/llxprt-code-core';
+
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
+  const store = new Map<string, string>();
+  return {
+    store,
+    getPassword: async (service: string, account: string) =>
+      store.get(`${service}:${account}`) ?? null,
+    setPassword: async (service: string, account: string, password: string) => {
+      store.set(`${service}:${account}`, password);
+    },
+    deletePassword: async (service: string, account: string) =>
+      store.delete(`${service}:${account}`),
+    findCredentials: async (service: string) => {
+      const results: Array<{ account: string; password: string }> = [];
+      for (const [key, value] of store.entries()) {
+        if (key.startsWith(`${service}:`)) {
+          results.push({
+            account: key.slice(service.length + 1),
+            password: value,
+          });
+        }
+      }
+      return results;
+    },
+  };
+}
 
 describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
   let tempDir: string;
@@ -35,7 +65,12 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
   beforeEach(async () => {
     // Create a temporary directory for testing
     tempDir = await fs.mkdtemp(join(tmpdir(), 'oauth-refresh-race-test-'));
-    tokenStore = new MultiProviderTokenStore(tempDir);
+    const secureStore = new SecureStore('llxprt-code-oauth', {
+      fallbackDir: tempDir,
+      fallbackPolicy: 'allow',
+      keyringLoader: async () => createMockKeyring(),
+    });
+    tokenStore = new KeyringTokenStore({ secureStore });
     oauthManager = new OAuthManager(tokenStore);
 
     // Reset refresh call counter
@@ -254,6 +289,45 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       // Each bucket should try to acquire its own lock
       // Note: Due to timing, some may timeout, but we should see at least one lock attempt
       expect(acquireLockSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('OAuthManager is the sole refresh authority (Issue #1378)', () => {
+    it('should refresh expired token through OAuthManager only, not through provider.getToken()', async () => {
+      // Track refresh calls to prove only OAuthManager triggers refresh
+      let managerRefreshCount = 0;
+
+      const anthropicProvider: OAuthProvider = {
+        name: 'anthropic',
+        initiateAuth: vi.fn().mockResolvedValue(undefined),
+        // Simulates the FIXED getToken() - just returns stored token, no refresh
+        getToken: vi
+          .fn()
+          .mockImplementation(async () => createToken('expired-token', -10)),
+        refreshToken: vi.fn().mockImplementation(async (_token: OAuthToken) => {
+          managerRefreshCount++;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return createToken('refreshed-by-manager', 3600);
+        }),
+      };
+
+      oauthManager.registerProvider(anthropicProvider);
+      await oauthManager.toggleOAuthEnabled('anthropic');
+
+      // Store an expired token
+      const expiredToken = createToken('expired-token', -10);
+      await tokenStore.saveToken('anthropic', expiredToken);
+
+      // Call OAuthManager.getOAuthToken (the correct path)
+      const result = await oauthManager.getOAuthToken('anthropic');
+
+      // OAuthManager should have called provider.refreshToken() exactly once
+      expect(managerRefreshCount).toBe(1);
+      expect(result?.access_token).toBe('refreshed-by-manager');
+
+      // provider.getToken() should NOT have been called by OAuthManager for refresh
+      // (OAuthManager reads from tokenStore directly)
+      expect(anthropicProvider.getToken).not.toHaveBeenCalled();
     });
   });
 });

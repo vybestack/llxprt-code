@@ -10,7 +10,11 @@ import process from 'node:process';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
-import type { Config, Todo } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  RecordingIntegration,
+  Todo,
+} from '@vybestack/llxprt-code-core';
 import {
   GitService,
   Logger,
@@ -49,6 +53,7 @@ import type {
   ExtensionUpdateAction,
 } from '../state/extensions.js';
 import { SubagentView } from '../components/SubagentManagement/types.js';
+import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 const confirmationLogger = new DebugLogger('llxprt:ui:selection');
 const slashCommandLogger = new DebugLogger('llxprt:ui:slash-commands');
@@ -104,6 +109,7 @@ export const useSlashCommandProcessor = (
     updateTodos: (todos: Todo[]) => void;
     refreshTodos: () => void;
   },
+  recordingIntegration?: RecordingIntegration,
 ) => {
   const session = useSessionStats();
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
@@ -306,6 +312,7 @@ export const useSlashCommandProcessor = (
         sessionShellAllowlist,
       },
       todoContext,
+      recordingIntegration,
     }),
     [
       alternateBuffer,
@@ -330,6 +337,7 @@ export const useSlashCommandProcessor = (
       reloadCommands,
       extensionsUpdateState,
       todoContext,
+      recordingIntegration,
     ],
   );
 
@@ -412,7 +420,14 @@ export const useSlashCommandProcessor = (
       setIsProcessing(true);
 
       const userMessageTimestamp = Date.now();
-      addItem({ type: MessageType.USER, text: trimmed }, userMessageTimestamp);
+      const sanitizedCommand =
+        trimmed.startsWith('/key ') || trimmed.startsWith('/toolkey ')
+          ? secureInputHandler.sanitizeForHistory(trimmed)
+          : trimmed;
+      addItem(
+        { type: MessageType.USER, text: sanitizedCommand },
+        userMessageTimestamp,
+      );
 
       let hasError = false;
       const { commandToExecute, args, canonicalPath } = parseSlashCommand(
@@ -472,6 +487,12 @@ export const useSlashCommandProcessor = (
                     },
                     Date.now(),
                   );
+                  if (result.messageType === 'error') {
+                    recordingIntegration?.recordSessionEvent(
+                      'error',
+                      result.content,
+                    );
+                  }
                   return { type: 'handled' };
                 case 'dialog':
                   switch (result.dialog) {
@@ -762,13 +783,15 @@ export const useSlashCommandProcessor = (
           );
           logSlashCommand(config, event);
         }
+        const errorText = e instanceof Error ? e.message : String(e);
         addItem(
           {
             type: MessageType.ERROR,
-            text: e instanceof Error ? e.message : String(e),
+            text: errorText,
           },
           Date.now(),
         );
+        recordingIntegration?.recordSessionEvent('error', errorText);
         return { type: 'handled' };
       } finally {
         if (config && commandToExecute && !hasError) {
@@ -792,6 +815,7 @@ export const useSlashCommandProcessor = (
       setSessionShellAllowlist,
       setIsProcessing,
       setConfirmationRequest,
+      recordingIntegration,
     ],
   );
 

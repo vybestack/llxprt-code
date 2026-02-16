@@ -15,7 +15,11 @@ import React, {
 import { HistoryItem, MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 import { useRuntimeApi, getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { Config, getErrorMessage } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  getErrorMessage,
+  loadCoreMemoryContent,
+} from '@vybestack/llxprt-code-core';
 import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 import { loadSettings } from '../../config/settings.js';
 import {
@@ -195,6 +199,14 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       );
       config.setUserMemory(memoryContent);
       config.setLlxprtMdFileCount(fileCount);
+
+      // Refresh core (system) memory from .LLXPRT_SYSTEM files
+      try {
+        const coreContent = await loadCoreMemoryContent(config.getWorkingDir());
+        config.setCoreMemory(coreContent);
+      } catch {
+        // Non-fatal: keep existing core memory
+      }
 
       addItem(
         {

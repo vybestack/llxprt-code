@@ -6,17 +6,19 @@
 
 /**
  * @plan PLAN-20260211-COMPRESSION.P10
- * @requirement REQ-CS-001.2, REQ-CS-001.3
+ * @plan PLAN-20260211-HIGHDENSITY.P17
+ * @requirement REQ-CS-001.2, REQ-CS-001.3, REQ-HD-004.2
+ * @pseudocode settings-factory.md lines 140-157
  *
  * Factory functions for resolving compression strategies by name.
  */
 
 import type { CompressionStrategy, CompressionStrategyName } from './types.js';
 import { COMPRESSION_STRATEGIES, UnknownStrategyError } from './types.js';
-import { HighDensityStrategy } from './HighDensityStrategy.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
+import { HighDensityStrategy } from './HighDensityStrategy.js';
 
 /**
  * Validates a raw string against the known strategy names.

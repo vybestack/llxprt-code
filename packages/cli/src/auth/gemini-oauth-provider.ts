@@ -73,6 +73,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
       );
     }
 
+    this.installPersistentAuthCodeHook();
+
     // DO NOT call initializeToken() - lazy initialization pattern
   }
 
@@ -113,6 +115,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
    * Cancel OAuth flow
    */
   cancelAuth(): void {
+    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
+      false;
     if (this.authCodeRejecter) {
       const error = OAuthErrorFactory.fromUnknown(
         this.name,
@@ -206,9 +210,20 @@ export class GeminiOAuthProvider implements OAuthProvider {
 
           // Create a minimal config for OAuth - use type assertion for test environment
           // Type assertion is needed since we're creating a partial Config for test mode
+          let noBrowser = false;
+          try {
+            const { getEphemeralSetting } = await import(
+              '../runtime/runtimeSettings.js'
+            );
+            noBrowser =
+              (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+          } catch {
+            // Runtime not initialized (e.g., tests) — use default
+          }
           const config = {
             getProxy: () => undefined,
-            isBrowserLaunchSuppressed: () => !shouldLaunchBrowser(),
+            isBrowserLaunchSuppressed: () =>
+              !shouldLaunchBrowser({ forceManual: noBrowser }),
           } as unknown as Parameters<typeof getOauthClient>[0];
 
           // Use the existing Google OAuth infrastructure to get a client
@@ -559,6 +574,18 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
         );
       }
     });
+  }
+
+  /**
+   * Install a persistent auth-code hook so ANY code path that triggers OAuth
+   * (e.g. streaming re-auth) can use the UI dialog instead of readline (Issue #1370).
+   */
+  private installPersistentAuthCodeHook(): void {
+    const globalObj = global as Record<string, unknown>;
+    if (!globalObj.__oauth_wait_for_code) {
+      globalObj.__oauth_wait_for_code = () => this.waitForAuthCode();
+      globalObj.__oauth_provider = this.name;
+    }
   }
 
   /**

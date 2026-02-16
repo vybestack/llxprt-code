@@ -4,83 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * Extension settings storage.
+ *
+ * Stores non-sensitive settings in .env files and sensitive settings
+ * in the OS keychain via SecureStore. All keyring access is delegated
+ * to SecureStore, eliminating direct @napi-rs/keyring imports.
+ *
+ * @plan PLAN-20260211-SECURESTORE.P09
+ * @requirement R7.5, R7.7
+ */
+
 import * as fs from 'fs';
 import * as path from 'path';
 import type { ExtensionSetting } from './extensionSettings.js';
-
-interface Keytar {
-  getPassword(service: string, account: string): Promise<string | null>;
-  setPassword(
-    service: string,
-    account: string,
-    password: string,
-  ): Promise<void>;
-  deletePassword(service: string, account: string): Promise<boolean>;
-  findCredentials(
-    service: string,
-  ): Promise<Array<{ account: string; password: string }>>;
-}
-
-let keytarModule: Keytar | null = null;
-let keytarLoadAttempted = false;
-
-async function getKeytar(): Promise<Keytar | null> {
-  if (keytarLoadAttempted) {
-    return keytarModule;
-  }
-
-  keytarLoadAttempted = true;
-
-  try {
-    const keyring = (await import('@napi-rs/keyring')) as {
-      AsyncEntry: new (
-        service: string,
-        account: string,
-      ) => {
-        getPassword(): Promise<string | null>;
-        setPassword(password: string): Promise<void>;
-        deletePassword(): Promise<boolean>;
-      };
-      findCredentialsAsync: (
-        service: string,
-      ) => Promise<Array<{ account: string; password: string }>>;
-    };
-    keytarModule = {
-      getPassword: (service: string, account: string) => {
-        const entry = new keyring.AsyncEntry(service, account);
-        return entry.getPassword();
-      },
-      setPassword: (service: string, account: string, password: string) => {
-        const entry = new keyring.AsyncEntry(service, account);
-        return entry.setPassword(password);
-      },
-      deletePassword: (service: string, account: string) => {
-        const entry = new keyring.AsyncEntry(service, account);
-        return entry.deletePassword();
-      },
-      findCredentials: keyring.findCredentialsAsync,
-    } as Keytar;
-  } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    const isModuleMissing =
-      err?.code === 'ERR_MODULE_NOT_FOUND' ||
-      err?.code === 'MODULE_NOT_FOUND' ||
-      err?.code === 'ERR_DLOPEN_FAILED' ||
-      err?.message?.includes(`'keytar'`) ||
-      err?.message?.includes(`'@napi-rs/keyring'`);
-
-    if (isModuleMissing) {
-      console.warn(
-        '@napi-rs/keyring not available; sensitive extension settings will not be stored securely.',
-      );
-    } else {
-      console.error('Failed to load @napi-rs/keyring module:', error);
-    }
-
-    keytarModule = null;
-  }
-  return keytarModule;
-}
+import { SecureStore } from '@vybestack/llxprt-code-core';
 
 /**
  * Returns the path to the .env file for an extension.
@@ -161,19 +99,20 @@ function formatEnvFile(values: Record<string, string>): string {
 
 /**
  * Storage implementation for extension settings.
- * Stores non-sensitive settings in .env file and sensitive settings in OS keychain.
+ * Stores non-sensitive settings in .env file and sensitive settings
+ * via SecureStore (keychain + encrypted file fallback).
  */
 export class ExtensionSettingsStorage {
   private readonly extensionDir: string;
-  private readonly serviceName: string;
+  private readonly store: SecureStore;
 
   constructor(extensionName: string, extensionDir: string) {
     this.extensionDir = extensionDir;
-    this.serviceName = getKeychainServiceName(extensionName);
+    this.store = new SecureStore(getKeychainServiceName(extensionName));
   }
 
   /**
-   * Saves settings to appropriate storage (env file for non-sensitive, keychain for sensitive).
+   * Saves settings to appropriate storage (env file for non-sensitive, SecureStore for sensitive).
    */
   async saveSettings(
     settings: ExtensionSetting[],
@@ -203,16 +142,15 @@ export class ExtensionSettingsStorage {
       await fs.promises.unlink(envPath);
     }
 
-    // Write sensitive settings to keychain (delete removed ones)
-    const keytar = await getKeytar();
-    if (keytar && sensitiveSettings.length > 0) {
+    // Write sensitive settings to SecureStore (delete removed ones)
+    if (sensitiveSettings.length > 0) {
       for (const setting of sensitiveSettings) {
         const value = values[setting.envVar];
         try {
           if (value !== undefined) {
-            await keytar.setPassword(this.serviceName, setting.envVar, value);
+            await this.store.set(setting.envVar, value);
           } else {
-            await keytar.deletePassword(this.serviceName, setting.envVar);
+            await this.store.delete(setting.envVar);
           }
         } catch (error) {
           console.error(
@@ -247,8 +185,7 @@ export class ExtensionSettingsStorage {
       console.error('Failed to read .env file:', error);
     }
 
-    // Load sensitive settings from keychain
-    const keytar = await getKeytar();
+    // Load sensitive settings from SecureStore
     const sensitiveSettings = settings.filter((s) => s.sensitive);
     const nonSensitiveSettings = settings.filter((s) => !s.sensitive);
 
@@ -257,26 +194,16 @@ export class ExtensionSettingsStorage {
       result[setting.envVar] = envValues[setting.envVar];
     }
 
-    // Populate sensitive values from keychain
-    if (keytar) {
-      for (const setting of sensitiveSettings) {
-        try {
-          const value = await keytar.getPassword(
-            this.serviceName,
-            setting.envVar,
-          );
-          result[setting.envVar] = value ?? undefined;
-        } catch (error) {
-          console.error(
-            `Failed to load sensitive setting ${setting.envVar} from keychain:`,
-            error,
-          );
-          result[setting.envVar] = undefined;
-        }
-      }
-    } else {
-      // Keychain not available, mark sensitive settings as undefined
-      for (const setting of sensitiveSettings) {
+    // Populate sensitive values from SecureStore
+    for (const setting of sensitiveSettings) {
+      try {
+        const value = await this.store.get(setting.envVar);
+        result[setting.envVar] = value ?? undefined;
+      } catch (error) {
+        console.error(
+          `Failed to load sensitive setting ${setting.envVar} from keychain:`,
+          error,
+        );
         result[setting.envVar] = undefined;
       }
     }
@@ -298,24 +225,18 @@ export class ExtensionSettingsStorage {
       console.error('Failed to delete .env file:', error);
     }
 
-    // Delete all keychain entries for this service
-    const keytar = await getKeytar();
-    if (keytar) {
-      try {
-        const credentials = await keytar.findCredentials(this.serviceName);
-        for (const cred of credentials) {
-          try {
-            await keytar.deletePassword(this.serviceName, cred.account);
-          } catch (error) {
-            console.error(
-              `Failed to delete keychain entry ${cred.account}:`,
-              error,
-            );
-          }
+    // Delete all SecureStore entries for this service
+    try {
+      const keys = await this.store.list();
+      for (const key of keys) {
+        try {
+          await this.store.delete(key);
+        } catch (error) {
+          console.error(`Failed to delete keychain entry ${key}:`, error);
         }
-      } catch (error) {
-        console.error('Failed to delete keychain entries:', error);
       }
+    } catch (error) {
+      console.error('Failed to delete keychain entries:', error);
     }
   }
 
@@ -329,15 +250,12 @@ export class ExtensionSettingsStorage {
       return true;
     }
 
-    // Check for keychain entries
-    const keytar = await getKeytar();
-    if (keytar) {
-      try {
-        const credentials = await keytar.findCredentials(this.serviceName);
-        return credentials.length > 0;
-      } catch (error) {
-        console.error('Failed to check keychain entries:', error);
-      }
+    // Check for SecureStore entries
+    try {
+      const keys = await this.store.list();
+      return keys.length > 0;
+    } catch (error) {
+      console.error('Failed to check keychain entries:', error);
     }
 
     return false;

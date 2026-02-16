@@ -8,7 +8,7 @@ import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import { Config, type RecordingIntegration } from '@vybestack/llxprt-code-core';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseProviderDialogParams {
@@ -21,6 +21,7 @@ interface UseProviderDialogParams {
   appState: AppState;
   config: Config;
   onClear?: () => void;
+  recordingIntegration?: RecordingIntegration;
 }
 
 export const useProviderDialog = ({
@@ -29,6 +30,7 @@ export const useProviderDialog = ({
   appState,
   config: _config,
   onClear,
+  recordingIntegration,
 }: UseProviderDialogParams) => {
   const appDispatch = useAppDispatch();
   const runtime = useRuntimeApi();
@@ -86,6 +88,10 @@ export const useProviderDialog = ({
         }
 
         setCurrentProvider(result.nextProvider);
+        recordingIntegration?.recordProviderSwitch(
+          result.nextProvider,
+          result.defaultModel ?? runtime.getActiveModelName(),
+        );
         onProviderChange?.();
       } catch (e) {
         addMessage({
@@ -96,7 +102,14 @@ export const useProviderDialog = ({
       }
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'provider' });
     },
-    [addMessage, onProviderChange, appDispatch, onClear, runtime],
+    [
+      addMessage,
+      onProviderChange,
+      appDispatch,
+      onClear,
+      runtime,
+      recordingIntegration,
+    ],
   );
 
   return {

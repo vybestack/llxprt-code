@@ -133,7 +133,7 @@ describe('usePhraseCycler', () => {
 
     const { result, rerender } = renderHook(
       ({ isActive, isWaiting, customPhrases: phrases }) =>
-        usePhraseCycler(isActive, isWaiting, 'default', phrases),
+        usePhraseCycler(isActive, isWaiting, 'default', false, 0, phrases),
       {
         initialProps: {
           isActive: true,
@@ -159,7 +159,7 @@ describe('usePhraseCycler', () => {
   it('should fall back to witty phrases if custom phrases are an empty array', () => {
     const { result } = renderHook(
       ({ isActive, isWaiting, customPhrases: phrases }) =>
-        usePhraseCycler(isActive, isWaiting, 'default', phrases),
+        usePhraseCycler(isActive, isWaiting, 'default', false, 0, phrases),
       {
         initialProps: {
           isActive: true,
@@ -225,14 +225,14 @@ describe('usePhraseCycler', () => {
     it('should use custom phrases for "custom" style when provided', () => {
       const customPhrases = ['Custom Phrase 1', 'Custom Phrase 2'];
       const { result } = renderHook(() =>
-        usePhraseCycler(true, false, 'custom', customPhrases),
+        usePhraseCycler(true, false, 'custom', false, 0, customPhrases),
       );
       expect(customPhrases).toContain(result.current);
     });
 
     it('should fallback to LLxprt phrases for "custom" style when custom is empty', () => {
       const { result } = renderHook(() =>
-        usePhraseCycler(true, false, 'custom', []),
+        usePhraseCycler(true, false, 'custom', false, 0, []),
       );
       expect(LLXPRT_PHRASES).toContain(result.current);
     });
@@ -240,21 +240,21 @@ describe('usePhraseCycler', () => {
     it('should use custom phrases for "default" style when provided', () => {
       const customPhrases = ['Custom Phrase 1', 'Custom Phrase 2'];
       const { result } = renderHook(() =>
-        usePhraseCycler(true, false, 'default', customPhrases),
+        usePhraseCycler(true, false, 'default', false, 0, customPhrases),
       );
       expect(customPhrases).toContain(result.current);
     });
 
     it('should fallback to LLxprt phrases for "default" style when custom is empty', () => {
       const { result } = renderHook(() =>
-        usePhraseCycler(true, false, 'default', []),
+        usePhraseCycler(true, false, 'default', false, 0, []),
       );
       expect(LLXPRT_PHRASES).toContain(result.current);
     });
 
     it('should use LLxprt phrases for "default" style when custom is undefined', () => {
       const { result } = renderHook(() =>
-        usePhraseCycler(true, false, 'default', undefined),
+        usePhraseCycler(true, false, 'default', false, 0, undefined),
       );
       expect(LLXPRT_PHRASES).toContain(result.current);
     });

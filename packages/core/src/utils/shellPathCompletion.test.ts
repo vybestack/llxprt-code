@@ -315,4 +315,97 @@ describe('getPathSuggestions', () => {
       await fs.chmod(restrictedDir, 0o755);
     }
   });
+
+  describe('shell special character escaping', () => {
+    let spacesDir: string;
+
+    beforeEach(async () => {
+      const structure: FileSystemStructure = {
+        'my file.txt': '',
+        'my dir': {
+          'nested file.txt': '',
+        },
+        'normal.txt': '',
+        'file (1).txt': '',
+      };
+      spacesDir = await createTmpDir(structure);
+    });
+
+    afterEach(async () => {
+      if (spacesDir) {
+        await cleanupTmpDir(spacesDir);
+      }
+    });
+
+    it('should escape spaces in suggestion values', async () => {
+      const results = await getPathSuggestions('./my', spacesDir);
+      const values = results.map((r) => r.value);
+      expect(values).toContain('./my\\ dir/');
+      expect(values).toContain('./my\\ file.txt');
+    });
+
+    it('should not escape spaces in suggestion labels', async () => {
+      const results = await getPathSuggestions('./my', spacesDir);
+      const labels = results.map((r) => r.label);
+      expect(labels).toContain('my dir/');
+      expect(labels).toContain('my file.txt');
+    });
+
+    it('should resolve paths from escaped input', async () => {
+      const results = await getPathSuggestions('./my\\ dir/', spacesDir);
+      expect(results.length).toBe(1);
+      expect(results[0].label).toBe('nested file.txt');
+      expect(results[0].value).toBe('./my\\ dir/nested\\ file.txt');
+    });
+
+    it('should escape parentheses in suggestion values', async () => {
+      const results = await getPathSuggestions('./file', spacesDir);
+      const match = results.find((r) => r.label === 'file (1).txt');
+      expect(match).toBeDefined();
+      expect(match?.value).toBe('./file\\ \\(1\\).txt');
+    });
+
+    it('should not escape path separators', async () => {
+      const results = await getPathSuggestions('./my\\ dir/', spacesDir);
+      expect(results[0].value).toContain('/');
+      expect(results[0].value).not.toContain('\\/');
+    });
+
+    it('should handle escaped input for prefix matching', async () => {
+      const results = await getPathSuggestions('./my\\ f', spacesDir);
+      expect(results.length).toBe(1);
+      expect(results[0].label).toBe('my file.txt');
+      expect(results[0].value).toBe('./my\\ file.txt');
+    });
+
+    it('should preserve tilde prefix with escaped names', async () => {
+      const homeDir = os.homedir();
+      const tildeTestDirName = `llxprt-test-spaces-${Date.now()}`;
+      const tildeTestDir = path.join(homeDir, tildeTestDirName);
+
+      await fs.mkdir(path.join(tildeTestDir, 'space dir'), {
+        recursive: true,
+      });
+      await fs.writeFile(path.join(tildeTestDir, 'space dir', 'inner.txt'), '');
+
+      try {
+        const results = await getPathSuggestions(
+          `~/${tildeTestDirName}/space`,
+          homeDir,
+        );
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].value).toContain('space\\ dir/');
+        expect(results[0].value.startsWith('~/')).toBe(true);
+      } finally {
+        await fs.rm(tildeTestDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should escape spaces in relative path suggestions without prefix', async () => {
+      const results = await getPathSuggestions('my', spacesDir);
+      const values = results.map((r) => r.value);
+      expect(values).toContain('my\\ dir/');
+      expect(values).toContain('my\\ file.txt');
+    });
+  });
 });

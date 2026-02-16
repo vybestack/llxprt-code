@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetCleanupStateForTesting,
   registerCleanup,
   runExitCleanup,
 } from './cleanup';
+import { ShellExecutionService } from '@vybestack/llxprt-code-core';
 
 describe('cleanup', () => {
   beforeEach(() => {
@@ -106,5 +107,53 @@ describe('cleanup', () => {
 
     expect(firstCleanupCount).toBe(1); // Should not run again
     expect(secondCleanupCount).toBe(0); // Should not run due to guard
+  });
+
+  it('should tolerate duplicate destroyAllPtys calls when also registered as manual cleanup', async () => {
+    const destroyAllSpy = vi
+      .spyOn(ShellExecutionService, 'destroyAllPtys')
+      .mockImplementation(() => {});
+
+    // Simulate legacy code that also registers destroyAllPtys manually
+    registerCleanup(() => {
+      ShellExecutionService.destroyAllPtys();
+    });
+
+    await runExitCleanup();
+
+    // Called twice: once by runExitCleanup itself, once by the registered cleanup
+    expect(destroyAllSpy).toHaveBeenCalledTimes(2);
+    destroyAllSpy.mockRestore();
+  });
+
+  it('should invoke ShellExecutionService.destroyAllPtys automatically without manual registration', async () => {
+    const destroyAllSpy = vi
+      .spyOn(ShellExecutionService, 'destroyAllPtys')
+      .mockImplementation(() => {});
+
+    // No registerCleanup call — runExitCleanup should invoke destroyAllPtys itself
+    await runExitCleanup();
+
+    expect(destroyAllSpy).toHaveBeenCalledOnce();
+    destroyAllSpy.mockRestore();
+  });
+
+  it('should not throw if ShellExecutionService.destroyAllPtys throws during cleanup', async () => {
+    const destroyAllSpy = vi
+      .spyOn(ShellExecutionService, 'destroyAllPtys')
+      .mockImplementation(() => {
+        throw new Error('PTY cleanup error');
+      });
+
+    let cleanupRan = false;
+    registerCleanup(() => {
+      cleanupRan = true;
+    });
+
+    await runExitCleanup();
+
+    expect(destroyAllSpy).toHaveBeenCalledOnce();
+    expect(cleanupRan).toBe(true);
+    destroyAllSpy.mockRestore();
   });
 });

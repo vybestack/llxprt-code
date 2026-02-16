@@ -36,6 +36,14 @@ vi.mock('../../config/settings.js', async () => {
   };
 });
 
+vi.mock('../utils.js', () => ({
+  exitCli: vi.fn((exitCode = 0) => {
+    if (exitCode !== 0) {
+      throw new Error('process.exit called');
+    }
+  }),
+}));
+
 const mockedLoadSettings = loadSettings as Mock;
 
 describe('mcp add command', () => {
@@ -208,12 +216,6 @@ describe('mcp add command', () => {
       });
 
       it('should show an error by default', async () => {
-        const mockProcessExit = vi
-          .spyOn(process, 'exit')
-          .mockImplementation((() => {
-            throw new Error('process.exit called');
-          }) as (code?: number | string | null) => never);
-
         await expect(
           parser.parseAsync(`add ${serverName} ${command}`),
         ).rejects.toThrow('process.exit called');
@@ -221,17 +223,10 @@ describe('mcp add command', () => {
         expect(mockConsoleError).toHaveBeenCalledWith(
           'Error: Please use --scope user to edit settings in the home directory.',
         );
-        expect(mockProcessExit).toHaveBeenCalledWith(1);
         expect(mockSetValue).not.toHaveBeenCalled();
       });
 
       it('should show an error when --scope=project is used explicitly', async () => {
-        const mockProcessExit = vi
-          .spyOn(process, 'exit')
-          .mockImplementation((() => {
-            throw new Error('process.exit called');
-          }) as (code?: number | string | null) => never);
-
         await expect(
           parser.parseAsync(`add --scope project ${serverName} ${command}`),
         ).rejects.toThrow('process.exit called');
@@ -239,7 +234,6 @@ describe('mcp add command', () => {
         expect(mockConsoleError).toHaveBeenCalledWith(
           'Error: Please use --scope user to edit settings in the home directory.',
         );
-        expect(mockProcessExit).toHaveBeenCalledWith(1);
         expect(mockSetValue).not.toHaveBeenCalled();
       });
 

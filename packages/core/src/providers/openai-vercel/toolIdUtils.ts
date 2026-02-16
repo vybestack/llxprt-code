@@ -17,69 +17,10 @@
 /**
  * @plan PLAN-20251127-OPENAIVERCEL.P04a
  * @requirement REQ-OV-004
- * @description Tool ID normalization utility functions
+ * @description Tool ID normalization utility functions - re-exports from shared utils
  */
 
-const SANITIZE_PATTERN = /[^a-zA-Z0-9_-]/g;
-
-function sanitizeSuffix(suffix: string): string {
-  return suffix.replace(SANITIZE_PATTERN, '');
-}
-
-/**
- * Normalizes various tool ID formats to OpenAI format (call_xxx)
- * - hist_tool_xxx → call_xxx
- * - toolu_xxx → call_xxx
- * - call_xxx → call_xxx (unchanged)
- * - unknown → call_unknown
- */
-export function normalizeToOpenAIToolId(id: string): string {
-  if (!id) {
-    return 'call_';
-  }
-
-  if (id.startsWith('call_')) {
-    const suffix = id.substring('call_'.length);
-    return `call_${sanitizeSuffix(suffix)}`;
-  }
-
-  let suffix = '';
-  if (id.startsWith('hist_tool_')) {
-    suffix = id.substring('hist_tool_'.length);
-  } else if (id.startsWith('toolu_')) {
-    suffix = id.substring('toolu_'.length);
-  } else {
-    suffix = id;
-  }
-
-  return `call_${sanitizeSuffix(suffix)}`;
-}
-
-/**
- * Normalizes various tool ID formats to history format (hist_tool_xxx)
- * - call_xxx → hist_tool_xxx
- * - toolu_xxx → hist_tool_xxx
- * - hist_tool_xxx → hist_tool_xxx (unchanged)
- */
-export function normalizeToHistoryToolId(id: string): string {
-  if (!id) {
-    return 'hist_tool_';
-  }
-
-  if (id.startsWith('hist_tool_')) {
-    const suffix = id.substring('hist_tool_'.length);
-    return `hist_tool_${sanitizeSuffix(suffix)}`;
-  }
-
-  if (id.startsWith('call_')) {
-    const suffix = id.substring('call_'.length);
-    return `hist_tool_${sanitizeSuffix(suffix)}`;
-  }
-
-  if (id.startsWith('toolu_')) {
-    const suffix = id.substring('toolu_'.length);
-    return `hist_tool_${sanitizeSuffix(suffix)}`;
-  }
-
-  return `hist_tool_${sanitizeSuffix(id)}`;
-}
+export {
+  normalizeToOpenAIToolId,
+  normalizeToHistoryToolId,
+} from '../utils/toolIdNormalization.js';

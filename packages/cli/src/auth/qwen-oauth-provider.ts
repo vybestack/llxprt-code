@@ -230,7 +230,17 @@ export class QwenOAuthProvider implements OAuthProvider {
         }
 
         // Line 40: IF shouldLaunchBrowser()
-        if (shouldLaunchBrowser()) {
+        let noBrowser = false;
+        try {
+          const { getEphemeralSetting } = await import(
+            '../runtime/runtimeSettings.js'
+          );
+          noBrowser =
+            (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+        } catch {
+          // Runtime not initialized (e.g., tests) — use default
+        }
+        if (shouldLaunchBrowser({ forceManual: noBrowser })) {
           // Line 41: PRINT
           if (addItem) {
             addItem(

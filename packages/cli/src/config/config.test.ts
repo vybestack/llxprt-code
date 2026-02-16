@@ -24,6 +24,7 @@ import { ExtensionStorage } from './extension.js';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { RESUME_LATEST } from '../utils/sessionUtils.js';
 
 vi.mock('./trustedFolders.js', () => ({
   isWorkspaceTrusted: vi.fn().mockReturnValue(true), // Default to trusted
@@ -512,6 +513,79 @@ describe('parseArguments', () => {
 
     mockExit.mockRestore();
     mockConsoleError.mockRestore();
+  });
+
+  it('should allow resuming a session without prompt in non-interactive mode', async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = false;
+    process.argv = ['node', 'script.js', '--resume', 'session-id'];
+
+    try {
+      const args = await parseArguments({} as Settings);
+      expect(args.resume).toBe('session-id');
+    } finally {
+      process.stdin.isTTY = originalIsTTY;
+    }
+  });
+
+  it('should return RESUME_LATEST constant when --resume is passed without a value', async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = true; // Make it interactive to avoid validation error
+    process.argv = ['node', 'script.js', '--resume'];
+
+    try {
+      const argv = await parseArguments({} as Settings);
+      expect(argv.resume).toBe(RESUME_LATEST);
+      expect(argv.resume).toBe('latest');
+    } finally {
+      process.stdin.isTTY = originalIsTTY;
+    }
+  });
+
+  it('should preserve bare --continue sentinel without coercing to string true', async () => {
+    process.argv = ['node', 'script.js', '--continue'];
+    const argv = await parseArguments({} as Settings);
+
+    expect(argv.continue === '' || argv.continue === true).toBe(true);
+    expect(argv.continue).not.toBe('true');
+  });
+
+  it('should normalize bare --continue to true through loadCliConfig', async () => {
+    process.argv = ['node', 'script.js', '--continue'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {};
+
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    try {
+      const config = await loadCliConfig(
+        settings,
+        [],
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'test-session',
+        argv,
+      );
+
+      expect(config.isContinueSession()).toBe(true);
+      expect(config.getContinueSessionRef()).toBe('__CONTINUE_LATEST__');
+    } finally {
+      clearActiveProviderRuntimeContext();
+    }
+  });
+
+  it('should preserve explicit --continue session id string', async () => {
+    process.argv = ['node', 'script.js', '--continue', 'session-123'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.continue).toBe('session-123');
+  });
+
+  it('should not consume following flag as --continue session id', async () => {
+    process.argv = ['node', 'script.js', '--continue', '--debug'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.continue === '' || argv.continue === true).toBe(true);
+    expect(argv.debug).toBe(true);
   });
 
   it('should support comma-separated values for --allowed-tools', async () => {

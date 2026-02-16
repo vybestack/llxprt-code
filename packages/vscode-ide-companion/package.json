@@ -148,7 +148,7 @@
   },
   "dependencies": {
     "@dqbd/tiktoken": "^1.0.21",
-    "@modelcontextprotocol/sdk": "^1.15.1",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "semver": "^7.6.3",

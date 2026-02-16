@@ -28,8 +28,6 @@ import type { Config } from '../../config/config.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { type ToolFormat } from '../../tools/IToolFormatter.js';
 import {
-  isKimiModel,
-  isMistralModel,
   getToolIdStrategy,
   type ToolIdMapper,
 } from '../../tools/ToolIdStrategy.js';
@@ -81,6 +79,17 @@ import {
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
+import { sanitizeProviderText } from '../utils/textSanitizer.js';
+import { extractThinkTagsAsBlock } from '../utils/thinkingExtraction.js';
+import { detectToolFormat } from '../utils/toolFormatDetection.js';
+import { getContentPreview } from '../utils/contentPreview.js';
+import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
+import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
+import { normalizeToolName } from '../utils/toolNameNormalization.js';
+import {
+  normalizeToOpenAIToolId,
+  normalizeToHistoryToolId,
+} from '../utils/toolIdNormalization.js';
 
 const TOOL_ARGS_PREVIEW_LENGTH = 500;
 
@@ -158,23 +167,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Detect if this is a Qwen endpoint
     // CRITICAL FIX: For now, only use base URL check in constructor since `this.name` isn't available yet
     // The name-based check will be handled in the supportsOAuth() method after construction
-    let isQwenEndpoint = false;
-    if (baseURL) {
-      try {
-        const hostname = new URL(baseURL).hostname.toLowerCase();
-        isQwenEndpoint =
-          hostname === 'dashscope.aliyuncs.com' ||
-          hostname.endsWith('.dashscope.aliyuncs.com') ||
-          hostname === 'api.qwen.com' ||
-          hostname.endsWith('.qwen.com');
-      } catch {
-        const lowered = baseURL.toLowerCase();
-        isQwenEndpoint =
-          lowered.includes('dashscope.aliyuncs.com') ||
-          lowered.includes('api.qwen.com') ||
-          lowered.includes('qwen.com');
-      }
-    }
+    const isQwenEndpoint = isQwenBaseURL(baseURL);
     const forceQwenOAuth = Boolean(
       (config as { forceQwenOAuth?: boolean } | undefined)?.forceQwenOAuth,
     );
@@ -404,174 +397,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return undefined;
   }
 
-  /**
-   * Strip provider-specific "thinking" / reasoning markup from visible text.
-   * This prevents DeepSeek / Kimi-style <think> blocks from leaking into
-   * user-visible output or tool arguments.
-   */
-  private sanitizeProviderText(text: unknown): string {
-    if (text === null || text === undefined) {
-      return '';
-    }
-
-    const logger = this.getLogger();
-    let str = typeof text === 'string' ? text : String(text);
-    const beforeLen = str.length;
-    const hadReasoningTags =
-      /<(?:think|thinking|analysis)>|<\/(?:think|thinking|analysis)>/i.test(
-        str,
-      );
-
-    // DeepSeek / generic <think>...</think> blocks.
-    // Replace with a single space to preserve word spacing when tags appear mid-sentence.
-    // This prevents "these<think>...</think>5" from becoming "these5" instead of "these 5".
-    // Multiple consecutive spaces will be collapsed below.
-    str = str.replace(/<think>[\s\S]*?<\/think>/gi, ' ');
-
-    // Alternative reasoning tags some providers use.
-    str = str.replace(/<thinking>[\s\S]*?<\/thinking>/gi, ' ');
-    str = str.replace(/<analysis>[\s\S]*?<\/analysis>/gi, ' ');
-
-    // Clean up stray unmatched tags - replace with space to preserve word separation.
-    str = str.replace(/<\/?(?:think|thinking|analysis)>/gi, ' ');
-
-    // Only clean up whitespace if we had reasoning tags to strip
-    // This preserves meaningful whitespace in regular text chunks during streaming
-    // (e.g., " 5 Biggest" should remain " 5 Biggest", not become "5 Biggest")
-    if (hadReasoningTags) {
-      // Collapse multiple spaces/tabs but preserve newlines for proper paragraph/line breaks
-      str = str.replace(/[ \t]+/g, ' ');
-      str = str.replace(/\n{3,}/g, '\n\n');
-
-      // Only trim leading horizontal whitespace (spaces/tabs), NOT newlines
-      // This preserves line breaks between think tags and content (fixes #721)
-      str = str.replace(/^[ \t]+/, '');
-    }
-
-    const afterLen = str.length;
-    if (hadReasoningTags && afterLen !== beforeLen) {
-      logger.debug(() => `[OpenAIProvider] Stripped reasoning tags`, {
-        beforeLen,
-        afterLen,
-      });
-    }
-
-    return str;
-  }
-
-  /**
-   * Extract thinking content from <think>, <thinking>, or <analysis> tags
-   * and return it as a ThinkingBlock. Returns null if no thinking tags found.
-   *
-   * This must be called BEFORE sanitizeProviderText which strips these tags.
-   *
-   * Handles two formats:
-   * 1. Standard: <think>Full thinking paragraph here...</think>
-   * 2. Fragmented (Synthetic API): <think>word</think><think>word</think>...
-   *
-   * For fragmented format, joins with spaces. For standard, joins with newlines.
-   *
-   * @plan PLAN-20251202-THINKING.P16
-   * @requirement REQ-THINK-003
-   */
-  private extractThinkTagsAsBlock(text: string): ThinkingBlock | null {
-    if (!text) {
-      return null;
-    }
-
-    // Collect all thinking content from various tag formats
-    // Note: We only trim leading/trailing whitespace from each part, not internal newlines
-    // This preserves formatting like numbered lists within thinking content
-    const thinkingParts: string[] = [];
-
-    // Match <think>...</think>
-    const thinkMatches = text.matchAll(/<think>([\s\S]*?)<\/think>/gi);
-    for (const match of thinkMatches) {
-      const content = match[1];
-      if (content?.trim()) {
-        // Preserve internal newlines but remove leading/trailing whitespace
-        thinkingParts.push(content.trim());
-      }
-    }
-
-    // Match <thinking>...</thinking>
-    const thinkingMatches = text.matchAll(/<thinking>([\s\S]*?)<\/thinking>/gi);
-    for (const match of thinkingMatches) {
-      const content = match[1];
-      if (content?.trim()) {
-        thinkingParts.push(content.trim());
-      }
-    }
-
-    // Match <analysis>...</analysis>
-    const analysisMatches = text.matchAll(/<analysis>([\s\S]*?)<\/analysis>/gi);
-    for (const match of analysisMatches) {
-      const content = match[1];
-      if (content?.trim()) {
-        thinkingParts.push(content.trim());
-      }
-    }
-
-    if (thinkingParts.length === 0) {
-      return null;
-    }
-
-    // Detect fragmented format: many short parts (likely token-by-token streaming)
-    // If average part length is very short (< 10 chars) and we have many parts,
-    // it's likely fragmented and should be joined with spaces
-    const avgPartLength =
-      thinkingParts.reduce((sum, p) => sum + p.length, 0) /
-      thinkingParts.length;
-    const isFragmented = thinkingParts.length > 5 && avgPartLength < 15;
-
-    // Join with space for fragmented, newlines for standard multi-paragraph thinking
-    const combinedThought = isFragmented
-      ? thinkingParts.join(' ')
-      : thinkingParts.join('\n\n');
-
-    this.getLogger().debug(
-      () =>
-        `[OpenAIProvider] Extracted thinking from tags: ${combinedThought.length} chars`,
-      { tagCount: thinkingParts.length, isFragmented, avgPartLength },
-    );
-
-    return {
-      type: 'thinking',
-      thought: combinedThought,
-      sourceField: 'think_tags',
-      isHidden: false,
-    };
-  }
-
-  /**
-   * Normalize tool name by stripping Kimi-K2 style prefixes.
-   *
-   * Handles malformed tool names where the model concatenates prefixes like
-   * "functions" or "call_functions" with the actual tool name:
-   * - "functionslist_directory" -> "list_directory"
-   * - "call_functionslist_directory6" -> "list_directory"
-   * - "call_functionsglob7" -> "glob"
-   */
-  private normalizeToolName(name: string): string {
-    let normalized = (name || '').trim();
-
-    // Strip Kimi-K2 style prefixes where model concatenates "functions" or "call_functions"
-    // with the actual tool name (e.g., "functionslist_directory" -> "list_directory")
-    // Pattern: (call_)?functions<actual_tool_name><optional_number>
-    const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
-      normalized,
-    );
-    if (kimiPrefixMatch) {
-      const originalName = normalized;
-      normalized = kimiPrefixMatch[1];
-      this.getLogger().debug(
-        () =>
-          `[OpenAIProvider] Stripped Kimi-style prefix from tool name: "${originalName}" -> "${normalized}"`,
-      );
-    }
-
-    return normalized.toLowerCase();
-  }
+  // sanitizeProviderText is imported from ../utils/textSanitizer.js
+  // extractThinkTagsAsBlock is imported from ../utils/thinkingExtraction.js
+  // normalizeToolName is imported from ../utils/toolNameNormalization.js
 
   /**
    * Sanitize raw tool argument payloads before JSON parsing:
@@ -605,7 +433,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Remove provider reasoning / thinking markup.
-    text = this.sanitizeProviderText(text);
+    text = sanitizeProviderText(text, this.getLogger());
 
     // If provider wrapped JSON in explanation text, try to isolate the object.
     const firstBrace = text.indexOf('{');
@@ -675,7 +503,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               }
 
               // Normalize tool name (handles Kimi-K2 style prefixes like call_functionsglob7)
-              toolName = this.normalizeToolName(toolName);
+              toolName = normalizeToolName(toolName);
 
               const sanitizedArgs = this.sanitizeToolArgumentsString(rawArgs);
               const processedParameters = processToolParameters(
@@ -685,7 +513,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
               toolCalls.push({
                 type: 'tool_call',
-                id: this.normalizeToHistoryToolId(rawId),
+                id: normalizeToHistoryToolId(rawId),
                 name: toolName,
                 parameters: processedParameters,
               } as ToolCallBlock);
@@ -1018,44 +846,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     );
   }
 
-  /**
-   * Normalize tool IDs from various formats to OpenAI format
-   * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
-   */
-  private normalizeToOpenAIToolId(id: string): string {
-    if (!id) {
-      return 'call_';
-    }
-
-    if (id.startsWith('call_')) {
-      return id;
-    }
-
-    if (id.startsWith('hist_tool_')) {
-      return `call_${id.substring('hist_tool_'.length)}`;
-    }
-
-    return `call_${id}`;
-  }
-
-  /**
-   * Normalize tool IDs from OpenAI format to history format
-   */
-  private normalizeToHistoryToolId(id: string): string {
-    if (!id) {
-      return 'hist_tool_';
-    }
-
-    if (id.startsWith('hist_tool_')) {
-      return id;
-    }
-
-    if (id.startsWith('call_')) {
-      return `hist_tool_${id.substring('call_'.length)}`;
-    }
-
-    return `hist_tool_${id}`;
-  }
+  // normalizeToOpenAIToolId is imported from ../utils/toolIdNormalization.js
+  // normalizeToHistoryToolId is imported from ../utils/toolIdNormalization.js
 
   /**
    * @plan PLAN-20250218-STATELESSPROVIDER.P04
@@ -1189,7 +981,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       if (toolIdMapper) {
         return toolIdMapper.resolveToolCallId(tc);
       }
-      return this.normalizeToOpenAIToolId(tc.id);
+      return normalizeToOpenAIToolId(tc.id);
     };
 
     // Helper to resolve tool response IDs based on format
@@ -1197,7 +989,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       if (toolIdMapper) {
         return toolIdMapper.resolveToolResponseId(tr);
       }
-      return this.normalizeToOpenAIToolId(tr.callId);
+      return normalizeToOpenAIToolId(tr.callId);
     };
 
     for (const content of filteredContents) {
@@ -1439,49 +1231,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return validatedMessages;
   }
 
-  private getContentPreview(
-    content: OpenAI.Chat.ChatCompletionMessageParam['content'],
-    maxLength = 200,
-  ): string | undefined {
-    if (content === null || content === undefined) {
-      return undefined;
-    }
-
-    if (typeof content === 'string') {
-      if (content.length <= maxLength) {
-        return content;
-      }
-      return `${content.slice(0, maxLength)}…`;
-    }
-
-    if (Array.isArray(content)) {
-      const textParts = content
-        .filter(
-          (part): part is { type: 'text'; text: string } =>
-            typeof part === 'object' && part !== null && 'type' in part,
-        )
-        .map((part) =>
-          part.type === 'text' && typeof part.text === 'string'
-            ? part.text
-            : JSON.stringify(part),
-        );
-      const joined = textParts.join('\n');
-      if (joined.length <= maxLength) {
-        return joined;
-      }
-      return `${joined.slice(0, maxLength)}…`;
-    }
-
-    try {
-      const serialized = JSON.stringify(content);
-      if (serialized.length <= maxLength) {
-        return serialized;
-      }
-      return `${serialized.slice(0, maxLength)}…`;
-    } catch {
-      return '[unserializable content]';
-    }
-  }
+  // getContentPreview is imported from ../utils/contentPreview.js
 
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -1515,7 +1265,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Detect the tool format to use BEFORE building messages
     // This is needed so that Kimi K2 tool IDs can be generated in the correct format
-    const detectedFormat = this.detectToolFormat();
+    const detectedFormat = detectToolFormat(model, logger);
 
     // Log the detected format for debugging
     logger.debug(
@@ -1621,7 +1371,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         messageCount: messagesWithSystem.length,
         messages: messagesWithSystem.map((msg) => ({
           role: msg.role,
-          contentPreview: this.getContentPreview(msg.content),
+          contentPreview: getContentPreview(msg.content),
           contentLength:
             typeof msg.content === 'string' ? msg.content.length : undefined,
           rawContent: typeof msg.content === 'string' ? msg.content : undefined,
@@ -2103,7 +1853,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               deltaContent = rawDeltaContent;
             } else {
               // For non-Kimi models: sanitize immediately as before
-              deltaContent = this.sanitizeProviderText(rawDeltaContent);
+              deltaContent = sanitizeProviderText(rawDeltaContent);
             }
             if (!deltaContent) {
               continue;
@@ -2152,8 +1902,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 // This handles fragmented <think>word</think> streaming from Synthetic API
                 // @plan PLAN-20251202-THINKING.P16
                 // @requirement REQ-THINK-003
-                const tagBasedThinking =
-                  this.extractThinkTagsAsBlock(workingText);
+                const tagBasedThinking = extractThinkTagsAsBlock(workingText);
                 if (tagBasedThinking) {
                   // Clean Kimi tokens from thinking content before accumulating
                   const cleanedThought = this.cleanThinkingContent(
@@ -2187,7 +1936,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 }
                 workingText = kimiParsed.cleanedText;
 
-                const parsingText = this.sanitizeProviderText(workingText);
+                const parsingText = sanitizeProviderText(workingText);
                 let cleanedText = parsingText;
                 try {
                   const parsedResult = this.textToolParser.parse(parsingText);
@@ -2198,7 +1947,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                         id: `text_tool_${Date.now()}_${Math.random()
                           .toString(36)
                           .substring(7)}`,
-                        name: this.normalizeToolName(call.name),
+                        name: normalizeToolName(call.name),
                         parameters: call.arguments,
                       })),
                     );
@@ -2397,7 +2146,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         // Extract any remaining <think> tags from final buffer (legacy path)
         // @plan PLAN-20251202-THINKING.P16
-        const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
+        const tagBasedThinking = extractThinkTagsAsBlock(workingText);
         if (tagBasedThinking) {
           // Clean Kimi tokens from thinking content before accumulating
           const cleanedThought = this.cleanThinkingContent(
@@ -2425,7 +2174,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
         workingText = kimiParsed.cleanedText;
 
-        const parsingText = this.sanitizeProviderText(workingText);
+        const parsingText = sanitizeProviderText(workingText);
         let cleanedText = parsingText;
         try {
           const parsedResult = this.textToolParser.parse(parsingText);
@@ -2436,7 +2185,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 id: `text_tool_${Date.now()}_${Math.random()
                   .toString(36)
                   .substring(7)}`,
-                name: this.normalizeToolName(call.name),
+                name: normalizeToolName(call.name),
                 parameters: call.arguments,
               })),
             );
@@ -2561,7 +2310,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           );
 
           // Normalize tool name (handles Kimi-K2 style prefixes)
-          const normalizedName = this.normalizeToolName(tc.function.name || '');
+          const normalizedName = normalizeToolName(tc.function.name || '');
 
           // Process tool parameters with double-escape handling
           const processedParameters = processToolParameters(
@@ -2571,7 +2320,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           blocks.push({
             type: 'tool_call',
-            id: this.normalizeToHistoryToolId(tc.id),
+            id: normalizeToHistoryToolId(tc.id),
             name: normalizedName,
             parameters: processedParameters,
           });
@@ -2792,8 +2541,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // @plan PLAN-20251202-THINKING.P16
         // @requirement REQ-THINK-003
         if (!reasoningBlock) {
-          const tagBasedThinking =
-            this.extractThinkTagsAsBlock(rawMessageContent);
+          const tagBasedThinking = extractThinkTagsAsBlock(rawMessageContent);
           if (tagBasedThinking) {
             blocks.push(tagBasedThinking);
             logger.debug(
@@ -2811,7 +2559,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // Bug fix: Previously Kimi-K2 used unsanitized kimiCleanContent,
         // which caused <think> tags to leak into visible output
         // @plan PLAN-20251202-THINKING.P16
-        const cleanedText = this.sanitizeProviderText(kimiCleanContent);
+        const cleanedText = sanitizeProviderText(kimiCleanContent);
         if (cleanedText) {
           blocks.push({
             type: 'text',
@@ -2827,9 +2575,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         for (const toolCall of choice.message.tool_calls) {
           if (toolCall.type === 'function') {
             // Normalize tool name (handles Kimi-K2 style prefixes)
-            const toolName = this.normalizeToolName(
-              toolCall.function.name || '',
-            );
+            const toolName = normalizeToolName(toolCall.function.name || '');
 
             const sanitizedArgs = this.sanitizeToolArgumentsString(
               toolCall.function.arguments,
@@ -2843,7 +2589,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
             blocks.push({
               type: 'tool_call',
-              id: this.normalizeToHistoryToolId(toolCall.id),
+              id: normalizeToHistoryToolId(toolCall.id),
               name: toolName,
               parameters: processedParameters,
             } as ToolCallBlock);
@@ -2863,7 +2609,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Additionally check for <tool_call> format in text content
       if (kimiCleanContent) {
-        const cleanedSource = this.sanitizeProviderText(kimiCleanContent);
+        const cleanedSource = sanitizeProviderText(kimiCleanContent);
         if (cleanedSource) {
           try {
             const parsedResult = this.textToolParser.parse(cleanedSource);
@@ -2873,7 +2619,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 blocks.push({
                   type: 'tool_call',
                   id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                  name: this.normalizeToolName(call.name),
+                  name: normalizeToolName(call.name),
                   parameters: call.arguments,
                 } as ToolCallBlock);
               }
@@ -3074,7 +2820,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Detect the tool format to use BEFORE building messages
     // This is needed so that Kimi K2 tool IDs can be generated in the correct format
-    const detectedFormat = this.detectToolFormat();
+    const detectedFormat = detectToolFormat(model, logger);
 
     // Log the detected format for debugging
     logger.debug(
@@ -3742,7 +3488,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               deltaContent = rawDeltaContent;
             } else {
               // For non-Kimi models: sanitize immediately as before
-              deltaContent = this.sanitizeProviderText(rawDeltaContent);
+              deltaContent = sanitizeProviderText(rawDeltaContent);
             }
             if (!deltaContent) {
               continue;
@@ -3791,8 +3537,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 // This handles fragmented <think>word</think> streaming from Synthetic API
                 // @plan PLAN-20251202-THINKING.P16
                 // @requirement REQ-THINK-003
-                const tagBasedThinking =
-                  this.extractThinkTagsAsBlock(workingText);
+                const tagBasedThinking = extractThinkTagsAsBlock(workingText);
                 if (tagBasedThinking) {
                   // Clean Kimi tokens from thinking content before accumulating
                   const cleanedThought = this.cleanThinkingContent(
@@ -3826,7 +3571,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 }
                 workingText = kimiParsed.cleanedText;
 
-                const parsingText = this.sanitizeProviderText(workingText);
+                const parsingText = sanitizeProviderText(workingText);
                 let cleanedText = parsingText;
                 try {
                   const parsedResult = this.textToolParser.parse(parsingText);
@@ -3837,7 +3582,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                         id: `text_tool_${Date.now()}_${Math.random()
                           .toString(36)
                           .substring(7)}`,
-                        name: this.normalizeToolName(call.name),
+                        name: normalizeToolName(call.name),
                         parameters: call.arguments,
                       })),
                     );
@@ -4021,7 +3766,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         // Extract any remaining <think> tags from final buffer
         // @plan PLAN-20251202-THINKING.P16
-        const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
+        const tagBasedThinking = extractThinkTagsAsBlock(workingText);
         if (tagBasedThinking) {
           // Clean Kimi tokens from thinking content before accumulating
           const cleanedThought = this.cleanThinkingContent(
@@ -4049,7 +3794,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
         workingText = kimiParsed.cleanedText;
 
-        const parsingText = this.sanitizeProviderText(workingText);
+        const parsingText = sanitizeProviderText(workingText);
         let cleanedText = parsingText;
         try {
           const parsedResult = this.textToolParser.parse(parsingText);
@@ -4060,7 +3805,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 id: `text_tool_${Date.now()}_${Math.random()
                   .toString(36)
                   .substring(7)}`,
-                name: this.normalizeToolName(call.name),
+                name: normalizeToolName(call.name),
                 parameters: call.arguments,
               })),
             );
@@ -4195,7 +3940,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           blocks.push({
             type: 'tool_call',
-            id: this.normalizeToHistoryToolId(
+            id: normalizeToHistoryToolId(
               normalizedCall.id || `call_${normalizedCall.index}`,
             ),
             name: normalizedCall.name,
@@ -4300,7 +4045,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           (normalizedCall, index) => ({
             id:
               normalizedCall.id && normalizedCall.id.trim().length > 0
-                ? this.normalizeToOpenAIToolId(normalizedCall.id)
+                ? normalizeToOpenAIToolId(normalizedCall.id)
                 : `call_${index}`,
             type: 'function' as const,
             function: {
@@ -4421,7 +4166,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         pipelineKimiToolBlocks = kimiParsed.toolCalls;
 
         // Always use sanitized text - even Kimi-K2 should have consistent tag stripping
-        const cleanedText = this.sanitizeProviderText(pipelineKimiCleanContent);
+        const cleanedText = sanitizeProviderText(pipelineKimiCleanContent);
         if (cleanedText) {
           blocks.push({
             type: 'text',
@@ -4454,7 +4199,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
             blocks.push({
               type: 'tool_call',
-              id: this.normalizeToHistoryToolId(toolCall.id),
+              id: normalizeToHistoryToolId(toolCall.id),
               name: normalizedName,
               parameters: processedParameters,
             } as ToolCallBlock);
@@ -4473,9 +4218,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Additionally check for <tool_call> format in text content
       if (pipelineKimiCleanContent) {
-        const cleanedSource = this.sanitizeProviderText(
-          pipelineKimiCleanContent,
-        );
+        const cleanedSource = sanitizeProviderText(pipelineKimiCleanContent);
         if (cleanedSource) {
           try {
             const parsedResult = this.textToolParser.parse(cleanedSource);
@@ -4485,7 +4228,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 blocks.push({
                   type: 'tool_call',
                   id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                  name: this.normalizeToolName(call.name),
+                  name: normalizeToolName(call.name),
                   parameters: call.arguments,
                 } as ToolCallBlock);
               }
@@ -4573,7 +4316,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Legacy implementation for chat completion using accumulated tool calls approach
    */
   override getToolFormat(): string {
-    const format = this.detectToolFormat();
+    const modelName = this.getModel() || this.getDefaultModel();
+    const format = detectToolFormat(
+      modelName,
+      new DebugLogger('llxprt:provider:openai'),
+    );
     const logger = new DebugLogger('llxprt:provider:openai');
     logger.debug(() => `getToolFormat() called, returning: ${format}`, {
       provider: this.name,
@@ -4583,54 +4330,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return format;
   }
 
-  /**
-   * Detects the tool call format based on the model being used
-   * @returns The detected tool format ('openai', 'qwen', or 'kimi')
-   */
-  private detectToolFormat(): ToolFormat {
-    // Auto-detect based on model name if set to 'auto' or not set
-    const modelName = this.getModel() || this.getDefaultModel();
-    const logger = new DebugLogger('llxprt:provider:openai');
-
-    // Check for Kimi K2 models (requires special ID format: functions.{name}:{index})
-    if (isKimiModel(modelName)) {
-      logger.debug(
-        () => `Auto-detected 'kimi' format for K2 model: ${modelName}`,
-      );
-      return 'kimi';
-    }
-
-    // Check for Mistral models (requires 9-char alphanumeric IDs)
-    // This applies to both hosted API and self-hosted Mistral models
-    if (isMistralModel(modelName)) {
-      logger.debug(
-        () => `Auto-detected 'mistral' format for Mistral model: ${modelName}`,
-      );
-      return 'mistral';
-    }
-
-    const lowerModelName = modelName.toLowerCase();
-
-    // Check for GLM-4 models (glm-4, glm-4.5, glm-4.6, glm-4-5, etc.)
-    if (lowerModelName.includes('glm-4')) {
-      logger.debug(
-        () => `Auto-detected 'qwen' format for GLM-4.x model: ${modelName}`,
-      );
-      return 'qwen';
-    }
-
-    // Check for qwen models
-    if (lowerModelName.includes('qwen')) {
-      logger.debug(
-        () => `Auto-detected 'qwen' format for Qwen model: ${modelName}`,
-      );
-      return 'qwen';
-    }
-
-    // Default to 'openai' format
-    logger.debug(() => `Using default 'openai' format for model: ${modelName}`);
-    return 'openai';
-  }
+  // detectToolFormat is imported from ../utils/toolFormatDetection.js
 
   /**
    * Parse tool response from API (placeholder for future response parsing)
@@ -4651,72 +4351,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * @returns true if the request should be retried, false otherwise
    */
   shouldRetryResponse(error: unknown): boolean {
-    const logger = new DebugLogger('llxprt:provider:openai');
-
-    // Don't retry if we're streaming chunks - just continue processing
-    if (
-      error &&
-      typeof error === 'object' &&
-      'status' in error &&
-      (error as { status?: number }).status === 200
-    ) {
-      return false;
-    }
-
-    // Check OpenAI SDK v5 error structure
-    let status: number | undefined;
-
-    // OpenAI SDK v5 error structure
-    if (error && typeof error === 'object' && 'status' in error) {
-      status = (error as { status?: number }).status;
-    }
-
-    // Also check error.response?.status for axios-style errors
-    if (!status && error && typeof error === 'object' && 'response' in error) {
-      const response = (error as { response?: { status?: number } }).response;
-      if (response && typeof response === 'object' && 'status' in response) {
-        status = response.status;
-      }
-    }
-
-    // Also check error message for 429
-    if (!status && error instanceof Error) {
-      if (error.message.includes('429')) {
-        status = 429;
-      }
-    }
-
-    // Log what we're seeing
-    logger.debug(() => `shouldRetryResponse checking error:`, {
-      hasError: !!error,
-      errorType: error?.constructor?.name,
-      status,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      errorKeys: error && typeof error === 'object' ? Object.keys(error) : [],
-      errorData:
-        error && typeof error === 'object' && 'error' in error
-          ? (error as { error?: unknown }).error
-          : undefined,
+    return shouldRetryOnStatus(error, {
+      logger: new DebugLogger('llxprt:provider:openai'),
+      checkNetworkTransient: isNetworkTransientError,
     });
-
-    // Retry on 429 rate limit errors or 5xx server errors
-    const shouldRetry = Boolean(
-      status === 429 || (status !== undefined && status >= 500 && status < 600),
-    );
-
-    if (!shouldRetry && isNetworkTransientError(error)) {
-      logger.debug(
-        () =>
-          `Will retry request due to network transient error: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return true;
-    }
-
-    if (shouldRetry) {
-      logger.debug(() => `Will retry request due to status ${status}`);
-    }
-
-    return shouldRetry;
   }
 
   /**
@@ -4927,7 +4565,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           choice.delta?.content as unknown,
         );
         if (deltaContent) {
-          const sanitized = this.sanitizeProviderText(deltaContent);
+          const sanitized = sanitizeProviderText(deltaContent);
           if (sanitized) {
             accumulatedText += sanitized;
             yield {

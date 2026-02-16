@@ -104,8 +104,6 @@ export * from './utils/formatters.js';
 export * from './utils/sanitization.js';
 export * from './utils/unicodeUtils.js';
 export * from './utils/generateContentResponseUtilities.js';
-export * from './utils/stdio.js';
-export * from './utils/terminal.js';
 export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';
 export * from './utils/errorParsing.js';
@@ -301,6 +299,8 @@ export * from './providers/tokenizers/OpenAITokenizer.js';
 export * from './providers/tokenizers/AnthropicTokenizer.js';
 export * from './utils/browser.js';
 export * from './utils/generateContentResponseUtilities.js';
+export * from './utils/stdio.js';
+export * from './utils/terminal.js';
 
 // Export adapters
 export * from './adapters/IStreamAdapter.js';
@@ -432,12 +432,8 @@ export {
   type ConversationRecord,
 } from './storage/sessionTypes.js';
 
-export {
-  SessionPersistenceService,
-  type PersistedSession,
-  type PersistedUIHistoryItem,
-  type PersistedToolCall,
-} from './storage/SessionPersistenceService.js';
+// @plan PLAN-20260211-SESSIONRECORDING.P03
+// Export session recording module
 export * from './recording/index.js';
 
 export {

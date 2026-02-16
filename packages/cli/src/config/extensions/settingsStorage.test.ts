@@ -15,14 +15,19 @@ import {
 } from './settingsStorage.js';
 import type { ExtensionSetting } from './extensionSettings.js';
 
-// Mock keytar/keyring for tests
-vi.mock('@napi-rs/keyring', () => ({
-  AsyncEntry: vi.fn().mockImplementation((_service, _account) => ({
-    getPassword: vi.fn().mockResolvedValue(null),
-    setPassword: vi.fn().mockResolvedValue(undefined),
-    deletePassword: vi.fn().mockResolvedValue(true),
+// In-memory store used by the mock SecureStore instances
+const mockStore = new Map<string, string>();
+
+vi.mock('@vybestack/llxprt-code-core', () => ({
+  SecureStore: vi.fn().mockImplementation(() => ({
+    get: vi.fn(async (key: string) => mockStore.get(key) ?? null),
+    set: vi.fn(async (key: string, value: string) => {
+      mockStore.set(key, value);
+    }),
+    delete: vi.fn(async (key: string) => mockStore.delete(key)),
+    list: vi.fn(async () => Array.from(mockStore.keys())),
+    has: vi.fn(async (key: string) => mockStore.has(key)),
   })),
-  findCredentialsAsync: vi.fn().mockResolvedValue([]),
 }));
 
 describe('getSettingsEnvFilePath', () => {
@@ -59,6 +64,7 @@ describe('ExtensionSettingsStorage', () => {
   const extensionName = 'test-extension';
 
   beforeEach(async () => {
+    mockStore.clear();
     tmpDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'ext-settings-test-'),
     );
@@ -97,7 +103,7 @@ describe('ExtensionSettingsStorage', () => {
       expect(content).toContain('CONFIG=');
     });
 
-    it('should save sensitive settings to keychain', async () => {
+    it('should save sensitive settings to SecureStore', async () => {
       const settings: ExtensionSetting[] = [
         { name: 'apiKey', envVar: 'API_KEY', sensitive: true },
       ];
@@ -105,11 +111,7 @@ describe('ExtensionSettingsStorage', () => {
 
       await storage.saveSettings(settings, values);
 
-      const keyring = await import('@napi-rs/keyring');
-      const AsyncEntry = vi.mocked(keyring.AsyncEntry);
-      expect(AsyncEntry).toHaveBeenCalledWith(expect.any(String), 'API_KEY');
-      const entry = AsyncEntry.mock.results[0]?.value;
-      expect(entry.setPassword).toHaveBeenCalledWith('secret123');
+      expect(mockStore.get('API_KEY')).toBe('secret123');
     });
 
     it('should NOT save sensitive settings to env file', async () => {
@@ -176,16 +178,14 @@ describe('ExtensionSettingsStorage', () => {
       expect(values.API_URL).toBe('https://api.example.com');
     });
 
-    it('should load sensitive settings from keychain', async () => {
+    it('should load sensitive settings from SecureStore', async () => {
+      mockStore.set('API_KEY', 'secret123');
       const settings: ExtensionSetting[] = [
         { name: 'apiKey', envVar: 'API_KEY', sensitive: true },
       ];
 
-      // This will test keychain loading - need mock to return value
       const result = await storage.loadSettings(settings);
-      // With proper mock setup, should return keychain value
-      // Currently mock returns null, so API_KEY should be undefined
-      expect(result.API_KEY).toBeUndefined();
+      expect(result.API_KEY).toBe('secret123');
     });
 
     it('should return undefined for missing settings', async () => {
@@ -219,7 +219,7 @@ describe('ExtensionSettingsStorage', () => {
 
       const values = await storage.loadSettings(settings);
       expect(values.API_URL).toBe('https://api.example.com');
-      // API_KEY would come from keychain (mocked)
+      // API_KEY would come from SecureStore (mocked)
     });
   });
 
@@ -234,9 +234,10 @@ describe('ExtensionSettingsStorage', () => {
       expect(fs.existsSync(envPath)).toBe(false);
     });
 
-    it('should delete keychain entries', async () => {
+    it('should delete SecureStore entries', async () => {
+      mockStore.set('API_KEY', 'secret123');
       await storage.deleteSettings();
-      // Verify keychain delete was called (check mock)
+      expect(mockStore.size).toBe(0);
     });
 
     it('should handle missing env file gracefully', async () => {
@@ -250,6 +251,12 @@ describe('ExtensionSettingsStorage', () => {
       const envPath = getSettingsEnvFilePath(tmpDir);
       await fs.promises.writeFile(envPath, 'TEST=value\n');
 
+      const result = await storage.hasSettings();
+      expect(result).toBe(true);
+    });
+
+    it('should return true if SecureStore has entries', async () => {
+      mockStore.set('API_KEY', 'secret');
       const result = await storage.hasSettings();
       expect(result).toBe(true);
     });

@@ -51,7 +51,12 @@ import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import dns from 'node:dns';
 import { start_sandbox } from './utils/sandbox.js';
-import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
+import {
+  shouldRelaunchForMemory,
+  isDebugMode,
+  computeSandboxMemoryArgs,
+  parseDockerMemoryToMB,
+} from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import chalk from 'chalk';
 import {
@@ -71,9 +76,22 @@ import {
   SettingsService,
   DebugLogger,
   ProfileManager,
-  SessionPersistenceService,
-  type PersistedSession,
   parseAndFormatApiError,
+  SessionRecordingService,
+  RecordingIntegration,
+  resumeSession,
+  listSessions,
+  deleteSession,
+  getProjectHash,
+  type IContent,
+  type LockHandle,
+  coreEvents,
+  CoreEvent,
+  type OutputPayload,
+  type ConsoleLogPayload,
+  patchStdio,
+  writeToStderr,
+  writeToStdout,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
@@ -85,6 +103,7 @@ import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import {
   cleanupCheckpoints,
   registerCleanup,
+  registerSyncCleanup,
   runExitCleanup,
 } from './utils/cleanup.js';
 import { getCliVersion } from './utils/version.js';
@@ -96,6 +115,7 @@ import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
 import { drainStdinBuffer } from './ui/utils/terminalContract.js';
+import { restoreTerminalProtocolsSync } from './ui/utils/terminalProtocolCleanup.js';
 import {
   DISABLE_BRACKETED_PASTE,
   DISABLE_FOCUS_TRACKING,
@@ -192,7 +212,7 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
   );
 };
 
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, promises as fsPromises } from 'fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'os';
@@ -238,56 +258,19 @@ function handleError(error: Error, errorInfo: ErrorInfo) {
   }
 }
 
+/**
+ * @plan:PLAN-20260211-SESSIONRECORDING.P26
+ * @pseudocode recording-integration.md lines 115-132
+ */
 export async function startInteractiveUI(
   config: Config,
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
+  recordingIntegration?: RecordingIntegration,
+  resumedHistory?: IContent[],
 ) {
   const version = await getCliVersion();
-
-  // Load previous session if --continue flag was used
-  let restoredSession: PersistedSession | null = null;
-  const initialPrompt = config.getQuestion();
-
-  if (config.isContinueSession()) {
-    const persistence = new SessionPersistenceService(
-      config.storage,
-      config.getSessionId(),
-    );
-    restoredSession = await persistence.loadMostRecent();
-
-    if (restoredSession) {
-      const formattedTime =
-        SessionPersistenceService.formatSessionTime(restoredSession);
-
-      if (initialPrompt) {
-        // User provided both --continue and --prompt
-        console.log(chalk.cyan(`Resuming session from ${formattedTime}`));
-        const truncatedPrompt =
-          initialPrompt.length > 50
-            ? `${initialPrompt.slice(0, 50)}...`
-            : initialPrompt;
-        console.log(
-          chalk.dim(
-            `Your prompt "${truncatedPrompt}" will be submitted after session loads.`,
-          ),
-        );
-      } else {
-        console.log(chalk.green(`Resumed session from ${formattedTime}`));
-      }
-    } else {
-      if (initialPrompt) {
-        console.log(
-          chalk.yellow(
-            'No previous session found. Starting fresh with your prompt.',
-          ),
-        );
-      } else {
-        console.log(chalk.yellow('No previous session found. Starting fresh.'));
-      }
-    }
-  }
 
   // Detect and enable Kitty keyboard protocol once at startup
   await detectAndEnableKittyProtocol();
@@ -303,12 +286,15 @@ export async function startInteractiveUI(
     process.on('exit', () => {
       disableMouseEvents();
       if (process.stdout.isTTY) {
-        process.stdout.write(
+        writeToStdout(
           DISABLE_BRACKETED_PASTE + DISABLE_FOCUS_TRACKING + SHOW_CURSOR,
         );
       }
     });
   }
+
+  process.on('exit', restoreTerminalProtocolsSync);
+  registerSyncCleanup(restoreTerminalProtocolsSync);
 
   const instance = render(
     <React.StrictMode>
@@ -319,7 +305,8 @@ export async function startInteractiveUI(
             settings={settings}
             startupWarnings={startupWarnings}
             version={version}
-            restoredSession={restoredSession ?? undefined}
+            recordingIntegration={recordingIntegration}
+            resumedHistory={resumedHistory}
           />
         </SettingsContext.Provider>
       </ErrorBoundary>
@@ -346,6 +333,13 @@ export async function startInteractiveUI(
 }
 
 export async function main() {
+  const cleanupStdio = patchStdio();
+  registerSyncCleanup(() => {
+    // This is needed to ensure we don't lose any buffered output.
+    initializeOutputListenersAndFlush();
+    cleanupStdio();
+  });
+
   setupUnhandledRejectionHandler();
 
   // Create .llxprt directory if it doesn't exist
@@ -392,8 +386,8 @@ export async function main() {
   if (hasPipedInput) {
     const stdinSnapshot = await readStdinOnce();
     if (!stdinSnapshot && !questionFromArgs) {
-      console.error(
-        `No input provided via stdin. Input can be provided by piping data into gemini or using the --prompt option.`,
+      writeToStderr(
+        `No input provided via stdin. Input can be provided by piping data into llxprt or using the --prompt option.\n`,
       );
       process.exit(1);
     }
@@ -449,8 +443,8 @@ export async function main() {
 
   // Check for invalid input combinations early to prevent crashes
   if (argv.promptInteractive && !process.stdin.isTTY) {
-    console.error(
-      'Error: The --prompt-interactive flag cannot be used when input is piped from stdin.',
+    writeToStderr(
+      'Error: The --prompt-interactive flag cannot be used when input is piped from stdin.\n',
     );
     process.exit(1);
   }
@@ -762,11 +756,28 @@ export async function main() {
 
   // hop into sandbox if we are outside and sandboxing is enabled
   if (!process.env.SANDBOX) {
-    // Memory relaunch was already handled at the top of main() before config loading
-    // Now only handle sandbox entry, which needs memory args passed to the sandbox process
-    const sandboxMemoryArgs = settings.merged.ui?.autoConfigureMaxOldSpaceSize
-      ? shouldRelaunchForMemory(config.getDebugMode())
-      : [];
+    // For sandbox, always compute memory args for the new process.
+    // Unlike shouldRelaunchForMemory() which compares against the host's current heap,
+    // computeSandboxMemoryArgs() always returns args because the sandbox starts fresh
+    // with Node.js default ~950MB heap.
+    let sandboxMemoryArgs: string[] = [];
+    if (settings.merged.ui?.autoConfigureMaxOldSpaceSize) {
+      const containerMemoryStr =
+        process.env.LLXPRT_SANDBOX_MEMORY ?? process.env.SANDBOX_MEMORY;
+      let containerMemoryMB: number | undefined;
+      if (containerMemoryStr) {
+        containerMemoryMB = parseDockerMemoryToMB(containerMemoryStr);
+      } else if (process.env.SANDBOX_FLAGS) {
+        const match = process.env.SANDBOX_FLAGS.match(/--memory[= ](\S+)/);
+        if (match) {
+          containerMemoryMB = parseDockerMemoryToMB(match[1]);
+        }
+      }
+      sandboxMemoryArgs = computeSandboxMemoryArgs(
+        config.getDebugMode(),
+        containerMemoryMB,
+      );
+    }
     const sandboxConfig = config.getSandbox();
     if (sandboxConfig) {
       // We intentionally omit the list of extensions here because extensions
@@ -872,6 +883,132 @@ export async function main() {
 
   // Cleanup sessions after config initialization
   await cleanupExpiredSessions(config, settings.merged);
+
+  /**
+   * @plan:PLAN-20260211-SESSIONRECORDING.P26
+   * @pseudocode recording-integration.md lines 115-132
+   *
+   * Set up session recording: compute project hash, create chats directory,
+   * handle --list-sessions / --delete-session early exits, then create
+   * SessionRecordingService (new or resumed) and RecordingIntegration.
+   */
+  const projectHash = getProjectHash(config.getProjectRoot());
+  const chatsDir = join(config.getProjectTempDir(), 'chats');
+  await fsPromises.mkdir(chatsDir, { recursive: true });
+
+  // --list-sessions: display sessions and exit
+  if (argv.listSessions) {
+    const { sessions } = await listSessions(chatsDir, projectHash);
+    if (sessions.length === 0) {
+      console.log('No recorded sessions for this project.');
+    } else {
+      console.log(`Sessions for this project (${sessions.length}):
+`);
+      for (let i = 0; i < sessions.length; i++) {
+        const s = sessions[i];
+        const modified = s.lastModified.toLocaleString();
+        const sizeKb = (s.fileSize / 1024).toFixed(1);
+        console.log(
+          `  ${i + 1}. ${s.sessionId.slice(0, 8)}  ${modified}  ${sizeKb} KB  ${s.provider}/${s.model}`,
+        );
+      }
+    }
+    process.exit(0);
+  }
+
+  // --delete-session: delete session and exit
+  if (argv.deleteSession) {
+    const result = await deleteSession(
+      argv.deleteSession,
+      chatsDir,
+      projectHash,
+    );
+    if (result.ok) {
+      console.log(
+        chalk.green(`Deleted session ${result.deletedSessionId.slice(0, 8)}`),
+      );
+      process.exit(0);
+    } else {
+      console.error(chalk.red(result.error));
+      process.exit(1);
+    }
+  }
+
+  // Create recording service (resume or new)
+  let recordingService: SessionRecordingService;
+  let resumedHistory: IContent[] | null = null;
+  let resumedLockHandle: LockHandle | null = null;
+
+  const continueRef = config.getContinueSessionRef();
+  if (continueRef) {
+    const resumeResult = await resumeSession({
+      continueRef,
+      projectHash,
+      chatsDir,
+      currentProvider: config.getProvider() ?? 'unknown',
+      currentModel: config.getModel(),
+      workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+    });
+    if (resumeResult.ok) {
+      recordingService = resumeResult.recording;
+      resumedHistory = resumeResult.history;
+      resumedLockHandle = resumeResult.lockHandle;
+      if (resumeResult.warnings.length > 0) {
+        for (const warning of resumeResult.warnings) {
+          console.warn(chalk.yellow(warning));
+        }
+      }
+    } else {
+      console.warn(
+        chalk.yellow(
+          `Could not resume session (ref: ${continueRef}): ${resumeResult.error}`,
+        ),
+      );
+      // Fall back to new session
+      recordingService = new SessionRecordingService({
+        sessionId,
+        projectHash,
+        chatsDir,
+        workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+        provider: config.getProvider() ?? 'unknown',
+        model: config.getModel(),
+      });
+    }
+  } else {
+    recordingService = new SessionRecordingService({
+      sessionId,
+      projectHash,
+      chatsDir,
+      workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+      provider: config.getProvider() ?? 'unknown',
+      model: config.getModel(),
+    });
+  }
+
+  const recordingIntegration = new RecordingIntegration(recordingService);
+
+  if (resumedHistory && resumedHistory.length > 0) {
+    try {
+      const geminiClient = config.getGeminiClient();
+      if (geminiClient) {
+        await geminiClient.restoreHistory(resumedHistory);
+      }
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : String(err);
+      console.warn(
+        chalk.yellow('Could not restore conversation history: ' + messageText),
+      );
+    }
+  }
+
+  registerCleanup(async () => {
+    recordingIntegration.dispose();
+    try {
+      await recordingService.dispose();
+    } finally {
+      await resumedLockHandle?.release();
+    }
+  });
 
   if (config.getListExtensions()) {
     console.log('Installed extensions:');
@@ -1059,7 +1196,14 @@ export async function main() {
 
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {
-    await startInteractiveUI(config, settings, startupWarnings, workspaceRoot);
+    await startInteractiveUI(
+      config,
+      settings,
+      startupWarnings,
+      workspaceRoot,
+      recordingIntegration,
+      resumedHistory ?? undefined,
+    );
     return;
   }
   // If not a TTY, read from stdin
@@ -1072,8 +1216,8 @@ export async function main() {
     }
   }
   if (!input) {
-    console.error(
-      `No input provided via stdin. Input can be provided by piping data into gemini or using the --prompt option.`,
+    writeToStderr(
+      `No input provided via stdin. Input can be provided by piping data into llxprt or using the --prompt option.\n`,
     );
     process.exit(1);
   }
@@ -1085,6 +1229,8 @@ export async function main() {
     config,
     settings,
   );
+
+  initializeOutputListenersAndFlush();
 
   try {
     await runNonInteractive({
@@ -1098,7 +1244,7 @@ export async function main() {
       const formatter = new JsonFormatter();
       const normalizedError =
         error instanceof Error ? error : new Error(String(error));
-      process.stderr.write(`${formatter.formatError(normalizedError, 1)}\n`);
+      writeToStderr(`${formatter.formatError(normalizedError, 1)}\n`);
     } else {
       const printableError = formatNonInteractiveError(error);
       console.error(`Non-interactive run failed: ${printableError}`);
@@ -1116,10 +1262,34 @@ export async function main() {
 function setWindowTitle(title: string, settings: LoadedSettings) {
   if (!settings.merged.ui?.hideWindowTitle) {
     const windowTitle = computeWindowTitle(title);
-    process.stdout.write(`\x1b]2;${windowTitle}\x07`);
+    writeToStdout(`\x1b]2;${windowTitle}\x07`);
 
     process.on('exit', () => {
-      process.stdout.write(`\x1b]2;\x07`);
+      writeToStdout(`\x1b]2;\x07`);
     });
   }
+}
+
+function initializeOutputListenersAndFlush() {
+  // If there are no listeners for output, make sure we flush so output is not
+  // lost.
+  if (coreEvents.listenerCount(CoreEvent.Output) === 0) {
+    // In non-interactive mode, ensure we drain any buffered output or logs to stderr
+    coreEvents.on(CoreEvent.Output, (payload: OutputPayload) => {
+      if (payload.isStderr) {
+        writeToStderr(payload.chunk, payload.encoding);
+      } else {
+        writeToStdout(payload.chunk, payload.encoding);
+      }
+    });
+
+    coreEvents.on(CoreEvent.ConsoleLog, (payload: ConsoleLogPayload) => {
+      if (payload.type === 'error' || payload.type === 'warn') {
+        writeToStderr(payload.content);
+      } else {
+        writeToStdout(payload.content);
+      }
+    });
+  }
+  coreEvents.drainBacklogs();
 }

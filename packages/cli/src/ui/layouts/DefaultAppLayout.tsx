@@ -18,8 +18,7 @@ import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { Colors } from '../colors.js';
 
 // Components
-import { Header } from '../components/Header.js';
-import { Tips } from '../components/Tips.js';
+import { AppHeader } from '../components/AppHeader.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
 import { Notifications } from '../components/Notifications.js';
@@ -195,18 +194,13 @@ export const DefaultAppLayout = ({
 
   if (useAlternateBuffer) {
     const headerElement = (
-      <>
-        {!(settings.merged.ui?.hideBanner || config.getScreenReader()) && (
-          <Header
-            terminalWidth={terminalWidth}
-            version={version}
-            nightly={nightly}
-          />
-        )}
-        {!(settings.merged.ui?.hideTips || config.getScreenReader()) && (
-          <Tips config={config} />
-        )}
-      </>
+      <AppHeader
+        config={config}
+        settings={settings}
+        version={version}
+        nightly={nightly}
+        terminalWidth={terminalWidth}
+      />
     );
 
     const pendingElement = (
@@ -446,20 +440,14 @@ export const DefaultAppLayout = ({
         <Static
           key={staticKey}
           items={[
-            <Box flexDirection="column" key="header">
-              {!(
-                settings.merged.ui?.hideBanner || config.getScreenReader()
-              ) && (
-                <Header
-                  terminalWidth={terminalWidth}
-                  version={version}
-                  nightly={nightly}
-                />
-              )}
-              {!(settings.merged.ui?.hideTips || config.getScreenReader()) && (
-                <Tips config={config} />
-              )}
-            </Box>,
+            <AppHeader
+              key="header"
+              config={config}
+              settings={settings}
+              version={version}
+              nightly={nightly}
+              terminalWidth={terminalWidth}
+            />,
             ...history.map((h) => (
               <HistoryItemDisplay
                 terminalWidth={mainAreaWidth}

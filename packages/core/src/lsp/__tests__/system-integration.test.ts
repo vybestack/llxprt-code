@@ -263,8 +263,16 @@ describe('LSP system integration (P35)', () => {
     expect(config.getLspConfig()).toBeUndefined();
   });
 
-  it('defaults to enabled config when lsp key is absent', async () => {
+  it('defaults to disabled when lsp key is absent (not configured)', async () => {
     const config = new Config(createBaseConfigParams());
+    await config.initialize();
+
+    expect(config.getLspConfig()).toBeUndefined();
+    expect(config.getLspServiceClient()).toBeUndefined();
+  });
+
+  it('defaults to enabled config when lsp is true', async () => {
+    const config = new Config(createBaseConfigParams({ lsp: true }));
     await config.initialize();
 
     expect(config.getLspConfig()).toEqual({ servers: [] });

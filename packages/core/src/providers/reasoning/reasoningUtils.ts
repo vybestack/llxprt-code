@@ -11,7 +11,9 @@ import type {
   ToolCallBlock,
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
-import { normalizeToHistoryToolId } from '../openai-vercel/toolIdUtils.js';
+import { normalizeToHistoryToolId } from '../utils/toolIdNormalization.js';
+import { normalizeToolName } from '../utils/toolNameNormalization.js';
+import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { DebugLogger } from '../../debug/DebugLogger.js';
 
 const logger = new DebugLogger('llxprt:provider:reasoning');
@@ -226,27 +228,9 @@ export function cleanKimiTokensFromThinking(thought: string): string {
   return extractKimiToolCallsFromText(thought).cleanedText;
 }
 
-/**
- * Helper: Normalize tool name by stripping Kimi-K2 style prefixes.
- * Handles cases where model concatenates "functions" or "call_functions" with tool name.
- *
- * @internal
- */
-function normalizeToolName(name: string): string {
-  let normalized = (name || '').trim();
-
-  // Strip Kimi-K2 style prefixes where model concatenates "functions" or "call_functions"
-  // with the actual tool name (e.g., "functionslist_directory" -> "list_directory")
-  // Pattern: (call_)?functions<actual_tool_name><optional_number>
-  const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
-    normalized,
-  );
-  if (kimiPrefixMatch) {
-    normalized = kimiPrefixMatch[1];
-  }
-
-  return normalized.toLowerCase();
-}
+// normalizeToolName is imported from ../utils/toolNameNormalization.js
+// sanitizeProviderText is imported from ../utils/textSanitizer.js
+// normalizeToHistoryToolId is imported from ../utils/toolIdNormalization.js
 
 /**
  * Helper: Sanitize raw tool argument payloads before JSON parsing.
@@ -294,19 +278,3 @@ function sanitizeToolArgumentsString(raw: unknown): string {
 
   return text.length ? text : '{}';
 }
-
-/**
- * Helper: Remove provider-specific thinking/reasoning markup from text.
- *
- * @internal
- */
-function sanitizeProviderText(text: string): string {
-  // Remove <think>...</think> blocks (and variations)
-  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
-  text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
-  text = text.replace(/<thought>[\s\S]*?<\/thought>/gi, '');
-
-  return text.trim();
-}
-
-// normalizeToHistoryToolId is imported from toolIdUtils.js

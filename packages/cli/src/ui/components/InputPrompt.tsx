@@ -39,6 +39,7 @@ import {
 } from '../utils/clipboardUtils.js';
 import * as path from 'path';
 import { SCREEN_READER_USER_PREFIX } from '../textConstants.js';
+import { secureInputHandler } from '../utils/secureInputHandler.js';
 import { useMouse } from '../hooks/useMouse.js';
 import type { MouseEvent } from '../hooks/useMouse.js';
 import clipboardy from 'clipboardy';
@@ -1019,10 +1020,17 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                 let charCount = 0;
                 let hasVisibleContent = false;
                 const [logicalLineIdx, logicalStartCol] = mapEntry ?? [0, 0];
-                const logicalLine =
+                const rawLogicalLine =
                   mapEntry && buffer.lines[logicalLineIdx]
                     ? buffer.lines[logicalLineIdx]
                     : lineText;
+                // Apply live masking for /key and /toolkey commands.
+                // processInput returns same-length text with sensitive chars
+                // replaced by '*', so cursor positioning stays correct.
+                const logicalLine =
+                  logicalLineIdx === 0
+                    ? secureInputHandler.processInput(rawLogicalLine)
+                    : rawLogicalLine;
                 const tokens = parseInputForHighlighting(
                   logicalLine,
                   logicalLineIdx,

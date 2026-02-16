@@ -11,12 +11,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GeminiOAuthProvider } from '../../src/auth/gemini-oauth-provider.js';
-import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
+import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { HistoryItemWithoutId } from '../../src/ui/types.js';
 
 describe('GeminiOAuthProvider - Fallback Dialog', () => {
   let provider: GeminiOAuthProvider;
-  let tokenStore: MultiProviderTokenStore;
+  let tokenStore: KeyringTokenStore;
   let addItemSpy: ReturnType<typeof vi.fn>;
   let historyItems: HistoryItemWithoutId[];
 
@@ -31,7 +31,7 @@ describe('GeminiOAuthProvider - Fallback Dialog', () => {
       saveToken: vi.fn(),
       getToken: vi.fn().mockResolvedValue(null),
       clearToken: vi.fn(),
-    } as unknown as MultiProviderTokenStore;
+    } as unknown as KeyringTokenStore;
 
     provider = new GeminiOAuthProvider(tokenStore, addItemSpy);
   });
@@ -41,6 +41,8 @@ describe('GeminiOAuthProvider - Fallback Dialog', () => {
     // Clean up global flags
     delete (global as { __oauth_provider?: unknown }).__oauth_provider;
     delete (global as { __oauth_needs_code?: unknown }).__oauth_needs_code;
+    delete (global as { __oauth_wait_for_code?: unknown })
+      .__oauth_wait_for_code;
   });
 
   describe('Fallback methods availability', () => {
@@ -119,6 +121,46 @@ describe('GeminiOAuthProvider - Fallback Dialog', () => {
 
       const result = await authPromise;
       expect(result).toBe('first-code');
+    });
+  });
+
+  describe('Persistent auth code hook installation (Issue #1370)', () => {
+    it('should install __oauth_wait_for_code hook on construction', () => {
+      const hook = (global as Record<string, unknown>).__oauth_wait_for_code;
+      expect(hook).toBeDefined();
+      expect(typeof hook).toBe('function');
+    });
+
+    it('should set __oauth_provider to gemini on construction', () => {
+      expect((global as Record<string, unknown>).__oauth_provider).toBe(
+        'gemini',
+      );
+    });
+
+    it('should not overwrite an existing __oauth_wait_for_code hook', () => {
+      const existingHook = vi.fn();
+      (global as Record<string, unknown>).__oauth_wait_for_code = existingHook;
+
+      // Create a new provider — should NOT overwrite
+      const newProvider = new GeminiOAuthProvider(tokenStore, addItemSpy);
+      expect((global as Record<string, unknown>).__oauth_wait_for_code).toBe(
+        existingHook,
+      );
+
+      // Suppress unused-variable warning
+      void newProvider;
+    });
+
+    it('should provide a working auth code flow through the persistent hook', async () => {
+      const hook = (global as Record<string, unknown>)
+        .__oauth_wait_for_code as () => Promise<string>;
+      const codePromise = hook();
+
+      // Simulate UI submitting the code
+      provider.submitAuthCode('test-code-1370');
+
+      const result = await codePromise;
+      expect(result).toBe('test-code-1370');
     });
   });
 });

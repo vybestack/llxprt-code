@@ -16,14 +16,48 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
+import {
+  KeyringTokenStore,
+  SecureStore,
+  type KeyringAdapter,
+  type OAuthToken,
+  type StandardProfile,
+} from '@vybestack/llxprt-code-core';
 import { OAuthManager, OAuthProvider } from '../../auth/oauth-manager.js';
-import type { OAuthToken, StandardProfile } from '@vybestack/llxprt-code-core';
 import {
   createTempDirectory,
   cleanupTempDirectory,
   createTempProfile,
 } from '../test-utils.js';
+
+/**
+ * Creates a mock keyring adapter backed by an in-memory Map.
+ */
+function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
+  const store = new Map<string, string>();
+  return {
+    store,
+    getPassword: async (service: string, account: string) =>
+      store.get(`${service}:${account}`) ?? null,
+    setPassword: async (service: string, account: string, password: string) => {
+      store.set(`${service}:${account}`, password);
+    },
+    deletePassword: async (service: string, account: string) =>
+      store.delete(`${service}:${account}`),
+    findCredentials: async (service: string) => {
+      const results: Array<{ account: string; password: string }> = [];
+      for (const [key, value] of store.entries()) {
+        if (key.startsWith(`${service}:`)) {
+          results.push({
+            account: key.slice(service.length + 1),
+            password: value,
+          });
+        }
+      }
+      return results;
+    },
+  };
+}
 
 /**
  * Counter to ensure unique token values across all tests
@@ -83,7 +117,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
   let tempDir: string;
   let oauthDir: string;
   let profilesDir: string;
-  let tokenStore: MultiProviderTokenStore;
+  let tokenStore: KeyringTokenStore;
   let oauthManager: OAuthManager;
 
   beforeEach(async () => {
@@ -94,8 +128,13 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
     await fs.mkdir(oauthDir, { recursive: true });
     await fs.mkdir(profilesDir, { recursive: true });
 
-    // Create token store
-    tokenStore = new MultiProviderTokenStore(oauthDir);
+    // Create token store backed by in-memory keyring
+    const secureStore = new SecureStore('llxprt-code-oauth', {
+      fallbackDir: oauthDir,
+      fallbackPolicy: 'allow',
+      keyringLoader: async () => createMockKeyring(),
+    });
+    tokenStore = new KeyringTokenStore({ secureStore });
 
     // Create OAuth manager
     oauthManager = new OAuthManager(tokenStore);
@@ -115,26 +154,22 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
   describe('Complete bucket lifecycle', () => {
     it('should complete full login-save-load cycle with buckets', async () => {
       // Step 1: Create buckets via mock authentication
-      const workToken = createMockToken('work@company.com');
-      const personalToken = createMockToken('personal@gmail.com');
+      const workToken = createMockToken('work-company');
+      const personalToken = createMockToken('personal-gmail');
 
-      await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
-      await tokenStore.saveToken(
-        'anthropic',
-        personalToken,
-        'personal@gmail.com',
-      );
+      await tokenStore.saveToken('anthropic', workToken, 'work-company');
+      await tokenStore.saveToken('anthropic', personalToken, 'personal-gmail');
 
       // Verify buckets exist
       const buckets = await tokenStore.listBuckets('anthropic');
-      expect(buckets).toContain('work@company.com');
-      expect(buckets).toContain('personal@gmail.com');
+      expect(buckets).toContain('work-company');
+      expect(buckets).toContain('personal-gmail');
 
       // Step 2: Create profile with multiple buckets
       const profile = createValidProfile({
         auth: {
           type: 'oauth',
-          buckets: ['work@company.com', 'personal@gmail.com'],
+          buckets: ['work-company', 'personal-gmail'],
         },
       });
 
@@ -143,13 +178,13 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Step 3: Load profile, verify first bucket used
       const loadedToken = await oauthManager.getOAuthToken(
         'anthropic',
-        'work@company.com',
+        'work-company',
       );
       expect(loadedToken).not.toBeNull();
       expect(loadedToken?.access_token).toBe(workToken.access_token);
 
       // Step 4: Simulate session bucket override (failover simulation)
-      oauthManager.setSessionBucket('anthropic', 'personal@gmail.com');
+      oauthManager.setSessionBucket('anthropic', 'personal-gmail');
 
       const overrideToken = await oauthManager.getOAuthToken('anthropic');
       expect(overrideToken?.access_token).toBe(personalToken.access_token);
@@ -157,31 +192,27 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Step 5: Verify buckets are properly managed
       const allBuckets = await tokenStore.listBuckets('anthropic');
       expect(allBuckets).toHaveLength(2);
-      expect(allBuckets).toContain('work@company.com');
-      expect(allBuckets).toContain('personal@gmail.com');
+      expect(allBuckets).toContain('work-company');
+      expect(allBuckets).toContain('personal-gmail');
     });
 
     it('should maintain bucket isolation throughout lifecycle', async () => {
       // Create work bucket
-      const workToken = createMockToken('work@company.com');
-      await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
+      const workToken = createMockToken('work-company');
+      await tokenStore.saveToken('anthropic', workToken, 'work-company');
 
       // Create personal bucket with different token
-      const personalToken = createMockToken('personal@gmail.com');
-      await tokenStore.saveToken(
-        'anthropic',
-        personalToken,
-        'personal@gmail.com',
-      );
+      const personalToken = createMockToken('personal-gmail');
+      await tokenStore.saveToken('anthropic', personalToken, 'personal-gmail');
 
       // Verify tokens are different
       const retrievedWork = await tokenStore.getToken(
         'anthropic',
-        'work@company.com',
+        'work-company',
       );
       const retrievedPersonal = await tokenStore.getToken(
         'anthropic',
-        'personal@gmail.com',
+        'personal-gmail',
       );
 
       expect(retrievedWork).not.toBeNull();
@@ -193,15 +224,15 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       );
 
       // Removing one bucket should not affect the other
-      await tokenStore.removeToken('anthropic', 'work@company.com');
+      await tokenStore.removeToken('anthropic', 'work-company');
 
       const afterRemoveWork = await tokenStore.getToken(
         'anthropic',
-        'work@company.com',
+        'work-company',
       );
       const afterRemovePersonal = await tokenStore.getToken(
         'anthropic',
-        'personal@gmail.com',
+        'personal-gmail',
       );
 
       expect(afterRemoveWork).toBeNull();
@@ -215,33 +246,30 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Create multiple buckets
       await tokenStore.saveToken(
         'anthropic',
-        createMockToken('work@company.com'),
-        'work@company.com',
+        createMockToken('work-company'),
+        'work-company',
       );
       await tokenStore.saveToken(
         'anthropic',
-        createMockToken('personal@gmail.com'),
-        'personal@gmail.com',
+        createMockToken('personal-gmail'),
+        'personal-gmail',
       );
 
       // Simulate usage by getting tokens multiple times
-      await oauthManager.getToken('anthropic', 'work@company.com');
-      await oauthManager.getToken('anthropic', 'work@company.com');
-      await oauthManager.getToken('anthropic', 'personal@gmail.com');
+      await oauthManager.getToken('anthropic', 'work-company');
+      await oauthManager.getToken('anthropic', 'work-company');
+      await oauthManager.getToken('anthropic', 'personal-gmail');
 
       // Verify both buckets are accessible
       const buckets = await tokenStore.listBuckets('anthropic');
-      expect(buckets).toContain('work@company.com');
-      expect(buckets).toContain('personal@gmail.com');
+      expect(buckets).toContain('work-company');
+      expect(buckets).toContain('personal-gmail');
 
       // Verify tokens can be retrieved from both buckets
-      const workToken = await tokenStore.getToken(
-        'anthropic',
-        'work@company.com',
-      );
+      const workToken = await tokenStore.getToken('anthropic', 'work-company');
       const personalToken = await tokenStore.getToken(
         'anthropic',
-        'personal@gmail.com',
+        'personal-gmail',
       );
       expect(workToken).not.toBeNull();
       expect(personalToken).not.toBeNull();
@@ -251,32 +279,24 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
   describe('Multi-provider bucket management', () => {
     it('should manage buckets across multiple providers independently', async () => {
       // Create buckets for anthropic
-      const anthropicWork = createMockToken('work@company.com');
-      const anthropicPersonal = createMockToken('personal@gmail.com');
-      await tokenStore.saveToken(
-        'anthropic',
-        anthropicWork,
-        'work@company.com',
-      );
+      const anthropicWork = createMockToken('work-company');
+      const anthropicPersonal = createMockToken('personal-gmail');
+      await tokenStore.saveToken('anthropic', anthropicWork, 'work-company');
       await tokenStore.saveToken(
         'anthropic',
         anthropicPersonal,
-        'personal@gmail.com',
+        'personal-gmail',
       );
 
       // Create buckets for gemini with same names
-      const geminiWork = createMockToken('work@company.com');
-      const geminiPersonal = createMockToken('personal@gmail.com');
-      await tokenStore.saveToken('gemini', geminiWork, 'work@company.com');
-      await tokenStore.saveToken(
-        'gemini',
-        geminiPersonal,
-        'personal@gmail.com',
-      );
+      const geminiWork = createMockToken('work-company');
+      const geminiPersonal = createMockToken('personal-gmail');
+      await tokenStore.saveToken('gemini', geminiWork, 'work-company');
+      await tokenStore.saveToken('gemini', geminiPersonal, 'personal-gmail');
 
       // Create buckets for qwen
-      const qwenWork = createMockToken('work@company.com');
-      await tokenStore.saveToken('qwen', qwenWork, 'work@company.com');
+      const qwenWork = createMockToken('work-company');
+      await tokenStore.saveToken('qwen', qwenWork, 'work-company');
 
       // Verify provider isolation
       const anthropicBuckets = await tokenStore.listBuckets('anthropic');
@@ -290,12 +310,9 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Verify tokens are provider-specific
       const anthropicToken = await tokenStore.getToken(
         'anthropic',
-        'work@company.com',
+        'work-company',
       );
-      const geminiToken = await tokenStore.getToken(
-        'gemini',
-        'work@company.com',
-      );
+      const geminiToken = await tokenStore.getToken('gemini', 'work-company');
 
       expect(anthropicToken?.access_token).toBe(anthropicWork.access_token);
       expect(geminiToken?.access_token).toBe(geminiWork.access_token);
@@ -304,24 +321,20 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
 
     it('should prevent cross-provider bucket interference', async () => {
       // Create work bucket for anthropic
-      const anthropicToken = createMockToken('work@company.com');
-      await tokenStore.saveToken(
-        'anthropic',
-        anthropicToken,
-        'work@company.com',
-      );
+      const anthropicToken = createMockToken('work-company');
+      await tokenStore.saveToken('anthropic', anthropicToken, 'work-company');
 
       // Create work bucket for gemini
-      const geminiToken = createMockToken('work@company.com');
-      await tokenStore.saveToken('gemini', geminiToken, 'work@company.com');
+      const geminiToken = createMockToken('work-company');
+      await tokenStore.saveToken('gemini', geminiToken, 'work-company');
 
       // Remove anthropic bucket
-      await tokenStore.removeToken('anthropic', 'work@company.com');
+      await tokenStore.removeToken('anthropic', 'work-company');
 
       // Verify gemini bucket still exists
       const geminiStillExists = await tokenStore.getToken(
         'gemini',
-        'work@company.com',
+        'work-company',
       );
       expect(geminiStillExists).not.toBeNull();
       expect(geminiStillExists?.access_token).toBe(geminiToken.access_token);
@@ -329,7 +342,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Verify anthropic bucket is removed
       const anthropicRemoved = await tokenStore.getToken(
         'anthropic',
-        'work@company.com',
+        'work-company',
       );
       expect(anthropicRemoved).toBeNull();
     });
@@ -338,44 +351,38 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Create buckets for multiple providers
       await tokenStore.saveToken(
         'anthropic',
-        createMockToken('work@company.com'),
-        'work@company.com',
+        createMockToken('work-company'),
+        'work-company',
       );
       await tokenStore.saveToken(
         'anthropic',
-        createMockToken('personal@gmail.com'),
-        'personal@gmail.com',
+        createMockToken('personal-gmail'),
+        'personal-gmail',
       );
       await tokenStore.saveToken(
         'gemini',
-        createMockToken('work@company.com'),
-        'work@company.com',
+        createMockToken('work-company'),
+        'work-company',
       );
       await tokenStore.saveToken(
         'gemini',
-        createMockToken('personal@gmail.com'),
-        'personal@gmail.com',
+        createMockToken('personal-gmail'),
+        'personal-gmail',
       );
 
       // Set different session buckets for each provider
-      oauthManager.setSessionBucket('anthropic', 'work@company.com');
-      oauthManager.setSessionBucket('gemini', 'personal@gmail.com');
+      oauthManager.setSessionBucket('anthropic', 'work-company');
+      oauthManager.setSessionBucket('gemini', 'personal-gmail');
 
       // Verify session overrides are provider-specific
-      expect(oauthManager.getSessionBucket('anthropic')).toBe(
-        'work@company.com',
-      );
-      expect(oauthManager.getSessionBucket('gemini')).toBe(
-        'personal@gmail.com',
-      );
+      expect(oauthManager.getSessionBucket('anthropic')).toBe('work-company');
+      expect(oauthManager.getSessionBucket('gemini')).toBe('personal-gmail');
 
       // Clear one provider's session
       oauthManager.clearSessionBucket('anthropic');
 
       expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
-      expect(oauthManager.getSessionBucket('gemini')).toBe(
-        'personal@gmail.com',
-      );
+      expect(oauthManager.getSessionBucket('gemini')).toBe('personal-gmail');
     });
   });
 
@@ -500,20 +507,20 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Create buckets
       await tokenStore.saveToken(
         'anthropic',
-        createMockToken('work@company.com'),
-        'work@company.com',
+        createMockToken('work-company'),
+        'work-company',
       );
       await tokenStore.saveToken(
         'anthropic',
-        createMockToken('personal@gmail.com'),
-        'personal@gmail.com',
+        createMockToken('personal-gmail'),
+        'personal-gmail',
       );
 
       // Create profile
       const profile = createValidProfile({
         auth: {
           type: 'oauth',
-          buckets: ['work@company.com', 'personal@gmail.com'],
+          buckets: ['work-company', 'personal-gmail'],
         },
       });
 
@@ -525,19 +532,16 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       const loaded = JSON.parse(content) as StandardProfile;
 
       expect(loaded.auth).toBeDefined();
-      expect(loaded.auth?.buckets).toEqual([
-        'work@company.com',
-        'personal@gmail.com',
-      ]);
+      expect(loaded.auth?.buckets).toEqual(['work-company', 'personal-gmail']);
 
       // Verify buckets are accessible via OAuth manager
       const workToken = await oauthManager.getOAuthToken(
         'anthropic',
-        'work@company.com',
+        'work-company',
       );
       const personalToken = await oauthManager.getOAuthToken(
         'anthropic',
-        'personal@gmail.com',
+        'personal-gmail',
       );
       expect(workToken).not.toBeNull();
       expect(personalToken).not.toBeNull();
@@ -727,13 +731,13 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(token1?.access_token).toBe(defaultToken.access_token);
 
       // Add additional buckets (new feature)
-      const workToken = createMockToken('work@company.com');
-      await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
+      const workToken = createMockToken('work-company');
+      await tokenStore.saveToken('anthropic', workToken, 'work-company');
 
       // Verify both buckets coexist
       const buckets = await tokenStore.listBuckets('anthropic');
       expect(buckets).toContain('default');
-      expect(buckets).toContain('work@company.com');
+      expect(buckets).toContain('work-company');
 
       // Verify default still works
       const token2 = await oauthManager.getOAuthToken('anthropic');
@@ -742,7 +746,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Verify new bucket works
       const token3 = await oauthManager.getOAuthToken(
         'anthropic',
-        'work@company.com',
+        'work-company',
       );
       expect(token3?.access_token).toBe(workToken.access_token);
     });
@@ -809,7 +813,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
 
       loaded.auth = {
         type: 'oauth',
-        buckets: ['work@company.com'],
+        buckets: ['work-company'],
       };
 
       // Save updated profile
@@ -826,7 +830,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(updated.modelParams?.max_tokens).toBe(4096);
       expect(updated.auth).toBeDefined();
       expect(updated.auth?.type).toBe('oauth');
-      expect(updated.auth?.buckets).toEqual(['work@company.com']);
+      expect(updated.auth?.buckets).toEqual(['work-company']);
     });
   });
 
@@ -918,37 +922,34 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Create buckets for multiple providers
       await tokenStore.saveToken(
         'anthropic',
-        createMockToken('work@company.com', 3600),
-        'work@company.com',
+        createMockToken('work-company', 3600),
+        'work-company',
       );
       await tokenStore.saveToken(
         'anthropic',
-        createMockToken('personal@gmail.com', -1800),
-        'personal@gmail.com',
+        createMockToken('personal-gmail', -1800),
+        'personal-gmail',
       );
       await tokenStore.saveToken(
         'gemini',
-        createMockToken('work@company.com', 7200),
-        'work@company.com',
+        createMockToken('work-company', 7200),
+        'work-company',
       );
 
       // Verify buckets exist for each provider
       const anthropicBuckets = await tokenStore.listBuckets('anthropic');
       const geminiBuckets = await tokenStore.listBuckets('gemini');
 
-      expect(anthropicBuckets).toContain('work@company.com');
-      expect(anthropicBuckets).toContain('personal@gmail.com');
-      expect(geminiBuckets).toContain('work@company.com');
+      expect(anthropicBuckets).toContain('work-company');
+      expect(anthropicBuckets).toContain('personal-gmail');
+      expect(geminiBuckets).toContain('work-company');
 
       // Verify tokens can be retrieved
       const anthropicWork = await tokenStore.getToken(
         'anthropic',
-        'work@company.com',
+        'work-company',
       );
-      const geminiWork = await tokenStore.getToken(
-        'gemini',
-        'work@company.com',
-      );
+      const geminiWork = await tokenStore.getToken('gemini', 'work-company');
 
       expect(anthropicWork).not.toBeNull();
       expect(geminiWork).not.toBeNull();
@@ -963,7 +964,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Verify personal bucket is expired
       const anthropicPersonal = await tokenStore.getToken(
         'anthropic',
-        'personal@gmail.com',
+        'personal-gmail',
       );
       expect(anthropicPersonal).not.toBeNull();
       if (anthropicPersonal) {

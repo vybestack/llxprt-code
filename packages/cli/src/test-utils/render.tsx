@@ -45,7 +45,7 @@ export const render = (
 const mockSettings = new LoadedSettings(
   { path: '', settings: {} },
   { path: '', settings: {} },
-  { path: '', settings: {} },
+  { path: '', settings: { ui: { useAlternateBuffer: true } } },
   { path: '', settings: {} },
   true,
 );

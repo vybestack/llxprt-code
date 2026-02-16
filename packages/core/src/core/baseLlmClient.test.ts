@@ -15,6 +15,28 @@ import type {
   CountTokensParameters,
 } from '@google/genai';
 
+// Mock retryWithBackoff to immediately call the function once without delays
+// This prevents actual retry delays from running during tests
+vi.mock('../utils/retry.js', () => ({
+  retryWithBackoff: vi.fn(
+    async <T>(
+      fn: () => Promise<T>,
+      options?: { shouldRetryOnContent?: (response: T) => boolean },
+    ) => {
+      // Execute the function once (first attempt)
+      const result = await fn();
+
+      // If shouldRetryOnContent is provided and returns true (indicating retry needed),
+      // simulate what would happen after exhausting retries
+      if (options?.shouldRetryOnContent?.(result)) {
+        throw new Error('Retry attempts exhausted');
+      }
+
+      return result;
+    },
+  ),
+}));
+
 describe('BaseLLMClient', () => {
   let mockContentGenerator: ContentGenerator;
   let baseLlmClient: BaseLLMClient;
@@ -129,7 +151,7 @@ describe('BaseLLMClient', () => {
           prompt: 'Generate data',
           model: 'gemini-pro',
         }),
-      ).rejects.toThrow('Failed to generate JSON content: API Error');
+      ).rejects.toThrow('Failed to generate content: API Error');
     });
 
     it('should handle empty response', async () => {
@@ -153,7 +175,7 @@ describe('BaseLLMClient', () => {
           prompt: 'Generate data',
           model: 'gemini-pro',
         }),
-      ).rejects.toThrow('API returned an empty response');
+      ).rejects.toThrow('Failed to generate content');
     });
 
     it('should handle invalid JSON in response', async () => {
@@ -177,7 +199,7 @@ describe('BaseLLMClient', () => {
           prompt: 'Generate data',
           model: 'gemini-pro',
         }),
-      ).rejects.toThrow('Failed to parse API response as JSON');
+      ).rejects.toThrow('Failed to generate content');
     });
 
     it('should support custom temperature', async () => {
@@ -335,6 +357,105 @@ describe('BaseLLMClient', () => {
       const callArgs = vi.mocked(mockContentGenerator.countTokens).mock
         .calls[0][0] as CountTokensParameters;
       expect(callArgs.contents).toHaveLength(2);
+    });
+  });
+
+  describe('generateContent', () => {
+    it('should call generateContent with correct parameters', async () => {
+      const mockResponse: GenerateContentResponse = {
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [{ text: 'This is the content.' }],
+            },
+          },
+        ],
+      };
+
+      vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
+        mockResponse,
+      );
+
+      const abortController = new AbortController();
+      const options = {
+        model: 'test-model',
+        contents: [{ role: 'user', parts: [{ text: 'Give me content.' }] }],
+        abortSignal: abortController.signal,
+        promptId: 'content-prompt-id',
+      } as const;
+
+      const result = await baseLlmClient.generateContent(options);
+
+      expect(result).toBe(mockResponse);
+
+      // Validate the parameters passed to the underlying generator
+      expect(mockContentGenerator.generateContent).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(mockContentGenerator.generateContent).mock
+        .calls[0][0] as GenerateContentParameters;
+      expect(callArgs.model).toBe('test-model');
+      expect(callArgs.contents).toEqual(options.contents);
+      expect(callArgs.config?.temperature).toBe(0);
+      expect(callArgs.config?.topP).toBe(1);
+    });
+
+    it('should handle empty response', async () => {
+      const mockResponse: GenerateContentResponse = {
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [],
+            },
+          },
+        ],
+      };
+
+      vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
+        mockResponse,
+      );
+
+      const abortController = new AbortController();
+      const options = {
+        model: 'test-model',
+        contents: [{ role: 'user', parts: [{ text: 'Give me content.' }] }],
+        abortSignal: abortController.signal,
+        promptId: 'content-prompt-id',
+      } as const;
+
+      await expect(baseLlmClient.generateContent(options)).rejects.toThrow(
+        'Failed to generate content',
+      );
+    });
+
+    it('should support system instruction', async () => {
+      const mockResponse: GenerateContentResponse = {
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [{ text: 'Response with instruction.' }],
+            },
+          },
+        ],
+      };
+
+      vi.mocked(mockContentGenerator.generateContent).mockResolvedValue(
+        mockResponse,
+      );
+
+      const abortController = new AbortController();
+      await baseLlmClient.generateContent({
+        model: 'test-model',
+        contents: [{ role: 'user', parts: [{ text: 'Query' }] }],
+        systemInstruction: 'Be helpful',
+        abortSignal: abortController.signal,
+        promptId: 'test-id',
+      });
+
+      const callArgs = vi.mocked(mockContentGenerator.generateContent).mock
+        .calls[0][0] as GenerateContentParameters;
+      expect(callArgs.config?.systemInstruction).toBe('Be helpful');
     });
   });
 

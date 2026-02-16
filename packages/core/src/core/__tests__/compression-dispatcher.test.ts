@@ -188,7 +188,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
         msg.blocks.some(
           (b) =>
             b.type === 'text' &&
-            b.text === 'Got it. Thanks for the additional context!',
+            b.text === 'Understood. Continuing with the current task.',
         ),
       );
       expect(hasAck).toBe(false);
@@ -228,7 +228,7 @@ describe('Compression Dispatcher Integration (P13)', () => {
         msg.blocks.some(
           (b) =>
             b.type === 'text' &&
-            b.text === 'Got it. Thanks for the additional context!',
+            b.text === 'Understood. Continuing with the current task.',
         ),
       );
       expect(hasAck).toBe(true);

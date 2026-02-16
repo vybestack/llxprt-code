@@ -41,6 +41,10 @@ describe('extensionsCommand', () => {
 
   describe('list', () => {
     it('should add an EXTENSIONS_LIST item to the UI', async () => {
+      // Set up non-empty extensions list to avoid early return with INFO message
+      mockGetExtensions.mockReturnValue([
+        { name: 'test-ext', version: '1.0.0' },
+      ]);
       if (!extensionsCommand.action) throw new Error('Action not defined');
       await extensionsCommand.action(mockContext, '');
 
@@ -48,6 +52,20 @@ describe('extensionsCommand', () => {
         {
           type: MessageType.EXTENSIONS_LIST,
           extensions: expect.any(Array),
+        },
+        expect.any(Number),
+      );
+    });
+
+    it('should show a message if no extensions are installed', async () => {
+      mockGetExtensions.mockReturnValue([]);
+      if (!extensionsCommand.action) throw new Error('Action not defined');
+      await extensionsCommand.action(mockContext, '');
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: 'No extensions installed. Run `/extensions explore` to check out the gallery.',
         },
         expect.any(Number),
       );
@@ -75,6 +93,10 @@ describe('extensionsCommand', () => {
     });
 
     it('should inform user if there are no extensions to update with --all', async () => {
+      // Set up extensions so we get past the "no extensions installed" check
+      mockGetExtensions.mockReturnValue([
+        { name: 'ext-one', version: '1.0.0' },
+      ]);
       mockDispatchExtensionState.mockImplementationOnce(
         (action: ExtensionUpdateAction) => {
           if (action.type === 'SCHEDULE_UPDATE') {
@@ -94,6 +116,11 @@ describe('extensionsCommand', () => {
     });
 
     it('should call setPendingItem and addItem in a finally block on success', async () => {
+      // Set up extensions so we get past the "no extensions installed" check
+      mockGetExtensions.mockReturnValue([
+        { name: 'ext-one', version: '1.0.0' },
+        { name: 'ext-two', version: '2.0.0' },
+      ]);
       mockDispatchExtensionState.mockImplementationOnce(
         (action: ExtensionUpdateAction) => {
           if (action.type === 'SCHEDULE_UPDATE') {
@@ -128,6 +155,10 @@ describe('extensionsCommand', () => {
     });
 
     it('should call setPendingItem and addItem in a finally block on failure', async () => {
+      // Set up extensions so we get past the "no extensions installed" check
+      mockGetExtensions.mockReturnValue([
+        { name: 'ext-one', version: '1.0.0' },
+      ]);
       mockDispatchExtensionState.mockImplementationOnce((_) => {
         throw new Error('Something went wrong');
       });
@@ -154,6 +185,10 @@ describe('extensionsCommand', () => {
     });
 
     it('should update a single extension by name', async () => {
+      // Set up extensions so we get past the "no extensions installed" check
+      mockGetExtensions.mockReturnValue([
+        { name: 'ext-one', version: '1.0.0' },
+      ]);
       mockDispatchExtensionState.mockImplementationOnce(
         (action: ExtensionUpdateAction) => {
           if (action.type === 'SCHEDULE_UPDATE') {
@@ -179,6 +214,11 @@ describe('extensionsCommand', () => {
     });
 
     it('should update multiple extensions by name', async () => {
+      // Set up extensions so we get past the "no extensions installed" check
+      mockGetExtensions.mockReturnValue([
+        { name: 'ext-one', version: '1.0.0' },
+        { name: 'ext-two', version: '1.0.0' },
+      ]);
       mockDispatchExtensionState.mockImplementationOnce(
         (action: ExtensionUpdateAction) => {
           if (action.type === 'SCHEDULE_UPDATE') {
@@ -215,6 +255,19 @@ describe('extensionsCommand', () => {
         {
           type: MessageType.EXTENSIONS_LIST,
           extensions: expect.any(Array),
+        },
+        expect.any(Number),
+      );
+    });
+
+    it('should show a message if no extensions are installed', async () => {
+      mockGetExtensions.mockReturnValue([]);
+      await updateAction(mockContext, 'ext-one');
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: 'No extensions installed. Run `/extensions explore` to check out the gallery.',
         },
         expect.any(Number),
       );

@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   Config,
-  MultiProviderTokenStore,
+  KeyringTokenStore,
   ProviderManager,
   SettingsService,
   clearActiveProviderRuntimeContext,
@@ -55,7 +55,7 @@ function loadSettingsForIsolatedRuntime(): LoadedSettings | undefined {
   return undefined;
 }
 
-let sharedTokenStore: MultiProviderTokenStore | null = null;
+let sharedTokenStore: KeyringTokenStore | null = null;
 let activationBindings: RuntimeActivationBindings | null = null;
 let runtimeCounter = 0;
 
@@ -260,7 +260,7 @@ export function createIsolatedRuntimeContext(
   const resolvedSettingsService =
     config.getSettingsService() ?? settingsService;
   const tokenStore =
-    sharedTokenStore ?? (sharedTokenStore = new MultiProviderTokenStore()); // Step 1 (multi-runtime-baseline.md line 2) keeps token storage shared.
+    sharedTokenStore ?? (sharedTokenStore = new KeyringTokenStore()); // Step 1 (multi-runtime-baseline.md line 2) keeps token storage shared.
   const oauthManager =
     options.oauthManager ??
     new OAuthManager(tokenStore, loadSettingsForIsolatedRuntime());

@@ -11,6 +11,10 @@ import * as fsPromises from 'node:fs/promises';
 
 vi.mock('node:fs/promises');
 
+vi.mock('../utils.js', () => ({
+  exitCli: vi.fn(),
+}));
+
 const mockedFs = vi.mocked(fsPromises);
 
 describe('extensions new command', () => {

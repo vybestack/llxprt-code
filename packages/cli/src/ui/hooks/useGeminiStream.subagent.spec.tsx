@@ -226,7 +226,8 @@ describe('useGeminiStream subagent isolation', () => {
       mockScheduleToolCalls,
       mockMarkToolsAsSubmitted,
       mockCancelAllToolCalls,
-    ]);
+      0,
+    ] as const);
 
     mockStartChat.mockClear().mockResolvedValue({
       sendMessageStream: mockSendMessageStream,
@@ -249,7 +250,13 @@ describe('useGeminiStream subagent isolation', () => {
 
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
       capturedOnComplete = onComplete as typeof capturedOnComplete;
-      return [[], mockScheduleToolCalls, mockMarkToolsAsSubmitted, vi.fn()];
+      return [
+        [],
+        mockScheduleToolCalls,
+        mockMarkToolsAsSubmitted,
+        vi.fn(),
+        0,
+      ] as const;
     });
 
     renderHook(() =>

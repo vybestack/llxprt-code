@@ -30,7 +30,7 @@ import {
 } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
 import { OAuthManager } from '../auth/oauth-manager.js';
-import { MultiProviderTokenStore } from '../auth/types.js';
+import { KeyringTokenStore } from '../auth/types.js';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
 import { HistoryItemWithoutId } from '../ui/types.js';
 import { IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
@@ -239,7 +239,7 @@ export function createProviderManager(
   };
   const manager = new ManagerCtor(context);
 
-  const tokenStore = new MultiProviderTokenStore();
+  const tokenStore = new KeyringTokenStore();
   const oauthManager = new OAuthManager(tokenStore, loadedSettings);
 
   const { config, allowBrowserEnvironment = false, addItem } = options;

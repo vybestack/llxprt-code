@@ -6,7 +6,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { expandTildePath } from './paths.js';
+import { escapePath, expandTildePath, unescapePath } from './paths.js';
 
 const MAX_SUGGESTIONS = 50;
 
@@ -82,8 +82,9 @@ export async function getPathSuggestions(
   if (partialPath.length === 0) return [];
 
   try {
-    // Normalize bare ~ to ~/ so dirname/basename split works correctly
-    const normalizedPath = partialPath === '~' ? '~/' : partialPath;
+    const unescapedPartial = unescapePath(partialPath);
+
+    const normalizedPath = unescapedPartial === '~' ? '~/' : unescapedPartial;
     const expandedPath = expandTildePath(normalizedPath);
 
     let dirPath: string;
@@ -112,7 +113,6 @@ export async function getPathSuggestions(
       return entry.name.toLowerCase().startsWith(lowerPrefix);
     });
 
-    // Resolve symlinks to determine actual directory status
     const withDirInfo = await Promise.all(
       filtered.map(async (entry) => ({
         entry,
@@ -128,22 +128,27 @@ export async function getPathSuggestions(
 
     const limited = withDirInfo.slice(0, MAX_SUGGESTIONS);
 
+    const escapedNormalizedPath = partialPath === '~' ? '~/' : partialPath;
+
     return limited.map(({ entry, isDir }) => {
       const suffix = isDir ? '/' : '';
+      const escapedName = escapePath(entry.name);
 
       let basePath: string;
       if (partialPath.startsWith('~/') || partialPath === '~') {
         const homeDir = expandTildePath('~');
         const fullEntryPath = path.join(dirPath, entry.name);
-        basePath = '~' + fullEntryPath.slice(homeDir.length);
-      } else if (normalizedPath.endsWith('/')) {
-        basePath = normalizedPath + entry.name;
+        const relativeFromHome = fullEntryPath.slice(homeDir.length);
+        const segments = relativeFromHome.split('/').filter(Boolean);
+        basePath = '~/' + segments.map((s) => escapePath(s)).join('/');
+      } else if (escapedNormalizedPath.endsWith('/')) {
+        basePath = escapedNormalizedPath + escapedName;
       } else {
         const dirOfPartial = partialPath.substring(
           0,
           partialPath.lastIndexOf('/') + 1,
         );
-        basePath = dirOfPartial + entry.name;
+        basePath = dirOfPartial + escapedName;
       }
 
       const value = basePath + suffix;

@@ -15,7 +15,7 @@ import {
   type Mock,
 } from 'vitest';
 import { OAuthCredentialStorage } from './oauth-credential-storage.js';
-import { HybridTokenStorage } from '../mcp/token-storage/hybrid-token-storage.js';
+import { KeychainTokenStorage } from '../mcp/token-storage/keychain-token-storage.js';
 import type { OAuthCredentials } from '../mcp/token-storage/types.js';
 import { Storage } from '../config/storage.js';
 import { coreEvents } from '../utils/events.js';
@@ -29,7 +29,7 @@ vi.mock('node:os', () => ({
 }));
 
 // Mock external dependencies
-vi.mock('../mcp/token-storage/hybrid-token-storage.js');
+vi.mock('../mcp/token-storage/keychain-token-storage.js');
 vi.mock('node:fs', () => ({
   promises: {
     readFile: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock('../utils/events.js', () => ({
 }));
 
 describe('OAuthCredentialStorage', () => {
-  let storage: HybridTokenStorage;
+  let storage: KeychainTokenStorage;
   let oauthStorage: OAuthCredentialStorage;
 
   const mockCredentials: Credentials = {
@@ -75,7 +75,7 @@ describe('OAuthCredentialStorage', () => {
   };
 
   beforeEach(() => {
-    storage = new HybridTokenStorage('');
+    storage = new KeychainTokenStorage('');
     oauthStorage = new OAuthCredentialStorage(storage);
 
     vi.spyOn(storage, 'getCredentials').mockResolvedValue(null);
@@ -94,7 +94,7 @@ describe('OAuthCredentialStorage', () => {
   });
 
   describe('loadCredentials', () => {
-    it('should load credentials from HybridTokenStorage if available', async () => {
+    it('should load credentials from KeychainTokenStorage if available', async () => {
       vi.spyOn(storage, 'getCredentials').mockResolvedValue(mockMcpCredentials);
 
       const result = await oauthStorage.loadCredentials();
@@ -103,7 +103,7 @@ describe('OAuthCredentialStorage', () => {
       expect(result).toEqual(mockCredentials);
     });
 
-    it('should fallback to migrateFromFileStorage if no credentials in HybridTokenStorage', async () => {
+    it('should fallback to migrateFromFileStorage if no credentials in KeychainTokenStorage', async () => {
       vi.spyOn(storage, 'getCredentials').mockResolvedValue(null);
       vi.spyOn(fs, 'readFile').mockResolvedValue(
         JSON.stringify(mockCredentials),
@@ -154,11 +154,11 @@ describe('OAuthCredentialStorage', () => {
     });
 
     it('should throw an error if loading fails', async () => {
-      const mockError = new Error('HybridTokenStorage error');
+      const mockError = new Error('KeychainTokenStorage error');
       vi.spyOn(storage, 'getCredentials').mockRejectedValue(mockError);
 
       await expect(oauthStorage.loadCredentials()).rejects.toThrow(
-        'HybridTokenStorage error',
+        'KeychainTokenStorage error',
       );
       expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
         'error',
@@ -197,7 +197,7 @@ describe('OAuthCredentialStorage', () => {
   });
 
   describe('saveCredentials', () => {
-    it('should save credentials to HybridTokenStorage', async () => {
+    it('should save credentials to KeychainTokenStorage', async () => {
       await oauthStorage.saveCredentials(mockCredentials);
 
       expect(storage.setCredentials).toHaveBeenCalledWith(mockMcpCredentials);
@@ -217,7 +217,7 @@ describe('OAuthCredentialStorage', () => {
   });
 
   describe('clearCredentials', () => {
-    it('should delete credentials from HybridTokenStorage', async () => {
+    it('should delete credentials from KeychainTokenStorage', async () => {
       await oauthStorage.clearCredentials();
 
       expect(storage.deleteCredentials).toHaveBeenCalledWith('main-account');
@@ -236,7 +236,7 @@ describe('OAuthCredentialStorage', () => {
       await expect(oauthStorage.clearCredentials()).resolves.toBeUndefined();
     });
 
-    it('should throw an error if clearing from HybridTokenStorage fails', async () => {
+    it('should throw an error if clearing from KeychainTokenStorage fails', async () => {
       const mockError = new Error('Deletion error');
       vi.spyOn(storage, 'deleteCredentials').mockRejectedValue(mockError);
 

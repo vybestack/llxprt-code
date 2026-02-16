@@ -557,7 +557,10 @@ export class RetryOrchestrator implements IProvider {
   private getBucketFailoverHandler(
     options: GenerateChatOptions,
   ): BucketFailoverHandler | undefined {
-    return options.runtime?.config?.getBucketFailoverHandler?.();
+    return (
+      options.runtime?.config?.getBucketFailoverHandler?.() ??
+      options.config?.getBucketFailoverHandler?.()
+    );
   }
 
   /**

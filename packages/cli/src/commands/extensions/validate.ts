@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import semver from 'semver';
 import { getErrorMessage } from '../../utils/errors.js';
 import { loadExtensionConfig, validateName } from '../../config/extension.js';
+import { exitCli } from '../utils.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:extensions:validate');
 
@@ -24,7 +25,7 @@ export async function handleValidate(args: ValidateArgs) {
     debugLogger.log(`Extension ${args.path} has been successfully validated.`);
   } catch (error) {
     debugLogger.error(getErrorMessage(error));
-    process.exit(1);
+    await exitCli(1);
   }
 }
 
@@ -38,7 +39,7 @@ async function validateExtension(args: ValidateArgs) {
     validateName(extensionName);
   } catch (e) {
     debugLogger.error(getErrorMessage(e));
-    process.exit(1);
+    await exitCli(1);
   }
 
   const extensionConfig = await loadExtensionConfig({
@@ -111,5 +112,6 @@ export const validateCommand: CommandModule = {
     await handleValidate({
       path: args['path'] as string,
     });
+    await exitCli();
   },
 };
