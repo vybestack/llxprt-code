@@ -1567,6 +1567,8 @@ export class GeminiClient {
 
       // Reset flags for this iteration (hadToolCallsThisTurn persists across duplicate todo retries)
       let todoPauseSeen = false;
+      let hadThinkingThisIteration = false;
+      let hadContentThisIteration = false;
       const deferredEvents: ServerGeminiStreamEvent[] = [];
       const resultStream = turn.run(request, signal);
 
@@ -1588,6 +1590,13 @@ export class GeminiClient {
           if (this.isTodoPauseResponse(event.value)) {
             todoPauseSeen = true;
           }
+        }
+
+        if (event.type === GeminiEventType.Thought) {
+          hadThinkingThisIteration = true;
+        }
+        if (event.type === GeminiEventType.Content) {
+          hadContentThisIteration = true;
         }
 
         // Handle duplicate todo writes
@@ -1660,6 +1669,30 @@ export class GeminiClient {
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
         return turn;
+      }
+
+      // Issue #1400: If model generated thinking but no content or tool calls,
+      // auto-continue so the model proceeds with its planned actions.
+      // Deferred events (Finished, etc.) from this iteration are intentionally
+      // dropped — the retry supersedes this turn.
+      if (
+        hadThinkingThisIteration &&
+        !hadContentThisIteration &&
+        !hadToolCallsThisTurn
+      ) {
+        retryCount++;
+        if (retryCount >= MAX_RETRIES) {
+          for (const deferred of deferredEvents) {
+            yield deferred;
+          }
+          return turn;
+        }
+        baseRequest = [
+          {
+            text: 'System: Continue and take the next concrete action now. Use tools if needed.',
+          } as Part,
+        ];
+        continue;
       }
 
       // No tool work detected - check todo/pause state
