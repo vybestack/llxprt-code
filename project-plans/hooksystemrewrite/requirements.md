@@ -18,14 +18,10 @@ one of five sentence templates:
 
 ### Errata
 
-- **overview.md config path:** The companion design document `overview.md`
-  (§6.1, §7.1, §9) still references `tools.enableHooks`. The correct
-  config path is `enableHooks` (top-level, no `tools.` prefix), as
-  verified in `config.ts` which defines `enableHooks?: boolean` and
-  `getEnableHooks(): boolean`. Requirements in this document use the
-  correct path. The overview.md path is a known erratum pending a
-  separate documentation fix.
-<!-- R3-01: Added erratum note for overview.md config path discrepancy. -->
+- **overview.md config path:** Resolved. `overview.md` now uses `enableHooks`
+  (top-level, no `tools.` prefix), consistent with `config.ts` (`enableHooks?: boolean`
+  and `getEnableHooks(): boolean`).
+<!-- R3-01: Updated after overview.md config path remediation. -->
 
 ### Review Remediation Log
 
@@ -1648,7 +1644,7 @@ Each is annotated with the review finding that prompted it.
 
 | Review ID | Issue | Action | Requirements Affected |
 |---|---|---|---|
-| R3-01 | overview.md still says `tools.enableHooks` | Added erratum note in preamble documenting that overview.md §6.1, §7.1, §9 use incorrect config path. Requirements use the correct `enableHooks` path. | Preamble (Errata section) |
+| R3-01 | overview.md used `tools.enableHooks` | Remediated overview.md to use top-level `enableHooks`, and updated errata note to reflect resolution. | Preamble (Errata section) |
 | R3-02 | HOOK-183 invents `blocked: true` on ToolResult | Fixed HOOK-183 — removed invented `blocked` property. Per tech spec §5.1, callers detect block via `beforeOutput?.isBlockingDecision()` before calling `executeFn()`, and blocked ToolResult has reason in `llmContent`. | HOOK-183 |
 | R3-03 | HOOK-070 selectively documents null case, omits exit code 2 | Fixed HOOK-070 to explicitly mention exit code 2, exit code 1, and all other non-zero codes producing `success: false`. Cross-referenced HOOK-160/213 for success vs policy distinction. | HOOK-070 |
 | R3-04 | HOOK-109 and HOOK-186 are near-duplicates | Merged HOOK-186 into HOOK-109. HOOK-186 retired with merge note. | HOOK-109, HOOK-186 |

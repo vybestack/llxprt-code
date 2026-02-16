@@ -74,7 +74,7 @@ immediately.
 
 All examples assume you have a `.llxprt/settings.json` in your project root
 (or `~/.llxprt/settings.json` for user-wide hooks). Every example requires
-`tools.enableHooks` to be `true`.
+`enableHooks` to be `true`.
 
 Hook scripts must be executable:
 ```bash
@@ -126,7 +126,7 @@ chance to inspect and block the content.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeTool": [
       {
@@ -292,7 +292,7 @@ blocks known-dangerous patterns while allowing normal development commands.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeTool": [
       {
@@ -453,7 +453,7 @@ hard line: the AI cannot touch protected files, period.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeTool": [
       {
@@ -615,7 +615,7 @@ displayed or processed.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "AfterModel": [
       {
@@ -802,7 +802,7 @@ that was just written.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "AfterTool": [
       {
@@ -943,7 +943,7 @@ changed code.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "AfterTool": [
       {
@@ -1113,7 +1113,7 @@ to snapshot the current state.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeTool": [
       {
@@ -1235,7 +1235,7 @@ write is blocked with a message telling it to create the test first.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeTool": [
       {
@@ -1419,7 +1419,7 @@ request's messages.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeModel": [
       {
@@ -1562,7 +1562,7 @@ allowing us to restrict the list.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeToolSelection": [
       {
@@ -1689,7 +1689,7 @@ block.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeModel": [
       {
@@ -1850,7 +1850,7 @@ two-hook recipe.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeModel": [
       {
@@ -2102,7 +2102,7 @@ input/output.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "AfterTool": [
       {
@@ -2236,7 +2236,7 @@ minutes.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "AfterTool": [
       {
@@ -2404,7 +2404,7 @@ out-of-scope file operations.
 ```jsonc
 // .llxprt/settings.json (in your CI project config)
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeTool": [
       {
@@ -2599,7 +2599,7 @@ or errors, allow the operation (fail-open) and log a warning.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeTool": [
       {
@@ -2753,7 +2753,7 @@ that exceed the budget.
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "BeforeModel": [
       {
@@ -2930,7 +2930,7 @@ and only modifies it when safe to do so (text-only responses).
 ```jsonc
 // .llxprt/settings.json
 {
-  "tools": { "enableHooks": true },
+  "enableHooks": true,
   "hooks": {
     "AfterModel": [
       {
