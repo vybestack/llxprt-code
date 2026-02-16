@@ -73,6 +73,7 @@ export * from './core/geminiRequest.js';
 export * from './core/coreToolScheduler.js';
 export * from './core/nonInteractiveToolExecutor.js';
 export type { SubagentSchedulerFactory } from './core/subagentScheduler.js';
+export { buildContinuationDirective } from './core/compression/utils.js';
 
 export * from './code_assist/codeAssist.js';
 export * from './code_assist/oauth2.js';
@@ -103,6 +104,8 @@ export * from './utils/formatters.js';
 export * from './utils/sanitization.js';
 export * from './utils/unicodeUtils.js';
 export * from './utils/generateContentResponseUtilities.js';
+export * from './utils/stdio.js';
+export * from './utils/terminal.js';
 export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';
 export * from './utils/errorParsing.js';
@@ -126,6 +129,7 @@ export {
   type OAuthTokenRequestMetadata,
 } from './auth/precedence.js';
 export * from './auth/token-store.js';
+export { KeyringTokenStore } from './auth/keyring-token-store.js';
 export * from './auth/types.js';
 export * from './auth/qwen-device-flow.js';
 export * from './auth/anthropic-device-flow.js';
@@ -195,6 +199,21 @@ export * from './tools/todo-events.js';
 export * from './tools/list-subagents.js';
 export * from './tools/task.js';
 export * from './tools/tool-key-storage.js';
+export {
+  ProviderKeyStorage,
+  getProviderKeyStorage,
+  resetProviderKeyStorage,
+  validateKeyName,
+  KEY_NAME_REGEX,
+} from './storage/provider-key-storage.js';
+export {
+  SecureStore,
+  SecureStoreError,
+  createDefaultKeyringAdapter,
+  type KeyringAdapter,
+  type SecureStoreErrorCode,
+  type SecureStoreOptions,
+} from './storage/secure-store.js';
 export * from './todo/todoFormatter.js';
 
 // MCP OAuth
@@ -419,6 +438,7 @@ export {
   type PersistedUIHistoryItem,
   type PersistedToolCall,
 } from './storage/SessionPersistenceService.js';
+export * from './recording/index.js';
 
 export {
   type SettingCategory,
