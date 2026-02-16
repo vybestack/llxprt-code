@@ -34,7 +34,6 @@ import {
   SHELL_TOOL_NAMES,
   isRipgrepAvailable,
   normalizeShellReplacement,
-  type ConfigParameters,
   type GeminiCLIExtension,
   type Profile,
 } from '@vybestack/llxprt-code-core';
@@ -1403,7 +1402,6 @@ export async function loadCliConfig(
       effectiveSettings.ui?.usageStatisticsEnabled ?? true,
     // Git-aware file filtering settings - fix from upstream: pass fileFiltering correctly
     fileFiltering,
-    lsp: effectiveSettings.lsp as ConfigParameters['lsp'],
     checkpointing:
       argv.checkpointing || effectiveSettings.checkpointing?.enabled,
     dumpOnError: argv.dumponerror || false,

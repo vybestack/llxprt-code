@@ -105,6 +105,7 @@ import {
   getOrCreateScheduler as _getOrCreateScheduler,
   disposeScheduler as _disposeScheduler,
   type SchedulerCallbacks,
+  type SchedulerOptions,
 } from './schedulerSingleton.js';
 
 // Re-export OAuth config type
@@ -2300,8 +2301,9 @@ export class Config {
   async getOrCreateScheduler(
     sessionId: string,
     callbacks: SchedulerCallbacks,
+    options?: SchedulerOptions,
   ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
-    return _getOrCreateScheduler(this, sessionId, callbacks);
+    return _getOrCreateScheduler(this, sessionId, callbacks, options);
   }
 
   disposeScheduler(sessionId: string): void {
@@ -2606,8 +2608,8 @@ export class Config {
   }
 }
 
-// Re-export SchedulerCallbacks for external use
-export { type SchedulerCallbacks };
+// Re-export scheduler types for external use
+export { type SchedulerCallbacks, type SchedulerOptions };
 
 // Export model constants for use in CLI
 export { DEFAULT_GEMINI_FLASH_MODEL };

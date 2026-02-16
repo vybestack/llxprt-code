@@ -15,6 +15,7 @@ import {
   Config,
   ApprovalMode,
   type SchedulerCallbacks,
+  type SchedulerOptions,
 } from '../config/config.js';
 import {
   type ToolCallRequestInfo,
@@ -1455,13 +1456,9 @@ export class SubAgentScope {
   private createSchedulerConfig(options?: { interactive?: boolean }): Config {
     const isInteractive = options?.interactive ?? false;
 
-    const whitelist =
-      !isInteractive && this.toolConfig
-        ? this.toolConfig.tools.filter(
-            (entry): entry is string => typeof entry === 'string',
-          )
-        : [];
-
+    // Get ephemeral settings from toolExecutorContext, which already has
+    // tools.allowed set correctly by createToolExecutionConfig.
+    // This avoids duplicating whitelist logic here.
     const getEphemeralSettings =
       typeof this.toolExecutorContext.getEphemeralSettings === 'function'
         ? () => ({
@@ -1485,15 +1482,22 @@ export class SubAgentScope {
         ? () => this.toolExecutorContext.getTelemetryLogPromptsEnabled()
         : () => this.config.getTelemetryLogPromptsEnabled();
 
-    const allowedTools = isInteractive
-      ? typeof this.config.getAllowedTools === 'function'
+    // Read allowed tools from ephemeral settings (tools.allowed) which is the
+    // canonical source set by createToolExecutionConfig. This ensures consistent
+    // behavior with the governance path (buildToolGovernance reads from ephemerals).
+    const getAllowedTools = (): string[] | undefined => {
+      const ephemerals = getEphemeralSettings();
+      const allowed = ephemerals['tools.allowed'];
+      if (Array.isArray(allowed)) {
+        return allowed.filter(
+          (entry): entry is string => typeof entry === 'string',
+        );
+      }
+      // Fall back to parent config's allowed tools
+      return typeof this.config.getAllowedTools === 'function'
         ? this.config.getAllowedTools()
-        : undefined
-      : whitelist.length > 0
-        ? whitelist
-        : typeof this.config.getAllowedTools === 'function'
-          ? this.config.getAllowedTools()
-          : undefined;
+        : undefined;
+    };
 
     return {
       getToolRegistry: () => this.toolExecutorContext.getToolRegistry(),
@@ -1502,7 +1506,7 @@ export class SubAgentScope {
       getEphemeralSetting,
       getExcludeTools,
       getTelemetryLogPromptsEnabled,
-      getAllowedTools: () => allowedTools,
+      getAllowedTools,
       getApprovalMode: () =>
         typeof this.config.getApprovalMode === 'function'
           ? this.config.getApprovalMode()
@@ -1512,7 +1516,12 @@ export class SubAgentScope {
       getOrCreateScheduler: (
         sessionId: string,
         callbacks: SchedulerCallbacks,
-      ) => this.config.getOrCreateScheduler(sessionId, callbacks),
+        schedulerOptions?: SchedulerOptions,
+      ) =>
+        this.config.getOrCreateScheduler(sessionId, callbacks, {
+          ...schedulerOptions,
+          interactiveMode: isInteractive,
+        }),
       disposeScheduler: (sessionId: string) => {
         this.config.disposeScheduler(sessionId);
       },

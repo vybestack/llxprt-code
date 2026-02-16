@@ -39,6 +39,8 @@ export type ToolExecutionConfig = Pick<
       | 'getApprovalMode'
       | 'getMessageBus'
       | 'getPolicyEngine'
+      | 'getOrCreateScheduler'
+      | 'disposeScheduler'
     >
   >;
 
@@ -46,7 +48,8 @@ export type ToolExecutionConfig = Pick<
  * Executes a single tool call non-interactively by leveraging the CoreToolScheduler.
  *
  * This is a thin wrapper that:
- * 1. Creates a temporary CoreToolScheduler with a non-interactive PolicyEngine
+ * 1. Uses the scheduler singleton (via config.getOrCreateScheduler) when available,
+ *    or creates a temporary CoreToolScheduler with a non-interactive PolicyEngine
  * 2. Schedules the tool call
  * 3. Returns the completed result
  *
@@ -54,7 +57,11 @@ export type ToolExecutionConfig = Pick<
  * - Tools that require user approval (ASK_USER) are automatically rejected as policy violations
  *   (handled by PolicyEngine with nonInteractive: true)
  * - No live output updates are provided
- * - The scheduler is disposed after execution
+ * - The scheduler uses toolContextInteractiveMode: false
+ *
+ * When using the singleton scheduler path (config.getOrCreateScheduler available):
+ * - Avoids MessageBus subscription spam from repeated scheduler creation
+ * - Proper refcount-based lifecycle management
  *
  * Note: Emoji filtering is handled by the individual tools (edit.ts, write-file.ts)
  * so it is not duplicated here.
@@ -80,22 +87,50 @@ export async function executeToolCall(
     }
   }
 
-  const schedulerConfig = await createSchedulerConfigForNonInteractive(config);
+  // Use singleton scheduler path if available, otherwise fall back to direct creation
+  const useSingletonPath =
+    typeof config.getOrCreateScheduler === 'function' &&
+    typeof config.disposeScheduler === 'function';
 
   let completionResolver: ((calls: CompletedToolCall[]) => void) | null = null;
   const completionPromise = new Promise<CompletedToolCall[]>((resolve) => {
     completionResolver = resolve;
   });
 
-  const scheduler = new CoreToolScheduler({
-    config: schedulerConfig as unknown as Config,
-    toolContextInteractiveMode: false,
-    getPreferredEditor: () => undefined,
-    onEditorClose: () => {},
-    onAllToolCallsComplete: async (completedToolCalls) => {
-      completionResolver?.(completedToolCalls);
-    },
-  });
+  const sessionId = config.getSessionId();
+  let scheduler: CoreToolScheduler;
+  let disposeScheduler: () => void;
+
+  if (useSingletonPath) {
+    // Use the singleton scheduler factory with non-interactive mode
+    scheduler = await config.getOrCreateScheduler!(
+      sessionId,
+      {
+        getPreferredEditor: () => undefined,
+        onEditorClose: () => {},
+        onAllToolCallsComplete: async (completedToolCalls) => {
+          completionResolver?.(completedToolCalls);
+        },
+      },
+      { interactiveMode: false },
+    );
+    disposeScheduler = () => config.disposeScheduler!(sessionId);
+  } else {
+    // Fall back to direct scheduler creation for backward compatibility
+    // Defer schedulerConfig creation to this branch only (avoid async work when unused)
+    const schedulerConfig =
+      await createSchedulerConfigForNonInteractive(config);
+    scheduler = new CoreToolScheduler({
+      config: schedulerConfig as unknown as Config,
+      toolContextInteractiveMode: false,
+      getPreferredEditor: () => undefined,
+      onEditorClose: () => {},
+      onAllToolCallsComplete: async (completedToolCalls) => {
+        completionResolver?.(completedToolCalls);
+      },
+    });
+    disposeScheduler = () => scheduler.dispose();
+  }
 
   try {
     const effectiveSignal = internalAbortController.signal;
@@ -127,7 +162,7 @@ export async function executeToolCall(
     if (internalAbortController.signal.aborted) {
       scheduler.cancelAll();
     }
-    scheduler.dispose();
+    disposeScheduler();
   }
 }
 
