@@ -216,10 +216,10 @@ const TOOL_OUTPUT_MAX_HEIGHT = 10;
 
 /** Approval option labels */
 const APPROVAL_OPTIONS: { label: string; outcome: ToolApprovalOutcome }[] = [
-  { label: '[1] Yes, allow once', outcome: 'allow_once' },
-  { label: '[2] Yes, allow always', outcome: 'allow_always' },
-  { label: '[3] No, suggest changes', outcome: 'suggest_edit' },
-  { label: '[4] No, cancel (esc)', outcome: 'cancel' },
+  { label: 'Yes, allow once', outcome: 'allow_once' },
+  { label: 'Yes, allow always', outcome: 'allow_always' },
+  { label: 'No, suggest changes', outcome: 'suggest_edit' },
+  { label: 'No, cancel (esc)', outcome: 'cancel' },
 ];
 
 interface InlineApprovalProps {
@@ -339,8 +339,7 @@ function renderInlineApproval({
                 );
               }}
             >
-              {isSelected ? '► ' : '  '}
-              {opt.label}
+              {isSelected ? '► ' : '  '}[{idx + 1}] {opt.label}
             </text>
           );
         })}

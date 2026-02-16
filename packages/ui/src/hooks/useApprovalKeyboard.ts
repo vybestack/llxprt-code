@@ -46,6 +46,21 @@ const APPROVAL_OPTIONS: ToolApprovalOutcome[] = [
   'cancel',
 ];
 
+function filterAvailableOptions(
+  canAllowAlways: boolean,
+  canSuggestEdit: boolean,
+): ToolApprovalOutcome[] {
+  return APPROVAL_OPTIONS.filter((option) => {
+    if (option === 'allow_always') {
+      return canAllowAlways;
+    }
+    if (option === 'suggest_edit') {
+      return canSuggestEdit;
+    }
+    return true;
+  });
+}
+
 interface UseApprovalKeyboardOptions {
   /** Whether approval is currently active */
   isActive: boolean;
@@ -125,15 +140,10 @@ export function useApprovalKeyboard(
   }, [selectedIndex]);
 
   // Get available options based on confirmation capabilities
-  const availableOptions = APPROVAL_OPTIONS.filter((option) => {
-    if (option === 'allow_always') {
-      return canAllowAlways;
-    }
-    if (option === 'suggest_edit') {
-      return canSuggestEdit;
-    }
-    return true;
-  });
+  const availableOptions = filterAvailableOptions(
+    canAllowAlways,
+    canSuggestEdit,
+  );
 
   const optionCount = availableOptions.length;
 
@@ -160,15 +170,10 @@ export function useApprovalKeyboard(
 
     const currentCanAllowAlways = canAllowAlwaysRef.current;
     const currentCanSuggestEdit = canSuggestEditRef.current;
-    const currentOptions = APPROVAL_OPTIONS.filter((option) => {
-      if (option === 'allow_always') {
-        return currentCanAllowAlways;
-      }
-      if (option === 'suggest_edit') {
-        return currentCanSuggestEdit;
-      }
-      return true;
-    });
+    const currentOptions = filterAvailableOptions(
+      currentCanAllowAlways,
+      currentCanSuggestEdit,
+    );
     const currentOptionCount = currentOptions.length;
 
     if (currentOptionCount === 0) {
