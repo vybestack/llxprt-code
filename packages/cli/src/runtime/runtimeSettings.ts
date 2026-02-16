@@ -49,6 +49,9 @@ import {
   formatNormalizationFailureMessage,
 } from './messages.js';
 import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-registration.js';
+// @plan:PLAN-20250214-CREDPROXY.P35
+// @requirement:R2.3 - Use factory instead of direct getProviderKeyStorage
+import { createProviderKeyStorage } from '../auth/proxy/credential-store-factory.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,
@@ -2417,12 +2420,13 @@ export async function applyCliArgumentOverrides(
  * Does NOT fall through to lower-precedence auth sources.
  *
  * @plan PLAN-20260211-SECURESTORE.P16
- * @requirement R24.1, R24.2
+ * @plan:PLAN-20250214-CREDPROXY.P35
+ * @requirement R24.1, R24.2, R2.3
  * @pseudocode auth-key-name.md lines 96-119
  */
 async function resolveNamedKey(name: string): Promise<string> {
-  const { getProviderKeyStorage } = await import('@vybestack/llxprt-code-core');
-  const storage = getProviderKeyStorage();
+  // R2.3: Use factory instead of direct getProviderKeyStorage to support proxy mode
+  const storage = createProviderKeyStorage();
 
   let key: string | null;
   try {

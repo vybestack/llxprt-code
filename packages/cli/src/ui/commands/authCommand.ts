@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20250214-CREDPROXY.P33
+ * @requirement R17.4
+ */
+
 import {
   CommandKind,
   SlashCommand,
@@ -12,7 +17,7 @@ import {
   MessageActionReturn,
 } from './types.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
-import { KeyringTokenStore, DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
@@ -23,18 +28,20 @@ import {
   type CompleterFn,
 } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
+import { createTokenStore } from '../../auth/proxy/credential-store-factory.js';
 
 const logger = new DebugLogger('llxprt:ui:auth-command');
 
 /**
  * Get the OAuth manager instance
+ * @plan:PLAN-20250214-CREDPROXY.P33
  */
 function getOAuthManager(): OAuthManager {
   const runtime = getRuntimeApi();
   let oauthManager = runtime.getCliOAuthManager();
 
   if (!oauthManager) {
-    const tokenStore = new KeyringTokenStore();
+    const tokenStore = createTokenStore();
     oauthManager = new OAuthManager(tokenStore);
     oauthManager.registerProvider(new GeminiOAuthProvider());
     oauthManager.registerProvider(new QwenOAuthProvider());
@@ -654,9 +661,10 @@ export const authCommand: SlashCommand = {
     let oauthManager = runtime.getCliOAuthManager();
 
     // If for some reason it doesn't exist yet, create it
+    // @plan:PLAN-20250214-CREDPROXY.P33
     if (!oauthManager) {
       // This should rarely happen, but handle it as a fallback
-      const tokenStore = new KeyringTokenStore();
+      const tokenStore = createTokenStore();
       oauthManager = new OAuthManager(tokenStore, context.services.settings);
 
       // Register OAuth providers

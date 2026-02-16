@@ -133,6 +133,23 @@ export * from './auth/qwen-device-flow.js';
 export * from './auth/anthropic-device-flow.js';
 export * from './auth/codex-device-flow.js';
 export * from './auth/oauth-errors.js';
+// @plan:PLAN-20250214-CREDPROXY.P35 - Token merge utility for shared use
+export {
+  mergeRefreshedToken,
+  type OAuthTokenWithExtras,
+} from './auth/token-merge.js';
+// @plan:PLAN-20250214-CREDPROXY.P33, P35 - Proxy mode credential store classes and utilities
+export { ProxyTokenStore } from './auth/proxy/proxy-token-store.js';
+export { ProxyProviderKeyStorage } from './auth/proxy/proxy-provider-key-storage.js';
+export { ProxySocketClient } from './auth/proxy/proxy-socket-client.js';
+export {
+  FrameDecoder,
+  FrameError,
+  encodeFrame,
+  MAX_FRAME_SIZE,
+  PARTIAL_FRAME_TIMEOUT_MS,
+} from './auth/proxy/framing.js';
+export { sanitizeTokenForProxy } from './auth/token-sanitization.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';

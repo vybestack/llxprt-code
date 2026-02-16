@@ -19,10 +19,10 @@ import {
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   DebugLogger,
-  KeyringTokenStore,
   getProtectedSettingKeys,
 } from '@vybestack/llxprt-code-core';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
+import { createTokenStore } from '../../auth/proxy/credential-store-factory.js';
 
 const profileSuggestionDescription = 'Saved profile';
 
@@ -97,7 +97,8 @@ const bucketCompleter: CompleterFn = withFuzzyFilter(
         return [];
       }
 
-      const tokenStore = new KeyringTokenStore();
+      // @plan:PLAN-20250214-CREDPROXY.P33
+      const tokenStore = createTokenStore();
       const buckets = await tokenStore.listBuckets(provider);
 
       // tokens.tokens format: ["save", "model", "profile-name", "bucket1", "bucket2", ...]
@@ -344,7 +345,8 @@ const saveCommand: SlashCommand = {
           }
 
           // Get token store to check bucket existence
-          const tokenStore = new KeyringTokenStore();
+          // @plan:PLAN-20250214-CREDPROXY.P33
+          const tokenStore = createTokenStore();
           const availableBuckets = await tokenStore.listBuckets(provider);
 
           for (const bucket of bucketArgs) {

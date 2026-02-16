@@ -25,6 +25,11 @@ import { promisify } from 'node:util';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { ConsolePatcher } from '../ui/utils/ConsolePatcher.js';
+import {
+  createAndStartProxy,
+  stopProxy,
+  getProxySocketPath,
+} from '../auth/proxy/sandbox-proxy-lifecycle.js';
 
 const execAsync = promisify(exec);
 
@@ -1022,7 +1027,13 @@ export async function start_sandbox(
     mountGitConfigFiles(args, os.homedir(), '/home/node');
 
     // mount os.tmpdir() as os.tmpdir() inside container
-    args.push('--volume', `${os.tmpdir()}:${getContainerPath(os.tmpdir())}`);
+    // @plan:PLAN-20250214-CREDPROXY.P34 R3.4: Use realpath to resolve symlinks
+    // (e.g., /var -> /private/var on macOS) so credential socket paths match
+    const resolvedTmpdir = fs.realpathSync(os.tmpdir());
+    args.push(
+      '--volume',
+      `${resolvedTmpdir}:${getContainerPath(resolvedTmpdir)}`,
+    );
 
     // mount gcloud config directory if it exists
     const gcloudConfigDir = path.join(os.homedir(), '.config', 'gcloud');
@@ -1318,6 +1329,25 @@ export async function start_sandbox(
       args.push('--env', `HOME=${os.homedir()}`);
     }
 
+    // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
+    // The proxy must be listening before the container starts so it can connect immediately
+    let credentialProxyHandle: { stop: () => Promise<void> } | undefined;
+    try {
+      credentialProxyHandle = await createAndStartProxy({
+        socketPath: resolvedTmpdir,
+      });
+      const socketPath = getProxySocketPath();
+      if (socketPath) {
+        // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
+        args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
+      }
+    } catch (err) {
+      // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
+      throw new FatalSandboxError(
+        `Failed to start credential proxy: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     // push container image name
     args.push(image);
 
@@ -1443,6 +1473,17 @@ export async function start_sandbox(
       sandboxProcess.on('close', stopTunnel);
     }
 
+    // @plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3: Clean up credential proxy on sandbox exit
+    if (credentialProxyHandle) {
+      const stopCredentialProxy = () => {
+        void stopProxy();
+      };
+      process.on('exit', stopCredentialProxy);
+      process.on('SIGINT', stopCredentialProxy);
+      process.on('SIGTERM', stopCredentialProxy);
+      sandboxProcess.on('close', stopCredentialProxy);
+    }
+
     return await new Promise<number>((resolve) => {
       sandboxProcess?.on('close', (code, signal) => {
         const exitCode = normalizeExitCode(code, signal);
@@ -1455,6 +1496,8 @@ export async function start_sandbox(
       });
     });
   } catch (error) {
+    // @plan:PLAN-20250214-CREDPROXY.P34 - Clean up credential proxy on error
+    await stopProxy();
     console.error('Sandbox error:', error);
     throw error;
   } finally {

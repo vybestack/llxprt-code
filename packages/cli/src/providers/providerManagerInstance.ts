@@ -30,8 +30,8 @@ import {
 } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
 import { OAuthManager } from '../auth/oauth-manager.js';
-import { KeyringTokenStore } from '../auth/types.js';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
+import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
 import { HistoryItemWithoutId } from '../ui/types.js';
 import { IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
 import {
@@ -239,7 +239,8 @@ export function createProviderManager(
   };
   const manager = new ManagerCtor(context);
 
-  const tokenStore = new KeyringTokenStore();
+  // @plan:PLAN-20250214-CREDPROXY.P33
+  const tokenStore = createTokenStore();
   const oauthManager = new OAuthManager(tokenStore, loadedSettings);
 
   const { config, allowBrowserEnvironment = false, addItem } = options;
