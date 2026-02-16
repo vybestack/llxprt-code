@@ -476,5 +476,27 @@ describe('OAuth Token Reuse (Issues #1262 and #1195)', () => {
       expect(token).toBe(existingToken.access_token);
       expect(provider.initiateAuthCalled).toBe(false);
     });
+
+    /**
+     * @scenario Runtime with explicit in-memory disable should not reuse stored token
+     * @given OAuth manager has no LoadedSettings and provider was explicitly disabled in-memory
+     * @and A valid stored token exists
+     * @when getToken() is called
+     * @then Should return null without triggering OAuth
+     */
+    it('should return null when runtime has explicit in-memory OAuth disable state', async () => {
+      const managerWithoutSettings = new OAuthManager(tokenStore);
+      const provider = new MockOAuthProvider('anthropic');
+      managerWithoutSettings.registerProvider(provider);
+
+      tokenStore.simulateExternalToken('anthropic');
+      await managerWithoutSettings.toggleOAuthEnabled('anthropic');
+      await managerWithoutSettings.toggleOAuthEnabled('anthropic');
+
+      const token = await managerWithoutSettings.getToken('anthropic');
+
+      expect(token).toBeNull();
+      expect(provider.initiateAuthCalled).toBe(false);
+    });
   });
 });

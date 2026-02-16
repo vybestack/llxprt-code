@@ -654,6 +654,22 @@ export class OAuthManager {
       return null;
     }
 
+    // In runtimes without LoadedSettings, only block token reuse when there is
+    // explicit in-memory state for this provider and that state is disabled.
+    const hasExplicitInMemoryOAuthState =
+      this.inMemoryOAuthState.has(providerName);
+    if (
+      !this.settings &&
+      hasExplicitInMemoryOAuthState &&
+      !this.isOAuthEnabled(providerName)
+    ) {
+      logger.debug(
+        () =>
+          `[FLOW] OAuth is disabled in-memory for ${providerName}, returning null`,
+      );
+      return null;
+    }
+
     // @fix issue1442: Try to get existing token BEFORE checking in-memory OAuth enablement.
     // This fixes subagents created without LoadedSettings: they can reuse existing tokens
     // instead of forcing unnecessary reauth loops.
@@ -717,7 +733,7 @@ export class OAuthManager {
     // In runtimes without LoadedSettings (e.g., isolated subagents), allow auth flow
     // when there's no explicit in-memory OAuth state yet.
     const shouldRequireOAuthEnabled =
-      this.settings !== undefined || this.inMemoryOAuthState.has(providerName);
+      this.settings !== undefined || hasExplicitInMemoryOAuthState;
     if (shouldRequireOAuthEnabled && !this.isOAuthEnabled(providerName)) {
       logger.debug(
         () =>
