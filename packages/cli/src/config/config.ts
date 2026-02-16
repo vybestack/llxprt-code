@@ -34,6 +34,7 @@ import {
   SHELL_TOOL_NAMES,
   isRipgrepAvailable,
   normalizeShellReplacement,
+  loadCoreMemoryContent,
   type ConfigParameters,
   type GeminiCLIExtension,
   type Profile,
@@ -49,6 +50,7 @@ import * as dotenv from 'dotenv';
 import * as os from 'node:os';
 import { resolvePath } from '../utils/resolvePath.js';
 import { appEvents } from '../utils/events.js';
+import { RESUME_LATEST } from '../utils/sessionUtils.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P04
@@ -173,11 +175,14 @@ export interface CliArgs {
   promptWords: string[] | undefined;
   query: string | undefined;
   set: string[] | undefined;
-  continue: boolean | undefined;
-  resume?: string;
-  listSessions?: boolean;
-  deleteSession?: string;
-  nobrowser?: boolean;
+  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — widened to support --continue <session-id> */
+  continue: string | boolean | undefined;
+  resume: string | typeof RESUME_LATEST | undefined;
+  nobrowser: boolean | undefined;
+  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 — list recorded sessions */
+  listSessions: boolean | undefined;
+  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 — delete a recorded session by ref */
+  deleteSession: string | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -342,6 +347,19 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           description:
             'Proxy for LLxprt client, like schema://user:password@host:port',
         })
+        .option('resume', {
+          alias: 'r',
+          type: 'string',
+          skipValidation: true,
+          description:
+            'Resume a previous session. Use "latest" for most recent or index number (e.g. --resume 5)',
+          coerce: (value: string): string => {
+            if (value === '') {
+              return RESUME_LATEST;
+            }
+            return value;
+          },
+        })
         .option('include-directories', {
           type: 'array',
           string: true,
@@ -366,9 +384,30 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .option('continue', {
           alias: 'C',
-          type: 'boolean',
+          type: 'string',
+          skipValidation: true,
           description:
-            'Resume the most recent session for this project. Can be combined with --prompt to continue with a new message.',
+            'Resume a previous session. Bare --continue resumes the most recent. --continue <id> resumes a specific session.',
+          coerce: (value: string): string => {
+            if (value === '') {
+              return value;
+            }
+            return value;
+          },
+        })
+        .option('list-sessions', {
+          type: 'boolean',
+          description: 'List recorded sessions for the current project.',
+          default: false,
+        })
+        .option('delete-session', {
+          type: 'string',
+          description:
+            'Delete a recorded session by ID, prefix, or 1-based index.',
+        })
+        .option('nobrowser', {
+          type: 'boolean',
+          description: 'Skip browser OAuth flow, use manual code entry',
           default: false,
         })
         .deprecateOption(
@@ -653,6 +692,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     keyfile: result.keyfile as string | undefined,
     baseurl: result.baseurl as string | undefined,
     proxy: result.proxy as string | undefined,
+    resume: result.resume as string | typeof RESUME_LATEST | undefined,
     includeDirectories: result.includeDirectories as string[] | undefined,
     profileLoad: result.profileLoad as string | undefined,
     loadMemoryFromIncludeDirectories:
@@ -665,7 +705,10 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     promptWords: result.promptWords as string[] | undefined,
     query: queryFromPromptWords,
     set: result.set as string[] | undefined,
-    continue: result.continue as boolean | undefined,
+    continue: result.continue as string | boolean | undefined,
+    nobrowser: result.nobrowser as boolean | undefined,
+    listSessions: result.listSessions as boolean | undefined,
+    deleteSession: result.deleteSession as string | undefined,
   };
 
   return cliArgs;
@@ -1412,7 +1455,12 @@ export async function loadCliConfig(
     ptyScrollbackLimit: effectiveSettings.ptyScrollbackLimit,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
-    continueSession: argv.continue ?? false,
+    // @plan PLAN-20260211-SESSIONRECORDING.P24 — normalize --continue flag:
+    // bare --continue (yargs gives "") → true, --continue <id> → id string, absent → false
+    continueSession:
+      argv.continue === '' || argv.continue === true
+        ? true
+        : argv.continue || false,
     // TODO: loading of hooks based on workspace trust
     enableHooks: effectiveSettings.tools?.enableHooks ?? false,
     hooks: effectiveSettings.hooks || {},

@@ -433,7 +433,7 @@ export interface ConfigParameters {
   enableToolOutputTruncation?: boolean;
   continueOnFailedApiCall?: boolean;
   enableShellOutputEfficiency?: boolean;
-  continueSession?: boolean;
+  continueSession?: boolean | string;
   disableYoloMode?: boolean;
   enableMessageBusIntegration?: boolean;
   enableHooks?: boolean;
@@ -617,7 +617,7 @@ export class Config {
   enableToolOutputTruncation: boolean;
   private readonly continueOnFailedApiCall: boolean;
   private readonly enableShellOutputEfficiency: boolean;
-  private readonly continueSession: boolean;
+  private readonly continueSession: boolean | string;
   private readonly disableYoloMode: boolean;
   private readonly enableHooks: boolean;
   private readonly hooks:
@@ -689,7 +689,7 @@ export class Config {
     /**
      * @plan PLAN-20250212-LSP.P33
      * @requirement REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
-     * Parse LSP config: false = disabled, absent = default enabled, object = use custom config
+     * Parse LSP config: false/absent = disabled, true = default enabled, object = use custom config
      */
     if (params.lsp === false || params.lsp === undefined) {
       // Explicitly disabled or absent (absent = not configured)
@@ -1093,7 +1093,7 @@ export class Config {
   }
 
   isContinueSession(): boolean {
-    return this.continueSession;
+    return !!this.continueSession;
   }
 
   shouldLoadMemoryFromIncludeDirectories(): boolean {
@@ -1294,8 +1294,11 @@ export class Config {
 
   updateSystemInstructionIfInitialized(): void | Promise<void> {}
 
-  getContinueSessionRef(): string | undefined {
-    return undefined;
+  getContinueSessionRef(): string | null {
+    if (typeof this.continueSession === 'string') {
+      return this.continueSession;
+    }
+    return this.continueSession ? '__CONTINUE_LATEST__' : null;
   }
 
   getLlxprtMdFileCount(): number {

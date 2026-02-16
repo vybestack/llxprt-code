@@ -275,30 +275,27 @@ describe('Config LSP Integration (P33)', () => {
     });
   });
 
-  describe('REQ-CFG-015: lsp key absent enables by default', () => {
-    it('should enable LSP with default config when lsp key is absent', async () => {
+  describe('REQ-CFG-015: lsp key absent disables LSP', () => {
+    it('should disable LSP when lsp key is absent', async () => {
       const params = createBaseConfigParams({
-        // lsp key omitted
+        // lsp key omitted — absent means disabled
       });
       const config = new Config(params);
       await config.initialize();
 
       const lspConfig = config.getLspConfig();
-      expect(lspConfig).toBeDefined();
-      expect(lspConfig?.servers).toEqual([]);
-      expect(lspConfig?.includeSeverities).toBeUndefined();
+      expect(lspConfig).toBeUndefined();
     });
 
-    it('should create LspServiceClient when lsp key is absent', async () => {
+    it('should not create LspServiceClient when lsp key is absent', async () => {
       const params = createBaseConfigParams({
-        // lsp key omitted
+        // lsp key omitted — absent means disabled
       });
       const config = new Config(params);
       await config.initialize();
 
       const lspClient = config.getLspServiceClient();
-      expect(lspClient).toBeDefined();
-      expect(lspClient?.isAlive()).toBe(true);
+      expect(lspClient).toBeUndefined();
     });
   });
 
