@@ -295,7 +295,8 @@ export class LspServiceClient {
   }
 
   private async resolveBunPath(): Promise<string | null> {
-    const which = spawn('which', ['bun'], {
+    const locator = process.platform === 'win32' ? 'where' : 'which';
+    const which = spawn(locator, ['bun'], {
       stdio: ['ignore', 'pipe', 'ignore'],
     });
 

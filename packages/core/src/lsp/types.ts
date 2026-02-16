@@ -46,6 +46,6 @@ export interface ServerStatus {
   serverId: LspServerId;
   healthy: boolean;
   detail?: string;
-  state?: 'ok' | 'broken' | 'starting';
+  state?: 'ok' | 'broken' | 'starting' | 'idle';
   status?: string;
 }

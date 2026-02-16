@@ -64,7 +64,7 @@ describe('Orchestrator unit tests against real implementation', () => {
 
   it('initial status includes configured servers but not starting before touch', async () => {
     const status = await orchestrator.status();
-    expect(status).toEqual([{ serverId: 'fake-ts', state: 'broken' }]);
+    expect(status).toEqual([{ serverId: 'fake-ts', state: 'idle' }]);
   });
 
   it('status marks broken after crash during checkFile', async () => {

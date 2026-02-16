@@ -23,7 +23,7 @@ export type ClientOpQueue = Promise<void>;
 
 export interface ServerStatus {
   serverId: string;
-  state: 'ok' | 'broken' | 'starting';
+  state: 'ok' | 'broken' | 'starting' | 'idle';
 }
 
 export interface WorkspaceSymbol {
@@ -232,7 +232,8 @@ export class Orchestrator {
         }
         return { serverId, state: 'ok' as const };
       }
-      return { serverId, state: 'broken' as const };
+      // Configured but never started (no matching file opened yet)
+      return { serverId, state: 'idle' as const };
     });
   }
 

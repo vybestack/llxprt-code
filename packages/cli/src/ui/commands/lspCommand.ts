@@ -65,6 +65,8 @@ function normalizeStatus(
     case 'failed':
     case 'error':
       return 'broken';
+    case 'idle':
+      return 'unavailable';
     default:
       return 'unavailable';
   }
