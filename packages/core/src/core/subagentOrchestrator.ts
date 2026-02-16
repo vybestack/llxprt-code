@@ -469,6 +469,13 @@ export class SubagentOrchestrator {
     if (disabled) {
       service.set('tools.disabled', disabled);
     }
+
+    const userAgent = this.getStringSetting(profile.ephemeralSettings, [
+      'user-agent',
+    ]);
+    if (userAgent) {
+      service.set('user-agent', userAgent);
+    }
   }
 
   private getNumberSetting(
