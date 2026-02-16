@@ -273,6 +273,7 @@ export function normalizeShellReplacement(
 
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 4_000_000;
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 1000;
+const MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS = 2_000;
 export class MCPServerConfig {
   constructor(
     // For stdio transport
@@ -915,19 +916,21 @@ export class Config {
         ) {
           const streams = this.lspServiceClient.getMcpTransportStreams();
           if (streams) {
-            const MCP_REGISTRATION_TIMEOUT_MS = 500;
             try {
               await Promise.race([
                 this.registerMcpNavigationTools(streams),
                 new Promise<void>((_, reject) => {
                   const signal = AbortSignal.timeout(
-                    MCP_REGISTRATION_TIMEOUT_MS,
+                    MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS,
                   );
-                  signal.addEventListener('abort', () =>
-                    reject(
-                      signal.reason ??
-                        new Error('MCP navigation registration timeout'),
-                    ),
+                  signal.addEventListener(
+                    'abort',
+                    () =>
+                      reject(
+                        signal.reason ??
+                          new Error('MCP navigation registration timeout'),
+                      ),
+                    { once: true },
                   );
                 }),
               ]);
