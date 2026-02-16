@@ -158,8 +158,7 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_needs_code = true;
       isOAuthCodeDialogOpen = true;
       // Browser auth NOT complete yet
-      (global as Record<string, unknown>).__oauth_browser_auth_complete =
-        false;
+      (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
 
       // Dialog should NOT auto-dismiss (flag is false)
       if (
