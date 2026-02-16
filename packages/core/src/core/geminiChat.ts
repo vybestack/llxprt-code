@@ -764,7 +764,11 @@ export class GeminiChat {
 
     // Build a provider-safe request transcript that includes the new message(s)
     // without committing them to history yet.
-    const strictToolAdjacency = provider.name.includes('anthropic');
+    // Both Anthropic and Gemini require strict tool call/response matching.
+    // Gemini API returns 400 if function response count doesn't match function call count.
+    // @see https://github.com/vybestack/llxprt-code/issues/1427
+    const strictToolAdjacency =
+      provider.name.includes('anthropic') || provider.name.includes('gemini');
     const iContents = this.historyService.getCuratedForProvider(userIContents, {
       strictToolAdjacency,
     });
@@ -1484,7 +1488,11 @@ export class GeminiChat {
         });
         // Build a provider-safe request transcript that includes the new message(s)
         // without committing them to history yet.
-        const strictToolAdjacency = provider.name.includes('anthropic');
+        // Both Anthropic and Gemini require strict tool call/response matching.
+        // @see https://github.com/vybestack/llxprt-code/issues/1427
+        const strictToolAdjacency =
+          provider.name.includes('anthropic') ||
+          provider.name.includes('gemini');
         requestContents = this.historyService.getCuratedForProvider(
           userIContents,
           {
@@ -1503,7 +1511,11 @@ export class GeminiChat {
         );
         // Build a provider-safe request transcript that includes the new message
         // without committing it to history yet.
-        const strictToolAdjacency = provider.name.includes('anthropic');
+        // Both Anthropic and Gemini require strict tool call/response matching.
+        // @see https://github.com/vybestack/llxprt-code/issues/1427
+        const strictToolAdjacency =
+          provider.name.includes('anthropic') ||
+          provider.name.includes('gemini');
         requestContents = this.historyService.getCuratedForProvider(
           [userIContent],
           { strictToolAdjacency },
