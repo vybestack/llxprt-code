@@ -174,6 +174,10 @@ export interface CliArgs {
   query: string | undefined;
   set: string[] | undefined;
   continue: boolean | undefined;
+  resume?: string;
+  listSessions?: boolean;
+  deleteSession?: string;
+  nobrowser?: boolean;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {

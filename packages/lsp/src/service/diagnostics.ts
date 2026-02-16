@@ -183,7 +183,7 @@ export function formatSingleFileDiagnostics(
   const overflow = diagnostics.length - included.length;
   const overflowLine = overflow > 0 ? `\n... and ${overflow} more` : '';
 
-  return `<diagnostics file="${normalizedFile}">\n${included.join('\n')}${overflowLine}\n</diagnostics>`;
+  return `<diagnostics file="${escapeXml(normalizedFile)}">\n${included.join('\n')}${overflowLine}\n</diagnostics>`;
 }
 
 /**
@@ -209,7 +209,7 @@ export function formatMultiFileDiagnostics(
 
   const files = Object.keys(allDiagnostics);
   if (files.length === 0) {
-    return String();
+    return '';
   }
 
   const normalizedWrittenFile = writtenFile.startsWith('/workspace/')
@@ -217,8 +217,7 @@ export function formatMultiFileDiagnostics(
     : writtenFile;
 
   const prioritizedWrittenFile =
-    files.find((file) => /(^|\/)written\.[^/]+$/.test(file)) ??
-    normalizedWrittenFile;
+    files.find((f) => f === normalizedWrittenFile) ?? normalizedWrittenFile;
 
   const orderedFiles = [...files].sort((a, b) => {
     if (a === prioritizedWrittenFile && b !== prioritizedWrittenFile) return -1;
@@ -258,7 +257,7 @@ export function formatMultiFileDiagnostics(
     );
     const included = sorted.slice(0, includeCount);
 
-    blocks.push(`<diagnostics file="${file}">`);
+    blocks.push(`<diagnostics file="${escapeXml(file)}">`);
     for (const diagnostic of included) {
       blocks.push(formatDiagnosticLine(diagnostic));
     }

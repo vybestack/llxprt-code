@@ -366,7 +366,7 @@ export interface ConfigParameters {
   toolCallCommand?: string;
   mcpServerCommand?: string;
   mcpServers?: Record<string, MCPServerConfig>;
-  lsp?: import('../lsp/types.js').LspConfig | false;
+  lsp?: import('../lsp/types.js').LspConfig | boolean;
   userMemory?: string;
   llxprtMdFileCount?: number;
   llxprtMdFilePaths?: string[];
@@ -1282,8 +1282,20 @@ export class Config {
     return this.userMemory;
   }
 
+  getCoreMemory(): string | undefined {
+    return undefined;
+  }
+
+  setCoreMemory(_content: string): void {}
+
   setUserMemory(newUserMemory: string): void {
     this.userMemory = newUserMemory;
+  }
+
+  updateSystemInstructionIfInitialized(): void | Promise<void> {}
+
+  getContinueSessionRef(): string | undefined {
+    return undefined;
   }
 
   getLlxprtMdFileCount(): number {

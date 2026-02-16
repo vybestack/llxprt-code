@@ -49,6 +49,8 @@ interface OrchestratorConfig {
 }
 
 export class Orchestrator {
+  private static readonly MAX_DIAGNOSTIC_EVENTS = 1000;
+
   private readonly clients = new Map<ClientKey, LspClient>();
   private readonly brokenServers = new Set<ClientKey>();
   private readonly firstTouchServers = new Set<ClientKey>();
@@ -470,6 +472,14 @@ export class Orchestrator {
   private bumpEpoch(file: string): void {
     this.diagnosticEpoch += 1;
     this.diagnosticEvents.push({ epoch: this.diagnosticEpoch, file });
+    if (
+      this.diagnosticEvents.length > Orchestrator.MAX_DIAGNOSTIC_EVENTS
+    ) {
+      this.diagnosticEvents.splice(
+        0,
+        this.diagnosticEvents.length - Orchestrator.MAX_DIAGNOSTIC_EVENTS,
+      );
+    }
   }
 }
 

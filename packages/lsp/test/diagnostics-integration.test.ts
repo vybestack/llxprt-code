@@ -475,24 +475,36 @@ describe('diagnostics integration pipeline', () => {
    * @then:Written file appears before other files in output
    */
   it('orders multi-file output with written file first', () => {
-    const output = runMultiFilePipeline(
-      {
-        'src/other.ts': [
-          {
-            message: 'Other error',
-            severity: 1,
-            range: { start: { line: 0, character: 0 } },
-          },
-        ],
-        'src/written.ts': [
-          {
-            message: 'Written error',
-            severity: 1,
-            range: { start: { line: 0, character: 0 } },
-          },
-        ],
-      },
-      { severities: ['error'], perFileLimit: 20, totalLimit: 50 },
+    const allRawDiagnostics = {
+      'src/other.ts': [
+        {
+          message: 'Other error',
+          severity: 1,
+          range: { start: { line: 0, character: 0 } },
+        },
+      ],
+      'src/written.ts': [
+        {
+          message: 'Written error',
+          severity: 1,
+          range: { start: { line: 0, character: 0 } },
+        },
+      ],
+    };
+    const config = { severities: ['error'], perFileLimit: 20, totalLimit: 50 };
+    const includeSeverities = config.severities ?? ['error'];
+    const perFileDiagnostics: Record<string, Diagnostic[]> = {};
+
+    for (const [file, rawDiags] of Object.entries(allRawDiagnostics)) {
+      const normalized = normalizeWithoutStubThrows(rawDiags, file);
+      const filtered = filterBySeverity(normalized, includeSeverities);
+      perFileDiagnostics[file] = deduplicateDiagnostics(filtered);
+    }
+
+    const output = formatMultiFileDiagnostics(
+      'src/written.ts',
+      perFileDiagnostics,
+      config,
     );
 
     const writtenIndex = output.indexOf('src/written.ts');
