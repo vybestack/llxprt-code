@@ -297,7 +297,7 @@ Hook scripts receive and return LLM data in a stable, version-independent format
 
 ### 6.1 Enabling the Hook System
 
-The setting `tools.enableHooks` must be set to `true`. When `false` (the default), the entire hook system is inert — no processes are spawned, no hooks are evaluated, and no latency is added to any operation.
+The setting `enableHooks` must be set to `true`. When `false` (the default), the entire hook system is inert — no processes are spawned, no hooks are evaluated, and no latency is added to any operation.
 
 ### 6.2 Hook Configuration Schema
 
@@ -305,9 +305,7 @@ Hooks are configured under the `hooks` key in `settings.json`. The `hooks` objec
 
 ```
 {
-  "tools": {
-    "enableHooks": true
-  },
+  "enableHooks": true,
   "hooks": {
     "<EventName>": [
       {
@@ -364,7 +362,7 @@ The `hooks` configuration key is supported at project (`<project>/.llxprt/settin
 
 ### 7.1 Zero Overhead When Disabled
 
-**[Target Requirement]** When `tools.enableHooks` is `false`, or when no hooks are configured, or when no hooks match the current event, the system MUST NOT:
+**[Target Requirement]** When `enableHooks` is `false`, or when no hooks are configured, or when no hooks match the current event, the system MUST NOT:
 - Spawn any child processes
 - Allocate hook infrastructure objects on the hot path
 - Add measurable latency to tool execution or model calls
@@ -511,7 +509,7 @@ Note: BeforeToolSelection modifies the tool configuration, which is neither "inp
 
 | Scenario | Behavior |
 |---|---|
-| `tools.enableHooks` = `false` | No hooks fire. Zero overhead. |
+| `enableHooks` = `false` | No hooks fire. Zero overhead. |
 | No hooks configured for event | No hooks fire. Zero overhead. |
 | No hooks match (matcher doesn't match tool_name) | No hooks fire. |
 | Script exits 0, valid JSON stdout | Parse and apply decisions/modifications. |
