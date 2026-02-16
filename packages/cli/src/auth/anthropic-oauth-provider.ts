@@ -326,6 +326,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
             (
               global as unknown as { __oauth_needs_code: boolean }
             ).__oauth_needs_code = false;
+            // Signal that browser auth completed successfully (Issue #1404)
+            (
+              global as unknown as { __oauth_browser_auth_complete: boolean }
+            ).__oauth_browser_auth_complete = true;
 
             if (this.currentAuthAttemptId === attemptId) {
               await this.completeAuth(authCode);

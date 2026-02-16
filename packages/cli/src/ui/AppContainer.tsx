@@ -837,6 +837,26 @@ export const AppContainer = (props: AppContainerProps) => {
     return () => clearInterval(checkOAuthFlag);
   }, [appDispatch]);
 
+  // Auto-dismiss OAuth dialog when auth completes via browser callback
+  // Issue #1404: Dialog should automatically hide after auth completes
+  const isOAuthCodeDialogOpen = appState.openDialogs.oauthCode;
+  useEffect(() => {
+    if (!isOAuthCodeDialogOpen) return;
+    // Poll for the browser-auth-success signal (global flag, not React state)
+    // This polling approach is necessary because the global flag is set outside React
+    const interval = setInterval(() => {
+      if (
+        (global as Record<string, unknown>).__oauth_browser_auth_complete ===
+        true
+      ) {
+        (global as Record<string, unknown>).__oauth_browser_auth_complete =
+          false;
+        appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isOAuthCodeDialogOpen, appDispatch]);
+
   const {
     isEditorDialogOpen,
     openEditorDialog,
@@ -1953,7 +1973,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isFolderTrustDialogOpen,
     showWorkspaceMigrationDialog,
     showPrivacyNotice,
-    isOAuthCodeDialogOpen: appState.openDialogs.oauthCode,
+    isOAuthCodeDialogOpen,
     isPermissionsDialogOpen,
     isLoggingDialogOpen,
     isSubagentDialogOpen,
