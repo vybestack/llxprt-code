@@ -17,6 +17,9 @@ import type {
 } from '../core/coreToolScheduler.js';
 import type { EditorType } from '../utils/editor.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const debugLog = new DebugLogger('llxprt:schedulerSingleton');
 
 export interface SchedulerCallbacks {
   outputUpdateHandler?: (
@@ -32,16 +35,31 @@ export interface SchedulerCallbacks {
   onEditorOpen?: () => void;
 }
 
+/**
+ * Options for scheduler creation via the singleton factory.
+ */
+export interface SchedulerOptions {
+  /**
+   * Whether the scheduler operates in interactive mode.
+   * When false, the scheduler is configured for non-interactive/subagent contexts
+   * (e.g., no live progress display, no editor support).
+   * Defaults to true for backward compatibility.
+   */
+  interactiveMode?: boolean;
+}
+
 type SchedulerEntry = {
   scheduler: CoreToolScheduler;
   refCount: number;
   callbacks?: SchedulerCallbacks;
+  interactiveMode: boolean;
 };
 
 type SchedulerInitState = {
   promise: Promise<CoreToolScheduler>;
   callbacks: SchedulerCallbacks;
   refCount: number;
+  interactiveMode: boolean;
 };
 
 const schedulerEntries = new Map<string, SchedulerEntry>();
@@ -132,11 +150,20 @@ export async function getOrCreateScheduler(
   config: Config,
   sessionId: string,
   callbacks: SchedulerCallbacks,
+  options?: SchedulerOptions,
 ): Promise<CoreToolScheduler> {
+  const interactiveMode = options?.interactiveMode ?? true;
   const entry = schedulerEntries.get(sessionId);
 
   if (entry) {
     entry.refCount += 1;
+    if (entry.interactiveMode !== interactiveMode) {
+      debugLog.debug(
+        `Scheduler reuse for sessionId=${sessionId} with different interactiveMode ` +
+          `(existing=${entry.interactiveMode}, requested=${interactiveMode}). ` +
+          `Using existing scheduler mode.`,
+      );
+    }
     if (shouldRefreshCallbacks(entry.callbacks, callbacks)) {
       entry.scheduler.setCallbacks?.({
         config,
@@ -155,6 +182,13 @@ export async function getOrCreateScheduler(
   const inFlight = schedulerInitStates.get(sessionId);
   if (inFlight) {
     inFlight.refCount += 1;
+    if (inFlight.interactiveMode !== interactiveMode) {
+      debugLog.debug(
+        `Scheduler init-in-progress for sessionId=${sessionId} with different interactiveMode ` +
+          `(existing=${inFlight.interactiveMode}, requested=${interactiveMode}). ` +
+          `Using existing scheduler mode.`,
+      );
+    }
     const combinedCallbacks = createCombinedCallbacks([
       inFlight.callbacks,
       callbacks,
@@ -172,14 +206,19 @@ export async function getOrCreateScheduler(
     });
     const existingEntry = schedulerEntries.get(sessionId);
     if (existingEntry) {
-      existingEntry.refCount += 1;
+      // Don't increment refCount here - our increment was already counted
+      // in initState.refCount (line 184) which was transferred to existingEntry
+      // when the original creator finished (line 250).
       existingEntry.callbacks = combinedCallbacks;
       return existingEntry.scheduler;
     }
+    // Entry doesn't exist yet (shouldn't happen normally, but handle edge case)
+    // Use inFlight.refCount to preserve all callers' increments
     schedulerEntries.set(sessionId, {
       scheduler,
-      refCount: 1,
+      refCount: inFlight.refCount,
       callbacks: combinedCallbacks,
+      interactiveMode: inFlight.interactiveMode,
     });
     return scheduler;
   }
@@ -190,6 +229,7 @@ export async function getOrCreateScheduler(
     );
     return new CoreToolSchedulerClass({
       config,
+      toolContextInteractiveMode: interactiveMode,
       outputUpdateHandler: callbacks.outputUpdateHandler,
       onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
       onToolCallsUpdate: callbacks.onToolCallsUpdate,
@@ -203,6 +243,7 @@ export async function getOrCreateScheduler(
     promise: creationPromise,
     callbacks,
     refCount: 1,
+    interactiveMode,
   };
   schedulerInitStates.set(sessionId, initState);
 
@@ -212,6 +253,7 @@ export async function getOrCreateScheduler(
       scheduler,
       refCount: initState.refCount,
       callbacks: initState.callbacks,
+      interactiveMode: initState.interactiveMode,
     });
     return scheduler;
   } finally {
