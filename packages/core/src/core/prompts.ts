@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
-import * as fs from 'node:fs/promises';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
@@ -175,6 +175,18 @@ function compactFolderStructureSnapshot(
 }
 
 /**
+ * Options for getCoreSystemPromptAsync
+ */
+export interface CoreSystemPromptOptions {
+  userMemory?: string;
+  coreMemory?: string;
+  model?: string;
+  tools?: string[];
+  provider?: string;
+  includeSubagentDelegation?: boolean;
+}
+
+/**
  * Loads core (system) memory content from .LLXPRT_SYSTEM files.
  * Reads both global (~/.llxprt/.LLXPRT_SYSTEM) and project-level
  * (<cwd>/.llxprt/.LLXPRT_SYSTEM) files and concatenates them.
@@ -199,7 +211,9 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
       const content = await fs.readFile(filePath, 'utf-8');
       if (content.trim()) {
         parts.push(
-          `--- Core System Memory from: ${tildeifyPath(filePath)} ---\n${content.trim()}\n--- End of Core System Memory ---`,
+          `--- Core System Memory from: ${tildeifyPath(filePath)} ---
+${content.trim()}
+--- End of Core System Memory ---`,
         );
       }
     } catch (err) {
@@ -213,18 +227,6 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
   }
 
   return parts.join('\n\n');
-}
-
-/**
- * Options for getCoreSystemPromptAsync
- */
-export interface CoreSystemPromptOptions {
-  userMemory?: string;
-  coreMemory?: string;
-  model?: string;
-  tools?: string[];
-  provider?: string;
-  includeSubagentDelegation?: boolean;
 }
 
 /**
@@ -430,6 +432,7 @@ export async function getCoreSystemPromptAsync(
         (p) => p && p.trim(),
       );
       effectiveCoreMemory = parts.join('\n\n') || undefined;
+
       effectiveUserMemory = undefined;
     }
   } catch {

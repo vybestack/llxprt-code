@@ -53,6 +53,13 @@
       },
       "additionalProperties": false
     },
+    "lsp": {
+      "title": "Experimental LSP Servers",
+      "description": "Enable experimental Language Server Protocol integration for real-time type-error diagnostics after file edits.",
+      "markdownDescription": "Enable experimental Language Server Protocol integration for real-time type-error diagnostics after file edits.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `false`",
+      "default": false,
+      "$ref": "#/$defs/BooleanOrLspConfig"
+    },
     "emojifilter": {
       "title": "Emoji Filter",
       "description": "Filter emojis from AI-generated content and file operations. Options: allowed (no filtering), auto (silent filtering), warn (filter with warnings to AI), error (block operations with emojis).",
@@ -336,8 +343,8 @@
         "useAlternateBuffer": {
           "title": "Use Alternate Screen Buffer",
           "description": "Use an alternate screen buffer for the UI, preserving shell history.",
-          "markdownDescription": "Use an alternate screen buffer for the UI, preserving shell history.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `false`",
-          "default": false,
+          "markdownDescription": "Use an alternate screen buffer for the UI, preserving shell history.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
           "type": "boolean"
         },
         "incrementalRendering": {
@@ -364,8 +371,8 @@
         "showLineNumbers": {
           "title": "Show Line Numbers",
           "description": "Show line numbers in the chat.",
-          "markdownDescription": "Show line numbers in the chat.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
-          "default": true,
+          "markdownDescription": "Show line numbers in the chat.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `false`",
+          "default": false,
           "type": "boolean"
         },
         "showCitations": {
@@ -1417,6 +1424,70 @@
         },
         {
           "type": "string"
+        }
+      ]
+    },
+    "BooleanOrLspConfig": {
+      "description": "Set to false to disable LSP entirely, or provide an object to configure LSP servers and diagnostics behavior.",
+      "anyOf": [
+        {
+          "type": "boolean",
+          "const": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "servers": {
+              "type": "array",
+              "description": "Custom LSP server definitions.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["id", "command"]
+              }
+            },
+            "includeSeverities": {
+              "type": "array",
+              "description": "Diagnostic severity levels to include.",
+              "items": {
+                "type": "string",
+                "enum": ["error", "warning", "info", "hint"]
+              }
+            },
+            "maxDiagnosticsPerFile": {
+              "type": "number",
+              "description": "Maximum number of diagnostics per file."
+            },
+            "maxProjectDiagnosticsFiles": {
+              "type": "number",
+              "description": "Maximum number of files included in project diagnostics."
+            },
+            "diagnosticTimeout": {
+              "type": "number",
+              "description": "Timeout in milliseconds for diagnostic requests."
+            },
+            "firstTouchTimeout": {
+              "type": "number",
+              "description": "Timeout in milliseconds for first-touch diagnostic requests."
+            },
+            "navigationTools": {
+              "type": "boolean",
+              "description": "Whether to register LSP navigation tools (goto definition, find references, etc.)."
+            }
+          }
         }
       ]
     }

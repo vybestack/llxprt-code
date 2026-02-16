@@ -36,6 +36,7 @@ export default tseslint.config(
       '**/.yalc/**',
       'yalc.lock',
       '**/yalc.lock',
+      '.integration-tests/**',
       'eslint.config.js',
       'packages/**/dist/**',
       'bundle/**',
@@ -57,6 +58,7 @@ export default tseslint.config(
       'project-plans/**',
       'packages/opentui/**',
       'packages/ui/**',
+      'packages/lsp/**',
     ],
   },
   eslint.configs.recommended,
@@ -141,6 +143,7 @@ export default tseslint.config(
           allow: [
             'react-dom/test-utils',
             'memfs/lib/volume.js',
+            'vscode-jsonrpc/node.js',
             'yargs/**',
             '@anthropic-ai/sdk/**',
             '**/generated/**',

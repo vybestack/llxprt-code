@@ -1,0 +1,53 @@
+{
+  "tmux": {
+    "cols": 140,
+    "rows": 40,
+    "historyLimit": 50000,
+    "scrollbackLines": 10000,
+    "initialWaitMs": 15000
+  },
+  "startCommand": [
+    "bash",
+    "-c",
+    "cd /Users/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/fakeproject && exec node /Users/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli/dist/index.js --profile-load chutesminimax --yolo"
+  ],
+  "yolo": true,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": ">",
+      "timeoutMs": 25000
+    },
+    { "type": "capture", "label": "01-startup", "scope": "screen" },
+
+    {
+      "type": "line",
+      "text": "Add a divide-by-zero guard to the Calculator.divide method in src/calculator.ts. If b is zero, throw an Error with the message 'Division by zero'. Then add a new method called 'power(base: number, exponent: number): number' that returns base ** exponent."
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "calculator",
+      "timeoutMs": 120000
+    },
+    { "type": "wait", "ms": 30000 },
+    { "type": "capture", "label": "02-after-edit", "scope": "scrollback" },
+    { "type": "capture", "label": "02-after-edit-screen", "scope": "screen" },
+
+    { "type": "line", "text": "/lsp status" },
+    { "type": "wait", "ms": 15000 },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "server status",
+      "timeoutMs": 45000
+    },
+    { "type": "wait", "ms": 3000 },
+    { "type": "capture", "label": "03-lsp-status", "scope": "scrollback" },
+    { "type": "capture", "label": "03-lsp-status-screen", "scope": "screen" },
+
+    { "type": "line", "text": "/quit" },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

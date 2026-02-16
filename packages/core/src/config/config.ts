@@ -32,6 +32,7 @@ import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import { ReadLineRangeTool } from '../tools/read_line_range.js';
 import { DeleteLineRangeTool } from '../tools/delete_line_range.js';
 import { InsertAtLineTool } from '../tools/insert_at_line.js';
+import { ApplyPatchTool } from '../tools/apply-patch.js';
 import {
   MemoryTool,
   setLlxprtMdFilename,
@@ -79,7 +80,13 @@ import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import { type MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { IdeClient } from '../ide/ide-client.js';
 import { ideContext } from '../ide/ideContext.js';
-import type { Content } from '@google/genai';
+import type {
+  CallableTool,
+  Content,
+  FunctionCall,
+  Part,
+  Tool,
+} from '@google/genai';
 import { registerSettingsService } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import {
@@ -359,8 +366,8 @@ export interface ConfigParameters {
   toolCallCommand?: string;
   mcpServerCommand?: string;
   mcpServers?: Record<string, MCPServerConfig>;
+  lsp?: import('../lsp/types.js').LspConfig | boolean;
   userMemory?: string;
-  coreMemory?: string;
   llxprtMdFileCount?: number;
   llxprtMdFilePaths?: string[];
   approvalMode?: ApprovalMode;
@@ -426,7 +433,6 @@ export interface ConfigParameters {
   enableToolOutputTruncation?: boolean;
   continueOnFailedApiCall?: boolean;
   enableShellOutputEfficiency?: boolean;
-  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — widened to support --continue <session-id> */
   continueSession?: boolean | string;
   disableYoloMode?: boolean;
   enableMessageBusIntegration?: boolean;
@@ -454,6 +460,15 @@ export class Config {
   private readonly outputFormat: OutputFormat;
   private readonly question: string | undefined;
 
+  /**
+   * @plan PLAN-20250212-LSP.P33
+   * @requirement REQ-CFG-010, REQ-CFG-015, REQ-CFG-070
+   */
+  private lspConfig?: import('../lsp/types.js').LspConfig;
+  private lspServiceClient?: import('../lsp/lsp-service-client.js').LspServiceClient;
+  private lspMcpClient?: import('@modelcontextprotocol/sdk/client/index.js').Client;
+  private lspMcpTransport?: import('@modelcontextprotocol/sdk/shared/transport.js').Transport;
+
   private readonly coreTools: string[] | undefined;
   private readonly allowedTools: string[] | undefined;
   private readonly excludeTools: string[] | undefined;
@@ -462,7 +477,6 @@ export class Config {
   private readonly mcpServerCommand: string | undefined;
   private mcpServers: Record<string, MCPServerConfig> | undefined;
   private userMemory: string;
-  private coreMemory: string;
   private llxprtMdFileCount: number;
   private llxprtMdFilePaths: string[];
   private approvalMode: ApprovalMode;
@@ -603,7 +617,6 @@ export class Config {
   enableToolOutputTruncation: boolean;
   private readonly continueOnFailedApiCall: boolean;
   private readonly enableShellOutputEfficiency: boolean;
-  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — widened to support --continue <session-id> */
   private readonly continueSession: boolean | string;
   private readonly disableYoloMode: boolean;
   private readonly enableHooks: boolean;
@@ -672,8 +685,27 @@ export class Config {
     this.mcpServers = params.mcpServers;
     this.allowedMcpServers = params.allowedMcpServers ?? [];
     this.blockedMcpServers = params.blockedMcpServers ?? [];
+
+    /**
+     * @plan PLAN-20250212-LSP.P33
+     * @requirement REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
+     * Parse LSP config: false/absent = disabled, true = default enabled, object = use custom config
+     */
+    if (params.lsp === false || params.lsp === undefined) {
+      // Explicitly disabled or absent (absent = not configured)
+      this.lspConfig = undefined;
+    } else if (params.lsp === true) {
+      // Boolean true = default enabled (REQ-CFG-015)
+      this.lspConfig = { servers: [] };
+    } else {
+      // Object presence = enabled (REQ-CFG-020), ensure servers field exists
+      this.lspConfig =
+        params.lsp.servers === undefined
+          ? { ...params.lsp, servers: [] }
+          : params.lsp;
+    }
+
     this.userMemory = params.userMemory ?? '';
-    this.coreMemory = params.coreMemory ?? '';
     this.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
     this.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
     this.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
@@ -856,6 +888,63 @@ export class Config {
       this.getExtensionLoader().start(this),
     ]);
 
+    /**
+     * @plan PLAN-20250212-LSP.P33
+     * @requirement REQ-CFG-010, REQ-CFG-015, REQ-CFG-020, REQ-NAV-055
+     * Initialize LSP service client if enabled
+     */
+    if (this.lspConfig !== undefined) {
+      try {
+        const { LspServiceClient } = await import(
+          '../lsp/lsp-service-client.js'
+        );
+        this.lspServiceClient = new LspServiceClient(
+          this.lspConfig,
+          this.targetDir,
+        );
+        await this.lspServiceClient.start();
+
+        /**
+         * @plan PLAN-20250212-LSP.P33
+         * @requirement REQ-NAV-055, REQ-CFG-070
+         * Register MCP navigation tools only if service started successfully and navigationTools not disabled
+         */
+        if (
+          this.lspServiceClient.isAlive() &&
+          this.lspConfig.navigationTools !== false
+        ) {
+          const streams = this.lspServiceClient.getMcpTransportStreams();
+          if (streams) {
+            const MCP_REGISTRATION_TIMEOUT_MS = 500;
+            try {
+              await Promise.race([
+                this.registerMcpNavigationTools(streams),
+                new Promise<void>((_, reject) => {
+                  const signal = AbortSignal.timeout(
+                    MCP_REGISTRATION_TIMEOUT_MS,
+                  );
+                  signal.addEventListener('abort', () =>
+                    reject(
+                      signal.reason ??
+                        new Error('MCP navigation registration timeout'),
+                    ),
+                  );
+                }),
+              ]);
+            } catch {
+              // MCP navigation registration timed out or failed — non-fatal (REQ-GRACE-050)
+              this.lspMcpClient = undefined;
+              this.lspMcpTransport = undefined;
+            }
+          }
+        }
+      } catch (_error) {
+        // LSP startup failure is non-fatal (REQ-GRACE-050)
+        // Service remains undefined, tools will not use it
+        this.lspServiceClient = undefined;
+      }
+    }
+
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
     this.geminiClient = new GeminiClient(this, this.runtimeState);
@@ -1003,17 +1092,8 @@ export class Config {
     return this.sessionId;
   }
 
-  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — truthy check handles both boolean and string */
   isContinueSession(): boolean {
     return !!this.continueSession;
-  }
-
-  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — returns session ref for resume */
-  getContinueSessionRef(): string | null {
-    if (typeof this.continueSession === 'string') {
-      return this.continueSession;
-    }
-    return this.continueSession ? '__CONTINUE_LATEST__' : null;
   }
 
   shouldLoadMemoryFromIncludeDirectories(): boolean {
@@ -1202,23 +1282,23 @@ export class Config {
     return this.userMemory;
   }
 
+  getCoreMemory(): string | undefined {
+    return undefined;
+  }
+
+  setCoreMemory(_content: string): void {}
+
   setUserMemory(newUserMemory: string): void {
     this.userMemory = newUserMemory;
   }
 
-  getCoreMemory(): string {
-    return this.coreMemory;
-  }
+  updateSystemInstructionIfInitialized(): void | Promise<void> {}
 
-  setCoreMemory(newCoreMemory: string): void {
-    this.coreMemory = newCoreMemory;
-  }
-
-  async updateSystemInstructionIfInitialized(): Promise<void> {
-    const geminiClient = this.geminiClient;
-    if (geminiClient?.isInitialized()) {
-      await geminiClient.updateSystemInstruction();
+  getContinueSessionRef(): string | null {
+    if (typeof this.continueSession === 'string') {
+      return this.continueSession;
     }
+    return this.continueSession ? '__CONTINUE_LATEST__' : null;
   }
 
   getLlxprtMdFileCount(): number {
@@ -2114,6 +2194,7 @@ export class Config {
     registerCoreTool(StructuralAnalysisTool, this);
     registerCoreTool(DeleteLineRangeTool, this);
     registerCoreTool(InsertAtLineTool, this);
+    registerCoreTool(ApplyPatchTool, this);
     registerCoreTool(ShellTool, this);
     registerCoreTool(MemoryTool, this);
     registerCoreTool(GoogleWebSearchTool, this);
@@ -2240,10 +2321,288 @@ export class Config {
 
   /**
    * Check if interactive shell is enabled.
-   * Returns true if the shouldUseNodePtyShell setting is enabled.
+   * Returns true if shouldUseNodePtyShell setting is enabled.
    */
   getEnableInteractiveShell(): boolean {
     return this.shouldUseNodePtyShell;
+  }
+
+  /**
+   * Get LSP service client if available.
+   * @plan PLAN-20250212-LSP.P33
+   * @requirement REQ-DIAG-010, REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
+   * @returns LspServiceClient instance or undefined if not initialized or disabled
+   */
+  getLspServiceClient():
+    | import('../lsp/lsp-service-client.js').LspServiceClient
+    | undefined {
+    return this.lspServiceClient;
+  }
+
+  /**
+   * Get LSP configuration.
+   * @plan PLAN-20250212-LSP.P33
+   * @requirement REQ-DIAG-010, REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
+   * @returns LspConfig or undefined (undefined means LSP disabled)
+   */
+  getLspConfig(): import('../lsp/types.js').LspConfig | undefined {
+    return this.lspConfig;
+  }
+
+  /**
+   * Register MCP navigation tools from LSP service.
+   * @plan PLAN-20250212-LSP.P33
+   * @requirement REQ-NAV-055, REQ-CFG-070
+   */
+  private async registerMcpNavigationTools(streams: {
+    readable: import('node:stream').Readable;
+    writable: import('node:stream').Writable;
+  }): Promise<void> {
+    type JSONRPCMessage =
+      import('@modelcontextprotocol/sdk/types.js').JSONRPCMessage;
+    type Transport =
+      import('@modelcontextprotocol/sdk/shared/transport.js').Transport;
+
+    const cleanup = async () => {
+      this.toolRegistry.removeMcpToolsByServer('lsp-navigation');
+
+      if (this.lspMcpClient) {
+        try {
+          await this.lspMcpClient.close();
+        } catch {
+          // Close errors are non-fatal during cleanup.
+        }
+      }
+      this.lspMcpClient = undefined;
+
+      if (this.lspMcpTransport) {
+        try {
+          await this.lspMcpTransport.close();
+        } catch {
+          // Close errors are non-fatal during cleanup.
+        }
+      }
+      this.lspMcpTransport = undefined;
+    };
+
+    try {
+      const { Client } = await import(
+        '@modelcontextprotocol/sdk/client/index.js'
+      );
+      const { DiscoveredMCPTool } = await import('../tools/mcp-tool.js');
+
+      let readBuffer = '';
+      let started = false;
+      const transport: Transport = {
+        onclose: undefined,
+        onerror: undefined,
+        onmessage: undefined,
+        start: async () => {
+          if (started) {
+            return;
+          }
+          started = true;
+
+          const onData = (chunk: Buffer | string) => {
+            const text =
+              typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+            readBuffer += text;
+
+            while (true) {
+              const newlineIndex = readBuffer.indexOf('\n');
+              if (newlineIndex === -1) {
+                break;
+              }
+
+              const line = readBuffer.slice(0, newlineIndex).trim();
+              readBuffer = readBuffer.slice(newlineIndex + 1);
+              if (!line) {
+                continue;
+              }
+
+              try {
+                const message = JSON.parse(line) as JSONRPCMessage;
+                transport.onmessage?.(message);
+              } catch {
+                // Ignore malformed transport messages.
+              }
+            }
+          };
+
+          const onError = (error: Error) => {
+            transport.onerror?.(error);
+          };
+
+          const onClose = () => {
+            transport.onclose?.();
+          };
+
+          streams.readable.on('data', onData);
+          streams.readable.on('error', onError);
+          streams.readable.on('close', onClose);
+          streams.readable.on('end', onClose);
+
+          const closeTransport = async () => {
+            if (!started) {
+              return;
+            }
+            started = false;
+            streams.readable.off('data', onData);
+            streams.readable.off('error', onError);
+            streams.readable.off('close', onClose);
+            streams.readable.off('end', onClose);
+            streams.writable.end();
+          };
+
+          transport.close = closeTransport;
+        },
+        send: async (message: JSONRPCMessage) => {
+          streams.writable.write(`${JSON.stringify(message)}\n`);
+        },
+        close: async () => {
+          if (!started) {
+            return;
+          }
+          started = false;
+          streams.writable.end();
+        },
+      };
+
+      this.lspMcpTransport = transport;
+
+      const client = new Client(
+        {
+          name: 'lsp-navigation-client',
+          version: '1.0.0',
+        },
+        { capabilities: {} },
+      );
+      this.lspMcpClient = client;
+
+      const requestTimeoutMs = 250;
+      await client.connect(transport, { timeout: requestTimeoutMs });
+
+      const capabilities = client.getServerCapabilities?.();
+      if (!capabilities?.tools) {
+        await cleanup();
+        return;
+      }
+
+      const toolsResponse = await client.listTools(undefined, {
+        timeout: requestTimeoutMs,
+      });
+      const toolDefs = toolsResponse.tools ?? [];
+      if (toolDefs.length === 0) {
+        await cleanup();
+        return;
+      }
+
+      class LspNavigationCallableTool implements CallableTool {
+        constructor(
+          private readonly mcpClient: import('@modelcontextprotocol/sdk/client/index.js').Client,
+          private readonly toolDef: {
+            name: string;
+            description?: string;
+            inputSchema?: unknown;
+          },
+        ) {}
+
+        async tool(): Promise<Tool> {
+          return {
+            functionDeclarations: [
+              {
+                name: this.toolDef.name,
+                description: this.toolDef.description,
+                parametersJsonSchema: this.toolDef.inputSchema,
+              },
+            ],
+          };
+        }
+
+        async callTool(functionCalls: FunctionCall[]): Promise<Part[]> {
+          if (functionCalls.length !== 1) {
+            throw new Error(
+              'LspNavigationCallableTool only supports single function call',
+            );
+          }
+          const call = functionCalls[0];
+          const result = await this.mcpClient.callTool(
+            {
+              name: call.name ?? this.toolDef.name,
+              arguments: (call.args ?? {}) as Record<string, unknown>,
+            },
+            undefined,
+            { timeout: requestTimeoutMs },
+          );
+
+          return [
+            {
+              functionResponse: {
+                name: call.name,
+                response: result,
+              },
+            },
+          ];
+        }
+      }
+
+      for (const toolDef of toolDefs) {
+        const callableTool = new LspNavigationCallableTool(client, toolDef);
+
+        const discoveredTool = new DiscoveredMCPTool(
+          callableTool,
+          'lsp-navigation',
+          toolDef.name,
+          toolDef.description ?? '',
+          toolDef.inputSchema ?? { type: 'object', properties: {} },
+          true,
+          undefined,
+          this,
+        );
+
+        this.toolRegistry.registerTool(discoveredTool);
+      }
+
+      this.toolRegistry.sortTools();
+    } catch {
+      await cleanup();
+    }
+  }
+
+  /**
+   * Shutdown LSP service if running.
+   * @plan PLAN-20250212-LSP.P33
+   * @requirement REQ-GRACE-020, REQ-GRACE-040
+   */
+  async shutdownLspService(): Promise<void> {
+    this.toolRegistry.removeMcpToolsByServer('lsp-navigation');
+
+    if (this.lspMcpClient) {
+      try {
+        await this.lspMcpClient.close();
+      } catch {
+        // Close errors are non-fatal
+      }
+    }
+    this.lspMcpClient = undefined;
+
+    if (this.lspMcpTransport) {
+      try {
+        await this.lspMcpTransport.close();
+      } catch {
+        // Close errors are non-fatal
+      }
+    }
+    this.lspMcpTransport = undefined;
+
+    if (this.lspServiceClient) {
+      try {
+        await this.lspServiceClient.shutdown();
+      } catch {
+        // Shutdown failure is non-fatal
+      }
+      this.lspServiceClient = undefined;
+    }
   }
 }
 
