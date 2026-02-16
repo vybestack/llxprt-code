@@ -34,6 +34,7 @@ import { isNodeError } from '../utils/errors.js';
 import { Config, ApprovalMode } from '../config/config.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
+import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 import { spawnSync } from 'child_process';
 import FastGlob from 'fast-glob';
 import { DebugLogger } from '../debug/index.js';
@@ -2098,14 +2099,30 @@ class ASTEditToolInvocation
         },
       };
 
-      const llmSuccessMessage = [
+      const llmSuccessMessageParts: string[] = [
         `Successfully applied edit to: ${this.params.file_path}`,
         `- Changes: ${editData.occurrences} replacement(s) applied`,
         `- AST validation: ${editData.astValidation?.valid ? 'PASSED' : 'FAILED'}`,
-      ].join('\n');
+      ];
+
+      // @plan PLAN-20250212-LSP.P31
+      // @requirement REQ-DIAG-010
+      // Append LSP diagnostics after successful edit
+      try {
+        const diagBlock = await collectLspDiagnosticsBlock(
+          this.config,
+          this.params.file_path,
+        );
+        if (diagBlock) {
+          llmSuccessMessageParts.push(diagBlock);
+        }
+      } catch (_error) {
+        // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
+        // Silently continue - edit was already successful
+      }
 
       return {
-        llmContent: llmSuccessMessage,
+        llmContent: llmSuccessMessageParts.join('\n\n'),
         returnDisplay: displayResult,
       };
     } catch (error) {

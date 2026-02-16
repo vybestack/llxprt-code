@@ -571,16 +571,25 @@ describe('LSP E2E integration (P36)', () => {
     const writePath = fileURLToPath(
       new URL('../../tools/write-file.ts', import.meta.url),
     );
+    const helperPath = fileURLToPath(
+      new URL('../../tools/lsp-diagnostics-helper.ts', import.meta.url),
+    );
 
     const editSource = readFileSync(editPath, 'utf8');
     const writeSource = readFileSync(writePath, 'utf8');
+    const helperSource = readFileSync(helperPath, 'utf8');
 
-    expect(editSource).toContain('getLspServiceClient');
-    expect(editSource).toContain('checkFile');
+    // edit.ts uses the shared helper via import
+    expect(editSource).toContain('collectLspDiagnosticsBlock');
 
+    // write-file.ts still has direct LSP calls for multi-file diagnostics
     expect(writeSource).toContain('getLspServiceClient');
     expect(writeSource).toContain('checkFile');
     expect(writeSource).toContain('getAllDiagnostics');
+
+    // The shared helper contains the actual LSP integration calls
+    expect(helperSource).toContain('getLspServiceClient');
+    expect(helperSource).toContain('checkFile');
   });
 
   // --- 18. Shutdown then checkFile is safe ---

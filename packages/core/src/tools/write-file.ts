@@ -523,7 +523,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
 
           // Append formatted diagnostics if present
           if (blocks.length > 0) {
-            llmSuccessMessageParts.push(`\n\n${blocks.join('\n')}`);
+            llmSuccessMessageParts.push(blocks.join('\n'));
           }
         }
       } catch (_error) {
@@ -563,7 +563,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       }
 
       const result: ToolResult = {
-        llmContent: llmSuccessMessageParts.join(' '),
+        llmContent: llmSuccessMessageParts.join('\n\n'),
         returnDisplay: displayResult,
       };
 

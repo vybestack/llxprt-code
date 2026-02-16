@@ -28,6 +28,7 @@ import {
 import { getSpecificMimeType } from '../utils/fileUtils.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 
 /**
  * Parameters for the DeleteLineRange tool
@@ -198,8 +199,28 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
         path.extname(this.params.absolute_path),
       );
 
+      // @plan PLAN-20250212-LSP.P31
+      // @requirement REQ-DIAG-010
+      // Append LSP diagnostics after successful edit
+      const llmSuccessMessageParts: string[] = [
+        `Successfully deleted lines ${this.params.start_line}-${this.params.end_line} from ${this.params.absolute_path}`,
+      ];
+
+      try {
+        const diagBlock = await collectLspDiagnosticsBlock(
+          this.config,
+          this.params.absolute_path,
+        );
+        if (diagBlock) {
+          llmSuccessMessageParts.push(diagBlock);
+        }
+      } catch (_error) {
+        // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
+        // Silently continue - edit was already successful
+      }
+
       return {
-        llmContent: `Successfully deleted lines ${this.params.start_line}-${this.params.end_line} from ${this.params.absolute_path}`,
+        llmContent: llmSuccessMessageParts.join('\n\n'),
         returnDisplay: `Deleted ${count} lines (${this.params.start_line}-${this.params.end_line})`,
       };
     } catch (error) {
