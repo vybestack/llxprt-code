@@ -29,6 +29,7 @@ import { getSpecificMimeType } from '../utils/fileUtils.js';
 import { isNodeError } from '../utils/errors.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 
 /**
  * Parameters for the InsertAtLine tool
@@ -237,47 +238,12 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
       ];
 
       try {
-        const lspClient = this.config.getLspServiceClient();
-        if (lspClient && lspClient.isAlive()) {
-          const diagnostics = await lspClient.checkFile(
-            this.params.absolute_path,
-          );
-          const lspConfig = this.config.getLspConfig();
-          const includeSeverities = lspConfig?.includeSeverities ?? ['error'];
-          const filtered = diagnostics.filter((d) =>
-            includeSeverities.includes(d.severity),
-          );
-
-          if (filtered.length > 0) {
-            const maxPerFile = lspConfig?.maxDiagnosticsPerFile ?? 20;
-            const relPath = path.relative(
-              this.config.getTargetDir(),
-              this.params.absolute_path,
-            );
-            const limited = filtered
-              .sort(
-                (a, b) =>
-                  (a.line ?? 0) - (b.line ?? 0) ||
-                  (a.column ?? 0) - (b.column ?? 0),
-              )
-              .slice(0, maxPerFile);
-
-            const diagLines = limited
-              .map((d) => {
-                const codeStr = d.code !== undefined ? ` (${d.code})` : '';
-                return `${d.severity.toUpperCase()} [${d.line ?? 1}:${d.column ?? 1}] ${d.message}${codeStr}`;
-              })
-              .join('\n');
-
-            let suffix = '';
-            if (filtered.length > maxPerFile) {
-              suffix = `\n... and ${filtered.length - maxPerFile} more`;
-            }
-
-            llmSuccessMessageParts.push(
-              `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${relPath}">\n${diagLines}${suffix}\n</diagnostics>`,
-            );
-          }
+        const diagBlock = await collectLspDiagnosticsBlock(
+          this.config,
+          this.params.absolute_path,
+        );
+        if (diagBlock) {
+          llmSuccessMessageParts.push(diagBlock);
         }
       } catch (_error) {
         // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
@@ -285,7 +251,7 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
       }
 
       return {
-        llmContent: llmSuccessMessageParts.join(' '),
+        llmContent: llmSuccessMessageParts.join('\n\n'),
         returnDisplay: `${action.charAt(0).toUpperCase() + action.slice(1)} ${linesInserted} lines at line ${this.params.line_number}`,
       };
     } catch (error) {

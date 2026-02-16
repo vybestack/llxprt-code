@@ -29,6 +29,7 @@ import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { APPLY_PATCH_TOOL } from './tool-names.js';
+import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 
 /**
  * Type representing a parsed patch operation
@@ -367,51 +368,23 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       try {
         const lspClient = this.config.getLspServiceClient();
         if (lspClient && lspClient.isAlive()) {
-          // Only check files that had content writes
+          // Only check files that had content writes (triggers LSP analysis)
           for (const contentFile of classification.contentWriteFiles) {
-            // Resolve relative file path from patch to absolute path
             const absoluteFilePath = path.resolve(
               this.config.getTargetDir(),
               contentFile,
             );
             await lspClient.checkFile(absoluteFilePath);
           }
+        }
 
-          // Now get diagnostics for the target file
-          const diagnostics = await lspClient.checkFile(filePath);
-          const lspConfig = this.config.getLspConfig();
-          const includeSeverities = lspConfig?.includeSeverities ?? ['error'];
-          const filtered = diagnostics.filter((d) =>
-            includeSeverities.includes(d.severity),
-          );
-
-          if (filtered.length > 0) {
-            const maxPerFile = lspConfig?.maxDiagnosticsPerFile ?? 20;
-            const relPath = path.relative(this.config.getTargetDir(), filePath);
-            const limited = filtered
-              .sort(
-                (a, b) =>
-                  (a.line ?? 0) - (b.line ?? 0) ||
-                  (a.column ?? 0) - (b.column ?? 0),
-              )
-              .slice(0, maxPerFile);
-
-            const diagLines = limited
-              .map((d) => {
-                const codeStr = d.code !== undefined ? ` (${d.code})` : '';
-                return `${d.severity.toUpperCase()} [${d.line ?? 1}:${d.column ?? 1}] ${d.message}${codeStr}`;
-              })
-              .join('\n');
-
-            let suffix = '';
-            if (filtered.length > maxPerFile) {
-              suffix = `\n... and ${filtered.length - maxPerFile} more`;
-            }
-
-            llmSuccessMessageParts.push(
-              `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${relPath}">\n${diagLines}${suffix}\n</diagnostics>`,
-            );
-          }
+        // Get formatted diagnostics for the target file
+        const diagBlock = await collectLspDiagnosticsBlock(
+          this.config,
+          filePath,
+        );
+        if (diagBlock) {
+          llmSuccessMessageParts.push(diagBlock);
         }
       } catch (_error) {
         // LSP failure must never fail the patch (REQ-GRACE-050, REQ-GRACE-055)
@@ -419,7 +392,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       }
 
       const result: ToolResult = {
-        llmContent: llmSuccessMessageParts.join(' '),
+        llmContent: llmSuccessMessageParts.join('\n\n'),
         returnDisplay: displayResult,
       };
 

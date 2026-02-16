@@ -38,6 +38,7 @@ import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';
+import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -664,42 +665,12 @@ class EditToolInvocation extends BaseToolInvocation<
       // @pseudocode edit-integration.md lines 10-44
       // Append LSP diagnostics after successful edit
       try {
-        const lspClient = this.config.getLspServiceClient();
-        if (lspClient && lspClient.isAlive()) {
-          const diagnostics = await lspClient.checkFile(filePath);
-          const lspConfig = this.config.getLspConfig();
-          const includeSeverities = lspConfig?.includeSeverities ?? ['error'];
-          const filtered = diagnostics.filter((d) =>
-            includeSeverities.includes(d.severity),
-          );
-
-          if (filtered.length > 0) {
-            const maxPerFile = lspConfig?.maxDiagnosticsPerFile ?? 20;
-            const relPath = path.relative(this.config.getTargetDir(), filePath);
-            const limited = filtered
-              .sort(
-                (a, b) =>
-                  (a.line ?? 0) - (b.line ?? 0) ||
-                  (a.column ?? 0) - (b.column ?? 0),
-              )
-              .slice(0, maxPerFile);
-
-            const diagLines = limited
-              .map((d) => {
-                const codeStr = d.code !== undefined ? ` (${d.code})` : '';
-                return `${d.severity.toUpperCase()} [${d.line ?? 1}:${d.column ?? 1}] ${d.message}${codeStr}`;
-              })
-              .join('\n');
-
-            let suffix = '';
-            if (filtered.length > maxPerFile) {
-              suffix = `\n... and ${filtered.length - maxPerFile} more`;
-            }
-
-            llmSuccessMessageParts.push(
-              `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${relPath}">\n${diagLines}${suffix}\n</diagnostics>`,
-            );
-          }
+        const diagBlock = await collectLspDiagnosticsBlock(
+          this.config,
+          filePath,
+        );
+        if (diagBlock) {
+          llmSuccessMessageParts.push(diagBlock);
         }
       } catch (_error) {
         // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
@@ -707,7 +678,7 @@ class EditToolInvocation extends BaseToolInvocation<
       }
 
       const result: ToolResult = {
-        llmContent: llmSuccessMessageParts.join(' '),
+        llmContent: llmSuccessMessageParts.join('\n\n'),
         returnDisplay: displayResult,
       };
 
