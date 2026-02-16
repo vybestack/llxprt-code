@@ -95,6 +95,97 @@ export interface AnthropicRateLimitInfo {
   inputTokensRemaining?: number;
 }
 
+/**
+ * Discriminated union of Anthropic content block types that support cache_control.
+ * Each variant lists only the Anthropic-permitted keys for its block type.
+ * @issue #1414
+ */
+export type CacheableAnthropicBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | {
+      type: 'tool_result';
+      tool_use_id: string;
+      content: string;
+      is_error?: boolean;
+    }
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string };
+
+/**
+ * A cacheable block with cache_control attached.
+ * @issue #1414
+ */
+export type CachedAnthropicBlock = CacheableAnthropicBlock & {
+  cache_control: { type: 'ephemeral'; ttl: '5m' | '1h' };
+};
+
+/**
+ * Sanitize a content block before attaching cache_control.
+ * Only copies Anthropic-permitted keys for each block type so that extra
+ * properties (from deserialization, SDK mutations, etc.) never reach the API.
+ * Prevents Anthropic 400 "text: Extra inputs are not permitted".
+ * Unknown block types are returned as minimal text blocks to avoid
+ * permissive spread of unexpected keys.
+ * @issue #1414
+ */
+export function sanitizeBlockForCacheControl(
+  block: CacheableAnthropicBlock,
+  ttl: '5m' | '1h',
+): CachedAnthropicBlock {
+  const cacheControl = { type: 'ephemeral' as const, ttl };
+
+  switch (block.type) {
+    case 'text':
+      return { type: 'text', text: block.text, cache_control: cacheControl };
+    case 'tool_use':
+      return {
+        type: 'tool_use',
+        id: block.id,
+        name: block.name,
+        input: block.input,
+        cache_control: cacheControl,
+      };
+    case 'tool_result': {
+      const result: CachedAnthropicBlock & { type: 'tool_result' } = {
+        type: 'tool_result',
+        tool_use_id: block.tool_use_id,
+        content: block.content,
+        cache_control: cacheControl,
+      };
+      if (block.is_error !== undefined) {
+        result.is_error = block.is_error;
+      }
+      return result;
+    }
+    case 'thinking':
+      return {
+        type: 'thinking',
+        thinking: block.thinking,
+        ...(block.signature !== undefined
+          ? { signature: block.signature }
+          : {}),
+        cache_control: cacheControl,
+      };
+    case 'redacted_thinking':
+      return {
+        type: 'redacted_thinking',
+        data: block.data,
+        cache_control: cacheControl,
+      };
+    default: {
+      // Fail-safe: unknown block types are coerced to a minimal text block
+      // rather than permissively spreading unknown keys to the API.
+      const unknown = block as { type: string };
+      return {
+        type: 'text',
+        text: `[unsupported block type: ${unknown.type}]`,
+        cache_control: cacheControl,
+      };
+    }
+  }
+}
+
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
   // All properties are stateless - no runtime/client caches or constructor-captured config
@@ -1861,10 +1952,10 @@ ${block.code}
         }
 
         if (lastNonThinkingIndex >= 0) {
-          content[lastNonThinkingIndex] = {
-            ...content[lastNonThinkingIndex],
-            cache_control: { type: 'ephemeral', ttl },
-          } as unknown as (typeof content)[number];
+          content[lastNonThinkingIndex] = sanitizeBlockForCacheControl(
+            content[lastNonThinkingIndex],
+            ttl,
+          );
           cacheLogger.debug(() => {
             const block = content[lastNonThinkingIndex];
             return `Added cache_control to last message's last ${block.type} block (index ${lastNonThinkingIndex})`;
