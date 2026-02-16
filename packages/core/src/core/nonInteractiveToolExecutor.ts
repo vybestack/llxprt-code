@@ -10,18 +10,12 @@ import {
   DEFAULT_AGENT_ID,
 } from '../index.js';
 import { type Part } from '@google/genai';
-import { type Config, ApprovalMode } from '../config/config.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
-import { PolicyEngine } from '../policy/policy-engine.js';
-import { PolicyDecision } from '../policy/types.js';
-import {
-  CoreToolScheduler,
-  type CompletedToolCall,
-} from './coreToolScheduler.js';
-import { loadDefaultPolicies } from '../policy/toml-loader.js';
+import { type Config } from '../config/config.js';
+import { type CompletedToolCall } from './coreToolScheduler.js';
 
 /**
  * Configuration subset required for non-interactive tool execution.
+ * Uses the scheduler singleton via getOrCreateScheduler/disposeScheduler.
  */
 export type ToolExecutionConfig = Pick<
   Config,
@@ -31,37 +25,27 @@ export type ToolExecutionConfig = Pick<
   | 'getExcludeTools'
   | 'getSessionId'
   | 'getTelemetryLogPromptsEnabled'
+  | 'getOrCreateScheduler'
+  | 'disposeScheduler'
 > &
-  Partial<
-    Pick<
-      Config,
-      | 'getAllowedTools'
-      | 'getApprovalMode'
-      | 'getMessageBus'
-      | 'getPolicyEngine'
-      | 'getOrCreateScheduler'
-      | 'disposeScheduler'
-    >
-  >;
+  Partial<Pick<Config, 'getAllowedTools' | 'getApprovalMode'>>;
 
 /**
- * Executes a single tool call non-interactively by leveraging the CoreToolScheduler.
+ * Executes a single tool call non-interactively by leveraging the CoreToolScheduler singleton.
  *
- * This is a thin wrapper that:
- * 1. Uses the scheduler singleton (via config.getOrCreateScheduler) when available,
- *    or creates a temporary CoreToolScheduler with a non-interactive PolicyEngine
+ * This wrapper:
+ * 1. Uses the scheduler singleton (via config.getOrCreateScheduler) with interactiveMode: false
  * 2. Schedules the tool call
  * 3. Returns the completed result
  *
  * Non-interactive mode means:
- * - Tools that require user approval (ASK_USER) are automatically rejected as policy violations
- *   (handled by PolicyEngine with nonInteractive: true)
+ * - The scheduler uses toolContextInteractiveMode: false so tools know they're non-interactive
  * - No live output updates are provided
- * - The scheduler uses toolContextInteractiveMode: false
  *
- * When using the singleton scheduler path (config.getOrCreateScheduler available):
+ * Benefits of using the singleton scheduler:
  * - Avoids MessageBus subscription spam from repeated scheduler creation
  * - Proper refcount-based lifecycle management
+ * - Consistent tool governance path with interactive mode
  *
  * Note: Emoji filtering is handled by the individual tools (edit.ts, write-file.ts)
  * so it is not duplicated here.
@@ -87,50 +71,25 @@ export async function executeToolCall(
     }
   }
 
-  // Use singleton scheduler path if available, otherwise fall back to direct creation
-  const useSingletonPath =
-    typeof config.getOrCreateScheduler === 'function' &&
-    typeof config.disposeScheduler === 'function';
-
   let completionResolver: ((calls: CompletedToolCall[]) => void) | null = null;
   const completionPromise = new Promise<CompletedToolCall[]>((resolve) => {
     completionResolver = resolve;
   });
 
   const sessionId = config.getSessionId();
-  let scheduler: CoreToolScheduler;
-  let disposeScheduler: () => void;
 
-  if (useSingletonPath) {
-    // Use the singleton scheduler factory with non-interactive mode
-    scheduler = await config.getOrCreateScheduler!(
-      sessionId,
-      {
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-        onAllToolCallsComplete: async (completedToolCalls) => {
-          completionResolver?.(completedToolCalls);
-        },
-      },
-      { interactiveMode: false },
-    );
-    disposeScheduler = () => config.disposeScheduler!(sessionId);
-  } else {
-    // Fall back to direct scheduler creation for backward compatibility
-    // Defer schedulerConfig creation to this branch only (avoid async work when unused)
-    const schedulerConfig =
-      await createSchedulerConfigForNonInteractive(config);
-    scheduler = new CoreToolScheduler({
-      config: schedulerConfig as unknown as Config,
-      toolContextInteractiveMode: false,
+  // Use the singleton scheduler factory with non-interactive mode
+  const scheduler = await config.getOrCreateScheduler(
+    sessionId,
+    {
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
       onAllToolCallsComplete: async (completedToolCalls) => {
         completionResolver?.(completedToolCalls);
       },
-    });
-    disposeScheduler = () => scheduler.dispose();
-  }
+    },
+    { interactiveMode: false },
+  );
 
   try {
     const effectiveSignal = internalAbortController.signal;
@@ -162,72 +121,8 @@ export async function executeToolCall(
     if (internalAbortController.signal.aborted) {
       scheduler.cancelAll();
     }
-    disposeScheduler();
+    config.disposeScheduler(sessionId);
   }
-}
-
-/**
- * Creates a PolicyEngine configured for non-interactive mode.
- * In non-interactive mode, ASK_USER decisions are converted to DENY.
- */
-async function createNonInteractivePolicyEngine(
-  policyEngine: PolicyEngine | undefined,
-): Promise<PolicyEngine> {
-  if (!policyEngine) {
-    // Load default policies to ensure safe tools like todo_read/todo_write are allowed
-    const defaultRules = await loadDefaultPolicies();
-    return new PolicyEngine({
-      rules: defaultRules,
-      defaultDecision: PolicyDecision.ASK_USER, // Will convert to DENY for ASK_USER in nonInteractive mode
-      nonInteractive: true,
-    });
-  }
-
-  if (policyEngine.isNonInteractive()) {
-    return policyEngine;
-  }
-
-  return new PolicyEngine({
-    rules: [...policyEngine.getRules()],
-    defaultDecision: policyEngine.getDefaultDecision(),
-    nonInteractive: true,
-  });
-}
-
-type SchedulerConfigMethods = Pick<
-  Config,
-  | 'getToolRegistry'
-  | 'getEphemeralSettings'
-  | 'getEphemeralSetting'
-  | 'getExcludeTools'
-  | 'getSessionId'
-  | 'getTelemetryLogPromptsEnabled'
-  | 'getAllowedTools'
-  | 'getApprovalMode'
-  | 'getMessageBus'
-  | 'getPolicyEngine'
->;
-
-async function createSchedulerConfigForNonInteractive(
-  config: ToolExecutionConfig,
-): Promise<SchedulerConfigMethods> {
-  const policyEngine = await createNonInteractivePolicyEngine(
-    config.getPolicyEngine?.(),
-  );
-  const messageBus = config.getMessageBus?.() ?? new MessageBus(policyEngine);
-
-  return {
-    getToolRegistry: () => config.getToolRegistry(),
-    getEphemeralSettings: () => config.getEphemeralSettings(),
-    getEphemeralSetting: (key: string) => config.getEphemeralSetting(key),
-    getExcludeTools: () => config.getExcludeTools(),
-    getSessionId: () => config.getSessionId(),
-    getTelemetryLogPromptsEnabled: () => config.getTelemetryLogPromptsEnabled(),
-    getAllowedTools: () => config.getAllowedTools?.(),
-    getApprovalMode: () => config.getApprovalMode?.() ?? ApprovalMode.DEFAULT,
-    getMessageBus: () => messageBus,
-    getPolicyEngine: () => policyEngine,
-  };
 }
 
 function createErrorCompletedToolCall(

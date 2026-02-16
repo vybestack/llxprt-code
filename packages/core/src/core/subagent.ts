@@ -302,6 +302,7 @@ async function validateToolsAgainstRuntime(params: {
 function createToolExecutionConfig(
   runtimeBundle: AgentRuntimeLoaderResult,
   toolRegistry: ToolRegistry,
+  foregroundConfig: Config,
   settingsSnapshot?: ReadonlySettingsSnapshot,
   toolConfig?: ToolConfig,
 ): ToolExecutionConfig {
@@ -341,6 +342,11 @@ function createToolExecutionConfig(
     getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
+    // Use foreground config's scheduler singleton methods
+    getOrCreateScheduler: (sessionId, callbacks, options) =>
+      foregroundConfig.getOrCreateScheduler(sessionId, callbacks, options),
+    disposeScheduler: (sessionId) =>
+      foregroundConfig.disposeScheduler(sessionId),
   };
 }
 
@@ -570,6 +576,7 @@ export class SubAgentScope {
     const toolExecutorContext = createToolExecutionConfig(
       runtimeBundle,
       toolRegistry,
+      foregroundConfig,
       settingsSnapshot,
       toolConfig,
     );

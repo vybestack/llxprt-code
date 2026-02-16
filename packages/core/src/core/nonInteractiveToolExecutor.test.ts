@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   executeToolCall,
   type ToolExecutionConfig,
@@ -24,6 +24,11 @@ import { MockTool } from '../test-utils/tools.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision } from '../policy/types.js';
+import {
+  getOrCreateScheduler,
+  disposeScheduler,
+  clearAllSchedulers,
+} from '../config/schedulerSingleton.js';
 
 describe('executeToolCall', () => {
   let mockToolRegistry: ToolRegistry;
@@ -32,8 +37,11 @@ describe('executeToolCall', () => {
   let mockConfig: Config;
   let policyEngine: PolicyEngine;
   let messageBus: MessageBus;
+  const testSessionId = 'test-session-id';
 
   beforeEach(() => {
+    clearAllSchedulers();
+
     policyEngine = new PolicyEngine({
       rules: [],
       defaultDecision: PolicyDecision.ALLOW,
@@ -49,11 +57,12 @@ describe('executeToolCall', () => {
       getAllTools: vi.fn().mockReturnValue([]),
     } as unknown as ToolRegistry;
 
-    mockConfig = {
+    // Create a base config object that we'll extend with scheduler methods
+    const baseConfig = {
       getToolRegistry: () => mockToolRegistry,
       getApprovalMode: () => ApprovalMode.DEFAULT,
       getAllowedTools: () => [],
-      getSessionId: () => 'test-session-id',
+      getSessionId: () => testSessionId,
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getContentGeneratorConfig: () => ({
@@ -65,9 +74,21 @@ describe('executeToolCall', () => {
       getTelemetryLogPromptsEnabled: () => false,
       getPolicyEngine: () => policyEngine,
       getMessageBus: () => messageBus,
+    };
+
+    // Add scheduler singleton methods - they need the full config reference
+    mockConfig = {
+      ...baseConfig,
+      getOrCreateScheduler: (sessionId, callbacks, options) =>
+        getOrCreateScheduler(mockConfig, sessionId, callbacks, options),
+      disposeScheduler: (sessionId) => disposeScheduler(sessionId),
     } as unknown as Config;
 
     abortController = new AbortController();
+  });
+
+  afterEach(() => {
+    clearAllSchedulers();
   });
 
   it('should execute a tool successfully', async () => {
@@ -373,6 +394,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
   let mockTool: MockTool;
   let abortController: AbortController;
   let request: ToolCallRequestInfo;
+  const testSessionId = 'test-session-structure';
 
   function createMockConfig(options?: {
     ephemerals?: Record<string, unknown>;
@@ -398,9 +420,11 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     const includeMessageBus = options?.includeMessageBus ?? true;
     const policyEngineReturnsUndefined =
       options?.policyEngineReturnsUndefined ?? false;
-    return {
+
+    // Create base config first, then add scheduler methods that reference it
+    const baseConfig = {
       getToolRegistry: () => mockToolRegistry,
-      getSessionId: () => 'test-session-id',
+      getSessionId: () => testSessionId,
       getTelemetryLogPromptsEnabled: () => false,
       getExcludeTools: () => [],
       getEphemeralSettings: () => ephemerals,
@@ -410,14 +434,26 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         ? policyEngineReturnsUndefined
           ? () => undefined as unknown as PolicyEngine
           : () => policyEngine
-        : undefined,
-      getMessageBus: includeMessageBus ? () => messageBus : undefined,
+        : () => policyEngine,
+      getMessageBus: includeMessageBus ? () => messageBus : () => messageBus,
       getApprovalMode: () => options?.approvalMode ?? ApprovalMode.DEFAULT,
       getAllowedTools: () => options?.allowedTools,
     };
+
+    // Add scheduler singleton methods
+    const config: ToolExecutionConfig = {
+      ...baseConfig,
+      getOrCreateScheduler: (sessionId, callbacks, opts) =>
+        getOrCreateScheduler(config as Config, sessionId, callbacks, opts),
+      disposeScheduler: (sessionId) => disposeScheduler(sessionId),
+    };
+
+    return config;
   }
 
   beforeEach(() => {
+    clearAllSchedulers();
+
     mockTool = new MockTool('testTool');
 
     mockToolRegistry = {
@@ -435,6 +471,10 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       isClientInitiated: false,
       prompt_id: 'prompt-id-1',
     };
+  });
+
+  afterEach(() => {
+    clearAllSchedulers();
   });
 
   describe('response structure validation', () => {
@@ -750,89 +790,8 @@ function getFullResponseText(response: ToolCallResponseInfo): string {
   return chunks.join('\n');
 }
 
-describe('policy handling when policyEngine is undefined', () => {
-  it('should load default policies and allow todo_write when policyEngine is undefined', async () => {
-    // Create a mock todo_write tool
-    const todoWriteTool = new MockTool('todo_write');
-    todoWriteTool.executeFn.mockReturnValue({
-      llmContent: 'Todo updated',
-      returnDisplay: 'Todo updated',
-    });
-
-    const mockToolRegistry = {
-      getTool: vi.fn().mockImplementation((name: string) => {
-        if (name === 'todo_write') return todoWriteTool;
-        return undefined;
-      }),
-      getAllToolNames: vi.fn().mockReturnValue(['todo_write']),
-      getAllTools: vi.fn().mockReturnValue([todoWriteTool]),
-    } as unknown as ToolRegistry;
-
-    // Config with NO policyEngine (getPolicyEngine returns undefined)
-    const config: ToolExecutionConfig = {
-      getToolRegistry: () => mockToolRegistry,
-      getSessionId: () => 'test-session-id',
-      getTelemetryLogPromptsEnabled: () => false,
-      getExcludeTools: () => [],
-      getEphemeralSettings: () => ({}),
-      getEphemeralSetting: () => undefined,
-      getPolicyEngine: () => undefined as unknown as PolicyEngine,
-      // No getMessageBus - will create one internally
-    };
-
-    const request: ToolCallRequestInfo = {
-      callId: 'todo-call',
-      name: 'todo_write',
-      args: { todos: [] },
-      isClientInitiated: false,
-      prompt_id: 'prompt-todo',
-    };
-
-    const { response } = await executeToolCall(config, request);
-
-    // Should NOT be denied - todo_write is in read-only.toml as allow
-    expect(response.error).toBeUndefined();
-    expect(response.errorType).toBeUndefined();
-    expect(response.resultDisplay).toBe('Todo updated');
-  });
-
-  it('should load default policies and allow todo_read when policyEngine is undefined', async () => {
-    const todoReadTool = new MockTool('todo_read');
-    todoReadTool.executeFn.mockReturnValue({
-      llmContent: 'Todos: []',
-      returnDisplay: 'Todos: []',
-    });
-
-    const mockToolRegistry = {
-      getTool: vi.fn().mockImplementation((name: string) => {
-        if (name === 'todo_read') return todoReadTool;
-        return undefined;
-      }),
-      getAllToolNames: vi.fn().mockReturnValue(['todo_read']),
-      getAllTools: vi.fn().mockReturnValue([todoReadTool]),
-    } as unknown as ToolRegistry;
-
-    const config: ToolExecutionConfig = {
-      getToolRegistry: () => mockToolRegistry,
-      getSessionId: () => 'test-session-id',
-      getTelemetryLogPromptsEnabled: () => false,
-      getExcludeTools: () => [],
-      getEphemeralSettings: () => ({}),
-      getEphemeralSetting: () => undefined,
-      getPolicyEngine: () => undefined as unknown as PolicyEngine,
-    };
-
-    const request: ToolCallRequestInfo = {
-      callId: 'todo-read-call',
-      name: 'todo_read',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-todo-read',
-    };
-
-    const { response } = await executeToolCall(config, request);
-
-    expect(response.error).toBeUndefined();
-    expect(response.errorType).toBeUndefined();
-  });
-});
+// Note: The old "policy handling when policyEngine is undefined" tests have been removed.
+// They were testing fallback behavior where executeToolCall would create its own PolicyEngine
+// when config.getPolicyEngine() returned undefined. This fallback path has been removed -
+// all tool execution now goes through the scheduler singleton which uses the parent config's
+// PolicyEngine. The parent config is responsible for providing a valid PolicyEngine.

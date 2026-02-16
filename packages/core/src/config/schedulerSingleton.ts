@@ -206,10 +206,13 @@ export async function getOrCreateScheduler(
     });
     const existingEntry = schedulerEntries.get(sessionId);
     if (existingEntry) {
-      existingEntry.refCount += 1;
+      // Don't increment refCount here - our increment was already counted
+      // in initState.refCount (line 184) which was transferred to existingEntry
+      // when the original creator finished (line 250).
       existingEntry.callbacks = combinedCallbacks;
       return existingEntry.scheduler;
     }
+    // Entry doesn't exist yet (shouldn't happen normally, but handle edge case)
     schedulerEntries.set(sessionId, {
       scheduler,
       refCount: 1,
