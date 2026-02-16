@@ -723,6 +723,18 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     },
   },
   {
+    key: 'subagents.async.enabled',
+    category: 'cli-behavior',
+    description: 'Enable async subagents for this profile.',
+    type: 'boolean',
+    default: true,
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Enable async subagents' },
+      { value: 'false', description: 'Disable async subagents' },
+    ],
+  },
+  {
     key: 'shell-default-timeout-seconds',
     category: 'cli-behavior',
     description: 'Default timeout in seconds for shell command executions',

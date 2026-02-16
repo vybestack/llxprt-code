@@ -1120,6 +1120,37 @@ export const SETTINGS_SCHEMA = {
       },
     },
   },
+  subagents: {
+    type: 'object',
+    label: 'Subagents',
+    category: 'Subagents',
+    requiresRestart: false,
+    default: {},
+    description: 'Settings for subagent behavior.',
+    showInDialog: false,
+    properties: {
+      asyncEnabled: {
+        type: 'boolean',
+        label: 'Async Subagents Enabled',
+        category: 'Subagents',
+        requiresRestart: false,
+        default: true,
+        description:
+          'Globally allow background subagent runs. If off, async=true launches are blocked even if a profile enables them.',
+        showInDialog: true,
+      },
+      maxAsync: {
+        type: 'number',
+        label: 'Maximum Async Tasks',
+        category: 'Subagents',
+        requiresRestart: false,
+        default: 5,
+        description:
+          'Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.',
+        showInDialog: true,
+      },
+    },
+  },
   security: {
     type: 'object',
     label: 'Security',

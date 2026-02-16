@@ -184,6 +184,8 @@ export interface CoreSystemPromptOptions {
   tools?: string[];
   provider?: string;
   includeSubagentDelegation?: boolean;
+  asyncSubagentsEnabled?: boolean;
+  profileAsyncEnabled?: boolean;
 }
 
 /**
@@ -361,6 +363,35 @@ async function buildPromptContext(
     }
   }
 
+  // Determine async subagent settings (global and profile)
+  let asyncSubagentsEnabled = options.asyncSubagentsEnabled;
+  let profileAsyncEnabled = options.profileAsyncEnabled;
+  if (
+    asyncSubagentsEnabled === undefined ||
+    profileAsyncEnabled === undefined
+  ) {
+    try {
+      const settingsService = getSettingsService();
+      if (asyncSubagentsEnabled === undefined) {
+        // Global setting from /settings (nested under subagents.asyncEnabled)
+        const globalSettings = settingsService.getAllGlobalSettings();
+        const subagentsSettings = globalSettings['subagents'] as
+          | { asyncEnabled?: boolean }
+          | undefined;
+        asyncSubagentsEnabled = subagentsSettings?.asyncEnabled !== false;
+      }
+      if (profileAsyncEnabled === undefined) {
+        // Profile setting from /set (subagents.async.enabled)
+        const profileValue = settingsService.get('subagents.async.enabled');
+        profileAsyncEnabled = profileValue !== false;
+      }
+    } catch (_error) {
+      // If we can't get settings, default to enabled
+      asyncSubagentsEnabled = asyncSubagentsEnabled ?? true;
+      profileAsyncEnabled = profileAsyncEnabled ?? true;
+    }
+  }
+
   return {
     provider: resolvedProvider,
     model: model || 'gemini-1.5-pro',
@@ -368,6 +399,8 @@ async function buildPromptContext(
     environment,
     enableToolPrompts,
     includeSubagentDelegation,
+    asyncSubagentsEnabled,
+    profileAsyncEnabled,
   };
 }
 

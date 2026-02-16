@@ -671,6 +671,41 @@ class TaskToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
+    // Check global async setting (from /settings)
+    const settingsService = this.config.getSettingsService?.();
+    const globalSettings = settingsService?.getAllGlobalSettings?.() ?? {};
+    const subagentsSettings = globalSettings['subagents'] as
+      | { asyncEnabled?: boolean; maxAsync?: number }
+      | undefined;
+    const globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
+    if (!globalAsyncEnabled) {
+      return {
+        llmContent:
+          'Async subagents are globally disabled via /settings. Enable "Async Subagents Enabled" in /settings to use async mode.',
+        returnDisplay: 'Error: Async subagents are globally disabled.',
+        error: {
+          message: 'Async subagents are globally disabled via /settings.',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
+    // Check profile async setting (from ephemeralSettings)
+    const ephemeralSettings = this.config.getEphemeralSettings?.() ?? {};
+    const profileAsyncEnabled =
+      ephemeralSettings['subagents.async.enabled'] !== false;
+    if (!profileAsyncEnabled) {
+      return {
+        llmContent:
+          'This profile disables async subagents. Re-enable with: /set subagents.async.enabled true',
+        returnDisplay: 'Error: Async subagents disabled in profile.',
+        error: {
+          message: 'Async subagents disabled in active profile.',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
     // Get AsyncTaskManager
     const asyncTaskManager = this.deps.getAsyncTaskManager?.();
     if (asyncTaskManager === undefined) {

@@ -38,4 +38,8 @@ export interface PromptContext {
   environment: PromptEnvironment;
   enableToolPrompts?: boolean;
   includeSubagentDelegation?: boolean;
+  /** Global setting: whether async subagents are enabled */
+  asyncSubagentsEnabled?: boolean;
+  /** Profile setting: whether async subagents are enabled for this profile */
+  profileAsyncEnabled?: boolean;
 }
