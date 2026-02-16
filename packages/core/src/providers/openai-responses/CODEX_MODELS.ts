@@ -31,6 +31,13 @@ export const CODEX_MODELS: IModel[] = [
     supportedToolFormats: ['openai'],
   },
   {
+    id: 'gpt-5.3-codex-spark',
+    name: 'gpt-5.3-codex-spark',
+    provider: 'codex',
+    supportedToolFormats: ['openai'],
+    contextWindow: 131072, // 128K context (smaller than gpt-5.3-codex's 256K)
+  },
+  {
     id: 'gpt-5.2-codex',
     name: 'gpt-5.2-codex',
     provider: 'codex',
