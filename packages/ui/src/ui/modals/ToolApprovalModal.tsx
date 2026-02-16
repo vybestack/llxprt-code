@@ -6,7 +6,9 @@ import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import { ModalShell } from './ModalShell';
 import { RadioSelect, type RadioSelectOption } from '../components/RadioSelect';
 import { DiffViewer } from '../components/DiffViewer';
-import type { ToolApprovalOutcome } from '../components/ChatLayout';
+import type { ToolApprovalOutcome as ChatLayoutToolApprovalOutcome } from '../components/ChatLayout';
+
+export type ToolApprovalOutcome = ChatLayoutToolApprovalOutcome;
 
 export interface ToolApprovalDetails {
   readonly callId: string;
