@@ -422,6 +422,8 @@ export async function getCoreSystemPromptAsync(
   let toolsArg: string[] | undefined = undefined;
   let providerArg: string | undefined = undefined;
   let includeSubagentDelegation: boolean | undefined = undefined;
+  let asyncSubagentsEnabledArg: boolean | undefined = undefined;
+  let profileAsyncEnabledArg: boolean | undefined = undefined;
 
   if (typeof userMemoryOrOptions === 'object' && userMemoryOrOptions !== null) {
     // Options object mode
@@ -432,6 +434,8 @@ export async function getCoreSystemPromptAsync(
     toolsArg = opts.tools;
     providerArg = opts.provider;
     includeSubagentDelegation = opts.includeSubagentDelegation;
+    asyncSubagentsEnabledArg = opts.asyncSubagentsEnabled;
+    profileAsyncEnabledArg = opts.profileAsyncEnabled;
   } else {
     // Legacy positional args mode
     userMemory = userMemoryOrOptions as string | undefined;
@@ -477,6 +481,8 @@ export async function getCoreSystemPromptAsync(
     tools: toolsArg,
     provider: providerArg,
     includeSubagentDelegation,
+    asyncSubagentsEnabled: asyncSubagentsEnabledArg,
+    profileAsyncEnabled: profileAsyncEnabledArg,
   });
 
   return await service.getPrompt(
