@@ -1770,6 +1770,228 @@ describe('Gemini Client (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
     });
 
+    it('should auto-continue when model generates thinking-only output', async () => {
+      const forwardedRequests: Part[][] = [];
+      let callCount = 0;
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
+        callCount++;
+        if (callCount === 1) {
+          return (async function* () {
+            yield {
+              type: GeminiEventType.Thought,
+              value: {
+                subject: 'Planning',
+                description: 'I will do something',
+              },
+            };
+            yield {
+              type: GeminiEventType.Finished,
+              value: { reason: 'STOP' },
+            };
+          })();
+        }
+        return (async function* () {
+          yield {
+            type: GeminiEventType.Content,
+            value: 'Here is the result',
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })();
+      });
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      todoStoreReadMock.mockResolvedValue([]);
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Do something' }],
+        new AbortController().signal,
+        'prompt-thinking-only',
+      );
+      const events = await fromAsync(stream);
+
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+      expect(forwardedRequests.length).toBe(2);
+
+      const secondRequest = forwardedRequests[1];
+      const continuationPart = secondRequest?.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          typeof (part as Part).text === 'string' &&
+          (part as Part).text.includes(
+            'Continue and take the next concrete action now',
+          ),
+      );
+      expect(continuationPart).toBeDefined();
+
+      expect(events.some((e) => e.type === GeminiEventType.Thought)).toBe(true);
+      expect(
+        events.some(
+          (e) =>
+            e.type === GeminiEventType.Content &&
+            e.value === 'Here is the result',
+        ),
+      ).toBe(true);
+    });
+
+    it('should not auto-continue when model generates thinking plus content', async () => {
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: GeminiEventType.Thought,
+            value: { subject: 'Planning', description: 'I will do something' },
+          };
+          yield {
+            type: GeminiEventType.Content,
+            value: 'Here is the result',
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })(),
+      );
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      todoStoreReadMock.mockResolvedValue([]);
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Do something' }],
+        new AbortController().signal,
+        'prompt-thinking-content',
+      );
+      await fromAsync(stream);
+
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not auto-continue when model generates thinking plus tool calls', async () => {
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: GeminiEventType.Thought,
+            value: { subject: 'Planning', description: 'I will do something' },
+          };
+          yield {
+            type: GeminiEventType.ToolCallRequest,
+            value: {
+              name: 'some_tool',
+              args: {},
+            },
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })(),
+      );
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      todoStoreReadMock.mockResolvedValue([]);
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Do something' }],
+        new AbortController().signal,
+        'prompt-thinking-tools',
+      );
+      await fromAsync(stream);
+
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should respect MAX_RETRIES for thinking-only continuation', async () => {
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: GeminiEventType.Thought,
+            value: { subject: 'Planning', description: 'Still thinking' },
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })(),
+      );
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      todoStoreReadMock.mockResolvedValue([]);
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Do something' }],
+        new AbortController().signal,
+        'prompt-thinking-max-retries',
+      );
+      const events = await fromAsync(stream);
+
+      // MAX_RETRIES is 2, so: initial call + 1 retry = 2 calls
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+      // Should eventually return with Finished event
+      expect(events.some((e) => e.type === GeminiEventType.Finished)).toBe(
+        true,
+      );
+    });
+
     describe('Editor context delta', () => {
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
