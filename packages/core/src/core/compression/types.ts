@@ -27,6 +27,7 @@ export const COMPRESSION_STRATEGIES = [
   'middle-out',
   'top-down-truncation',
   'one-shot',
+  'high-density',
 ] as const;
 
 export type CompressionStrategyName = (typeof COMPRESSION_STRATEGIES)[number];
@@ -53,6 +54,29 @@ export interface CompressionStrategy {
   readonly name: CompressionStrategyName;
   readonly requiresLLM: boolean;
   compress(context: CompressionContext): Promise<CompressionResult>;
+}
+
+export interface StrategyTrigger {
+  mode: 'continuous' | 'threshold';
+  defaultThreshold: number;
+}
+
+export interface DensityConfig {
+  readWritePruning: boolean;
+  fileDedupe: boolean;
+  recencyPruning: boolean;
+  recencyRetention: number;
+  workspaceRoot: string;
+}
+
+export interface DensityResult {
+  removals: number[];
+  replacements: ReadonlyMap<number, IContent>;
+  metadata: {
+    readWritePairsPruned: number;
+    fileDeduplicationsPruned: number;
+    recencyPruned: number;
+  };
 }
 
 export interface CompressionResult {

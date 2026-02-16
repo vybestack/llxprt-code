@@ -189,6 +189,7 @@ export interface AgentRuntimeContext {
     contextLimit(): number;
     preserveThreshold(): number;
     topPreserveThreshold(): number;
+    densityCompressHeadroom(): number;
     toolFormatOverride(): string | undefined;
     /** @plan PLAN-20260211-COMPRESSION.P12 */
     compressionStrategy(): string;

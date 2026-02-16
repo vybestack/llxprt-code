@@ -13,6 +13,7 @@
 
 import type { CompressionStrategy, CompressionStrategyName } from './types.js';
 import { COMPRESSION_STRATEGIES, UnknownStrategyError } from './types.js';
+import { HighDensityStrategy } from './HighDensityStrategy.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
@@ -43,6 +44,8 @@ export function getCompressionStrategy(
       return new TopDownTruncationStrategy();
     case 'one-shot':
       return new OneShotStrategy();
+    case 'high-density':
+      return new HighDensityStrategy();
     default: {
       const exhaustive: never = name;
       throw new UnknownStrategyError(exhaustive as string);

@@ -42,10 +42,17 @@ export interface MemoryChangedPayload {
   filePaths: string[];
 }
 
+export interface OutputPayload {
+  chunk: Uint8Array | string;
+  encoding?: BufferEncoding;
+  isStderr: boolean;
+}
+
 export enum CoreEvent {
   UserFeedback = 'user-feedback',
   MemoryChanged = 'memory-changed',
   ModelChanged = 'model-changed',
+  Output = 'output',
 }
 
 export class CoreEventEmitter extends EventEmitter {
@@ -102,6 +109,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (model: string) => void,
   ): this;
   override on(
+    event: CoreEvent.Output,
+    listener: (payload: OutputPayload) => void,
+  ): this;
+  override on(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     listener: (...args: any[]) => void,
@@ -122,6 +133,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (model: string) => void,
   ): this;
   override off(
+    event: CoreEvent.Output,
+    listener: (payload: OutputPayload) => void,
+  ): this;
+  override off(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     listener: (...args: any[]) => void,
@@ -138,6 +153,7 @@ export class CoreEventEmitter extends EventEmitter {
     payload: MemoryChangedPayload,
   ): boolean;
   override emit(event: CoreEvent.ModelChanged, model: string): boolean;
+  override emit(event: CoreEvent.Output, payload: OutputPayload): boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   override emit(event: string | symbol, ...args: any[]): boolean {
     return super.emit(event, ...args);
@@ -148,6 +164,10 @@ export class CoreEventEmitter extends EventEmitter {
    */
   emitModelChanged(model: string): void {
     this.emit(CoreEvent.ModelChanged, model);
+  }
+
+  emitOutput(payload: OutputPayload): void {
+    this.emit(CoreEvent.Output, payload);
   }
 }
 

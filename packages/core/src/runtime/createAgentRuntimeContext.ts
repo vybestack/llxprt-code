@@ -128,6 +128,7 @@ export function createAgentRuntimeContext(
         'compression.profile',
         options.settings.compressionProfile,
       ),
+    densityCompressHeadroom: (): number => 0.6,
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006
