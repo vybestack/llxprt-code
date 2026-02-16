@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -123,7 +129,7 @@ describe('proxy integration (phase 31)', () => {
   let priorSocketEnv: string | undefined;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'credproxy-p31-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-'));
     priorSocketEnv = process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
   });
@@ -250,8 +256,10 @@ describe('proxy integration (phase 31)', () => {
     // @scenario Generated socket path should include process id and random nonce suffix.
     await withServer(async ({ socketPath }) => {
       const socketFile = path.basename(socketPath);
+      // Socket filename format: {pid}-{base64url nonce}.sock
+      // base64url uses [A-Za-z0-9_-], 128 bits = 22 chars
       expect(socketFile).toMatch(
-        new RegExp(`^llxprt-cred-${process.pid}-[a-f0-9]{8}\\.sock$`),
+        new RegExp(`^${process.pid}-[A-Za-z0-9_-]{22}\\.sock$`),
       );
     });
   });

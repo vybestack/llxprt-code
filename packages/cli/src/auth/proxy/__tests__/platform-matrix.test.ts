@@ -10,7 +10,7 @@
  * Tests platform-conditional socket creation, permissions, peer credential
  * verification, and socket path handling across Linux and macOS.
  *
- * @plan PLAN-20250214-CREDPROXY.P38
+ * @plan:PLAN-20250214-CREDPROXY.P38
  * @requirement R4.1, R4.2, R4.3, R27.1, R27.2, R27.3
  */
 
@@ -121,7 +121,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
   let server: CredentialProxyServer | null = null;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'platform-matrix-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-'));
   });
 
   afterEach(async () => {
@@ -421,12 +421,14 @@ describe('Platform Matrix Tests (Phase 38)', () => {
       const resolvedTmpdir = fs.realpathSync(os.tmpdir());
       const uid = process.getuid?.() ?? 99999;
       const maxPid = 99999;
-      const nonce = 'deadbeef';
+      // 128-bit nonce in base64url = 22 chars
+      const nonce = 'AAAAAAAAAAAAAAAAAAAAAA';
 
+      // Use short directory name "lc-" to fit within macOS socket path limits
       const worstCasePath = path.join(
         resolvedTmpdir,
-        `llxprt-cred-${uid}`,
-        `llxprt-cred-${maxPid}-${nonce}.sock`,
+        `lc-${uid}`,
+        `${maxPid}-${nonce}.sock`,
       );
 
       // Should be at most 104 chars for macOS compatibility
@@ -456,7 +458,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
         // This tests that the server can start in a directory with existing files
         const staleFilePath = path.join(
           tmpDir,
-          `llxprt-cred-${process.pid}-stale123.sock`,
+          `${process.pid}-stale1234567890123456.sock`,
         );
         fs.writeFileSync(staleFilePath, 'stale socket placeholder');
 

@@ -80,15 +80,18 @@ export class CredentialProxyServer {
   }
 
   async stop(): Promise<void> {
-    if (this.server !== null) {
-      this.server.close();
-      this.server = null;
-    }
-
+    // First destroy all active connections so server.close() can complete
     for (const socket of this.connections) {
       socket.destroy();
     }
     this.connections.clear();
+
+    if (this.server !== null) {
+      await new Promise<void>((resolve, reject) => {
+        this.server!.close((err) => (err ? reject(err) : resolve()));
+      });
+      this.server = null;
+    }
 
     if (this.socketPath !== null) {
       try {
@@ -107,10 +110,12 @@ export class CredentialProxyServer {
   private buildSocketPath(): string {
     const tmpdir = fs.realpathSync(os.tmpdir());
     const uid = process.getuid?.() ?? process.pid;
-    const nonce = crypto.randomBytes(4).toString('hex');
-    const dir =
-      this.options.socketDir ?? path.join(tmpdir, `llxprt-cred-${uid}`);
-    return path.join(dir, `llxprt-cred-${process.pid}-${nonce}.sock`);
+    // Use 128-bit cryptographic nonce, base64url encoded for compactness
+    // (macOS has ~104 char limit on Unix socket paths)
+    const nonce = crypto.randomBytes(16).toString('base64url');
+    // Use short directory name "lc-" to fit within macOS socket path limits
+    const dir = this.options.socketDir ?? path.join(tmpdir, `lc-${uid}`);
+    return path.join(dir, `${process.pid}-${nonce}.sock`);
   }
 
   private handleConnection(socket: net.Socket): void {
@@ -327,6 +332,7 @@ export class CredentialProxyServer {
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     const tokenData = payload.token as Record<string, unknown> | undefined;
+    const bucket = payload.bucket as string | undefined;
     if (!provider || !tokenData) {
       this.sendError(
         socket,
@@ -337,12 +343,31 @@ export class CredentialProxyServer {
       return;
     }
 
+    if (!this.isProviderAllowed(provider)) {
+      this.sendError(
+        socket,
+        id,
+        'UNAUTHORIZED',
+        `UNAUTHORIZED: Provider not allowed: ${provider}`,
+      );
+      return;
+    }
+    if (!this.isBucketAllowed(bucket)) {
+      this.sendError(
+        socket,
+        id,
+        'UNAUTHORIZED',
+        `UNAUTHORIZED: Bucket not allowed: ${bucket ?? 'default'}`,
+      );
+      return;
+    }
+
     // Strip refresh_token from incoming token
     const { refresh_token: _stripped, ...safeToken } = tokenData;
     await this.options.tokenStore.saveToken(
       provider,
       safeToken as unknown as OAuthToken,
-      payload.bucket as string | undefined,
+      bucket,
     );
     this.sendOk(socket, id, {});
   }
@@ -358,6 +383,26 @@ export class CredentialProxyServer {
       return;
     }
     const bucket = payload.bucket as string | undefined;
+
+    if (!this.isProviderAllowed(provider)) {
+      this.sendError(
+        socket,
+        id,
+        'UNAUTHORIZED',
+        `UNAUTHORIZED: Provider not allowed: ${provider}`,
+      );
+      return;
+    }
+    if (!this.isBucketAllowed(bucket)) {
+      this.sendError(
+        socket,
+        id,
+        'UNAUTHORIZED',
+        `UNAUTHORIZED: Bucket not allowed: ${bucket ?? 'default'}`,
+      );
+      return;
+    }
+
     await this.options.tokenStore.removeToken(provider, bucket);
     this.sendOk(socket, id, {});
   }

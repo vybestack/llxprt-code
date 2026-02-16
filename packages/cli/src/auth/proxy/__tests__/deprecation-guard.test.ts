@@ -88,7 +88,9 @@ describe('Deprecation Guards (P36)', () => {
 
       if (violations.length > 0) {
         console.error('Found direct KeyringTokenStore instantiation:');
-        violations.forEach((v) => console.error(`  ${v}`));
+        violations.forEach((v) => {
+          console.error(`  ${v}`);
+        });
       }
 
       expect(violations).toEqual([]);
@@ -113,7 +115,9 @@ describe('Deprecation Guards (P36)', () => {
 
       if (violations.length > 0) {
         console.error('Found direct getProviderKeyStorage() calls:');
-        violations.forEach((v) => console.error(`  ${v}`));
+        violations.forEach((v) => {
+          console.error(`  ${v}`);
+        });
       }
 
       expect(violations).toEqual([]);
@@ -137,7 +141,9 @@ describe('Deprecation Guards (P36)', () => {
 
       if (definitions.length !== 1) {
         console.error('Expected exactly 1 mergeRefreshedToken definition:');
-        definitions.forEach((d) => console.error(`  ${d}`));
+        definitions.forEach((d) => {
+          console.error(`  ${d}`);
+        });
       }
 
       expect(definitions.length).toBe(1);
@@ -155,7 +161,9 @@ describe('Deprecation Guards (P36)', () => {
       // Should find zero - no variable assignments creating duplicate implementations
       if (matches.length > 0) {
         console.error('Found mergeRefreshedToken assignments:');
-        matches.forEach((m) => console.error(`  ${m}`));
+        matches.forEach((m) => {
+          console.error(`  ${m}`);
+        });
       }
 
       expect(matches).toEqual([]);

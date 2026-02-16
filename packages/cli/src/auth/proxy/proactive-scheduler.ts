@@ -50,7 +50,13 @@ export class ProactiveScheduler {
 
     const timer = setTimeout(() => {
       this.timers.delete(key);
-      void this.refreshFn(provider, bucket);
+      this.refreshFn(provider, bucket).catch((err) => {
+        // Log error to prevent unhandled rejection; refresh will be retried on next schedule
+        console.error(
+          `Proactive refresh failed for ${provider}:${bucket}:`,
+          err,
+        );
+      });
     }, delayMs);
 
     timer.unref();

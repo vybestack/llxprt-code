@@ -12,8 +12,8 @@
  * can be accessed via both symlink and realpath, and support the
  * framing protocol for credential proxy communication.
  *
- * @plan PLAN-20250214-CREDPROXY.P38
- * @requirement R4.1, R4.2, R4.3, R27.2, R27.3
+ * @plan:PLAN-20250214-CREDPROXY.P38
+ * @requirement R27.2
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -37,7 +37,7 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
   let server: net.Server | null = null;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'uds-probe-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'up-'));
   });
 
   afterEach(() => {

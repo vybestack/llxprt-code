@@ -163,7 +163,7 @@ describe('E2E Credential Flow (Phase 37)', () => {
   let priorSocketEnv: string | undefined;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'credproxy-e2e-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ce-'));
     priorSocketEnv = process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     resetFactorySingletons();
