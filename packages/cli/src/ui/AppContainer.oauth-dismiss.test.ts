@@ -5,23 +5,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { AppState } from './reducers/appReducer.js';
-import { initialAppState } from './reducers/appReducer.js';
 
 describe('OAuthCodeDialog auto-dismiss behavior', () => {
-  let mockAppState: AppState;
-
   beforeEach(() => {
     // Reset global OAuth state
     delete (global as Record<string, unknown>).__oauth_needs_code;
-
-    mockAppState = {
-      ...initialAppState,
-      openDialogs: {
-        ...initialAppState.openDialogs,
-        oauthCode: false,
-      },
-    };
   });
 
   afterEach(() => {
