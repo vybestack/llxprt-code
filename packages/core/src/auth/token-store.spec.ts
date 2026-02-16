@@ -399,8 +399,6 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
         'bucket|name',
         'bucket?name',
         'bucket*name',
-        'bucket@name',
-        'bucket.name',
       ];
 
       for (const bucketName of invalidBucketNames) {
@@ -418,6 +416,8 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
         'bucket_with_underscores',
         'BucketMixedCase',
         'simple123',
+        'user@example.com',
+        'bucket.with.dots',
       ];
 
       for (const bucketName of validBucketNames) {

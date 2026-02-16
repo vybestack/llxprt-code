@@ -11,6 +11,8 @@ import { GeminiOAuthProvider } from './gemini-oauth-provider.js';
 import { QwenOAuthProvider } from './qwen-oauth-provider.js';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import { promises as fs } from 'node:fs';
+import { LoadedSettings } from '../config/settings.js';
+import type { Settings } from '../config/settings.js';
 
 // Mock the file system to simulate missing OAuth credentials
 vi.mock('node:fs', async (importOriginal) => {
@@ -24,6 +26,20 @@ vi.mock('node:fs', async (importOriginal) => {
     },
   };
 });
+
+function createLoadedSettings(
+  overrides: Partial<Settings> = {},
+): LoadedSettings {
+  const emptySettings = {} as Settings;
+  const userSettings = { ...overrides } as Settings;
+  return new LoadedSettings(
+    { path: '', settings: emptySettings },
+    { path: '', settings: emptySettings },
+    { path: '', settings: userSettings },
+    { path: '', settings: emptySettings },
+    true,
+  );
+}
 
 const mockFs = vi.mocked(fs);
 
@@ -42,6 +58,17 @@ describe('OAuth Provider Premature Initialization', () => {
         "ENOENT: no such file or directory, open '/.llxprt/oauth_creds.json'",
       ),
     );
+
+    // Default to explicitly disabled OAuth in these initialization tests.
+    // These tests verify "no premature OAuth usage" behavior when OAuth is off.
+    const settings = createLoadedSettings({
+      oauthEnabledProviders: {
+        gemini: false,
+        qwen: false,
+        anthropic: false,
+      },
+    });
+    oauthManager = new OAuthManager(tokenStore, settings);
   });
 
   describe('OAuth Provider Registration Should Not Trigger Initialization', () => {

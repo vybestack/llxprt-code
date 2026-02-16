@@ -635,17 +635,30 @@ export class OAuthManager {
     logger.debug(
       () => `[FLOW] getToken() called for provider: ${providerName}`,
     );
-    // Check if OAuth is enabled for this provider
-    if (!this.isOAuthEnabled(providerName)) {
+
+    if (!this.providers.has(providerName)) {
       logger.debug(
-        () => `[FLOW] OAuth is NOT enabled for ${providerName}, returning null`,
+        () => `[FLOW] Unknown provider for getToken(): ${providerName}`,
       );
       return null;
     }
 
+    // Respect explicit user settings when available.
+    // If settings exist and OAuth is disabled for this provider, do not use stored
+    // tokens and do not trigger OAuth flows.
+    if (this.settings && !this.isOAuthEnabled(providerName)) {
+      logger.debug(
+        () =>
+          `[FLOW] OAuth is disabled by settings for ${providerName}, returning null`,
+      );
+      return null;
+    }
+
+    // @fix issue1442: Try to get existing token BEFORE checking in-memory OAuth enablement.
+    // This fixes subagents created without LoadedSettings: they can reuse existing tokens
+    // instead of forcing unnecessary reauth loops.
     logger.debug(
-      () =>
-        `[FLOW] OAuth is enabled for ${providerName}, calling getOAuthToken()...`,
+      () => `[FLOW] Attempting to get existing token for ${providerName}...`,
     );
     const token = await this.getOAuthToken(providerName, bucket);
 
@@ -699,6 +712,20 @@ export class OAuthManager {
     // For other providers, trigger OAuth flow
     // Check if the current profile has multiple buckets - if so, use MultiBucketAuthenticator
     // Issue 913: Also check if auth-bucket-prompt is enabled for single/default buckets
+
+    // @fix issue1442: Check OAuth enablement only when triggering NEW authentication.
+    // In runtimes without LoadedSettings (e.g., isolated subagents), allow auth flow
+    // when there's no explicit in-memory OAuth state yet.
+    const shouldRequireOAuthEnabled =
+      this.settings !== undefined || this.inMemoryOAuthState.has(providerName);
+    if (shouldRequireOAuthEnabled && !this.isOAuthEnabled(providerName)) {
+      logger.debug(
+        () =>
+          `[FLOW] OAuth is NOT enabled for ${providerName}, cannot trigger new auth`,
+      );
+      return null;
+    }
+
     logger.debug(
       () =>
         `[FLOW] No existing token for ${providerName}, triggering OAuth flow...`,
