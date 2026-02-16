@@ -213,9 +213,10 @@ export async function getOrCreateScheduler(
       return existingEntry.scheduler;
     }
     // Entry doesn't exist yet (shouldn't happen normally, but handle edge case)
+    // Use inFlight.refCount to preserve all callers' increments
     schedulerEntries.set(sessionId, {
       scheduler,
-      refCount: 1,
+      refCount: inFlight.refCount,
       callbacks: combinedCallbacks,
       interactiveMode: inFlight.interactiveMode,
     });
