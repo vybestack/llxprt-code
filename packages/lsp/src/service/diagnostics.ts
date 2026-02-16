@@ -170,7 +170,7 @@ export function formatSingleFileDiagnostics(
   config: LspConfig,
 ): string {
   if (diagnostics.length === 0) {
-    return [''].join('');
+    return '';
   }
 
   const normalizedFile = file.startsWith('/workspace/')

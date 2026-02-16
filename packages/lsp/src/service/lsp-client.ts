@@ -233,7 +233,7 @@ export class LspClient {
     const normalizedPath = fromFileUri(filePath);
     const uri = toFileUri(normalizedPath);
     const ext = extname(normalizedPath);
-    const languageId = getLanguageId(ext) ?? this.config.config.id;
+    const languageId = getLanguageId(ext) ?? 'plaintext';
     const previousVersion = this.documentVersions.get(normalizedPath);
 
     // Clear stale cached diagnostics so waitForDiagnostics doesn't
@@ -573,6 +573,9 @@ export class LspClient {
       // kill may fail if process already exited
     }
 
+    for (const { reject } of this.pending.values()) {
+      reject(new Error('LSP client shutdown'));
+    }
     this.pending.clear();
     this.alive = false;
     this.initialized = false;

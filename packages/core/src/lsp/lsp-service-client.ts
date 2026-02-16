@@ -244,16 +244,25 @@ export class LspServiceClient {
     }
 
     try {
+      let exited = false;
+      const onExit = once(child, 'exit').then(() => {
+        exited = true;
+      });
+
       if (!child.killed) {
         child.kill('SIGTERM');
       }
 
       await Promise.race([
-        once(child, 'exit'),
+        onExit,
         new Promise<void>((resolve) => {
           setTimeout(() => {
-            if (!child.killed) {
-              child.kill('SIGKILL');
+            if (!exited) {
+              try {
+                child.kill('SIGKILL');
+              } catch {
+                // already dead
+              }
             }
             resolve();
           }, SIGKILL_GRACE_MS);

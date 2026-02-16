@@ -290,13 +290,12 @@ export async function main(): Promise<void> {
 
   process.on('uncaughtException', (error) => {
     stderr.write(`Uncaught exception in LSP service: ${String(error)}\n`);
-    void shutdown();
-    process.exit(1);
+    shutdown().finally(() => process.exit(1));
   });
 
   process.on('unhandledRejection', (error) => {
     stderr.write(`Unhandled rejection in LSP service: ${String(error)}\n`);
-    process.exit(1);
+    shutdown().finally(() => process.exit(1));
   });
 
   rpcConnection.sendNotification('lsp/ready');

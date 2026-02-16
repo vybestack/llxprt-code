@@ -354,8 +354,8 @@ export class Orchestrator {
   }
 
   private serverIdFromKey(key: ClientKey): string {
-    const [serverId] = key.split('::');
-    return serverId;
+    const idx = key.indexOf('::');
+    return idx < 0 ? key : key.slice(0, idx);
   }
 
   private appendKnownSource(file: string, source: string): Set<string> {
@@ -427,10 +427,7 @@ export class Orchestrator {
     file: string,
   ): Promise<LspClient | null> {
     const normalizedFile = this.normalizeAbsolutePath(file);
-    if (
-      !this.isInsideWorkspace(normalizedFile) ||
-      !normalizedFile.startsWith(this.workspaceRootAbs)
-    ) {
+    if (!this.isInsideWorkspace(normalizedFile)) {
       return null;
     }
 
@@ -458,12 +455,13 @@ export class Orchestrator {
   ): Promise<T> {
     const timeoutMs = this.config.navigationTimeoutMs ?? DEFAULT_WAIT_MS;
     try {
+      let timer: ReturnType<typeof setTimeout>;
       return await Promise.race([
         operation(),
         new Promise<T>((resolveTimeout) => {
-          setTimeout(() => resolveTimeout(fallback), timeoutMs);
+          timer = setTimeout(() => resolveTimeout(fallback), timeoutMs);
         }),
-      ]);
+      ]).finally(() => clearTimeout(timer));
     } catch {
       return fallback;
     }
