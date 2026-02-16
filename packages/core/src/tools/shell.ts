@@ -191,7 +191,9 @@ class ShellToolInvocation extends BaseToolInvocation<
       rootCommand: commandsToConfirm.join(', '),
       onConfirm: async (outcome: ToolConfirmationOutcome, payload) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
-          commandsToConfirm.forEach((command) => this.allowlist.add(command));
+          commandsToConfirm.forEach((command) => {
+            this.allowlist.add(command);
+          });
           return;
         }
 

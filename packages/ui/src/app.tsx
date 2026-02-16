@@ -327,6 +327,11 @@ function AppInner(): React.ReactNode {
     pendingApprovalRef.current = pendingApproval;
   }, [pendingApproval]);
 
+  const editedApprovalCommandRef = useRef(editedApprovalCommand);
+  useEffect(() => {
+    editedApprovalCommandRef.current = editedApprovalCommand;
+  }, [editedApprovalCommand]);
+
   // Track edited command text for suggest-edit flow
   useEffect(() => {
     const current = pendingApproval;
@@ -488,26 +493,34 @@ function AppInner(): React.ReactNode {
         current?.callId,
       );
       if (current) {
-        handleDecision(current.callId, outcome, editedApprovalCommand);
+        handleDecision(
+          current.callId,
+          outcome,
+          editedApprovalCommandRef.current,
+        );
         // If user cancelled, also cancel all tools and streaming to break the loop
         if (outcome === 'cancel') {
           handleCancelAll();
         }
       }
     },
-    [editedApprovalCommand, handleDecision, handleCancelAll],
+    [handleDecision, handleCancelAll],
   );
 
   // Callback for ChatLayout inline approval UI
   const handleApprovalSelectFromUI = useCallback(
     (callId: string, outcome: ToolApprovalOutcome, editedCommand?: string) => {
-      handleDecision(callId, outcome, editedCommand ?? editedApprovalCommand);
+      handleDecision(
+        callId,
+        outcome,
+        editedCommand ?? editedApprovalCommandRef.current,
+      );
       // If user cancelled, also cancel all tools and streaming to break the loop
       if (outcome === 'cancel') {
         handleCancelAll();
       }
     },
-    [editedApprovalCommand, handleDecision, handleCancelAll],
+    [handleDecision, handleCancelAll],
   );
 
   const handleApprovalCancel = useCallback(() => {

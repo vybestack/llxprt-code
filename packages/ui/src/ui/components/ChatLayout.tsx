@@ -332,7 +332,11 @@ function renderInlineApproval({
               }
               bg={isSelected ? theme.colors.selection.bg : undefined}
               onMouse={() => {
-                onApprovalSelect?.(tool.callId, opt.outcome, editedCommand);
+                onApprovalSelect?.(
+                  tool.callId,
+                  opt.outcome,
+                  selectedEditedCommand,
+                );
               }}
             >
               {isSelected ? '► ' : '  '}

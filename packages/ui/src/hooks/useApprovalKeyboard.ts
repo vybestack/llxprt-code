@@ -208,11 +208,15 @@ export function useApprovalKeyboard(
         break;
       case 'return':
       case 'kpenter': {
-        const outcome = currentOptions[selectedIndexRef.current];
+        const selected = selectedIndexRef.current;
+        if (selected < 0 || selected >= currentOptionCount) {
+          break;
+        }
+        const outcome = currentOptions[selected];
         logger.debug(
           'Enter pressed',
           'selectedIndex:',
-          selectedIndexRef.current,
+          selected,
           'outcome:',
           outcome,
         );

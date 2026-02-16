@@ -60,12 +60,10 @@ describe('ToolApprovalModal', () => {
     it('accepts valid outcome values', () => {
       const allowOnce: ToolApprovalOutcome = 'allow_once';
       const allowAlways: ToolApprovalOutcome = 'allow_always';
-      const suggestEdit: ToolApprovalOutcome = 'suggest_edit';
       const cancel: ToolApprovalOutcome = 'cancel';
 
       expect(allowOnce).toBe('allow_once');
       expect(allowAlways).toBe('allow_always');
-      expect(suggestEdit).toBe('suggest_edit');
       expect(cancel).toBe('cancel');
     });
   });
