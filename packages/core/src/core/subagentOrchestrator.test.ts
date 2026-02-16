@@ -567,6 +567,56 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(loaderArgs.profile.state.baseUrl).toBe(qwenBaseUrl);
   });
 
+  it('forwards user-agent ephemeral setting to subagent SettingsService', async () => {
+    const kimiProfile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'kimi-for-coding',
+      modelParams: {},
+      ephemeralSettings: {
+        'user-agent': 'RooCode/1.0',
+      },
+    };
+
+    const kimiSubagent: SubagentConfig = {
+      name: 'kimicoder',
+      profile: 'kimi',
+      systemPrompt: 'Kimi coder',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(kimiSubagent);
+    const loadProfile = vi.fn().mockResolvedValue(kimiProfile);
+
+    const runtimeBundle = createRuntimeBundle('kimi');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'kimicoder-1',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({
+      name: kimiSubagent.name,
+    });
+
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
+    expect(settingsService.get('user-agent')).toBe('RooCode/1.0');
+  });
+
   it('provides a dispose hook that clears runtime history and returns unique agent ids per launch', async () => {
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
     const loadProfile = vi.fn().mockResolvedValue(profile);
