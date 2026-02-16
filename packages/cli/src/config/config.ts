@@ -34,7 +34,6 @@ import {
   SHELL_TOOL_NAMES,
   isRipgrepAvailable,
   normalizeShellReplacement,
-  loadCoreMemoryContent,
   type ConfigParameters,
   type GeminiCLIExtension,
   type Profile,
