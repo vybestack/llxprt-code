@@ -6,8 +6,9 @@ import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import { ModalShell } from './ModalShell';
 import { RadioSelect, type RadioSelectOption } from '../components/RadioSelect';
 import { DiffViewer } from '../components/DiffViewer';
+import type { ToolApprovalOutcome as ChatLayoutToolApprovalOutcome } from '../components/ChatLayout';
 
-export type ToolApprovalOutcome = 'allow_once' | 'allow_always' | 'cancel';
+export type ToolApprovalOutcome = ChatLayoutToolApprovalOutcome;
 
 export interface ToolApprovalDetails {
   readonly callId: string;
@@ -214,6 +215,7 @@ export function ToolApprovalModal(
       });
     }
 
+    // Modal flow currently provides allow/cancel only; suggest-edit is handled in inline approval UI.
     result.push({
       label: 'No, cancel (esc)',
       value: 'cancel',

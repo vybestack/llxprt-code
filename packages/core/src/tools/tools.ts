@@ -173,7 +173,8 @@ export abstract class BaseToolInvocation<
           response.confirmed ??
           (response.outcome !== undefined
             ? response.outcome !== ToolConfirmationOutcome.Cancel &&
-              response.outcome !== ToolConfirmationOutcome.ModifyWithEditor
+              response.outcome !== ToolConfirmationOutcome.ModifyWithEditor &&
+              response.outcome !== ToolConfirmationOutcome.SuggestEdit
             : false);
 
         resolve(confirmed ? 'ALLOW' : 'DENY');
@@ -679,7 +680,10 @@ export interface ToolEditConfirmationDetails {
 export interface ToolExecuteConfirmationDetails {
   type: 'exec';
   title: string;
-  onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
+  onConfirm: (
+    outcome: ToolConfirmationOutcome,
+    payload?: ToolConfirmationPayload,
+  ) => Promise<void>;
   command: string;
   rootCommand: string;
   correlationId?: string;
@@ -691,14 +695,20 @@ export interface ToolMcpConfirmationDetails {
   serverName: string;
   toolName: string;
   toolDisplayName: string;
-  onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
+  onConfirm: (
+    outcome: ToolConfirmationOutcome,
+    payload?: ToolConfirmationPayload,
+  ) => Promise<void>;
   correlationId?: string;
 }
 
 export interface ToolInfoConfirmationDetails {
   type: 'info';
   title: string;
-  onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
+  onConfirm: (
+    outcome: ToolConfirmationOutcome,
+    payload?: ToolConfirmationPayload,
+  ) => Promise<void>;
   prompt: string;
   urls?: string[];
   correlationId?: string;

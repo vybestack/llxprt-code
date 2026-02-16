@@ -1,8 +1,6 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
-import type {
-  ToolApprovalDetails,
-  ToolApprovalOutcome,
-} from '../ui/modals/ToolApprovalModal';
+import type { ToolApprovalDetails } from '../ui/modals/ToolApprovalModal';
+import type { ToolApprovalOutcome } from '../ui/components/ChatLayout';
 import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import type { ToolConfirmationType } from '../types/events';
@@ -13,9 +11,14 @@ const logger = getLogger('nui:tool-approval');
 /**
  * Function type for responding to tool confirmations
  */
+export interface ConfirmationPayload {
+  editedCommand?: string;
+}
+
 export type RespondToConfirmationFn = (
   callId: string,
   outcome: ToolConfirmationOutcome,
+  payload?: ConfirmationPayload,
 ) => void;
 
 export interface PendingApproval extends ToolApprovalDetails {
@@ -33,6 +36,7 @@ export interface UseToolApprovalResult {
   readonly handleDecision: (
     callId: string,
     outcome: ToolApprovalOutcome,
+    editedCommand?: string,
   ) => void;
   readonly clearApproval: () => void;
 }
@@ -43,6 +47,8 @@ function mapOutcome(outcome: ToolApprovalOutcome): ToolConfirmationOutcome {
       return ToolConfirmationOutcome.ProceedOnce;
     case 'allow_always':
       return ToolConfirmationOutcome.ProceedAlways;
+    case 'suggest_edit':
+      return ToolConfirmationOutcome.SuggestEdit;
     case 'cancel':
       return ToolConfirmationOutcome.Cancel;
     default:
@@ -176,7 +182,7 @@ export function useToolApproval(
   );
 
   const handleDecision = useCallback(
-    (callId: string, outcome: ToolApprovalOutcome) => {
+    (callId: string, outcome: ToolApprovalOutcome, editedCommand?: string) => {
       const currentApproval = pendingApprovalRef.current;
       const confirmFn = respondToConfirmationRef.current;
       logger.debug(
@@ -185,6 +191,8 @@ export function useToolApproval(
         callId,
         'outcome:',
         outcome,
+        'hasEditedCommand:',
+        editedCommand != null,
         'currentApproval:',
         currentApproval?.callId,
         'hasConfirmFn:',
@@ -210,16 +218,33 @@ export function useToolApproval(
         return;
       }
 
+      if (
+        outcome === 'suggest_edit' &&
+        currentApproval.confirmationType === 'exec' &&
+        (editedCommand == null || editedCommand.trim().length === 0)
+      ) {
+        logger.warn(
+          'handleDecision: suggest_edit requires edited command text',
+        );
+        return;
+      }
+
       try {
         const coreOutcome = mapOutcome(outcome);
+        const payload: ConfirmationPayload | undefined =
+          outcome === 'suggest_edit'
+            ? { editedCommand: editedCommand?.trim() }
+            : undefined;
         logger.debug(
           'Calling respondToConfirmation',
           'callId:',
           callId,
           'outcome:',
           coreOutcome,
+          'hasPayload:',
+          payload != null,
         );
-        confirmFn(callId, coreOutcome);
+        confirmFn(callId, coreOutcome, payload);
         logger.debug('respondToConfirmation called successfully');
 
         // Move to next approval in queue

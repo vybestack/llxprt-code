@@ -146,6 +146,7 @@ export const permissionOptionKindSchema = z.union([
   z.literal('allow_always'),
   z.literal('reject_once'),
   z.literal('reject_always'),
+  z.literal('suggest_changes'),
 ]);
 
 export const roleSchema = z.union([z.literal('assistant'), z.literal('user')]);
@@ -194,6 +195,11 @@ export const requestPermissionOutcomeSchema = z.union([
   z.object({
     optionId: z.string(),
     outcome: z.literal('selected'),
+    payload: z
+      .object({
+        editedCommand: z.string().optional().nullable(),
+      })
+      .optional(),
   }),
 ]);
 

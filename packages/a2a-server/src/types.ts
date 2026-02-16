@@ -72,6 +72,8 @@ export type ThoughtSummary = {
 export interface ToolConfirmationResponse {
   outcome: ToolConfirmationOutcome;
   callId: string;
+  editedCommand?: string;
+  newContent?: string;
 }
 
 export type CoderAgentMessage =

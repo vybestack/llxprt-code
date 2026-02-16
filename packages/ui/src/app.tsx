@@ -314,6 +314,7 @@ function AppInner(): React.ReactNode {
     handleDecision,
     clearApproval,
   } = useToolApproval(respondToConfirmation);
+  const [editedApprovalCommand, setEditedApprovalCommand] = useState('');
 
   // Keep the ref in sync with the actual function
   useEffect(() => {
@@ -324,6 +325,27 @@ function AppInner(): React.ReactNode {
   const pendingApprovalRef = useRef(pendingApproval);
   useEffect(() => {
     pendingApprovalRef.current = pendingApproval;
+  }, [pendingApproval]);
+
+  const editedApprovalCommandRef = useRef(editedApprovalCommand);
+  useEffect(() => {
+    editedApprovalCommandRef.current = editedApprovalCommand;
+  }, [editedApprovalCommand]);
+
+  // Track edited command text for suggest-edit flow
+  useEffect(() => {
+    const current = pendingApproval;
+    if (current?.confirmationType !== 'exec') {
+      setEditedApprovalCommand('');
+      return;
+    }
+
+    const details = current.coreDetails;
+    if (details?.type === 'exec') {
+      setEditedApprovalCommand(details.command);
+    } else {
+      setEditedApprovalCommand(current.preview);
+    }
   }, [pendingApproval]);
 
   // Keep scheduleRef in sync
@@ -471,7 +493,11 @@ function AppInner(): React.ReactNode {
         current?.callId,
       );
       if (current) {
-        handleDecision(current.callId, outcome);
+        handleDecision(
+          current.callId,
+          outcome,
+          editedApprovalCommandRef.current,
+        );
         // If user cancelled, also cancel all tools and streaming to break the loop
         if (outcome === 'cancel') {
           handleCancelAll();
@@ -483,8 +509,12 @@ function AppInner(): React.ReactNode {
 
   // Callback for ChatLayout inline approval UI
   const handleApprovalSelectFromUI = useCallback(
-    (callId: string, outcome: ToolApprovalOutcome) => {
-      handleDecision(callId, outcome);
+    (callId: string, outcome: ToolApprovalOutcome, editedCommand?: string) => {
+      handleDecision(
+        callId,
+        outcome,
+        editedCommand ?? editedApprovalCommandRef.current,
+      );
       // If user cancelled, also cancel all tools and streaming to break the loop
       if (outcome === 'cancel') {
         handleCancelAll();
@@ -502,9 +532,15 @@ function AppInner(): React.ReactNode {
 
   // Wire up keyboard navigation for inline approval
   // This must be called before useEnterSubmit to intercept keys when approval is active
-  const { selectedIndex: approvalSelectedIndex } = useApprovalKeyboard({
+  const {
+    selectedIndex: approvalSelectedIndex,
+    selectedOutcome: approvalSelectedOutcome,
+  } = useApprovalKeyboard({
     isActive: pendingApproval !== null,
-    canAllowAlways: true, // We allow "always" for all tools currently
+    canAllowAlways: pendingApproval?.canAllowAlways ?? false,
+    canSuggestEdit: pendingApproval?.confirmationType === 'exec',
+    editedCommand: editedApprovalCommand,
+    onEditedCommandChange: setEditedApprovalCommand,
     onSelect: handleApprovalSelectKeyboard,
     onCancel: handleApprovalCancel,
   });
@@ -535,7 +571,12 @@ function AppInner(): React.ReactNode {
 
   // Build inline approval state for ChatLayout
   const pendingApprovalState: PendingApprovalState | undefined = pendingApproval
-    ? { callId: pendingApproval.callId, selectedIndex: approvalSelectedIndex }
+    ? {
+        callId: pendingApproval.callId,
+        selectedIndex: approvalSelectedIndex,
+        selectedOutcome: approvalSelectedOutcome,
+        editedCommand: editedApprovalCommand,
+      }
     : undefined;
 
   return (

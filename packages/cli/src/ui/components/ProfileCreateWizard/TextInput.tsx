@@ -34,10 +34,12 @@ export const TextInput: React.FC<TextInputProps> = ({
 }) => {
   const [cursorPosition, setCursorPosition] = useState(value.length);
 
-  // Keep cursor at end when value changes externally
+  // Preserve cursor position on controlled value updates; only clamp when content shrinks.
   useEffect(() => {
-    setCursorPosition(value.length);
-  }, [value]);
+    setCursorPosition((currentPosition) =>
+      Math.min(currentPosition, value.length),
+    );
+  }, [value.length]);
 
   const handleKeypress = useCallback(
     (key: Key) => {
