@@ -472,9 +472,7 @@ export class Orchestrator {
   private bumpEpoch(file: string): void {
     this.diagnosticEpoch += 1;
     this.diagnosticEvents.push({ epoch: this.diagnosticEpoch, file });
-    if (
-      this.diagnosticEvents.length > Orchestrator.MAX_DIAGNOSTIC_EVENTS
-    ) {
+    if (this.diagnosticEvents.length > Orchestrator.MAX_DIAGNOSTIC_EVENTS) {
       this.diagnosticEvents.splice(
         0,
         this.diagnosticEvents.length - Orchestrator.MAX_DIAGNOSTIC_EVENTS,
