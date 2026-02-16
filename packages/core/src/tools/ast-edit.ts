@@ -2098,14 +2098,63 @@ class ASTEditToolInvocation
         },
       };
 
-      const llmSuccessMessage = [
+      const llmSuccessMessageParts: string[] = [
         `Successfully applied edit to: ${this.params.file_path}`,
         `- Changes: ${editData.occurrences} replacement(s) applied`,
         `- AST validation: ${editData.astValidation?.valid ? 'PASSED' : 'FAILED'}`,
-      ].join('\n');
+      ];
+
+      // @plan PLAN-20250212-LSP.P31
+      // @requirement REQ-DIAG-010
+      // Append LSP diagnostics after successful edit
+      try {
+        const lspClient = this.config.getLspServiceClient();
+        if (lspClient && lspClient.isAlive()) {
+          const diagnostics = await lspClient.checkFile(this.params.file_path);
+          const lspConfig = this.config.getLspConfig();
+          const includeSeverities = lspConfig?.includeSeverities ?? ['error'];
+          const filtered = diagnostics.filter((d) =>
+            includeSeverities.includes(d.severity),
+          );
+
+          if (filtered.length > 0) {
+            const maxPerFile = lspConfig?.maxDiagnosticsPerFile ?? 20;
+            const relPath = path.relative(
+              this.config.getTargetDir(),
+              this.params.file_path,
+            );
+            const limited = filtered
+              .sort(
+                (a, b) =>
+                  (a.line ?? 0) - (b.line ?? 0) ||
+                  (a.column ?? 0) - (b.column ?? 0),
+              )
+              .slice(0, maxPerFile);
+
+            const diagLines = limited
+              .map((d) => {
+                const codeStr = d.code !== undefined ? ` (${d.code})` : '';
+                return `${d.severity.toUpperCase()} [${d.line ?? 1}:${d.column ?? 1}] ${d.message}${codeStr}`;
+              })
+              .join('\n');
+
+            let suffix = '';
+            if (filtered.length > maxPerFile) {
+              suffix = `\n... and ${filtered.length - maxPerFile} more`;
+            }
+
+            llmSuccessMessageParts.push(
+              `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${relPath}">\n${diagLines}${suffix}\n</diagnostics>`,
+            );
+          }
+        }
+      } catch (_error) {
+        // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
+        // Silently continue - edit was already successful
+      }
 
       return {
-        llmContent: llmSuccessMessage,
+        llmContent: llmSuccessMessageParts.join(' '),
         returnDisplay: displayResult,
       };
     } catch (error) {
