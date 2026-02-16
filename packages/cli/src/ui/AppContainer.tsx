@@ -841,12 +841,14 @@ export const AppContainer = (props: AppContainerProps) => {
   // Issue #1404: Dialog should automatically hide after auth completes
   const isOAuthCodeDialogOpen = appState.openDialogs.oauthCode;
   useEffect(() => {
-    // Only close if dialog is open AND __oauth_needs_code is explicitly false
-    // This indicates the auth completed via browser callback
+    // Only close if dialog is open AND browser auth completed
+    // This distinct flag prevents race condition with polling effect (CodeRabbit fix)
     if (
       isOAuthCodeDialogOpen &&
-      (global as Record<string, unknown>).__oauth_needs_code === false
+      (global as Record<string, unknown>).__oauth_browser_auth_complete === true
     ) {
+      // Reset the flag and close the dialog
+      (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
     }
   }, [isOAuthCodeDialogOpen, appDispatch]);
