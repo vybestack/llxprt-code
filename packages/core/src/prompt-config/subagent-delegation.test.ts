@@ -145,11 +145,11 @@ describe('shouldIncludeAsyncSubagentGuidance', () => {
     expect(result).toBe(false);
   });
 
-  it('returns false when globalAsyncEnabled and profileAsyncEnabled are true but includeSubagentDelegation is false', async () => {
+  it('returns false when globalAsyncEnabled and profileAsyncEnabled are both false', async () => {
     const result = await shouldIncludeAsyncSubagentGuidance(
-      false, // includeSubagentDelegation
-      true, // globalAsyncEnabled
-      true, // profileAsyncEnabled
+      true, // includeSubagentDelegation
+      false, // globalAsyncEnabled
+      false, // profileAsyncEnabled
     );
 
     expect(result).toBe(false);

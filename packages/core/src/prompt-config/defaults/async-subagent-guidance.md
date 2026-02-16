@@ -15,7 +15,7 @@ Async subagents are **not** for parallelizing independent tasks. Use **parallel 
 
 **Example:**
 
-```
+```text
 Task(subagent='researcher', goal='Analyze 50-page report', async=true)
 // Continue working or respond to user; system will alert you when done
 ```
