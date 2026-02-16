@@ -176,7 +176,7 @@ describe('Orchestrator unit tests against real implementation', () => {
         fc.string({ minLength: 1, maxLength: 8 }),
         async (extRaw) => {
           const ext = extRaw.replace(/[^a-z]/gi, 'x') || 'x';
-          if (ext === 'ts') return;
+          if (ext.toLowerCase() === 'ts') return;
           const out = await orchestrator.checkFile(
             `/workspace/src/a.${ext}`,
             'TYPE_ERROR',
