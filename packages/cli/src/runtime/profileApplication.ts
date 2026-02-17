@@ -702,6 +702,24 @@ export async function applyProfileWithGuards(
   // This updates the provider-specific state but the auth is already in SettingsService
   let appliedBaseUrl: string | undefined;
 
+  const profileEphemeralSettings = sanitizedProfile.ephemeralSettings ?? {};
+  const hasOwnEphemeral = (key: string): boolean =>
+    Object.prototype.hasOwnProperty.call(profileEphemeralSettings, key);
+  const isExplicitClearValue = (value: unknown): boolean =>
+    value === null || (typeof value === 'string' && value.trim() === '');
+
+  const hasAuthDirective =
+    hasOwnEphemeral('auth-key') ||
+    hasOwnEphemeral('auth-keyfile') ||
+    hasOwnEphemeral('auth-key-name');
+  const hasExplicitAuthClearDirective =
+    (hasOwnEphemeral('auth-key') &&
+      isExplicitClearValue(profileEphemeralSettings['auth-key'])) ||
+    (hasOwnEphemeral('auth-keyfile') &&
+      isExplicitClearValue(profileEphemeralSettings['auth-keyfile'])) ||
+    (hasOwnEphemeral('auth-key-name') &&
+      isExplicitClearValue(profileEphemeralSettings['auth-key-name']));
+
   const currentAuthKey = config.getEphemeralSetting('auth-key') as
     | string
     | undefined;
@@ -718,7 +736,17 @@ export async function applyProfileWithGuards(
       setEphemeralSetting('auth-key', undefined);
       setEphemeralSetting('auth-keyfile', resolvedAuthKeyfilePath);
     }
+  } else if (!hasAuthDirective || hasExplicitAuthClearDirective) {
+    const { message } = await updateActiveProviderApiKey(null);
+    if (message) {
+      infoMessages.push(message);
+    }
   }
+
+  const hasBaseUrlDirective = hasOwnEphemeral('base-url');
+  const hasExplicitBaseUrlClearDirective =
+    hasBaseUrlDirective &&
+    isExplicitClearValue(profileEphemeralSettings['base-url']);
 
   const currentBaseUrl = config.getEphemeralSetting('base-url') as
     | string
@@ -733,6 +761,11 @@ export async function applyProfileWithGuards(
       infoMessages.push(message);
     }
     appliedBaseUrl = baseUrl ?? currentBaseUrl;
+  } else if (!hasBaseUrlDirective || hasExplicitBaseUrlClearDirective) {
+    const { message } = await updateActiveProviderBaseUrl(null);
+    if (message) {
+      infoMessages.push(message);
+    }
   }
 
   // STEP 5: Apply non-auth ephemerals

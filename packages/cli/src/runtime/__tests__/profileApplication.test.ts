@@ -810,6 +810,61 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
     );
   });
 
+  it('clears provider auth/base-url when profile omits those directives', async () => {
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    configStub.setEphemeralSetting('auth-key', 'stale-auth-key');
+    configStub.setEphemeralSetting('auth-key-name', 'named-stale-key');
+    configStub.setEphemeralSetting('base-url', 'https://stale.example.com/v1');
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: {
+        'context-limit': 2048,
+      },
+    };
+
+    await applyProfileWithGuards(profile, {
+      profileName: 'openai-clean-profile',
+    });
+
+    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(null);
+    expect(updateActiveProviderBaseUrlMock).toHaveBeenCalledWith(null);
+  });
+
+  it('treats explicit null auth/base-url values as clear directives', async () => {
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    const profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key': null,
+        'auth-keyfile': null,
+        'auth-key-name': null,
+        'base-url': null,
+      },
+    } as unknown as Profile;
+
+    await applyProfileWithGuards(profile, {
+      profileName: 'openai-explicit-clear',
+    });
+
+    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(null);
+    expect(updateActiveProviderBaseUrlMock).toHaveBeenCalledWith(null);
+  });
+
   it('should NOT trigger OAuth when profile has keyfile and provider switch calls getModels', async () => {
     // Mock fs.readFile to return an API key
     vi.mocked(mockFs.readFile).mockResolvedValue('test-api-key-from-keyfile');
