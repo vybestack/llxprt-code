@@ -63,6 +63,7 @@ import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import {
   triggerBeforeToolHook,
   triggerAfterToolHook,
+  triggerToolNotificationHook,
 } from './coreToolHookTriggers.js';
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
@@ -1081,6 +1082,12 @@ export class CoreToolScheduler {
             const context =
               policyContext ??
               this.getPolicyContextFromInvocation(invocation, reqInfo);
+
+            // Fire Notification hook before showing confirmation dialog
+            void triggerToolNotificationHook(
+              this.config,
+              wrappedConfirmationDetails,
+            );
 
             this.publishConfirmationRequest(correlationId, context);
 
