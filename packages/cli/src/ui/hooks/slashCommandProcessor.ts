@@ -84,6 +84,10 @@ interface SlashCommandProcessorActions {
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void;
   addConfirmUpdateExtensionRequest: (request: ConfirmationRequest) => void;
   openWelcomeDialog: () => void;
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  openSessionBrowserDialog: () => void;
 }
 
 /**
@@ -602,6 +606,13 @@ export const useSlashCommandProcessor = (
                     case 'welcome':
                       actions.openWelcomeDialog();
                       return { type: 'handled' };
+                    case 'sessionBrowser':
+                      /**
+                       * Open session browser dialog
+                       * @plan PLAN-20260214-SESSIONBROWSER.P21
+                       */
+                      actions.openSessionBrowserDialog();
+                      return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;
                       throw new Error(
@@ -743,6 +754,15 @@ export const useSlashCommandProcessor = (
                     undefined,
                     true,
                   );
+                }
+                case 'perform_resume': {
+                  // Session resume - not yet implemented
+                  addMessage({
+                    type: MessageType.INFO,
+                    content: `Session resume not yet implemented (ref: ${result.sessionRef})`,
+                    timestamp: new Date(),
+                  });
+                  return { type: 'handled' };
                 }
                 default: {
                   const unhandled: never = result;

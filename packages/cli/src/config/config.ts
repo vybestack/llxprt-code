@@ -2,6 +2,8 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * @plan PLAN-20260214-SESSIONBROWSER.P29
  */
 
 import * as fs from 'fs';
@@ -48,7 +50,6 @@ import * as dotenv from 'dotenv';
 import * as os from 'node:os';
 import { resolvePath } from '../utils/resolvePath.js';
 import { appEvents } from '../utils/events.js';
-import { RESUME_LATEST } from '../utils/sessionUtils.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P04
@@ -344,19 +345,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'string',
           description:
             'Proxy for LLxprt client, like schema://user:password@host:port',
-        })
-        .option('resume', {
-          alias: 'r',
-          type: 'string',
-          skipValidation: true,
-          description:
-            'Resume a previous session. Use "latest" for most recent or index number (e.g. --resume 5)',
-          coerce: (value: string): string => {
-            if (value === '') {
-              return RESUME_LATEST;
-            }
-            return value;
-          },
         })
         .option('include-directories', {
           type: 'array',
@@ -690,7 +678,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     keyfile: result.keyfile as string | undefined,
     baseurl: result.baseurl as string | undefined,
     proxy: result.proxy as string | undefined,
-    resume: result.resume as string | typeof RESUME_LATEST | undefined,
     includeDirectories: result.includeDirectories as string[] | undefined,
     profileLoad: result.profileLoad as string | undefined,
     loadMemoryFromIncludeDirectories:

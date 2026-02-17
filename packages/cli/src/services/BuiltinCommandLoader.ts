@@ -58,6 +58,10 @@ import { dumpcontextCommand } from '../ui/commands/dumpcontextCommand.js';
 import { todoCommand } from '../ui/commands/todoCommand.js';
 import { setupCommand } from '../ui/commands/setupCommand.js';
 import { tasksCommands } from '../ui/commands/tasksCommand.js';
+/**
+ * @plan PLAN-20260214-SESSIONBROWSER.P21
+ */
+import { continueCommand } from '../ui/commands/continueCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -168,6 +172,10 @@ export class BuiltinCommandLoader implements ICommandLoader {
       todoCommand,
       setupCommand,
       ...tasksCommands,
+      /**
+       * @plan PLAN-20260214-SESSIONBROWSER.P21
+       */
+      continueCommand,
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);

@@ -13,6 +13,8 @@ import type {
   Config,
   Profile,
 } from '@vybestack/llxprt-code-core';
+import { getProjectHash } from '@vybestack/llxprt-code-core';
+import { join } from 'node:path';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -37,6 +39,10 @@ import { LoggingDialog } from './LoggingDialog.js';
 import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
 import { ModelsDialog } from './ModelDialog.js';
+/**
+ * @plan PLAN-20260214-SESSIONBROWSER.P21
+ */
+import { SessionBrowserDialog } from './SessionBrowserDialog.js';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
@@ -160,6 +166,36 @@ export const DialogManager = ({
       uiActions.closeModelsDialog();
     },
     [runtime, addItem, uiActions, currentProvider, commandContext],
+  );
+
+  /**
+   * Handler for SessionBrowserDialog selection (stub implementation)
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  const handleSessionBrowserSelect = useCallback(
+    async (session: {
+      sessionId: string;
+      provider?: string;
+      model?: string;
+    }) => {
+      // Stub: close dialog on select for now
+      uiActions.closeSessionBrowserDialog();
+      const projectHash = getProjectHash(config.getProjectRoot());
+      return {
+        ok: true as const,
+        history: [],
+        metadata: {
+          sessionId: session.sessionId,
+          projectHash,
+          provider: session.provider ?? 'unknown',
+          model: session.model ?? 'unknown',
+          workspaceDirs: [],
+          startTime: new Date().toISOString(),
+        },
+        warnings: [],
+      };
+    },
+    [uiActions, config],
   );
 
   // TODO: IdeTrustChangeDialog not yet ported from upstream
@@ -468,6 +504,29 @@ export const DialogManager = ({
           currentProvider={currentProvider}
           initialProviderFilter={uiState.modelsDialogData?.providerOverride}
           showAllProviders={uiState.modelsDialogData?.showAllProviders}
+        />
+      </Box>
+    );
+  }
+
+  /**
+   * Session browser dialog rendering
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  if (uiState.isSessionBrowserDialogOpen) {
+    const chatsDir = join(config.getProjectTempDir(), 'chats');
+    const projectHash = getProjectHash(config.getProjectRoot());
+    const currentSessionId = config.getSessionId();
+
+    return (
+      <Box flexDirection="column">
+        <SessionBrowserDialog
+          chatsDir={chatsDir}
+          projectHash={projectHash}
+          currentSessionId={currentSessionId}
+          hasActiveConversation={false}
+          onSelect={handleSessionBrowserSelect}
+          onClose={uiActions.closeSessionBrowserDialog}
         />
       </Box>
     );

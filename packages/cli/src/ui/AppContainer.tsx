@@ -625,6 +625,13 @@ export const AppContainer = (props: AppContainerProps) => {
     ModelsDialogData | undefined
   >(undefined);
 
+  /**
+   * Session browser dialog state
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  const [isSessionBrowserDialogOpen, setIsSessionBrowserDialogOpen] =
+    useState(false);
+
   // Queue error message state (for preventing slash/shell commands from being queued)
   const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(
     null,
@@ -662,6 +669,18 @@ export const AppContainer = (props: AppContainerProps) => {
   const closeModelsDialog = useCallback(() => {
     setIsModelsDialogOpen(false);
     setModelsDialogData(undefined);
+  }, []);
+
+  /**
+   * Session browser dialog actions
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  const openSessionBrowserDialog = useCallback(() => {
+    setIsSessionBrowserDialogOpen(true);
+  }, []);
+
+  const closeSessionBrowserDialog = useCallback(() => {
+    setIsSessionBrowserDialogOpen(false);
   }, []);
 
   const {
@@ -1171,6 +1190,10 @@ export const AppContainer = (props: AppContainerProps) => {
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
       openWelcomeDialog: welcomeActions.resetAndReopen,
+      /**
+       * @plan PLAN-20260214-SESSIONBROWSER.P21
+       */
+      openSessionBrowserDialog,
     }),
     [
       openAuthDialog,
@@ -1195,6 +1218,7 @@ export const AppContainer = (props: AppContainerProps) => {
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
       welcomeActions.resetAndReopen,
+      openSessionBrowserDialog,
     ],
   );
 
@@ -1978,6 +2002,10 @@ export const AppContainer = (props: AppContainerProps) => {
     isLoggingDialogOpen,
     isSubagentDialogOpen,
     isModelsDialogOpen,
+    /**
+     * @plan PLAN-20260214-SESSIONBROWSER.P21
+     */
+    isSessionBrowserDialogOpen,
 
     // Dialog data
     providerOptions: isCreateProfileDialogOpen
@@ -2196,6 +2224,13 @@ export const AppContainer = (props: AppContainerProps) => {
       openModelsDialog,
       closeModelsDialog,
 
+      /**
+       * Session browser dialog
+       * @plan PLAN-20260214-SESSIONBROWSER.P21
+       */
+      openSessionBrowserDialog,
+      closeSessionBrowserDialog,
+
       // Workspace migration dialog
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
@@ -2292,6 +2327,8 @@ export const AppContainer = (props: AppContainerProps) => {
       closeSubagentDialog,
       openModelsDialog,
       closeModelsDialog,
+      openSessionBrowserDialog,
+      closeSessionBrowserDialog,
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
       openPrivacyNotice,

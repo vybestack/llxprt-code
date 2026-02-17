@@ -202,7 +202,8 @@ export type DialogType =
   | 'profileList'
   | 'profileDetail'
   | 'profileEditor'
-  | 'welcome';
+  | 'welcome'
+  | 'sessionBrowser';
 
 /** Map dialog types to their associated data types for type-safe access */
 export interface DialogDataMap {
@@ -278,6 +279,16 @@ export interface ConfirmActionReturn {
   };
 }
 
+/**
+ * The return type for a command action that delegates session resume to the processor.
+ * @plan PLAN-20260214-SESSIONBROWSER.P18
+ * @requirement REQ-DI-007
+ */
+export interface PerformResumeActionReturn {
+  type: 'perform_resume';
+  sessionRef: string;
+}
+
 export type SlashCommandActionReturn =
   | ToolActionReturn
   | MessageActionReturn
@@ -286,7 +297,8 @@ export type SlashCommandActionReturn =
   | LoadHistoryActionReturn
   | SubmitPromptActionReturn
   | ConfirmShellCommandsActionReturn
-  | ConfirmActionReturn;
+  | ConfirmActionReturn
+  | PerformResumeActionReturn;
 
 export enum CommandKind {
   BUILT_IN = 'built-in',
