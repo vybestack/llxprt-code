@@ -1,16 +1,16 @@
-# Session Browser & /resume Command — Requirements (EARS Format)
+# Session Browser & /continue Command — Requirements (EARS Format)
 
 **Issue:** #1385
 **Depends on:** #1361 (Session Recording Service — merged)
 
-This document captures every behavioral requirement from the functional specification, technical specification, and UI mockup for the Session Browser & /resume Command feature. Requirements use the EARS (Easy Approach to Requirements Syntax) templates and are grouped by functional area.
+This document captures every behavioral requirement from the functional specification, technical specification, and UI mockup for the Session Browser & /continue Command feature. Requirements use the EARS (Easy Approach to Requirements Syntax) templates and are grouped by functional area.
 
 ---
 
 ## 1. Session Browser Dialog — Listing & Display
 
 ### REQ-SB-001
-When the user types `/resume` with no arguments, the system shall open an interactive session browser dialog.
+When the user types `/continue` with no arguments, the system shall open an interactive session browser dialog.
 
 ### REQ-SB-002
 When the session browser opens, the system shall list all JSONL sessions matching the current project hash, sorted newest-first by default.
@@ -371,7 +371,7 @@ While an active-conversation confirmation is active, the system shall consume Y/
 While a resume is in progress (`isResuming`), the system shall ignore all key input including Escape (resume is non-cancellable once initiated).
 
 ### REQ-MP-004
-If the model is currently processing (tool calls executing), the `/resume` command shall return an error: "Cannot resume while a request is in progress."
+If the model is currently processing (tool calls executing), the `/continue` command shall return an error: "Cannot resume while a request is in progress."
 
 ---
 
@@ -397,19 +397,19 @@ When an action fails due to a lock conflict, the system shall refresh the list (
 
 ---
 
-## 13. /resume Slash Command — Direct Resume
+## 13. /continue Slash Command — Direct Resume
 
 ### REQ-RC-001
-When the user types `/resume latest`, the system shall resume the most recent unlocked, non-current, non-empty session without opening the browser.
+When the user types `/continue latest`, the system shall resume the most recent unlocked, non-current, non-empty session without opening the browser.
 
 ### REQ-RC-002
-If `/resume latest` is used and all sessions are locked, current, or empty (no resumable session exists), the system shall return an error.
+If `/continue latest` is used and all sessions are locked, current, or empty (no resumable session exists), the system shall return an error.
 
 ### REQ-RC-003
-When the user types `/resume <session-id>`, the system shall resume the session matching the full ID or unique prefix.
+When the user types `/continue <session-id>`, the system shall resume the session matching the full ID or unique prefix.
 
 ### REQ-RC-004
-When the user types `/resume <number>`, the system shall resume the Nth session (1-based, newest-first).
+When the user types `/continue <number>`, the system shall resume the Nth session (1-based, newest-first).
 
 ### REQ-RC-005
 If the session reference is out of range, the system shall return a clear error message (from `SessionDiscovery.resolveSessionRef()`).
@@ -433,10 +433,10 @@ When the user has an active conversation (non-empty model history) and the termi
 When the user has an active conversation and the terminal is non-interactive (piped input), the system shall reject the resume with an error: "Cannot replace active conversation in non-interactive mode. Use --continue at startup instead."
 
 ### REQ-RC-012
-When `/resume` with no arguments is invoked in non-interactive mode, the system shall return an error: "Session browser requires interactive mode. Use /resume latest or /resume <id>."
+When `/continue` with no arguments is invoked in non-interactive mode, the system shall return an error: "Session browser requires interactive mode. Use /continue latest or /continue <id>."
 
 ### REQ-RC-013
-The `/resume` command shall provide tab completion offering "latest" plus session previews as completions.
+The `/continue` command shall provide tab completion offering "latest" plus session previews as completions.
 
 ---
 
@@ -643,7 +643,7 @@ The system shall add `isSessionBrowserDialogOpen` to `UIState`.
 The system shall provide `openSessionBrowserDialog()` and `closeSessionBrowserDialog()` actions in `UIActions`.
 
 ### REQ-DI-004
-When `/resume` with no arguments returns `{ type: 'dialog', dialog: 'sessionBrowser' }`, the command processor shall set `uiState.isSessionBrowserDialogOpen = true`.
+When `/continue` with no arguments returns `{ type: 'dialog', dialog: 'sessionBrowser' }`, the command processor shall set `uiState.isSessionBrowserDialogOpen = true`.
 
 ### REQ-DI-005
 The `DialogManager` shall render `SessionBrowserDialog` when `uiState.isSessionBrowserDialogOpen` is true, passing `chatsDir`, `projectHash`, `currentSessionId`, `onSelect`, and `onClose` as props.
@@ -656,13 +656,13 @@ The active-conversation confirmation shall be rendered inline inside `SessionBro
 ## 23. Entry Points
 
 ### REQ-EN-001
-When the user types `/resume` with no arguments, the system shall open the session browser dialog.
+When the user types `/continue` with no arguments, the system shall open the session browser dialog.
 
 ### REQ-EN-002
-When the user types `/resume latest`, the system shall resume the most recent resumable session directly without opening the browser.
+When the user types `/continue latest`, the system shall resume the most recent resumable session directly without opening the browser.
 
 ### REQ-EN-003
-When the user types `/resume <id or index>`, the system shall resume the specific session directly without opening the browser.
+When the user types `/continue <id or index>`, the system shall resume the specific session directly without opening the browser.
 
 ### REQ-EN-004
 The existing `--continue` / `-C` CLI flag behavior shall remain unchanged (resumes at startup).
@@ -671,7 +671,7 @@ The existing `--continue` / `-C` CLI flag behavior shall remain unchanged (resum
 The existing `--list-sessions` CLI flag behavior shall remain unchanged (prints list and exits).
 
 ### REQ-EN-006
-When `/resume` with no arguments is invoked while the session browser dialog is already open, the system shall treat it as a no-op (no second dialog instance).
+When `/continue` with no arguments is invoked while the session browser dialog is already open, the system shall treat it as a no-op (no second dialog instance).
 
 ---
 
@@ -691,7 +691,7 @@ When a session is resumed, the system shall update session recording metadata wi
 ## 25. performResume() Shared Utility
 
 ### REQ-PR-001
-The system shall use a single `performResume()` utility for both the browser path and the direct `/resume <ref>` path.
+The system shall use a single `performResume()` utility for both the browser path and the direct `/continue <ref>` path.
 
 ### REQ-PR-002
 When `performResume()` is called with the `"latest"` reference, the system shall select the first resumable session from the newest-first list (first session that is not locked, not the current session, and not empty — i.e., has content events).

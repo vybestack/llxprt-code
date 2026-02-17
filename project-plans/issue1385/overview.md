@@ -1,16 +1,16 @@
-# Session Browser & /resume Command — Functional Specification
+# Session Browser & /continue Command — Functional Specification
 
 **Issue:** #1385
 **Depends on:** #1361 (Session Recording Service — merged)
 
 ## 1. Problem Statement
 
-LLxprt Code records sessions as append-only JSONL files (landed in #1361). Users can resume sessions via `--continue` on the command line, but there is no interactive way to browse, search, or select from previous sessions while already inside a running instance. The upstream gemini-cli added a session browser UI and `/resume` slash command; this spec defines LLxprt's equivalent, built on the JSONL session infrastructure.
+LLxprt Code records sessions as append-only JSONL files (landed in #1361). Users can resume sessions via `--continue` on the command line, but there is no interactive way to browse, search, or select from previous sessions while already inside a running instance. The upstream gemini-cli added a session browser UI and `/continue` slash command; this spec defines LLxprt's equivalent, built on the JSONL session infrastructure.
 
 ## 2. Goals
 
 1. **Interactive session browsing** — A focused dialog component that lists all sessions for the current project, with search/filter, sort, and keyboard navigation.
-2. **`/resume` slash command** — A top-level slash command that opens the session browser inline and resumes the selected session into the current conversation.
+2. **`/continue` slash command** — A top-level slash command that opens the session browser inline and resumes the selected session into the current conversation.
 3. **Session deletion from the browser** — Ability to delete sessions directly from the browser with confirmation.
 4. **Session info in `/stats`** — Display current session metadata (session ID, duration, file size) in the existing `/stats` command output.
 5. **Remove `--resume` flag** — Remove the upstream `--resume` / `-r` CLI flag, which duplicates LLxprt's own `--continue` / `-C` flag.
@@ -29,7 +29,7 @@ LLxprt Code records sessions as append-only JSONL files (landed in #1361). Users
 **As a user**, I want to see a list of my previous sessions for this project so I can decide which one to resume.
 
 **Acceptance criteria:**
-- Typing `/resume` (with no arguments) opens an interactive session browser dialog.
+- Typing `/continue` (with no arguments) opens an interactive session browser dialog.
 - The browser lists all JSONL sessions matching the current project hash, sorted newest-first by default.
 - Each session row shows: 1-based index, relative time (e.g. "2 hours ago"), provider/model, file size, and a preview of the first user message.
 - Sessions that are locked by another process display an "(in use)" indicator.
@@ -106,13 +106,13 @@ LLxprt Code records sessions as append-only JSONL files (landed in #1361). Users
 
 ### 4.7 Resume via Argument
 
-**As a user**, I want to resume a specific session by typing `/resume <id>` directly so I can skip the browser when I know which session I want.
+**As a user**, I want to resume a specific session by typing `/continue <id>` directly so I can skip the browser when I know which session I want.
 
 **Acceptance criteria:**
-- `/resume latest` resumes the most recent unlocked session without opening the browser.
-- `/resume <session-id>` resumes a session by full ID or unique prefix.
-- `/resume <number>` resumes the Nth session (1-based, newest-first).
-- Invalid references produce clear error messages. These come from `SessionDiscovery.resolveSessionRef()` in core, which handles: out-of-range indices, ambiguous prefixes (listing matching IDs), and not-found references. The `/resume` command passes through these error messages.
+- `/continue latest` resumes the most recent unlocked session without opening the browser.
+- `/continue <session-id>` resumes a session by full ID or unique prefix.
+- `/continue <number>` resumes the Nth session (1-based, newest-first).
+- Invalid references produce clear error messages. These come from `SessionDiscovery.resolveSessionRef()` in core, which handles: out-of-range indices, ambiguous prefixes (listing matching IDs), and not-found references. The `/continue` command passes through these error messages.
 - If the session is locked: "Session is in use by another process."
 - If the user has an active conversation and the terminal is interactive, the "replace current conversation" confirmation is shown.
 - If the user has an active conversation and the terminal is non-interactive (piped input), the resume is rejected with an error: "Cannot replace active conversation in non-interactive mode. Use --continue at startup instead."
@@ -150,7 +150,7 @@ When multiple interactive elements are active, key events are consumed in this p
 1. **Delete confirmation dialog** — Y/N/Esc are consumed. All other keys are ignored.
 2. **Active-conversation confirmation** — Y/N/Esc are consumed. All other keys are ignored.
 3. **Resuming state** — All keys are ignored. Resume is non-cancellable once initiated (the core `resumeSession()` call cannot be safely aborted mid-replay). Esc is ignored until the operation completes or fails.
-4. **Tool-call in flight** — If the model is currently processing (tool calls executing), `/resume` returns an error: "Cannot resume while a request is in progress." This prevents corrupting in-flight tool-call state.
+4. **Tool-call in flight** — If the model is currently processing (tool calls executing), `/continue` returns an error: "Cannot resume while a request is in progress." This prevents corrupting in-flight tool-call state.
 5. **Search mode / Navigation mode** — Normal browser keyboard handling.
 
 ### Escape Key Precedence
@@ -182,10 +182,10 @@ Note: Enter resumes the selected session in both modes. This is the primary acti
 
 | Entry Point              | Behavior                                              |
 |--------------------------|-------------------------------------------------------|
-| `/resume`                | Opens the session browser dialog                      |
-| `/resume` (browser already open) | No-op (no second dialog instance)              |
-| `/resume latest`         | Resumes most recent resumable (unlocked, not current) session directly (no browser) |
-| `/resume <id or index>`  | Resumes specific session directly (no browser)        |
+| `/continue`                | Opens the session browser dialog                      |
+| `/continue` (browser already open) | No-op (no second dialog instance)              |
+| `/continue latest`         | Resumes most recent resumable (unlocked, not current) session directly (no browser) |
+| `/continue <id or index>`  | Resumes specific session directly (no browser)        |
 | `--continue` (CLI flag)  | Existing behavior, unchanged -- resumes at startup    |
 | `--list-sessions` (CLI)  | Existing behavior, unchanged -- prints list and exits |
 
@@ -194,8 +194,8 @@ Note: Enter resumes the selected session in both modes. This is the primary acti
 | Scenario                                | Behavior                                                         |
 |-----------------------------------------|------------------------------------------------------------------|
 | No sessions for project                 | Empty state: "No sessions found for this project." (after filtering out empty and current sessions) |
-| Session locked by another process       | Inline error in browser; error message for direct `/resume`      |
-| Resume same session as current          | Filtered out of browser list; direct `/resume <id>` returns "That session is already active." |
+| Session locked by another process       | Inline error in browser; error message for direct `/continue`      |
+| Resume same session as current          | Filtered out of browser list; direct `/continue <id>` returns "That session is already active." |
 | Session file corrupted (header unreadable) | Session excluded from list; inline notice "Skipped N unreadable session(s)." |
 | Session file disappeared between list and action | Inline error: "Session no longer exists." List reloads.   |
 | Replay failure                          | Inline error: "Failed to replay session: {details}". Current session remains intact. |
@@ -209,7 +209,7 @@ Note: Enter resumes the selected session in both modes. This is the primary acti
 | Active conversation exists (non-interactive) | Error: "Cannot replace active conversation in non-interactive mode." |
 | Lock release failure during session swap | Warning logged; swap continues (best-effort cleanup).            |
 | Resume fails after new session acquired  | Inline error with details. Current session is already preserved (two-phase swap). |
-| Non-interactive mode, `/resume` no args | Error: "Session browser requires interactive mode. Use /resume latest or /resume <id>." |
+| Non-interactive mode, `/continue` no args | Error: "Session browser requires interactive mode. Use /continue latest or /continue <id>." |
 | Model request in flight (`isProcessing`) | Error: "Cannot resume while a request is in progress."                                  |
 
 ## 8. Responsive Behavior

@@ -1,18 +1,18 @@
-# Session Browser & /resume Command — Technical Specification
+# Session Browser & /continue Command — Technical Specification
 
 **Issue:** #1385
 **Depends on:** #1361 (Session Recording Service — merged)
 
 ## 1. Architecture Overview
 
-The session browser is a React/Ink dialog component in `packages/cli`, driven by a custom hook, that interacts with existing core-layer APIs for session discovery, replay, locking, and deletion. A new `/resume` top-level slash command serves as the entry point. The browser integrates with the existing dialog management system via `DialogManager` and `UIState` flags — the same pattern used by all other dialogs in the app.
+The session browser is a React/Ink dialog component in `packages/cli`, driven by a custom hook, that interacts with existing core-layer APIs for session discovery, replay, locking, and deletion. A new `/continue` top-level slash command serves as the entry point. The browser integrates with the existing dialog management system via `DialogManager` and `UIState` flags — the same pattern used by all other dialogs in the app.
 
-Both the browser path and the direct `/resume <ref>` path share a single `performResume()` utility that owns the side-effects (lock management, recording swap, history restore). This avoids ownership drift between the two paths.
+Both the browser path and the direct `/continue <ref>` path share a single `performResume()` utility that owns the side-effects (lock management, recording swap, history restore). This avoids ownership drift between the two paths.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  /resume slash command                                  │
-│  (packages/cli/src/ui/commands/resumeCommand.ts)        │
+│  /continue slash command                                  │
+│  (packages/cli/src/ui/commands/continueCommand.ts)        │
 │         │                                               │
 │     ┌───┴────────────────────┐                          │
 │     │ no args                │ with args                │
@@ -182,28 +182,28 @@ This keeps resume side-effects external while giving the dialog the feedback it 
 6. Error message (if any)
 7. Controls bar: abbreviated, includes sort hint (e.g. `s:newest`)
 
-### 4.3 /resume Slash Command
+### 4.3 /continue Slash Command
 
-**Location:** `packages/cli/src/ui/commands/resumeCommand.ts`
+**Location:** `packages/cli/src/ui/commands/continueCommand.ts`
 
 A new top-level slash command registered alongside existing commands like `/chat`, `/stats`, etc.
 
 **Behavior:**
-- `/resume` (no args) — Returns `{ type: 'dialog', dialog: 'sessionBrowser' }` (an `OpenDialogActionReturn`), which causes the command processor to set `uiState.isSessionBrowserDialogOpen = true`.
-- `/resume latest` — Calls `performResume()` directly and returns a `LoadHistoryActionReturn` on success, or a `MessageActionReturn` with the error on failure.
-- `/resume <ref>` — Same as `latest` but with the specific ref.
+- `/continue` (no args) — Returns `{ type: 'dialog', dialog: 'sessionBrowser' }` (an `OpenDialogActionReturn`), which causes the command processor to set `uiState.isSessionBrowserDialogOpen = true`.
+- `/continue latest` — Returns `{ type: 'perform_resume', sessionRef: 'latest' }` (a `PerformResumeActionReturn`). The slashCommandProcessor then calls `performResume()` and returns a `LoadHistoryActionReturn` on success, or a `MessageActionReturn` with the error on failure.
+- `/continue <ref>` — Same as `latest` but with the specific ref.
 
-For the direct path (`/resume latest` and `/resume <ref>`), `performResume()` handles all side-effects (recording swap, lock management) before returning. The returned `LoadHistoryActionReturn` carries only the UI history and client history; the recording infrastructure is already swapped.
+For the direct path (`/continue latest` and `/continue <ref>`), the command returns a `PerformResumeActionReturn` containing only the session reference. The slashCommandProcessor executes `performResume()` which handles all side-effects (recording swap, lock management). The processor then returns a `LoadHistoryActionReturn` carrying the UI history and client history.
 
 **Same-session check:** If the ref resolves to the current session ID, the command returns an error: "That session is already active."
 
 **In-flight request check:** If the model is currently processing (tool calls executing, `isProcessing` is true), the command returns an error: "Cannot resume while a request is in progress." This prevents corrupting in-flight tool-call state. The `isProcessing` flag is available from `CommandContext` or the relevant UI state.
 
-**Non-interactive mode check:** If `config.isInteractive()` returns false and no argument is provided, the command returns an error: "Session browser requires interactive mode. Use /resume latest or /resume <id>."
+**Non-interactive mode check:** If `config.isInteractive()` returns false and no argument is provided, the command returns an error: "Session browser requires interactive mode. Use /continue latest or /continue <id>."
 
 **Schema (for tab completion):**
 ```typescript
-const resumeSchema: CommandArgumentSchema = [
+const continueSchema: CommandArgumentSchema = [
   {
     kind: 'value',
     name: 'session',
@@ -295,9 +295,9 @@ The following exports in `sessionUtils.ts` are used by `sessionCleanup.ts` and c
 
 ## 7. performResume() — Shared Resume Utility
 
-Both the browser path and the direct `/resume <ref>` path use a single `performResume()` function that owns all resume side-effects.
+Both the browser path and the direct `/continue <ref>` path use a single `performResume()` function that owns all resume side-effects.
 
-**Location:** `packages/cli/src/utils/performResume.ts` (or co-located with `resumeCommand.ts`)
+**Location:** `packages/cli/src/utils/performResume.ts` (or co-located with `continueCommand.ts`)
 
 **Signature:**
 ```typescript
@@ -456,7 +456,7 @@ Locked sessions appear in the list with an `(in use)` indicator in warning color
 
 - **useSessionBrowser hook** — Test state transitions: loading, search filtering (against preview + provider + model), sort ordering, pagination, selection movement, selection clamping after delete/filter/page-empty, delete confirmation flow, `isResuming` guard, empty-list no-ops, generation counter for preview cancellation, search term change resets page and selection, selection preservation by sessionId on refresh, preview cache hit (no re-read on page revisit), eventually-consistent search (session removed from results when preview loads and doesn't match).
 - **SessionBrowserDialog** — Ink testing-library render tests for: loading state, empty state, populated list, search filtering, keyboard navigation, delete confirmation, locked session display, error display, skipped-sessions notice, narrow vs wide layout, narrow sort hint, narrow session ID display.
-- **resumeCommand** — Test action returns: no-args returns `{ type: 'dialog', dialog: 'sessionBrowser' }`, `latest` returns `load_history`, `latest` with all sessions locked returns error, invalid ref returns error message, non-interactive mode returns error for no-args, same-session ref returns "already active" error, `isProcessing` true returns "request in progress" error, `/resume` while browser already open is a no-op.
+- **continueCommand** — Test action returns: no-args returns `{ type: 'dialog', dialog: 'sessionBrowser' }`, `latest` returns `load_history`, `latest` with all sessions locked returns error, invalid ref returns error message, non-interactive mode returns error for no-args, same-session ref returns "already active" error, `isProcessing` true returns "request in progress" error, `/continue` while browser already open is a no-op.
 - **performResume()** — Tests for: successful two-phase swap, Phase 1 failure (old session preserved), Phase 2 best-effort cleanup (lock release warning), concurrent resume guard.
 - **relativeTime utility** — Tests for all time buckets, boundary conditions, both short and long modes, future timestamp clamping.
 - **First-message preview extraction** — Tests with: no user message (system-only), immediate user message, tool-call before user message, empty session file, corrupted JSONL line, read permission error, structurally valid JSON but unexpected payload schema returns null.
@@ -474,13 +474,13 @@ Locked sessions appear in the list with an `(in use)` indicator in warning color
 
 ### Integration Tests
 
-- Full flow: `/resume` -> browser opens -> select session -> history restored -> can continue chatting.
-- Full flow: `/resume latest` -> session resumes directly.
+- Full flow: `/continue` -> browser opens -> select session -> history restored -> can continue chatting.
+- Full flow: `/continue latest` -> session resumes directly.
 - Delete flow: select session -> delete -> confirm -> session removed from list.
 - Error flow: attempt to resume locked session -> error shown, browser stays open, list refreshed.
 - Stale data flow: session deleted by another process -> resume fails -> list refreshes.
 - Active conversation flow: user has history -> resume -> confirmation shown -> confirm -> two-phase swap -> old session flushed/disposed -> new session active.
-- Same-session flow: `/resume <current-session-id>` -> error "already active".
-- Non-interactive flow: piped input -> `/resume` no args -> error with suggestion.
-- In-flight request flow: tool call executing -> `/resume` -> error "Cannot resume while a request is in progress."
+- Same-session flow: `/continue <current-session-id>` -> error "already active".
+- Non-interactive flow: piped input -> `/continue` no args -> error with suggestion.
+- In-flight request flow: tool call executing -> `/continue` -> error "Cannot resume while a request is in progress."
 - Warnings flow: session with replay warnings -> resume -> warnings displayed as info messages.
