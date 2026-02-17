@@ -2405,5 +2405,142 @@ describe('subagent.ts', () => {
         expect(onMessageCalls[0]).toBe('Tool not found');
       });
     });
+
+    describe('Hook delegation to parent config', () => {
+      /**
+       * @requirement:HOOK-SUBAGENT-001 - BeforeTool hooks must fire for subagent tool calls
+       *
+       * This test verifies that when a subagent executes a tool, the BeforeTool hook
+       * configured on the parent config is triggered. The bug is that createSchedulerConfig()
+       * creates a minimal Config object missing getEnableHooks, getHooks, getHookSystem,
+       * getWorkingDir, and getTargetDir methods.
+       */
+      it('should trigger BeforeTool hook when subagent executes a tool', async () => {
+        // Create a mock HookSystem that tracks when BeforeTool is triggered
+        const mockHookSystem = {
+          initialize: vi.fn().mockResolvedValue(undefined),
+          getEventHandler: vi.fn().mockReturnValue({
+            fireBeforeToolEvent: vi
+              .fn()
+              .mockResolvedValue({ decision: 'allow' }),
+            fireAfterToolEvent: vi.fn().mockResolvedValue(undefined),
+          }),
+        };
+
+        const { config, toolRegistry } = await createMockConfig({
+          getTool: vi.fn().mockImplementation((name: string) => {
+            if (name === 'read_file') {
+              return {
+                name: 'read_file',
+                displayName: 'Read File',
+                schema: {
+                  name: 'read_file',
+                  parameters: { type: 'object', properties: {} },
+                },
+                build: vi.fn(),
+              };
+            }
+            return undefined;
+          }),
+        });
+
+        // Override config methods to enable hooks
+        vi.spyOn(config, 'getEnableHooks' as keyof Config).mockReturnValue(
+          true,
+        );
+        vi.spyOn(config, 'getHooks' as keyof Config).mockReturnValue({
+          BeforeTool: [
+            {
+              hooks: [
+                { type: 'command', command: 'echo allow', timeout: 5000 },
+              ],
+            },
+          ],
+        });
+        vi.spyOn(config, 'getHookSystem' as keyof Config).mockReturnValue(
+          mockHookSystem,
+        );
+        vi.spyOn(config, 'getWorkingDir' as keyof Config).mockReturnValue(
+          '/tmp/test',
+        );
+        vi.spyOn(config, 'getTargetDir' as keyof Config).mockReturnValue(
+          '/tmp/test',
+        );
+
+        const toolConfig: ToolConfig = { tools: ['read_file'] };
+
+        // Turn 1: Model calls the read_file tool
+        // Turn 2: Model stops
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [
+              {
+                id: 'call_hook_test',
+                name: 'read_file',
+                args: { path: '/test.txt' },
+              },
+            ],
+            'stop',
+          ]),
+        );
+
+        // Mock the tool execution result
+        vi.mocked(executeToolCall).mockResolvedValue({
+          ...createCompletedToolCallResponse({
+            callId: 'call_hook_test',
+            responseParts: [{ text: 'file contents' }],
+            resultDisplay: 'Read file successfully',
+          }),
+        });
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry,
+          toolsView: {
+            listToolNames: () => ['read_file'],
+            getToolMetadata: () => ({
+              name: 'read_file',
+              description: 'Reads a file',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry,
+        });
+
+        const scope = await SubAgentScope.create(
+          'hook-test-agent',
+          config,
+          { systemPrompt: 'Test hooks.' },
+          defaultModelConfig,
+          defaultRunConfig,
+          toolConfig,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        // Verify the tool was called
+        expect(executeToolCall).toHaveBeenCalled();
+
+        // Verify the config passed to executeToolCall has hook methods
+        // The bug is that createSchedulerConfig() doesn't delegate these
+        const [toolExecutorConfig] = vi.mocked(executeToolCall).mock.calls[0];
+
+        // These assertions will FAIL until the bug is fixed:
+        // createSchedulerConfig() must delegate hook methods to this.config
+        expect(typeof toolExecutorConfig.getEnableHooks).toBe('function');
+        expect(typeof toolExecutorConfig.getHooks).toBe('function');
+        expect(typeof toolExecutorConfig.getHookSystem).toBe('function');
+        expect(typeof toolExecutorConfig.getWorkingDir).toBe('function');
+        expect(typeof toolExecutorConfig.getTargetDir).toBe('function');
+
+        // When hook methods are properly delegated, they should return the parent config values
+        expect(toolExecutorConfig.getEnableHooks?.()).toBe(true);
+        expect(toolExecutorConfig.getHookSystem?.()).toBe(mockHookSystem);
+      });
+    });
   });
 });

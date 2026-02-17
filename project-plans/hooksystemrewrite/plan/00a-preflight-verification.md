@@ -28,13 +28,13 @@ Validate dependencies, type contracts, call paths, and baseline test infrastruct
 - ls integration-tests
 
 ## Config-Key Consistency Checks
-- rg "tools.enableHooks" project-plans/hooksystemrewrite -n
-- rg "enableHooks" project-plans/hooksystemrewrite -n
-- Resolve stale tools.enableHooks usage in plan artifacts before implementation phases.
+- rg "tools.enableHooks" project-plans/hooksystemrewrite/overview.md project-plans/hooksystemrewrite/usecaseexamples.md project-plans/hooksystemrewrite/specification.md -n
+- rg "enableHooks" project-plans/hooksystemrewrite/overview.md project-plans/hooksystemrewrite/usecaseexamples.md project-plans/hooksystemrewrite/specification.md -n
+- Fail only on stale normative usage in user-facing docs/examples/specification; allow intentional references in plan phase docs and review/remediation notes.
 
 ## Gate
 - [ ] No dependency, symbol, or call path blockers
 - [ ] Test harness exists for unit and integration levels
-- [ ] Config-key consistency resolved (top-level enableHooks canonicalized)
+- [ ] No stale normative config-key usage in overview/usecaseexamples/specification (plan/review/remediation references allowed)
 
 If any item remains unchecked, stop and update plan files before phase 01.
