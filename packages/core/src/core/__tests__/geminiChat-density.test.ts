@@ -357,6 +357,7 @@ describe('Density Optimization Orchestration (P19)', () => {
     it('applies result when optimize returns changes', async () => {
       const runtimeContext = buildRuntimeContext(historyService, {
         compressionStrategy: 'high-density',
+        'compression.density.optimizeThreshold': 0, // Always run for test
       });
 
       historyService.add(makeUserMessage('Fix the bug'));
@@ -1034,6 +1035,7 @@ describe('Density Optimization Orchestration (P19)', () => {
 
               const ctx = buildRuntimeContext(hs, {
                 compressionStrategy: 'high-density',
+                'compression.density.optimizeThreshold': 0, // Always run for test
               });
               const gen = buildMockContentGenerator();
               const chat = new GeminiChat(ctx, gen, {}, []);
