@@ -24,7 +24,7 @@ import { getSettingSpec } from '../settings/settingsRegistry.js';
 
 const EPHEMERAL_DEFAULTS = {
   compressionThreshold: 0.5,
-  preserveThreshold: 0.2,
+  preserveThreshold: 0.4,
   topPreserveThreshold: 0.2,
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */
   reasoning: {

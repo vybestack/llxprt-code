@@ -157,7 +157,7 @@ export class HighDensityStrategy implements CompressionStrategy {
   readonly requiresLLM = false;
   readonly trigger: StrategyTrigger = {
     mode: 'continuous',
-    defaultThreshold: 0.85,
+    defaultThreshold: 0.9,
   };
 
   /**
@@ -444,9 +444,9 @@ export class HighDensityStrategy implements CompressionStrategy {
     }
 
     if (keyParam) {
-      return `[${toolName} ${keyParam}: ${outcome}]`;
+      return `[${toolName} ${keyParam}: ${outcome} — re-run to view]`;
     }
-    return `[${toolName}: ${outcome}]`;
+    return `[${toolName}: ${outcome} — re-run to view]`;
   }
 
   /**

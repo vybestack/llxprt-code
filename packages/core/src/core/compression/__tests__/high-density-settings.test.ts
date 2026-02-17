@@ -144,7 +144,7 @@ describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
     expect(strategy.name).toBe('high-density');
     expect(strategy.requiresLLM).toBe(false);
     expect(strategy.trigger.mode).toBe('continuous');
-    expect(strategy.trigger.defaultThreshold).toBe(0.85);
+    expect(strategy.trigger.defaultThreshold).toBe(0.9);
   });
 
   /** @requirement REQ-HD-004.2 */
