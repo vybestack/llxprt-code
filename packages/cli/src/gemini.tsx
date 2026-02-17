@@ -93,6 +93,10 @@ import {
   writeToStderr,
   writeToStdout,
   ExitCodes,
+  triggerSessionStartHook,
+  triggerSessionEndHook,
+  SessionStartSource,
+  SessionEndReason,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
@@ -1199,6 +1203,9 @@ export async function main() {
 
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {
+    // Fire SessionStart hook for interactive mode
+    await triggerSessionStartHook(config, SessionStartSource.Startup);
+
     await startInteractiveUI(
       config,
       settings,
@@ -1235,6 +1242,9 @@ export async function main() {
 
   initializeOutputListenersAndFlush();
 
+  // Fire SessionStart hook for non-interactive mode
+  await triggerSessionStartHook(nonInteractiveConfig, SessionStartSource.Startup);
+
   try {
     await runNonInteractive({
       config: nonInteractiveConfig,
@@ -1242,7 +1252,13 @@ export async function main() {
       input,
       prompt_id,
     });
+
+    // Fire SessionEnd hook on successful completion
+    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Exit);
   } catch (error) {
+    // Fire SessionEnd hook on error
+    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Other);
+
     if (nonInteractiveConfig.getOutputFormat() === OutputFormat.JSON) {
       const formatter = new JsonFormatter();
       const normalizedError =

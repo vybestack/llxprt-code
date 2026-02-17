@@ -81,6 +81,8 @@ import {
   type UserFeedbackPayload,
   ShellExecutionService,
   type RecordingIntegration,
+  triggerSessionEndHook,
+  SessionEndReason,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { useLogger } from './hooks/useLogger.js';
@@ -1635,21 +1637,28 @@ export const AppContainer = (props: AppContainerProps) => {
     if (quittingMessages) {
       // Allow UI to render the quit message briefly before exiting
       const timer = setTimeout(() => {
-        // Flush protocol restore before process.exit() so script/pty wrappers
-        // don't drop the final disable sequences.
-        restoreTerminalProtocolsSync();
-        // Note: We don't call runExitCleanup() here because it includes
-        // instance.waitUntilExit() which would deadlock. The cleanup is
-        // triggered by process.exit() which fires SIGTERM/exit handlers.
-        // The mouse events cleanup is registered in gemini.tsx and will
-        // run via the process exit handlers. (fixes #959)
-        process.exit(0);
+        // Fire SessionEnd hook before exiting
+        triggerSessionEndHook(config, SessionEndReason.Exit)
+          .catch(() => {
+            // Hook failures must not block exit
+          })
+          .finally(() => {
+            // Flush protocol restore before process.exit() so script/pty wrappers
+            // don't drop the final disable sequences.
+            restoreTerminalProtocolsSync();
+            // Note: We don't call runExitCleanup() here because it includes
+            // instance.waitUntilExit() which would deadlock. The cleanup is
+            // triggered by process.exit() which fires SIGTERM/exit handlers.
+            // The mouse events cleanup is registered in gemini.tsx and will
+            // run via the process exit handlers. (fixes #959)
+            process.exit(0);
+          });
       }, 100); // 100ms delay to show quit screen
 
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [quittingMessages]);
+  }, [quittingMessages, config]);
 
   const isInputActive =
     (streamingState === StreamingState.Idle ||
