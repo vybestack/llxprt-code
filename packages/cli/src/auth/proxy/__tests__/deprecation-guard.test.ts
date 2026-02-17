@@ -152,7 +152,7 @@ describe('Deprecation Guards (P36)', () => {
 
     it('should not have any "mergeRefreshedToken =" assignments', () => {
       const matches = grepFiles(
-        'mergeRefreshedToken\\s*=',
+        'mergeRefreshedToken[[:space:]]*=',
         '*.ts',
         packagesRoot,
         ['node_modules', 'dist', '__tests__'],

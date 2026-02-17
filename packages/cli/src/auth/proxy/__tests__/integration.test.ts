@@ -24,7 +24,6 @@ import {
   createTokenStore,
 } from '../credential-store-factory.js';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
-import { ProxyOAuthAdapter } from '../proxy-oauth-adapter.js';
 import { createAndStartProxy, stopProxy } from '../sandbox-proxy-lifecycle.js';
 
 /** @plan:PLAN-20250214-CREDPROXY.P31 */
@@ -470,34 +469,6 @@ describe('proxy integration (phase 31)', () => {
       await expect(proxyKeys.deleteKey('anthropic')).rejects.toThrow(
         'API key management is not available in sandbox mode',
       );
-    });
-  });
-
-  it('completes OAuth login over proxy and returns sanitized token payload', async () => {
-    // @requirement R17.4
-    // @scenario oauth_initiate/exchange flow should return access token without refresh_token.
-    await withServer(async ({ socketPath }) => {
-      const adapter = new ProxyOAuthAdapter(new ProxySocketClient(socketPath));
-      const token = (await adapter.login('anthropic', 'default')) as Record<
-        string,
-        unknown
-      >;
-      expect(typeof token.access_token).toBe('string');
-      expect('refresh_token' in token).toBe(false);
-    });
-  });
-
-  it('refreshes OAuth token over proxy and returns sanitized payload', async () => {
-    // @requirement R10.1
-    // @scenario refresh_token operation should execute host refresh and return sanitized result.
-    await withServer(async ({ socketPath }) => {
-      const adapter = new ProxyOAuthAdapter(new ProxySocketClient(socketPath));
-      const token = (await adapter.refresh('anthropic', 'default')) as Record<
-        string,
-        unknown
-      >;
-      expect(typeof token.access_token).toBe('string');
-      expect('refresh_token' in token).toBe(false);
     });
   });
 

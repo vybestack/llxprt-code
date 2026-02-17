@@ -95,6 +95,7 @@ export class PKCESessionStore {
     }
 
     if (Date.now() - session.createdAt > this.sessionTimeoutMs) {
+      session.abortController?.abort();
       this.sessions.delete(sessionId);
       throw new Error('SESSION_EXPIRED');
     }

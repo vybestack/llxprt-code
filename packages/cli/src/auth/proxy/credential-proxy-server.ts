@@ -28,6 +28,7 @@ import {
   encodeFrame,
   sanitizeTokenForProxy,
 } from '@vybestack/llxprt-code-core';
+import { RefreshCoordinator } from './refresh-coordinator.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -35,12 +36,36 @@ const PROTOCOL_VERSION = 1;
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
+/**
+ * Interface for OAuth flow instances that can be used with the credential proxy.
+ * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P03
+ */
+export interface OAuthFlowInterface {
+  initiateDeviceFlow(redirectUri?: string): Promise<{
+    device_code: string;
+    user_code?: string;
+    verification_uri: string;
+    verification_uri_complete?: string;
+    expires_in: number;
+    interval?: number;
+  }>;
+  exchangeCodeForToken?(code: string, state?: string): Promise<OAuthToken>;
+  pollForToken?(deviceCode: string): Promise<OAuthToken>;
+  refreshToken?(refreshToken: string): Promise<OAuthToken>;
+}
+
 export interface CredentialProxyServerOptions {
   tokenStore: TokenStore;
   providerKeyStorage: ProviderKeyStorage;
   socketDir?: string;
   allowedProviders?: string[];
   allowedBuckets?: string[];
+  /** Flow factories for OAuth initiation - maps provider name to factory function */
+  flowFactories?: Map<string, () => OAuthFlowInterface>;
+  /** OAuth session timeout in milliseconds (default 10 minutes) */
+  oauthSessionTimeoutMs?: number;
+  /** RefreshCoordinator for rate-limited, deduplicated token refresh */
+  refreshCoordinator?: RefreshCoordinator;
 }
 
 // ─── Server ──────────────────────────────────────────────────────────────────
@@ -50,9 +75,35 @@ export class CredentialProxyServer {
   private socketPath: string | null = null;
   private server: net.Server | null = null;
   private readonly connections: Set<net.Socket> = new Set();
+  private readonly refreshCoordinator: RefreshCoordinator;
 
   constructor(options: CredentialProxyServerOptions) {
     this.options = options;
+    // Initialize RefreshCoordinator - uses flowFactories to get provider instances for refresh
+    this.refreshCoordinator =
+      options.refreshCoordinator ??
+      new RefreshCoordinator({
+        tokenStore: options.tokenStore,
+        refreshFn: async (provider, currentToken) => {
+          const flowFactory = options.flowFactories?.get(provider);
+          if (!flowFactory) {
+            throw new Error(`No OAuth provider configured for: ${provider}`);
+          }
+          const flowInstance = flowFactory();
+          if (!flowInstance.refreshToken) {
+            throw new Error(
+              `Provider ${provider} does not support token refresh`,
+            );
+          }
+          if (!currentToken.refresh_token) {
+            throw new Error(
+              `Token for ${provider} does not have a refresh_token`,
+            );
+          }
+          return flowInstance.refreshToken(currentToken.refresh_token);
+        },
+        cooldownMs: 30 * 1000, // 30 second cooldown per provider:bucket
+      });
   }
 
   async start(): Promise<string> {
@@ -76,6 +127,9 @@ export class CredentialProxyServer {
       });
     });
 
+    // Set socket permissions to owner read/write only (0o600)
+    fs.chmodSync(socketPath, 0o600);
+
     return socketPath;
   }
 
@@ -86,20 +140,25 @@ export class CredentialProxyServer {
     }
     this.connections.clear();
 
-    if (this.server !== null) {
-      await new Promise<void>((resolve, reject) => {
-        this.server!.close((err) => (err ? reject(err) : resolve()));
-      });
-      this.server = null;
-    }
+    const socketPathToClean = this.socketPath;
+    this.socketPath = null;
 
-    if (this.socketPath !== null) {
-      try {
-        fs.unlinkSync(this.socketPath);
-      } catch {
-        // Socket file may already be removed
+    try {
+      if (this.server !== null) {
+        const srv = this.server;
+        this.server = null;
+        await new Promise<void>((resolve) => {
+          srv.close(() => resolve());
+        });
       }
-      this.socketPath = null;
+    } finally {
+      if (socketPathToClean !== null) {
+        try {
+          fs.unlinkSync(socketPathToClean);
+        } catch {
+          // Socket file may already be removed
+        }
+      }
     }
   }
 
@@ -202,9 +261,15 @@ export class CredentialProxyServer {
     socket: net.Socket,
     frame: Record<string, unknown>,
   ): Promise<void> {
-    const id = frame.id as string;
-    const op = frame.op as string;
+    const id =
+      typeof frame.id === 'string' ? frame.id : String(frame.id ?? 'unknown');
+    const op = typeof frame.op === 'string' ? frame.op : undefined;
     const payload = (frame.payload as Record<string, unknown>) ?? {};
+
+    if (!frame.id || !op) {
+      this.sendError(socket, id, 'INVALID_REQUEST', 'Missing request id or op');
+      return;
+    }
 
     try {
       switch (op) {
@@ -514,12 +579,38 @@ export class CredentialProxyServer {
     this.sendOk(socket, id, stats as unknown as Record<string, unknown>);
   }
 
-  // OAuth session storage for browser_redirect flow
+  /**
+   * OAuth session storage for managing active OAuth flows.
+   * Sessions store the flow instance for later exchange/poll operations.
+   * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P03
+   */
   private readonly oauthSessions = new Map<
     string,
-    { provider: string; bucket?: string; complete: boolean; token?: OAuthToken }
+    {
+      provider: string;
+      bucket?: string;
+      complete: boolean;
+      token?: OAuthToken;
+      createdAt: number;
+      used: boolean;
+      /** The type of OAuth flow for this session */
+      flowType: 'pkce_redirect' | 'device_code' | 'browser_redirect';
+      /** The flow instance for later exchange/poll operations */
+      flowInstance: OAuthFlowInterface;
+      /** PKCE state for pkce_redirect flows (NOT returned to client) */
+      pkceState?: string;
+      /** Device code for device_code flows - needed for polling */
+      deviceCode?: string;
+      /** Current poll interval (can increase on slow_down responses) */
+      pollInterval?: number;
+    }
   >();
 
+  /**
+   * Handles OAuth initiation - creates real flow instance and session.
+   *
+   * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P03
+   */
   private async handleOAuthInitiate(
     socket: net.Socket,
     id: string,
@@ -527,10 +618,15 @@ export class CredentialProxyServer {
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     const bucket = payload.bucket as string | undefined;
+    const redirectUri = payload.redirect_uri as string | undefined;
+
+    // Validate provider
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
       return;
     }
+
+    // Check provider authorization
     if (!this.isProviderAllowed(provider)) {
       this.sendError(
         socket,
@@ -541,20 +637,142 @@ export class CredentialProxyServer {
       return;
     }
 
-    // Generate session ID and store session
-    const sessionId = crypto.randomBytes(16).toString('hex');
-    this.oauthSessions.set(sessionId, { provider, bucket, complete: false });
+    // Get flow factory for this provider
+    const flowFactory = this.options.flowFactories?.get(provider);
+    if (!flowFactory) {
+      this.sendError(
+        socket,
+        id,
+        'PROVIDER_NOT_CONFIGURED',
+        `No OAuth flow factory configured for provider: ${provider}`,
+      );
+      return;
+    }
 
-    // Use browser_redirect flow for simplicity in testing
-    // In real implementation, this would call the actual OAuth provider
-    this.sendOk(socket, id, {
-      flow_type: 'browser_redirect',
-      session_id: sessionId,
-      auth_url: `https://auth.example.com/oauth?provider=${provider}`,
-      pollIntervalMs: 100,
-    });
+    try {
+      // Create flow instance
+      const flowInstance = flowFactory();
+
+      // Detect flow type based on provider and flow capabilities
+      const flowType = this.detectFlowType(provider, flowInstance);
+
+      // Initiate the flow - this calls the REAL provider
+      const initiationResult =
+        await flowInstance.initiateDeviceFlow(redirectUri);
+
+      // Generate unique session ID (128-bit, 32 hex chars)
+      const sessionId = crypto.randomBytes(16).toString('hex');
+
+      // Store session with flow instance for later exchange
+      this.oauthSessions.set(sessionId, {
+        provider,
+        bucket,
+        complete: false,
+        createdAt: Date.now(),
+        used: false,
+        flowType,
+        flowInstance,
+        // Store PKCE state for pkce_redirect flows (NOT returned to client)
+        pkceState:
+          flowType === 'pkce_redirect'
+            ? initiationResult.device_code
+            : undefined,
+        // Store device_code for device_code flows - needed for polling
+        deviceCode:
+          flowType === 'device_code' ? initiationResult.device_code : undefined,
+        // Store poll interval for device_code flows (may increase on slow_down)
+        pollInterval:
+          flowType === 'device_code'
+            ? (initiationResult.interval ?? 5)
+            : undefined,
+      });
+
+      // Build response based on flow type
+      const response: Record<string, unknown> = {
+        flow_type: flowType,
+        session_id: sessionId,
+        pollIntervalMs: (initiationResult.interval ?? 5) * 1000,
+      };
+
+      // Add flow-type-specific data
+      if (flowType === 'pkce_redirect' || flowType === 'browser_redirect') {
+        // For redirect flows, return the complete auth URL
+        response.auth_url =
+          initiationResult.verification_uri_complete ??
+          initiationResult.verification_uri;
+      } else if (flowType === 'device_code') {
+        // For device code flows, return verification URI and user code
+        response.auth_url = initiationResult.verification_uri;
+        response.verification_uri = initiationResult.verification_uri;
+        response.user_code = initiationResult.user_code;
+        response.verification_uri_complete =
+          initiationResult.verification_uri_complete;
+      }
+
+      // SECURITY: Do NOT return PKCE verifier, device_code internals, or flow instance
+      // These stay server-side for the exchange step
+
+      this.sendOk(socket, id, response);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.sendError(socket, id, 'FLOW_INITIATION_FAILED', message);
+    }
   }
 
+  /**
+   * Detects the OAuth flow type for a given provider.
+   *
+   * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P03
+   */
+  private detectFlowType(
+    provider: string,
+    flowInstance: OAuthFlowInterface,
+  ): 'pkce_redirect' | 'device_code' | 'browser_redirect' {
+    // Provider-specific flow type detection
+    switch (provider.toLowerCase()) {
+      case 'anthropic':
+        // Anthropic uses PKCE redirect flow
+        return 'pkce_redirect';
+
+      case 'qwen':
+        // Qwen uses device code flow
+        return 'device_code';
+
+      case 'codex':
+        // Codex uses browser redirect with local callback
+        return 'browser_redirect';
+
+      case 'gemini':
+        // Gemini uses PKCE redirect
+        return 'pkce_redirect';
+
+      default:
+        // Check if flow instance has specific capabilities
+        if (
+          'pollForToken' in flowInstance &&
+          typeof flowInstance.pollForToken === 'function'
+        ) {
+          return 'device_code';
+        }
+        // Default to pkce_redirect for unknown providers with exchange capability
+        return 'pkce_redirect';
+    }
+  }
+
+  /**
+   * Session timeout in milliseconds (default 10 minutes).
+   * Can be overridden via options.oauthSessionTimeoutMs.
+   */
+  private static readonly SESSION_TIMEOUT_MS = 10 * 60 * 1000;
+
+  /**
+   * Handles OAuth code exchange - calls real provider, stores full token.
+   *
+   * CRITICAL: Token is stored in backingStore WITH refresh_token.
+   *           Response is sanitized (refresh_token stripped).
+   *
+   * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P05
+   */
   private async handleOAuthExchange(
     socket: net.Socket,
     id: string,
@@ -562,6 +780,8 @@ export class CredentialProxyServer {
   ): Promise<void> {
     const sessionId = payload.session_id as string | undefined;
     const code = payload.code as string | undefined;
+
+    // Validate required fields
     if (!sessionId) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing session_id');
       return;
@@ -571,86 +791,245 @@ export class CredentialProxyServer {
       return;
     }
 
+    // Retrieve session
     const session = this.oauthSessions.get(sessionId);
     if (!session) {
       this.sendError(
         socket,
         id,
-        'SESSION_EXPIRED',
-        'OAuth session not found or expired',
+        'SESSION_NOT_FOUND',
+        'OAuth session not found',
       );
       return;
     }
 
-    // Simulate successful exchange - in real implementation would call provider
-    const token: OAuthToken = {
-      access_token: `test_access_${sessionId}`,
-      token_type: 'Bearer',
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-    };
+    // Check if session already used
+    if (session.used) {
+      this.sendError(
+        socket,
+        id,
+        'SESSION_ALREADY_USED',
+        'OAuth session already used',
+      );
+      return;
+    }
 
-    // Store token
-    await this.options.tokenStore.saveToken(
-      session.provider,
-      token,
-      session.bucket,
-    );
+    // Check if session expired
+    const sessionTimeoutMs =
+      (
+        this.options as CredentialProxyServerOptions & {
+          oauthSessionTimeoutMs?: number;
+        }
+      ).oauthSessionTimeoutMs ?? CredentialProxyServer.SESSION_TIMEOUT_MS;
+    if (Date.now() - session.createdAt > sessionTimeoutMs) {
+      this.oauthSessions.delete(sessionId);
+      this.sendError(socket, id, 'SESSION_EXPIRED', 'OAuth session expired');
+      return;
+    }
 
-    // Clean up session
-    this.oauthSessions.delete(sessionId);
+    // Mark session as used BEFORE attempting exchange (prevent replay)
+    session.used = true;
 
-    // Return sanitized token
-    const sanitized = sanitizeTokenForProxy(token);
-    this.sendOk(socket, id, sanitized as unknown as Record<string, unknown>);
+    try {
+      // Retrieve flow instance from session
+      const flowInstance = session.flowInstance;
+      if (
+        !flowInstance ||
+        typeof flowInstance.exchangeCodeForToken !== 'function'
+      ) {
+        this.sendError(
+          socket,
+          id,
+          'INTERNAL_ERROR',
+          'Session missing flow instance',
+        );
+        return;
+      }
+
+      // Call REAL provider exchange
+      const token = await flowInstance.exchangeCodeForToken(
+        code,
+        session.pkceState,
+      );
+
+      // Store FULL token in backing store (INCLUDING refresh_token)
+      await this.options.tokenStore.saveToken(
+        session.provider,
+        token,
+        session.bucket,
+      );
+
+      // Return SANITIZED token (WITHOUT refresh_token)
+      const sanitized = sanitizeTokenForProxy(token);
+      this.sendOk(socket, id, sanitized as unknown as Record<string, unknown>);
+
+      // Delete session after successful completion (consistent with handleOAuthPoll)
+      this.oauthSessions.delete(sessionId);
+    } catch (err) {
+      // Session remains marked as used to prevent retry
+      const message = err instanceof Error ? err.message : String(err);
+      this.sendError(socket, id, 'EXCHANGE_FAILED', message);
+    }
   }
 
+  /**
+   * Handle OAuth poll request for device_code flows.
+   *
+   * Polls the provider to check if the user has completed authorization.
+   * Returns pending status until complete, then stores and returns the token.
+   *
+   * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P04d
+   */
   private async handleOAuthPoll(
     socket: net.Socket,
     id: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
     const sessionId = payload.session_id as string | undefined;
+
+    // Validate required fields
     if (!sessionId) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing session_id');
       return;
     }
 
+    // Retrieve session
     const session = this.oauthSessions.get(sessionId);
     if (!session) {
       this.sendError(
         socket,
         id,
-        'SESSION_EXPIRED',
-        'OAuth session not found or expired',
+        'SESSION_NOT_FOUND',
+        'OAuth session not found',
       );
       return;
     }
 
-    // For testing, immediately return complete with a token
-    // In real implementation, this would poll actual OAuth status
-    const token: OAuthToken = {
-      access_token: `test_access_${sessionId}`,
-      token_type: 'Bearer',
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-    };
+    // Check if session already completed
+    if (session.used) {
+      this.sendError(
+        socket,
+        id,
+        'SESSION_ALREADY_USED',
+        'OAuth session already completed',
+      );
+      return;
+    }
 
-    // Store token
-    await this.options.tokenStore.saveToken(
-      session.provider,
-      token,
-      session.bucket,
-    );
+    // Verify session has flow instance and device_code (required for polling)
+    if (!session.flowInstance) {
+      this.sendError(
+        socket,
+        id,
+        'INTERNAL_ERROR',
+        'Session missing flow instance',
+      );
+      return;
+    }
+    if (!session.deviceCode) {
+      this.sendError(
+        socket,
+        id,
+        'INTERNAL_ERROR',
+        'Session missing device_code',
+      );
+      return;
+    }
 
-    // Clean up session
-    this.oauthSessions.delete(sessionId);
+    // Verify flow instance has pollForToken method
+    if (
+      !('pollForToken' in session.flowInstance) ||
+      typeof session.flowInstance.pollForToken !== 'function'
+    ) {
+      this.sendError(
+        socket,
+        id,
+        'INTERNAL_ERROR',
+        'Flow instance does not support polling',
+      );
+      return;
+    }
 
-    // Return sanitized token with status complete
-    this.sendOk(socket, id, {
-      status: 'complete',
-      access_token: token.access_token,
-      token_type: token.token_type,
-      expiry: token.expiry,
-    });
+    try {
+      // Poll the provider for token
+      const token = await session.flowInstance.pollForToken(session.deviceCode);
+
+      // Success! Token received from provider
+      // Mark session as used BEFORE storing to prevent race conditions
+      session.used = true;
+
+      // Store FULL token (including refresh_token) in backing store
+      await this.options.tokenStore.saveToken(
+        session.provider,
+        token,
+        session.bucket,
+      );
+
+      // Return SANITIZED token (no refresh_token crosses socket boundary)
+      const sanitized = sanitizeTokenForProxy(token);
+
+      this.sendOk(socket, id, {
+        status: 'complete',
+        token: sanitized,
+      });
+
+      // Clean up session after successful completion
+      this.oauthSessions.delete(sessionId);
+    } catch (error: unknown) {
+      // Handle provider-specific polling responses
+      const err = error as Error & { code?: string; newInterval?: number };
+      const errorCode = err.code || err.message;
+
+      switch (errorCode) {
+        case 'authorization_pending':
+          // User hasn't completed authorization yet - this is normal
+          this.sendOk(socket, id, {
+            status: 'pending',
+          });
+          return;
+
+        case 'slow_down':
+          // Provider asking us to slow down polling
+          // Return pending with increased interval
+          {
+            const currentInterval = session.pollInterval ?? 5;
+            const newInterval = err.newInterval ?? currentInterval + 5;
+            session.pollInterval = newInterval;
+            this.sendOk(socket, id, {
+              status: 'pending',
+              interval: newInterval,
+            });
+          }
+          return;
+
+        case 'expired_token':
+          // Device code expired - session is dead
+          this.oauthSessions.delete(sessionId);
+          this.sendError(socket, id, 'SESSION_EXPIRED', 'Device code expired');
+          return;
+
+        case 'access_denied':
+          // User denied authorization
+          this.oauthSessions.delete(sessionId);
+          this.sendError(
+            socket,
+            id,
+            'ACCESS_DENIED',
+            'User denied authorization',
+          );
+          return;
+
+        default:
+          // Unexpected error
+          this.sendError(
+            socket,
+            id,
+            'POLL_FAILED',
+            err.message || 'Poll failed',
+          );
+          return;
+      }
+    }
   }
 
   private async handleOAuthCancel(
@@ -668,6 +1047,15 @@ export class CredentialProxyServer {
     this.sendOk(socket, id, {});
   }
 
+  /**
+   * Handles token refresh - uses RefreshCoordinator for rate limiting/dedup.
+   *
+   * CRITICAL: Token is stored in backingStore WITH refresh_token.
+   *           Response is sanitized (refresh_token stripped).
+   *           RefreshCoordinator handles rate limiting (30s) and deduplication.
+   *
+   * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P07
+   */
   private async handleRefreshToken(
     socket: net.Socket,
     id: string,
@@ -675,10 +1063,14 @@ export class CredentialProxyServer {
   ): Promise<void> {
     const provider = payload.provider as string | undefined;
     const bucket = payload.bucket as string | undefined;
+
+    // Validate required fields
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
       return;
     }
+
+    // Check provider authorization
     if (!this.isProviderAllowed(provider)) {
       this.sendError(
         socket,
@@ -688,6 +1080,8 @@ export class CredentialProxyServer {
       );
       return;
     }
+
+    // Check bucket authorization
     if (!this.isBucketAllowed(bucket)) {
       this.sendError(
         socket,
@@ -698,35 +1092,103 @@ export class CredentialProxyServer {
       return;
     }
 
-    // Get existing token (or create a base token for refresh simulation)
-    let existingToken = await this.options.tokenStore.getToken(
+    // Check if provider is configured in flowFactories (before checking token)
+    const flowFactory = this.options.flowFactories?.get(provider);
+    if (!flowFactory) {
+      this.sendError(
+        socket,
+        id,
+        'PROVIDER_NOT_FOUND',
+        `No OAuth provider configured for: ${provider}`,
+      );
+      return;
+    }
+
+    // Get existing token to check if it exists and has refresh_token
+    const existingToken = await this.options.tokenStore.getToken(
       provider,
       bucket,
     );
     if (!existingToken) {
-      // For testing: simulate having a token to refresh
-      existingToken = {
-        access_token: `initial_${provider}`,
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        refresh_token: `refresh_${provider}`,
-      };
+      this.sendError(
+        socket,
+        id,
+        'NOT_FOUND',
+        `No token found for provider: ${provider}`,
+      );
+      return;
     }
 
-    // Simulate refresh - in real implementation would call provider's refresh endpoint
-    // using the refresh_token from existingToken
-    const refreshedToken: OAuthToken = {
-      ...existingToken,
-      access_token: `refreshed_${Date.now()}`,
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-    };
+    // Must have refresh_token to refresh
+    if (!existingToken.refresh_token) {
+      this.sendError(
+        socket,
+        id,
+        'REFRESH_NOT_AVAILABLE',
+        `Token for ${provider} does not have a refresh_token`,
+      );
+      return;
+    }
 
-    // Save refreshed token
-    await this.options.tokenStore.saveToken(provider, refreshedToken, bucket);
+    // Use RefreshCoordinator for rate limiting and deduplication
+    const refreshResult = await this.refreshCoordinator.refresh(
+      provider,
+      bucket,
+    );
 
-    // Return sanitized token
-    const sanitized = sanitizeTokenForProxy(refreshedToken);
-    this.sendOk(socket, id, sanitized as unknown as Record<string, unknown>);
+    // Handle the result based on status
+    switch (refreshResult.status) {
+      case 'ok':
+        // Success - return sanitized token (refresh_token already stripped by coordinator)
+        this.sendOk(
+          socket,
+          id,
+          refreshResult.token as unknown as Record<string, unknown>,
+        );
+        break;
+
+      case 'rate_limited':
+        // Rate limited - return error with retryAfter
+        socket.write(
+          encodeFrame({
+            id,
+            ok: false,
+            code: 'RATE_LIMITED',
+            error: 'Refresh rate limited',
+            retryAfter: refreshResult.retryAfter ?? 30,
+          }),
+        );
+        break;
+
+      case 'auth_error':
+        // Auth error (invalid_grant, etc.) - require re-authentication
+        this.sendError(
+          socket,
+          id,
+          'REAUTH_REQUIRED',
+          refreshResult.error ?? 'Authentication error during refresh',
+        );
+        break;
+
+      case 'error':
+        // Generic error
+        this.sendError(
+          socket,
+          id,
+          'REFRESH_FAILED',
+          refreshResult.error ?? 'Token refresh failed',
+        );
+        break;
+
+      default:
+        // Exhaustive check - should never reach here
+        this.sendError(
+          socket,
+          id,
+          'INTERNAL_ERROR',
+          `Unexpected refresh result status`,
+        );
+    }
   }
 
   private sendOk(

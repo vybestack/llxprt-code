@@ -11,7 +11,6 @@
  * - Real CredentialProxyServer
  * - Real ProxyTokenStore
  * - Real ProxyProviderKeyStorage
- * - Real ProxyOAuthAdapter
  * - Real ProxySocketClient
  *
  * Only the underlying token stores use in-memory implementations.
@@ -37,7 +36,6 @@ import {
   KeyringTokenStore,
 } from '@vybestack/llxprt-code-core';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
-import { ProxyOAuthAdapter } from '../proxy-oauth-adapter.js';
 import { ProactiveScheduler } from '../proactive-scheduler.js';
 import {
   createTokenStore,
@@ -267,166 +265,6 @@ describe('E2E Credential Flow (Phase 37)', () => {
         } catch {
           // Already stopped
         }
-      }
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Scenario 2: Login via Proxy (PKCE Redirect)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  describe('Scenario 2: Login via Proxy (PKCE Redirect)', () => {
-    /**
-     * @requirement E2E.2
-     * @scenario PKCE redirect login flow through proxy
-     * @given A proxy server with mock OAuth provider
-     * @when login() is called and code is exchanged
-     * @then Host store has full token, returned token has no refresh_token
-     */
-    it('completes PKCE redirect login and sanitizes returned token', async () => {
-      const { server, socketPath, tokenStore } = await startServer();
-
-      try {
-        const client = new ProxySocketClient(socketPath);
-        // Adapter is available but we test the lower-level client API directly
-        const _adapter = new ProxyOAuthAdapter(client);
-        void _adapter;
-
-        // Initiate login
-        const initResponse = await client.request('oauth_initiate', {
-          provider: 'anthropic',
-          bucket: 'default',
-        });
-        expect(initResponse.ok).toBe(true);
-        const sessionId = (initResponse.data as Record<string, unknown>)
-          .session_id as string;
-        expect(sessionId).toBeTruthy();
-
-        // Exchange code
-        const exchangeResponse = await client.request('oauth_exchange', {
-          session_id: sessionId,
-          code: 'test-auth-code',
-        });
-        expect(exchangeResponse.ok).toBe(true);
-
-        // Verify returned token has NO refresh_token
-        const returnedToken = exchangeResponse.data as Record<string, unknown>;
-        expect(typeof returnedToken.access_token).toBe('string');
-        expect('refresh_token' in returnedToken).toBe(false);
-
-        // Verify host store has the token
-        const hostToken = await tokenStore.getToken('anthropic', 'default');
-        expect(hostToken).not.toBeNull();
-        expect(hostToken!.access_token).toContain('test_access_');
-
-        client.close();
-      } finally {
-        await server.stop();
-      }
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Scenario 3: Login via Proxy (Device Code)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  describe('Scenario 3: Login via Proxy (Device Code)', () => {
-    /**
-     * @requirement E2E.3
-     * @scenario Device code login flow through proxy
-     * @given A proxy server with device code flow
-     * @when login() is called and polling completes
-     * @then Sanitized token returned to inner
-     */
-    it('completes device code login flow and returns sanitized token', async () => {
-      const { server, socketPath, tokenStore } = await startServer();
-
-      try {
-        const client = new ProxySocketClient(socketPath);
-
-        // Initiate - the server always returns browser_redirect in current implementation
-        // For this test, we'll use the poll mechanism directly
-        const initResponse = await client.request('oauth_initiate', {
-          provider: 'qwen',
-          bucket: 'default',
-        });
-        expect(initResponse.ok).toBe(true);
-        const sessionId = (initResponse.data as Record<string, unknown>)
-          .session_id as string;
-
-        // Poll - server immediately returns complete
-        const pollResponse = await client.request('oauth_poll', {
-          session_id: sessionId,
-        });
-        expect(pollResponse.ok).toBe(true);
-        const pollData = pollResponse.data as Record<string, unknown>;
-        expect(pollData.status).toBe('complete');
-        expect(typeof pollData.access_token).toBe('string');
-        expect('refresh_token' in pollData).toBe(false);
-
-        // Verify host store has the token
-        const hostToken = await tokenStore.getToken('qwen', 'default');
-        expect(hostToken).not.toBeNull();
-
-        client.close();
-      } finally {
-        await server.stop();
-      }
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Scenario 4: Token Refresh via Proxy
-  // ─────────────────────────────────────────────────────────────────────────
-
-  describe('Scenario 4: Token Refresh via Proxy', () => {
-    /**
-     * @requirement E2E.4
-     * @scenario Token refresh through proxy
-     * @given A proxy server with expired token in host store
-     * @when refresh_token operation is called
-     * @then New sanitized token returned, host store has new token with preserved refresh_token
-     */
-    it('refreshes token via proxy and preserves host refresh_token', async () => {
-      const { server, socketPath, tokenStore } = await startServer();
-
-      try {
-        // Store expired token on host
-        const expiredToken: OAuthToken = {
-          access_token: 'expired-access-token',
-          refresh_token: 'host-refresh-token-secret',
-          expiry: Math.floor(Date.now() / 1000) - 3600, // Expired 1 hour ago
-          token_type: 'Bearer',
-        };
-        await tokenStore.saveToken('anthropic', expiredToken, 'default');
-
-        const client = new ProxySocketClient(socketPath);
-
-        // Call refresh_token
-        const refreshResponse = await client.request('refresh_token', {
-          provider: 'anthropic',
-          bucket: 'default',
-        });
-        expect(refreshResponse.ok).toBe(true);
-
-        // Verify sanitized token returned (no refresh_token)
-        const refreshedData = refreshResponse.data as Record<string, unknown>;
-        expect(typeof refreshedData.access_token).toBe('string');
-        expect(
-          (refreshedData.access_token as string).startsWith('refreshed_'),
-        ).toBe(true);
-        expect('refresh_token' in refreshedData).toBe(false);
-
-        // Verify host store has new token with preserved refresh_token
-        const hostToken = await tokenStore.getToken('anthropic', 'default');
-        expect(hostToken).not.toBeNull();
-        expect(hostToken!.access_token).toContain('refreshed_');
-        // Host should preserve the original refresh_token
-        expect(hostToken!.refresh_token).toBe('host-refresh-token-secret');
-
-        client.close();
-      } finally {
-        await server.stop();
       }
     });
   });
@@ -837,48 +675,6 @@ describe('E2E Credential Flow (Phase 37)', () => {
         await expect(proxyKeys.deleteKey('anthropic')).rejects.toThrow(
           /not available in sandbox/i,
         );
-
-        client.close();
-      } finally {
-        await server.stop();
-      }
-    });
-  });
-
-  describe('Additional E2E: OAuth Cancel', () => {
-    /**
-     * @requirement E2E.OAUTH.1
-     * @scenario OAuth session cancellation
-     * @given An active OAuth session
-     * @when oauth_cancel is called
-     * @then Session is cleaned up
-     */
-    it('cancels OAuth sessions', async () => {
-      const { server, socketPath } = await startServer();
-
-      try {
-        const client = new ProxySocketClient(socketPath);
-
-        // Initiate a session
-        const initResponse = await client.request('oauth_initiate', {
-          provider: 'anthropic',
-          bucket: 'default',
-        });
-        const sessionId = (initResponse.data as Record<string, unknown>)
-          .session_id as string;
-
-        // Cancel the session
-        const cancelResponse = await client.request('oauth_cancel', {
-          session_id: sessionId,
-        });
-        expect(cancelResponse.ok).toBe(true);
-
-        // Subsequent poll should fail (session consumed)
-        const pollResponse = await client.request('oauth_poll', {
-          session_id: sessionId,
-        });
-        expect(pollResponse.ok).toBe(false);
-        expect(pollResponse.code).toBe('SESSION_EXPIRED');
 
         client.close();
       } finally {

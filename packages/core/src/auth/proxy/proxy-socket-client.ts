@@ -111,7 +111,20 @@ export class ProxySocketClient {
 
   gracefulClose(): void {
     this.handshakeComplete = false;
+    // Reject any pending requests
+    for (const [, pending] of this.pendingRequests) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error('Connection closing'));
+    }
+    this.pendingRequests.clear();
+    if (this.handshakeResolver) {
+      const resolver = this.handshakeResolver;
+      this.handshakeResolver = null;
+      resolver.reject(new Error('Connection closing'));
+    }
     if (this.socket !== null) {
+      // Remove listeners to prevent stale close events from affecting new connections
+      this.socket.removeAllListeners();
       this.socket.end();
       this.socket = null;
     }
@@ -206,7 +219,7 @@ export class ProxySocketClient {
   }
 
   private onClose(): void {
-    if (this.handshakeComplete) {
+    if (this.handshakeComplete || this.handshakeResolver) {
       this.destroy('Credential proxy connection lost. Restart the session.');
     }
   }

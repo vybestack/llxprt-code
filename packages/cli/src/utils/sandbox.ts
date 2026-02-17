@@ -135,7 +135,16 @@ export interface SshAgentResult {
   entrypointPrefix?: string;
 }
 
+export interface CredentialProxyBridgeResult {
+  tunnelProcess?: ChildProcess;
+  cleanup?: () => void;
+  /** Shell command to prepend to the container entrypoint (e.g. socat relay). */
+  entrypointPrefix?: string;
+  containerSocketPath: string;
+}
+
 const CONTAINER_SSH_AGENT_SOCK = '/ssh-agent';
+const CONTAINER_CREDENTIAL_PROXY_SOCK = '/tmp/llxprt-credential.sock';
 
 /**
  * Routes SSH agent forwarding to the appropriate platform-specific helper.
@@ -493,6 +502,143 @@ export async function setupSshAgentPodmanMacOS(
 }
 
 /**
+ * Sets up credential proxy forwarding for Podman on macOS via an SSH reverse
+ * tunnel into the Podman VM. This mirrors the SSH-agent Podman workaround,
+ * but relays credential proxy socket traffic used by /key and /auth flows.
+ */
+export async function setupCredentialProxyPodmanMacOS(
+  args: string[],
+  hostCredentialSocketPath: string,
+  pollTimeoutMs: number = SSH_TUNNEL_POLL_TIMEOUT_MS,
+): Promise<CredentialProxyBridgeResult> {
+  const conn = getPodmanMachineConnection();
+
+  // Pick a random ephemeral port for the TCP tunnel.
+  const tunnelPort = 49152 + Math.floor(Math.random() * 16383);
+
+  const tunnelProcess = spawn(
+    'ssh',
+    [
+      '-o',
+      'StrictHostKeyChecking=no',
+      '-o',
+      'UserKnownHostsFile=/dev/null',
+      '-o',
+      'LogLevel=ERROR',
+      '-o',
+      'ExitOnForwardFailure=yes',
+      '-i',
+      conn.identityPath,
+      '-p',
+      String(conn.port),
+      '-R',
+      `127.0.0.1:${tunnelPort}:${hostCredentialSocketPath}`,
+      '-N',
+      `${conn.user}@${conn.host}`,
+    ],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+
+  const tunnelStarted = await new Promise<boolean>((resolve) => {
+    const errorHandler = () => resolve(false);
+    tunnelProcess.on('error', errorHandler);
+    setTimeout(() => {
+      tunnelProcess.removeListener('error', errorHandler);
+      if (tunnelProcess.exitCode !== null) {
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    }, 500);
+  });
+
+  if (!tunnelStarted) {
+    throw new FatalSandboxError(
+      'Credential proxy bridge tunnel failed to start for Podman macOS. ' +
+        'Ensure Podman machine is running: `podman machine start`. ' +
+        'Check SSH connectivity: `podman machine ssh`.',
+    );
+  }
+
+  const pollStart = Date.now();
+  let portReady = false;
+  while (Date.now() - pollStart < pollTimeoutMs) {
+    try {
+      const result = execSync(
+        `podman machine ssh -- ss -tln | grep -q ':${tunnelPort} ' && echo ok`,
+        { timeout: 2000 },
+      )
+        .toString()
+        .trim();
+      if (result === 'ok') {
+        portReady = true;
+        break;
+      }
+    } catch {
+      // Port not ready yet.
+    }
+    await new Promise((r) => setTimeout(r, SSH_TUNNEL_POLL_INTERVAL_MS));
+  }
+
+  if (!portReady) {
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch {
+      // ignore
+    }
+    throw new FatalSandboxError(
+      'Credential proxy bridge timed out waiting for TCP tunnel in Podman VM. ' +
+        'Ensure the credential proxy socket is valid and Podman machine is reachable.',
+    );
+  }
+
+  const existingNetIdx = args.indexOf('--network');
+  if (existingNetIdx !== -1) {
+    const existingNet = args[existingNetIdx + 1];
+    if (existingNet !== 'host') {
+      try {
+        tunnelProcess.kill('SIGTERM');
+      } catch {
+        // ignore
+      }
+      throw new FatalSandboxError(
+        `Podman macOS credential proxy bridge requires --network=host but --network=${existingNet} is already set.`,
+      );
+    }
+  } else {
+    args.push('--network', 'host');
+  }
+
+  const entrypointPrefix =
+    `command -v socat >/dev/null 2>&1 || { echo "ERROR: socat not found — credential proxy relay requires socat in the sandbox image" >&2; }; ` +
+    `rm -f ${CONTAINER_CREDENTIAL_PROXY_SOCK}; ` +
+    `socat UNIX-LISTEN:${CONTAINER_CREDENTIAL_PROXY_SOCK},fork TCP4:127.0.0.1:${tunnelPort} &`;
+
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch {
+      // ignore
+    }
+  };
+
+  return {
+    tunnelProcess,
+    cleanup,
+    entrypointPrefix,
+    containerSocketPath: CONTAINER_CREDENTIAL_PROXY_SOCK,
+  };
+}
+
+/**
  * Determines whether the sandbox container should be run with the current user's UID and GID.
  * This is often necessary on Linux systems (especially Debian/Ubuntu based) when using
  * rootful Docker without userns-remap configured, to avoid permission issues with
@@ -634,6 +780,7 @@ export async function start_sandbox(
   cliConfig?: Config,
   cliArgs: string[] = [],
 ): Promise<number> {
+  let credentialProxyBridgeCleanup: (() => void) | undefined;
   const normalizeExitCode = (
     code: number | null,
     signal: NodeJS.Signals | null,
@@ -1280,12 +1427,12 @@ export async function start_sandbox(
     // See shouldUseCurrentUserInSandbox for more details.
     let userFlag = '';
     const finalEntrypoint = entrypoint(workdir, cliArgs);
+    const entrypointPrefixes: string[] = [];
 
     // If SSH agent forwarding provided an entrypoint prefix (e.g. socat relay
-    // for Podman macOS TCP tunnel), prepend it to the shell command.
+    // for Podman macOS TCP tunnel), prepend it to the container shell command.
     if (sshResult.entrypointPrefix) {
-      finalEntrypoint[2] =
-        sshResult.entrypointPrefix + ' ' + finalEntrypoint[2];
+      entrypointPrefixes.push(sshResult.entrypointPrefix);
     }
 
     if (process.env.LLXPRT_CODE_INTEGRATION_TEST === 'true') {
@@ -1332,6 +1479,7 @@ export async function start_sandbox(
     // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
     // The proxy must be listening before the container starts so it can connect immediately
     let credentialProxyHandle: { stop: () => Promise<void> } | undefined;
+    let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
     try {
       credentialProxyHandle = await createAndStartProxy({
         socketPath: resolvedTmpdir,
@@ -1339,13 +1487,38 @@ export async function start_sandbox(
       const socketPath = getProxySocketPath();
       if (socketPath) {
         // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
-        args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
+        const shouldBridgeCredentialProxy =
+          config.command === 'podman' && os.platform() === 'darwin';
+
+        if (shouldBridgeCredentialProxy) {
+          credentialProxyBridgeResult = await setupCredentialProxyPodmanMacOS(
+            args,
+            socketPath,
+          );
+          credentialProxyBridgeCleanup = credentialProxyBridgeResult.cleanup;
+          if (credentialProxyBridgeResult.entrypointPrefix) {
+            entrypointPrefixes.push(
+              credentialProxyBridgeResult.entrypointPrefix,
+            );
+          }
+          args.push(
+            '--env',
+            `LLXPRT_CREDENTIAL_SOCKET=${credentialProxyBridgeResult.containerSocketPath}`,
+          );
+        } else {
+          args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
+        }
       }
     } catch (err) {
+      credentialProxyBridgeResult?.cleanup?.();
       // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
       throw new FatalSandboxError(
         `Failed to start credential proxy: ${err instanceof Error ? err.message : String(err)}`,
       );
+    }
+
+    if (entrypointPrefixes.length > 0) {
+      finalEntrypoint[2] = `${entrypointPrefixes.join(' ')} ${finalEntrypoint[2]}`;
     }
 
     // push container image name
@@ -1473,6 +1646,18 @@ export async function start_sandbox(
       sandboxProcess.on('close', stopTunnel);
     }
 
+    // Wire credential proxy bridge tunnel cleanup into sandbox lifecycle.
+    if (credentialProxyBridgeResult?.cleanup) {
+      const stopCredentialBridgeTunnel = credentialProxyBridgeResult.cleanup;
+      process.on('exit', stopCredentialBridgeTunnel);
+      process.on('SIGINT', stopCredentialBridgeTunnel);
+      process.on('SIGTERM', stopCredentialBridgeTunnel);
+      sandboxProcess.on('close', () => {
+        credentialProxyBridgeCleanup = undefined;
+        stopCredentialBridgeTunnel();
+      });
+    }
+
     // @plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3: Clean up credential proxy on sandbox exit
     if (credentialProxyHandle) {
       const stopCredentialProxy = () => {
@@ -1501,6 +1686,7 @@ export async function start_sandbox(
     console.error('Sandbox error:', error);
     throw error;
   } finally {
+    credentialProxyBridgeCleanup?.();
     patcher.cleanup();
   }
 }

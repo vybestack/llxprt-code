@@ -31,10 +31,6 @@ function createTempSocketPath(): string {
 }
 
 /**
- * Creates a mock proxy server that speaks the framing protocol.
- * Returns the server and its socket path.
-
-/**
  * Helper: starts a server that auto-replies to handshake then echoes requests.
  */
 function createAutoReplyServer(_socketPath: string): net.Server {

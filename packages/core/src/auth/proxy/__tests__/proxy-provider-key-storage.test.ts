@@ -84,7 +84,9 @@ describe('ProxyProviderKeyStorage', () => {
       }
     });
     try {
-      fs.unlinkSync(socketPath);
+      // Remove the entire temp directory (includes socket file)
+      const tmpDir = path.dirname(socketPath);
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {
       // may already be gone
     }

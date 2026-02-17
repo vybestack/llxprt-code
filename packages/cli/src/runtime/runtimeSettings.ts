@@ -58,6 +58,8 @@ import {
   type ModelDefaultRule,
 } from '../providers/providerAliases.js';
 
+export { createProviderKeyStorage };
+
 type ProfileApplicationResult = Awaited<
   ReturnType<typeof applyProfileWithGuards>
 >;

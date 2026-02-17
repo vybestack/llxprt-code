@@ -80,7 +80,13 @@ export class ProxyTokenStore implements TokenStore {
     });
     if (!response.ok && response.code === 'NOT_FOUND') return null;
     if (!response.ok) throw new Error(response.error ?? 'proxy error');
-    return { bucket, requestCount: 0, percentage: 0, lastUsed: undefined };
+    const data = response.data as Record<string, unknown>;
+    return {
+      bucket,
+      requestCount: (data.requestCount as number) ?? 0,
+      percentage: (data.percentage as number) ?? 0,
+      lastUsed: data.lastUsed as number | undefined,
+    };
   }
 
   async acquireRefreshLock(

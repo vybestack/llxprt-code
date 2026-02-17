@@ -163,9 +163,10 @@ describe('Platform Matrix Tests (Phase 38)', () => {
         const stat = fs.statSync(socketPath);
 
         expect(stat.isSocket()).toBe(true);
-        // Socket permissions are set by the underlying fs, but the directory
-        // should have the correct permissions
         expect(socketPath.endsWith('.sock')).toBe(true);
+        // Verify socket file permissions (owner read/write only)
+        const mode = stat.mode & 0o777;
+        expect(mode).toBe(0o600);
       },
     );
   });
@@ -507,7 +508,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
           'anthropic',
           {
             access_token: 'test-anthropic',
-            expiry: Date.now() + 3600000,
+            expiry: Math.floor(Date.now() / 1000) + 3600,
             token_type: 'Bearer',
           },
           'default',
@@ -516,7 +517,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
           'openai',
           {
             access_token: 'test-openai',
-            expiry: Date.now() + 3600000,
+            expiry: Math.floor(Date.now() / 1000) + 3600,
             token_type: 'Bearer',
           },
           'default',
@@ -570,7 +571,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
           'gemini',
           {
             access_token: 'test-gemini',
-            expiry: Date.now() + 3600000,
+            expiry: Math.floor(Date.now() / 1000) + 3600,
             token_type: 'Bearer',
           },
           'default',

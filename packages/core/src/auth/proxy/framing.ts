@@ -60,10 +60,15 @@ export class FrameDecoder {
       this.cancelPartialFrameTimer();
       const jsonBytes = this.buffer.subarray(4, 4 + payloadLength);
       this.buffer = this.buffer.subarray(4 + payloadLength);
-      const parsed = JSON.parse(jsonBytes.toString('utf8')) as Record<
-        string,
-        unknown
-      >;
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(jsonBytes.toString('utf8')) as Record<
+          string,
+          unknown
+        >;
+      } catch (e) {
+        throw new FrameError(`Invalid JSON in frame: ${(e as Error).message}`);
+      }
       frames.push(parsed);
     }
 
@@ -79,6 +84,7 @@ export class FrameDecoder {
     if (this.partialFrameTimer !== null) return;
     this.partialFrameTimer = setTimeout(() => {
       this.partialFrameTimer = null;
+      this.buffer = Buffer.alloc(0);
     }, PARTIAL_FRAME_TIMEOUT_MS);
   }
 
