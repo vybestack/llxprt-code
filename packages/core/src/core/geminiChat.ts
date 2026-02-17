@@ -764,14 +764,7 @@ export class GeminiChat {
 
     // Build a provider-safe request transcript that includes the new message(s)
     // without committing them to history yet.
-    // Both Anthropic and Gemini require strict tool call/response matching.
-    // Gemini API returns 400 if function response count doesn't match function call count.
-    // @see https://github.com/vybestack/llxprt-code/issues/1427
-    const strictToolAdjacency =
-      provider.name.includes('anthropic') || provider.name.includes('gemini');
-    const iContents = this.historyService.getCuratedForProvider(userIContents, {
-      strictToolAdjacency,
-    });
+    const iContents = this.historyService.getCuratedForProvider(userIContents);
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-004.1
@@ -1488,17 +1481,8 @@ export class GeminiChat {
         });
         // Build a provider-safe request transcript that includes the new message(s)
         // without committing them to history yet.
-        // Both Anthropic and Gemini require strict tool call/response matching.
-        // @see https://github.com/vybestack/llxprt-code/issues/1427
-        const strictToolAdjacency =
-          provider.name.includes('anthropic') ||
-          provider.name.includes('gemini');
-        requestContents = this.historyService.getCuratedForProvider(
-          userIContents,
-          {
-            strictToolAdjacency,
-          },
-        );
+        requestContents =
+          this.historyService.getCuratedForProvider(userIContents);
       } else {
         const turnKey = this.historyService.generateTurnKey();
         const idGen = this.historyService.getIdGeneratorCallback(turnKey);
@@ -1511,15 +1495,9 @@ export class GeminiChat {
         );
         // Build a provider-safe request transcript that includes the new message
         // without committing it to history yet.
-        // Both Anthropic and Gemini require strict tool call/response matching.
-        // @see https://github.com/vybestack/llxprt-code/issues/1427
-        const strictToolAdjacency =
-          provider.name.includes('anthropic') ||
-          provider.name.includes('gemini');
-        requestContents = this.historyService.getCuratedForProvider(
-          [userIContent],
-          { strictToolAdjacency },
-        );
+        requestContents = this.historyService.getCuratedForProvider([
+          userIContent,
+        ]);
       }
 
       // DEBUG: Check for malformed entries
