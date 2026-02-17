@@ -27,8 +27,7 @@ describe('shouldClearTodos bug fix #1336', () => {
   describe('empty list should NOT trigger clear', () => {
     it('should return false for empty TODO list (nothing to clear)', () => {
       const todos: Todo[] = [];
-      // BUG: Current implementation returns true, which causes empty [] files
-      // FIX: Empty list means nothing to clear, should return false
+      // Empty list means nothing to clear - this is the fix for issue #1336
       expect(shouldClearTodos(todos)).toBe(false);
     });
   });
