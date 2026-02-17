@@ -162,13 +162,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       expect(isPerformResumeAction(result)).toBe(true);
       if (isPerformResumeAction(result)) {
         // When active conversation exists, requiresConfirmation should be true
-        expect(
-          (
-            result as PerformResumeActionReturn & {
-              requiresConfirmation?: boolean;
-            }
-          ).requiresConfirmation,
-        ).toBe(true);
+        expect(result.requiresConfirmation).toBe(true);
       }
     });
 
@@ -211,22 +205,13 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       expect(isPerformResumeAction(result)).toBe(true);
       if (isPerformResumeAction(result)) {
         // No confirmation flag when no active conversation
-        expect(
-          (
-            result as PerformResumeActionReturn & {
-              requiresConfirmation?: boolean;
-            }
-          ).requiresConfirmation,
-        ).toBeFalsy();
+        expect(result.requiresConfirmation).toBeFalsy();
       }
     });
   });
 
   describe('In-flight request guard @requirement:REQ-MP-004', () => {
     it('returns error when isProcessing=true with no args', async () => {
-      // NOTE: isProcessing is not yet in CommandContext types.
-      // This test documents the expected behavior once P20 adds it.
-      // Using type assertion to allow test to compile while implementation pending.
       ctx = createMockCommandContext({
         services: {
           config: {
@@ -234,8 +219,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
           } as unknown as CommandContext['services']['config'],
         },
       });
-      // Add isProcessing to the context - this may need adjustment in P20
-      (ctx.session as unknown as { isProcessing: boolean }).isProcessing = true;
+      ctx.session.isProcessing = true;
 
       const result = await continueCommand.action!(ctx, '');
 
@@ -249,8 +233,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
     it('returns error when isProcessing=true with latest', async () => {
       ctx = createMockCommandContext();
-      // Add isProcessing to the context - this may need adjustment in P20
-      (ctx.session as unknown as { isProcessing: boolean }).isProcessing = true;
+      ctx.session.isProcessing = true;
 
       const result = await continueCommand.action!(ctx, 'latest');
 
@@ -264,9 +247,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
     it('proceeds normally when isProcessing=false', async () => {
       ctx = createMockCommandContext();
-      // Add isProcessing to the context - this may need adjustment in P20
-      (ctx.session as unknown as { isProcessing: boolean }).isProcessing =
-        false;
+      ctx.session.isProcessing = false;
 
       const result = await continueCommand.action!(ctx, 'latest');
 

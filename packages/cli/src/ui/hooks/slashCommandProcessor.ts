@@ -9,6 +9,7 @@ import { type PartListUnion } from '@google/genai';
 import process from 'node:process';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { join } from 'node:path';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type {
   Config,
@@ -26,7 +27,14 @@ import {
   IdeClient,
   ProfileManager,
   SubagentManager,
+  getProjectHash,
 } from '@vybestack/llxprt-code-core';
+import {
+  performResume,
+  type RecordingSwapCallbacks,
+  type ResumeContext,
+} from '../../services/performResume.js';
+import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import type {
   Message,
@@ -94,6 +102,7 @@ interface SlashCommandProcessorActions {
  * Hook to define and process slash commands (e.g., /help, /clear).
  *
  * @plan PLAN-20260129-TODOPERSIST.P07 - Added todoContext param
+ * @plan PLAN-20260214-SESSIONBROWSER.P23 - Added recordingSwapCallbacks for /continue command
  */
 export const useSlashCommandProcessor = (
   config: Config | null,
@@ -114,6 +123,7 @@ export const useSlashCommandProcessor = (
     refreshTodos: () => void;
   },
   recordingIntegration?: RecordingIntegration,
+  recordingSwapCallbacks?: RecordingSwapCallbacks,
 ) => {
   const session = useSessionStats();
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
@@ -139,6 +149,13 @@ export const useSlashCommandProcessor = (
     prompt: React.ReactNode;
     onConfirm: (confirmed: boolean) => void;
   }>(null);
+
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   * Track isProcessing internally for commandContext.session.isProcessing.
+   * This is used by /continue command to block resume during active processing.
+   */
+  const [localIsProcessing, setLocalIsProcessing] = useState(false);
 
   const [sessionShellAllowlist, setSessionShellAllowlist] = useState(
     new Set<string>(),
@@ -314,9 +331,11 @@ export const useSlashCommandProcessor = (
       session: {
         stats: session.stats,
         sessionShellAllowlist,
+        isProcessing: localIsProcessing, // @plan PLAN-20260214-SESSIONBROWSER.P23
       },
       todoContext,
       recordingIntegration,
+      recordingSwapCallbacks, // @plan PLAN-20260214-SESSIONBROWSER.P23
     }),
     [
       alternateBuffer,
@@ -337,11 +356,13 @@ export const useSlashCommandProcessor = (
       setPendingItem,
       toggleVimEnabled,
       sessionShellAllowlist,
+      localIsProcessing, // @plan PLAN-20260214-SESSIONBROWSER.P23
       setLlxprtMdFileCount,
       reloadCommands,
       extensionsUpdateState,
       todoContext,
       recordingIntegration,
+      recordingSwapCallbacks, // @plan PLAN-20260214-SESSIONBROWSER.P23
     ],
   );
 
@@ -422,6 +443,7 @@ export const useSlashCommandProcessor = (
       }
 
       setIsProcessing(true);
+      setLocalIsProcessing(true); // @plan PLAN-20260214-SESSIONBROWSER.P23
 
       const userMessageTimestamp = Date.now();
       const sanitizedCommand =
@@ -756,12 +778,92 @@ export const useSlashCommandProcessor = (
                   );
                 }
                 case 'perform_resume': {
-                  // Session resume - not yet implemented
-                  addMessage({
-                    type: MessageType.INFO,
-                    content: `Session resume not yet implemented (ref: ${result.sessionRef})`,
-                    timestamp: new Date(),
+                  /**
+                   * Handle session resume via performResume service.
+                   * @plan PLAN-20260214-SESSIONBROWSER.P23
+                   * @requirement REQ-PR-001, REQ-PR-002
+                   */
+                  if (!config) {
+                    addMessage({
+                      type: MessageType.ERROR,
+                      content:
+                        'Cannot resume session: configuration not available.',
+                      timestamp: new Date(),
+                    });
+                    return { type: 'handled' };
+                  }
+
+                  if (!recordingSwapCallbacks) {
+                    addMessage({
+                      type: MessageType.ERROR,
+                      content:
+                        'Cannot resume session: recording infrastructure not available.',
+                      timestamp: new Date(),
+                    });
+                    return { type: 'handled' };
+                  }
+
+                  // Build ResumeContext from config
+                  const chatsDir = join(
+                    config.storage.getProjectTempDir(),
+                    'chats',
+                  );
+                  const projectHash = getProjectHash(config.getProjectRoot());
+                  const currentSessionId = config.getSessionId();
+                  const currentProvider = config.getProvider() ?? 'unknown';
+                  const currentModel = config.getModel();
+                  const workspaceDirs = [
+                    ...config.getWorkspaceContext().getDirectories(),
+                  ];
+
+                  const resumeContext: ResumeContext = {
+                    chatsDir,
+                    projectHash,
+                    currentSessionId,
+                    currentProvider,
+                    currentModel,
+                    workspaceDirs,
+                    recordingCallbacks: recordingSwapCallbacks,
+                    logger: slashCommandLogger,
+                  };
+
+                  const resumeResult = await performResume(
+                    result.sessionRef,
+                    resumeContext,
+                  );
+
+                  if (!resumeResult.ok) {
+                    addMessage({
+                      type: MessageType.ERROR,
+                      content: resumeResult.error,
+                      timestamp: new Date(),
+                    });
+                    return { type: 'handled' };
+                  }
+
+                  // Log warnings if any (use INFO since Message type doesn't support WARNING)
+                  for (const warning of resumeResult.warnings) {
+                    addMessage({
+                      type: MessageType.INFO,
+                      content: `Warning: ${warning}`,
+                      timestamp: new Date(),
+                    });
+                  }
+
+                  // Restore IContent[] to gemini client via restoreHistory
+                  await config
+                    .getGeminiClient()
+                    ?.restoreHistory(resumeResult.history);
+
+                  // Convert IContent[] to UI history items and load
+                  const uiHistory = iContentToHistoryItems(
+                    resumeResult.history,
+                  );
+                  fullCommandContext.ui.clear();
+                  uiHistory.forEach((item, index) => {
+                    fullCommandContext.ui.addItem(item, index);
                   });
+
                   return { type: 'handled' };
                 }
                 default: {
@@ -822,6 +924,7 @@ export const useSlashCommandProcessor = (
           logSlashCommand(config, event);
         }
         setIsProcessing(false);
+        setLocalIsProcessing(false); // @plan PLAN-20260214-SESSIONBROWSER.P23
       }
     },
     [
@@ -836,6 +939,7 @@ export const useSlashCommandProcessor = (
       setIsProcessing,
       setConfirmationRequest,
       recordingIntegration,
+      recordingSwapCallbacks, // @plan PLAN-20260214-SESSIONBROWSER.P23
     ],
   );
 

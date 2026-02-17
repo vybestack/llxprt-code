@@ -51,10 +51,7 @@ function hasActiveConversation(ctx: CommandContext): boolean {
  * @requirement REQ-MP-004
  */
 function isProcessing(ctx: CommandContext): boolean {
-  // Test sets isProcessing on session object
-  return (
-    (ctx.session as unknown as { isProcessing?: boolean }).isProcessing === true
-  );
+  return ctx.session.isProcessing === true;
 }
 
 /**
@@ -129,7 +126,7 @@ export const continueCommand: SlashCommand = {
         type: 'perform_resume',
         sessionRef,
         requiresConfirmation: true,
-      } as SlashCommandActionReturn;
+      };
     }
 
     // No active conversation - proceed without confirmation

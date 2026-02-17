@@ -20,6 +20,7 @@ import type {
   SubagentManager,
   Todo,
 } from '@vybestack/llxprt-code-core';
+import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { OAuthManager } from '../../auth/oauth-manager.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
@@ -95,6 +96,8 @@ export interface CommandContext {
     stats: SessionStatsState;
     /** A transient list of shell commands the user has approved for this session. */
     sessionShellAllowlist: Set<string>;
+    /** Indicates whether a request is currently being processed. */
+    isProcessing?: boolean;
   };
   // TODO management
   /**
@@ -110,6 +113,11 @@ export interface CommandContext {
   overwriteConfirmed?: boolean;
   // Recording integration for session recording
   recordingIntegration?: RecordingIntegration;
+  /**
+   * Callbacks for swapping recording infrastructure during session resume.
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   */
+  recordingSwapCallbacks?: RecordingSwapCallbacks;
 }
 
 /**
@@ -287,6 +295,8 @@ export interface ConfirmActionReturn {
 export interface PerformResumeActionReturn {
   type: 'perform_resume';
   sessionRef: string;
+  /** Whether the resume requires user confirmation (e.g., when replacing an active conversation). */
+  requiresConfirmation?: boolean;
 }
 
 export type SlashCommandActionReturn =

@@ -81,7 +81,11 @@ import {
   type UserFeedbackPayload,
   ShellExecutionService,
   type RecordingIntegration,
+  type SessionRecordingService,
+  type LockHandle,
+  type SessionMetadata,
 } from '@vybestack/llxprt-code-core';
+import type { RecordingSwapCallbacks } from '../services/performResume.js';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useSessionStats } from './contexts/SessionContext.js';
@@ -231,6 +235,47 @@ export const AppContainer = (props: AppContainerProps) => {
     todoPauseController.registerTodoPause();
     todoContinuationRef.current?.handleTodoPause('paused by model');
   }, [todoPauseController]);
+
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   * Recording infrastructure refs for session resume (performResume swap callbacks).
+   * These refs hold the current recording service, integration, and lock handle,
+   * allowing performResume to swap them during session resume.
+   */
+  const recordingServiceRef = useRef<SessionRecordingService | null>(null);
+  const recordingIntegrationRef = useRef<RecordingIntegration | null>(
+    recordingIntegration ?? null,
+  );
+  const lockHandleRef = useRef<LockHandle | null>(null);
+
+  // Keep recordingIntegrationRef in sync with prop
+  useEffect(() => {
+    recordingIntegrationRef.current = recordingIntegration ?? null;
+  }, [recordingIntegration]);
+
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   * RecordingSwapCallbacks for performResume - provides ref-based access to
+   * current recording infrastructure and setters for swapping during resume.
+   */
+  const recordingSwapCallbacks = useMemo(
+    (): RecordingSwapCallbacks => ({
+      getCurrentRecording: () => recordingServiceRef.current,
+      getCurrentIntegration: () => recordingIntegrationRef.current,
+      getCurrentLockHandle: () => lockHandleRef.current,
+      setRecording: (
+        recording: SessionRecordingService,
+        integration: RecordingIntegration,
+        lock: LockHandle | null,
+        _metadata: SessionMetadata,
+      ) => {
+        recordingServiceRef.current = recording;
+        recordingIntegrationRef.current = integration;
+        lockHandleRef.current = lock;
+      },
+    }),
+    [],
+  );
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = config.getIdeClient()?.getCurrentIde();
@@ -1259,6 +1304,7 @@ export const AppContainer = (props: AppContainerProps) => {
     true, // isConfigInitialized
     todoContextForCommands, // @plan PLAN-20260129-TODOPERSIST.P07
     recordingIntegration,
+    recordingSwapCallbacks, // @plan PLAN-20260214-SESSIONBROWSER.P23
   );
 
   // Memoize viewport to ensure it updates when inputWidth changes

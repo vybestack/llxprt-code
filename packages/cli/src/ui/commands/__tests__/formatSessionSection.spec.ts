@@ -291,8 +291,8 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
           fc.string({ minLength: 5, maxLength: 50 }).map((s) => `/tmp/${s}`), // Random path
         ),
         startTime: fc
-          .date({ min: new Date(2020, 0, 1), max: new Date() })
-          .map((d) => d.toISOString()),
+          .integer({ min: Date.UTC(2020, 0, 1), max: Date.now() })
+          .map((ms) => new Date(ms).toISOString()),
         isResumed: fc.boolean(),
       }) as fc.Arbitrary<SessionRecordingMetadata>;
 
