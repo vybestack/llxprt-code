@@ -70,6 +70,7 @@ The component receives callbacks (`onSelect`, `onClose`). Rendering behavior dep
 11. **Match count displayed**: Shows "5 sessions found".
 12. **Tab hint in search mode**: Shows "(Tab to navigate)" when isSearching.
 13. **Zero results message includes quoted query (REQ-SR-011)**: When search term "xyzzy" yields no results, rendered output contains exact string 'No sessions match "xyzzy"' with the query in double quotes.
+13a. **Anti-fake: No-match renders exact query not placeholder**: Given search term "my custom query", assert rendered output contains exactly `No sessions match "my custom query"` - NOT a generic "No results" message. This prevents hardcoded fake.
 
 ### BEHAVIORAL Tests — Sort Bar
 

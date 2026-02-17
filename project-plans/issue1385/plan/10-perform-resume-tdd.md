@@ -97,6 +97,16 @@ Create a test helper that:
 27. **Property: ok:true always has all fields**: For any success, history/metadata/warnings/newRecording/newLockHandle are present.
 28. **Property: same-session always fails**: For any context where ref resolves to currentSessionId, result.ok is false.
 
+### Anti-Fake Integration Tests (Per Deepthinker Review)
+
+These tests verify the implementation cannot be faked:
+
+29. **Recording swap verified via post-resume append**: After successful resume, call `newRecording.enqueue()` + `flush()`, then read both session files. Assert NEW file contains the event, OLD file does NOT contain the event. This proves recording infrastructure was actually swapped.
+
+30. **Warnings sourced from ResumeResult**: Create session with conditions that produce ResumeResult.warnings (e.g., model mismatch). Assert `result.warnings` contains the exact warning text from `ResumeResult.warnings`, NOT a generic message.
+
+31. **Stale lock cleanup verified via before/after state**: Create stale lock fixture (lock file with dead PID). Assert lock appears "locked" before cleanup, then after `performResume` completes, assert lock is NOT locked (file removed or marked stale).
+
 ### FORBIDDEN Patterns
 ```typescript
 // NO mocking core APIs for unit tests of integration behavior

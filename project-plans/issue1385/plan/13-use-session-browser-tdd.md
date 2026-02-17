@@ -117,6 +117,7 @@ For initial load, the hook calls `SessionDiscovery.listSessionsDetailed` and `Se
 16. **Search resets selection to 0**: After selecting item 3, typing resets to 0.
 17. **Match count reflects filtered list**: filteredSessions.length matches expected count.
 17a. **No-match state includes query (REQ-SR-011)**: When search yields no results, hook state includes `noMatchQuery` containing the exact search term for display as 'No sessions match "{query}"'.
+17b. **Anti-fake: No-match query preserves special chars**: Given search term with quotes like `my "test"`, the `noMatchQuery` contains the exact verbatim string including quotes. This prevents fake implementation that strips or escapes the query.
 18. **Tab switches to nav mode**: After Tab, isSearching is false.
 19. **Tab switches back to search**: From nav mode, Tab sets isSearching to true.
 20. **Arrow keys work in search mode**: Up/Down change selectedIndex while isSearching.
