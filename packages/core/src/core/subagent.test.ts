@@ -1067,6 +1067,31 @@ describe('subagent.ts', () => {
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
       });
 
+      it('should throw an error if sessionId template variable is missing', async () => {
+        const { config } = await createMockConfig();
+        const promptConfig: PromptConfig = {
+          systemPrompt: 'Session ${sessionId}',
+        };
+        const context = new ContextState();
+
+        const { overrides } = createRuntimeOverrides();
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        await expect(scope.runNonInteractive(context)).rejects.toThrow(
+          'Missing context values for the following keys: sessionId',
+        );
+        expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+      });
+
       it('should validate that systemPrompt and initialMessages are mutually exclusive', async () => {
         const { config } = await createMockConfig();
         const promptConfig: PromptConfig = {

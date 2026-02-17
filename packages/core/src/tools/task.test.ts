@@ -115,6 +115,159 @@ describe('TaskTool', () => {
     expect(result.error).toBeUndefined();
   });
 
+  it('backfills sessionId from config when context does not provide one', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const scope: {
+      output: {
+        emitted_vars: Record<string, string>;
+        terminate_reason: SubagentTerminateMode;
+      };
+      runInteractive: ReturnType<typeof vi.fn>;
+      runNonInteractive: ReturnType<typeof vi.fn>;
+      onMessage?: (message: string) => void;
+    } = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi
+        .fn()
+        .mockImplementation(async (context: ContextState) => {
+          expect(context.get('sessionId')).toBe('session-123');
+        }),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-session',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+    });
+
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship the feature',
+      context: { extra: 'value' },
+    });
+
+    await invocation.execute(new AbortController().signal, undefined);
+
+    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
+    expect(scope.runNonInteractive).not.toHaveBeenCalled();
+  });
+
+  it('keeps explicit context sessionId without overriding it', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const scope: {
+      output: {
+        emitted_vars: Record<string, string>;
+        terminate_reason: SubagentTerminateMode;
+      };
+      runInteractive: ReturnType<typeof vi.fn>;
+      runNonInteractive: ReturnType<typeof vi.fn>;
+      onMessage?: (message: string) => void;
+    } = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi
+        .fn()
+        .mockImplementation(async (context: ContextState) => {
+          expect(context.get('sessionId')).toBe('explicit-session');
+        }),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-session-explicit',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+    });
+
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship the feature',
+      context: { sessionId: 'explicit-session' },
+    });
+
+    await invocation.execute(new AbortController().signal, undefined);
+
+    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
+    expect(scope.runNonInteractive).not.toHaveBeenCalled();
+  });
+
+  it('leaves sessionId absent when config has no session id', async () => {
+    const configWithoutSessionId = {
+      getSessionId: () => '',
+    } as unknown as Config;
+
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const scope: {
+      output: {
+        emitted_vars: Record<string, string>;
+        terminate_reason: SubagentTerminateMode;
+      };
+      runInteractive: ReturnType<typeof vi.fn>;
+      runNonInteractive: ReturnType<typeof vi.fn>;
+      onMessage?: (message: string) => void;
+    } = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi
+        .fn()
+        .mockImplementation(async (context: ContextState) => {
+          expect(context.get('sessionId')).toBeUndefined();
+        }),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-session-missing',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(configWithoutSessionId, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+    });
+
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship the feature',
+    });
+
+    await invocation.execute(new AbortController().signal, undefined);
+
+    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
+    expect(scope.runNonInteractive).not.toHaveBeenCalled();
+  });
+
   it('falls back to non-interactive execution when interactive flag is disabled', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
     const scope = {

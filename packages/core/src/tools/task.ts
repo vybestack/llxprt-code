@@ -487,6 +487,12 @@ class TaskToolInvocation extends BaseToolInvocation<
     const context = new ContextState();
     context.set('task_goal', this.normalized.goalPrompt);
     context.set('task_name', this.normalized.subagentName);
+
+    const sessionId = this.config.getSessionId();
+    if (sessionId.length > 0) {
+      context.set('sessionId', sessionId);
+    }
+
     for (const [key, value] of Object.entries(this.normalized.context)) {
       context.set(key, value);
     }
