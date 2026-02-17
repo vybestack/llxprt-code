@@ -133,6 +133,8 @@ describe('<ToolGroupMessage />', () => {
       todos,
       updateTodos: vi.fn(),
       refreshTodos: vi.fn(),
+      paused: false,
+      setPaused: vi.fn(),
     };
     const toolCallContextValue = {
       getExecutingToolCalls: () => [],
