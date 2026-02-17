@@ -1329,6 +1329,9 @@ export class GeminiChat {
           // Get config for hook triggers
           const configForHooks = this.runtimeContext.providerRuntime.config;
 
+          // Contents to send to API - may be modified by BeforeModel hook
+          let contentsForApi: IContent[] = userIContents;
+
           // Trigger BeforeToolSelection hook and apply tool restrictions
           // @requirement:HOOK-055 - Apply tool restrictions from hook
           let effectiveToolsFromConfig = toolsFromConfig;
@@ -1443,10 +1446,25 @@ export class GeminiChat {
             if (syntheticResponse) {
               return syntheticResponse;
             }
+
+            // Apply request modifications from BeforeModel hook
+            // This allows hooks to modify the request before it's sent to the model
+            if (beforeModelResult) {
+              const modifiedRequest =
+                beforeModelResult.applyLLMRequestModifications({
+                  model: this.runtimeState.model || '',
+                  contents: userIContents as Content[],
+                });
+              // If hook modified contents, update contentsForApi
+              if (modifiedRequest && modifiedRequest.contents) {
+                contentsForApi =
+                  modifiedRequest.contents as Content[] as IContent[];
+              }
+            }
           }
 
           const streamResponse = provider.generateChatCompletion({
-            contents: userIContents,
+            contents: contentsForApi,
             tools:
               effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
                 ? (effectiveToolsFromConfig as ProviderToolset)
