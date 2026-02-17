@@ -376,7 +376,7 @@ export class LspServiceClient {
       return fallback;
     }
 
-    return await Promise.race([
+    return Promise.race([
       promise,
       new Promise<T>((resolve) => {
         signal.addEventListener(
@@ -395,7 +395,7 @@ export class LspServiceClient {
     timeoutMs: number,
     message: string,
   ): Promise<T> {
-    return await Promise.race([
+    return Promise.race([
       promise,
       new Promise<T>((_, reject) => {
         setTimeout(() => {
