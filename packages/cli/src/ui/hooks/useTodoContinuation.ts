@@ -65,7 +65,6 @@ export const useTodoContinuation = (
 
   // Track if a continuation is currently in progress to prevent rapid firing
   const continuationInProgressRef = useRef<boolean>(false);
-  const todoPausedRef = useRef<boolean>(false);
 
   const todoContext = useTodoContext();
   const abortControllerRef = useRef<AbortController | undefined>(undefined);
@@ -207,7 +206,8 @@ export const useTodoContinuation = (
         }));
       }
 
-      const todoPaused = todoPausedRef.current;
+      // Use paused state from context (persisted across sessions)
+      const todoPaused = todoContext.paused;
 
       const conditions = _evaluateContinuationConditions(
         hadToolCalls,
@@ -243,25 +243,29 @@ export const useTodoContinuation = (
       _findMostRelevantActiveTodo,
       _triggerContinuation,
       todoContext.todos,
+      todoContext.paused,
       continuationState.isActive,
     ],
   );
 
   const handleTodoPause = useCallback(
     (reason: string): { type: 'pause'; reason: string; message: string } => {
-      todoPausedRef.current = true;
+      // Persist paused state via context (survives --continue)
+      todoContext.setPaused(true);
       return {
         type: 'pause' as const,
         reason,
         message: `Task paused: ${reason}`,
       };
     },
-    [],
+    [todoContext],
   );
 
   const clearPause = useCallback(() => {
-    todoPausedRef.current = false;
-  }, []);
+    // Clear paused state via context (persisted)
+    todoContext.setPaused(false);
+  }, [todoContext]);
+
   useEffect(
     () => () => {
       abortControllerRef.current?.abort();
