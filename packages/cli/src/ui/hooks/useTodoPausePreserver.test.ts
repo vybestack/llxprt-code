@@ -16,9 +16,9 @@ import { shouldClearTodos } from './useTodoPausePreserver.js';
  */
 describe('shouldClearTodos', () => {
   describe('behavioral tests', () => {
-    it('should return true for empty TODO list (clear)', () => {
+    it('should return false for empty TODO list (nothing to clear)', () => {
       const todos: Todo[] = [];
-      expect(shouldClearTodos(todos)).toBe(true);
+      expect(shouldClearTodos(todos)).toBe(false);
     });
 
     it('should return true when all TODOs are completed (clear)', () => {
@@ -113,10 +113,10 @@ describe('shouldClearTodos', () => {
   });
 
   describe('property-based tests', () => {
-    it('should always return true for empty lists', () => {
+    it('should always return false for empty lists (nothing to clear)', () => {
       fc.assert(
         fc.property(fc.constant([] as Todo[]), (todos) => {
-          expect(shouldClearTodos(todos)).toBe(true);
+          expect(shouldClearTodos(todos)).toBe(false);
         }),
       );
     });

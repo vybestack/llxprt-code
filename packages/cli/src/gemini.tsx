@@ -953,6 +953,8 @@ export async function main() {
       recordingService = resumeResult.recording;
       resumedHistory = resumeResult.history;
       resumedLockHandle = resumeResult.lockHandle;
+      // FIX-1336: Adopt the restored session's ID so TodoStore uses the correct file
+      config.adoptSessionId(resumeResult.metadata.sessionId);
       if (resumeResult.warnings.length > 0) {
         for (const warning of resumeResult.warnings) {
           console.warn(chalk.yellow(warning));

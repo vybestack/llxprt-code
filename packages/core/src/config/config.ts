@@ -451,6 +451,7 @@ export class Config {
   private blockedMcpServers: Array<{ name: string; extensionName: string }>;
   private promptRegistry!: PromptRegistry;
   private readonly sessionId: string;
+  private adoptedSessionId: string | undefined;
   private readonly settingsService: SettingsService;
   private fileSystemService: FileSystemService;
   private contentGeneratorConfig!: ContentGeneratorConfig;
@@ -1093,7 +1094,20 @@ export class Config {
   }
 
   getSessionId(): string {
-    return this.sessionId;
+    return this.adoptedSessionId ?? this.sessionId;
+  }
+
+  /**
+   * @fix FIX-1336-SESSION-ADOPTION
+   * Adopt a restored session's ID for use by TodoStore and other session-scoped services.
+   * This allows --continue to properly restore todos from the previous session.
+   */
+  adoptSessionId(sessionId: string): void {
+    const logger = new DebugLogger('llxprt:config:session');
+    logger.debug(
+      `adoptSessionId: adopting ${sessionId} (was ${this.sessionId})`,
+    );
+    this.adoptedSessionId = sessionId;
   }
 
   isContinueSession(): boolean {

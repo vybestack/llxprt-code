@@ -41,6 +41,8 @@ interface MockTodoContext {
   todos: Todo[];
   updateTodos: Mock<(todos: Todo[]) => void>;
   refreshTodos: Mock<() => void>;
+  paused: boolean;
+  setPaused: Mock<(paused: boolean) => void>;
 }
 
 interface MockConfig {
@@ -95,6 +97,10 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       todos: [],
       updateTodos: vi.fn(),
       refreshTodos: vi.fn(),
+      paused: false,
+      setPaused: vi.fn((value: boolean) => {
+        mockTodoContext.paused = value;
+      }),
     };
     (useTodoContext as MockedFunction<typeof useTodoContext>).mockReturnValue(
       mockTodoContext as unknown as ReturnType<typeof useTodoContext>,

@@ -11,6 +11,15 @@ interface TodoContextType {
   todos: Todo[];
   updateTodos: (todos: Todo[]) => void;
   refreshTodos: () => void;
+  /**
+   * Whether the todo continuation is paused (via todo_pause tool).
+   * Persisted across sessions to survive --continue restores.
+   */
+  paused: boolean;
+  /**
+   * Set the paused state. Persists to disk immediately.
+   */
+  setPaused: (paused: boolean) => void;
 }
 
 const defaultContextValue: TodoContextType = {
@@ -24,6 +33,10 @@ const defaultContextValue: TodoContextType = {
     throw new Error(
       'TodoContext refreshTodos not implemented - use TodoProvider',
     );
+  },
+  paused: false,
+  setPaused: () => {
+    throw new Error('TodoContext setPaused not implemented - use TodoProvider');
   },
 };
 
