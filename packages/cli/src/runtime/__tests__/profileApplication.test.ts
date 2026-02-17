@@ -1208,9 +1208,7 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
         ),
       ]),
     );
-    expect(updateActiveProviderApiKeyMock).not.toHaveBeenCalledWith(
-      'resolved-named-key',
-    );
+    expect(updateActiveProviderApiKeyMock).not.toHaveBeenCalled();
   });
 
   it('sets GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION as ephemerals and env vars', async () => {

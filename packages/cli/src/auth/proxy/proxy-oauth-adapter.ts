@@ -49,13 +49,14 @@ export class ProxyOAuthAdapter {
       bucket,
     });
     const data = initiate.data as InitiateResponse;
-    const sessionId = String(data.session_id ?? '');
+    const sessionId = String(data.session_id ?? data.sessionId ?? '');
+    const flowType = this.normalizeFlowType(data);
 
     try {
-      if (data.flow_type === 'pkce_redirect') {
+      if (flowType === 'pkce_redirect') {
         return await this.handlePkceRedirect(sessionId, data);
       }
-      if (data.flow_type === 'device_code') {
+      if (flowType === 'device_code') {
         const pending = this.handleDeviceCode(sessionId, data);
         pending.catch(() => {
           // Attach a no-op rejection handler to avoid unhandled rejection warnings
@@ -63,7 +64,7 @@ export class ProxyOAuthAdapter {
         });
         return await pending;
       }
-      if (data.flow_type === 'browser_redirect') {
+      if (flowType === 'browser_redirect') {
         const pending = this.handleBrowserRedirect(sessionId, data);
         pending.catch(() => {
           // Attach a no-op rejection handler to avoid unhandled rejection warnings
@@ -71,7 +72,9 @@ export class ProxyOAuthAdapter {
         });
         return await pending;
       }
-      throw new Error(`Unknown flow type: ${String(data.flow_type)}`);
+      throw new Error(
+        `Unknown flow type: ${String(data.flow_type ?? data.mode ?? 'unknown')}`,
+      );
     } catch (error) {
       if (sessionId !== '') {
         try {
@@ -181,6 +184,25 @@ export class ProxyOAuthAdapter {
 
   async cancel(sessionId: string): Promise<void> {
     await this.socketClient.request('oauth_cancel', { session_id: sessionId });
+  }
+
+  private normalizeFlowType(
+    data: InitiateResponse,
+  ): 'pkce_redirect' | 'device_code' | 'browser_redirect' | string {
+    if (typeof data.flow_type === 'string' && data.flow_type !== '') {
+      return data.flow_type;
+    }
+
+    switch (data.mode) {
+      case 'pkce':
+        return 'pkce_redirect';
+      case 'device_code':
+        return 'device_code';
+      case 'browser_redirect':
+        return 'browser_redirect';
+      default:
+        return data.mode ?? '';
+    }
   }
 
   private async wait(ms: number): Promise<void> {

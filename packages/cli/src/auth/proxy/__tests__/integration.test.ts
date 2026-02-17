@@ -22,6 +22,7 @@ import {
 import {
   createProviderKeyStorage,
   createTokenStore,
+  resetFactorySingletons,
 } from '../credential-store-factory.js';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
 import { createAndStartProxy, stopProxy } from '../sandbox-proxy-lifecycle.js';
@@ -131,6 +132,7 @@ describe('proxy integration (phase 31)', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-'));
     priorSocketEnv = process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+    resetFactorySingletons();
   });
 
   afterEach(async () => {
@@ -146,6 +148,7 @@ describe('proxy integration (phase 31)', () => {
       process.env.LLXPRT_CREDENTIAL_SOCKET = priorSocketEnv;
     }
 
+    resetFactorySingletons();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 

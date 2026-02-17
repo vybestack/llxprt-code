@@ -195,22 +195,12 @@ describe('oauth_initiate handler', () => {
       ['qwen', createQwenFlow],
     ]);
 
-    // NOTE: flowFactories is not yet part of CredentialProxyServerOptions.
-    // This test is written TDD-style - it will fail to compile/run until
-    // Phase 03 adds the flowFactories option to the server.
-    // For now, we cast to make the test compilable but expect runtime failure.
-    const opts: CredentialProxyServerOptions & {
-      flowFactories?: Map<string, () => TestOAuthFlow>;
-    } = {
+    const opts: CredentialProxyServerOptions = {
       tokenStore: backingStore,
       providerKeyStorage:
         keyStorage as unknown as CredentialProxyServerOptions['providerKeyStorage'],
-      // flowFactories will be wired in Phase 03 implementation
       flowFactories,
     };
-
-    // flowFactories is set above - the server will ignore it until Phase 03
-    // implements the real handling
 
     server = new CredentialProxyServer(opts);
     const socketPath = await server.start();

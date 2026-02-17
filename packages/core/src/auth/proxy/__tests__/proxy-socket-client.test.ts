@@ -82,12 +82,9 @@ describe('ProxySocketClient', () => {
         resolve();
       }
     });
-    // Clean up socket file
-    try {
-      fs.unlinkSync(socketPath);
-    } catch {
-      // may already be gone
-    }
+
+    const socketDir = path.dirname(socketPath);
+    fs.rmSync(socketDir, { recursive: true, force: true });
   });
 
   /**

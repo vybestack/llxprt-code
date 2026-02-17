@@ -490,8 +490,22 @@ export class CredentialProxyServer {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
       return;
     }
+
+    if (!this.isProviderAllowed(provider)) {
+      this.sendError(
+        socket,
+        id,
+        'UNAUTHORIZED',
+        `UNAUTHORIZED: Provider not allowed: ${provider}`,
+      );
+      return;
+    }
+
     const buckets = await this.options.tokenStore.listBuckets(provider);
-    this.sendOk(socket, id, { buckets });
+    const filteredBuckets = buckets.filter((bucket) =>
+      this.isBucketAllowed(bucket),
+    );
+    this.sendOk(socket, id, { buckets: filteredBuckets });
   }
 
   private async handleGetApiKey(
@@ -504,6 +518,17 @@ export class CredentialProxyServer {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing name');
       return;
     }
+
+    if (!this.isProviderAllowed(name)) {
+      this.sendError(
+        socket,
+        id,
+        'UNAUTHORIZED',
+        `UNAUTHORIZED: Provider not allowed: ${name}`,
+      );
+      return;
+    }
+
     const key = await this.options.providerKeyStorage.getKey(name);
     if (key === null) {
       this.sendError(socket, id, 'NOT_FOUND', `No API key found for: ${name}`);
@@ -517,7 +542,10 @@ export class CredentialProxyServer {
     id: string,
   ): Promise<void> {
     const keys = await this.options.providerKeyStorage.listKeys();
-    this.sendOk(socket, id, { keys });
+    const filteredKeys = keys.filter((keyName) =>
+      this.isProviderAllowed(keyName),
+    );
+    this.sendOk(socket, id, { keys: filteredKeys });
   }
 
   private async handleHasApiKey(
@@ -530,6 +558,17 @@ export class CredentialProxyServer {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing name');
       return;
     }
+
+    if (!this.isProviderAllowed(name)) {
+      this.sendError(
+        socket,
+        id,
+        'UNAUTHORIZED',
+        `UNAUTHORIZED: Provider not allowed: ${name}`,
+      );
+      return;
+    }
+
     const exists = await this.options.providerKeyStorage.hasKey(name);
     this.sendOk(socket, id, { exists });
   }
