@@ -30,7 +30,10 @@ import { DebugLogger } from '../debug/index.js';
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const SERVICE_NAME = 'llxprt-code-oauth';
-const NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+// Allow email-style bucket names (e.g., user@example.com) while keeping filenames safe.
+// SecureStore.validateKey() handles path separators and null bytes separately.
+// @fix issue1439 - relaxed from /^[a-zA-Z0-9_-]+$/ to allow '.' and '@'
+const NAME_REGEX = /^[a-zA-Z0-9._@-]{1,64}$/;
 const DEFAULT_BUCKET = 'default';
 const DEFAULT_LOCK_WAIT_MS = 10_000;
 const DEFAULT_STALE_THRESHOLD_MS = 30_000;
@@ -76,7 +79,7 @@ export class KeyringTokenStore implements TokenStore {
   private validateName(name: string, label: string): void {
     if (!NAME_REGEX.test(name)) {
       throw new Error(
-        `Invalid ${label} name: "${name}". Allowed: letters, numbers, dashes, underscores.`,
+        `Invalid ${label} name: "${name}". Allowed: letters, numbers, dashes, underscores, dots, @ (1-64 chars).`,
       );
     }
   }
