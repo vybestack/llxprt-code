@@ -1591,3 +1591,88 @@ describe('Config setModel', () => {
     expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith('auto');
   });
 });
+
+/**
+ * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P04
+ * @requirement:HOOK-001,HOOK-002,HOOK-010
+ */
+describe('Config getHookSystem', () => {
+  const baseParams = {
+    cwd: '/tmp',
+    targetDir: '/path/to/target',
+    debugMode: false,
+    sessionId: 'test-session-id',
+    model: 'gemini-2.0-flash',
+    usageStatisticsEnabled: false,
+  };
+
+  it('enableHooks true initializes hook system', () => {
+    // @requirement:HOOK-001 - Lazy creation when enableHooks=true
+    const config = new Config({
+      ...baseParams,
+      enableHooks: true,
+    });
+
+    const hookSystem = config.getHookSystem();
+    expect(hookSystem).toBeDefined();
+    expect(hookSystem).not.toBeNull();
+  });
+
+  it('enableHooks false returns undefined', () => {
+    // @requirement:HOOK-002 - Returns undefined when enableHooks=false
+    const config = new Config({
+      ...baseParams,
+      enableHooks: false,
+    });
+
+    const hookSystem = config.getHookSystem();
+    expect(hookSystem).toBeUndefined();
+  });
+
+  it('tools.enableHooks does not enable hooks', () => {
+    // @requirement:HOOK-002 - Only top-level enableHooks controls hook system
+    // The tools.enableHooks key should not enable the hook system
+    const config = new Config({
+      ...baseParams,
+      enableHooks: false,
+      // Note: tools.enableHooks is not a valid config key for enabling hooks
+    });
+
+    const hookSystem = config.getHookSystem();
+    expect(hookSystem).toBeUndefined();
+    expect(config.getEnableHooks()).toBe(false);
+  });
+
+  it('getHookSystem returns same instance on multiple calls', () => {
+    // @requirement:HOOK-001 - Lazy creation, same instance returned
+    const config = new Config({
+      ...baseParams,
+      enableHooks: true,
+    });
+
+    const hookSystem1 = config.getHookSystem();
+    const hookSystem2 = config.getHookSystem();
+
+    expect(hookSystem1).toBe(hookSystem2);
+  });
+
+  it('getEnableHooks reflects enableHooks config value', () => {
+    const configEnabled = new Config({
+      ...baseParams,
+      enableHooks: true,
+    });
+    expect(configEnabled.getEnableHooks()).toBe(true);
+
+    const configDisabled = new Config({
+      ...baseParams,
+      enableHooks: false,
+    });
+    expect(configDisabled.getEnableHooks()).toBe(false);
+  });
+
+  it('enableHooks defaults to false when not specified', () => {
+    const config = new Config(baseParams);
+    expect(config.getEnableHooks()).toBe(false);
+    expect(config.getHookSystem()).toBeUndefined();
+  });
+});

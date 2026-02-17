@@ -53,6 +53,7 @@ import { GeminiClient } from '../core/client.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
+import { HookSystem } from '../hooks/hookSystem.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -629,6 +630,12 @@ export class Config {
   private readonly hooks:
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
+  /**
+   * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P03
+   * @requirement:HOOK-001,HOOK-002
+   * Lazily-created HookSystem instance, only when enableHooks=true
+   */
+  private hookSystem: HookSystem | undefined;
   private jitContextEnabled: boolean;
   private initialized = false;
 
@@ -2386,6 +2393,29 @@ ${trimmed}
    */
   getHooks(): { [K in HookEventName]?: HookDefinition[] } | undefined {
     return this.hooks;
+  }
+
+  /**
+   * Get the HookSystem instance, creating it lazily on first access.
+   * Returns undefined if hooks are disabled (enableHooks=false).
+   *
+   * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P03
+   * @requirement:HOOK-001 - Lazy creation on first call when enableHooks=true
+   * @requirement:HOOK-002 - Returns undefined when enableHooks=false
+   * @requirement:HOOK-010 - Zero CPU/memory overhead when hooks are disabled
+   */
+  getHookSystem(): HookSystem | undefined {
+    // @requirement:HOOK-002 - Return undefined when hooks disabled
+    if (!this.enableHooks) {
+      return undefined;
+    }
+
+    // @requirement:HOOK-001 - Lazy creation on first access
+    if (!this.hookSystem) {
+      this.hookSystem = new HookSystem(this);
+    }
+
+    return this.hookSystem;
   }
 
   /**

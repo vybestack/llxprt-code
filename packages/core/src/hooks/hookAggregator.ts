@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P15,P16,P17
+ * @requirement:HOOK-092,HOOK-093,HOOK-094,HOOK-095,HOOK-096,HOOK-097,HOOK-098,HOOK-099,HOOK-100,HOOK-101,HOOK-102,HOOK-103,HOOK-104,HOOK-105
+ */
+
 import { FunctionCallingConfigMode } from '@google/genai';
 import type {
   HookOutput,
@@ -16,6 +21,7 @@ import {
   BeforeModelHookOutput,
   BeforeToolSelectionHookOutput,
   AfterModelHookOutput,
+  AfterToolHookOutput,
 } from './types.js';
 import { HookEventName } from './types.js';
 
@@ -163,6 +169,15 @@ export class HookAggregator {
         merged.suppressOutput = true;
       }
 
+      // Merge hookSpecificOutput - later outputs override earlier ones
+      // This preserves fields like tool_input, additionalContext, etc.
+      if (output.hookSpecificOutput) {
+        merged.hookSpecificOutput = {
+          ...(merged.hookSpecificOutput || {}),
+          ...output.hookSpecificOutput,
+        };
+      }
+
       // Collect additional context from hook-specific outputs
       this.extractAdditionalContext(output, additionalContexts);
     }
@@ -185,7 +200,7 @@ export class HookAggregator {
       merged.systemMessage = systemMessages.join('\n');
     }
 
-    // Add merged additional context
+    // If we collected additional contexts, merge them into hookSpecificOutput
     if (additionalContexts.length > 0) {
       merged.hookSpecificOutput = {
         ...(merged.hookSpecificOutput || {}),
@@ -314,6 +329,8 @@ export class HookAggregator {
     switch (eventName) {
       case HookEventName.BeforeTool:
         return new BeforeToolHookOutput(output);
+      case HookEventName.AfterTool:
+        return new AfterToolHookOutput(output);
       case HookEventName.BeforeModel:
         return new BeforeModelHookOutput(output);
       case HookEventName.BeforeToolSelection:

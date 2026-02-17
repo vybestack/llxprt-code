@@ -4,12 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P09,P10,P11,P20
+ * @requirement:HOOK-014,HOOK-015,HOOK-016a,HOOK-016b,HOOK-017,HOOK-018,HOOK-019,HOOK-020,HOOK-021,HOOK-022,HOOK-023,HOOK-024,HOOK-025,HOOK-026,HOOK-027,HOOK-028,HOOK-029,HOOK-030,HOOK-031,HOOK-134
+ * @pseudocode:analysis/pseudocode/03-tool-hook-pipeline.md
+ */
+
 import type { Config } from '../config/config.js';
-import { HookEventName } from '../hooks/types.js';
-import type { BeforeToolInput, AfterToolInput } from '../hooks/types.js';
-import { HookRegistry } from '../hooks/hookRegistry.js';
-import { HookPlanner } from '../hooks/hookPlanner.js';
-import { HookRunner } from '../hooks/hookRunner.js';
+import { BeforeToolHookOutput, AfterToolHookOutput } from '../hooks/types.js';
 import type { ToolResult } from '../tools/tools.js';
 import { DebugLogger } from '../debug/index.js';
 
@@ -18,147 +20,115 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:hook-triggers:tool');
 /**
  * Trigger BeforeTool hook for a tool call
  *
+ * @requirement:HOOK-134 - Returns typed result instead of void
+ *
  * @param config - Configuration object with hook system access
  * @param toolName - Name of the tool being called
  * @param toolInput - Input arguments for the tool
+ * @returns BeforeToolHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerBeforeToolHook(
   config: Config,
   toolName: string,
   toolInput: Record<string, unknown>,
-): Promise<void> {
+): Promise<BeforeToolHookOutput | undefined> {
   // Check if hooks are enabled
   if (!config.getEnableHooks?.()) {
-    return;
+    return undefined;
+  }
+
+  // Get the HookSystem singleton
+  const hookSystem = config.getHookSystem?.();
+  if (!hookSystem) {
+    return undefined;
   }
 
   try {
-    // Create hook system instances
-    const hookRegistry = new HookRegistry(config);
-    await hookRegistry.initialize();
-    const hookPlanner = new HookPlanner(hookRegistry);
-    const hookRunner = new HookRunner();
+    // Initialize hook system if needed
+    await hookSystem.initialize();
 
-    // Create execution plan
-    const executionPlan = hookPlanner.createExecutionPlan(
-      HookEventName.BeforeTool,
-      { toolName },
-    );
-
-    if (!executionPlan) {
-      return;
-    }
-
-    // Build hook input
-    const hookInput: BeforeToolInput = {
-      session_id: config.getSessionId(),
-      transcript_path: '', // TODO: Add transcript path to Config if needed
-      cwd: config.getWorkingDir(),
-      hook_event_name: HookEventName.BeforeTool,
-      timestamp: new Date().toISOString(),
-      tool_name: toolName,
-      tool_input: toolInput,
-    };
-
-    // Execute hooks
-    if (executionPlan.sequential) {
-      await hookRunner.executeHooksSequential(
-        executionPlan.hookConfigs,
-        HookEventName.BeforeTool,
-        hookInput,
-      );
-    } else {
-      await hookRunner.executeHooksParallel(
-        executionPlan.hookConfigs,
-        HookEventName.BeforeTool,
-        hookInput,
-      );
-    }
+    // Get the event handler and fire the event
+    const eventHandler = hookSystem.getEventHandler();
+    const result = await eventHandler.fireBeforeToolEvent(toolName, toolInput);
 
     debugLogger.debug(`BeforeTool hook executed for tool: ${toolName}`);
+
+    // Wrap result in BeforeToolHookOutput
+    if (result) {
+      return new BeforeToolHookOutput(result);
+    }
+
+    return undefined;
   } catch (error) {
     // Hook failures must NOT block tool execution
     debugLogger.warn(
       `BeforeTool hook failed for tool ${toolName} (non-blocking):`,
       error,
     );
+    return undefined;
   }
 }
 
 /**
  * Trigger AfterTool hook (non-blocking)
  *
+ * @requirement:HOOK-134 - Returns typed result instead of void
+ *
  * @param config - Configuration object with hook system access
  * @param toolName - Name of the tool that was called
  * @param toolInput - Input/arguments that were passed to the tool
  * @param toolOutput - Output/response from the tool
+ * @returns AfterToolHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerAfterToolHook(
   config: Config,
   toolName: string,
   toolInput: Record<string, unknown>,
   toolOutput: ToolResult,
-): Promise<void> {
+): Promise<AfterToolHookOutput | undefined> {
   // Check if hooks are enabled
   if (!config.getEnableHooks?.()) {
-    return;
+    return undefined;
+  }
+
+  // Get the HookSystem singleton
+  const hookSystem = config.getHookSystem?.();
+  if (!hookSystem) {
+    return undefined;
   }
 
   try {
-    // Create hook system instances
-    const hookRegistry = new HookRegistry(config);
-    await hookRegistry.initialize();
-    const hookPlanner = new HookPlanner(hookRegistry);
-    const hookRunner = new HookRunner();
+    // Initialize hook system if needed
+    await hookSystem.initialize();
 
-    // Create execution plan
-    const executionPlan = hookPlanner.createExecutionPlan(
-      HookEventName.AfterTool,
-      { toolName },
+    // Get the event handler and fire the event
+    const eventHandler = hookSystem.getEventHandler();
+    const toolResponse = {
+      llmContent: toolOutput.llmContent,
+      returnDisplay: toolOutput.returnDisplay,
+      ...(toolOutput.metadata && { metadata: toolOutput.metadata }),
+      ...(toolOutput.error && { error: toolOutput.error }),
+    };
+    const result = await eventHandler.fireAfterToolEvent(
+      toolName,
+      toolInput,
+      toolResponse,
     );
 
-    if (!executionPlan) {
-      return;
-    }
-
-    // Build hook input
-    const hookInput: AfterToolInput = {
-      session_id: config.getSessionId(),
-      transcript_path: '', // TODO: Add transcript path to Config if needed
-      cwd: config.getWorkingDir(),
-      hook_event_name: HookEventName.AfterTool,
-      timestamp: new Date().toISOString(),
-      tool_name: toolName,
-      tool_input: toolInput,
-      tool_response: {
-        llmContent: toolOutput.llmContent,
-        returnDisplay: toolOutput.returnDisplay,
-        ...(toolOutput.metadata && { metadata: toolOutput.metadata }),
-        ...(toolOutput.error && { error: toolOutput.error }),
-      },
-    };
-
-    // Execute hooks
-    if (executionPlan.sequential) {
-      await hookRunner.executeHooksSequential(
-        executionPlan.hookConfigs,
-        HookEventName.AfterTool,
-        hookInput,
-      );
-    } else {
-      await hookRunner.executeHooksParallel(
-        executionPlan.hookConfigs,
-        HookEventName.AfterTool,
-        hookInput,
-      );
-    }
-
     debugLogger.debug(`AfterTool hook executed for tool: ${toolName}`);
+
+    // Wrap result in AfterToolHookOutput
+    if (result) {
+      return new AfterToolHookOutput(result);
+    }
+
+    return undefined;
   } catch (error) {
     // Hook failures must NOT block tool execution
     debugLogger.warn(
       `AfterTool hook failed for tool ${toolName} (non-blocking):`,
       error,
     );
+    return undefined;
   }
 }

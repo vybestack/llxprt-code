@@ -546,6 +546,12 @@ export interface ToolResult {
     message: string; // raw error message
     type?: ToolErrorType; // An optional machine-readable error type (e.g., 'FILE_NOT_FOUND').
   };
+
+  /**
+   * Optional flag to suppress display of this tool result
+   * @requirement:HOOK-132 - AfterTool suppressOutput support
+   */
+  suppressDisplay?: boolean;
 }
 
 /**

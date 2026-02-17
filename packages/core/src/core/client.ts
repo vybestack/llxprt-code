@@ -66,6 +66,10 @@ import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { BaseLLMClient } from './baseLlmClient.js';
 import type { IContent } from '../services/history/IContent.js';
+import {
+  triggerBeforeAgentHook,
+  triggerAfterAgentHook,
+} from './lifecycleHookTriggers.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
@@ -704,6 +708,31 @@ ${jitMemory}`
 
   isInitialized(): boolean {
     return this.chat !== undefined && this.contentGenerator !== undefined;
+  }
+
+  /**
+   * Extract text from a PartListUnion for hook consumption
+   */
+  private extractPromptText(request: PartListUnion): string {
+    if (typeof request === 'string') {
+      return request;
+    }
+    if (Array.isArray(request)) {
+      return request
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (part && typeof part === 'object' && 'text' in part) {
+            return (part as { text: string }).text;
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join(' ');
+    }
+    if (request && typeof request === 'object' && 'text' in request) {
+      return (request as { text: string }).text;
+    }
+    return '';
   }
 
   async getHistory(): Promise<Content[]> {
@@ -1399,10 +1428,31 @@ ${jitMemory}`
       }
     }
 
-    if (this.lastPromptId !== prompt_id) {
+    // Track if this is a new user prompt (vs a continuation/retry)
+    const isNewPrompt = this.lastPromptId !== prompt_id;
+    const promptText = this.extractPromptText(initialRequest);
+    const responseChunks: string[] = [];
+
+    // Helper to fire AfterAgent hook when returning
+    const fireAfterAgentHook = async () => {
+      if (isNewPrompt) {
+        const responseText = responseChunks.join('');
+        await triggerAfterAgentHook(
+          this.config,
+          promptText,
+          responseText,
+          false, // stop_hook_active - no stop hooks in current implementation
+        );
+      }
+    };
+
+    if (isNewPrompt) {
       this.loopDetector.reset(prompt_id);
       this.lastPromptId = prompt_id;
       this.currentSequenceModel = null;
+
+      // Fire BeforeAgent hook for new user prompts
+      await triggerBeforeAgentHook(this.config, promptText);
     }
 
     this.sessionTurnCount++;
@@ -1418,6 +1468,7 @@ ${jitMemory}`
       const providerManager = contentGenConfig?.providerManager;
       const providerName =
         providerManager?.getActiveProviderName() || 'backend';
+      await fireAfterAgentHook();
       return new Turn(
         this.getChat(),
         prompt_id,
@@ -1432,6 +1483,7 @@ ${jitMemory}`
       const providerManager = contentGenConfig?.providerManager;
       const providerName =
         providerManager?.getActiveProviderName() || 'backend';
+      await fireAfterAgentHook();
       return new Turn(
         this.getChat(),
         prompt_id,
@@ -1462,6 +1514,7 @@ ${jitMemory}`
         type: GeminiEventType.ContextWindowWillOverflow,
         value: { estimatedRequestTokenCount, remainingTokenCount },
       };
+      await fireAfterAgentHook();
       return new Turn(
         this.getChat(),
         prompt_id,
@@ -1584,6 +1637,7 @@ ${jitMemory}`
       const loopDetected = await this.loopDetector.turnStarted(signal);
       if (loopDetected) {
         yield { type: GeminiEventType.LoopDetected };
+        await fireAfterAgentHook();
         return turn;
       }
 
@@ -1598,6 +1652,7 @@ ${jitMemory}`
       for await (const event of resultStream) {
         if (this.loopDetector.addAndCheck(event)) {
           yield { type: GeminiEventType.LoopDetected };
+          await fireAfterAgentHook();
           return turn;
         }
 
@@ -1641,6 +1696,11 @@ ${jitMemory}`
           }
         }
 
+        // Capture content events for AfterAgent hook
+        if (event.type === GeminiEventType.Content && event.value) {
+          responseChunks.push(event.value);
+        }
+
         if (this.shouldDeferStreamEvent(event)) {
           deferredEvents.push(event);
         } else {
@@ -1655,6 +1715,7 @@ ${jitMemory}`
           for (const deferred of deferredEvents) {
             yield deferred;
           }
+          await fireAfterAgentHook();
           return turn;
         }
 
@@ -1663,6 +1724,7 @@ ${jitMemory}`
           if (this.config.getContinueOnFailedApiCall()) {
             if (isInvalidStreamRetry) {
               // We already retried once, so stop here.
+              await fireAfterAgentHook();
               return turn;
             }
             const nextRequest = [{ text: 'System: Please continue.' }];
@@ -1673,6 +1735,7 @@ ${jitMemory}`
               boundedTurns - 1,
               true, // Set isInvalidStreamRetry to true
             );
+            await fireAfterAgentHook();
             return turn;
           }
         }
@@ -1690,6 +1753,7 @@ ${jitMemory}`
         this.lastTodoSnapshot = reminderState.todos;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
+        await fireAfterAgentHook();
         return turn;
       }
 
@@ -1730,6 +1794,7 @@ ${jitMemory}`
         this.lastTodoSnapshot = latestSnapshot;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
+        await fireAfterAgentHook();
         return turn;
       }
 
@@ -1746,6 +1811,7 @@ ${jitMemory}`
         this.lastTodoSnapshot = latestSnapshot;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
+        await fireAfterAgentHook();
         return turn;
       }
 
@@ -1760,6 +1826,7 @@ ${jitMemory}`
         this.lastTodoSnapshot = latestSnapshot;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
+        await fireAfterAgentHook();
         return turn;
       }
 
@@ -1790,6 +1857,7 @@ ${jitMemory}`
           }
           this.toolCallReminderLevel = 'none';
           this.toolActivityCount = 0;
+          await fireAfterAgentHook();
           return turn;
         }
 
@@ -1819,6 +1887,7 @@ ${jitMemory}`
     }
 
     // Shouldn't reach here, but return last turn if we do
+    await fireAfterAgentHook();
     return lastTurn!;
   }
 

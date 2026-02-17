@@ -1329,12 +1329,42 @@ export class GeminiChat {
           // Get config for hook triggers
           const configForHooks = this.runtimeContext.providerRuntime.config;
 
-          // Trigger BeforeToolSelection hook (non-blocking)
+          // Trigger BeforeToolSelection hook and apply tool restrictions
+          // @requirement:HOOK-055 - Apply tool restrictions from hook
+          let effectiveToolsFromConfig = toolsFromConfig;
           if (configForHooks && toolsFromConfig) {
-            void triggerBeforeToolSelectionHook(
+            const toolSelectionResult = await triggerBeforeToolSelectionHook(
               configForHooks,
               toolsFromConfig,
             );
+            // Apply tool config modifications if hook provided them
+            const modifiedConfig =
+              toolSelectionResult?.applyToolConfigModifications({
+                tools: toolsFromConfig,
+              });
+            if (
+              modifiedConfig?.toolConfig &&
+              'allowedFunctionNames' in modifiedConfig.toolConfig
+            ) {
+              const allowedFunctions =
+                modifiedConfig.toolConfig.allowedFunctionNames;
+              if (allowedFunctions && allowedFunctions.length > 0) {
+                // Filter tools to only include allowed functions
+                effectiveToolsFromConfig = toolsFromConfig
+                  .map((toolGroup) => ({
+                    ...toolGroup,
+                    functionDeclarations:
+                      toolGroup.functionDeclarations?.filter((fn) =>
+                        allowedFunctions.includes(fn.name),
+                      ),
+                  }))
+                  .filter(
+                    (toolGroup) =>
+                      toolGroup.functionDeclarations &&
+                      toolGroup.functionDeclarations.length > 0,
+                  ) as typeof toolsFromConfig;
+              }
+            }
           }
 
           const directOverrides = this.extractDirectGeminiOverrides(
@@ -1351,7 +1381,7 @@ export class GeminiChat {
             {
               providerName: provider.name,
               model: this.runtimeState.model,
-              toolCount: toolsFromConfig?.length ?? 0,
+              toolCount: effectiveToolsFromConfig?.length ?? 0,
               baseUrl: baseUrlForCall,
             },
           );
@@ -1359,30 +1389,67 @@ export class GeminiChat {
           const runtimeContext = this.buildProviderRuntime(
             'GeminiChat.streamGeneration',
             {
-              toolCount: toolsFromConfig?.length ?? 0,
+              toolCount: effectiveToolsFromConfig?.length ?? 0,
               ...(directOverrides
                 ? { geminiDirectOverrides: directOverrides }
                 : {}),
             },
           );
 
-          // Trigger BeforeModel hook (non-blocking)
+          // Trigger BeforeModel hook and check for blocking/synthetic response
+          // @requirement:HOOK-036 - Block API call or return synthetic response
           if (configForHooks) {
             const requestForHook = {
               contents: userIContents,
               tools:
-                toolsFromConfig && toolsFromConfig.length > 0
-                  ? (toolsFromConfig as ProviderToolset)
+                effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+                  ? (effectiveToolsFromConfig as ProviderToolset)
                   : undefined,
             };
-            void triggerBeforeModelHook(configForHooks, requestForHook);
+            const beforeModelResult = await triggerBeforeModelHook(
+              configForHooks,
+              requestForHook,
+            );
+
+            // Check for blocking decision with synthetic response
+            if (beforeModelResult?.isBlockingDecision()) {
+              const syntheticResponse =
+                beforeModelResult.getSyntheticResponse();
+              if (syntheticResponse) {
+                return syntheticResponse;
+              }
+              // If blocking but no synthetic response, return a default blocked response
+              // Cast as GenerateContentResponse to satisfy TypeScript (minimal response that satisfies runtime)
+              return {
+                candidates: [
+                  {
+                    content: {
+                      role: 'model',
+                      parts: [
+                        {
+                          text:
+                            beforeModelResult.getEffectiveReason() ||
+                            'Request blocked by BeforeModel hook',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              } as GenerateContentResponse;
+            }
+
+            // Check for synthetic response even without blocking (hook might want to provide cached response)
+            const syntheticResponse = beforeModelResult?.getSyntheticResponse();
+            if (syntheticResponse) {
+              return syntheticResponse;
+            }
           }
 
           const streamResponse = provider.generateChatCompletion({
             contents: userIContents,
             tools:
-              toolsFromConfig && toolsFromConfig.length > 0
-                ? (toolsFromConfig as ProviderToolset)
+              effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+                ? (effectiveToolsFromConfig as ProviderToolset)
                 : undefined,
             config: runtimeContext.config,
             runtime: runtimeContext,
@@ -1408,11 +1475,23 @@ export class GeminiChat {
             throw new Error('No response from provider');
           }
 
-          const directResponse = this.convertIContentToResponse(lastResponse);
+          let directResponse = this.convertIContentToResponse(lastResponse);
 
-          // Trigger AfterModel hook (non-blocking)
+          // Trigger AfterModel hook and apply modifications
+          // @requirement:HOOK-040,HOOK-048 - Apply response modifications or stop execution
           if (configForHooks && lastResponse) {
-            void triggerAfterModelHook(configForHooks, lastResponse);
+            const afterModelResult = await triggerAfterModelHook(
+              configForHooks,
+              lastResponse,
+            );
+
+            // Check if hook wants to stop execution or modify response
+            if (afterModelResult) {
+              const modifiedResponse = afterModelResult.getModifiedResponse();
+              if (modifiedResponse) {
+                directResponse = modifiedResponse;
+              }
+            }
           }
 
           if (aggregatedText.trim()) {
