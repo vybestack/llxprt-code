@@ -731,7 +731,7 @@
           "description": "Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.",
           "markdownDescription": "Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.\n\n- Category: `Subagents`\n- Requires restart: `no`\n- Default: `5`",
           "default": 5,
-          "type": "integer",
+          "type": "number",
           "minimum": -1
         }
       },
