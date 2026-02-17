@@ -85,7 +85,10 @@ export class HookEventHandler {
     toolName: string,
     toolInput: Record<string, unknown>,
   ): Promise<DefaultHookOutput | undefined> {
-    return this.executeEvent('BeforeTool', { toolName, toolInput });
+    return this.executeEvent('BeforeTool', {
+      tool_name: toolName,
+      tool_input: toolInput,
+    });
   }
 
   /**
@@ -98,9 +101,9 @@ export class HookEventHandler {
     toolResponse: Record<string, unknown>,
   ): Promise<DefaultHookOutput | undefined> {
     return this.executeEvent('AfterTool', {
-      toolName,
-      toolInput,
-      toolResponse,
+      tool_name: toolName,
+      tool_input: toolInput,
+      tool_response: toolResponse,
     });
   }
 
@@ -270,7 +273,7 @@ export class HookEventHandler {
     // Create execution plan
     const plan = this.planner.createExecutionPlan(
       eventName as HookEventName,
-      context.toolName ? { toolName: context.toolName as string } : undefined,
+      context.tool_name ? { toolName: context.tool_name as string } : undefined,
     );
 
     // No matching hooks - return empty success
