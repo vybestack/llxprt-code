@@ -1243,7 +1243,10 @@ export async function main() {
   initializeOutputListenersAndFlush();
 
   // Fire SessionStart hook for non-interactive mode
-  await triggerSessionStartHook(nonInteractiveConfig, SessionStartSource.Startup);
+  await triggerSessionStartHook(
+    nonInteractiveConfig,
+    SessionStartSource.Startup,
+  );
 
   try {
     await runNonInteractive({

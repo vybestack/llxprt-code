@@ -16,6 +16,7 @@ import type { HookPlanner } from './hookPlanner.js';
 import type { HookRunner } from './hookRunner.js';
 import type { HookAggregator, AggregatedHookResult } from './hookAggregator.js';
 import type { HookInput, HookEventName, DefaultHookOutput } from './types.js';
+import { NotificationType } from './types.js';
 import { DebugLogger } from '../debug/index.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:eventHandler');
@@ -214,6 +215,27 @@ export class HookEventHandler {
       return await this.executeEventWithFullResult('AfterAgent', context);
     } catch (error) {
       debugLogger.warn(`AfterAgent hook error (non-fatal): ${error}`);
+      return EMPTY_SUCCESS_RESULT;
+    }
+  }
+
+  /**
+   * Fire Notification event (e.g., ToolPermission before confirmation dialog)
+   * @requirement:HOOK-143
+   */
+  async fireNotificationEvent(
+    type: NotificationType,
+    message: string,
+    details: Record<string, unknown>,
+  ): Promise<AggregatedHookResult> {
+    try {
+      return await this.executeEventWithFullResult('Notification', {
+        notification_type: type,
+        message,
+        details,
+      });
+    } catch (error) {
+      debugLogger.warn(`Notification hook error (non-fatal): ${error}`);
       return EMPTY_SUCCESS_RESULT;
     }
   }
