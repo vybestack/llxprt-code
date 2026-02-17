@@ -42,3 +42,11 @@ export {
 
 // Export aggregator types
 export type { AggregatedHookResult } from './hookAggregator.js';
+
+// Export lifecycle hook triggers
+export {
+  triggerSessionStartHook,
+  triggerSessionEndHook,
+  triggerBeforeAgentHook,
+  triggerAfterAgentHook,
+} from '../core/lifecycleHookTriggers.js';
