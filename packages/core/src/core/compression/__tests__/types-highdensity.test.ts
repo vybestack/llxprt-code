@@ -314,7 +314,7 @@ describe('Factory high-density support @plan PLAN-20260211-HIGHDENSITY.P04', () 
     expect(strategy).toBeInstanceOf(HighDensityStrategy);
     expect(strategy.trigger).toEqual({
       mode: 'continuous',
-      defaultThreshold: 0.85,
+      defaultThreshold: 0.9,
     });
   });
 });

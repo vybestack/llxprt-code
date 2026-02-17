@@ -24,7 +24,7 @@ import { getSettingSpec } from '../settings/settingsRegistry.js';
 
 const EPHEMERAL_DEFAULTS = {
   compressionThreshold: 0.5,
-  preserveThreshold: 0.2,
+  preserveThreshold: 0.4,
   topPreserveThreshold: 0.2,
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */
   reasoning: {
@@ -167,6 +167,17 @@ export function createAgentRuntimeContext(
         options.settings['compression.density.compressHeadroom'],
       );
       return typeof value === 'number' && value > 0 && value <= 1 ? value : 0.6;
+    },
+    densityOptimizeThreshold: (): number | undefined => {
+      const value = getLiveSetting<number>(
+        'compression.density.optimizeThreshold',
+        options.settings['compression.density.optimizeThreshold'],
+      );
+      // Return undefined if not set — caller should use strategy.trigger.defaultThreshold
+      // Allow 0 for testing (always run optimize) up to 1
+      return typeof value === 'number' && value >= 0 && value <= 1
+        ? value
+        : undefined;
     },
     /**
      * @plan PLAN-20251202-THINKING.P03b
