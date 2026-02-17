@@ -1434,25 +1434,64 @@ ${jitMemory}`
     const responseChunks: string[] = [];
 
     // Helper to fire AfterAgent hook when returning
+    // Returns the hook output for caller to check for continuation
+    // Note: Unlike BeforeAgent which only fires for new prompts, AfterAgent fires
+    // for every turn to allow hooks to monitor all model responses
     const fireAfterAgentHook = async () => {
-      if (isNewPrompt) {
-        const responseText = responseChunks.join('');
-        await triggerAfterAgentHook(
-          this.config,
-          promptText,
-          responseText,
-          false, // stop_hook_active - no stop hooks in current implementation
-        );
-      }
+      const responseText = responseChunks.join('');
+      return triggerAfterAgentHook(
+        this.config,
+        promptText,
+        responseText,
+        false, // stop_hook_active - no stop hooks in current implementation
+      );
     };
+
+    // getBoundedTurns returns the bounded turn count for continuation
+    const getBoundedTurns = () => Math.min(turns, this.MAX_TURNS);
+
+    // Mutable request that may be modified by hooks
+    let request: PartListUnion = initialRequest;
 
     if (isNewPrompt) {
       this.loopDetector.reset(prompt_id);
       this.lastPromptId = prompt_id;
       this.currentSequenceModel = null;
 
-      // Fire BeforeAgent hook for new user prompts
-      await triggerBeforeAgentHook(this.config, promptText);
+      // Fire BeforeAgent hook for new user prompts and handle result
+      const hookOutput = await triggerBeforeAgentHook(this.config, promptText);
+
+      // Check for blocking decision or stop execution
+      if (
+        hookOutput?.isBlockingDecision() ||
+        hookOutput?.shouldStopExecution()
+      ) {
+        yield {
+          type: GeminiEventType.Error,
+          value: {
+            error: new Error(
+              `BeforeAgent hook blocked processing: ${hookOutput.getEffectiveReason()}`,
+            ),
+          },
+        };
+        const contentGenConfig = this.config.getContentGeneratorConfig();
+        const providerManager = contentGenConfig?.providerManager;
+        const providerName =
+          providerManager?.getActiveProviderName() || 'backend';
+        return new Turn(
+          this.getChat(),
+          prompt_id,
+          DEFAULT_AGENT_ID,
+          providerName,
+        );
+      }
+
+      // Add additional context from hooks to the request
+      const additionalContext = hookOutput?.getAdditionalContext();
+      if (additionalContext) {
+        const requestArray = Array.isArray(request) ? request : [request];
+        request = [...requestArray, { text: additionalContext }];
+      }
     }
 
     this.sessionTurnCount++;
@@ -1545,9 +1584,9 @@ ${jitMemory}`
       this.forceFullIdeContext = false;
     }
 
-    let baseRequest: PartListUnion = Array.isArray(initialRequest)
-      ? [...(initialRequest as Part[])]
-      : initialRequest;
+    let baseRequest: PartListUnion = Array.isArray(request)
+      ? [...(request as Part[])]
+      : request;
     let retryCount = 0;
     const MAX_RETRIES = 2;
     let lastTurn: Turn | undefined;
@@ -1753,7 +1792,21 @@ ${jitMemory}`
         this.lastTodoSnapshot = reminderState.todos;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
-        await fireAfterAgentHook();
+        const afterHookOutput = await fireAfterAgentHook();
+        // For AfterAgent hooks, blocking/stop execution should force continuation
+        if (
+          afterHookOutput?.isBlockingDecision() ||
+          afterHookOutput?.shouldStopExecution()
+        ) {
+          const continueReason = afterHookOutput.getEffectiveReason();
+          const continueRequest: PartListUnion = [{ text: continueReason }];
+          yield* this.sendMessageStream(
+            continueRequest,
+            signal,
+            prompt_id,
+            getBoundedTurns() - 1,
+          );
+        }
         return turn;
       }
 
@@ -1811,7 +1864,21 @@ ${jitMemory}`
         this.lastTodoSnapshot = latestSnapshot;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
-        await fireAfterAgentHook();
+        const afterHookOutput2 = await fireAfterAgentHook();
+        // For AfterAgent hooks, blocking/stop execution should force continuation
+        if (
+          afterHookOutput2?.isBlockingDecision() ||
+          afterHookOutput2?.shouldStopExecution()
+        ) {
+          const continueReason = afterHookOutput2.getEffectiveReason();
+          const continueRequest: PartListUnion = [{ text: continueReason }];
+          yield* this.sendMessageStream(
+            continueRequest,
+            signal,
+            prompt_id,
+            getBoundedTurns() - 1,
+          );
+        }
         return turn;
       }
 

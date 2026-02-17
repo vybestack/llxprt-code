@@ -541,4 +541,58 @@ describe('Hook Caller Application', () => {
       expect(usesVoidPrefix).toBe(false);
     });
   });
+
+  /**
+   * Test 9: geminiChat applies request modifications from BeforeModel hook
+   * @requirement:HOOK-036
+   *
+   * Expected behavior: When BeforeModel hook returns llm_request modifications,
+   * those modifications should be applied to the request before calling the API.
+   *
+   * This test MUST FAIL because geminiChat:
+   * 1. Calls triggerBeforeModelHook and gets a result
+   * 2. Checks for getSyntheticResponse() and isBlockingDecision()
+   * 3. But does NOT call applyLLMRequestModifications() to modify the request
+   *
+   * The fix requires adding a call to applyLLMRequestModifications() when
+   * the hook doesn't block or return a synthetic response.
+   */
+  describe('geminiChat applies request modifications from BeforeModel hook', () => {
+    it('geminiChat should call applyLLMRequestModifications (currently does not)', async () => {
+      // This test verifies that geminiChat.ts calls applyLLMRequestModifications
+      // after getting a BeforeModel hook result (when not blocking/synthetic).
+      //
+      // The current code path is:
+      //   const beforeModelResult = await triggerBeforeModelHook(...);
+      //   if (beforeModelResult?.isBlockingDecision()) { ... return synthetic }
+      //   const syntheticResponse = beforeModelResult?.getSyntheticResponse();
+      //   if (syntheticResponse) { return syntheticResponse; }
+      //   // MISSING: beforeModelResult.applyLLMRequestModifications(request)
+      //   provider.generateChatCompletion({ ...originalRequest... })
+      //
+      // This MUST be fixed to:
+      //   const beforeModelResult = await triggerBeforeModelHook(...);
+      //   if (beforeModelResult?.isBlockingDecision()) { ... return synthetic }
+      //   const syntheticResponse = beforeModelResult?.getSyntheticResponse();
+      //   if (syntheticResponse) { return syntheticResponse; }
+      //   // Apply request modifications before calling API
+      //   const modifiedRequest = beforeModelResult?.applyLLMRequestModifications(request) ?? request;
+      //   provider.generateChatCompletion({ ...modifiedRequest... })
+
+      const fs = await import('node:fs/promises');
+      const geminiChatPath = new URL('../core/geminiChat.ts', import.meta.url)
+        .pathname;
+      const sourceCode = await fs.readFile(geminiChatPath, 'utf-8');
+
+      // The test FAILS if geminiChat doesn't call applyLLMRequestModifications
+      // The test PASSES when geminiChat applies request modifications from hook
+      const callsApplyLLMRequestModifications = sourceCode.includes(
+        'applyLLMRequestModifications',
+      );
+
+      // This assertion will FAIL with current code (doesn't apply modifications)
+      // and PASS when fixed (calls applyLLMRequestModifications)
+      expect(callsApplyLLMRequestModifications).toBe(true);
+    });
+  });
 });
