@@ -1104,10 +1104,10 @@ export class HistoryService
     // calls cause 400 errors from Anthropic, Gemini, OpenAI, and others.
     const completed = this.ensureToolResponseCompleteness(normalized);
 
-    // Providers like OpenAI Chat and Anthropic require strict tool adjacency:
-    // tool results must appear directly after the assistant tool call message.
-    // Corrupted histories can contain duplicate or out-of-order tool results,
-    // which will 400 on provider switching. Normalize ordering and drop dupes.
+    // All providers require strict tool adjacency: tool results must appear
+    // directly after the assistant tool call message. Corrupted histories can
+    // contain duplicate or out-of-order tool results, which will 400 on provider
+    // switching. Normalize ordering and drop dupes.
     const ordered = this.ensureToolResponseAdjacency(completed);
 
     // Deep clone to avoid circular references in tool call parameters
