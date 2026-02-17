@@ -264,6 +264,12 @@ describe('LSP E2E integration (P36)', () => {
     const checkFileSpy = vi
       .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'checkFile')
       .mockResolvedValue(mockDiagnostics);
+    const startSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+      .mockResolvedValue(undefined);
+    const isAliveSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+      .mockReturnValue(true);
 
     try {
       const config = new Config(
@@ -281,6 +287,8 @@ describe('LSP E2E integration (P36)', () => {
       expect(diagnostics[0].severity).toBeDefined();
     } finally {
       checkFileSpy.mockRestore();
+      startSpy.mockRestore();
+      isAliveSpy.mockRestore();
     }
   });
 
@@ -310,6 +318,12 @@ describe('LSP E2E integration (P36)', () => {
         'getAllDiagnostics',
       )
       .mockResolvedValue(mockByFile);
+    const startSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+      .mockResolvedValue(undefined);
+    const isAliveSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+      .mockReturnValue(true);
 
     try {
       const config = new Config(
@@ -337,6 +351,8 @@ describe('LSP E2E integration (P36)', () => {
     } finally {
       checkFileSpy.mockRestore();
       getAllDiagnosticsSpy.mockRestore();
+      startSpy.mockRestore();
+      isAliveSpy.mockRestore();
     }
   });
 
@@ -402,12 +418,24 @@ describe('LSP E2E integration (P36)', () => {
   });
 
   it('Config enables LSP when lsp is true', async () => {
-    const config = new Config(createBaseConfigParams({ lsp: true }));
-    await config.initialize();
+    const startSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+      .mockResolvedValue(undefined);
+    const isAliveSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+      .mockReturnValue(true);
 
-    expect(config.getLspConfig()).toEqual({ servers: [] });
-    expect(config.getLspServiceClient()).toBeDefined();
-    expect(config.getLspServiceClient()!.isAlive()).toBe(true);
+    try {
+      const config = new Config(createBaseConfigParams({ lsp: true }));
+      await config.initialize();
+
+      expect(config.getLspConfig()).toEqual({ servers: [] });
+      expect(config.getLspServiceClient()).toBeDefined();
+      expect(config.getLspServiceClient()!.isAlive()).toBe(true);
+    } finally {
+      startSpy.mockRestore();
+      isAliveSpy.mockRestore();
+    }
   });
 
   // --- 9. Status Command ---
@@ -455,18 +483,41 @@ describe('LSP E2E integration (P36)', () => {
 
   // --- 11. Navigation Tools Registered ---
   it('MCP navigation tools are registered when navigationTools is true', async () => {
-    const config = new Config(
-      createBaseConfigParams({
-        lsp: { servers: [], navigationTools: true },
-      }),
-    );
-    await config.initialize();
+    const { PassThrough } = await import('node:stream');
+    const startSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+      .mockResolvedValue(undefined);
+    const isAliveSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+      .mockReturnValue(true);
+    const getMcpTransportStreamsSpy = vi
+      .spyOn(
+        lspServiceClientModule.LspServiceClient.prototype,
+        'getMcpTransportStreams',
+      )
+      .mockReturnValue({
+        readable: new PassThrough(),
+        writable: new PassThrough(),
+      });
 
-    const tools = config.getToolRegistry().getAllTools();
-    const lspNavTools = tools.filter(
-      (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-    );
-    expect(lspNavTools.length).toBeGreaterThan(0);
+    try {
+      const config = new Config(
+        createBaseConfigParams({
+          lsp: { servers: [], navigationTools: true },
+        }),
+      );
+      await config.initialize();
+
+      const tools = config.getToolRegistry().getAllTools();
+      const lspNavTools = tools.filter(
+        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+      );
+      expect(lspNavTools.length).toBeGreaterThan(0);
+    } finally {
+      startSpy.mockRestore();
+      isAliveSpy.mockRestore();
+      getMcpTransportStreamsSpy.mockRestore();
+    }
   });
 
   // --- 12. Navigation Tools Disabled ---
@@ -487,28 +538,51 @@ describe('LSP E2E integration (P36)', () => {
 
   // --- 13. Shutdown Lifecycle ---
   it('shutdownLspService clears client and navigation tools', async () => {
-    const config = new Config(
-      createBaseConfigParams({
-        lsp: { servers: [], navigationTools: true },
-      }),
-    );
-    await config.initialize();
+    const { PassThrough } = await import('node:stream');
+    const startSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+      .mockResolvedValue(undefined);
+    const isAliveSpy = vi
+      .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+      .mockReturnValue(true);
+    const getMcpTransportStreamsSpy = vi
+      .spyOn(
+        lspServiceClientModule.LspServiceClient.prototype,
+        'getMcpTransportStreams',
+      )
+      .mockReturnValue({
+        readable: new PassThrough(),
+        writable: new PassThrough(),
+      });
 
-    expect(config.getLspServiceClient()).toBeDefined();
-    const toolsBefore = config.getToolRegistry().getAllTools();
-    const navBefore = toolsBefore.filter(
-      (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-    );
-    expect(navBefore.length).toBeGreaterThan(0);
+    try {
+      const config = new Config(
+        createBaseConfigParams({
+          lsp: { servers: [], navigationTools: true },
+        }),
+      );
+      await config.initialize();
 
-    await config.shutdownLspService();
+      expect(config.getLspServiceClient()).toBeDefined();
+      const toolsBefore = config.getToolRegistry().getAllTools();
+      const navBefore = toolsBefore.filter(
+        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+      );
+      expect(navBefore.length).toBeGreaterThan(0);
 
-    expect(config.getLspServiceClient()).toBeUndefined();
-    const toolsAfter = config.getToolRegistry().getAllTools();
-    const navAfter = toolsAfter.filter(
-      (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-    );
-    expect(navAfter).toHaveLength(0);
+      await config.shutdownLspService();
+
+      expect(config.getLspServiceClient()).toBeUndefined();
+      const toolsAfter = config.getToolRegistry().getAllTools();
+      const navAfter = toolsAfter.filter(
+        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+      );
+      expect(navAfter).toHaveLength(0);
+    } finally {
+      startSpy.mockRestore();
+      isAliveSpy.mockRestore();
+      getMcpTransportStreamsSpy.mockRestore();
+    }
   });
 
   // --- 14. Type Contract ---
