@@ -176,7 +176,6 @@ export interface CliArgs {
   set: string[] | undefined;
   /** @plan PLAN-20260211-SESSIONRECORDING.P24 — widened to support --continue <session-id> */
   continue: string | boolean | undefined;
-  resume: string | typeof RESUME_LATEST | undefined;
   nobrowser: boolean | undefined;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 — list recorded sessions */
   listSessions: boolean | undefined;
