@@ -646,4 +646,201 @@ describe('ToolRegistry', () => {
       expect(description).toBe(JSON.stringify(params));
     });
   });
+
+  describe('Schema transformations for async subagents', () => {
+    const taskSchemaWithAsync = {
+      type: 'object',
+      properties: {
+        subagent_name: { type: 'string' },
+        goal_prompt: { type: 'string' },
+        async: { type: 'boolean' },
+      },
+    };
+
+    it('should hide async parameter from task tool when global asyncEnabled is false', () => {
+      const mockSettingsService = {
+        get: vi.fn().mockReturnValue(true), // profile setting enabled
+        getAllGlobalSettings: vi.fn().mockReturnValue({
+          subagents: { asyncEnabled: false },
+        }),
+      };
+      vi.spyOn(config, 'getSettingsService').mockReturnValue(
+        mockSettingsService as unknown as ReturnType<
+          typeof config.getSettingsService
+        >,
+      );
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+
+      const taskTool = new MockTool(
+        'task',
+        'Task Tool',
+        'A task tool',
+        taskSchemaWithAsync,
+      );
+      toolRegistry.registerTool(taskTool);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      const taskSchema = declarations.find((d) => d.name === 'task');
+
+      expect(taskSchema).toBeDefined();
+      expect(
+        (
+          taskSchema?.parametersJsonSchema?.properties as Record<
+            string,
+            unknown
+          >
+        )?.async,
+      ).toBeUndefined();
+      expect(
+        (
+          taskSchema?.parametersJsonSchema?.properties as Record<
+            string,
+            unknown
+          >
+        )?.subagent_name,
+      ).toBeDefined();
+    });
+
+    it('should hide async parameter from task tool when profile async.enabled is false', () => {
+      const mockSettingsService = {
+        get: vi.fn().mockReturnValue(false), // profile setting disabled
+        getAllGlobalSettings: vi.fn().mockReturnValue({
+          subagents: { asyncEnabled: true },
+        }),
+      };
+      vi.spyOn(config, 'getSettingsService').mockReturnValue(
+        mockSettingsService as unknown as ReturnType<
+          typeof config.getSettingsService
+        >,
+      );
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+
+      const taskTool = new MockTool(
+        'task',
+        'Task Tool',
+        'A task tool',
+        taskSchemaWithAsync,
+      );
+      toolRegistry.registerTool(taskTool);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      const taskSchema = declarations.find((d) => d.name === 'task');
+
+      expect(taskSchema).toBeDefined();
+      expect(
+        (
+          taskSchema?.parametersJsonSchema?.properties as Record<
+            string,
+            unknown
+          >
+        )?.async,
+      ).toBeUndefined();
+    });
+
+    it('should keep async parameter when both global and profile settings are enabled', () => {
+      const mockSettingsService = {
+        get: vi.fn().mockReturnValue(true),
+        getAllGlobalSettings: vi.fn().mockReturnValue({
+          subagents: { asyncEnabled: true },
+        }),
+      };
+      vi.spyOn(config, 'getSettingsService').mockReturnValue(
+        mockSettingsService as unknown as ReturnType<
+          typeof config.getSettingsService
+        >,
+      );
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+
+      const taskTool = new MockTool(
+        'task',
+        'Task Tool',
+        'A task tool',
+        taskSchemaWithAsync,
+      );
+      toolRegistry.registerTool(taskTool);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      const taskSchema = declarations.find((d) => d.name === 'task');
+
+      expect(taskSchema).toBeDefined();
+      expect(
+        (
+          taskSchema?.parametersJsonSchema?.properties as Record<
+            string,
+            unknown
+          >
+        )?.async,
+      ).toBeDefined();
+    });
+
+    it('should apply schema transforms to getFunctionDeclarationsFiltered as well', () => {
+      const mockSettingsService = {
+        get: vi.fn().mockReturnValue(false), // disabled
+        getAllGlobalSettings: vi.fn().mockReturnValue({}),
+      };
+      vi.spyOn(config, 'getSettingsService').mockReturnValue(
+        mockSettingsService as unknown as ReturnType<
+          typeof config.getSettingsService
+        >,
+      );
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+
+      const taskTool = new MockTool(
+        'task',
+        'Task Tool',
+        'A task tool',
+        taskSchemaWithAsync,
+      );
+      toolRegistry.registerTool(taskTool);
+
+      const declarations = toolRegistry.getFunctionDeclarationsFiltered([
+        'task',
+      ]);
+      const taskSchema = declarations.find((d) => d.name === 'task');
+
+      expect(taskSchema).toBeDefined();
+      expect(
+        (
+          taskSchema?.parametersJsonSchema?.properties as Record<
+            string,
+            unknown
+          >
+        )?.async,
+      ).toBeUndefined();
+    });
+
+    it('should not modify original tool schema (uses clone)', () => {
+      const mockSettingsService = {
+        get: vi.fn().mockReturnValue(false), // disabled
+        getAllGlobalSettings: vi.fn().mockReturnValue({}),
+      };
+      vi.spyOn(config, 'getSettingsService').mockReturnValue(
+        mockSettingsService as unknown as ReturnType<
+          typeof config.getSettingsService
+        >,
+      );
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+
+      const taskTool = new MockTool(
+        'task',
+        'Task Tool',
+        'A task tool',
+        taskSchemaWithAsync,
+      );
+      toolRegistry.registerTool(taskTool);
+
+      // Call getFunctionDeclarations which should transform the schema
+      toolRegistry.getFunctionDeclarations();
+
+      // Original tool schema should still have async (getter returns new object each time)
+      expect(
+        (
+          taskTool.schema.parametersJsonSchema?.properties as Record<
+            string,
+            unknown
+          >
+        )?.async,
+      ).toBeDefined();
+    });
+  });
 });

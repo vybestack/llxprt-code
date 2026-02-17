@@ -734,11 +734,17 @@ class TaskToolInvocation extends BaseToolInvocation<
     const bookingId = asyncTaskManager.tryReserveAsyncSlot();
     if (!bookingId) {
       const canLaunch = asyncTaskManager.canLaunchAsync();
+      const baseReason = canLaunch.reason ?? 'Async task limit reached';
+      const guidance =
+        'You can: (1) wait for running async tasks to complete using check_async_tasks, ' +
+        '(2) launch this subagent synchronously (without async: true), or ' +
+        '(3) try again later when a slot is available.';
+      const errorMessage = `${baseReason}. ${guidance}`;
       return {
-        llmContent: canLaunch.reason ?? 'Cannot launch async task.',
-        returnDisplay: canLaunch.reason ?? 'Async task limit reached.',
+        llmContent: errorMessage,
+        returnDisplay: baseReason,
         error: {
-          message: canLaunch.reason ?? 'Limit reached',
+          message: baseReason,
           type: ToolErrorType.EXECUTION_FAILED,
         },
       };

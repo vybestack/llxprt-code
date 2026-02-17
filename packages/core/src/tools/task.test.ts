@@ -855,6 +855,8 @@ describe('TaskTool', () => {
       expect(result.error).toBeDefined();
       expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
       expect(result.llmContent).toContain('Max async tasks');
+      expect(result.llmContent).toContain('check_async_tasks');
+      expect(result.llmContent).toContain('synchronously');
     });
 
     it('registers task with AsyncTaskManager when async=true', async () => {
