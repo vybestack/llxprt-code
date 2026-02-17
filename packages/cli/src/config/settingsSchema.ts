@@ -112,6 +112,14 @@ export interface SettingDefinition {
    */
   ref?: string;
   subSettings?: SettingsSchema;
+  /**
+   * For number types, the minimum allowed value.
+   */
+  minimum?: number;
+  /**
+   * For number types, the maximum allowed value.
+   */
+  maximum?: number;
 }
 
 export interface SettingsSchema {
@@ -1145,6 +1153,7 @@ export const SETTINGS_SCHEMA = {
         category: 'Subagents',
         requiresRestart: false,
         default: 5,
+        minimum: -1,
         description:
           'Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.',
         showInDialog: true,
