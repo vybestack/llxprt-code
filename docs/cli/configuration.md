@@ -517,6 +517,16 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `undefined`
   - **Requires restart:** Yes
 
+#### `subagents`
+
+- **`subagents.asyncEnabled`** (boolean):
+  - **Description:** Globally allow background subagent runs. If off, async=true launches are blocked even if a profile enables them.
+  - **Default:** `true`
+
+- **`subagents.maxAsync`** (number):
+  - **Description:** Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.
+  - **Default:** `5`
+
 #### `security`
 
 - **`security.disableYoloMode`** (boolean):

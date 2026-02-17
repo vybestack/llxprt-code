@@ -712,6 +712,30 @@
       },
       "additionalProperties": false
     },
+    "subagents": {
+      "title": "Subagents",
+      "description": "Settings for subagent behavior.",
+      "markdownDescription": "Settings for subagent behavior.\n\n- Category: `Subagents`\n- Requires restart: `no`\n- Default: `{}`",
+      "default": {},
+      "type": "object",
+      "properties": {
+        "asyncEnabled": {
+          "title": "Async Subagents Enabled",
+          "description": "Globally allow background subagent runs. If off, async=true launches are blocked even if a profile enables them.",
+          "markdownDescription": "Globally allow background subagent runs. If off, async=true launches are blocked even if a profile enables them.\n\n- Category: `Subagents`\n- Requires restart: `no`\n- Default: `true`",
+          "default": true,
+          "type": "boolean"
+        },
+        "maxAsync": {
+          "title": "Maximum Async Tasks",
+          "description": "Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.",
+          "markdownDescription": "Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.\n\n- Category: `Subagents`\n- Requires restart: `no`\n- Default: `5`",
+          "default": 5,
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
     "security": {
       "title": "Security",
       "description": "Security-related settings.",
