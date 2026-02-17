@@ -11,8 +11,15 @@
  */
 
 import type { Config } from '../config/config.js';
-import { BeforeToolHookOutput, AfterToolHookOutput } from '../hooks/types.js';
-import type { ToolResult } from '../tools/tools.js';
+import {
+  BeforeToolHookOutput,
+  AfterToolHookOutput,
+  NotificationType,
+} from '../hooks/types.js';
+import type {
+  ToolResult,
+  ToolCallConfirmationDetails,
+} from '../tools/tools.js';
 import { DebugLogger } from '../debug/index.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hook-triggers:tool');
@@ -127,6 +134,161 @@ export async function triggerAfterToolHook(
     // Hook failures must NOT block tool execution
     debugLogger.warn(
       `AfterTool hook failed for tool ${toolName} (non-blocking):`,
+      error,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * Result from triggering a Notification hook
+ */
+export interface NotificationHookResult {
+  notificationType: NotificationType;
+  message: string;
+  details: SerializableConfirmationDetails;
+}
+
+/**
+ * Serializable representation of tool confirmation details for hooks.
+ * Excludes function properties like onConfirm that can't be serialized.
+ * Uses index signature for Record<string, unknown> compatibility.
+ */
+interface SerializableConfirmationDetails {
+  [key: string]: unknown;
+  type: 'edit' | 'exec' | 'mcp' | 'info';
+  title: string;
+  fileName?: string;
+  filePath?: string;
+  fileDiff?: string;
+  originalContent?: string | null;
+  newContent?: string;
+  isModifying?: boolean;
+  command?: string;
+  rootCommand?: string;
+  serverName?: string;
+  toolName?: string;
+  toolDisplayName?: string;
+  prompt?: string;
+  urls?: string[];
+}
+
+/**
+ * Converts ToolCallConfirmationDetails to a serializable format for hooks.
+ * Excludes function properties (onConfirm, ideConfirmation) that can't be serialized.
+ */
+function toSerializableDetails(
+  details: ToolCallConfirmationDetails,
+): SerializableConfirmationDetails {
+  const base: SerializableConfirmationDetails = {
+    type: details.type,
+    title: details.title,
+  };
+
+  switch (details.type) {
+    case 'edit':
+      return {
+        ...base,
+        fileName: details.fileName,
+        filePath: details.filePath,
+        fileDiff: details.fileDiff,
+        originalContent: details.originalContent,
+        newContent: details.newContent,
+        isModifying: details.isModifying,
+      };
+    case 'exec':
+      return {
+        ...base,
+        command: details.command,
+        rootCommand: details.rootCommand,
+      };
+    case 'mcp':
+      return {
+        ...base,
+        serverName: details.serverName,
+        toolName: details.toolName,
+        toolDisplayName: details.toolDisplayName,
+      };
+    case 'info':
+      return {
+        ...base,
+        prompt: details.prompt,
+        urls: details.urls,
+      };
+    default:
+      return base;
+  }
+}
+
+/**
+ * Gets the message to display in the notification hook for tool confirmation.
+ */
+function getNotificationMessage(
+  confirmationDetails: ToolCallConfirmationDetails,
+): string {
+  switch (confirmationDetails.type) {
+    case 'edit':
+      return `Tool ${confirmationDetails.title} requires editing`;
+    case 'exec':
+      return `Tool ${confirmationDetails.title} requires execution`;
+    case 'mcp':
+      return `Tool ${confirmationDetails.title} requires MCP`;
+    case 'info':
+      return `Tool ${confirmationDetails.title} requires information`;
+    default:
+      return `Tool requires confirmation`;
+  }
+}
+
+/**
+ * Trigger ToolPermission Notification hook before showing confirmation dialog.
+ *
+ * This hook fires before the user is prompted to confirm a tool execution,
+ * allowing external systems to be notified about pending tool confirmations
+ * (e.g., for desktop notifications, logging, or integration with other tools).
+ *
+ * @param config - Configuration object with hook system access
+ * @param confirmationDetails - Details about the tool requiring confirmation
+ * @returns NotificationHookResult if hooks execute, undefined otherwise
+ */
+export async function triggerToolNotificationHook(
+  config: Config,
+  confirmationDetails: ToolCallConfirmationDetails,
+): Promise<NotificationHookResult | undefined> {
+  if (!config.getEnableHooks?.()) {
+    return undefined;
+  }
+
+  const hookSystem = config.getHookSystem?.();
+  if (!hookSystem) {
+    return undefined;
+  }
+
+  try {
+    await hookSystem.initialize();
+
+    const eventHandler = hookSystem.getEventHandler();
+    const message = getNotificationMessage(confirmationDetails);
+    const serializedDetails = toSerializableDetails(confirmationDetails);
+
+    await eventHandler.fireNotificationEvent(
+      NotificationType.ToolPermission,
+      message,
+      serializedDetails,
+    );
+
+    debugLogger.debug(
+      `Notification hook (ToolPermission) executed for: ${confirmationDetails.title}`,
+    );
+
+    return {
+      notificationType: NotificationType.ToolPermission,
+      message,
+      details: serializedDetails,
+    };
+  } catch (error) {
+    debugLogger.warn(
+      `Notification hook failed for ${confirmationDetails.title} (non-blocking):`,
       error,
     );
     return undefined;
