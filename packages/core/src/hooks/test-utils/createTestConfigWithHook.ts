@@ -79,13 +79,15 @@ export function createTestConfigWithHook(options: TestHookOptions): Config {
   // HookSystem singleton for this config
   let hookSystem: HookSystem | undefined;
 
+  const testCwd = process.cwd();
+
   // Create a minimal Config mock that satisfies hook system requirements
   const config = {
     getEnableHooks: () => true,
     getHooks: () => hooks,
     getSessionId: () => 'test-session-' + Date.now(),
-    getWorkingDir: () => '/tmp/test',
-    getTargetDir: () => '/tmp/test',
+    getWorkingDir: () => testCwd,
+    getTargetDir: () => testCwd,
     getExtensions: () => [],
     getModel: () => 'test-model',
     getHookSystem: () => {
@@ -104,12 +106,14 @@ export function createTestConfigWithHook(options: TestHookOptions): Config {
  * Creates a Config with hooks disabled for testing disabled-hooks path
  */
 export function createTestConfigWithHooksDisabled(): Config {
+  const testCwd = process.cwd();
+
   return {
     getEnableHooks: () => false,
     getHooks: () => ({}),
     getSessionId: () => 'test-session-disabled',
-    getWorkingDir: () => '/tmp/test',
-    getTargetDir: () => '/tmp/test',
+    getWorkingDir: () => testCwd,
+    getTargetDir: () => testCwd,
     getExtensions: () => [],
     getModel: () => 'test-model',
     getHookSystem: () => undefined,

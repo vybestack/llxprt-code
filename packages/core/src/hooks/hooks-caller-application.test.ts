@@ -43,6 +43,10 @@ import {
   type Config,
 } from '../index.js';
 import { PolicyDecision } from '../policy/types.js';
+import {
+  triggerBeforeToolHook,
+  triggerAfterToolHook,
+} from '../core/coreToolHookTriggers.js';
 import { HookSystem } from './hookSystem.js';
 import type { HookDefinition, HookType } from './types.js';
 
@@ -156,6 +160,8 @@ function createConfigWithHook(options: {
     getToolsByServer: () => [],
   } as unknown as ToolRegistry;
 
+  const testCwd = process.cwd();
+
   const config = {
     getSessionId: () => 'test-session-' + Date.now(),
     getUsageStatisticsEnabled: () => true,
@@ -169,8 +175,8 @@ function createConfigWithHook(options: {
     getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     getEnableHooks: () => true,
     getHooks: () => hooks,
-    getWorkingDir: () => '/tmp/test',
-    getTargetDir: () => '/tmp/test',
+    getWorkingDir: () => testCwd,
+    getTargetDir: () => testCwd,
     getExtensions: () => [],
     getModel: () => 'test-model',
     getHookSystem() {
@@ -229,6 +235,14 @@ describe('Hook Caller Application', () => {
         command: 'echo "Tool blocked by policy" >&2; exit 2',
       });
 
+      const hookResult = await triggerBeforeToolHook(config, 'tracking_tool', {
+        path: '/etc/passwd',
+      });
+      expect(hookResult?.isBlockingDecision()).toBe(true);
+      expect(hookResult?.getEffectiveReason()).toContain(
+        'Tool blocked by policy',
+      );
+
       const { scheduler, onAllToolCallsComplete } = createTestScheduler(config);
 
       // Act: Schedule the tool call
@@ -274,6 +288,13 @@ describe('Hook Caller Application', () => {
         command: `echo '{"decision": "allow", "hookSpecificOutput": {"tool_input": {"path": "/safe/sanitized/path"}}}'`,
       });
 
+      const hookResult = await triggerBeforeToolHook(config, 'tracking_tool', {
+        path: '/etc/passwd',
+      });
+      expect(hookResult?.getModifiedToolInput()).toEqual({
+        path: '/safe/sanitized/path',
+      });
+
       const { scheduler } = createTestScheduler(config);
 
       // Act: Schedule with original (potentially dangerous) path
@@ -313,6 +334,19 @@ describe('Hook Caller Application', () => {
         event: 'AfterTool',
         command: `echo '{"decision": "allow", "systemMessage": "Security scan: file contents verified safe"}'`,
       });
+
+      const hookResult = await triggerAfterToolHook(
+        config,
+        'tracking_tool',
+        { path: '/test/file' },
+        {
+          llmContent: 'Executed with args: {"path":"/test/file"}',
+          returnDisplay: 'Tool executed',
+        },
+      );
+      expect(hookResult?.systemMessage).toContain(
+        'Security scan: file contents verified safe',
+      );
 
       const { scheduler, onAllToolCallsComplete } = createTestScheduler(config);
 
@@ -364,6 +398,17 @@ describe('Hook Caller Application', () => {
         event: 'AfterTool',
         command: `echo '{"decision": "allow", "suppressOutput": true}'`,
       });
+
+      const hookResult = await triggerAfterToolHook(
+        config,
+        'tracking_tool',
+        { path: '/test/file' },
+        {
+          llmContent: 'Executed with args: {"path":"/test/file"}',
+          returnDisplay: 'Tool executed',
+        },
+      );
+      expect(hookResult?.suppressOutput).toBe(true);
 
       const { scheduler, onAllToolCallsComplete } = createTestScheduler(config);
 
