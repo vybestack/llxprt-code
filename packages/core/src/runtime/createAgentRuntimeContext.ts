@@ -168,6 +168,17 @@ export function createAgentRuntimeContext(
       );
       return typeof value === 'number' && value > 0 && value <= 1 ? value : 0.6;
     },
+    densityOptimizeThreshold: (): number | undefined => {
+      const value = getLiveSetting<number>(
+        'compression.density.optimizeThreshold',
+        options.settings['compression.density.optimizeThreshold'],
+      );
+      // Return undefined if not set — caller should use strategy.trigger.defaultThreshold
+      // Allow 0 for testing (always run optimize) up to 1
+      return typeof value === 'number' && value >= 0 && value <= 1
+        ? value
+        : undefined;
+    },
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006

@@ -65,6 +65,11 @@ export interface ReadonlySettingsSnapshot {
   'compression.density.recencyPruning'?: boolean;
   'compression.density.recencyRetention'?: number;
   'compression.density.compressHeadroom'?: number;
+  /**
+   * Threshold for when density optimization runs (0-1).
+   * If undefined, uses the compression strategy's defaultThreshold.
+   */
+  'compression.density.optimizeThreshold'?: number;
 }
 
 /**
@@ -212,6 +217,12 @@ export interface AgentRuntimeContext {
     densityRecencyPruning(): boolean;
     densityRecencyRetention(): number;
     densityCompressHeadroom(): number;
+    /**
+     * Threshold for when density optimization (optimize phase) should run.
+     * Returns undefined to indicate "use strategy's defaultThreshold".
+     * Value is a fraction (0-1) of context limit.
+     */
+    densityOptimizeThreshold(): number | undefined;
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006

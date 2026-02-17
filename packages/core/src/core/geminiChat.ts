@@ -1784,6 +1784,22 @@ export class GeminiChat {
         return;
       }
 
+      // Check threshold: use ephemeral override or strategy's defaultThreshold
+      const contextLimit = this.runtimeContext.ephemerals.contextLimit();
+      const optimizeThreshold =
+        this.runtimeContext.ephemerals.densityOptimizeThreshold() ??
+        strategy.trigger.defaultThreshold;
+      const currentTokens = this.historyService.getTotalTokens();
+      const currentUsage = currentTokens / contextLimit;
+
+      if (currentUsage < optimizeThreshold) {
+        this.logger.debug(
+          () =>
+            `[GeminiChat] Skipping density optimization: ${(currentUsage * 100).toFixed(1)}% < ${(optimizeThreshold * 100).toFixed(1)}% threshold`,
+        );
+        return;
+      }
+
       // Step 2: Build DensityConfig from ephemerals
       const config: DensityConfig = {
         readWritePruning:
