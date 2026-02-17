@@ -1103,6 +1103,10 @@ export class Config {
    * This allows --continue to properly restore todos from the previous session.
    */
   adoptSessionId(sessionId: string): void {
+    const logger = new DebugLogger('llxprt:config:session');
+    logger.debug(
+      `adoptSessionId: adopting ${sessionId} (was ${this.sessionId})`,
+    );
     this.adoptedSessionId = sessionId;
   }
 
