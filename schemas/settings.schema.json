@@ -726,12 +726,12 @@
           "default": true,
           "type": "boolean"
         },
-        "maxAsync": {
+"maxAsync": {
           "title": "Maximum Async Tasks",
           "description": "Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.",
           "markdownDescription": "Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.\n\n- Category: `Subagents`\n- Requires restart: `no`\n- Default: `5`",
           "default": 5,
-          "type": "number",
+          "type": "integer",
           "minimum": -1
         }
       },
