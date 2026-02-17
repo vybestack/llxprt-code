@@ -306,6 +306,8 @@ export const CORE_DEFAULTS: Record<string, string> = {
 
   'subagent-delegation.md': loadMarkdownFile('subagent-delegation.md'),
 
+  'async-subagent-guidance.md': loadMarkdownFile('async-subagent-guidance.md'),
+
   'env/git-repository.md': loadMarkdownFile('env/git-repository.md'),
   'env/sandbox.md': loadMarkdownFile('env/sandbox.md'),
   'env/ide-mode.md': loadMarkdownFile('env/ide-mode.md'),

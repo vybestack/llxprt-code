@@ -33,3 +33,18 @@ export async function shouldIncludeSubagentDelegation(
     return false;
   }
 }
+
+/**
+ * Determines whether to include async subagent guidance in the prompt.
+ * Async guidance should only be shown when:
+ * 1. Subagent delegation is included (tools available, subagents exist)
+ * 2. Global async setting is enabled
+ * 3. Profile async setting is enabled
+ */
+export async function shouldIncludeAsyncSubagentGuidance(
+  includeSubagentDelegation: boolean,
+  globalAsyncEnabled: boolean,
+  profileAsyncEnabled: boolean,
+): Promise<boolean> {
+  return includeSubagentDelegation && globalAsyncEnabled && profileAsyncEnabled;
+}

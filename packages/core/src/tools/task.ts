@@ -671,6 +671,41 @@ class TaskToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
+    // Check global async setting (from /settings)
+    const settingsService = this.config.getSettingsService?.();
+    const globalSettings = settingsService?.getAllGlobalSettings?.() ?? {};
+    const subagentsSettings = globalSettings['subagents'] as
+      | { asyncEnabled?: boolean; maxAsync?: number }
+      | undefined;
+    const globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
+    if (!globalAsyncEnabled) {
+      return {
+        llmContent:
+          'Async subagents are globally disabled via /settings. Enable "Async Subagents Enabled" in /settings to use async mode.',
+        returnDisplay: 'Error: Async subagents are globally disabled.',
+        error: {
+          message: 'Async subagents are globally disabled via /settings.',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
+    // Check profile async setting (from ephemeralSettings)
+    const ephemeralSettings = this.config.getEphemeralSettings?.() ?? {};
+    const profileAsyncEnabled =
+      ephemeralSettings['subagents.async.enabled'] !== false;
+    if (!profileAsyncEnabled) {
+      return {
+        llmContent:
+          'This profile disables async subagents. Re-enable with: /set subagents.async.enabled true',
+        returnDisplay: 'Error: Async subagents disabled in profile.',
+        error: {
+          message: 'Async subagents disabled in active profile.',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
     // Get AsyncTaskManager
     const asyncTaskManager = this.deps.getAsyncTaskManager?.();
     if (asyncTaskManager === undefined) {
@@ -699,11 +734,17 @@ class TaskToolInvocation extends BaseToolInvocation<
     const bookingId = asyncTaskManager.tryReserveAsyncSlot();
     if (!bookingId) {
       const canLaunch = asyncTaskManager.canLaunchAsync();
+      const baseReason = canLaunch.reason ?? 'Async task limit reached';
+      const guidance =
+        'You can: (1) wait for running async tasks to complete using check_async_tasks, ' +
+        '(2) launch this subagent synchronously (without async: true), or ' +
+        '(3) try again later when a slot is available.';
+      const errorMessage = `${baseReason}. ${guidance}`;
       return {
-        llmContent: canLaunch.reason ?? 'Cannot launch async task.',
-        returnDisplay: canLaunch.reason ?? 'Async task limit reached.',
+        llmContent: errorMessage,
+        returnDisplay: baseReason,
         error: {
-          message: canLaunch.reason ?? 'Limit reached',
+          message: baseReason,
           type: ToolErrorType.EXECUTION_FAILED,
         },
       };

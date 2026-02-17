@@ -180,8 +180,17 @@ function buildSchemaForType(
   switch (source.type) {
     case 'boolean':
     case 'string':
-    case 'number':
       return { type: source.type };
+    case 'number': {
+      const numberSchema: JsonSchema = { type: source.type };
+      if ('minimum' in source && source.minimum !== undefined) {
+        numberSchema.minimum = source.minimum;
+      }
+      if ('maximum' in source && source.maximum !== undefined) {
+        numberSchema.maximum = source.maximum;
+      }
+      return numberSchema;
+    }
     case 'enum':
       return buildEnumSchema(source.options);
     case 'array': {
