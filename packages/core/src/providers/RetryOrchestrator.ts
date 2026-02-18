@@ -240,10 +240,6 @@ export class RetryOrchestrator implements IProvider {
 
     const bucketFailoverHandler = this.getBucketFailoverHandler(options);
 
-    // Reset session tracking so this request can try all buckets fresh.
-    // Prevents stale "already tried" state from carrying over from previous requests.
-    bucketFailoverHandler?.resetSession?.();
-
     let attempt = 0;
     let currentDelay = initialDelayMs;
     let consecutive429s = 0;
@@ -301,9 +297,12 @@ export class RetryOrchestrator implements IProvider {
           }
         }
 
-        // Success - reset error counters and return
+        // Success - reset error counters and bucket failover tracking
         consecutive429s = 0;
         consecutiveAuthErrors = 0;
+        // Reset bucket failover session on success so future failures in this turn
+        // can try all buckets again (rate limits may have cleared)
+        bucketFailoverHandler?.resetSession?.();
         return;
       } catch (error) {
         // Check for abort
