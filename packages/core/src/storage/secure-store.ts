@@ -18,7 +18,11 @@ import * as crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import envPaths from 'env-paths';
 import { DebugLogger } from '../debug/DebugLogger.js';
+
+// Platform-standard paths for llxprt-code app data (no suffix to match documented paths)
+const platformPaths = envPaths('llxprt-code', { suffix: '' });
 
 // ─── Error Type ──────────────────────────────────────────────────────────────
 
@@ -252,7 +256,7 @@ export class SecureStore {
     this.serviceName = serviceName;
     this.fallbackDir =
       options?.fallbackDir ??
-      path.join(os.homedir(), '.llxprt', 'secure-store', serviceName);
+      path.join(platformPaths.data, 'secure-store', serviceName);
     this.fallbackPolicy = options?.fallbackPolicy ?? 'allow';
     this.keyringLoaderFn =
       options?.keyringLoader ?? createDefaultKeyringAdapter;

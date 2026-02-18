@@ -1421,3 +1421,53 @@ describe('SecureStore — Cross-Instance Consistency', () => {
     expect(result).toBeNull();
   });
 });
+
+describe('SecureStore — Default Path Uses Platform Standards', () => {
+  /**
+   * @given SecureStore created without explicit fallbackDir
+   * @when checking the default fallback path
+   * @then it uses platform-standard app data directory, not ~/.llxprt
+   *
+   * Platform paths (via env-paths):
+   * - macOS: ~/Library/Application Support/llxprt-code/secure-store/{service}
+   * - Linux: ~/.local/share/llxprt-code/secure-store/{service} (or $XDG_DATA_HOME)
+   * - Windows: %LOCALAPPDATA%\llxprt-code\secure-store\{service}
+   */
+  it('default fallbackDir uses platform-standard paths, not ~/.llxprt', () => {
+    // Access the private fallbackDir via reflection to verify the path structure
+    // without writing any files to disk
+    const store = new SecureStore('test-service', {
+      keyringLoader: async () => null, // Force fallback mode
+      fallbackPolicy: 'allow',
+    });
+
+    // Use reflection to access private fallbackDir for verification
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fallbackDir = (store as any).fallbackDir as string;
+
+    // Should NOT be under ~/.llxprt
+    expect(fallbackDir).not.toContain(path.join('.llxprt', 'secure-store'));
+
+    // Should use platform-standard paths
+    if (process.platform === 'darwin') {
+      expect(fallbackDir).toContain('Library/Application Support');
+      expect(fallbackDir).toContain('llxprt-code');
+    } else if (process.platform === 'win32') {
+      // Windows: should be under LOCALAPPDATA or AppData
+      expect(fallbackDir.toLowerCase()).toMatch(/appdata|localappdata/i);
+      expect(fallbackDir).toContain('llxprt-code');
+    } else {
+      // Linux: XDG_DATA_HOME or ~/.local/share
+      const xdgDataHome = process.env.XDG_DATA_HOME;
+      if (xdgDataHome) {
+        expect(fallbackDir).toContain(xdgDataHome);
+      } else {
+        expect(fallbackDir).toContain('.local/share');
+      }
+      expect(fallbackDir).toContain('llxprt-code');
+    }
+
+    // Should include service name
+    expect(fallbackDir).toContain('test-service');
+  });
+});
