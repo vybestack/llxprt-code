@@ -94,6 +94,14 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
+// @plan:PLAN-20250214-CREDPROXY.P33
+// Mock the factory to use our test storage
+vi.mock('../../auth/proxy/credential-store-factory.js', () => ({
+  createProviderKeyStorage: () => mockStorage,
+  createTokenStore: () => ({}),
+  resetFactorySingletons: () => {},
+}));
+
 // ─── Test Setup ──────────────────────────────────────────────────────────────
 
 let mockKeyring: KeyringAdapter & { store: Map<string, string> };

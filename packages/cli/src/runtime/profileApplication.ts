@@ -24,6 +24,7 @@ import {
   switchActiveProvider,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
+  createProviderKeyStorage,
 } from './runtimeSettings.js';
 
 export interface ProviderSelectionResult {
@@ -164,6 +165,7 @@ interface AuthWiringDeps {
 interface AuthWiringResult {
   authKeyApplied: boolean;
   resolvedAuthKeyfilePath: string | null;
+  authKeyNameApplied: boolean;
 }
 
 async function wireAuthBeforeSwitch(
@@ -180,7 +182,43 @@ async function wireAuthBeforeSwitch(
   } = deps;
 
   let authKeyApplied = false;
+  let authKeyNameApplied = false;
   let resolvedAuthKeyfilePath: string | null = null;
+  const authKeyName = sanitizedProfile.ephemeralSettings?.['auth-key-name'];
+  if (
+    authKeyName &&
+    typeof authKeyName === 'string' &&
+    authKeyName.trim() !== ''
+  ) {
+    const trimmedKeyName = authKeyName.trim();
+    setEphemeralSetting('auth-key-name', trimmedKeyName);
+    try {
+      const storage = createProviderKeyStorage();
+      const resolvedAuthKey = await storage.getKey(trimmedKeyName);
+      if (resolvedAuthKey && resolvedAuthKey.trim() !== '') {
+        const trimmedAuthKey = resolvedAuthKey.trim();
+        setEphemeralSetting('auth-key', trimmedAuthKey);
+        setProviderApiKey(trimmedAuthKey);
+        authKeyApplied = true;
+        authKeyNameApplied = true;
+        logger.debug(
+          () =>
+            `[profile] resolved auth-key-name '${trimmedKeyName}' before switch`,
+        );
+      } else {
+        warnings.push(
+          `Key '${trimmedKeyName}' not found in secure storage; falling back to existing credentials.`,
+        );
+      }
+    } catch (error) {
+      warnings.push(
+        `Failed to resolve auth-key-name '${trimmedKeyName}': ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
   const authKeyfile = sanitizedProfile.ephemeralSettings?.['auth-keyfile'];
   if (
     authKeyfile &&
@@ -264,11 +302,12 @@ async function wireAuthBeforeSwitch(
     process.env.GOOGLE_CLOUD_LOCATION = gcpLocation;
   }
 
-  return { authKeyApplied, resolvedAuthKeyfilePath };
+  return { authKeyApplied, resolvedAuthKeyfilePath, authKeyNameApplied };
 }
 
 const PRE_APPLIED_EPHEMERAL_KEYS = new Set([
   'auth-key',
+  'auth-key-name',
   'auth-keyfile',
   'base-url',
   'GOOGLE_CLOUD_PROJECT',
@@ -656,7 +695,7 @@ export async function applyProfileWithGuards(
   }
 
   // STEP 2: Apply auth and base-url to SettingsService BEFORE provider switch
-  const { authKeyApplied, resolvedAuthKeyfilePath } =
+  const { authKeyApplied, resolvedAuthKeyfilePath, authKeyNameApplied } =
     await wireAuthBeforeSwitch(sanitizedProfile, {
       targetProviderName,
       warnings,
@@ -677,6 +716,7 @@ export async function applyProfileWithGuards(
     skipModelDefaults: true,
     preserveEphemerals: [
       'auth-key',
+      'auth-key-name',
       'auth-keyfile',
       'base-url',
       'GOOGLE_CLOUD_PROJECT',
@@ -723,6 +763,10 @@ export async function applyProfileWithGuards(
   const currentAuthKey = config.getEphemeralSetting('auth-key') as
     | string
     | undefined;
+  // Capture auth-key-name before updateActiveProviderApiKey (which clears it)
+  const currentAuthKeyName = authKeyNameApplied
+    ? (config.getEphemeralSetting('auth-key-name') as string | undefined)
+    : undefined;
   if (currentAuthKey) {
     logger.debug(() => {
       const displayValue = `***redacted*** (len=${currentAuthKey.length})`;
@@ -740,6 +784,14 @@ export async function applyProfileWithGuards(
     const { message } = await updateActiveProviderApiKey(null);
     if (message) {
       infoMessages.push(message);
+    }
+  }
+
+  if (authKeyNameApplied) {
+    setEphemeralSetting('auth-key', undefined);
+    // Restore auth-key-name after updateActiveProviderApiKey cleared it
+    if (currentAuthKeyName) {
+      setEphemeralSetting('auth-key-name', currentAuthKeyName);
     }
   }
 

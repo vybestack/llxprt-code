@@ -45,6 +45,11 @@ const setActiveModelParamMock = vi.fn<(key: string, value: unknown) => void>();
 const clearActiveModelParamMock = vi.fn<(key: string) => void>();
 const getActiveModelParamsMock = vi.fn<() => Record<string, unknown>>();
 const setEphemeralSettingMock = vi.fn<(key: string, value: unknown) => void>();
+const createProviderKeyStorageMock = vi.fn<
+  () => {
+    getKey: (name: string) => Promise<string | null>;
+  }
+>();
 const getCliRuntimeServicesMock = vi.fn<
   () => {
     config: {
@@ -178,6 +183,10 @@ const mockProfileManager = {
   loadProfile: vi.fn<(profileName: string) => Promise<Profile>>(),
 };
 
+const keyStorageStub = {
+  getKey: vi.fn<(name: string) => Promise<string | null>>(),
+};
+
 let savedGcpProject: string | undefined;
 let savedGcpLocation: string | undefined;
 
@@ -207,6 +216,8 @@ beforeEach(() => {
   updateActiveProviderBaseUrlMock.mockResolvedValue({});
   updateActiveProviderApiKeyMock.mockResolvedValue({});
   getActiveModelParamsMock.mockReturnValue({});
+  keyStorageStub.getKey.mockResolvedValue(null);
+  createProviderKeyStorageMock.mockReturnValue(keyStorageStub);
   setEphemeralSettingMock.mockImplementation((key, value) => {
     configStub.setEphemeralSetting(key, value);
   });
@@ -247,6 +258,7 @@ vi.mock('../runtimeSettings.js', () => ({
   clearActiveModelParam: clearActiveModelParamMock,
   getActiveModelParams: getActiveModelParamsMock,
   setEphemeralSetting: setEphemeralSettingMock,
+  createProviderKeyStorage: createProviderKeyStorageMock,
   getCliRuntimeServices: getCliRuntimeServicesMock,
   getActiveProviderOrThrow: getActiveProviderOrThrowMock,
   isCliStatelessProviderModeEnabled: isCliStatelessProviderModeEnabledMock,
@@ -1192,6 +1204,66 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
     const provSettings = settingsServiceStub.getProviderSettings('anthropic');
     expect(provSettings['baseUrl']).toBe('https://custom.api.com/v1');
     expect(provSettings['baseURL']).toBe('https://custom.api.com/v1');
+  });
+
+  it('resolves auth-key-name from secure storage and preserves auth-key-name ephemeral', async () => {
+    keyStorageStub.getKey.mockResolvedValueOnce('resolved-named-key');
+
+    providerManagerStub.available = ['Chutes.ai'];
+    providerManagerStub.providerLookup = new Map([
+      ['Chutes.ai', { name: 'Chutes.ai' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'Chutes.ai',
+      model: 'MiniMaxAI/MiniMax-M2.1-TEE',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key-name': 'chutes',
+        'base-url': 'https://llm.chutes.ai/v1',
+      },
+    };
+
+    await applyProfileWithGuards(profile);
+
+    expect(createProviderKeyStorageMock).toHaveBeenCalledTimes(1);
+    expect(keyStorageStub.getKey).toHaveBeenCalledWith('chutes');
+    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(
+      'resolved-named-key',
+    );
+    expect(configStub.getEphemeralSetting('auth-key-name')).toBe('chutes');
+    expect(configStub.getEphemeralSetting('auth-key')).toBeUndefined();
+  });
+
+  it('adds warning when auth-key-name is missing from secure storage', async () => {
+    keyStorageStub.getKey.mockResolvedValueOnce(null);
+
+    providerManagerStub.available = ['Chutes.ai'];
+    providerManagerStub.providerLookup = new Map([
+      ['Chutes.ai', { name: 'Chutes.ai' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'Chutes.ai',
+      model: 'MiniMaxAI/MiniMax-M2.1-TEE',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key-name': 'missing-key',
+      },
+    };
+
+    const result = await applyProfileWithGuards(profile);
+
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          "Key 'missing-key' not found in secure storage",
+        ),
+      ]),
+    );
+    expect(updateActiveProviderApiKeyMock).not.toHaveBeenCalled();
   });
 
   it('sets GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION as ephemerals and env vars', async () => {

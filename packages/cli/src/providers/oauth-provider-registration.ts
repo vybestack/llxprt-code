@@ -4,12 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20250214-CREDPROXY.P33
+ */
+
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { GeminiOAuthProvider } from '../auth/gemini-oauth-provider.js';
 import { QwenOAuthProvider } from '../auth/qwen-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
 import { CodexOAuthProvider } from '../auth/codex-oauth-provider.js';
-import { KeyringTokenStore } from '../auth/types.js';
+import type { TokenStore } from '../auth/types.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { HistoryItemWithoutId } from '../ui/types.js';
 
@@ -27,7 +31,7 @@ let registeredProviders = new WeakMap<OAuthManager, Set<string>>();
 export function ensureOAuthProviderRegistered(
   providerName: string,
   oauthManager: OAuthManager,
-  tokenStore?: KeyringTokenStore,
+  tokenStore?: TokenStore,
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
