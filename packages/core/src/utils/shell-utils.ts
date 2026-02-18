@@ -110,18 +110,36 @@ export function escapeShellArg(arg: string, shell: ShellType): string {
 }
 
 /**
- * Splits a shell command into a list of individual commands, respecting quotes.
- * This is used to separate chained commands (e.g., using &&, ||, ;).
- * Uses tree-sitter for accurate parsing when available, falls back to regex.
+ * Options for splitCommands function.
+ */
+export interface SplitCommandsOptions {
+  /**
+   * Whether to split on pipe operators (|).
+   * Default: true (split pipes for security checks).
+   * Set to false for command instrumentation where pipelines should stay intact.
+   */
+  splitOnPipes?: boolean;
+}
+
+/**
+ * Split a command string into individual commands respecting shell syntax.
+ * Handles &&, ||, ;, and properly ignores these inside quotes.
+ * Uses tree-sitter for accurate parsing when available.
  * @param command The shell command string to parse
+ * @param options Optional settings for split behavior
  * @returns An array of individual command strings
  */
-export function splitCommands(command: string): string[] {
+export function splitCommands(
+  command: string,
+  options?: SplitCommandsOptions,
+): string[] {
+  const splitOnPipes = options?.splitOnPipes ?? true;
+
   // Try tree-sitter first for accurate parsing
   if (isParserAvailable()) {
     const tree = parseShellCommand(command);
     if (tree) {
-      const result = splitCommandsWithTree(tree);
+      const result = splitCommandsWithTree(tree, { splitOnPipes });
       if (result.length > 0) {
         return result;
       }
@@ -129,14 +147,18 @@ export function splitCommands(command: string): string[] {
   }
 
   // Fall back to regex-based parsing
-  return splitCommandsRegex(command);
+  return splitCommandsRegex(command, { splitOnPipes });
 }
 
 /**
  * Regex-based fallback for splitting shell commands.
  * Used when tree-sitter is not available.
  */
-function splitCommandsRegex(command: string): string[] {
+function splitCommandsRegex(
+  command: string,
+  options?: SplitCommandsOptions,
+): string[] {
+  const splitOnPipes = options?.splitOnPipes ?? true;
   const commands: string[] = [];
   let currentCommand = '';
   let inSingleQuotes = false;
@@ -181,8 +203,15 @@ function splitCommandsRegex(command: string): string[] {
           currentCommand = '';
         }
       } else if (char === '|') {
-        commands.push(currentCommand.trim());
-        currentCommand = '';
+        // Single | is a pipe operator
+        if (splitOnPipes) {
+          // Split on pipes for security checks (need to validate each command)
+          commands.push(currentCommand.trim());
+          currentCommand = '';
+        } else {
+          // Keep pipeline intact for instrumentation (one marker per pipeline)
+          currentCommand += char;
+        }
       } else {
         currentCommand += char;
       }

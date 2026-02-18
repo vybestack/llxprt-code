@@ -824,6 +824,61 @@ describe('splitCommands', () => {
     const result = splitCommands('cmd1 & cmd2');
     expect(result).toEqual(['cmd1', 'cmd2']);
   });
+
+  // Default behavior: split on pipes (for security/allowlist checks)
+  it('should split on pipes by default (for security checks)', () => {
+    const result = splitCommands('cat file | grep foo');
+    expect(result).toEqual(['cat file', 'grep foo']);
+  });
+
+  it('should split complex pipelines by default', () => {
+    const result = splitCommands('cat file | grep foo | sort | uniq');
+    expect(result).toEqual(['cat file', 'grep foo', 'sort', 'uniq']);
+  });
+
+  // With splitOnPipes: false (for instrumentation - pipelines stay intact)
+  it('should keep pipe operator within a single command when splitOnPipes: false', () => {
+    const result = splitCommands('cat file | grep foo', {
+      splitOnPipes: false,
+    });
+    expect(result).toEqual(['cat file | grep foo']);
+  });
+
+  it('should keep complex pipelines as a single command when splitOnPipes: false', () => {
+    const result = splitCommands('cat file | grep foo | sort | uniq', {
+      splitOnPipes: false,
+    });
+    expect(result).toEqual(['cat file | grep foo | sort | uniq']);
+  });
+
+  it('should split on && but preserve pipes within each segment when splitOnPipes: false', () => {
+    const result = splitCommands('cat file | grep foo && echo done', {
+      splitOnPipes: false,
+    });
+    expect(result).toEqual(['cat file | grep foo', 'echo done']);
+  });
+
+  it('should split on || but preserve pipes within each segment when splitOnPipes: false', () => {
+    const result = splitCommands('cat file | grep foo || echo not found', {
+      splitOnPipes: false,
+    });
+    expect(result).toEqual(['cat file | grep foo', 'echo not found']);
+  });
+
+  it('should handle multiple chained pipelines when splitOnPipes: false', () => {
+    const result = splitCommands(
+      'cat file1 | grep foo && cat file2 | grep bar',
+      { splitOnPipes: false },
+    );
+    expect(result).toEqual(['cat file1 | grep foo', 'cat file2 | grep bar']);
+  });
+
+  it('should handle pipe with 2>&1 redirection when splitOnPipes: false', () => {
+    const result = splitCommands('cmd 2>&1 | grep error', {
+      splitOnPipes: false,
+    });
+    expect(result).toEqual(['cmd 2>&1 | grep error']);
+  });
 });
 
 describe('splitCommands regex fallback', () => {
@@ -881,5 +936,53 @@ describe('splitCommands regex fallback', () => {
     );
     const result = splitCommandsRegex('cmd1 & cmd2');
     expect(result).toEqual(['cmd1', 'cmd2']);
+  });
+
+  // Default behavior: split on pipes (for security)
+  it('should split on pipes by default (regex path)', async () => {
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo');
+    expect(result).toEqual(['cat file', 'grep foo']);
+  });
+
+  it('should split complex pipelines by default (regex path)', async () => {
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo | sort | uniq');
+    expect(result).toEqual(['cat file', 'grep foo', 'sort', 'uniq']);
+  });
+
+  // With splitOnPipes: false (for instrumentation)
+  it('should keep pipe operator within a single command when splitOnPipes: false (regex path)', async () => {
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo', {
+      splitOnPipes: false,
+    });
+    expect(result).toEqual(['cat file | grep foo']);
+  });
+
+  it('should keep complex pipelines as a single command when splitOnPipes: false (regex path)', async () => {
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo | sort | uniq', {
+      splitOnPipes: false,
+    });
+    expect(result).toEqual(['cat file | grep foo | sort | uniq']);
+  });
+
+  it('should split on && but preserve pipes within each segment when splitOnPipes: false (regex path)', async () => {
+    const { splitCommands: splitCommandsRegex } = await import(
+      './shell-utils.js'
+    );
+    const result = splitCommandsRegex('cat file | grep foo && echo done', {
+      splitOnPipes: false,
+    });
+    expect(result).toEqual(['cat file | grep foo', 'echo done']);
   });
 });
