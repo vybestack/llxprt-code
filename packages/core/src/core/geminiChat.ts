@@ -56,6 +56,10 @@ import {
   parseCompressionStrategyName,
 } from './compression/compressionStrategyFactory.js';
 import type { CompressionContext, DensityConfig } from './compression/types.js';
+import {
+  shouldRetryCompressionError,
+  isTransientCompressionError,
+} from './compression/types.js';
 import { PromptResolver } from '../prompt-config/prompt-resolver.js';
 import { tokenLimit } from './tokenLimits.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -396,6 +400,27 @@ export class GeminiChat {
   private compressionPromise: Promise<void> | null = null;
   private logger = new DebugLogger('llxprt:gemini:chat');
   private lastPromptTokenCount: number | null = null;
+
+  /**
+   * Tracks consecutive compression failures for cooldown logic.
+   *
+   * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+   * @requirement REQ-CR-005
+   */
+  private compressionFailureCount: number = 0;
+
+  /**
+   * Timestamp (ms) of the most recent compression failure, or null if none.
+   *
+   * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+   * @requirement REQ-CR-005
+   */
+  private lastCompressionFailureTime: number | null = null;
+
+  /** Cooldown period in ms — skip compression when 3+ failures within this window. */
+  private static readonly COMPRESSION_COOLDOWN_MS = 60_000;
+  /** Number of consecutive failures before entering cooldown. */
+  private static readonly COMPRESSION_FAILURE_THRESHOLD = 3;
 
   /**
    * Optional callback that supplies formatted active todo items for compression.
@@ -2141,13 +2166,31 @@ export class GeminiChat {
   }
 
   /**
-   * Perform compression of chat history.
-   * Delegates to the configured compression strategy via the strategy pattern.
+   * Perform compression of chat history with retry, fallback, and cooldown.
+   *
+   * - Transient errors (429, 5xx, network) are retried up to 3 times with backoff.
+   * - After exhausting retries, falls back to TopDownTruncationStrategy (no LLM).
+   * - After 3 consecutive failures within the 60-second cooldown window,
+   *   compression is skipped entirely to avoid blocking the conversation.
+   * - Successful compression resets the failure counters.
    *
    * @plan PLAN-20260211-COMPRESSION.P14
-   * @requirement REQ-CS-006.1, REQ-CS-002.9
+   * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+   * @requirement REQ-CS-006.1, REQ-CS-002.9, REQ-CR-003, REQ-CR-004, REQ-CR-005
    */
   async performCompression(prompt_id: string): Promise<void> {
+    // Cooldown: skip compression if we have too many recent failures
+    if (this.isCompressionInCooldown()) {
+      this.logger.debug(
+        'Skipping compression — in cooldown after repeated failures',
+        {
+          failureCount: this.compressionFailureCount,
+          lastFailureTime: this.lastCompressionFailureTime,
+        },
+      );
+      return;
+    }
+
     this.logger.debug('Starting compression');
     const preCompressionCount =
       this.historyService.getStatistics().totalMessages;
@@ -2158,25 +2201,14 @@ export class GeminiChat {
     // Suppress densityDirty during compression rebuild (clear+add loop)
     this._suppressDensityDirty = true;
     try {
-      const strategyName = parseCompressionStrategyName(
-        this.runtimeContext.ephemerals.compressionStrategy(),
-      );
-      const strategy = getCompressionStrategy(strategyName);
-      const context = await this.buildCompressionContext(prompt_id);
-      const result = await strategy.compress(context);
-
-      // Apply result: clear history, add each entry from newHistory
-      this.historyService.clear();
-      for (const content of result.newHistory) {
-        this.historyService.add(content, this.runtimeState.model);
-      }
-
-      compressionSummary = result.newHistory[0];
-
-      this.logger.debug('Compression completed', result.metadata);
-    } catch (error) {
-      this.logger.error('Compression failed:', error);
-      throw error;
+      await this.runCompressionWithRetryAndFallback(prompt_id, (newHistory) => {
+        // Apply result: clear history, add each entry from newHistory
+        this.historyService.clear();
+        for (const content of newHistory) {
+          this.historyService.add(content, this.runtimeState.model);
+        }
+        compressionSummary = newHistory[0];
+      });
     } finally {
       this._suppressDensityDirty = false;
       this.historyService.endCompression(
@@ -2186,6 +2218,115 @@ export class GeminiChat {
     }
 
     await this.historyService.waitForTokenUpdates();
+  }
+
+  /**
+   * Returns true if compression should be skipped due to repeated recent failures.
+   *
+   * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+   * @requirement REQ-CR-005
+   */
+  private isCompressionInCooldown(): boolean {
+    if (
+      this.compressionFailureCount < GeminiChat.COMPRESSION_FAILURE_THRESHOLD
+    ) {
+      return false;
+    }
+    if (this.lastCompressionFailureTime === null) {
+      return false;
+    }
+    const elapsed = Date.now() - this.lastCompressionFailureTime;
+    return elapsed < GeminiChat.COMPRESSION_COOLDOWN_MS;
+  }
+
+  /**
+   * Execute compression using the primary strategy with retry for transient
+   * errors, falling back to TopDownTruncationStrategy if all transient retries fail.
+   * Permanent errors are re-thrown immediately without attempting a fallback.
+   *
+   * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+   * @requirement REQ-CR-003, REQ-CR-004, REQ-CR-005
+   */
+  private async runCompressionWithRetryAndFallback(
+    promptId: string,
+    applyResult: (newHistory: IContent[]) => void,
+  ): Promise<void> {
+    const context = await this.buildCompressionContext(promptId);
+
+    const attemptPrimary = async (): Promise<IContent[]> => {
+      const strategyName = parseCompressionStrategyName(
+        this.runtimeContext.ephemerals.compressionStrategy(),
+      );
+      const strategy = getCompressionStrategy(strategyName);
+      const result = await strategy.compress(context);
+      return result.newHistory;
+    };
+
+    let primaryError: unknown;
+    try {
+      const newHistory = await retryWithBackoff(attemptPrimary, {
+        maxAttempts: 3,
+        initialDelayMs: 2000,
+        maxDelayMs: 10000,
+        shouldRetryOnError: (err) => shouldRetryCompressionError(err),
+      });
+      // Primary strategy succeeded — reset failure counters
+      this.compressionFailureCount = 0;
+      this.lastCompressionFailureTime = null;
+      this.logger.debug('Compression completed with primary strategy');
+      applyResult(newHistory);
+      return;
+    } catch (err) {
+      primaryError = err;
+    }
+
+    // Permanent errors are rethrown immediately — no fallback
+    if (!isTransientCompressionError(primaryError)) {
+      throw primaryError;
+    }
+
+    this.logger.warn(
+      'Primary compression strategy failed after retries (transient), attempting fallback',
+      primaryError,
+    );
+    await this.performFallbackCompression(context, primaryError, applyResult);
+  }
+
+  /**
+   * Attempt compression using TopDownTruncationStrategy as a fallback.
+   * This strategy never requires an LLM call and always succeeds if there is
+   * any history at all.  If it also fails, we log and continue without
+   * compressing to avoid blocking the conversation.
+   *
+   * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+   * @requirement REQ-CR-004, REQ-CR-005
+   */
+  private async performFallbackCompression(
+    context: CompressionContext,
+    primaryError: unknown,
+    applyResult: (newHistory: IContent[]) => void,
+  ): Promise<void> {
+    try {
+      // Use the strategy factory so tests can intercept via getCompressionStrategy mock
+      const fallback = getCompressionStrategy('top-down-truncation');
+      const result = await fallback.compress(context);
+      // Fallback succeeded — record as a partial failure for cooldown purposes
+      this.compressionFailureCount++;
+      this.lastCompressionFailureTime = Date.now();
+      this.logger.debug(
+        'Compression completed with fallback (TopDownTruncation)',
+      );
+      applyResult(result.newHistory);
+    } catch (fallbackError) {
+      // Both strategies failed — track the failure and continue without compression
+      this.compressionFailureCount++;
+      this.lastCompressionFailureTime = Date.now();
+      this.logger.error(
+        'Fallback compression also failed — continuing without compression',
+        { primaryError, fallbackError },
+      );
+      // Swallow error to avoid blocking the conversation turn
+    }
   }
 
   /**
