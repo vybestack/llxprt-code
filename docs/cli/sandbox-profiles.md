@@ -422,19 +422,6 @@ Docker and Podman work without special configuration.
 
 ### From Command Line
 
-```bash
-# Load a profile
-llxprt --sandbox-profile-load dev
-
-# Override engine
-llxprt --sandbox-engine podman --sandbox-profile-load dev
-
-# Combine with other flags
-llxprt --sandbox-profile-load safe --key $API_KEY
-```
-
-### From Command Line
-
 Load a profile via CLI flag:
 
 ```bash

@@ -104,7 +104,7 @@ Profiles configure container behavior. They are stored in `~/.llxprt/sandboxes/<
 | `dev`     | On      | Auto      | 2 CPU, 4GB, 256 pids | Daily development       |
 | `safe`    | Off     | Off       | 2 CPU, 4GB, 128 pids | Untrusted code analysis |
 | `tight`   | Off     | Off       | 1 CPU, 2GB, 64 pids  | Maximum restriction     |
-| `offline` | Off     | Off       | 2 CPU, 4GB, 128 pids | No network required     |
+| `offline` | Off     | Auto      | 2 CPU, 4GB, 128 pids | No network required     |
 
 ### Using Profiles
 
@@ -428,13 +428,13 @@ For deeper debugging, run the container manually:
 
 ```bash
 # Find the sandbox image
-docker images | grep llxprt-code-sandbox
+docker images | grep 'vybestack/llxprt-code/sandbox'
 
 # Run interactively
 docker run -it --rm \
   -v $(pwd):/workspace \
   -v ~/.llxprt:/home/node/.llxprt \
-  llxprt-code-sandbox:latest \
+  ghcr.io/vybestack/llxprt-code/sandbox:latest \
   bash
 ```
 
