@@ -279,6 +279,8 @@ The `~/.git-credentials` file is intentionally NOT mounted for security.
 2. Environment variable: `LLXPRT_SANDBOX=true|docker|podman|sandbox-exec`
 3. Settings file: `"sandbox": "docker"` in `settings.json`
 
+**Note:** The `LLXPRT_SANDBOX` environment variable only accepts engine names (true, docker, podman, sandbox-exec). To disable sandboxing, use the CLI flag `--sandbox-engine none` instead.
+
 ### Examples
 
 ```bash
@@ -331,11 +333,16 @@ llxprt --sandbox
 
 On Linux, the container runs with your UID/GID to avoid permission issues with mounted volumes.
 
-Override with:
+Force host UID/GID mapping:
 
 ```bash
-export SANDBOX_SET_UID_GID=true   # Force host UID/GID
-export SANDBOX_SET_UID_GID=false  # Disable UID/GID mapping
+export SANDBOX_SET_UID_GID=true
+```
+
+Disable UID/GID mapping:
+
+```bash
+export SANDBOX_SET_UID_GID=false
 ```
 
 ### Debug Mode

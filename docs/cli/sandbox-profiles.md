@@ -88,6 +88,8 @@ For work that does not require network access but may still need SSH for local r
 
 Use when: Working on airplanes, reading documentation, or any offline task where you still need git access to local repos.
 
+**Note:** With `network: "off"`, SSH agent passthrough only works for local operations like commit signing or accessing local filesystem keys. Git push/pull to remote servers over SSH will not work because TCP connections are blocked.
+
 ## Profile Schema
 
 ### engine
@@ -344,9 +346,9 @@ For automated tasks in CI:
 }
 ```
 
-### Example: Read-Only Analysis
+### Example: Restricted Analysis
 
-For analyzing code without modification:
+For analyzing untrusted code with strict limits:
 
 ```json
 {
@@ -362,7 +364,7 @@ For analyzing code without modification:
 }
 ```
 
-Note: The project directory is always mounted read-write. The `mounts` field controls additional mounts only.
+Note: The project directory is always mounted read-write. The `mounts` field controls additional mounts only. For true read-only access, use the `safe` or `tight` built-in profiles which restrict network and SSH access.
 
 ## Engine Selection Behavior
 
