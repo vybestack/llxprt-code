@@ -17,6 +17,7 @@ interface ChatMessage {
   kind: 'message';
   role: Role;
   text: string;
+  profileName?: string;
 }
 
 interface ToolBlockLegacy {
@@ -71,7 +72,7 @@ export type {
 
 export interface UseChatStoreReturn {
   entries: ChatEntry[];
-  appendMessage: (role: Role, text: string) => string;
+  appendMessage: (role: Role, text: string, profileName?: string) => string;
   appendToMessage: (id: string, text: string) => void;
   appendToolBlock: (tool: {
     lines: string[];
@@ -110,7 +111,7 @@ export function useChatStore(makeId: () => string): UseChatStoreReturn {
   const [streamState, setStreamState] = useState<StreamState>('idle');
 
   const appendMessage = useCallback(
-    (role: Role, text: string): string => {
+    (role: Role, text: string, profileName?: string): string => {
       const id = makeId();
       setEntries((prev) => [
         ...prev,
@@ -119,6 +120,7 @@ export function useChatStore(makeId: () => string): UseChatStoreReturn {
           kind: 'message',
           role,
           text,
+          ...(profileName !== undefined ? { profileName } : {}),
         },
       ]);
       return id;

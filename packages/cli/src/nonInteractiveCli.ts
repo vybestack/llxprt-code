@@ -296,6 +296,7 @@ export async function runNonInteractive({
         prompt_id,
       );
 
+      let firstContentInTurn = true;
       for await (const event of responseStream) {
         if (abortController.signal.aborted) {
           console.error('Operation cancelled.');
@@ -331,6 +332,18 @@ export async function runNonInteractive({
           }
         } else if (event.type === GeminiEventType.Content) {
           flushThoughtBuffer();
+          if (firstContentInTurn && !jsonOutput && !streamFormatter) {
+            const activeProfileName = config
+              .getSettingsService()
+              .getCurrentProfileName?.();
+            if (activeProfileName) {
+              process.stdout.write(`[${activeProfileName}]
+`);
+            }
+            firstContentInTurn = false;
+          } else {
+            firstContentInTurn = false;
+          }
           let outputValue = event.value;
 
           if (emojiFilter) {

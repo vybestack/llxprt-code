@@ -5,9 +5,12 @@ export function ModelMessage(
   props: Readonly<ModelMessageProps>,
 ): React.ReactNode {
   return (
-    <text key={props.id} fg={props.theme.colors.text.responder}>
-      {props.text}
-    </text>
+    <box key={props.id}>
+      {props.profileName !== undefined && props.profileName !== '' && (
+        <text fg={props.theme.colors.text.muted}>[{props.profileName}]</text>
+      )}
+      <text fg={props.theme.colors.text.responder}>{props.text}</text>
+    </box>
   );
 }
 

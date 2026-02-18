@@ -13,7 +13,9 @@ export type UserMessageProps = MessageProps;
 
 export type SystemMessageProps = MessageProps;
 
-export type ModelMessageProps = MessageProps;
+export interface ModelMessageProps extends MessageProps {
+  readonly profileName?: string;
+}
 
 export type ThinkingMessageProps = MessageProps;
 

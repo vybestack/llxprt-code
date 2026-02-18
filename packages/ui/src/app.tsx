@@ -98,6 +98,10 @@ function AppInner(): React.ReactNode {
   const [sessionConfig, setSessionConfig] = useState<SessionConfig>({
     provider: 'openai',
   });
+  const [activeProfileName, setActiveProfileName] = useState<
+    string | undefined
+  >(undefined);
+  const activeProfileNameRef = useRef<string | undefined>(undefined);
   const { themes, theme, setThemeBySlug } = useThemeManager();
   const renderer = useRenderer();
 
@@ -206,6 +210,8 @@ function AppInner(): React.ReactNode {
             setResponderWordCount,
             scheduleFn,
             setStreamState,
+            undefined,
+            activeProfileNameRef.current,
           );
           logger.debug(
             'onToolsComplete: continueStreamingAfterTools finished',
@@ -321,6 +327,11 @@ function AppInner(): React.ReactNode {
     queueApprovalFromSchedulerRef.current = queueApprovalFromScheduler;
   }, [queueApprovalFromScheduler]);
 
+  // Keep profileName ref in sync with state for use in closures
+  useEffect(() => {
+    activeProfileNameRef.current = activeProfileName;
+  }, [activeProfileName]);
+
   // Ref to track current pendingApproval to avoid stale closures in keyboard handlers
   const pendingApprovalRef = useRef(pendingApproval);
   useEffect(() => {
@@ -362,6 +373,8 @@ function AppInner(): React.ReactNode {
       setResponderWordCount,
       setStreamState,
       schedule,
+      undefined,
+      activeProfileName,
     );
 
   // Sync abortRef to the container so onToolsComplete can access it
@@ -407,7 +420,12 @@ function AppInner(): React.ReactNode {
   const handleCommand = useCallback(
     async (command: string) => {
       const configResult = await handleConfigCommand(command);
-      if (configResult.handled) return true;
+      if (configResult.handled) {
+        if (configResult.profileName !== undefined) {
+          setActiveProfileName(configResult.profileName);
+        }
+        return true;
+      }
       if (command.startsWith('/theme')) {
         const parts = command.trim().split(/\s+/);
         if (parts.length === 1) return triggerCommand('/theme');
@@ -431,7 +449,14 @@ function AppInner(): React.ReactNode {
       }
       return triggerCommand(command);
     },
-    [applyTheme, handleConfigCommand, triggerCommand, session, clearEntries],
+    [
+      applyTheme,
+      handleConfigCommand,
+      triggerCommand,
+      session,
+      clearEntries,
+      setActiveProfileName,
+    ],
   );
 
   const {

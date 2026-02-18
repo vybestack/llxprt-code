@@ -17,6 +17,7 @@ interface ConfigCommandResult {
   handled: boolean;
   nextConfig: SessionConfig;
   messages: string[];
+  profileName?: string;
 }
 
 interface UseAppCommandsProps {
@@ -115,7 +116,7 @@ export function useAppCommands({
           }
         }
       }
-      return configResult;
+      return { ...configResult, profileName: configResult.profileName };
     },
     [appendMessage, sessionConfig, setSessionConfig, createSession],
   );

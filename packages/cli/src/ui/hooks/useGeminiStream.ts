@@ -735,6 +735,9 @@ export const useGeminiStream = (
         setPendingHistoryItem({
           type: 'gemini',
           text: '',
+          ...(activeProfileName != null
+            ? { profileName: activeProfileName }
+            : {}),
           ...(thinkingBlocksRef.current.length > 0
             ? { thinkingBlocks: [...thinkingBlocksRef.current] }
             : {}),
@@ -771,6 +774,9 @@ export const useGeminiStream = (
           {
             type: pendingType,
             text: beforeText,
+            ...(activeProfileName != null
+              ? { profileName: activeProfileName }
+              : {}),
             ...(thinkingBlocksRef.current.length > 0
               ? { thinkingBlocks: [...thinkingBlocksRef.current] }
               : {}),
@@ -786,6 +792,9 @@ export const useGeminiStream = (
       setPendingHistoryItem({
         type: 'gemini_content',
         text: afterText,
+        ...(activeProfileName != null
+          ? { profileName: activeProfileName }
+          : {}),
       });
       return afterText;
     },
@@ -795,6 +804,7 @@ export const useGeminiStream = (
       sanitizeContent,
       setPendingHistoryItem,
       flushPendingHistoryItem,
+      activeProfileName,
     ],
   );
 

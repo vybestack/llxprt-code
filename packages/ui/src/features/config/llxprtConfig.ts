@@ -12,6 +12,7 @@ export interface ConfigCommandResult {
 
 export interface ConfigCommandResultWithSession extends ConfigCommandResult {
   readonly sessionOptions?: ConfigSessionOptions;
+  readonly profileName?: string;
 }
 
 interface ApplyOptions {
@@ -393,6 +394,10 @@ export async function applyProfileWithSession(
     return { ...result, sessionOptions: undefined };
   }
 
+  // Extract profile name from command tokens (e.g., "/profile load <name>")
+  const profileArg = parseProfileArgs(tokens.slice(1));
+  const loadedProfileName = 'error' in profileArg ? undefined : profileArg.name;
+
   // If profile load failed or config is incomplete, don't return options
   if (
     !result.handled ||
@@ -414,5 +419,5 @@ export async function applyProfileWithSession(
     options.workingDir,
   );
 
-  return { ...result, sessionOptions };
+  return { ...result, sessionOptions, profileName: loadedProfileName };
 }
