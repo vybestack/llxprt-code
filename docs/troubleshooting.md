@@ -165,7 +165,7 @@ Both syntaxes work in PowerShell, but `+` avoids the IntelliSense interference. 
 
 ## Exit Codes
 
-The Gemini CLI uses specific exit codes to indicate the reason for termination. This is especially useful for scripting and automation.
+LLxprt Code uses specific exit codes to indicate the reason for termination. This is especially useful for scripting and automation.
 
 | Exit Code | Error Type                 | Description                                                                                         |
 | --------- | -------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -174,6 +174,294 @@ The Gemini CLI uses specific exit codes to indicate the reason for termination. 
 | 44        | `FatalSandboxError`        | An error occurred with the sandboxing environment (e.g., Docker, Podman, or Seatbelt).              |
 | 52        | `FatalConfigError`         | A configuration file (`settings.json`) is invalid or contains errors.                               |
 | 53        | `FatalTurnLimitedError`    | The maximum number of conversational turns for the session was reached. (non-interactive mode only) |
+
+## Sandbox Issues
+
+### Container Engine Problems
+
+#### Docker daemon not running
+
+**Symptom:** `Cannot connect to the Docker daemon. Is the docker daemon running?`
+
+**Solutions:**
+
+- **macOS/Windows:** Start Docker Desktop
+- **Linux:** Run `sudo systemctl start docker` or `sudo service docker start`
+
+#### Podman machine not running (macOS)
+
+**Symptom:** `Error: cannot connect to Podman socket`
+
+**Solution:**
+
+```bash
+podman machine start
+podman machine ls  # Verify it's running
+```
+
+If the machine is stuck:
+
+```bash
+podman machine stop
+podman machine rm
+podman machine init
+podman machine start
+```
+
+#### Image pull failures
+
+**Symptom:** `Unable to find image 'ghcr.io/vybestack/llxprt-code/sandbox:latest'`
+
+**Causes and solutions:**
+
+- No network: Check internet connection
+- Registry auth required: `docker login ghcr.io`
+- Rate limited: Wait and retry, or use authenticated pull
+
+### Credential Proxy Errors
+
+#### Failed to start credential proxy
+
+**Symptom:** `Failed to start credential proxy: <error message>`
+
+**Causes:**
+
+The credential proxy requires a working OS keyring. Common issues:
+
+- Linux: `gnome-keyring-daemon` not running or D-Bus unavailable
+- Keyring locked after login
+
+**Solutions:**
+
+```bash
+# Linux: Check keyring status
+gnome-keyring-daemon --check
+
+# Linux: Start keyring if needed
+eval "$(gnome-keyring-daemon -s)"
+export SSH_AUTH_SOCK
+
+# Fallback: Use explicit API key
+llxprt --key $YOUR_API_KEY --sandbox
+```
+
+#### LLXPRT_CREDENTIAL_SOCKET not set
+
+**Symptom:** Inside the sandbox, authentication fails or `/auth` commands do not work.
+
+**Cause:** The credential proxy socket was not properly passed to the container.
+
+**Diagnosis:**
+
+```bash
+# Check if the env var is set inside sandbox
+llxprt --sandbox "run shell command: echo $LLXPRT_CREDENTIAL_SOCKET"
+```
+
+If empty, the proxy did not start correctly on the host.
+
+**Solution:** Restart the session. If the problem persists, check host keyring availability.
+
+#### Credential proxy connection lost
+
+**Symptom:** `Credential proxy connection lost. Restart the session.`
+
+**Cause:** The container lost its connection to the host-side credential proxy. This usually happens after:
+
+- Host system sleep/hibernate
+- Container crash
+- Network interface changes
+
+**Solution:** Exit and restart the llxprt session.
+
+#### socat not found (Podman macOS)
+
+**Symptom:** `ERROR: socat not found — credential proxy relay requires socat in the sandbox image`
+
+**Cause:** The sandbox image lacks the `socat` utility needed for credential proxy bridging on Podman macOS.
+
+**Solutions:**
+
+- Update to a newer sandbox image
+- Use Docker Desktop instead of Podman on macOS
+- Build a custom image with `socat` installed
+
+### SSH Agent Passthrough
+
+#### SSH_AUTH_SOCK not set
+
+**Symptom:** `SSH agent requested but SSH_AUTH_SOCK is not set.`
+
+**Solution:**
+
+```bash
+# Start the agent
+eval "$(ssh-agent -s)"
+
+# Add your key
+ssh-add ~/.ssh/id_ed25519
+
+# Verify
+ssh-add -l
+```
+
+#### SSH socket not found
+
+**Symptom:** `SSH_AUTH_SOCK path not found at /path/to/socket`
+
+**Cause:** The SSH agent is not running or the socket path is incorrect.
+
+**Solution:**
+
+```bash
+# Check if agent is running
+ps aux | grep ssh-agent
+
+# Restart the agent
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+```
+
+#### Podman macOS SSH issues
+
+**Symptom:** Git clone fails with `Permission denied (publickey)` even though keys are loaded.
+
+**Cause:** Podman on macOS runs in a VM. Launchd-managed sockets (paths containing `/private/tmp/com.apple.launchd.*`) are not accessible from the VM.
+
+**Solution:**
+
+Create a dedicated SSH agent socket at a normal filesystem path:
+
+```bash
+# Stop any existing agents
+killall ssh-agent 2>/dev/null
+
+# Start agent with dedicated socket
+ssh-agent -a ~/.llxprt/ssh-agent.sock
+export SSH_AUTH_SOCK=~/.llxprt/ssh-agent.sock
+
+# Add keys
+ssh-add ~/.ssh/id_ed25519
+
+# Test
+ssh-add -l
+
+# Now run llxprt
+llxprt --sandbox-engine podman --sandbox-profile-load dev
+```
+
+### Sandbox Profile Issues
+
+#### Profile not found
+
+**Symptom:** `Profile 'custom' not found`
+
+**Solution:**
+
+```bash
+# Check existing profiles
+ls ~/.llxprt/sandboxes/
+
+# Create the profile if missing
+echo '{"engine":"auto"}' > ~/.llxprt/sandboxes/custom.json
+```
+
+#### Invalid profile JSON
+
+**Symptom:** `Failed to parse sandbox profile`
+
+**Solution:** Validate the JSON syntax:
+
+```bash
+# Check syntax
+cat ~/.llxprt/sandboxes/custom.json | jq .
+```
+
+If `jq` reports errors, fix the JSON and try again.
+
+#### Operation not permitted
+
+**Symptom:** `Operation not permitted` when running commands in sandbox
+
+**Cause:** The operation requires access outside the sandbox boundaries.
+
+**Solutions:**
+
+- Use a less restrictive profile (`dev` instead of `safe`)
+- Add the required path to `mounts` in the profile
+- Disable network restrictions if network access is needed
+
+### Resource Limits
+
+#### Container killed (OOM)
+
+**Symptom:** Container exits unexpectedly, possibly with `OOMKilled` status.
+
+**Cause:** The process exceeded the memory limit in the profile.
+
+**Solution:** Increase the memory limit in your profile:
+
+```json
+{
+  "resources": { "memory": "8g" }
+}
+```
+
+#### Process limit reached
+
+**Symptom:** Commands fail with `fork: Resource temporarily unavailable`
+
+**Cause:** The container hit the process count limit (`pids` in profile).
+
+**Solution:** Increase the process limit:
+
+```json
+{
+  "resources": { "pids": 512 }
+}
+```
+
+### Debugging Sandbox Issues
+
+#### Enable debug output
+
+```bash
+DEBUG=1 llxprt --sandbox "your prompt here"
+```
+
+#### Inspect the sandbox environment
+
+```bash
+# Check sandbox environment variables
+llxprt --sandbox "run shell command: env | grep -E 'LLXPRT|SANDBOX'"
+
+# Check credential proxy socket
+llxprt --sandbox "run shell command: ls -la $LLXPRT_CREDENTIAL_SOCKET"
+
+# Check mounts
+llxprt --sandbox "run shell command: mount | grep workspace"
+
+# Test network access
+llxprt --sandbox "run shell command: curl -I https://example.com 2>&1"
+```
+
+#### Run container manually for debugging
+
+```bash
+# Find the image
+docker images | grep llxprt-code-sandbox
+
+# Run interactively
+docker run -it --rm \
+  -v $(pwd):/workspace \
+  -v ~/.llxprt:/home/node/.llxprt \
+  llxprt-code-sandbox:latest \
+  bash
+
+# Inside container, debug
+env | grep LLXPRT
+ls -la /workspace
+```
 
 ## Debugging Tips
 

@@ -21,6 +21,7 @@ Essential guides for daily use:
 - **[Provider Configuration](./cli/providers.md):** Configure and manage LLM providers (Anthropic, OpenAI, Gemini, and more).
 - **[Authentication](./cli/authentication.md):** Set up authentication for various providers.
 - **[Profiles](./cli/profiles.md):** Save and manage configurations for different contexts.
+- **[Sandboxing](./sandbox.md):** Protect your system with container-based isolation.
 - **[Subagents](./subagents.md):** Create and manage specialized AI assistants tied to profiles.
 
 ### Advanced Topics
