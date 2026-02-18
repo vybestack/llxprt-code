@@ -1613,5 +1613,87 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       // Should try each backend exactly once (no infinite loop)
       expect(totalAttempts).toBe(3);
     });
+
+    it('should abort and throw error if chunks were yielded before immediate failover error', async () => {
+      // This tests the partial-yield hazard fix: if we already sent chunks to the
+      // caller before getting a 429, we should NOT failover to another backend
+      // (which would produce a mixed response), but instead propagate the error.
+      let callCount = 0;
+
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          callCount++;
+          if (callCount === 1) {
+            // Backend 1: yield a chunk, then throw 429
+            yield { type: 'text' as const, content: 'partial-response' };
+            const error = new Error('Rate limited mid-stream') as Error & {
+              status: number;
+            };
+            error.status = 429;
+            throw error;
+          }
+          // Backend 2: would succeed, but should never be called
+          yield { type: 'text' as const, content: 'backend2-response' };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-partial-yield-hazard',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'backend1',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-1',
+          },
+          {
+            name: 'backend2',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-2',
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+      };
+
+      const chunks: IContent[] = [];
+      let thrownError: Error | null = null;
+      try {
+        for await (const chunk of provider.generateChatCompletion(options)) {
+          chunks.push(chunk);
+        }
+      } catch (e) {
+        thrownError = e as Error;
+      }
+
+      // Should have thrown an error (not completed successfully)
+      expect(thrownError).not.toBeNull();
+      expect(thrownError?.message).toMatch(/rate limited/i);
+
+      // Should have received the partial chunk before the error
+      expect(chunks).toHaveLength(1);
+      expect(chunks[0]).toEqual({
+        type: 'text',
+        content: 'partial-response',
+      });
+
+      // Backend 2 should NOT have been called (no mixed response)
+      expect(callCount).toBe(1);
+    });
   });
 });

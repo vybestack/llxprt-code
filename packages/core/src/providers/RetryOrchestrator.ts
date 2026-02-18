@@ -271,9 +271,29 @@ export class RetryOrchestrator implements IProvider {
           );
         } else {
           // No timeout - yield chunks as they arrive (true streaming)
-          // Let retry logic handle mid-stream errors
-          for await (const chunk of stream) {
-            yield chunk;
+          // Track if any chunks were yielded - if so, we can't retry safely
+          // (would produce a mixed response from partial + retry)
+          let chunksYielded = false;
+          try {
+            for await (const chunk of stream) {
+              chunksYielded = true;
+              yield chunk;
+            }
+          } catch (streamError) {
+            // If we already yielded chunks, we can't retry - caller has partial response
+            // Retrying would produce mixed content from two different attempts
+            if (chunksYielded) {
+              this.logger.debug(
+                () =>
+                  `Error after yielding chunks - cannot retry (would produce mixed response)`,
+              );
+              // Mark error to prevent retry in outer catch
+              (
+                streamError as Error & { _chunksYieldedBeforeError: boolean }
+              )._chunksYieldedBeforeError = true;
+            }
+            // Let outer catch handle (will skip retry if marked)
+            throw streamError;
           }
         }
 
@@ -284,6 +304,15 @@ export class RetryOrchestrator implements IProvider {
       } catch (error) {
         // Check for abort
         if (error instanceof Error && error.name === 'AbortError') {
+          throw error;
+        }
+
+        // If chunks were already yielded, we can't retry - would produce mixed response
+        // Propagate the error immediately
+        if (
+          (error as Error & { _chunksYieldedBeforeError?: boolean })
+            ._chunksYieldedBeforeError
+        ) {
           throw error;
         }
 

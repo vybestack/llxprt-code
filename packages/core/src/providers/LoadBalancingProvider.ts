@@ -764,7 +764,11 @@ export class LoadBalancingProvider implements IProvider {
     profileName: string,
   ): AsyncGenerator<IContent> {
     if (!timeoutMs || timeoutMs <= 0) {
-      yield* iterator;
+      // Use for-await instead of yield* to ensure proper error propagation
+      // yield* can have subtle issues with error propagation in async generators
+      for await (const chunk of iterator) {
+        yield chunk;
+      }
       return;
     }
 
@@ -1085,6 +1089,9 @@ export class LoadBalancingProvider implements IProvider {
         attempts++;
         // Record request start (Phase 5, Issue #489)
         const startTime = this.recordRequestStart(subProfile.name);
+        // Track if any chunks were yielded to detect partial-stream scenarios
+        // Declared outside try block so it's accessible in catch block
+        let chunksYielded = false;
         try {
           this.logger.debug(
             () =>
@@ -1114,6 +1121,7 @@ export class LoadBalancingProvider implements IProvider {
           // Collect chunks for token extraction (Phase 4, Issue #489)
           const chunks: IContent[] = [];
           for await (const chunk of iterator) {
+            chunksYielded = true;
             chunks.push(chunk);
             yield chunk;
           }
@@ -1140,6 +1148,22 @@ export class LoadBalancingProvider implements IProvider {
           // Check for immediate failover errors (429, 401, 402, 403) - Issue #902
           // These skip retry and immediately failover to next backend
           if (this.isImmediateFailoverError(error)) {
+            // If we already yielded chunks, don't failover - we'd produce a mixed response
+            // (partial from this backend + full from next). Propagate error instead.
+            if (chunksYielded) {
+              this.logger.debug(
+                () =>
+                  `[LB:failover] ${subProfile.name} returned immediate failover error after yielding chunks, aborting stream`,
+              );
+              this.recordRequestFailure(
+                subProfile.name,
+                startTime,
+                error as Error,
+              );
+              this.recordBackendFailure(subProfile.name, error as Error);
+              throw error;
+            }
+
             this.logger.debug(
               () =>
                 `[LB:failover] ${subProfile.name} returned immediate failover error (${getErrorStatus(error)}), skipping retries`,
