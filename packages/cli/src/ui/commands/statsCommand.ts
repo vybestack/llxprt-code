@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  * @plan PLAN-20250909-TOKTRACK.P06
+ * @plan PLAN-20260214-SESSIONBROWSER.P24
  */
 
 import { MessageType, HistoryItemStats } from '../types.js';
@@ -21,6 +22,8 @@ import {
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { formatSessionSection } from './formatSessionSection.js';
+import type { SessionRecordingMetadata } from '../types/SessionRecordingMetadata.js';
 
 const logger = new DebugLogger('llxprt:cli:stats');
 
@@ -99,7 +102,7 @@ async function fetchApiKeyProviderQuota(
   );
 }
 
-function defaultSessionView(context: CommandContext): void {
+async function defaultSessionView(context: CommandContext): Promise<void> {
   const now = new Date();
   const { sessionStartTime } = context.session.stats;
   if (!sessionStartTime) {
@@ -120,6 +123,11 @@ function defaultSessionView(context: CommandContext): void {
   };
 
   context.ui.addItem(statsItem, Date.now());
+
+  // Session recording section (stub - result currently discarded)
+  // @plan PLAN-20260214-SESSIONBROWSER.P24
+  const _sessionMetadata: SessionRecordingMetadata | null = null;
+  await formatSessionSection(_sessionMetadata);
 }
 
 export const statsCommand: SlashCommand = {
@@ -128,16 +136,16 @@ export const statsCommand: SlashCommand = {
   description:
     'check session stats. Usage: /stats [session|model|tools|cache|buckets|quota|lb]',
   kind: CommandKind.BUILT_IN,
-  action: (context: CommandContext) => {
-    defaultSessionView(context);
+  action: async (context: CommandContext) => {
+    await defaultSessionView(context);
   },
   subCommands: [
     {
       name: 'session',
       description: 'Show session-specific usage statistics.',
       kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext) => {
-        defaultSessionView(context);
+      action: async (context: CommandContext) => {
+        await defaultSessionView(context);
       },
     },
     {

@@ -143,6 +143,13 @@ export interface UIActions {
   }) => void;
   closeModelsDialog: () => void;
 
+  /**
+   * Session browser dialog
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  openSessionBrowserDialog: () => void;
+  closeSessionBrowserDialog: () => void;
+
   // Workspace migration dialog
   onWorkspaceMigrationDialogOpen: () => void;
   onWorkspaceMigrationDialogClose: () => void;
