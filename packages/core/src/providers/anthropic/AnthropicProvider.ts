@@ -435,6 +435,14 @@ export class AnthropicProvider extends BaseProvider {
           maxOutputTokens: 32000,
         },
         {
+          id: 'claude-sonnet-4-6',
+          name: 'Claude Sonnet 4.6',
+          provider: this.name,
+          supportedToolFormats: ['anthropic'],
+          contextWindow: 400000,
+          maxOutputTokens: 64000,
+        },
+        {
           id: 'claude-sonnet-4-5-20250929',
           name: 'Claude Sonnet 4.5',
           provider: this.name,
@@ -576,6 +584,14 @@ export class AnthropicProvider extends BaseProvider {
         supportedToolFormats: ['anthropic'],
         contextWindow: 500000,
         maxOutputTokens: 32000,
+      },
+      {
+        id: 'claude-sonnet-4-6',
+        name: 'Claude Sonnet 4.6',
+        provider: this.name,
+        supportedToolFormats: ['anthropic'],
+        contextWindow: 400000,
+        maxOutputTokens: 64000,
       },
       {
         id: 'claude-sonnet-4-5-20250929',
