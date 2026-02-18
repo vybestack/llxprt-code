@@ -142,15 +142,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const pendingLargePastesRef = useRef<Map<string, string>>(new Map());
 
-  const [dirs, setDirs] = useState<readonly string[]>(
-    config.getWorkspaceContext().getDirectories(),
-  );
-  const dirsChanged = config.getWorkspaceContext().getDirectories();
-  useEffect(() => {
-    if (dirs.length !== dirsChanged.length) {
-      setDirs(dirsChanged);
-    }
-  }, [dirs.length, dirsChanged]);
   const [reverseSearchActive, setReverseSearchActive] = useState(false);
   const [textBeforeReverseSearch, setTextBeforeReverseSearch] = useState('');
   const [cursorPosition, setCursorPosition] = useState<[number, number]>([
@@ -161,7 +152,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const completion = useCommandCompletion(
     buffer,
-    dirs,
     config.getTargetDir(),
     slashCommands,
     commandContext,
@@ -603,7 +593,22 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                 ? 0 // Default to the first if none is active
                 : completion.activeSuggestionIndex;
             if (targetIndex < completion.suggestions.length) {
-              completion.handleAutocomplete(targetIndex);
+              // Check if this is Enter key and command has autoExecute
+              const isEnterKey = key.name === 'return';
+              const command = completion.getCommandFromSuggestion(targetIndex);
+              const shouldAutoExecute = isEnterKey && command?.autoExecute;
+
+              const completedText = completion.handleAutocomplete(targetIndex);
+
+              // If autoExecute is true, also submit the command
+              if (shouldAutoExecute && completedText !== undefined) {
+                // Submit the text returned by handleAutocomplete rather
+                // than reading buffer.text, which would be stale here
+                // (buffer is a useMemo snapshot from the current render).
+                setTimeout(() => {
+                  handleSubmit(completedText);
+                }, 0);
+              }
             }
           }
           return;

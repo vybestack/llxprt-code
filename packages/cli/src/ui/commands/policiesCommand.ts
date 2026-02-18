@@ -142,6 +142,7 @@ export const policiesCommand: SlashCommand = {
   name: 'policies',
   description: 'display active policy rules and their priorities',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: (context: CommandContext, args: string): MessageActionReturn | void =>
     handlePoliciesCommand(context, args),
 };

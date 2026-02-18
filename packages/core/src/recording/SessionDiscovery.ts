@@ -67,7 +67,7 @@ async function readFirstLineFromFile(
     if (newlineIdx < 0 && bytesRead === buf.length) {
       await fh.close();
       fh = undefined;
-      return readSessionHeader(filePath);
+      return await readSessionHeader(filePath);
     }
 
     const firstLine = newlineIdx >= 0 ? chunk.slice(0, newlineIdx) : chunk;

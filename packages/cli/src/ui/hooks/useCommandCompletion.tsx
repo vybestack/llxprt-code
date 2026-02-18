@@ -43,13 +43,13 @@ export interface UseCommandCompletionReturn {
   resetCompletionState: () => void;
   navigateUp: () => void;
   navigateDown: () => void;
-  handleAutocomplete: (indexToUse: number) => void;
+  handleAutocomplete: (indexToUse: number) => string | undefined;
   promptCompletion: PromptCompletion;
+  getCommandFromSuggestion: (suggestionIndex: number) => SlashCommand | null;
 }
 
 export function useCommandCompletion(
   buffer: TextBuffer,
-  dirs: readonly string[],
   cwd: string,
   slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
@@ -57,6 +57,11 @@ export function useCommandCompletion(
   shellModeActive: boolean,
   config?: Config,
 ): UseCommandCompletionReturn {
+  const dirs = useMemo(
+    () => config?.getWorkspaceContext().getDirectories() ?? [cwd],
+    [config, cwd],
+  );
+
   const {
     suggestions,
     activeSuggestionIndex,
@@ -204,9 +209,9 @@ export function useCommandCompletion(
   ]);
 
   const handleAutocomplete = useCallback(
-    (indexToUse: number) => {
+    (indexToUse: number): string | undefined => {
       if (indexToUse < 0 || indexToUse >= suggestions.length) {
-        return;
+        return undefined;
       }
       const suggestion = suggestions[indexToUse].value;
 
@@ -219,7 +224,7 @@ export function useCommandCompletion(
       }
 
       if (start === -1 || end === -1) {
-        return;
+        return undefined;
       }
 
       let suggestionText = suggestion;
@@ -243,11 +248,17 @@ export function useCommandCompletion(
         suggestionText += ' ';
       }
 
-      buffer.replaceRangeByOffset(
-        logicalPosToOffset(buffer.lines, cursorRow, start),
-        logicalPosToOffset(buffer.lines, cursorRow, end),
-        suggestionText,
-      );
+      const startOffset = logicalPosToOffset(buffer.lines, cursorRow, start);
+      const endOffset = logicalPosToOffset(buffer.lines, cursorRow, end);
+
+      const resultingText =
+        buffer.text.substring(0, startOffset) +
+        suggestionText +
+        buffer.text.substring(endOffset);
+
+      buffer.replaceRangeByOffset(startOffset, endOffset, suggestionText);
+
+      return resultingText;
     },
     [
       cursorRow,
@@ -275,6 +286,7 @@ export function useCommandCompletion(
       navigateUp: slashCompletionResults.navigateUp,
       navigateDown: slashCompletionResults.navigateDown,
       handleAutocomplete: slashCompletionResults.handleAutocomplete,
+      getCommandFromSuggestion: slashCompletionResults.getCommandFromSuggestion,
       promptCompletion,
     };
   }
@@ -293,6 +305,7 @@ export function useCommandCompletion(
     navigateUp,
     navigateDown,
     handleAutocomplete,
+    getCommandFromSuggestion: () => null, // Not in slash mode, so no command mapping
     promptCompletion,
   };
 }

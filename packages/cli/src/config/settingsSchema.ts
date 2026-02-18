@@ -766,6 +766,16 @@ export const SETTINGS_SCHEMA = {
           'Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.',
         showInDialog: true,
       },
+      jitContextEnabled: {
+        type: 'boolean',
+        label: 'JIT Context Enabled',
+        category: 'UI',
+        requiresRestart: false,
+        default: true,
+        description:
+          'Enable Just-In-Time (JIT) loading of subdirectory-specific context (LLXPRT.md files) on demand when tools access files. When enabled, the system automatically loads context from subdirectories as needed.',
+        showInDialog: true,
+      },
       contextFileName: {
         type: 'string',
         label: 'Context File Name',
@@ -1604,15 +1614,7 @@ export const SETTINGS_SCHEMA = {
       'Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., "prd" to match "production"). When disabled, only exact prefix matches are shown.',
     showInDialog: true,
   },
-  debugKeystrokeLogging: {
-    type: 'boolean',
-    label: 'Debug Keystroke Logging',
-    category: 'General',
-    requiresRestart: false,
-    default: false,
-    description: 'Enable debug logging of keystrokes to the console.',
-    showInDialog: true,
-  },
+
   customWittyPhrases: {
     type: 'array',
     label: 'Custom Witty Phrases',

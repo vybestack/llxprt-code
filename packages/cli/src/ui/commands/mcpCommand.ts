@@ -487,6 +487,7 @@ const listCommand: SlashCommand = {
   name: 'list',
   description: 'List configured MCP servers and tools',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: async (context: CommandContext, args: string) => {
     const lowerCaseArgs = args.toLowerCase().split(/\s+/).filter(Boolean);
 
@@ -512,6 +513,7 @@ const refreshCommand: SlashCommand = {
   name: 'refresh',
   description: 'Restarts MCP servers.',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: async (
     context: CommandContext,
   ): Promise<SlashCommandActionReturn> => {

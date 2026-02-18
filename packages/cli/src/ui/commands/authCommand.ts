@@ -651,6 +651,7 @@ export const authCommand: SlashCommand = {
   name: 'auth',
   description: 'Manage OAuth authentication for providers',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   schema: authCommandSchema,
   action: async (context, args) => {
     const runtime = getRuntimeApi();

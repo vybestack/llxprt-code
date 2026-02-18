@@ -17,6 +17,7 @@ export const docsCommand: SlashCommand = {
   name: 'docs',
   description: 'open full LLxprt Code documentation in your browser',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: async (context: CommandContext): Promise<void> => {
     const docsUrl =
       'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';

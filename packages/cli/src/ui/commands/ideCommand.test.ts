@@ -82,6 +82,36 @@ describe('ideCommand', () => {
     expect(command?.subCommands?.[2].name).toBe('install');
   });
 
+  it('should set autoExecute: true on all subcommands when disconnected', () => {
+    vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
+    vi.mocked(mockConfig.getIdeClient).mockReturnValue({
+      getCurrentIde: () => IDE_DEFINITIONS.vscode,
+      getDetectedIdeDisplayName: () => 'VS Code',
+      getConnectionStatus: () => ({
+        status: core.IDEConnectionStatus.Disconnected,
+      }),
+    } as ReturnType<Config['getIdeClient']>);
+    const command = ideCommand(mockConfig);
+    for (const sub of command?.subCommands ?? []) {
+      expect(sub.autoExecute).toBe(true);
+    }
+  });
+
+  it('should set autoExecute: true on all subcommands when connected', () => {
+    vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
+    vi.mocked(mockConfig.getIdeClient).mockReturnValue({
+      getCurrentIde: () => IDE_DEFINITIONS.vscode,
+      getDetectedIdeDisplayName: () => 'VS Code',
+      getConnectionStatus: () => ({
+        status: core.IDEConnectionStatus.Connected,
+      }),
+    } as ReturnType<Config['getIdeClient']>);
+    const command = ideCommand(mockConfig);
+    for (const sub of command?.subCommands ?? []) {
+      expect(sub.autoExecute).toBe(true);
+    }
+  });
+
   it('should show disable command when connected', () => {
     vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
     vi.mocked(mockConfig.getIdeClient).mockReturnValue({

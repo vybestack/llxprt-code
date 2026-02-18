@@ -74,6 +74,52 @@ class StubProvider implements IProvider {
   }
 }
 
+class FinishReasonProvider implements IProvider {
+  name = 'finish-reason-provider';
+  private tokenUsage = {
+    promptTokens: 100,
+    completionTokens: 50,
+    totalTokens: 150,
+    cachedTokens: 10,
+  };
+
+  constructor(private finishReason: string) {}
+
+  async getModels(): Promise<never[]> {
+    return [];
+  }
+
+  getDefaultModel(): string {
+    return 'stub-model';
+  }
+
+  getServerTools(): string[] {
+    return [];
+  }
+
+  async invokeServerTool(
+    _toolName: string,
+    _params: unknown,
+    _config?: unknown,
+  ): Promise<unknown> {
+    return {};
+  }
+
+  async *generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
+    void options;
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Test response' }],
+      metadata: {
+        usage: this.tokenUsage,
+        finishReason: this.finishReason,
+      },
+    } as IContent;
+  }
+}
+
 class ErrorProvider implements IProvider {
   name = 'error-provider';
 
@@ -388,6 +434,99 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       // Bug: Before fix, this would be 'stub-model' (the default)
       // After fix: should be 'explicitly-requested-model' (the resolved model)
       expect(call[1].model).toBe('explicitly-requested-model');
+    });
+  });
+
+  describe('finish_reasons in telemetry', () => {
+    it('should populate finish_reasons when provider metadata includes finishReason (logResponseStream path)', async () => {
+      const provider = new FinishReasonProvider('stop');
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(true); // Logging ENABLED - uses logResponseStream path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume
+      }
+
+      expect(loggers.logApiResponse).toHaveBeenCalled();
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
+      expect(call[1].finish_reasons).toEqual(['stop']);
+    });
+
+    it('should default finish_reasons to [] when no finishReason in metadata', async () => {
+      const provider = new StubProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(true);
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume
+      }
+
+      expect(loggers.logApiResponse).toHaveBeenCalled();
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
+      expect(call[1].finish_reasons).toEqual([]);
+    });
+
+    it('should populate finish_reasons via processStreamForMetrics path (logging disabled)', async () => {
+      const provider = new FinishReasonProvider('length');
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // Logging disabled - uses processStreamForMetrics
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume
+      }
+
+      expect(loggers.logApiResponse).toHaveBeenCalled();
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
+      expect(call[1].finish_reasons).toEqual(['length']);
     });
   });
 });

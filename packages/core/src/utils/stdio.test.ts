@@ -66,4 +66,88 @@ describe('stdio utils', () => {
 
     cleanup();
   });
+
+  describe('stdio hardening (EPIPE resilience)', () => {
+    it('createInkStdio attaches error handlers to stdout and stderr', () => {
+      // Call createInkStdio to trigger hardening
+      createInkStdio();
+
+      // Check that error handlers are attached
+      const stdoutListeners = process.stdout.listeners('error');
+      const stderrListeners = process.stderr.listeners('error');
+
+      expect(stdoutListeners.length).toBeGreaterThan(0);
+      expect(stderrListeners.length).toBeGreaterThan(0);
+    });
+
+    it('EPIPE errors on stdout do not crash the process', () => {
+      // Call createInkStdio to trigger hardening
+      createInkStdio();
+
+      // Create an EPIPE error
+      const epipeError = new Error('write EPIPE') as NodeJS.ErrnoException;
+      epipeError.code = 'EPIPE';
+
+      // This should not throw
+      expect(() => {
+        process.stdout.emit('error', epipeError);
+      }).not.toThrow();
+    });
+
+    it('EPIPE errors on stderr do not crash the process', () => {
+      // Call createInkStdio to trigger hardening
+      createInkStdio();
+
+      // Create an EPIPE error
+      const epipeError = new Error('write EPIPE') as NodeJS.ErrnoException;
+      epipeError.code = 'EPIPE';
+
+      // This should not throw
+      expect(() => {
+        process.stderr.emit('error', epipeError);
+      }).not.toThrow();
+    });
+
+    it('non-EPIPE errors on stdout are logged', () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation();
+      // Call createInkStdio to trigger hardening
+      createInkStdio();
+
+      // Create a non-EPIPE error
+      const otherError = new Error('other error') as NodeJS.ErrnoException;
+      otherError.code = 'EOTHER';
+
+      // Emit the error
+      process.stdout.emit('error', otherError);
+
+      // Should have been logged
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('stdout error'),
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('non-EPIPE errors on stderr are logged', () => {
+      const stderrWriteSpy = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation(() => true);
+      // Call createInkStdio to trigger hardening
+      createInkStdio();
+
+      // Create a non-EPIPE error
+      const otherError = new Error('other error') as NodeJS.ErrnoException;
+      otherError.code = 'EOTHER';
+
+      // Emit the error
+      process.stderr.emit('error', otherError);
+
+      // Should have been logged via process.stderr.write (not console.warn to avoid infinite loop)
+      expect(stderrWriteSpy).toHaveBeenCalledWith(
+        expect.stringContaining('stderr error'),
+      );
+
+      stderrWriteSpy.mockRestore();
+    });
+  });
 });

@@ -458,6 +458,13 @@
           "markdownDescription": "Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.\n\n- Category: `UI`\n- Requires restart: `no`",
           "type": "number"
         },
+        "jitContextEnabled": {
+          "title": "JIT Context Enabled",
+          "description": "Enable Just-In-Time (JIT) loading of subdirectory-specific context (LLXPRT.md files) on demand when tools access files. When enabled, the system automatically loads context from subdirectories as needed.",
+          "markdownDescription": "Enable Just-In-Time (JIT) loading of subdirectory-specific context (LLXPRT.md files) on demand when tools access files. When enabled, the system automatically loads context from subdirectories as needed.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
+          "default": true,
+          "type": "boolean"
+        },
         "contextFileName": {
           "title": "Context File Name",
           "description": "The name of the context file or files to load into memory. Accepts either a single string or an array of strings.",
@@ -1079,13 +1086,6 @@
       "description": "Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., \"prd\" to match \"production\"). When disabled, only exact prefix matches are shown.",
       "markdownDescription": "Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., \"prd\" to match \"production\"). When disabled, only exact prefix matches are shown.\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
       "default": true,
-      "type": "boolean"
-    },
-    "debugKeystrokeLogging": {
-      "title": "Debug Keystroke Logging",
-      "description": "Enable debug logging of keystrokes to the console.",
-      "markdownDescription": "Enable debug logging of keystrokes to the console.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `false`",
-      "default": false,
       "type": "boolean"
     },
     "customWittyPhrases": {

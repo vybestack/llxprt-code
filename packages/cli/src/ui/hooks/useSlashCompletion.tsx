@@ -84,7 +84,8 @@ export interface UseSlashCompletionReturn {
   resetCompletionState: () => void;
   navigateUp: () => void;
   navigateDown: () => void;
-  handleAutocomplete: (indexToUse: number) => void;
+  handleAutocomplete: (indexToUse: number) => string | undefined;
+  getCommandFromSuggestion: (suggestionIndex: number) => SlashCommand | null;
 }
 
 const debugLogger = new DebugLogger('llxprt:ui:slash-completion');
@@ -129,6 +130,9 @@ export function useSlashCompletion(
 
   // Track the previous input to avoid unnecessary re-computations
   const previousInput = useRef<string>('');
+
+  // Track mapping from suggestion values to their source commands for autoExecute
+  const suggestionCommandMapRef = useRef<Map<string, SlashCommand>>(new Map());
 
   const cursorRow = buffer.cursor[0];
   const cursorCol = buffer.cursor[1];
@@ -463,6 +467,13 @@ export function useSlashCompletion(
           value: cmd.name,
           description: cmd.description,
         }));
+
+        // Update command mapping for autoExecute support
+        const newCommandMap = new Map<string, SlashCommand>();
+        potentialSuggestions.forEach((cmd) => {
+          newCommandMap.set(cmd.name, cmd);
+        });
+        suggestionCommandMapRef.current = newCommandMap;
 
         setSuggestions(finalSuggestions);
         setShowSuggestions(finalSuggestions.length > 0);
@@ -834,15 +845,26 @@ export function useSlashCompletion(
     setVisibleStartIndex,
   ]);
 
+  const getCommandFromSuggestion = useCallback(
+    (suggestionIndex: number): SlashCommand | null => {
+      if (suggestionIndex < 0 || suggestionIndex >= suggestions.length) {
+        return null;
+      }
+      const suggestion = suggestions[suggestionIndex];
+      return suggestionCommandMapRef.current.get(suggestion.value) || null;
+    },
+    [suggestions],
+  );
+
   const handleAutocomplete = useCallback(
-    (indexToUse: number) => {
+    (indexToUse: number): string | undefined => {
       if (indexToUse < 0 || indexToUse >= suggestions.length) {
-        return;
+        return undefined;
       }
       const suggestion = suggestions[indexToUse].value;
 
       if (completionStart.current === -1 || completionEnd.current === -1) {
-        return;
+        return undefined;
       }
 
       const isSlash = (buffer.lines[cursorRow] || '')[commandIndex] === '/';
@@ -860,11 +882,25 @@ export function useSlashCompletion(
 
       suggestionText += ' ';
 
-      buffer.replaceRangeByOffset(
-        logicalPosToOffset(buffer.lines, cursorRow, completionStart.current),
-        logicalPosToOffset(buffer.lines, cursorRow, completionEnd.current),
-        suggestionText,
+      const startOffset = logicalPosToOffset(
+        buffer.lines,
+        cursorRow,
+        completionStart.current,
       );
+      const endOffset = logicalPosToOffset(
+        buffer.lines,
+        cursorRow,
+        completionEnd.current,
+      );
+
+      // Compute the resulting text before dispatching (buffer.text will be
+      // stale in any deferred callback because it is derived via useMemo).
+      const resultingText =
+        buffer.text.substring(0, startOffset) +
+        suggestionText +
+        buffer.text.substring(endOffset);
+
+      buffer.replaceRangeByOffset(startOffset, endOffset, suggestionText);
 
       // Clear current suggestions so we don't re-apply stale entries while
       // the resolver recomputes the next argument context.
@@ -874,6 +910,8 @@ export function useSlashCompletion(
       setVisibleStartIndex(0);
       setActiveHint('');
       setIsLoadingSuggestions(false);
+
+      return resultingText;
     },
     [
       cursorRow,
@@ -903,5 +941,6 @@ export function useSlashCompletion(
     navigateUp,
     navigateDown,
     handleAutocomplete,
+    getCommandFromSuggestion,
   };
 }

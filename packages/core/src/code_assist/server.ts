@@ -118,23 +118,17 @@ export class CodeAssistServer implements ContentGenerator {
   async onboardUser(
     req: OnboardUserRequest,
   ): Promise<LongRunningOperationResponse> {
-    return await this.requestPost<LongRunningOperationResponse>(
-      'onboardUser',
-      req,
-    );
+    return this.requestPost<LongRunningOperationResponse>('onboardUser', req);
   }
 
   async loadCodeAssist(
     req: LoadCodeAssistRequest,
   ): Promise<LoadCodeAssistResponse> {
-    return await this.requestPost<LoadCodeAssistResponse>(
-      'loadCodeAssist',
-      req,
-    );
+    return this.requestPost<LoadCodeAssistResponse>('loadCodeAssist', req);
   }
 
   async getCodeAssistGlobalUserSetting(): Promise<CodeAssistGlobalUserSettingResponse> {
-    return await this.requestGet<CodeAssistGlobalUserSettingResponse>(
+    return this.requestGet<CodeAssistGlobalUserSettingResponse>(
       'getCodeAssistGlobalUserSetting',
     );
   }
@@ -142,7 +136,7 @@ export class CodeAssistServer implements ContentGenerator {
   async setCodeAssistGlobalUserSetting(
     req: SetCodeAssistGlobalUserSettingRequest,
   ): Promise<CodeAssistGlobalUserSettingResponse> {
-    return await this.requestPost<CodeAssistGlobalUserSettingResponse>(
+    return this.requestPost<CodeAssistGlobalUserSettingResponse>(
       'setCodeAssistGlobalUserSetting',
       req,
     );

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'vitest';
 import EventEmitter from 'events';
 import { Readable } from 'stream';
 import { type ChildProcess } from 'child_process';
@@ -371,6 +379,118 @@ describe('ShellExecutionService', () => {
       // was not blocked by the long chain of data processing promises,
       // which is the desired behavior on abort.
       expect(result.aborted).toBe(true);
+    });
+  });
+
+  describe('Inactivity Timeout', () => {
+    it('should reset inactivity timer when output is received', async () => {
+      const abortController = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'test command',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+        {
+          ...defaultShellConfig,
+          inactivityTimeoutMs: 100, // 100ms for fast test
+        },
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Emit output every 50ms (within the 100ms inactivity window)
+      const outputInterval = setInterval(() => {
+        if (mockPtyProcess.onData.mock.calls[0]) {
+          mockPtyProcess.onData.mock.calls[0][0]('output\n');
+        }
+      }, 50);
+
+      // Wait 250ms (should reset timer multiple times)
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      clearInterval(outputInterval);
+
+      // Command exits normally
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+      const result = await handle.result;
+
+      // Command should complete successfully, not be killed by inactivity timeout
+      expect(result.exitCode).toBe(0);
+      expect(result.aborted).toBe(false);
+    });
+
+    it('should kill command when no output for inactivityTimeout duration', async () => {
+      const abortController = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'hanging command',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+        {
+          ...defaultShellConfig,
+          inactivityTimeoutMs: 100, // 100ms for fast test
+        },
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Emit one line of output
+      mockPtyProcess.onData.mock.calls[0][0]('initial output\n');
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Then go silent for longer than inactivity timeout
+      // Wait for the timeout to trigger and kill signal to be sent
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Simulate the PTY exiting after being killed
+      mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 1, signal: 15 });
+
+      const result = await handle.result;
+
+      // Command should be terminated by SIGTERM due to inactivity
+      expect(result.signal).toBe(15); // SIGTERM
+      expect(result.inactivityTimedOut).toBe(true);
+      // Verify SIGTERM was sent
+      expect(mockProcessKill).toHaveBeenCalledWith(-12345, 'SIGTERM');
+    });
+
+    it('should handle inactivity timeout independently from total timeout', async () => {
+      const abortController = new AbortController();
+      const handle = await ShellExecutionService.execute(
+        'test command',
+        '/test/dir',
+        onOutputEventMock,
+        abortController.signal,
+        true,
+        {
+          ...defaultShellConfig,
+          inactivityTimeoutMs: 50, // 50ms inactivity timeout
+        },
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Set up a total timeout of 200ms
+      const totalTimeout = setTimeout(() => abortController.abort(), 200);
+
+      // Emit output at intervals shorter than inactivity timeout
+      mockPtyProcess.onData.mock.calls[0][0]('output 1\n');
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      mockPtyProcess.onData.mock.calls[0][0]('output 2\n');
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      mockPtyProcess.onData.mock.calls[0][0]('output 3\n');
+
+      // Now go silent - inactivity timeout should fire before total timeout (at ~110ms)
+      const result = await handle.result;
+      clearTimeout(totalTimeout);
+
+      // Should be killed by inactivity timeout, not total timeout
+      expect(result.aborted).toBe(true);
+      expect(result.inactivityTimedOut).toBe(true);
+      expect(mockProcessKill).toHaveBeenCalled();
     });
   });
 
@@ -1262,6 +1382,241 @@ describe('ShellExecutionService child_process fallback', () => {
   });
 });
 
+describe('Shell Environment Sanitization', () => {
+  describe('sanitizeEnvironment', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      // Reset process.env before each test
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it('should only forward allowlisted vars in sandbox/CI mode', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        HOME: '/home/user',
+        API_KEY: 'test-api-key-placeholder',
+        AWS_SECRET_ACCESS_KEY: 'test-aws-placeholder',
+        GITHUB_TOKEN: 'test-token-placeholder',
+        SECRET_PASSWORD: 'test-password-placeholder',
+        DATABASE_PASSWORD: 'test-dbpass-placeholder',
+        PRIVATE_KEY: 'test-privkey-placeholder',
+        SAFE_VAR: 'safe-value',
+        NODE_ENV: 'test',
+        EDITOR: 'vim',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // Built-in allowlisted vars should be preserved
+      expect(sanitized.PATH).toBe('/usr/bin');
+      expect(sanitized.HOME).toBe('/home/user');
+
+      // Everything not on the allowlist should be excluded
+      expect(sanitized.API_KEY).toBeUndefined();
+      expect(sanitized.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+      expect(sanitized.GITHUB_TOKEN).toBeUndefined();
+      expect(sanitized.SECRET_PASSWORD).toBeUndefined();
+      expect(sanitized.DATABASE_PASSWORD).toBeUndefined();
+      expect(sanitized.PRIVATE_KEY).toBeUndefined();
+      expect(sanitized.SAFE_VAR).toBeUndefined();
+      expect(sanitized.NODE_ENV).toBeUndefined();
+      expect(sanitized.EDITOR).toBeUndefined();
+    });
+
+    it('should forward LLXPRT_CODE_TEST_* vars but not other LLXPRT vars', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        LLXPRT_CODE_TEST_MODE: 'true',
+        LLXPRT_CODE_TEST_TIMEOUT: '5000',
+        LLXPRT_DEBUG: '1',
+        LLXPRT_CODE: '1',
+        LLXPRT_CONFIG_PATH: '/path/to/config',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // LLXPRT_CODE* vars should be preserved (product env vars)
+      expect(sanitized.LLXPRT_CODE_TEST_MODE).toBe('true');
+      expect(sanitized.LLXPRT_CODE_TEST_TIMEOUT).toBe('5000');
+      expect(sanitized.LLXPRT_CODE).toBe('1');
+
+      // Other LLXPRT_* vars (non-product) should NOT be preserved
+      expect(sanitized.LLXPRT_DEBUG).toBeUndefined();
+      expect(sanitized.LLXPRT_CONFIG_PATH).toBeUndefined();
+    });
+
+    it('should forward all built-in Unix safe vars', () => {
+      const testEnv = {
+        PATH: '/usr/bin:/bin',
+        HOME: '/home/user',
+        USER: 'testuser',
+        SHELL: '/bin/bash',
+        TMPDIR: '/tmp',
+        LANG: 'en_US.UTF-8',
+        LOGNAME: 'testuser',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      expect(sanitized.PATH).toBe('/usr/bin:/bin');
+      expect(sanitized.HOME).toBe('/home/user');
+      expect(sanitized.USER).toBe('testuser');
+      expect(sanitized.SHELL).toBe('/bin/bash');
+      expect(sanitized.TMPDIR).toBe('/tmp');
+      expect(sanitized.LANG).toBe('en_US.UTF-8');
+      expect(sanitized.LOGNAME).toBe('testuser');
+    });
+
+    it('should forward all built-in Windows safe vars', () => {
+      const testEnv = {
+        Path: 'C:\\Windows',
+        SYSTEMROOT: 'C:\\Windows',
+        SystemRoot: 'C:\\Windows',
+        COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
+        ComSpec: 'C:\\Windows\\System32\\cmd.exe',
+        PATHEXT: '.COM;.EXE;.BAT',
+        WINDIR: 'C:\\Windows',
+        TEMP: 'C:\\Users\\test\\AppData\\Local\\Temp',
+        TMP: 'C:\\Users\\test\\AppData\\Local\\Temp',
+        USERPROFILE: 'C:\\Users\\test',
+        SYSTEMDRIVE: 'C:',
+        SystemDrive: 'C:',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      expect(sanitized.Path).toBe('C:\\Windows');
+      expect(sanitized.SYSTEMROOT).toBe('C:\\Windows');
+      expect(sanitized.SystemRoot).toBe('C:\\Windows');
+      expect(sanitized.COMSPEC).toBe('C:\\Windows\\System32\\cmd.exe');
+      expect(sanitized.ComSpec).toBe('C:\\Windows\\System32\\cmd.exe');
+      expect(sanitized.PATHEXT).toBe('.COM;.EXE;.BAT');
+      expect(sanitized.WINDIR).toBe('C:\\Windows');
+      expect(sanitized.TEMP).toBe('C:\\Users\\test\\AppData\\Local\\Temp');
+      expect(sanitized.TMP).toBe('C:\\Users\\test\\AppData\\Local\\Temp');
+      expect(sanitized.USERPROFILE).toBe('C:\\Users\\test');
+      expect(sanitized.SYSTEMDRIVE).toBe('C:');
+      expect(sanitized.SystemDrive).toBe('C:');
+    });
+
+    it('should forward user-specified allowlist variables', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        CUSTOM_VAR: 'custom-value',
+        SPECIAL_CONFIG: 'special',
+        OTHER_VAR: 'other',
+      };
+
+      const allowlist = ['CUSTOM_VAR', 'SPECIAL_CONFIG'];
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+        allowlist,
+      );
+
+      // Allowlisted vars should be preserved
+      expect(sanitized.PATH).toBe('/usr/bin');
+      expect(sanitized.CUSTOM_VAR).toBe('custom-value');
+      expect(sanitized.SPECIAL_CONFIG).toBe('special');
+
+      // Non-allowlisted vars should be excluded
+      expect(sanitized.OTHER_VAR).toBeUndefined();
+    });
+
+    it('should not sanitize when isSandboxOrCI is false (local dev mode)', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        API_KEY: 'secret-key',
+        AWS_SECRET_ACCESS_KEY: 'aws-secret',
+        GITHUB_TOKEN: 'token',
+        CUSTOM_VAR: 'value',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        false, // Not in CI/sandbox mode
+      );
+
+      // All vars should be preserved in local dev mode
+      expect(sanitized.PATH).toBe('/usr/bin');
+      expect(sanitized.API_KEY).toBe('secret-key');
+      expect(sanitized.AWS_SECRET_ACCESS_KEY).toBe('aws-secret');
+      expect(sanitized.GITHUB_TOKEN).toBe('token');
+      expect(sanitized.CUSTOM_VAR).toBe('value');
+    });
+
+    it('should exclude vars not on allowlist even if they look safe', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        GIT_AUTHOR_NAME: 'Test User',
+        SSH_AUTH_SOCK: '/tmp/ssh-agent.sock',
+        XDG_CONFIG_HOME: '/home/user/.config',
+        CI: 'true',
+        GITHUB_ACTIONS: 'true',
+        NODE_ENV: 'test',
+        TERM: 'xterm-256color',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // Only PATH is on the built-in allowlist
+      expect(sanitized.PATH).toBe('/usr/bin');
+
+      // TERM is on the allowlist (needed for proper terminal behavior)
+      expect(sanitized.TERM).toBe('xterm-256color');
+
+      // None of these are on the allowlist
+      expect(sanitized.GIT_AUTHOR_NAME).toBeUndefined();
+      expect(sanitized.SSH_AUTH_SOCK).toBeUndefined();
+      expect(sanitized.XDG_CONFIG_HOME).toBeUndefined();
+      expect(sanitized.CI).toBeUndefined();
+      expect(sanitized.GITHUB_ACTIONS).toBeUndefined();
+      expect(sanitized.NODE_ENV).toBeUndefined();
+    });
+
+    it('should return only allowlisted keys with no extras', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        HOME: '/home/user',
+        USER: 'testuser',
+        LLXPRT_CODE_TEST_FOO: 'bar',
+        RANDOM_VAR: 'should-not-appear',
+        ANOTHER_SECRET: 'nope',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // Result should contain exactly the allowlisted vars that exist in env
+      expect(Object.keys(sanitized).sort()).toEqual(
+        ['HOME', 'LLXPRT_CODE_TEST_FOO', 'PATH', 'USER'].sort(),
+      );
+    });
+  });
+});
+
 describe('ShellExecutionService execution method selection', () => {
   let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
   let mockPtyProcess: EventEmitter & {
@@ -1378,5 +1733,156 @@ describe('ShellExecutionService execution method selection', () => {
     expect(mockPtySpawn).not.toHaveBeenCalled();
     expect(mockCpSpawn).toHaveBeenCalled();
     expect(result.executionMethod).toBe('child_process');
+  });
+});
+
+describe('ShellExecutionService environment sanitization wiring', () => {
+  let onOutputEventMock: Mock<(event: ShellOutputEvent) => void>;
+  let mockPtyProcess: EventEmitter & {
+    pid: number;
+    kill: Mock;
+    onData: Mock;
+    onExit: Mock;
+  };
+  let mockChildProcess: EventEmitter & Partial<ChildProcess>;
+
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onOutputEventMock = vi.fn();
+
+    // Reset process.env to a copy, preserving the real special object for afterEach restore
+    process.env = { ...originalEnv };
+
+    // Inject a sensitive env var so we can verify it gets stripped
+    process.env.MY_API_KEY = 'super-secret';
+    process.env.LLXPRT_CODE_TEST_WIRING = 'keep-me';
+
+    // Mock for pty
+    mockPtyProcess = new EventEmitter() as EventEmitter & {
+      pid: number;
+      kill: Mock;
+      onData: Mock;
+      onExit: Mock;
+    };
+    mockPtyProcess.pid = 12345;
+    mockPtyProcess.kill = vi.fn();
+    mockPtyProcess.onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
+    mockPtyProcess.onExit = vi.fn().mockReturnValue({ dispose: vi.fn() });
+    mockPtySpawn.mockReturnValue(mockPtyProcess);
+    mockGetPty.mockResolvedValue({
+      module: { spawn: mockPtySpawn },
+      name: 'mock-pty',
+    });
+
+    // Mock for child_process
+    mockChildProcess = new EventEmitter() as EventEmitter &
+      Partial<ChildProcess>;
+    mockChildProcess.stdout = new EventEmitter() as Readable;
+    mockChildProcess.stderr = new EventEmitter() as Readable;
+    mockChildProcess.kill = vi.fn();
+    Object.defineProperty(mockChildProcess, 'pid', {
+      value: 54321,
+      configurable: true,
+    });
+    mockChildProcess.once = mockChildProcess.on.bind(mockChildProcess);
+    mockCpSpawn.mockReturnValue(mockChildProcess);
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('should strip sensitive env vars in child_process mode when isSandboxOrCI is true', async () => {
+    const abortController = new AbortController();
+    const handle = await ShellExecutionService.execute(
+      'echo test',
+      '/test/dir',
+      onOutputEventMock,
+      abortController.signal,
+      false, // child_process mode
+      { isSandboxOrCI: true },
+    );
+
+    // Verify the env passed to spawn does NOT contain the sensitive var
+    const spawnCall = mockCpSpawn.mock.calls[0];
+    const spawnEnv = spawnCall[2].env;
+    expect(spawnEnv.MY_API_KEY).toBeUndefined();
+    expect(spawnEnv.LLXPRT_CODE_TEST_WIRING).toBe('keep-me');
+
+    // Cleanup
+    mockChildProcess.emit('exit', 0, null);
+    await handle.result;
+  });
+
+  it('should strip sensitive env vars in PTY mode when isSandboxOrCI is true', async () => {
+    const abortController = new AbortController();
+    const handle = await ShellExecutionService.execute(
+      'echo test',
+      '/test/dir',
+      onOutputEventMock,
+      abortController.signal,
+      true, // PTY mode
+      {
+        isSandboxOrCI: true,
+        terminalWidth: 80,
+        terminalHeight: 24,
+      },
+    );
+
+    // Verify the env passed to pty spawn does NOT contain the sensitive var
+    const ptySpawnCall = mockPtySpawn.mock.calls[0];
+    const ptyEnv = ptySpawnCall[2].env;
+    expect(ptyEnv.MY_API_KEY).toBeUndefined();
+    expect(ptyEnv.LLXPRT_CODE_TEST_WIRING).toBe('keep-me');
+
+    // Cleanup
+    mockPtyProcess.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+    await handle.result;
+  });
+
+  it('should NOT strip sensitive env vars in child_process mode when isSandboxOrCI is false', async () => {
+    const abortController = new AbortController();
+    const handle = await ShellExecutionService.execute(
+      'echo test',
+      '/test/dir',
+      onOutputEventMock,
+      abortController.signal,
+      false, // child_process mode
+      { isSandboxOrCI: false },
+    );
+
+    // Verify the env passed to spawn DOES contain all vars (local mode)
+    const spawnCall = mockCpSpawn.mock.calls[0];
+    const spawnEnv = spawnCall[2].env;
+    expect(spawnEnv.MY_API_KEY).toBe('super-secret');
+    expect(spawnEnv.LLXPRT_CODE_TEST_WIRING).toBe('keep-me');
+
+    // Cleanup
+    mockChildProcess.emit('exit', 0, null);
+    await handle.result;
+  });
+
+  it('should NOT strip sensitive env vars when isSandboxOrCI is not set (defaults to local mode)', async () => {
+    const abortController = new AbortController();
+    const handle = await ShellExecutionService.execute(
+      'echo test',
+      '/test/dir',
+      onOutputEventMock,
+      abortController.signal,
+      false, // child_process mode
+      {}, // no isSandboxOrCI
+    );
+
+    // Verify the env passed to spawn DOES contain all vars (local mode)
+    const spawnCall = mockCpSpawn.mock.calls[0];
+    const spawnEnv = spawnCall[2].env;
+    expect(spawnEnv.MY_API_KEY).toBe('super-secret');
+    expect(spawnEnv.LLXPRT_CODE_TEST_WIRING).toBe('keep-me');
+
+    // Cleanup
+    mockChildProcess.emit('exit', 0, null);
+    await handle.result;
   });
 });

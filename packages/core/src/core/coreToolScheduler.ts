@@ -60,6 +60,11 @@ import {
 import { DebugLogger } from '../debug/index.js';
 import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import {
+  triggerBeforeToolHook,
+  triggerAfterToolHook,
+  triggerToolNotificationHook,
+} from './coreToolHookTriggers.js';
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
 export type ValidatingToolCall = {
@@ -1078,6 +1083,12 @@ export class CoreToolScheduler {
               policyContext ??
               this.getPolicyContextFromInvocation(invocation, reqInfo);
 
+            // Fire Notification hook before showing confirmation dialog
+            void triggerToolNotificationHook(
+              this.config,
+              wrappedConfirmationDetails,
+            );
+
             this.publishConfirmationRequest(correlationId, context);
 
             this.setStatusInternal(
@@ -1107,7 +1118,7 @@ export class CoreToolScheduler {
           );
         }
       }
-      this.attemptExecutionOfScheduledCalls(signal);
+      await this.attemptExecutionOfScheduledCalls(signal);
       void this.checkAndNotifyCompletion();
     } finally {
       this.isScheduling = false;
@@ -1259,7 +1270,7 @@ export class CoreToolScheduler {
       }
       this.setStatusInternal(callId, 'scheduled');
     }
-    this.attemptExecutionOfScheduledCalls(signal);
+    await this.attemptExecutionOfScheduledCalls(signal);
 
     const correlationId = previousCorrelationId;
     if (correlationId) {
@@ -1647,6 +1658,11 @@ export class CoreToolScheduler {
         errorType: undefined,
         agentId:
           metadataAgentId ?? scheduledCall.request.agentId ?? DEFAULT_AGENT_ID,
+        // @requirement:HOOK-132 - propagate suppressDisplay from AfterTool hook
+        // Only include suppressDisplay if explicitly set to avoid undefined pollution
+        ...(result.suppressDisplay !== undefined && {
+          suppressDisplay: result.suppressDisplay,
+        }),
       };
 
       this.logger.debug(
@@ -1727,16 +1743,50 @@ export class CoreToolScheduler {
 
   /**
    * Launch a single scheduled tool call and wire up result buffering / error handling.
+   * @requirement:HOOK-017,HOOK-019,HOOK-129,HOOK-131,HOOK-132,HOOK-134 - Hook result application
    */
-  private launchToolExecution(
+  private async launchToolExecution(
     scheduledCall: ScheduledToolCall,
     executionIndex: number,
     signal: AbortSignal,
   ): Promise<void> {
-    const { callId, name: toolName } = scheduledCall.request;
-    const invocation = scheduledCall.invocation;
+    const { callId, name: toolName, args } = scheduledCall.request;
+    let invocation = scheduledCall.invocation;
+    let effectiveArgs = args;
 
     this.setStatusInternal(callId, 'executing');
+
+    // Trigger BeforeTool hook and await result
+    // @requirement:HOOK-017,HOOK-019 - Block execution or modify args based on hook result
+    const beforeResult = await triggerBeforeToolHook(
+      this.config,
+      toolName,
+      args,
+    );
+
+    // Check if hook wants to block execution
+    if (beforeResult?.isBlockingDecision()) {
+      const blockReason =
+        beforeResult.getEffectiveReason() || 'Blocked by BeforeTool hook';
+      // Buffer the error - publishBufferedResults will set the proper error status
+      // via publishResult which creates a proper ToolCallResponseInfo
+      this.bufferError(
+        callId,
+        new Error(blockReason),
+        scheduledCall,
+        executionIndex,
+      );
+      await this.publishBufferedResults(signal);
+      return;
+    }
+
+    // Check if hook wants to modify tool input
+    const modifiedInput = beforeResult?.getModifiedToolInput();
+    if (modifiedInput) {
+      effectiveArgs = modifiedInput;
+      // Re-create invocation with modified args
+      invocation = scheduledCall.tool.build(modifiedInput);
+    }
 
     const liveOutputCallback = scheduledCall.tool.canUpdateOutput
       ? (outputChunk: string | AnsiOutput) => {
@@ -1777,10 +1827,48 @@ export class CoreToolScheduler {
             return;
           }
 
+          // Trigger AfterTool hook and await result
+          // @requirement:HOOK-131,HOOK-132 - Apply systemMessage and suppressOutput
+          const afterResult = await triggerAfterToolHook(
+            this.config,
+            toolName,
+            effectiveArgs,
+            toolResult,
+          );
+
+          // Apply hook modifications to tool result
+          let finalResult = toolResult;
+          if (afterResult) {
+            // Append systemMessage to llmContent
+            const systemMessage = afterResult.systemMessage;
+            const additionalContext = afterResult.getAdditionalContext();
+            if (systemMessage || additionalContext) {
+              const appendText = systemMessage || additionalContext || '';
+              const existingContent =
+                typeof finalResult.llmContent === 'string'
+                  ? finalResult.llmContent
+                  : JSON.stringify(finalResult.llmContent);
+              finalResult = {
+                ...finalResult,
+                llmContent: `${existingContent}
+
+${appendText}`,
+              };
+            }
+
+            // Set suppressDisplay if requested
+            if (afterResult.suppressOutput) {
+              finalResult = {
+                ...finalResult,
+                suppressDisplay: true,
+              };
+            }
+          }
+
           this.bufferResult(
             callId,
             toolName,
-            toolResult,
+            finalResult,
             scheduledCall,
             executionIndex,
           );
@@ -1838,7 +1926,9 @@ export class CoreToolScheduler {
     );
   }
 
-  private attemptExecutionOfScheduledCalls(signal: AbortSignal): void {
+  private async attemptExecutionOfScheduledCalls(
+    signal: AbortSignal,
+  ): Promise<void> {
     const allCallsFinalOrScheduled = this.toolCalls.every(
       (call) =>
         call.status === 'scheduled' ||
@@ -1866,15 +1956,23 @@ export class CoreToolScheduler {
       // for all tool outputs combined, divided equally among them. (#1301)
       this.applyBatchOutputLimits(callsToExecute.length);
 
-      // Execute all tools in parallel (PRESERVE EXISTING PATTERN)
-      callsToExecute.forEach((toolCall) => {
-        if (toolCall.status !== 'scheduled') return;
-        const scheduledCall = toolCall;
-        const executionIndex = executionIndices.get(
-          scheduledCall.request.callId,
-        )!;
-        void this.launchToolExecution(scheduledCall, executionIndex, signal);
-      });
+      // Execute all tools in parallel and wait for all to complete
+      // @requirement:HOOK-134 - Hook results are now awaited, so we wait for all executions
+      await Promise.all(
+        callsToExecute
+          .filter((toolCall) => toolCall.status === 'scheduled')
+          .map((toolCall) => {
+            const scheduledCall = toolCall;
+            const executionIndex = executionIndices.get(
+              scheduledCall.request.callId,
+            )!;
+            return this.launchToolExecution(
+              scheduledCall,
+              executionIndex,
+              signal,
+            );
+          }),
+      );
     }
   }
 

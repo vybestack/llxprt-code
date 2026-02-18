@@ -141,6 +141,8 @@ export interface EphemeralSettings {
   'shell-default-timeout-seconds'?: number;
   /** Maximum allowed timeout in seconds for shell command executions */
   'shell-max-timeout-seconds'?: number;
+  /** Inactivity timeout in seconds for shell commands. Resets on each output event. */
+  'shell-inactivity-timeout-seconds'?: number;
 
   // Load balancer advanced failover settings (Phase 3, Issue #489)
   /** Minimum tokens per minute before triggering failover */

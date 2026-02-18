@@ -97,6 +97,7 @@ export const modelCommand: SlashCommand = {
   name: 'model',
   description: 'browse, search, or switch models',
   kind: CommandKind.BUILT_IN,
+  autoExecute: true,
   action: async (
     context: CommandContext,
     args: string,

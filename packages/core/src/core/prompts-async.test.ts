@@ -97,6 +97,24 @@ describe('prompts async integration', () => {
       expect(prompt).toContain('Core Mandates');
     });
 
+    it('renders non-interactive mode instructions when interactionMode is non-interactive', async () => {
+      const prompt = await callPrompt({ interactionMode: 'non-interactive' });
+
+      expect(prompt).toContain('a non-interactive CLI agent');
+      expect(prompt).toContain('Do not ask the user for clarification');
+      expect(prompt).toContain('Continue the work');
+      expect(prompt).not.toContain('confirming with the user');
+    });
+
+    it('renders subagent mode instructions when interactionMode is subagent', async () => {
+      const prompt = await callPrompt({ interactionMode: 'subagent' });
+
+      expect(prompt).toContain('a subagent CLI agent');
+      expect(prompt).toContain('Do not ask the user for clarification');
+      expect(prompt).toContain('Continue the work');
+      expect(prompt).not.toContain('confirming with the user');
+    });
+
     it('should include user memory when provided', async () => {
       const userMemory = 'Remember: The user prefers concise responses.';
       const prompt = await callPrompt({ userMemory });
@@ -297,6 +315,50 @@ describe('prompts async integration', () => {
       });
 
       expect(prompt).not.toContain('{{SUBAGENT_DELEGATION}}');
+    });
+  });
+
+  describe('MCP Instructions Integration', () => {
+    it('should include MCP instructions when provided', async () => {
+      const mcpInstructions = `--- Instructions from MCP server 'test-server' ---
+This is a test instruction from an MCP server.
+--- End of instructions from 'test-server' ---`;
+
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        mcpInstructions,
+      });
+
+      expect(prompt).toContain("Instructions from MCP server 'test-server'");
+      expect(prompt).toContain(
+        'This is a test instruction from an MCP server.',
+      );
+    });
+
+    it('should not include MCP instructions when not provided', async () => {
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+      });
+
+      expect(prompt).not.toContain('Instructions from MCP server');
+    });
+
+    it('should handle empty MCP instructions', async () => {
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        mcpInstructions: '',
+      });
+
+      expect(prompt).not.toContain('Instructions from MCP server');
+    });
+
+    it('should handle whitespace-only MCP instructions', async () => {
+      const prompt = await getCoreSystemPromptAsync({
+        ...baseOptions,
+        mcpInstructions: '   \n\n   ',
+      });
+
+      expect(prompt).not.toContain('Instructions from MCP server');
     });
   });
 });

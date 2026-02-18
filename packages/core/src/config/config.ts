@@ -53,6 +53,7 @@ import { GeminiClient } from '../core/client.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
+import { HookSystem } from '../hooks/hookSystem.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -63,7 +64,10 @@ import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.j
 import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
 // @plan PLAN-20260130-ASYNCTASK.P14
 import { CheckAsyncTasksTool } from '../tools/check-async-tasks.js';
-import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
+import {
+  loadServerHierarchicalMemory,
+  loadJitSubdirectoryMemory,
+} from '../utils/memoryDiscovery.js';
 import { OutputFormat } from '../utils/output-format.js';
 import {
   // TELEMETRY: Re-enabled for local file logging only
@@ -442,6 +446,7 @@ export interface ConfigParameters {
   hooks?: {
     [K in HookEventName]?: HookDefinition[];
   };
+  jitContextEnabled?: boolean;
 }
 
 export class Config {
@@ -626,6 +631,13 @@ export class Config {
   private readonly hooks:
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
+  /**
+   * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P03
+   * @requirement:HOOK-001,HOOK-002
+   * Lazily-created HookSystem instance, only when enableHooks=true
+   */
+  private hookSystem: HookSystem | undefined;
+  private jitContextEnabled: boolean;
   private initialized = false;
 
   constructor(params: ConfigParameters) {
@@ -806,6 +818,7 @@ export class Config {
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
     this.disableYoloMode = params.disableYoloMode ?? false;
     this.enableHooks = params.enableHooks ?? false;
+    this.jitContextEnabled = params.jitContextEnabled ?? true;
 
     // Enable MessageBus integration if:
     // 1. Explicitly enabled via setting, OR
@@ -1966,11 +1979,23 @@ export class Config {
   }
 
   getShellExecutionConfig(): ShellExecutionConfig {
+    const ephemeralSettings = this.getEphemeralSettings();
+    const inactivityTimeoutSeconds =
+      (ephemeralSettings['shell-inactivity-timeout-seconds'] as
+        | number
+        | undefined) ?? 120; // Default 120 seconds
+    const inactivityTimeoutMs =
+      inactivityTimeoutSeconds === -1
+        ? undefined
+        : inactivityTimeoutSeconds * 1000;
+
     return {
       terminalWidth: this.getPtyTerminalWidth(),
       terminalHeight: this.getPtyTerminalHeight(),
       showColor: this.getAllowPtyThemeOverride(),
       scrollback: this.getPtyScrollbackLimit(),
+      inactivityTimeoutMs,
+      isSandboxOrCI: !!this.getSandbox() || process.env.CI === 'true',
     };
   }
 
@@ -1992,6 +2017,52 @@ export class Config {
 
   getEnablePromptCompletion(): boolean {
     return this.enablePromptCompletion;
+  }
+
+  getJitContextEnabled(): boolean {
+    // Check settings service first, then fall back to instance value
+    const settingsValue = this.settingsService.get('jitContextEnabled');
+    if (settingsValue !== undefined) {
+      return settingsValue as boolean;
+    }
+    return this.jitContextEnabled;
+  }
+
+  /**
+   * Lazily loads JIT subdirectory memory for a given path.
+   * Returns formatted memory content from LLXPRT.md files found between
+   * the target path and the trusted root, excluding already-loaded paths.
+   */
+  async getJitMemoryForPath(targetPath: string): Promise<string> {
+    if (!this.getJitContextEnabled()) {
+      return '';
+    }
+
+    const trustedRoots = [this.getTargetDir()];
+    const alreadyLoadedPaths = new Set(this.getLlxprtMdFilePaths());
+
+    const result = await loadJitSubdirectoryMemory(
+      targetPath,
+      trustedRoots,
+      alreadyLoadedPaths,
+      this.getDebugMode(),
+      true,
+    );
+
+    if (result.files.length === 0) {
+      return '';
+    }
+
+    return result.files
+      .map((f) => {
+        const trimmed = f.content.trim();
+        if (!trimmed) return null;
+        return `--- JIT Context from: ${f.path} ---
+${trimmed}
+--- End of JIT Context from: ${f.path} ---`;
+      })
+      .filter((block): block is string => block !== null)
+      .join('\n\n');
   }
 
   async getGitService(): Promise<GitService> {
@@ -2336,6 +2407,29 @@ export class Config {
    */
   getHooks(): { [K in HookEventName]?: HookDefinition[] } | undefined {
     return this.hooks;
+  }
+
+  /**
+   * Get the HookSystem instance, creating it lazily on first access.
+   * Returns undefined if hooks are disabled (enableHooks=false).
+   *
+   * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P03
+   * @requirement:HOOK-001 - Lazy creation on first call when enableHooks=true
+   * @requirement:HOOK-002 - Returns undefined when enableHooks=false
+   * @requirement:HOOK-010 - Zero CPU/memory overhead when hooks are disabled
+   */
+  getHookSystem(): HookSystem | undefined {
+    // @requirement:HOOK-002 - Return undefined when hooks disabled
+    if (!this.enableHooks) {
+      return undefined;
+    }
+
+    // @requirement:HOOK-001 - Lazy creation on first access
+    if (!this.hookSystem) {
+      this.hookSystem = new HookSystem(this);
+    }
+
+    return this.hookSystem;
   }
 
   /**

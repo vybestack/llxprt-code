@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { act } from 'react';
 import { vi } from 'vitest';
@@ -55,7 +56,7 @@ describe('FolderTrustDialog', () => {
       );
     });
     await waitFor(() => {
-      expect(mockedExit).toHaveBeenCalledWith(1);
+      expect(mockedExit).toHaveBeenCalledWith(ExitCodes.FATAL_CONFIG_ERROR);
     });
     expect(onSelect).not.toHaveBeenCalled();
   });
@@ -76,7 +77,7 @@ describe('FolderTrustDialog', () => {
     stdin.write('r');
 
     await waitFor(() => {
-      expect(mockedExit).toHaveBeenCalledWith(0);
+      expect(mockedExit).toHaveBeenCalledWith(ExitCodes.SUCCESS);
     });
   });
 

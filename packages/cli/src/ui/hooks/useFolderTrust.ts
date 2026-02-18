@@ -5,7 +5,11 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { type Config, DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  type Config,
+  DebugLogger,
+  ExitCodes,
+} from '@vybestack/llxprt-code-core';
 import { LoadedSettings, Settings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
@@ -98,7 +102,7 @@ export const useFolderTrust = (
           );
         }
         setTimeout(() => {
-          process.exit(1);
+          process.exit(ExitCodes.FATAL_CONFIG_ERROR);
         }, 100);
         return;
       }

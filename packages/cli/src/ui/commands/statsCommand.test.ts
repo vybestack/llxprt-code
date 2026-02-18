@@ -42,10 +42,10 @@ describe('statsCommand', () => {
     getEphemeralSettingMock.mockReturnValue(undefined);
   });
 
-  it('should display general session stats when run with no subcommand', () => {
+  it('should display general session stats when run with no subcommand', async () => {
     if (!statsCommand.action) throw new Error('Command has no action');
 
-    statsCommand.action(mockContext, '');
+    await statsCommand.action(mockContext, '');
 
     const expectedDuration = formatDuration(
       endTime.getTime() - startTime.getTime(),
@@ -54,6 +54,7 @@ describe('statsCommand', () => {
       {
         type: MessageType.STATS,
         duration: expectedDuration,
+        quotaLines: undefined,
       },
       expect.any(Number),
     );

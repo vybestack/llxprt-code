@@ -713,7 +713,7 @@ export class SubAgentScope {
         )
       : (async () => {
           const sessionId = schedulerConfig.getSessionId();
-          return await schedulerConfig.getOrCreateScheduler(sessionId, {
+          return schedulerConfig.getOrCreateScheduler(sessionId, {
             outputUpdateHandler,
             onAllToolCallsComplete: handleCompletion,
             onToolCallsUpdate: undefined,
@@ -1532,6 +1532,12 @@ export class SubAgentScope {
       disposeScheduler: (sessionId: string) => {
         this.config.disposeScheduler(sessionId);
       },
+      // Hook system delegation - enables BeforeTool/AfterTool hooks for subagents
+      getEnableHooks: () => this.config.getEnableHooks?.() ?? false,
+      getHooks: () => this.config.getHooks?.(),
+      getHookSystem: () => this.config.getHookSystem?.(),
+      getWorkingDir: () => this.config.getWorkingDir?.() ?? process.cwd(),
+      getTargetDir: () => this.config.getTargetDir?.() ?? process.cwd(),
     } as unknown as Config;
   }
 
@@ -1838,10 +1844,15 @@ export class SubAgentScope {
       ),
     );
 
+    const mcpInstructions = this.config
+      .getMcpClientManager()
+      ?.getMcpInstructions();
     const coreSystemPrompt = await getCoreSystemPromptAsync({
+      mcpInstructions,
       model: this.modelConfig.model,
       tools: toolNames,
       includeSubagentDelegation: false,
+      interactionMode: 'subagent',
     });
 
     const instructionSections = [

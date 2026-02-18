@@ -68,6 +68,11 @@ import type {
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import {
+  triggerBeforeModelHook,
+  triggerAfterModelHook,
+  triggerBeforeToolSelectionHook,
+} from './geminiChatHookTriggers.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -1345,6 +1350,51 @@ export class GeminiChat {
                   }>;
                 }>)
               : undefined;
+
+          // Get config for hook triggers
+          const configForHooks = this.runtimeContext.providerRuntime.config;
+
+          // Contents to send to API - may be modified by BeforeModel hook
+          let contentsForApi: IContent[] = userIContents;
+
+          // Trigger BeforeToolSelection hook and apply tool restrictions
+          // @requirement:HOOK-055 - Apply tool restrictions from hook
+          let effectiveToolsFromConfig = toolsFromConfig;
+          if (configForHooks && toolsFromConfig) {
+            const toolSelectionResult = await triggerBeforeToolSelectionHook(
+              configForHooks,
+              toolsFromConfig,
+            );
+            // Apply tool config modifications if hook provided them
+            const modifiedConfig =
+              toolSelectionResult?.applyToolConfigModifications({
+                tools: toolsFromConfig,
+              });
+            if (
+              modifiedConfig?.toolConfig &&
+              'allowedFunctionNames' in modifiedConfig.toolConfig
+            ) {
+              const allowedFunctions =
+                modifiedConfig.toolConfig.allowedFunctionNames;
+              if (allowedFunctions && allowedFunctions.length > 0) {
+                // Filter tools to only include allowed functions
+                effectiveToolsFromConfig = toolsFromConfig
+                  .map((toolGroup) => ({
+                    ...toolGroup,
+                    functionDeclarations:
+                      toolGroup.functionDeclarations?.filter((fn) =>
+                        allowedFunctions.includes(fn.name),
+                      ),
+                  }))
+                  .filter(
+                    (toolGroup) =>
+                      toolGroup.functionDeclarations &&
+                      toolGroup.functionDeclarations.length > 0,
+                  ) as typeof toolsFromConfig;
+              }
+            }
+          }
+
           const directOverrides = this.extractDirectGeminiOverrides(
             params.config as GenerateContentConfig | undefined,
           );
@@ -1359,7 +1409,7 @@ export class GeminiChat {
             {
               providerName: provider.name,
               model: this.runtimeState.model,
-              toolCount: toolsFromConfig?.length ?? 0,
+              toolCount: effectiveToolsFromConfig?.length ?? 0,
               baseUrl: baseUrlForCall,
             },
           );
@@ -1367,18 +1417,82 @@ export class GeminiChat {
           const runtimeContext = this.buildProviderRuntime(
             'GeminiChat.streamGeneration',
             {
-              toolCount: toolsFromConfig?.length ?? 0,
+              toolCount: effectiveToolsFromConfig?.length ?? 0,
               ...(directOverrides
                 ? { geminiDirectOverrides: directOverrides }
                 : {}),
             },
           );
 
+          // Trigger BeforeModel hook and check for blocking/synthetic response
+          // @requirement:HOOK-036 - Block API call or return synthetic response
+          if (configForHooks) {
+            const requestForHook = {
+              contents: userIContents,
+              tools:
+                effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+                  ? (effectiveToolsFromConfig as ProviderToolset)
+                  : undefined,
+            };
+            const beforeModelResult = await triggerBeforeModelHook(
+              configForHooks,
+              requestForHook,
+            );
+
+            // Check for blocking decision with synthetic response
+            if (beforeModelResult?.isBlockingDecision()) {
+              const syntheticResponse =
+                beforeModelResult.getSyntheticResponse();
+              if (syntheticResponse) {
+                return syntheticResponse;
+              }
+              // If blocking but no synthetic response, return a default blocked response
+              // Cast as GenerateContentResponse to satisfy TypeScript (minimal response that satisfies runtime)
+              return {
+                candidates: [
+                  {
+                    content: {
+                      role: 'model',
+                      parts: [
+                        {
+                          text:
+                            beforeModelResult.getEffectiveReason() ||
+                            'Request blocked by BeforeModel hook',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              } as GenerateContentResponse;
+            }
+
+            // Check for synthetic response even without blocking (hook might want to provide cached response)
+            const syntheticResponse = beforeModelResult?.getSyntheticResponse();
+            if (syntheticResponse) {
+              return syntheticResponse;
+            }
+
+            // Apply request modifications from BeforeModel hook
+            // This allows hooks to modify the request before it's sent to the model
+            if (beforeModelResult) {
+              const modifiedRequest =
+                beforeModelResult.applyLLMRequestModifications({
+                  model: this.runtimeState.model || '',
+                  contents: userIContents as Content[],
+                });
+              // If hook modified contents, update contentsForApi
+              if (modifiedRequest && modifiedRequest.contents) {
+                contentsForApi =
+                  modifiedRequest.contents as Content[] as IContent[];
+              }
+            }
+          }
+
           const streamResponse = provider.generateChatCompletion({
-            contents: userIContents,
+            contents: contentsForApi,
             tools:
-              toolsFromConfig && toolsFromConfig.length > 0
-                ? (toolsFromConfig as ProviderToolset)
+              effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+                ? (effectiveToolsFromConfig as ProviderToolset)
                 : undefined,
             config: runtimeContext.config,
             runtime: runtimeContext,
@@ -1404,7 +1518,24 @@ export class GeminiChat {
             throw new Error('No response from provider');
           }
 
-          const directResponse = this.convertIContentToResponse(lastResponse);
+          let directResponse = this.convertIContentToResponse(lastResponse);
+
+          // Trigger AfterModel hook and apply modifications
+          // @requirement:HOOK-040,HOOK-048 - Apply response modifications or stop execution
+          if (configForHooks && lastResponse) {
+            const afterModelResult = await triggerAfterModelHook(
+              configForHooks,
+              lastResponse,
+            );
+
+            // Check if hook wants to stop execution or modify response
+            if (afterModelResult) {
+              const modifiedResponse = afterModelResult.getModifiedResponse();
+              if (modifiedResponse) {
+                directResponse = modifiedResponse;
+              }
+            }
+          }
 
           if (aggregatedText.trim()) {
             const candidate = directResponse.candidates?.[0];

@@ -640,15 +640,22 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       options.userMemory,
       () => options.invocation?.userMemory,
     );
+    const mcpInstructions = options.config
+      ?.getMcpClientManager?.()
+      ?.getMcpInstructions();
     const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
       toolNamesArg ?? [],
       () => options.config?.getSubagentManager?.(),
     );
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
+      mcpInstructions,
       model: modelId,
       tools: toolNamesArg,
       includeSubagentDelegation,
+      interactionMode: options.config?.isInteractive?.()
+        ? 'interactive'
+        : 'non-interactive',
     });
 
     // Filter thinking from context based on settings

@@ -164,6 +164,17 @@ vi.mock('../ide/ide-client.js', () => ({
   },
 }));
 
+const mockLoadJitSubdirectoryMemory = vi.hoisted(() => vi.fn());
+
+vi.mock('../utils/memoryDiscovery.js', () => ({
+  loadJitSubdirectoryMemory: mockLoadJitSubdirectoryMemory,
+  loadServerHierarchicalMemory: vi.fn().mockResolvedValue({
+    memoryContent: '',
+    fileCount: 0,
+    filePaths: [],
+  }),
+}));
+
 const mockCoreEvents = vi.hoisted(() => ({
   emitFeedback: vi.fn(),
   emitModelChanged: vi.fn(),
@@ -1402,6 +1413,130 @@ describe('Config getHooks', () => {
   });
 });
 
+describe('Config JIT context', () => {
+  const baseParams: ConfigParameters = {
+    cwd: '/tmp',
+    targetDir: '/path/to/target',
+    debugMode: false,
+    sessionId: 'test-session-id',
+    model: 'gemini-pro',
+    usageStatisticsEnabled: false,
+  };
+
+  it('should return true by default when JIT context setting is not provided', () => {
+    const config = new Config(baseParams);
+    expect(config.getJitContextEnabled()).toBe(true);
+  });
+
+  it('should return the configured JIT context setting value', () => {
+    const configEnabled = new Config({
+      ...baseParams,
+      jitContextEnabled: true,
+    });
+    expect(configEnabled.getJitContextEnabled()).toBe(true);
+
+    const configDisabled = new Config({
+      ...baseParams,
+      jitContextEnabled: false,
+    });
+    expect(configDisabled.getJitContextEnabled()).toBe(false);
+  });
+
+  it('should respect the settings service value when available', async () => {
+    const mockSettingsService = {
+      get: vi.fn().mockReturnValue(false),
+      set: vi.fn(),
+      getAll: vi.fn(),
+      has: vi.fn(),
+    } as unknown as SettingsService;
+
+    const config = new Config({
+      ...baseParams,
+      settingsService: mockSettingsService,
+    });
+
+    expect(config.getJitContextEnabled()).toBe(false);
+    expect(mockSettingsService.get).toHaveBeenCalledWith('jitContextEnabled');
+  });
+
+  describe('getJitMemoryForPath', () => {
+    beforeEach(() => {
+      mockLoadJitSubdirectoryMemory.mockReset();
+    });
+
+    it('should return JIT memory content when enabled', async () => {
+      mockLoadJitSubdirectoryMemory.mockResolvedValue({
+        files: [
+          { path: '/path/to/target/sub/LLXPRT.md', content: 'sub memory' },
+        ],
+      });
+
+      const config = new Config({
+        ...baseParams,
+        jitContextEnabled: true,
+      });
+
+      const result = await config.getJitMemoryForPath(
+        '/path/to/target/sub/file.ts',
+      );
+
+      expect(result).toContain('sub memory');
+      expect(mockLoadJitSubdirectoryMemory).toHaveBeenCalledWith(
+        '/path/to/target/sub/file.ts',
+        [baseParams.targetDir],
+        expect.any(Set),
+        baseParams.debugMode,
+        true,
+      );
+    });
+
+    it('should return empty string when JIT context is disabled', async () => {
+      const config = new Config({
+        ...baseParams,
+        jitContextEnabled: false,
+      });
+
+      const result = await config.getJitMemoryForPath(
+        '/path/to/target/sub/file.ts',
+      );
+
+      expect(result).toBe('');
+      expect(mockLoadJitSubdirectoryMemory).not.toHaveBeenCalled();
+    });
+
+    it('should return empty string when no JIT files are found', async () => {
+      mockLoadJitSubdirectoryMemory.mockResolvedValue({ files: [] });
+
+      const config = new Config({
+        ...baseParams,
+        jitContextEnabled: true,
+      });
+
+      const result = await config.getJitMemoryForPath(
+        '/path/to/target/sub/file.ts',
+      );
+
+      expect(result).toBe('');
+    });
+
+    it('should exclude already-loaded paths', async () => {
+      mockLoadJitSubdirectoryMemory.mockResolvedValue({ files: [] });
+
+      const config = new Config({
+        ...baseParams,
+        jitContextEnabled: true,
+        llxprtMdFilePaths: ['/path/to/target/LLXPRT.md'],
+      });
+
+      await config.getJitMemoryForPath('/path/to/target/sub/file.ts');
+
+      const calledAlreadyLoaded = mockLoadJitSubdirectoryMemory.mock
+        .calls[0]?.[2] as Set<string>;
+      expect(calledAlreadyLoaded.has('/path/to/target/LLXPRT.md')).toBe(true);
+    });
+  });
+});
+
 describe('Config setModel', () => {
   const baseParams: ConfigParameters = {
     cwd: '/tmp',
@@ -1454,5 +1589,90 @@ describe('Config setModel', () => {
     expect(config.getModel()).toBe('auto');
     expect(config.isInFallbackMode()).toBe(false);
     expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith('auto');
+  });
+});
+
+/**
+ * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P04
+ * @requirement:HOOK-001,HOOK-002,HOOK-010
+ */
+describe('Config getHookSystem', () => {
+  const baseParams = {
+    cwd: '/tmp',
+    targetDir: '/path/to/target',
+    debugMode: false,
+    sessionId: 'test-session-id',
+    model: 'gemini-2.0-flash',
+    usageStatisticsEnabled: false,
+  };
+
+  it('enableHooks true initializes hook system', () => {
+    // @requirement:HOOK-001 - Lazy creation when enableHooks=true
+    const config = new Config({
+      ...baseParams,
+      enableHooks: true,
+    });
+
+    const hookSystem = config.getHookSystem();
+    expect(hookSystem).toBeDefined();
+    expect(hookSystem).not.toBeNull();
+  });
+
+  it('enableHooks false returns undefined', () => {
+    // @requirement:HOOK-002 - Returns undefined when enableHooks=false
+    const config = new Config({
+      ...baseParams,
+      enableHooks: false,
+    });
+
+    const hookSystem = config.getHookSystem();
+    expect(hookSystem).toBeUndefined();
+  });
+
+  it('tools.enableHooks does not enable hooks', () => {
+    // @requirement:HOOK-002 - Only top-level enableHooks controls hook system
+    // The tools.enableHooks key should not enable the hook system
+    const config = new Config({
+      ...baseParams,
+      enableHooks: false,
+      // Note: tools.enableHooks is not a valid config key for enabling hooks
+    });
+
+    const hookSystem = config.getHookSystem();
+    expect(hookSystem).toBeUndefined();
+    expect(config.getEnableHooks()).toBe(false);
+  });
+
+  it('getHookSystem returns same instance on multiple calls', () => {
+    // @requirement:HOOK-001 - Lazy creation, same instance returned
+    const config = new Config({
+      ...baseParams,
+      enableHooks: true,
+    });
+
+    const hookSystem1 = config.getHookSystem();
+    const hookSystem2 = config.getHookSystem();
+
+    expect(hookSystem1).toBe(hookSystem2);
+  });
+
+  it('getEnableHooks reflects enableHooks config value', () => {
+    const configEnabled = new Config({
+      ...baseParams,
+      enableHooks: true,
+    });
+    expect(configEnabled.getEnableHooks()).toBe(true);
+
+    const configDisabled = new Config({
+      ...baseParams,
+      enableHooks: false,
+    });
+    expect(configDisabled.getEnableHooks()).toBe(false);
+  });
+
+  it('enableHooks defaults to false when not specified', () => {
+    const config = new Config(baseParams);
+    expect(config.getEnableHooks()).toBe(false);
+    expect(config.getHookSystem()).toBeUndefined();
   });
 });

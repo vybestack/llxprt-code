@@ -66,6 +66,10 @@ import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { BaseLLMClient } from './baseLlmClient.js';
 import type { IContent } from '../services/history/IContent.js';
+import {
+  triggerBeforeAgentHook,
+  triggerAfterAgentHook,
+} from './lifecycleHookTriggers.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
@@ -630,18 +634,40 @@ export class GeminiClient {
     enabledToolNames: string[],
     envParts?: Array<{ text?: string }>,
   ): Promise<string> {
-    const userMemory = this.config.getUserMemory();
+    let userMemory = this.config.getUserMemory();
     const coreMemory = this.config.getCoreMemory();
+
+    // Load JIT subdirectory context for the current working directory
+    const jitMemory = await this.config.getJitMemoryForPath(
+      this.config.getWorkingDir(),
+    );
+    if (jitMemory) {
+      userMemory = userMemory
+        ? `${userMemory}
+
+${jitMemory}`
+        : jitMemory;
+    }
+
+    const mcpInstructions = this.config
+      .getMcpClientManager()
+      ?.getMcpInstructions();
     const model = this.runtimeState.model;
     const includeSubagentDelegation =
       await this.shouldIncludeSubagentDelegation(enabledToolNames);
 
+    const interactionMode = this.config.isInteractive()
+      ? 'interactive'
+      : 'non-interactive';
+
     let systemInstruction = await getCoreSystemPromptAsync({
       userMemory,
       coreMemory,
+      mcpInstructions,
       model,
       tools: enabledToolNames,
       includeSubagentDelegation,
+      interactionMode,
     });
 
     const envContextText = (envParts ?? [])
@@ -682,6 +708,31 @@ export class GeminiClient {
 
   isInitialized(): boolean {
     return this.chat !== undefined && this.contentGenerator !== undefined;
+  }
+
+  /**
+   * Extract text from a PartListUnion for hook consumption
+   */
+  private extractPromptText(request: PartListUnion): string {
+    if (typeof request === 'string') {
+      return request;
+    }
+    if (Array.isArray(request)) {
+      return request
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (part && typeof part === 'object' && 'text' in part) {
+            return (part as { text: string }).text;
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join(' ');
+    }
+    if (request && typeof request === 'object' && 'text' in request) {
+      return (request as { text: string }).text;
+    }
+    return '';
   }
 
   async getHistory(): Promise<Content[]> {
@@ -1377,10 +1428,70 @@ export class GeminiClient {
       }
     }
 
-    if (this.lastPromptId !== prompt_id) {
+    // Track if this is a new user prompt (vs a continuation/retry)
+    const isNewPrompt = this.lastPromptId !== prompt_id;
+    const promptText = this.extractPromptText(initialRequest);
+    const responseChunks: string[] = [];
+
+    // Helper to fire AfterAgent hook when returning
+    // Returns the hook output for caller to check for continuation
+    // Note: Unlike BeforeAgent which only fires for new prompts, AfterAgent fires
+    // for every turn to allow hooks to monitor all model responses
+    const fireAfterAgentHook = async () => {
+      const responseText = responseChunks.join('');
+      return triggerAfterAgentHook(
+        this.config,
+        promptText,
+        responseText,
+        false, // stop_hook_active - no stop hooks in current implementation
+      );
+    };
+
+    // getBoundedTurns returns the bounded turn count for continuation
+    const getBoundedTurns = () => Math.min(turns, this.MAX_TURNS);
+
+    // Mutable request that may be modified by hooks
+    let request: PartListUnion = initialRequest;
+
+    if (isNewPrompt) {
       this.loopDetector.reset(prompt_id);
       this.lastPromptId = prompt_id;
       this.currentSequenceModel = null;
+
+      // Fire BeforeAgent hook for new user prompts and handle result
+      const hookOutput = await triggerBeforeAgentHook(this.config, promptText);
+
+      // Check for blocking decision or stop execution
+      if (
+        hookOutput?.isBlockingDecision() ||
+        hookOutput?.shouldStopExecution()
+      ) {
+        yield {
+          type: GeminiEventType.Error,
+          value: {
+            error: new Error(
+              `BeforeAgent hook blocked processing: ${hookOutput.getEffectiveReason()}`,
+            ),
+          },
+        };
+        const contentGenConfig = this.config.getContentGeneratorConfig();
+        const providerManager = contentGenConfig?.providerManager;
+        const providerName =
+          providerManager?.getActiveProviderName() || 'backend';
+        return new Turn(
+          this.getChat(),
+          prompt_id,
+          DEFAULT_AGENT_ID,
+          providerName,
+        );
+      }
+
+      // Add additional context from hooks to the request
+      const additionalContext = hookOutput?.getAdditionalContext();
+      if (additionalContext) {
+        const requestArray = Array.isArray(request) ? request : [request];
+        request = [...requestArray, { text: additionalContext }];
+      }
     }
 
     this.sessionTurnCount++;
@@ -1396,6 +1507,7 @@ export class GeminiClient {
       const providerManager = contentGenConfig?.providerManager;
       const providerName =
         providerManager?.getActiveProviderName() || 'backend';
+      await fireAfterAgentHook();
       return new Turn(
         this.getChat(),
         prompt_id,
@@ -1410,6 +1522,7 @@ export class GeminiClient {
       const providerManager = contentGenConfig?.providerManager;
       const providerName =
         providerManager?.getActiveProviderName() || 'backend';
+      await fireAfterAgentHook();
       return new Turn(
         this.getChat(),
         prompt_id,
@@ -1440,6 +1553,7 @@ export class GeminiClient {
         type: GeminiEventType.ContextWindowWillOverflow,
         value: { estimatedRequestTokenCount, remainingTokenCount },
       };
+      await fireAfterAgentHook();
       return new Turn(
         this.getChat(),
         prompt_id,
@@ -1470,9 +1584,9 @@ export class GeminiClient {
       this.forceFullIdeContext = false;
     }
 
-    let baseRequest: PartListUnion = Array.isArray(initialRequest)
-      ? [...(initialRequest as Part[])]
-      : initialRequest;
+    let baseRequest: PartListUnion = Array.isArray(request)
+      ? [...(request as Part[])]
+      : request;
     let retryCount = 0;
     const MAX_RETRIES = 2;
     let lastTurn: Turn | undefined;
@@ -1562,6 +1676,7 @@ export class GeminiClient {
       const loopDetected = await this.loopDetector.turnStarted(signal);
       if (loopDetected) {
         yield { type: GeminiEventType.LoopDetected };
+        await fireAfterAgentHook();
         return turn;
       }
 
@@ -1576,6 +1691,7 @@ export class GeminiClient {
       for await (const event of resultStream) {
         if (this.loopDetector.addAndCheck(event)) {
           yield { type: GeminiEventType.LoopDetected };
+          await fireAfterAgentHook();
           return turn;
         }
 
@@ -1619,6 +1735,11 @@ export class GeminiClient {
           }
         }
 
+        // Capture content events for AfterAgent hook
+        if (event.type === GeminiEventType.Content && event.value) {
+          responseChunks.push(event.value);
+        }
+
         if (this.shouldDeferStreamEvent(event)) {
           deferredEvents.push(event);
         } else {
@@ -1633,6 +1754,7 @@ export class GeminiClient {
           for (const deferred of deferredEvents) {
             yield deferred;
           }
+          await fireAfterAgentHook();
           return turn;
         }
 
@@ -1641,6 +1763,7 @@ export class GeminiClient {
           if (this.config.getContinueOnFailedApiCall()) {
             if (isInvalidStreamRetry) {
               // We already retried once, so stop here.
+              await fireAfterAgentHook();
               return turn;
             }
             const nextRequest = [{ text: 'System: Please continue.' }];
@@ -1651,6 +1774,7 @@ export class GeminiClient {
               boundedTurns - 1,
               true, // Set isInvalidStreamRetry to true
             );
+            await fireAfterAgentHook();
             return turn;
           }
         }
@@ -1668,6 +1792,21 @@ export class GeminiClient {
         this.lastTodoSnapshot = reminderState.todos;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
+        const afterHookOutput = await fireAfterAgentHook();
+        // For AfterAgent hooks, blocking/stop execution should force continuation
+        if (
+          afterHookOutput?.isBlockingDecision() ||
+          afterHookOutput?.shouldStopExecution()
+        ) {
+          const continueReason = afterHookOutput.getEffectiveReason();
+          const continueRequest: PartListUnion = [{ text: continueReason }];
+          yield* this.sendMessageStream(
+            continueRequest,
+            signal,
+            prompt_id,
+            getBoundedTurns() - 1,
+          );
+        }
         return turn;
       }
 
@@ -1708,6 +1847,7 @@ export class GeminiClient {
         this.lastTodoSnapshot = latestSnapshot;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
+        await fireAfterAgentHook();
         return turn;
       }
 
@@ -1724,6 +1864,21 @@ export class GeminiClient {
         this.lastTodoSnapshot = latestSnapshot;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
+        const afterHookOutput2 = await fireAfterAgentHook();
+        // For AfterAgent hooks, blocking/stop execution should force continuation
+        if (
+          afterHookOutput2?.isBlockingDecision() ||
+          afterHookOutput2?.shouldStopExecution()
+        ) {
+          const continueReason = afterHookOutput2.getEffectiveReason();
+          const continueRequest: PartListUnion = [{ text: continueReason }];
+          yield* this.sendMessageStream(
+            continueRequest,
+            signal,
+            prompt_id,
+            getBoundedTurns() - 1,
+          );
+        }
         return turn;
       }
 
@@ -1738,6 +1893,7 @@ export class GeminiClient {
         this.lastTodoSnapshot = latestSnapshot;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
+        await fireAfterAgentHook();
         return turn;
       }
 
@@ -1768,6 +1924,7 @@ export class GeminiClient {
           }
           this.toolCallReminderLevel = 'none';
           this.toolActivityCount = 0;
+          await fireAfterAgentHook();
           return turn;
         }
 
@@ -1797,6 +1954,7 @@ export class GeminiClient {
     }
 
     // Shouldn't reach here, but return last turn if we do
+    await fireAfterAgentHook();
     return lastTurn!;
   }
 
@@ -1812,14 +1970,21 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
+      const mcpInstructions = this.config
+        .getMcpClientManager()
+        ?.getMcpInstructions();
       const enabledToolNames = this.getEnabledToolNamesForPrompt();
       const includeSubagentDelegation =
         await this.shouldIncludeSubagentDelegation(enabledToolNames);
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
+        mcpInstructions,
         model: modelToUse,
         tools: enabledToolNames,
         includeSubagentDelegation,
+        interactionMode: this.config.isInteractive()
+          ? 'interactive'
+          : 'non-interactive',
       });
 
       // Convert Content[] to a single prompt for BaseLLMClient
@@ -1910,15 +2075,22 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
+      const mcpInstructions = this.config
+        .getMcpClientManager()
+        ?.getMcpInstructions();
       const enabledToolNames = this.getEnabledToolNamesForPrompt();
       const includeSubagentDelegation =
         await this.shouldIncludeSubagentDelegation(enabledToolNames);
       // Provider name removed from prompt call signature
       const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
+        mcpInstructions,
         model: modelToUse,
         tools: enabledToolNames,
         includeSubagentDelegation,
+        interactionMode: this.config.isInteractive()
+          ? 'interactive'
+          : 'non-interactive',
       });
 
       const requestConfig = {

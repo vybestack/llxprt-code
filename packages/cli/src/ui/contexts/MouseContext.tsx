@@ -15,7 +15,6 @@ import {
   useRef,
 } from 'react';
 import { ESC } from '../utils/input.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
   isIncompleteMouseSequence,
   parseMouseEvent,
@@ -23,8 +22,6 @@ import {
   type MouseEventName,
   type MouseHandler,
 } from '../utils/mouse.js';
-
-const debugLogger = new DebugLogger('llxprt:ui:mouse');
 
 export type { MouseEvent, MouseEventName, MouseHandler };
 
@@ -61,11 +58,9 @@ export function useMouse(handler: MouseHandler, { isActive = true } = {}) {
 export function MouseProvider({
   children,
   mouseEventsEnabled,
-  debugKeystrokeLogging,
 }: {
   children: React.ReactNode;
   mouseEventsEnabled?: boolean;
-  debugKeystrokeLogging?: boolean;
 }) {
   const { stdin } = useStdin();
   const subscribers = useRef<Set<MouseHandler>>(new Set()).current;
@@ -109,12 +104,6 @@ export function MouseProvider({
         const parsed = parseMouseEvent(mouseBuffer);
 
         if (parsed) {
-          if (debugKeystrokeLogging) {
-            debugLogger.log(
-              '[DEBUG] Mouse event parsed:',
-              JSON.stringify(parsed.event),
-            );
-          }
           broadcast(parsed.event);
           mouseBuffer = mouseBuffer.slice(parsed.length);
           continue;
@@ -142,7 +131,7 @@ export function MouseProvider({
     return () => {
       stdin.removeListener('data', handleData);
     };
-  }, [stdin, mouseEventsEnabled, subscribers, debugKeystrokeLogging]);
+  }, [stdin, mouseEventsEnabled, subscribers]);
 
   const contextValue = useMemo(
     () => ({ subscribe, unsubscribe }),

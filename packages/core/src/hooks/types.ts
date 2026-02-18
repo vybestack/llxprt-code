@@ -250,6 +250,24 @@ export class BeforeToolHookOutput extends DefaultHookOutput {
 
     return super.isBlockingDecision();
   }
+
+  /**
+   * Get modified tool input if provided by hook
+   * @requirement:HOOK-019 - Tool input modification
+   */
+  getModifiedToolInput(): Record<string, unknown> | undefined {
+    if (this.hookSpecificOutput && 'tool_input' in this.hookSpecificOutput) {
+      const modifiedInput = this.hookSpecificOutput['tool_input'];
+      if (
+        modifiedInput &&
+        typeof modifiedInput === 'object' &&
+        !Array.isArray(modifiedInput)
+      ) {
+        return modifiedInput as Record<string, unknown>;
+      }
+    }
+    return undefined;
+  }
 }
 
 /**
@@ -304,11 +322,17 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
 export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
   /**
    * Apply tool configuration modifications
+   *
+   * Returns a structure with toolConfig containing allowedFunctionNames directly,
+   * in addition to the SDK-compatible functionCallingConfig structure.
    */
   override applyToolConfigModifications(target: {
-    toolConfig?: GenAIToolConfig;
+    toolConfig?: GenAIToolConfig & { allowedFunctionNames?: string[] };
     tools?: ToolListUnion;
-  }): { toolConfig?: GenAIToolConfig; tools?: ToolListUnion } {
+  }): {
+    toolConfig?: GenAIToolConfig & { allowedFunctionNames?: string[] };
+    tools?: ToolListUnion;
+  } {
     if (this.hookSpecificOutput && 'toolConfig' in this.hookSpecificOutput) {
       const hookToolConfig = this.hookSpecificOutput[
         'toolConfig'
@@ -320,7 +344,11 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
         return {
           ...target,
           tools: target.tools || [],
-          toolConfig: sdkToolConfig,
+          toolConfig: {
+            ...sdkToolConfig,
+            // Also expose allowedFunctionNames directly for easier access
+            allowedFunctionNames: hookToolConfig.allowedFunctionNames,
+          },
         };
       }
     }
@@ -365,6 +393,61 @@ export class AfterModelHookOutput extends DefaultHookOutput {
     }
 
     return undefined;
+  }
+}
+
+/**
+ * Specific hook output class for AfterTool events
+ */
+export class AfterToolHookOutput extends DefaultHookOutput {
+  /**
+   * Get additional context if provided by hook
+   */
+  override getAdditionalContext(): string | undefined {
+    return super.getAdditionalContext();
+  }
+}
+
+/**
+ * Specific hook output class for SessionStart events
+ */
+export class SessionStartHookOutput extends DefaultHookOutput {
+  /**
+   * Get additional context if provided by hook
+   */
+  override getAdditionalContext(): string | undefined {
+    return super.getAdditionalContext();
+  }
+}
+
+/**
+ * Specific hook output class for SessionEnd events
+ */
+export class SessionEndHookOutput extends DefaultHookOutput {
+  // SessionEnd typically doesn't need special output processing
+}
+
+/**
+ * Specific hook output class for BeforeAgent events
+ */
+export class BeforeAgentHookOutput extends DefaultHookOutput {
+  /**
+   * Get additional context if provided by hook
+   */
+  override getAdditionalContext(): string | undefined {
+    return super.getAdditionalContext();
+  }
+}
+
+/**
+ * Specific hook output class for AfterAgent events
+ */
+export class AfterAgentHookOutput extends DefaultHookOutput {
+  /**
+   * Get additional context if provided by hook
+   */
+  override getAdditionalContext(): string | undefined {
+    return super.getAdditionalContext();
   }
 }
 

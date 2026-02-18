@@ -78,9 +78,9 @@ describe('PromptService', () => {
       const stats = await fs.stat(coreDefaultPath);
       expect(stats.isFile()).toBe(true);
 
-      // Check content is correct
+      // Check content is correct (raw template, not rendered)
       const content = await fs.readFile(coreDefaultPath, 'utf-8');
-      expect(content).toContain('You are an interactive CLI agent');
+      expect(content).toContain('You are {{INTERACTION_MODE_LABEL}} CLI agent');
       expect(content).toContain('Workspace name: {{WORKSPACE_NAME}}');
       expect(content).toContain('Sandbox type: {{SANDBOX_TYPE}}');
     });
@@ -443,6 +443,28 @@ describe('PromptService', () => {
       // Should work because defaults are always installed during initialization
       const prompt = await service.getPrompt(context);
       expect(prompt).toContain('You are an interactive CLI agent');
+    });
+
+    it('should apply gemini-3-pro-preview prompt overrides', async () => {
+      const baseDir = path.join(tempDir, 'gemini-prompts');
+      const service = new PromptService({ baseDir });
+      await service.initialize();
+
+      const context: PromptContext = {
+        provider: 'gemini',
+        model: 'gemini-3-pro-preview',
+        enabledTools: [],
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const prompt = await service.getPrompt(context);
+      expect(prompt).toContain('Do not call tools in silence');
+      expect(prompt).not.toContain('No Chitchat');
+      expect(prompt).toContain('Clarity over Brevity (When Needed)');
     });
 
     it('should continue if tool prompt is missing and log warning in debug mode', async () => {

@@ -137,6 +137,44 @@ describe('PromptCache', () => {
       const key2 = cache.generateKey(context2);
       expect(key1).not.toBe(key2);
     });
+
+    it('partitions cache keys by interaction mode', () => {
+      const interactive = createContext({
+        environment: {
+          isGitRepository: true,
+          isSandboxed: false,
+          hasIdeCompanion: true,
+          interactionMode: 'interactive',
+        },
+      });
+      const nonInteractive = createContext({
+        environment: {
+          isGitRepository: true,
+          isSandboxed: false,
+          hasIdeCompanion: true,
+          interactionMode: 'non-interactive',
+        },
+      });
+      const subagent = createContext({
+        environment: {
+          isGitRepository: true,
+          isSandboxed: false,
+          hasIdeCompanion: true,
+          interactionMode: 'subagent',
+        },
+      });
+
+      const interactiveKey = cache.generateKey(interactive);
+      const nonInteractiveKey = cache.generateKey(nonInteractive);
+      const subagentKey = cache.generateKey(subagent);
+
+      expect(interactiveKey).not.toBe(nonInteractiveKey);
+      expect(interactiveKey).not.toBe(subagentKey);
+      expect(nonInteractiveKey).not.toBe(subagentKey);
+      expect(interactiveKey).toContain('interactive');
+      expect(nonInteractiveKey).toContain('non-interactive');
+      expect(subagentKey).toContain('subagent');
+    });
   });
 
   describe('set and get operations', () => {

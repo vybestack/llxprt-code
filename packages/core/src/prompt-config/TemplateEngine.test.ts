@@ -104,6 +104,57 @@ describe('TemplateEngine', () => {
     });
   });
 
+  describe('interaction mode variables', () => {
+    const createContextForMode = (
+      interactionMode?: 'interactive' | 'non-interactive' | 'subagent',
+    ): PromptContext => ({
+      provider: 'openai',
+      model: 'gpt-4',
+      enabledTools: [],
+      environment: {
+        isGitRepository: false,
+        isSandboxed: false,
+        hasIdeCompanion: false,
+        interactionMode,
+      },
+    });
+
+    it('sets interactive defaults when no interaction mode is provided', () => {
+      const vars = engine.createVariablesFromContext(createContextForMode());
+
+      expect(vars.INTERACTION_MODE).toBe('interactive');
+      expect(vars.INTERACTION_MODE_LABEL).toBe('an interactive');
+      expect(vars.INTERACTIVE_CONFIRM).toContain('confirming with the user');
+      expect(vars.NON_INTERACTIVE_CONTINUE).toBe('');
+    });
+
+    it('sets non-interactive prompt variables when interactionMode is non-interactive', () => {
+      const vars = engine.createVariablesFromContext(
+        createContextForMode('non-interactive'),
+      );
+
+      expect(vars.INTERACTION_MODE).toBe('non-interactive');
+      expect(vars.INTERACTION_MODE_LABEL).toBe('a non-interactive');
+      expect(vars.INTERACTIVE_CONFIRM).toContain(
+        'Do not ask the user for clarification',
+      );
+      expect(vars.NON_INTERACTIVE_CONTINUE).toContain('Continue the work');
+    });
+
+    it('sets subagent prompt variables when interactionMode is subagent', () => {
+      const vars = engine.createVariablesFromContext(
+        createContextForMode('subagent'),
+      );
+
+      expect(vars.INTERACTION_MODE).toBe('subagent');
+      expect(vars.INTERACTION_MODE_LABEL).toBe('a subagent');
+      expect(vars.INTERACTIVE_CONFIRM).toContain(
+        'Do not ask the user for clarification',
+      );
+      expect(vars.NON_INTERACTIVE_CONTINUE).toContain('Continue the work');
+    });
+  });
+
   describe('SUBAGENT_DELEGATION variable', () => {
     it('should include SUBAGENT_DELEGATION when includeSubagentDelegation is true and tools include Task and ListSubagents', () => {
       const context: PromptContext = {

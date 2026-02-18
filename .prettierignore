@@ -49,3 +49,4 @@ research/
 eslint.config.js
 gha-creds-*.json
 junit.xml
+.pytest_cache

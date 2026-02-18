@@ -71,6 +71,7 @@ export enum GeminiEventType {
   SystemNotice = 'system_notice',
   InvalidStream = 'invalid_stream',
   ContextWindowWillOverflow = 'context_window_will_overflow',
+  ModelInfo = 'model_info',
 }
 
 export type ServerGeminiRetryEvent = {
@@ -114,6 +115,11 @@ export interface ToolCallResponseInfo {
   error: Error | undefined;
   errorType: ToolErrorType | undefined;
   agentId?: string;
+  /**
+   * Optional flag to suppress display of this tool result
+   * @requirement:HOOK-132 - AfterTool suppressOutput support
+   */
+  suppressDisplay?: boolean;
 }
 
 export interface ServerToolCallConfirmationDetails {
@@ -218,6 +224,15 @@ export type ServerGeminiCitationEvent = {
   value: string;
 };
 
+export interface ModelInfo {
+  model: string;
+}
+
+export type ServerGeminiModelInfoEvent = {
+  type: GeminiEventType.ModelInfo;
+  value: ModelInfo;
+};
+
 // The original union type, now composed of the individual types
 export type ServerGeminiStreamEvent =
   | ServerGeminiContentEvent
@@ -236,7 +251,8 @@ export type ServerGeminiStreamEvent =
   | ServerGeminiCitationEvent
   | ServerGeminiRetryEvent
   | ServerGeminiInvalidStreamEvent
-  | ServerGeminiContextWindowWillOverflowEvent;
+  | ServerGeminiContextWindowWillOverflowEvent
+  | ServerGeminiModelInfoEvent;
 
 // A turn manages the agentic loop turn within the server context.
 export class Turn {

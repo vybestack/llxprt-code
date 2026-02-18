@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P15,P16,P17
+ * @requirement:HOOK-087,HOOK-088,HOOK-089,HOOK-090,HOOK-091
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HookPlanner } from './hookPlanner.js';
 import type { HookRegistry, HookRegistryEntry } from './hookRegistry.js';

@@ -64,16 +64,24 @@ function loadMarkdownFile(filename: string): string {
     );
   }
 
-  const manifestContent = loadPromptFromManifest(filename);
-  if (manifestContent !== null) {
-    if (debugLog) {
-      const origin = getManifestOrigin();
-      logger.debug(
-        () =>
-          `[PROMPT_LOADER] Loaded ${filename} from manifest${origin ? ` (${origin})` : ''}`,
-      );
+  const manifestEnv =
+    typeof process !== 'undefined' ? process.env?.LLXPRT_PROMPT_MANIFEST : '';
+  const isTestMode =
+    typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+  const shouldUseManifest = !isTestMode || Boolean(manifestEnv);
+
+  if (shouldUseManifest) {
+    const manifestContent = loadPromptFromManifest(filename);
+    if (manifestContent !== null) {
+      if (debugLog) {
+        const origin = getManifestOrigin();
+        logger.debug(
+          () =>
+            `[PROMPT_LOADER] Loaded ${filename} from manifest${origin ? ` (${origin})` : ''}`,
+        );
+      }
+      return manifestContent;
     }
-    return manifestContent;
   }
 
   try {
@@ -267,6 +275,9 @@ function loadMarkdownFile(filename: string): string {
 export const PROVIDER_DEFAULTS: Record<string, string> = {
   'providers/gemini/models/gemini-2.5-flash/core.md': loadMarkdownFile(
     'providers/gemini/models/gemini-2.5-flash/core.md',
+  ),
+  'providers/gemini/models/gemini-3-pro-preview/core.md': loadMarkdownFile(
+    'providers/gemini/models/gemini-3-pro-preview/core.md',
   ),
   // Future provider-specific defaults can be added here
 };

@@ -580,7 +580,7 @@ export class GracefulErrorHandler {
 
       // Return fallback for non-critical errors
       if (typeof fallback === 'function') {
-        return await (fallback as () => T | Promise<T>)();
+        return (fallback as () => T | Promise<T>)();
       }
       return fallback;
     }
@@ -628,9 +628,9 @@ export class GracefulErrorHandler {
           oauthError.category !== OAuthErrorCategory.CRITICAL
         ) {
           if (typeof fallback === 'function') {
-            return await (
-              fallback as (...args: TArgs) => TReturn | Promise<TReturn>
-            )(...args);
+            return (fallback as (...args: TArgs) => TReturn | Promise<TReturn>)(
+              ...args,
+            );
           }
           return fallback;
         }

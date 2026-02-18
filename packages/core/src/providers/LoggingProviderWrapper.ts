@@ -695,14 +695,21 @@ export class LoggingProviderWrapper implements IProvider {
   ): AsyncIterableIterator<IContent> {
     const startTime = performance.now();
     let latestTokenUsage: UsageStats | undefined;
+    let lastFinishReason: string | undefined;
 
     try {
       for await (const chunk of stream) {
-        // Extract token usage from IContent metadata
+        // Extract token usage and finishReason from IContent metadata
         if (chunk && typeof chunk === 'object') {
           const content = chunk as IContent;
           if (content.metadata?.usage) {
             latestTokenUsage = content.metadata.usage;
+          }
+          const metaFinishReason = (
+            content.metadata as Record<string, unknown> | undefined
+          )?.finishReason;
+          if (typeof metaFinishReason === 'string') {
+            lastFinishReason = metaFinishReason;
           }
         }
 
@@ -725,11 +732,16 @@ export class LoggingProviderWrapper implements IProvider {
 
       // Issue #684: Log API response telemetry for /stats model tracking
       if (config) {
+        const finishReasons = lastFinishReason ? [lastFinishReason] : [];
         // Create event and set token counts directly since constructor doesn't support raw counts
         const event = new ApiResponseEvent(
           modelName,
           duration,
           '', // promptId - not available in metrics-only path
+          undefined,
+          undefined,
+          undefined,
+          finishReasons,
         );
         event.input_token_count = tokenCounts.input_token_count;
         event.output_token_count = tokenCounts.output_token_count;
@@ -790,6 +802,7 @@ export class LoggingProviderWrapper implements IProvider {
     let responseContent = '';
     let responseComplete = false;
     let latestTokenUsage: UsageStats | undefined;
+    let lastFinishReason: string | undefined;
 
     try {
       for await (const chunk of stream) {
@@ -799,11 +812,17 @@ export class LoggingProviderWrapper implements IProvider {
           responseContent += content;
         }
 
-        // Extract token usage from IContent metadata
+        // Extract token usage and finishReason from IContent metadata
         if (chunk && typeof chunk === 'object') {
           const content = chunk as IContent;
           if (content.metadata?.usage) {
             latestTokenUsage = content.metadata.usage;
+          }
+          const metaFinishReason = (
+            content.metadata as Record<string, unknown> | undefined
+          )?.finishReason;
+          if (typeof metaFinishReason === 'string') {
+            lastFinishReason = metaFinishReason;
           }
         }
 
@@ -821,6 +840,7 @@ export class LoggingProviderWrapper implements IProvider {
         error,
         latestTokenUsage,
         modelName,
+        lastFinishReason ? [lastFinishReason] : [],
       );
       throw error;
     }
@@ -836,6 +856,7 @@ export class LoggingProviderWrapper implements IProvider {
         undefined,
         latestTokenUsage,
         modelName,
+        lastFinishReason ? [lastFinishReason] : [],
       );
     }
   }
@@ -871,6 +892,7 @@ export class LoggingProviderWrapper implements IProvider {
     error?: unknown,
     tokenUsage?: UsageStats,
     modelName?: string,
+    finishReasons?: string[],
   ): Promise<void> {
     try {
       const redactedContent = this.redactor
@@ -918,6 +940,10 @@ export class LoggingProviderWrapper implements IProvider {
         resolvedModelName,
         duration,
         promptId,
+        undefined,
+        undefined,
+        undefined,
+        finishReasons,
       );
       apiResponseEvent.input_token_count = tokenCounts.input_token_count;
       apiResponseEvent.output_token_count = tokenCounts.output_token_count;

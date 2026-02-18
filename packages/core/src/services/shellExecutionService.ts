@@ -74,6 +74,8 @@ export interface ShellExecutionResult {
   error: Error | null;
   /** A boolean indicating if the command was aborted by the user. */
   aborted: boolean;
+  /** Whether the command was killed due to an inactivity timeout. */
+  inactivityTimedOut?: boolean;
   /** The process ID of the spawned shell. */
   pid: number | undefined;
   /** The method used to execute the shell command. */
@@ -95,6 +97,8 @@ export interface ShellExecutionConfig {
   // Used for testing
   disableDynamicLineTrimming?: boolean;
   scrollback?: number;
+  inactivityTimeoutMs?: number;
+  isSandboxOrCI?: boolean;
 }
 
 export type ShellOutputEvent =
@@ -235,6 +239,7 @@ export class ShellExecutionService {
       cwd,
       onOutputEvent,
       abortSignal,
+      shellExecutionConfig,
     );
   }
 
@@ -273,6 +278,7 @@ export class ShellExecutionService {
     cwd: string,
     onOutputEvent: (event: ShellOutputEvent) => void,
     abortSignal: AbortSignal,
+    shellExecutionConfig: ShellExecutionConfig = {},
   ): ShellExecutionHandle {
     try {
       const isWindows = os.platform() === 'win32';
@@ -280,12 +286,15 @@ export class ShellExecutionService {
       const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
       const spawnArgs = [...argsPrefix, guardedCommand];
 
-      const envVars: NodeJS.ProcessEnv = {
-        ...process.env,
-        LLXPRT_CODE: '1',
-        TERM: 'xterm-256color',
-        PAGER: 'cat',
-      };
+      const envVars: NodeJS.ProcessEnv = this.sanitizeEnvironment(
+        {
+          ...process.env,
+          LLXPRT_CODE: '1',
+          TERM: 'xterm-256color',
+          PAGER: 'cat',
+        },
+        !!shellExecutionConfig.isSandboxOrCI,
+      );
       delete envVars.BASH_ENV;
 
       const child = cpSpawn(executable, spawnArgs, {
@@ -314,8 +323,59 @@ export class ShellExecutionService {
         let sniffedBytes = 0;
         let sniffBuffer = Buffer.alloc(0);
         let totalBytesReceived = 0;
+        let inactivityTimeout: NodeJS.Timeout | null = null;
+        const inactivityTimeoutMs = shellExecutionConfig?.inactivityTimeoutMs;
+        const inactivityAbortController = new AbortController();
+
+        const resetInactivityTimer = () => {
+          if (!inactivityTimeoutMs || inactivityTimeoutMs <= 0 || exited) {
+            return;
+          }
+
+          if (inactivityTimeout) {
+            clearTimeout(inactivityTimeout);
+          }
+
+          inactivityTimeout = setTimeout(() => {
+            if (!exited) {
+              // Kill the process due to inactivity
+              inactivityAbortController.abort('inactivity_timeout');
+            }
+          }, inactivityTimeoutMs);
+        };
+
+        // Set up inactivity abort handler (mirrors abortHandler's SIGKILL escalation)
+        if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
+          inactivityAbortController.signal.addEventListener(
+            'abort',
+            async () => {
+              if (child.pid && !exited) {
+                const pid = child.pid;
+                if (isWindows) {
+                  cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+                } else {
+                  try {
+                    process.kill(-pid, 'SIGTERM');
+                    await new Promise((res) =>
+                      setTimeout(res, SIGKILL_TIMEOUT_MS),
+                    );
+                    if (!exited) {
+                      process.kill(-pid, 'SIGKILL');
+                    }
+                  } catch (_e) {
+                    if (!exited) child.kill('SIGKILL');
+                  }
+                }
+              }
+            },
+            { once: true },
+          );
+          resetInactivityTimer();
+        }
 
         const handleOutput = (data: Buffer, stream: 'stdout' | 'stderr') => {
+          // Reset inactivity timer on each output
+          resetInactivityTimer();
           if (!stdoutDecoder || !stderrDecoder) {
             const encoding = getCachedEncodingForBuffer(data);
             try {
@@ -414,6 +474,7 @@ export class ShellExecutionService {
             signal: signal ? (os.constants.signals[signal] ?? null) : null,
             error,
             aborted: abortSignal.aborted,
+            inactivityTimedOut: inactivityAbortController.signal.aborted,
             pid: child.pid,
             executionMethod: 'child_process',
           });
@@ -465,6 +526,11 @@ export class ShellExecutionService {
         function cleanup() {
           exited = true;
           abortSignal.removeEventListener('abort', abortHandler);
+
+          if (inactivityTimeout) {
+            clearTimeout(inactivityTimeout);
+            inactivityTimeout = null;
+          }
 
           if (!cleanedUp) {
             cleanedUp = true;
@@ -532,12 +598,15 @@ export class ShellExecutionService {
       const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
       const args = [...argsPrefix, guardedCommand];
 
-      const envVars: NodeJS.ProcessEnv = {
-        ...process.env,
-        LLXPRT_CODE: '1',
-        TERM: 'xterm-256color',
-        PAGER: shellExecutionConfig.pager ?? 'cat',
-      };
+      const envVars: NodeJS.ProcessEnv = this.sanitizeEnvironment(
+        {
+          ...process.env,
+          LLXPRT_CODE: '1',
+          TERM: 'xterm-256color',
+          PAGER: shellExecutionConfig.pager ?? 'cat',
+        },
+        !!shellExecutionConfig.isSandboxOrCI,
+      );
       delete envVars.BASH_ENV;
 
       const ptyProcess = ptyInfo.module.spawn(executable, args, {
@@ -579,6 +648,9 @@ export class ShellExecutionService {
         };
         ShellExecutionService.activePtys.set(ptyProcess.pid, activePtyEntry);
         ShellExecutionService.lastActivePtyId = ptyProcess.pid;
+        let inactivityTimeout: NodeJS.Timeout | null = null;
+        const inactivityTimeoutMs = shellExecutionConfig.inactivityTimeoutMs;
+        const inactivityAbortController = new AbortController();
 
         const cleanupActivePty = () => {
           const entry = ShellExecutionService.activePtys.get(ptyProcess.pid);
@@ -588,6 +660,10 @@ export class ShellExecutionService {
           }
           if (ShellExecutionService.lastActivePtyId === ptyProcess.pid) {
             ShellExecutionService.lastActivePtyId = null;
+          }
+          if (inactivityTimeout) {
+            clearTimeout(inactivityTimeout);
+            inactivityTimeout = null;
           }
         };
 
@@ -742,6 +818,7 @@ export class ShellExecutionService {
             signal: signal ?? null,
             error,
             aborted: abortSignal.aborted,
+            inactivityTimedOut: inactivityAbortController.signal.aborted,
             pid: ptyProcess.pid,
             executionMethod: ptyInfo.name ?? 'node-pty',
           });
@@ -775,7 +852,56 @@ export class ShellExecutionService {
           }
         });
 
+        const resetInactivityTimer = () => {
+          if (!inactivityTimeoutMs || inactivityTimeoutMs <= 0 || exited) {
+            return;
+          }
+
+          if (inactivityTimeout) {
+            clearTimeout(inactivityTimeout);
+          }
+
+          inactivityTimeout = setTimeout(() => {
+            if (!exited) {
+              // Kill the process due to inactivity
+              inactivityAbortController.abort('inactivity_timeout');
+            }
+          }, inactivityTimeoutMs);
+        };
+
+        // Set up inactivity abort handler (mirrors abortHandler's SIGKILL escalation)
+        if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
+          inactivityAbortController.signal.addEventListener(
+            'abort',
+            async () => {
+              if (ptyProcess.pid && !exited) {
+                const pid = ptyProcess.pid;
+                if (isWindows) {
+                  cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+                } else {
+                  try {
+                    process.kill(-pid, 'SIGTERM');
+                    await new Promise((res) =>
+                      setTimeout(res, SIGKILL_TIMEOUT_MS),
+                    );
+                    if (!exited) {
+                      process.kill(-pid, 'SIGKILL');
+                    }
+                  } catch (_e) {
+                    if (!exited) ptyProcess.kill('SIGKILL');
+                  }
+                }
+              }
+            },
+            { once: true },
+          );
+          resetInactivityTimer();
+        }
+
         const handleOutput = (data: Buffer) => {
+          // Reset inactivity timer on each output
+          resetInactivityTimer();
+
           processingChain = processingChain.then(
             () =>
               new Promise<void>((resolve) => {
@@ -891,6 +1017,7 @@ export class ShellExecutionService {
                 signal: null,
                 error,
                 aborted: true,
+                inactivityTimedOut: inactivityAbortController.signal.aborted,
                 pid,
                 executionMethod: ptyInfo.name ?? 'node-pty',
               });
@@ -932,6 +1059,7 @@ export class ShellExecutionService {
                 signal: null,
                 error,
                 aborted: true,
+                inactivityTimedOut: inactivityAbortController.signal.aborted,
                 pid,
                 executionMethod: ptyInfo.name ?? 'node-pty',
               });
@@ -1107,5 +1235,69 @@ export class ShellExecutionService {
       this.activePtys.delete(pid);
     }
     this.lastActivePtyId = null;
+  }
+
+  /**
+   * Sanitizes environment variables to prevent credential leaks in sandbox/CI environments.
+   * Uses an allowlist approach: only known-safe variables are forwarded.
+   *
+   * @param env The environment variables to sanitize
+   * @param isSandboxOrCI Whether running in sandbox or CI mode (true = sanitize, false = pass through all)
+   * @param allowlist Optional array of additional variable names to allow
+   * @returns Sanitized environment variables
+   */
+  static sanitizeEnvironment(
+    env: NodeJS.ProcessEnv,
+    isSandboxOrCI: boolean,
+    allowlist?: string[],
+  ): NodeJS.ProcessEnv {
+    // In local dev mode (not sandbox/CI), pass through all env vars unchanged
+    if (!isSandboxOrCI) {
+      return { ...env };
+    }
+
+    const SAFE_VARS = new Set([
+      // Cross-platform
+      'PATH',
+      // Windows
+      'Path',
+      'SYSTEMROOT',
+      'SystemRoot',
+      'COMSPEC',
+      'ComSpec',
+      'PATHEXT',
+      'WINDIR',
+      'TEMP',
+      'TMP',
+      'USERPROFILE',
+      'SYSTEMDRIVE',
+      'SystemDrive',
+      // Unix
+      'HOME',
+      'LANG',
+      'SHELL',
+      'TMPDIR',
+      'USER',
+      'LOGNAME',
+      // Terminal
+      'TERM',
+      'PAGER',
+    ]);
+
+    if (allowlist) {
+      for (const name of allowlist) {
+        SAFE_VARS.add(name);
+      }
+    }
+
+    const result: NodeJS.ProcessEnv = {};
+
+    for (const [key, value] of Object.entries(env)) {
+      if (SAFE_VARS.has(key) || /^LLXPRT_CODE/.test(key)) {
+        result[key] = value;
+      }
+    }
+
+    return result;
   }
 }

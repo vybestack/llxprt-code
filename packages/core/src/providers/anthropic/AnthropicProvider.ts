@@ -1789,18 +1789,27 @@ ${block.code}
     }
 
     // Determine whether to include subagent delegation prompt
+    const mcpInstructions = options.config
+      ?.getMcpClientManager?.()
+      ?.getMcpInstructions();
     const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
       toolNamesForPrompt ?? [],
       () => options.config?.getSubagentManager?.(),
     );
 
+    const interactionMode = options.config?.isInteractive?.()
+      ? 'interactive'
+      : 'non-interactive';
+
     // For OAuth mode, inject core system prompt as the first human message
     if (isOAuth) {
       const corePrompt = await getCoreSystemPromptAsync({
         userMemory,
+        mcpInstructions,
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
+        interactionMode,
       });
       if (corePrompt) {
         if (wantCaching) {
@@ -1833,9 +1842,11 @@ ${block.code}
     const systemPrompt = !isOAuth
       ? await getCoreSystemPromptAsync({
           userMemory,
+          mcpInstructions,
           model: currentModel,
           tools: toolNamesForPrompt,
           includeSubagentDelegation,
+          interactionMode,
         })
       : undefined;
 

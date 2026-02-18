@@ -837,7 +837,9 @@ Expectation for required parameters:
       getCurrentContent: async (params: EditToolParams): Promise<string> => {
         const filePath = params.absolute_path || params.file_path || '';
         try {
-          return this.config.getFileSystemService().readTextFile(filePath);
+          return await this.config
+            .getFileSystemService()
+            .readTextFile(filePath);
         } catch (err) {
           if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
           return '';

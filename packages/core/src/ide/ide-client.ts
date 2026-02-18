@@ -135,10 +135,11 @@ export class IdeClient {
 
     this.setState(IDEConnectionStatus.Connecting);
 
-    // Use the connectionConfig that was fetched during getInstance()
-    if (this.connectionConfig?.authToken) {
-      this.authToken = this.connectionConfig.authToken;
-    }
+    this.connectionConfig = await this.getConnectionConfigFromFile();
+    this.authToken =
+      this.connectionConfig?.authToken ??
+      process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'];
+
     const workspacePath =
       this.connectionConfig?.workspacePath ??
       process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];

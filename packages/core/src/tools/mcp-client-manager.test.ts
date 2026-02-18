@@ -128,4 +128,155 @@ describe('McpClientManager', () => {
     expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
     expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
   });
+
+  describe('getMcpInstructions', () => {
+    it('should aggregate instructions from all connected servers', async () => {
+      const mockedMcpClient1 = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        getStatus: vi.fn().mockReturnValue('connected'),
+        getServerConfig: vi.fn().mockReturnValue({}),
+        getInstructions: vi.fn().mockReturnValue('Server 1 instructions'),
+      };
+      const mockedMcpClient2 = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        getStatus: vi.fn().mockReturnValue('connected'),
+        getServerConfig: vi.fn().mockReturnValue({}),
+        getInstructions: vi.fn().mockReturnValue('Server 2 instructions'),
+      };
+
+      let callCount = 0;
+      vi.mocked(McpClient).mockImplementation(() => {
+        const client = callCount === 0 ? mockedMcpClient1 : mockedMcpClient2;
+        callCount++;
+        return client as unknown as McpClient;
+      });
+
+      const mockConfig = {
+        isTrustedFolder: () => true,
+        getMcpServers: () => ({
+          'server-1': {},
+          'server-2': {},
+        }),
+        getMcpServerCommand: () => '',
+        getPromptRegistry: () => ({}) as PromptRegistry,
+        getDebugMode: () => false,
+        getWorkspaceContext: () => ({}) as WorkspaceContext,
+        getEnableExtensionReloading: () => false,
+        getExtensionEvents: () => undefined,
+        getAllowedMcpServers: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        getGeminiClient: () => ({
+          isInitialized: () => false,
+        }),
+      } as unknown as Config;
+
+      const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+      await manager.startConfiguredMcpServers();
+
+      const instructions = manager.getMcpInstructions();
+      expect(instructions).toContain('server-1');
+      expect(instructions).toContain('Server 1 instructions');
+      expect(instructions).toContain('server-2');
+      expect(instructions).toContain('Server 2 instructions');
+    });
+
+    it('should return empty string when no servers have instructions', async () => {
+      const mockedMcpClient = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        getStatus: vi.fn().mockReturnValue('connected'),
+        getServerConfig: vi.fn().mockReturnValue({}),
+        getInstructions: vi.fn().mockReturnValue(''),
+      };
+
+      vi.mocked(McpClient).mockReturnValue(
+        mockedMcpClient as unknown as McpClient,
+      );
+
+      const mockConfig = {
+        isTrustedFolder: () => true,
+        getMcpServers: () => ({
+          'test-server': {},
+        }),
+        getMcpServerCommand: () => '',
+        getPromptRegistry: () => ({}) as PromptRegistry,
+        getDebugMode: () => false,
+        getWorkspaceContext: () => ({}) as WorkspaceContext,
+        getEnableExtensionReloading: () => false,
+        getExtensionEvents: () => undefined,
+        getAllowedMcpServers: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        getGeminiClient: () => ({
+          isInitialized: () => false,
+        }),
+      } as unknown as Config;
+
+      const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+      await manager.startConfiguredMcpServers();
+
+      const instructions = manager.getMcpInstructions();
+      expect(instructions).toBe('');
+    });
+
+    it('should skip servers that are not connected', async () => {
+      const mockedMcpClient1 = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        getStatus: vi.fn().mockReturnValue('connected'),
+        getServerConfig: vi.fn().mockReturnValue({}),
+        getInstructions: vi
+          .fn()
+          .mockReturnValue('Connected server instructions'),
+      };
+      const mockedMcpClient2 = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        getStatus: vi.fn().mockReturnValue('disconnected'),
+        getServerConfig: vi.fn().mockReturnValue({}),
+        getInstructions: vi
+          .fn()
+          .mockReturnValue('Disconnected server instructions'),
+      };
+
+      let callCount = 0;
+      vi.mocked(McpClient).mockImplementation(() => {
+        const client = callCount === 0 ? mockedMcpClient1 : mockedMcpClient2;
+        callCount++;
+        return client as unknown as McpClient;
+      });
+
+      const mockConfig = {
+        isTrustedFolder: () => true,
+        getMcpServers: () => ({
+          'connected-server': {},
+          'disconnected-server': {},
+        }),
+        getMcpServerCommand: () => '',
+        getPromptRegistry: () => ({}) as PromptRegistry,
+        getDebugMode: () => false,
+        getWorkspaceContext: () => ({}) as WorkspaceContext,
+        getEnableExtensionReloading: () => false,
+        getExtensionEvents: () => undefined,
+        getAllowedMcpServers: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        getGeminiClient: () => ({
+          isInitialized: () => false,
+        }),
+      } as unknown as Config;
+
+      const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+      await manager.startConfiguredMcpServers();
+
+      const instructions = manager.getMcpInstructions();
+      expect(instructions).toContain('Connected server instructions');
+      expect(instructions).not.toContain('Disconnected server instructions');
+    });
+  });
 });

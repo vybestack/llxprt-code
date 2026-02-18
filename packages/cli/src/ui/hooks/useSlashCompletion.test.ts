@@ -1210,6 +1210,72 @@ describe('useSlashCompletion', () => {
       expect(result.current.textBuffer.text).toBe('/memory ');
     });
 
+    it('should return the resulting text from handleAutocomplete', () => {
+      const slashCommands = [
+        {
+          name: 'help',
+          description: 'Show help',
+          autoExecute: true,
+        },
+      ] as unknown as SlashCommand[];
+
+      const { result } = renderHook(() => {
+        const textBuffer = useTextBufferForTest('/he');
+        const completion = useSlashCompletion(
+          textBuffer,
+          testDirs,
+          testRootDir,
+          slashCommands,
+          mockCommandContext,
+          false,
+
+          mockConfig,
+        );
+        return { ...completion, textBuffer };
+      });
+
+      expect(result.current.suggestions.map((s) => s.value)).toEqual(['help']);
+
+      let returnedText: string | undefined;
+      act(() => {
+        returnedText = result.current.handleAutocomplete(0);
+      });
+
+      expect(returnedText).toBe('/help ');
+      expect(result.current.textBuffer.text).toBe('/help ');
+    });
+
+    it('should return undefined for out-of-bounds index', () => {
+      const slashCommands = [
+        {
+          name: 'help',
+          description: 'Show help',
+        },
+      ] as unknown as SlashCommand[];
+
+      const { result } = renderHook(() => {
+        const textBuffer = useTextBufferForTest('/he');
+        const completion = useSlashCompletion(
+          textBuffer,
+          testDirs,
+          testRootDir,
+          slashCommands,
+          mockCommandContext,
+          false,
+
+          mockConfig,
+        );
+        return { ...completion, textBuffer };
+      });
+
+      let returnedText: string | undefined;
+      act(() => {
+        returnedText = result.current.handleAutocomplete(99);
+      });
+
+      expect(returnedText).toBeUndefined();
+    });
+
     it('should append a sub-command when the parent is complete', () => {
       const slashCommands = [
         {

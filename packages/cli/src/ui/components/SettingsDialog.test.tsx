@@ -973,7 +973,6 @@ describe('SettingsDialog', () => {
           general: {
             vimMode: true,
             disableAutoUpdate: true,
-            debugKeystrokeLogging: true,
             enablePromptCompletion: true,
           },
           ui: {
@@ -1116,7 +1115,6 @@ describe('SettingsDialog', () => {
           general: {
             vimMode: false,
             disableAutoUpdate: false,
-            debugKeystrokeLogging: false,
             enablePromptCompletion: false,
           },
           ui: {

@@ -186,6 +186,7 @@ describe('CoreToolScheduler', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -663,6 +664,7 @@ describe('CoreToolScheduler', () => {
       getUseModelRouter: () => false,
       getGeminiClient: () => null,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -734,6 +736,7 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
       }),
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -802,6 +805,7 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
       }),
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
@@ -875,6 +879,7 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
       }),
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -917,6 +922,7 @@ describe('CoreToolScheduler', () => {
       const mockConfig = {
         getToolRegistry: () => mockToolRegistry,
         getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+        getEnableHooks: () => false,
         getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
       } as unknown as Config;
 
@@ -985,6 +991,7 @@ describe('CoreToolScheduler with payload', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -1476,6 +1483,7 @@ describe('CoreToolScheduler edit cancellation', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -1793,6 +1801,7 @@ describe('CoreToolScheduler YOLO mode', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -2438,6 +2447,7 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -2557,6 +2567,7 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -2679,6 +2690,7 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -2703,7 +2715,10 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
     const signal = new AbortController().signal;
 
     // Schedule 5 tool calls (simulating the scenario from the bug report)
-    await scheduler.schedule(
+    // NOTE: Don't await schedule() - we need to control tool completion externally via resolvers.
+    // With hooks enabled, schedule() would block until all tools complete, causing a deadlock.
+    // Since this test has hooks disabled (getEnableHooks: () => false), fire-and-forget is fine.
+    void scheduler.schedule(
       [1, 2, 3, 4, 5].map((n) => ({
         callId: `call${n}`,
         name: 'mockTool',
@@ -2808,6 +2823,7 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -2901,6 +2917,7 @@ it('injects agentId into ContextAwareTool context', async () => {
       model: 'test-model',
     }),
     getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+    getEnableHooks: () => false,
     getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
   } as unknown as Config;
 
@@ -2970,6 +2987,7 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
@@ -3077,6 +3095,7 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       }),
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 

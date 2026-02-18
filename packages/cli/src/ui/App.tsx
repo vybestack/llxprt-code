@@ -65,14 +65,8 @@ export const AppWrapper = (props: AppProps) => {
   );
 
   return (
-    <KeypressProvider
-      config={props.config}
-      debugKeystrokeLogging={props.settings.merged.debugKeystrokeLogging}
-    >
-      <MouseProvider
-        mouseEventsEnabled={mouseEventsEnabled}
-        debugKeystrokeLogging={props.settings.merged.debugKeystrokeLogging}
-      >
+    <KeypressProvider config={props.config}>
+      <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
         <ScrollProvider>
           <SessionStatsProvider>
             <VimModeProvider settings={props.settings}>

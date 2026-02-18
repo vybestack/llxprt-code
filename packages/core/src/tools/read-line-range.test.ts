@@ -158,7 +158,7 @@ describe('ReadLineRangeTool', () => {
 
     const runGit = async (args: string[]) => {
       const { spawn } = await import('child_process');
-      return await new Promise<void>((resolve, reject) => {
+      return new Promise<void>((resolve, reject) => {
         const child = spawn('git', args, { cwd: repoDir, windowsHide: true });
         let stderr = '';
         child.stderr.on('data', (d) => {
@@ -211,7 +211,7 @@ describe('ReadLineRangeTool', () => {
 
     const runGit = async (args: string[]) => {
       const { spawn } = await import('child_process');
-      return await new Promise<void>((resolve, reject) => {
+      return new Promise<void>((resolve, reject) => {
         const child = spawn('git', args, { cwd: repoDir, windowsHide: true });
         let stderr = '';
         child.stderr.on('data', (d) => {
@@ -264,7 +264,7 @@ describe('ReadLineRangeTool', () => {
 
     const runGit = async (args: string[]) => {
       const { spawn } = await import('child_process');
-      return await new Promise<void>((resolve, reject) => {
+      return new Promise<void>((resolve, reject) => {
         const child = spawn('git', args, { cwd: repoDir, windowsHide: true });
         let stderr = '';
         child.stderr.on('data', (d) => {
@@ -321,7 +321,7 @@ describe('ReadLineRangeTool', () => {
 
     const runGit = async (args: string[]) => {
       const { spawn } = await import('child_process');
-      return await new Promise<void>((resolve, reject) => {
+      return new Promise<void>((resolve, reject) => {
         const child = spawn('git', args, { cwd: repoDir, windowsHide: true });
         let stderr = '';
         child.stderr.on('data', (d) => {

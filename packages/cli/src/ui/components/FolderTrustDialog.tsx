@@ -15,6 +15,7 @@ import {
 import { useKeypress } from '../hooks/useKeypress.js';
 import * as process from 'node:process';
 import * as path from 'node:path';
+import { ExitCodes } from '@vybestack/llxprt-code-core';
 
 export enum FolderTrustChoice {
   TRUST_FOLDER = 'trust_folder',
@@ -38,7 +39,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
       if (key.name === 'escape') {
         setExiting(true);
         setTimeout(() => {
-          process.exit(1);
+          process.exit(ExitCodes.FATAL_CONFIG_ERROR);
         }, 100);
       }
     },
@@ -48,7 +49,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
   useKeypress(
     (key) => {
       if (key.name === 'r') {
-        process.exit(0);
+        process.exit(ExitCodes.SUCCESS);
       }
     },
     { isActive: !!isRestarting },

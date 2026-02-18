@@ -228,6 +228,7 @@ export class ApiResponseEvent {
   total_token_count: number;
   response_text?: string;
   prompt_id: string;
+  finish_reasons: string[];
 
   constructor(
     model: string,
@@ -236,6 +237,7 @@ export class ApiResponseEvent {
     usage_data?: GenerateContentResponseUsageMetadata,
     response_text?: string,
     error?: string,
+    finish_reasons?: string[],
   ) {
     this['event.name'] = 'api_response';
     this['event.timestamp'] = new Date().toISOString();
@@ -251,6 +253,7 @@ export class ApiResponseEvent {
     this.response_text = response_text;
     this.error = error;
     this.prompt_id = prompt_id;
+    this.finish_reasons = finish_reasons ?? [];
   }
 }
 

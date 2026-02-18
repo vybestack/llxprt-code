@@ -29,6 +29,7 @@ import type {
   Config,
   UserTierId,
   AnyDeclarativeTool,
+  ModelInfo,
 } from '@vybestack/llxprt-code-core';
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';
@@ -77,6 +78,7 @@ export class Task {
     resolve: () => void;
     reject: (reason?: Error) => void;
   };
+  private modelInfo?: ModelInfo;
 
   private constructor(
     id: string,
@@ -142,7 +144,10 @@ export class Task {
       id: this.id,
       contextId: this.contextId,
       taskState: this.taskState,
-      model: this.config.getContentGeneratorConfig()?.model || 'unknown',
+      model:
+        this.modelInfo?.model ||
+        this.config.getContentGeneratorConfig()?.model ||
+        'unknown',
       mcpServers: servers,
       availableTools,
     };
@@ -237,7 +242,7 @@ export class Task {
       traceId?: string;
     } = {
       coderAgent: coderAgentMessage,
-      model: this.config.getModel(),
+      model: this.modelInfo?.model || this.config.getModel(),
       userTier: this.geminiClient.getUserTier(),
     };
 
@@ -443,7 +448,7 @@ export class Task {
     if (!sessionId) {
       throw new Error('Scheduler sessionId is required');
     }
-    return await this.config.getOrCreateScheduler(sessionId, {
+    return this.config.getOrCreateScheduler(sessionId, {
       outputUpdateHandler: this._schedulerOutputUpdate.bind(this),
       onAllToolCallsComplete: this._schedulerAllToolCallsComplete.bind(this),
       onToolCallsUpdate: this._schedulerToolCallsUpdate.bind(this),
@@ -660,6 +665,10 @@ export class Task {
       case GeminiEventType.Thought:
         logger.info('[Task] Sending agent thought...');
         this._sendThought(event.value, traceId);
+        break;
+      case GeminiEventType.ModelInfo:
+        logger.info('[Task] Received model info event:', event.value);
+        this.modelInfo = event.value;
         break;
       case GeminiEventType.ChatCompressed:
         break;

@@ -10,6 +10,24 @@ import { coreEvents } from './events.js';
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 const originalStderrWrite = process.stderr.write.bind(process.stderr);
 
+// Module-level error handlers so the same references are used for add/remove.
+const handleStdoutError = (err: NodeJS.ErrnoException) => {
+  if (err.code !== 'EPIPE') {
+    console.warn(`stdout error: ${err.message}`);
+  }
+};
+
+const handleStderrError = (err: NodeJS.ErrnoException) => {
+  if (err.code !== 'EPIPE') {
+    try {
+      process.stderr.write(`stderr error: ${err.message}
+`);
+    } catch {
+      // Swallow write failures to avoid infinite recursion
+    }
+  }
+};
+
 /**
  * Writes to the real stdout, bypassing any monkey patching on process.stdout.write.
  */
@@ -81,8 +99,19 @@ export function patchStdio(): () => void {
  * Creates proxies for process.stdout and process.stderr that use the real write methods
  * (writeToStdout and writeToStderr) bypassing any monkey patching.
  * This is used by Ink to render to the real output.
+ *
+ * Also adds error event handlers to prevent EPIPE crashes when output is piped
+ * to a process that exits early.
  */
 export function createInkStdio() {
+  // Remove any existing handlers to avoid duplicates, then re-add.
+  // Handlers are defined at module scope so the same references are used.
+  process.stdout.removeListener('error', handleStdoutError);
+  process.stderr.removeListener('error', handleStderrError);
+
+  process.stdout.on('error', handleStdoutError);
+  process.stderr.on('error', handleStderrError);
+
   const inkStdout = new Proxy(process.stdout, {
     get(target, prop, receiver) {
       if (prop === 'write') {

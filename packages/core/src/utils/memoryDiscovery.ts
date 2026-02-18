@@ -454,7 +454,7 @@ export async function loadEnvironmentMemory(
         `Loading environment memory for trusted root: ${resolvedRoot} (Stopping exactly here)`,
       );
     }
-    return await findUpwardGeminiFiles(resolvedRoot, resolvedRoot, debugMode);
+    return findUpwardGeminiFiles(resolvedRoot, resolvedRoot, debugMode);
   });
 
   const pathArrays = await Promise.all(traversalPromises);
@@ -564,7 +564,15 @@ export async function loadJitSubdirectoryMemory(
   trustedRoots: string[],
   alreadyLoadedPaths: Set<string>,
   debugMode: boolean = false,
+  jitContextEnabled: boolean = true,
 ): Promise<MemoryLoadResult> {
+  if (!jitContextEnabled) {
+    if (debugMode) {
+      logger.debug('JIT context loading is disabled by configuration.');
+    }
+    return { files: [] };
+  }
+
   const resolvedTarget = path.resolve(targetPath);
   let bestRoot: string | null = null;
 

@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P08
+ * @requirement:HOOK-061,HOOK-063,HOOK-064,HOOK-065,HOOK-066,HOOK-067a,HOOK-067b,HOOK-068,HOOK-069,HOOK-070
+ * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
+ */
+
 import { spawn } from 'node:child_process';
 import type { HookConfig } from './types.js';
 import { HookEventName } from './types.js';
@@ -83,7 +89,7 @@ export class HookRunner {
       this.executeHook(config, eventName, input),
     );
 
-    return await Promise.all(promises);
+    return Promise.all(promises);
   }
 
   /**
@@ -235,6 +241,12 @@ export class HookRunner {
 
       // Send input to stdin
       if (child.stdin) {
+        child.stdin.on('error', (err: NodeJS.ErrnoException) => {
+          // Ignore EPIPE errors which happen when the child process closes stdin early
+          if (err.code !== 'EPIPE') {
+            debugLogger.warn(`Hook stdin error: ${err}`);
+          }
+        });
         child.stdin.write(JSON.stringify(input));
         child.stdin.end();
       }
