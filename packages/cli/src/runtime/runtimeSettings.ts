@@ -1169,6 +1169,13 @@ export async function applyProfileSnapshot(
           `[issue1250] LoadBalancer profile detected with ${subProfileNames.length} sub-profile(s)`,
       );
 
+      // @fix issue1467 - Capture handler snapshot BEFORE the loop to avoid
+      // cascade clearing: if we clear inside the loop, subsequent iterations
+      // would see an empty handler and falsely detect bucket changes
+      const lbExistingHandler = config.getBucketFailoverHandler?.();
+      const lbExistingBuckets = lbExistingHandler?.getBuckets?.() ?? [];
+      let shouldClearHandler = false;
+
       for (const subProfileName of subProfileNames) {
         try {
           const subProfile = await new ProfileManager().loadProfile(
@@ -1189,22 +1196,19 @@ export async function applyProfileSnapshot(
             // @fix issue1467 - Clear stale session state for sub-profile if buckets changed
             // Note: For LB profiles, each sub-profile may have its own provider,
             // so we check/clear based on the sub-profile's provider
-            const subExistingHandler = config.getBucketFailoverHandler?.();
-            const subExistingBuckets = subExistingHandler?.getBuckets?.() ?? [];
             const subBucketsChanged =
-              subExistingBuckets.length !== subNewBuckets.length ||
-              !subExistingBuckets.every((b, i) => b === subNewBuckets[i]);
+              lbExistingBuckets.length !== subNewBuckets.length ||
+              !lbExistingBuckets.every((b, i) => b === subNewBuckets[i]);
 
             if (subBucketsChanged) {
               logger.debug(
                 () =>
                   `[issue1467] Sub-profile '${subProfileName}' buckets changed for ${subProfile.provider}: ` +
-                  `[${subExistingBuckets.join(', ')}] → [${subNewBuckets.join(', ')}]. ` +
-                  `Clearing session bucket and failover handler.`,
+                  `[${lbExistingBuckets.join(', ')}] → [${subNewBuckets.join(', ')}]. ` +
+                  `Clearing session bucket.`,
               );
               oauthManager.clearSessionBucket(subProfile.provider);
-              // Clear the old failover handler so a fresh one is created by getOAuthToken
-              config.setBucketFailoverHandler?.(undefined);
+              shouldClearHandler = true;
             }
 
             // Touch getOAuthToken to ensure handler is wired to config
@@ -1231,6 +1235,15 @@ export async function applyProfileSnapshot(
               }`,
           );
         }
+      }
+
+      // Clear the handler once after the loop if any sub-profile had changed buckets
+      if (shouldClearHandler) {
+        logger.debug(
+          () =>
+            `[issue1467] Clearing failover handler after LB sub-profile bucket changes`,
+        );
+        config.setBucketFailoverHandler?.(undefined);
       }
     }
   }
