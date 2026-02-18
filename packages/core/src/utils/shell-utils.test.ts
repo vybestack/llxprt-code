@@ -809,4 +809,9 @@ describe('splitCommands', () => {
     const result = splitCommands('echo a; echo b');
     expect(result).toEqual(['echo a', 'echo b']);
   });
+
+  it('should keep &>file (bash redirect-both) within a single command segment', () => {
+    const result = splitCommands('cmd1 &>output.log && cmd2');
+    expect(result).toEqual(['cmd1 &>output.log', 'cmd2']);
+  });
 });
