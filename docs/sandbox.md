@@ -288,8 +288,11 @@ llxprt --sandbox "help me refactor this"
 # Environment variable
 export LLXPRT_SANDBOX=docker
 llxprt "analyze the tests"
+```
 
-# Settings file (~/.llxprt/settings.json)
+Settings file (`~/.llxprt/settings.json`):
+
+```json
 {
   "sandbox": "podman"
 }

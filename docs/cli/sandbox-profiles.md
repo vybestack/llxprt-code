@@ -72,7 +72,7 @@ Use when: Analyzing potentially malicious code or when maximum isolation is requ
 
 ### offline
 
-For work that does not require network access.
+For work that does not require network access but may still need SSH for local repositories.
 
 ```json
 {
@@ -80,13 +80,13 @@ For work that does not require network access.
   "image": "ghcr.io/vybestack/llxprt-code/sandbox:latest",
   "resources": { "cpus": 2, "memory": "4g", "pids": 128 },
   "network": "off",
-  "sshAgent": "off",
+  "sshAgent": "auto",
   "mounts": [],
   "env": {}
 }
 ```
 
-Use when: Working on airplanes, reading documentation, or any offline task.
+Use when: Working on airplanes, reading documentation, or any offline task where you still need git access to local repos.
 
 ## Profile Schema
 
@@ -433,15 +433,18 @@ llxprt --sandbox-engine podman --sandbox-profile-load dev
 llxprt --sandbox-profile-load safe --key $API_KEY
 ```
 
-### From Settings
+### From Command Line
 
-Set a default profile in `~/.llxprt/settings.json`:
+Load a profile via CLI flag:
 
-```json
-{
-  "sandbox": "docker",
-  "sandboxProfile": "safe"
-}
+```bash
+llxprt --sandbox-profile-load dev
+
+# Combine with engine override
+llxprt --sandbox-engine podman --sandbox-profile-load dev
+
+# Combine with other flags
+llxprt --sandbox-profile-load safe --key $API_KEY
 ```
 
 ### Listing Available Profiles
