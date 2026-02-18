@@ -13,6 +13,8 @@ import {
   DebugLogger,
   MessageBus,
   Config,
+  mergeRefreshedToken,
+  type OAuthTokenWithExtras,
 } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:oauth:manager');
@@ -73,30 +75,9 @@ export function unwrapLoggingProvider<T extends OAuthProvider | undefined>(
   return current as T;
 }
 
-type OAuthTokenWithExtras = OAuthToken & Record<string, unknown>;
-
-function mergeRefreshedToken(
-  currentToken: OAuthTokenWithExtras,
-  refreshedToken: OAuthTokenWithExtras,
-): OAuthTokenWithExtras {
-  const merged: OAuthTokenWithExtras = { ...currentToken, ...refreshedToken };
-
-  for (const key of Object.keys(refreshedToken)) {
-    if (refreshedToken[key] === undefined && currentToken[key] !== undefined) {
-      merged[key] = currentToken[key];
-    }
-  }
-
-  if (
-    (typeof merged.refresh_token !== 'string' || merged.refresh_token === '') &&
-    typeof currentToken.refresh_token === 'string' &&
-    currentToken.refresh_token !== ''
-  ) {
-    merged.refresh_token = currentToken.refresh_token;
-  }
-
-  return merged;
-}
+// @plan:PLAN-20250214-CREDPROXY.P35
+// @requirement:R12.5 - mergeRefreshedToken now imported from shared utility
+// See: packages/core/src/auth/token-merge.ts
 
 type ProfileManagerCtor =
   (typeof import('@vybestack/llxprt-code-core'))['ProfileManager'];
@@ -1271,11 +1252,21 @@ export class OAuthManager {
     );
   }
 
+  /**
+   * @plan:PLAN-20250214-CREDPROXY.P33
+   * @requirement R16.8
+   */
   private scheduleProactiveRenewal(
     providerName: string,
     bucket: string | undefined,
     token: OAuthToken,
   ): void {
+    // R16.8: Skip proactive renewal scheduling in proxy mode
+    // The host process handles token refresh, not the sandbox
+    if (process.env.LLXPRT_CREDENTIAL_SOCKET) {
+      return;
+    }
+
     if (!this.isOAuthEnabled(providerName)) {
       return;
     }
@@ -2014,6 +2005,22 @@ export class OAuthManager {
       // Load the profile to check for auth.buckets
       const profileManager = await createProfileManager();
       const profile = await profileManager.loadProfile(currentProfileName);
+
+      // Issue #1468: Verify the profile's provider matches the requested provider
+      // Without this check, buckets from one provider's profile could be returned
+      // when requesting buckets for a different provider, causing token storage
+      // corruption (e.g., Anthropic tokens saved under codex:bucket keys)
+      const profileProvider =
+        'provider' in profile && typeof profile.provider === 'string'
+          ? profile.provider
+          : null;
+
+      if (profileProvider !== providerName) {
+        logger.debug(
+          `Profile provider '${profileProvider}' does not match requested provider '${providerName}', returning empty buckets`,
+        );
+        return [];
+      }
 
       // Check if profile has auth.buckets for this provider
       if (

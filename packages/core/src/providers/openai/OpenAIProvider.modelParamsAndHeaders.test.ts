@@ -28,8 +28,9 @@ vi.mock('../../core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
 
+// REQ-RETRY-001: retryWithBackoff removed from providers
 vi.mock('../../utils/retry.js', () => ({
-  retryWithBackoff: vi.fn(async (fn) => fn()),
+  isNetworkTransientError: vi.fn(() => false),
 }));
 
 vi.mock('../../settings/settingsServiceInstance.js', () => ({

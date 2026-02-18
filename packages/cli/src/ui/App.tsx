@@ -9,6 +9,8 @@ import type {
   Config,
   IContent,
   RecordingIntegration,
+  SessionRecordingService,
+  LockHandle,
 } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../config/settings.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
@@ -34,6 +36,10 @@ interface AppProps {
   version: string;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
   recordingIntegration?: RecordingIntegration;
+  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
+  initialRecordingService?: SessionRecordingService;
+  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
+  initialLockHandle?: LockHandle | null;
 }
 
 /**

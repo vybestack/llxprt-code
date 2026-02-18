@@ -119,7 +119,17 @@ export class ProviderKeyStorage {
 /** @pseudocode line 68 */
 let providerKeyStorageInstance: ProviderKeyStorage | null = null;
 
-/** @pseudocode lines 70-74 */
+/**
+ * Returns the singleton ProviderKeyStorage instance for direct host access.
+ *
+ * @internal **DO NOT call directly in consumer code.**
+ * Use `createProviderKeyStorage()` from `credential-store-factory.ts` instead.
+ * This ensures proper environment detection (sandbox vs. direct mode)
+ * and consistent behavior across the application.
+ *
+ * @pseudocode lines 70-74
+ * @plan PLAN-20250214-CREDPROXY.P36
+ */
 export function getProviderKeyStorage(): ProviderKeyStorage {
   if (providerKeyStorageInstance === null) {
     providerKeyStorageInstance = new ProviderKeyStorage();

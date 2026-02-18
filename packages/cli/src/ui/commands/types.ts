@@ -20,6 +20,7 @@ import type {
   SubagentManager,
   Todo,
 } from '@vybestack/llxprt-code-core';
+import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { OAuthManager } from '../../auth/oauth-manager.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
@@ -95,6 +96,8 @@ export interface CommandContext {
     stats: SessionStatsState;
     /** A transient list of shell commands the user has approved for this session. */
     sessionShellAllowlist: Set<string>;
+    /** Indicates whether a request is currently being processed. */
+    isProcessing?: boolean;
   };
   // TODO management
   /**
@@ -110,6 +113,11 @@ export interface CommandContext {
   overwriteConfirmed?: boolean;
   // Recording integration for session recording
   recordingIntegration?: RecordingIntegration;
+  /**
+   * Callbacks for swapping recording infrastructure during session resume.
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   */
+  recordingSwapCallbacks?: RecordingSwapCallbacks;
 }
 
 /**
@@ -202,7 +210,8 @@ export type DialogType =
   | 'profileList'
   | 'profileDetail'
   | 'profileEditor'
-  | 'welcome';
+  | 'welcome'
+  | 'sessionBrowser';
 
 /** Map dialog types to their associated data types for type-safe access */
 export interface DialogDataMap {
@@ -278,6 +287,18 @@ export interface ConfirmActionReturn {
   };
 }
 
+/**
+ * The return type for a command action that delegates session resume to the processor.
+ * @plan PLAN-20260214-SESSIONBROWSER.P18
+ * @requirement REQ-DI-007
+ */
+export interface PerformResumeActionReturn {
+  type: 'perform_resume';
+  sessionRef: string;
+  /** Whether the resume requires user confirmation (e.g., when replacing an active conversation). */
+  requiresConfirmation?: boolean;
+}
+
 export type SlashCommandActionReturn =
   | ToolActionReturn
   | MessageActionReturn
@@ -286,7 +307,8 @@ export type SlashCommandActionReturn =
   | LoadHistoryActionReturn
   | SubmitPromptActionReturn
   | ConfirmShellCommandsActionReturn
-  | ConfirmActionReturn;
+  | ConfirmActionReturn
+  | PerformResumeActionReturn;
 
 export enum CommandKind {
   BUILT_IN = 'built-in',

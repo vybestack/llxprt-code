@@ -20,7 +20,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import type { IContent } from '../../services/history/IContent.js';
+import type { IContent, UsageStats } from '../../services/history/IContent.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type {
   CompressionContext,
@@ -94,7 +94,10 @@ export class OneShotStrategy implements CompressionStrategy {
     ];
 
     // Call the provider and aggregate the streamed response
-    const summary = await this.callProvider(provider, compressionRequest);
+    const { text: summary, usage: capturedUsage } = await this.callProvider(
+      provider,
+      compressionRequest,
+    );
 
     if (!summary.trim()) {
       throw new CompressionExecutionError(
@@ -104,11 +107,14 @@ export class OneShotStrategy implements CompressionStrategy {
     }
 
     // Assemble result: summary + continuation directive + preserved tail
+    const summaryEntry: IContent = {
+      speaker: 'human' as const,
+      blocks: [{ type: 'text' as const, text: summary }],
+      ...(capturedUsage ? { metadata: { usage: capturedUsage } } : {}),
+    };
+
     const newHistory: IContent[] = [
-      {
-        speaker: 'human' as const,
-        blocks: [{ type: 'text' as const, text: summary }],
-      },
+      summaryEntry,
       {
         speaker: 'ai' as const,
         blocks: [
@@ -129,6 +135,7 @@ export class OneShotStrategy implements CompressionStrategy {
       topPreserved: 0,
       bottomPreserved: toKeep.length,
       middleCompressed: toCompress.length,
+      ...(capturedUsage ? { usage: capturedUsage } : {}),
     };
 
     return { newHistory, metadata };
@@ -189,7 +196,7 @@ export class OneShotStrategy implements CompressionStrategy {
   private async callProvider(
     provider: IProvider,
     request: IContent[],
-  ): Promise<string> {
+  ): Promise<{ text: string; usage?: UsageStats }> {
     try {
       const stream = provider.generateChatCompletion({
         contents: request,
@@ -198,6 +205,7 @@ export class OneShotStrategy implements CompressionStrategy {
 
       let summary = '';
       let lastBlockWasNonText = false;
+      let capturedUsage: UsageStats | undefined;
 
       for await (const chunk of stream) {
         if (chunk.blocks) {
@@ -209,9 +217,12 @@ export class OneShotStrategy implements CompressionStrategy {
           summary = result.text;
           lastBlockWasNonText = result.lastBlockWasNonText;
         }
+        if (chunk.metadata?.usage) {
+          capturedUsage = chunk.metadata.usage;
+        }
       }
 
-      return summary;
+      return { text: summary, usage: capturedUsage };
     } catch (error) {
       throw new CompressionExecutionError(
         'one-shot',

@@ -43,12 +43,7 @@ import {
   dumpSDKContext,
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
-import {
-  retryWithBackoff,
-  getErrorStatus,
-  isNetworkTransientError,
-} from '../../utils/retry.js';
-import { ApiError } from '@google/genai';
+
 import { isGemini3Model } from '../../config/models.js';
 
 /**
@@ -253,40 +248,6 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
-   * @plan PLAN-20251215-issue813
-   * @requirement REQ-RETRY-001: GeminiProvider must use retryWithBackoff for all SDK calls
-   *
-   * Determines if an error should trigger a retry.
-   * - 429 (rate limit) errors are retried
-   * - 5xx server errors are retried
-   * - 400 (bad request) errors are NOT retried
-   * - Network transient errors are retried
-   */
-  private shouldRetryOnError(error: Error | unknown): boolean {
-    // Priority check for ApiError
-    if (error instanceof ApiError) {
-      // Explicitly do not retry 400 (Bad Request)
-      if (error.status === 400) return false;
-      // Retry on rate limit and server errors
-      return (
-        error.status === 429 || (error.status >= 500 && error.status < 600)
-      );
-    }
-
-    // Check for status using helper (handles other error shapes)
-    const status = getErrorStatus(error);
-    if (status !== undefined) {
-      if (status === 400) return false;
-      return status === 429 || (status >= 500 && status < 600);
-    }
-
-    // Check for network transient errors
-    if (isNetworkTransientError(error)) {
-      return true;
-    }
-
-    return false;
-  }
 
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P12
@@ -817,13 +778,9 @@ export class GeminiProvider extends BaseProvider {
             },
           };
 
-          // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
-          const apiKeyResult = await retryWithBackoff(
-            () => contentGenerator.generateContent(apiKeyRequest),
-            {
-              shouldRetryOnError: this.shouldRetryOnError.bind(this),
-            },
-          );
+          // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
+          const apiKeyResult =
+            await contentGenerator.generateContent(apiKeyRequest);
           return apiKeyResult;
         }
 
@@ -855,13 +812,9 @@ export class GeminiProvider extends BaseProvider {
             },
           };
 
-          // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
-          const vertexResult = await retryWithBackoff(
-            () => vertexContentGenerator.generateContent(vertexRequest),
-            {
-              shouldRetryOnError: this.shouldRetryOnError.bind(this),
-            },
-          );
+          // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
+          const vertexResult =
+            await vertexContentGenerator.generateContent(vertexRequest);
           return vertexResult;
         }
 
@@ -920,17 +873,11 @@ export class GeminiProvider extends BaseProvider {
               () =>
                 `invokeServerTool: making OAuth generateContent request with query: ${(params as { query: string }).query}`,
             );
-            // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
+            // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
             // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
-            const result = await retryWithBackoff(
-              () =>
-                oauthContentGenerator.generateContent(
-                  oauthRequest,
-                  'google-web-search-oauth', // userPromptId for OAuth web search
-                ),
-              {
-                shouldRetryOnError: this.shouldRetryOnError.bind(this),
-              },
+            const result = await oauthContentGenerator.generateContent(
+              oauthRequest,
+              'google-web-search-oauth', // userPromptId for OAuth web search
             );
             logger.debug(
               () =>
@@ -1006,13 +953,9 @@ export class GeminiProvider extends BaseProvider {
             },
           };
 
-          // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
-          const apiKeyResult = await retryWithBackoff(
-            () => contentGenerator.generateContent(apiKeyRequest),
-            {
-              shouldRetryOnError: this.shouldRetryOnError.bind(this),
-            },
-          );
+          // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
+          const apiKeyResult =
+            await contentGenerator.generateContent(apiKeyRequest);
           return apiKeyResult;
         }
 
@@ -1044,13 +987,9 @@ export class GeminiProvider extends BaseProvider {
             },
           };
 
-          // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
-          const vertexResult = await retryWithBackoff(
-            () => vertexContentGenerator.generateContent(vertexRequest),
-            {
-              shouldRetryOnError: this.shouldRetryOnError.bind(this),
-            },
-          );
+          // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
+          const vertexResult =
+            await vertexContentGenerator.generateContent(vertexRequest);
           return vertexResult;
         }
 
@@ -1075,17 +1014,11 @@ export class GeminiProvider extends BaseProvider {
               tools: [{ urlContext: {} }],
             },
           };
-          // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
+          // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
           // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
-          const result = await retryWithBackoff(
-            () =>
-              oauthContentGenerator.generateContent(
-                oauthRequest,
-                'google-web-fetch-oauth', // userPromptId for OAuth web fetch
-              ),
-            {
-              shouldRetryOnError: this.shouldRetryOnError.bind(this),
-            },
+          const result = await oauthContentGenerator.generateContent(
+            oauthRequest,
+            'google-web-fetch-oauth', // userPromptId for OAuth web fetch
           );
           return result;
         }
@@ -1674,12 +1607,10 @@ export class GeminiProvider extends BaseProvider {
 
       if (!streamingEnabled && generatorWithStream.generateContent) {
         try {
-          // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
-          const response = await retryWithBackoff(
-            () => generatorWithStream.generateContent!(oauthRequest, sessionId),
-            {
-              shouldRetryOnError: this.shouldRetryOnError.bind(this),
-            },
+          // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
+          const response = await generatorWithStream.generateContent!(
+            oauthRequest,
+            sessionId,
           );
 
           // Dump successful non-streaming request if enabled
@@ -1725,19 +1656,10 @@ export class GeminiProvider extends BaseProvider {
       }
 
       try {
-        // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
+        // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
         // Use Promise.resolve to handle both sync and async return types from generateContentStream
-        const oauthStream = await retryWithBackoff(
-          () =>
-            Promise.resolve(
-              generatorWithStream.generateContentStream(
-                oauthRequest,
-                sessionId,
-              ),
-            ),
-          {
-            shouldRetryOnError: this.shouldRetryOnError.bind(this),
-          },
+        const oauthStream = await Promise.resolve(
+          generatorWithStream.generateContentStream(oauthRequest, sessionId),
         );
 
         // Dump successful streaming request if enabled
@@ -1829,13 +1751,8 @@ export class GeminiProvider extends BaseProvider {
 
       if (streamingEnabled) {
         try {
-          // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
-          stream = await retryWithBackoff(
-            () => contentGenerator.generateContentStream(apiRequest),
-            {
-              shouldRetryOnError: this.shouldRetryOnError.bind(this),
-            },
-          );
+          // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
+          stream = await contentGenerator.generateContentStream(apiRequest);
 
           // Dump successful streaming request if enabled
           if (shouldDumpSuccess) {
@@ -1866,13 +1783,8 @@ export class GeminiProvider extends BaseProvider {
         }
       } else {
         try {
-          // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
-          const response = await retryWithBackoff(
-            () => contentGenerator.generateContent(apiRequest),
-            {
-              shouldRetryOnError: this.shouldRetryOnError.bind(this),
-            },
-          );
+          // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
+          const response = await contentGenerator.generateContent(apiRequest);
 
           // Dump successful non-streaming request if enabled
           if (shouldDumpSuccess) {

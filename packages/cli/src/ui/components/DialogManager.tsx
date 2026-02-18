@@ -12,7 +12,16 @@ import type {
   HydratedModel,
   Config,
   Profile,
+  SessionSummary,
 } from '@vybestack/llxprt-code-core';
+import { getProjectHash, DebugLogger } from '@vybestack/llxprt-code-core';
+import { join } from 'node:path';
+import {
+  performResume,
+  type PerformResumeResult,
+  type ResumeContext,
+} from '../../services/performResume.js';
+import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -37,6 +46,10 @@ import { LoggingDialog } from './LoggingDialog.js';
 import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
 import { ModelsDialog } from './ModelDialog.js';
+/**
+ * @plan PLAN-20260214-SESSIONBROWSER.P21
+ */
+import { SessionBrowserDialog } from './SessionBrowserDialog.js';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
@@ -50,6 +63,8 @@ interface DialogManagerProps {
   config: Config;
   settings: LoadedSettings;
 }
+
+const dialogManagerLogger = new DebugLogger('llxprt:ui:dialogmanager');
 
 // Props for DialogManager
 export const DialogManager = ({
@@ -160,6 +175,80 @@ export const DialogManager = ({
       uiActions.closeModelsDialog();
     },
     [runtime, addItem, uiActions, currentProvider, commandContext],
+  );
+
+  /**
+   * Handler for SessionBrowserDialog selection - performs real session resume.
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   * @requirement REQ-PR-001, REQ-PR-002
+   */
+  const handleSessionBrowserSelect = useCallback(
+    async (session: SessionSummary): Promise<PerformResumeResult> => {
+      const recordingSwapCallbacks = commandContext.recordingSwapCallbacks;
+
+      // Guard: recording infrastructure required
+      if (!recordingSwapCallbacks) {
+        dialogManagerLogger.warn(
+          'Cannot resume session: recording infrastructure not available.',
+        );
+        return {
+          ok: false,
+          error: 'Recording infrastructure not available.',
+        };
+      }
+
+      // Build ResumeContext
+      const chatsDir = join(config.getProjectTempDir(), 'chats');
+      const projectHash = getProjectHash(config.getProjectRoot());
+      const currentSessionId = config.getSessionId();
+      const currentProvider = config.getProvider() ?? 'unknown';
+      const currentModel = config.getModel();
+      const workspaceDirs = [...config.getWorkspaceContext().getDirectories()];
+
+      const resumeContext: ResumeContext = {
+        chatsDir,
+        projectHash,
+        currentSessionId,
+        currentProvider,
+        currentModel,
+        workspaceDirs,
+        recordingCallbacks: recordingSwapCallbacks,
+        logger: dialogManagerLogger,
+      };
+
+      // Perform resume
+      const resumeResult = await performResume(
+        session.sessionId,
+        resumeContext,
+      );
+
+      if (!resumeResult.ok) {
+        // Show error but keep dialog open for retry
+        addItem({ type: 'error', text: resumeResult.error }, Date.now());
+        return resumeResult;
+      }
+
+      // Log warnings
+      for (const warning of resumeResult.warnings) {
+        addItem({ type: 'info', text: `Warning: ${warning}` }, Date.now());
+      }
+
+      // Restore history to gemini client
+      await config.getGeminiClient()?.restoreHistory(resumeResult.history);
+
+      // Convert IContent[] to UI history items and load
+      const uiHistory = iContentToHistoryItems(resumeResult.history);
+      commandContext.ui.clear();
+      uiHistory.forEach((item, index) => {
+        commandContext.ui.addItem(item, index);
+      });
+
+      // Close dialog on success
+      uiActions.closeSessionBrowserDialog();
+
+      return resumeResult;
+    },
+    [config, commandContext, addItem, uiActions],
   );
 
   // TODO: IdeTrustChangeDialog not yet ported from upstream
@@ -468,6 +557,36 @@ export const DialogManager = ({
           currentProvider={currentProvider}
           initialProviderFilter={uiState.modelsDialogData?.providerOverride}
           showAllProviders={uiState.modelsDialogData?.showAllProviders}
+        />
+      </Box>
+    );
+  }
+
+  /**
+   * Session browser dialog rendering
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  /**
+   * Session browser dialog rendering
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   * Uses commandContext.ui.pendingItem to determine if there's an active conversation.
+   */
+  if (uiState.isSessionBrowserDialogOpen) {
+    const chatsDir = join(config.getProjectTempDir(), 'chats');
+    const projectHash = getProjectHash(config.getProjectRoot());
+    const currentSessionId = config.getSessionId();
+    // Determine if there's an active conversation based on pendingItem
+    const hasActiveConversation = commandContext.ui.pendingItem !== null;
+
+    return (
+      <Box flexDirection="column">
+        <SessionBrowserDialog
+          chatsDir={chatsDir}
+          projectHash={projectHash}
+          currentSessionId={currentSessionId}
+          hasActiveConversation={hasActiveConversation}
+          onSelect={handleSessionBrowserSelect}
+          onClose={uiActions.closeSessionBrowserDialog}
         />
       </Box>
     );

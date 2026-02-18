@@ -296,6 +296,20 @@ export async function runNonInteractive({
         prompt_id,
       );
 
+      let firstEventInTurn = true;
+      const maybeEmitProfileName = () => {
+        if (firstEventInTurn && !jsonOutput && !streamFormatter) {
+          const activeProfileName = config
+            .getSettingsService()
+            .getCurrentProfileName?.();
+          if (activeProfileName) {
+            process.stdout.write(`[${activeProfileName}]
+`);
+          }
+        }
+        firstEventInTurn = false;
+      };
+
       for await (const event of responseStream) {
         if (abortController.signal.aborted) {
           console.error('Operation cancelled.');
@@ -304,6 +318,7 @@ export async function runNonInteractive({
 
         if (event.type === GeminiEventType.Thought) {
           if (includeThinking) {
+            maybeEmitProfileName();
             const thoughtEvent = event as ServerGeminiThoughtEvent;
             const thought = thoughtEvent.value;
             // Format thought with subject and description
@@ -331,6 +346,7 @@ export async function runNonInteractive({
           }
         } else if (event.type === GeminiEventType.Content) {
           flushThoughtBuffer();
+          maybeEmitProfileName();
           let outputValue = event.value;
 
           if (emojiFilter) {

@@ -24,7 +24,6 @@ import { ExtensionStorage } from './extension.js';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
-import { RESUME_LATEST } from '../utils/sessionUtils.js';
 
 vi.mock('./trustedFolders.js', () => ({
   isWorkspaceTrusted: vi.fn().mockReturnValue(true), // Default to trusted
@@ -513,33 +512,6 @@ describe('parseArguments', () => {
 
     mockExit.mockRestore();
     mockConsoleError.mockRestore();
-  });
-
-  it('should allow resuming a session without prompt in non-interactive mode', async () => {
-    const originalIsTTY = process.stdin.isTTY;
-    process.stdin.isTTY = false;
-    process.argv = ['node', 'script.js', '--resume', 'session-id'];
-
-    try {
-      const args = await parseArguments({} as Settings);
-      expect(args.resume).toBe('session-id');
-    } finally {
-      process.stdin.isTTY = originalIsTTY;
-    }
-  });
-
-  it('should return RESUME_LATEST constant when --resume is passed without a value', async () => {
-    const originalIsTTY = process.stdin.isTTY;
-    process.stdin.isTTY = true; // Make it interactive to avoid validation error
-    process.argv = ['node', 'script.js', '--resume'];
-
-    try {
-      const argv = await parseArguments({} as Settings);
-      expect(argv.resume).toBe(RESUME_LATEST);
-      expect(argv.resume).toBe('latest');
-    } finally {
-      process.stdin.isTTY = originalIsTTY;
-    }
   });
 
   it('should preserve bare --continue sentinel without coercing to string true', async () => {

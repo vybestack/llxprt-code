@@ -31,6 +31,9 @@ const baseExcludePatterns = [
   // '**/ui/commands/directoryCommand.test.tsx', // Temporarily enabled for trust gating implementation (9786c4dcf)
   '**/ui/components/*.test.tsx',
   '**/ui/components/__tests__/*.test.tsx',
+  // SessionBrowserDialog - ink-testing-library/ink-stub reconciler conflict (issue #1385)
+  // Tests pass individually but fail when run in sequence due to global ink mock
+  '**/ui/components/__tests__/SessionBrowserDialog.spec.tsx',
   '**/ui/components/messages/DiffRenderer.test.tsx',
   // GeminiMessage/ToolMessage - behavioral tests excluded due to ink-testing-library/ink-stub
   // incompatibility in CI (renders empty string). Tests pass locally but fail in CI.

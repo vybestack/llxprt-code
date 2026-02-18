@@ -1,0 +1,118 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 30,
+    "historyLimit": 50000,
+    "scrollbackLines": 5000,
+    "initialWaitMs": 6000
+  },
+  "startCommand": ["node", "scripts/start.js"],
+  "yolo": true,
+  "macros": {
+    "loadSynthetic": [
+      { "type": "line", "text": "/profile load synthetic" },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "Profile 'synthetic' loaded",
+        "timeoutMs": 15000
+      }
+    ],
+    "openSessionBrowser": [
+      { "type": "line", "text": "/continue", "submitKeys": ["Enter"] },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "Session Browser",
+        "timeoutMs": 10000
+      }
+    ],
+    "closeSessionBrowser": [
+      { "type": "key", "key": "Escape" },
+      {
+        "type": "waitForNot",
+        "scope": "screen",
+        "contains": "Session Browser",
+        "timeoutMs": 5000
+      }
+    ],
+    "quit": [
+      { "type": "line", "text": "/quit" },
+      { "type": "waitForExit", "timeoutMs": 15000 }
+    ]
+  },
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    { "type": "capture", "label": "start", "scope": "screen" },
+
+    { "type": "macro", "name": "loadSynthetic" },
+
+    { "type": "line", "text": "say hello" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "",
+      "timeoutMs": 30000
+    },
+    { "type": "wait", "ms": 1000 },
+    { "type": "capture", "label": "after-first-message", "scope": "screen" },
+
+    { "type": "macro", "name": "openSessionBrowser" },
+    { "type": "capture", "label": "browser-open", "scope": "screen" },
+
+    { "type": "expect", "scope": "screen", "contains": "Session Browser" },
+    { "type": "expect", "scope": "screen", "contains": "Search:" },
+    { "type": "expect", "scope": "screen", "contains": "sessions found" },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "regex": "\\[newest\\]|\\[oldest\\]|\\[size\\]"
+    },
+
+    { "type": "key", "key": "Down" },
+    { "type": "wait", "ms": 200 },
+    {
+      "type": "capture",
+      "label": "browser-selection-moved",
+      "scope": "screen"
+    },
+
+    { "type": "key", "key": "Tab" },
+    { "type": "wait", "ms": 200 },
+    { "type": "capture", "label": "browser-nav-mode", "scope": "screen" },
+
+    { "type": "key", "key": "s" },
+    { "type": "wait", "ms": 200 },
+    { "type": "capture", "label": "browser-sort-changed", "scope": "screen" },
+
+    { "type": "key", "key": "Tab" },
+    { "type": "wait", "ms": 200 },
+
+    { "type": "keys", "keys": ["t", "e", "s", "t"] },
+    { "type": "wait", "ms": 300 },
+    { "type": "capture", "label": "browser-search-typed", "scope": "screen" },
+    { "type": "expect", "scope": "screen", "contains": "test" },
+
+    { "type": "key", "key": "BSpace" },
+    { "type": "key", "key": "BSpace" },
+    { "type": "key", "key": "BSpace" },
+    { "type": "key", "key": "BSpace" },
+    { "type": "wait", "ms": 200 },
+
+    { "type": "macro", "name": "closeSessionBrowser" },
+    { "type": "capture", "label": "browser-closed", "scope": "screen" },
+    {
+      "type": "expectCount",
+      "scope": "screen",
+      "contains": "Session Browser",
+      "equals": 0
+    },
+
+    { "type": "macro", "name": "quit" }
+  ]
+}

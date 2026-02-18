@@ -76,6 +76,10 @@ export interface UIState {
   isLoggingDialogOpen: boolean;
   isSubagentDialogOpen: boolean;
   isModelsDialogOpen: boolean;
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  isSessionBrowserDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];

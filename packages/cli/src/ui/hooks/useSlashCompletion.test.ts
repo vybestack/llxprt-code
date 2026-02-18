@@ -988,14 +988,12 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          expect(result.current.suggestions).toEqual([
+            { label: 'data/', value: 'data/' },
+            { label: 'dist/', value: 'dist/' },
+          ]);
         });
-
-        expect(result.current.suggestions).toEqual([
-          { label: 'data/', value: 'data/' },
-          { label: 'dist/', value: 'dist/' },
-        ]);
       });
 
       it('should work without config (fallback behavior)', async () => {

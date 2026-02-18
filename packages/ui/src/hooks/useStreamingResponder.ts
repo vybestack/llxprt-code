@@ -36,7 +36,7 @@ type ToolCallUpdate = Partial<Omit<ToolCall, 'id' | 'kind' | 'callId'>>;
 function handleAdapterEvent(
   event: AdapterEvent,
   context: StreamContext,
-  appendMessage: (role: Role, text: string) => string,
+  appendMessage: (role: Role, text: string, profileName?: string) => string,
   appendToMessage: (id: string, text: string) => void,
   appendToolCall: (
     callId: string,
@@ -48,6 +48,7 @@ function handleAdapterEvent(
   scheduleTools: ScheduleFn,
   signal: AbortSignal,
   onConfirmationNeeded?: (event: ToolConfirmationEvent) => void,
+  profileName?: string,
 ): StreamContext {
   if (event.type === 'text_delta') {
     const text = event.text;
@@ -56,7 +57,7 @@ function handleAdapterEvent(
       if (text.trim() === '') {
         return context;
       }
-      const id = appendMessage('model', text);
+      const id = appendMessage('model', text, profileName);
       setResponderWordCount((count) => count + countWords(text));
       return { ...context, modelMessageId: id };
     }
@@ -155,7 +156,7 @@ export type OnToolsCompleteCallback = (
 ) => Promise<void>;
 
 export function useStreamingResponder(
-  appendMessage: (role: Role, text: string) => string,
+  appendMessage: (role: Role, text: string, profileName?: string) => string,
   appendToMessage: (id: string, text: string) => void,
   appendToolCall: (
     callId: string,
@@ -173,6 +174,7 @@ export function useStreamingResponder(
   abortRef: RefHandle<AbortController | null>,
   scheduleTools: ScheduleFn,
   onConfirmationNeeded?: (event: ToolConfirmationEvent) => void,
+  profileName?: string,
 ): UseStreamingResponderFunction {
   return useCallback(
     async (prompt: string, session: ConfigSession | null) => {
@@ -228,6 +230,7 @@ export function useStreamingResponder(
             scheduleTools,
             controller.signal,
             onConfirmationNeeded,
+            profileName,
           );
         }
         // Tool execution is handled by the scheduler via callbacks
@@ -271,6 +274,7 @@ export function useStreamingResponder(
       streamRunId,
       scheduleTools,
       onConfirmationNeeded,
+      profileName,
     ],
   );
 }
@@ -283,7 +287,7 @@ export async function continueStreamingAfterTools(
   session: ConfigSession,
   completedTools: CompletedToolCall[],
   signal: AbortSignal,
-  appendMessage: (role: Role, text: string) => string,
+  appendMessage: (role: Role, text: string, profileName?: string) => string,
   appendToMessage: (id: string, text: string) => void,
   appendToolCall: (
     callId: string,
@@ -298,6 +302,7 @@ export async function continueStreamingAfterTools(
   scheduleTools: ScheduleFn,
   setStreamState: StateSetter<StreamState>,
   onConfirmationNeeded?: (event: ToolConfirmationEvent) => void,
+  profileName?: string,
 ): Promise<boolean> {
   logger.debug(
     'continueStreamingAfterTools called',
@@ -382,6 +387,7 @@ export async function continueStreamingAfterTools(
         scheduleTools,
         signal,
         onConfirmationNeeded,
+        profileName,
       );
     }
   } catch (error) {

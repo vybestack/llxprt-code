@@ -30,6 +30,7 @@ interface ChatMessage {
   kind: 'message';
   role: Role;
   text: string;
+  profileName?: string;
 }
 
 interface ToolBlockLegacy {
@@ -150,7 +151,13 @@ export function renderChatMessage(
   message: ChatMessage,
   theme: ThemeDefinition,
 ): React.ReactNode {
-  return renderMessage(message.role, message.id, message.text, theme);
+  return renderMessage(
+    message.role,
+    message.id,
+    message.text,
+    theme,
+    message.profileName,
+  );
 }
 
 /**

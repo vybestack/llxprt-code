@@ -204,4 +204,157 @@ export class SessionDiscovery {
   ): Promise<SessionStartPayload | null> {
     return readSessionHeader(filePath);
   }
+
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P06
+   * @requirement REQ-SB-008
+   * @pseudocode session-discovery-extensions.md lines 10-60
+   *
+   * List all sessions in a chats directory matching the given project hash,
+   * returning both valid sessions and a count of skipped (corrupted) files.
+   * Sessions are sorted newest-first by file modification time.
+   */
+  static async listSessionsDetailed(
+    chatsDir: string,
+    projectHash: string,
+  ): Promise<{ sessions: SessionSummary[]; skippedCount: number }> {
+    let entries: string[];
+    try {
+      entries = await fs.readdir(chatsDir);
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { sessions: [], skippedCount: 0 };
+      }
+      throw error;
+    }
+
+    const sessionFiles = entries.filter(
+      (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
+    );
+
+    const summaries: SessionSummary[] = [];
+    let skippedCount = 0;
+
+    for (const fileName of sessionFiles) {
+      const filePath = path.join(chatsDir, fileName);
+
+      let stat: Awaited<ReturnType<typeof fs.stat>>;
+      try {
+        stat = await fs.stat(filePath);
+      } catch {
+        skippedCount++;
+        continue;
+      }
+
+      const header = await readFirstLineFromFile(filePath);
+      if (header === null) {
+        skippedCount++;
+        continue;
+      }
+      if (header.projectHash !== projectHash) continue;
+
+      summaries.push({
+        sessionId: header.sessionId,
+        filePath,
+        projectHash: header.projectHash,
+        startTime: header.startTime,
+        lastModified: stat.mtime,
+        fileSize: stat.size,
+        provider: header.provider,
+        model: header.model,
+      });
+    }
+
+    summaries.sort((a, b) => {
+      const mtimeDiff = b.lastModified.getTime() - a.lastModified.getTime();
+      if (mtimeDiff !== 0) return mtimeDiff;
+      return b.sessionId.localeCompare(a.sessionId);
+    });
+
+    return { sessions: summaries, skippedCount };
+  }
+
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P06
+   * @requirement REQ-SB-005
+   * @pseudocode session-discovery-extensions.md lines 65-91
+   *
+   * Check if a session file contains any content events (user or assistant messages).
+   * Returns false for non-existent files, empty files, or files with only session_start.
+   */
+  static async hasContentEvents(filePath: string): Promise<boolean> {
+    try {
+      const fileContent = await fs.readFile(filePath, 'utf-8');
+      const lines = fileContent.split('\n');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line) as Record<string, unknown>;
+          if (event.type === 'content') return true;
+        } catch {
+          // Skip malformed JSON lines
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P06
+   * @requirement REQ-PV-002
+   * @pseudocode session-discovery-extensions.md lines 95-165
+   *
+   * Read the first user message from a session file.
+   * Extracts text from TextBlock parts only, ignoring media and tool blocks.
+   * Returns null for non-existent files, I/O errors, or no user messages found.
+   */
+  static async readFirstUserMessage(
+    filePath: string,
+    maxLength: number = 120,
+  ): Promise<string | null> {
+    try {
+      const fileContent = await fs.readFile(filePath, 'utf-8');
+      const lines = fileContent.split('\n');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line) as Record<string, unknown>;
+          if (event.type !== 'content') continue;
+
+          const payload = event.payload as Record<string, unknown> | undefined;
+          if (!payload || typeof payload !== 'object') continue;
+
+          const contentObj = payload.content as
+            | Record<string, unknown>
+            | undefined;
+          if (!contentObj || typeof contentObj !== 'object') continue;
+
+          // Check if this is a human/user message
+          if (contentObj.speaker !== 'human') continue;
+
+          const blocks = contentObj.blocks as
+            | Array<Record<string, unknown>>
+            | undefined;
+          if (!Array.isArray(blocks)) continue;
+
+          // Extract text from text blocks only
+          const text = blocks
+            .filter((block) => block.type === 'text')
+            .map((block) => (block.text as string) || '')
+            .join('');
+
+          if (text) {
+            return text.length > maxLength ? text.slice(0, maxLength) : text;
+          }
+        } catch {
+          // Skip malformed JSON lines
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
 }

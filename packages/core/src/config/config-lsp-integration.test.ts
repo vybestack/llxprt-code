@@ -12,10 +12,12 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import { Readable, Writable } from 'node:stream';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import type { LspConfig } from '../lsp/types.js';
 import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
+import * as lspServiceClientModule from '../lsp/lsp-service-client.js';
 
 // Mock dependencies
 vi.mock('fs', async (importOriginal) => {
@@ -424,11 +426,13 @@ describe('Config LSP Integration (P33)', () => {
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.navigationTools).toBe(true);
 
-      const tools = config.getToolRegistry().getAllTools();
-      const lspNavTools = tools.filter(
-        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-      );
-      expect(lspNavTools.length).toBeGreaterThan(0);
+      await vi.waitFor(() => {
+        const tools = config.getToolRegistry().getAllTools();
+        const lspNavTools = tools.filter(
+          (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+        );
+        expect(lspNavTools.length).toBeGreaterThan(0);
+      });
     });
 
     it('should default to enabled when navigationTools is absent', async () => {
@@ -443,31 +447,62 @@ describe('Config LSP Integration (P33)', () => {
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.navigationTools).toBeUndefined();
-      const tools = config.getToolRegistry().getAllTools();
-      const lspNavTools = tools.filter(
-        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-      );
-      expect(lspNavTools.length).toBeGreaterThan(0);
+
+      await vi.waitFor(() => {
+        const tools = config.getToolRegistry().getAllTools();
+        const lspNavTools = tools.filter(
+          (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+        );
+        expect(lspNavTools.length).toBeGreaterThan(0);
+      });
     });
   });
 
   describe('REQ-NAV-055: Register MCP only after service starts', () => {
     it('should provide MCP transport streams when service starts successfully', async () => {
-      const params = createBaseConfigParams({
-        lsp: {
-          servers: [],
-        },
-      });
-      const config = new Config(params);
-      await config.initialize();
+      // Mock LspServiceClient methods to avoid real subprocess spawn
+      const startSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+        .mockResolvedValue(undefined);
+      const isAliveSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+        .mockReturnValue(true);
+      const mockTransport = {
+        readable: new Readable({ read() {} }),
+        writable: new Writable({
+          write(_chunk, _enc, cb) {
+            cb();
+          },
+        }),
+      };
+      const getTransportSpy = vi
+        .spyOn(
+          lspServiceClientModule.LspServiceClient.prototype,
+          'getMcpTransportStreams',
+        )
+        .mockReturnValue(mockTransport);
 
-      const lspClient = config.getLspServiceClient();
-      expect(lspClient?.isAlive()).toBe(true);
+      try {
+        const params = createBaseConfigParams({
+          lsp: {
+            servers: [],
+          },
+        });
+        const config = new Config(params);
+        await config.initialize();
 
-      const transport = lspClient?.getMcpTransportStreams();
-      expect(transport).toBeDefined();
-      expect(transport?.readable).toBeDefined();
-      expect(transport?.writable).toBeDefined();
+        const lspClient = config.getLspServiceClient();
+        expect(lspClient?.isAlive()).toBe(true);
+
+        const transport = lspClient?.getMcpTransportStreams();
+        expect(transport).toBeDefined();
+        expect(transport?.readable).toBeDefined();
+        expect(transport?.writable).toBeDefined();
+      } finally {
+        startSpy.mockRestore();
+        isAliveSpy.mockRestore();
+        getTransportSpy.mockRestore();
+      }
     });
 
     it('should not register MCP navigation tools when navigationTools is false', async () => {

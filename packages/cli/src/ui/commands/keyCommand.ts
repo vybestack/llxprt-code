@@ -16,13 +16,17 @@ import {
   SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
+/**
+ * @plan:PLAN-20250214-CREDPROXY.P33
+ */
+
 import type { CommandArgumentSchema, CompleterFn } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
-  getProviderKeyStorage,
   maskKeyForDisplay,
   SecureStoreError,
 } from '@vybestack/llxprt-code-core';
+import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
 
 /**
  * @plan PLAN-20260211-SECURESTORE.P13
@@ -83,7 +87,8 @@ async function handleSave(
     };
   }
 
-  const storage = getProviderKeyStorage();
+  // @plan:PLAN-20250214-CREDPROXY.P33
+  const storage = createProviderKeyStorage();
 
   // Check for existing key — prompt overwrite (R13.2, R13.3)
   try {
@@ -158,7 +163,8 @@ async function handleLoad(
   }
 
   const name = tokens[0];
-  const storage = getProviderKeyStorage();
+  // @plan:PLAN-20250214-CREDPROXY.P33
+  const storage = createProviderKeyStorage();
 
   try {
     const key = await storage.getKey(name);
@@ -224,7 +230,8 @@ async function handleShow(tokens: string[]): Promise<MessageActionReturn> {
   }
 
   const name = tokens[0];
-  const storage = getProviderKeyStorage();
+  // @plan:PLAN-20250214-CREDPROXY.P33
+  const storage = createProviderKeyStorage();
 
   try {
     const key = await storage.getKey(name);
@@ -262,7 +269,8 @@ async function handleShow(tokens: string[]): Promise<MessageActionReturn> {
  * @requirement R16.1, R16.2
  */
 async function handleList(): Promise<MessageActionReturn> {
-  const storage = getProviderKeyStorage();
+  // @plan:PLAN-20250214-CREDPROXY.P33
+  const storage = createProviderKeyStorage();
 
   try {
     const names = await storage.listKeys();
@@ -341,7 +349,8 @@ async function handleDelete(
     };
   }
 
-  const storage = getProviderKeyStorage();
+  // @plan:PLAN-20250214-CREDPROXY.P33
+  const storage = createProviderKeyStorage();
 
   try {
     // Check if key exists (R17.3)
@@ -394,7 +403,8 @@ async function handleDelete(
  */
 const keyNameCompleter: CompleterFn = async (_ctx, partial) => {
   try {
-    const names = await getProviderKeyStorage().listKeys();
+    // @plan:PLAN-20250214-CREDPROXY.P33
+    const names = await createProviderKeyStorage().listKeys();
     return names
       .filter((name) => name.startsWith(partial))
       .map((name) => ({ value: name }));

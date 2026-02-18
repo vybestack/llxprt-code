@@ -8,6 +8,10 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+/**
+ * @plan:PLAN-20250214-CREDPROXY.P33
+ */
+
 import {
   Config,
   KeyringTokenStore,
@@ -22,6 +26,7 @@ import {
   SubagentManager,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
+import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
 import { LoadedSettings, USER_SETTINGS_PATH } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
@@ -259,8 +264,10 @@ export function createIsolatedRuntimeContext(
 
   const resolvedSettingsService =
     config.getSettingsService() ?? settingsService;
+  // @plan:PLAN-20250214-CREDPROXY.P33
   const tokenStore =
-    sharedTokenStore ?? (sharedTokenStore = new KeyringTokenStore()); // Step 1 (multi-runtime-baseline.md line 2) keeps token storage shared.
+    sharedTokenStore ??
+    (sharedTokenStore = createTokenStore() as KeyringTokenStore); // Step 1 (multi-runtime-baseline.md line 2) keeps token storage shared.
   const oauthManager =
     options.oauthManager ??
     new OAuthManager(tokenStore, loadSettingsForIsolatedRuntime());

@@ -15,6 +15,7 @@ import {
   setupSshAgentDockerMacOS,
   getPodmanMachineConnection,
   setupSshAgentPodmanMacOS,
+  setupCredentialProxyPodmanMacOS,
 } from './sandbox.js';
 
 describe('setupSshAgentDockerMacOS', () => {
@@ -219,6 +220,45 @@ describe('setupSshAgentForwarding', () => {
   });
 });
 
+function mockValidPodmanConnection() {
+  vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
+    const cmdStr = String(cmd);
+    if (cmdStr.includes('connection list')) {
+      return Buffer.from(
+        JSON.stringify([
+          {
+            Name: 'default',
+            URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
+            Identity: '/Users/test/.ssh/key',
+            Default: true,
+          },
+        ]),
+      );
+    }
+    // TCP port poll via ss
+    if (cmdStr.includes('ss -tln')) {
+      return Buffer.from('ok');
+    }
+    return Buffer.from('');
+  });
+}
+
+function mockTunnelProcess(exitCode: number | null = null) {
+  const fakeProcess = {
+    pid: 99999,
+    exitCode,
+    on: vi.fn().mockReturnThis(),
+    removeListener: vi.fn().mockReturnThis(),
+    kill: vi.fn(),
+    stdout: { on: vi.fn() },
+    stderr: { on: vi.fn() },
+  };
+  vi.mocked(child_process.spawn).mockReturnValue(
+    fakeProcess as unknown as child_process.ChildProcess,
+  );
+  return fakeProcess;
+}
+
 describe('setupSshAgentPodmanMacOS', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -228,47 +268,8 @@ describe('setupSshAgentPodmanMacOS', () => {
     vi.restoreAllMocks();
   });
 
-  function mockValidConnection() {
-    vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes('connection list')) {
-        return Buffer.from(
-          JSON.stringify([
-            {
-              Name: 'default',
-              URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
-              Identity: '/Users/test/.ssh/key',
-              Default: true,
-            },
-          ]),
-        );
-      }
-      // TCP port poll via ss
-      if (cmdStr.includes('ss -tln')) {
-        return Buffer.from('ok');
-      }
-      return Buffer.from('');
-    });
-  }
-
-  function mockTunnelProcess(exitCode: number | null = null) {
-    const fakeProcess = {
-      pid: 99999,
-      exitCode,
-      on: vi.fn().mockReturnThis(),
-      removeListener: vi.fn().mockReturnThis(),
-      kill: vi.fn(),
-      stdout: { on: vi.fn() },
-      stderr: { on: vi.fn() },
-    };
-    vi.mocked(child_process.spawn).mockReturnValue(
-      fakeProcess as unknown as child_process.ChildProcess,
-    );
-    return fakeProcess;
-  }
-
   it('spawns SSH tunnel with -R TCP reverse forwarding (R7.1)', async () => {
-    mockValidConnection();
+    mockValidPodmanConnection();
     mockTunnelProcess();
 
     await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
@@ -285,7 +286,7 @@ describe('setupSshAgentPodmanMacOS', () => {
   }, 10000);
 
   it('adds --network host and SSH_AUTH_SOCK env on success (R7.5)', async () => {
-    mockValidConnection();
+    mockValidPodmanConnection();
     mockTunnelProcess();
 
     const args: string[] = [];
@@ -302,7 +303,7 @@ describe('setupSshAgentPodmanMacOS', () => {
   }, 10000);
 
   it('returns entrypointPrefix with socat relay command (R7.5)', async () => {
-    mockValidConnection();
+    mockValidPodmanConnection();
     mockTunnelProcess();
 
     const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
@@ -315,7 +316,7 @@ describe('setupSshAgentPodmanMacOS', () => {
   }, 10000);
 
   it('returns cleanup function that kills tunnel (R7.9)', async () => {
-    mockValidConnection();
+    mockValidPodmanConnection();
     const fakeProc = mockTunnelProcess();
 
     const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
@@ -326,7 +327,7 @@ describe('setupSshAgentPodmanMacOS', () => {
   }, 10000);
 
   it('cleanup is idempotent (R7.10)', async () => {
-    mockValidConnection();
+    mockValidPodmanConnection();
     const fakeProc = mockTunnelProcess();
 
     const result = await setupSshAgentPodmanMacOS([], '/tmp/auth.sock');
@@ -338,7 +339,7 @@ describe('setupSshAgentPodmanMacOS', () => {
   }, 10000);
 
   it('warns and skips when --network already set (conflict guard)', async () => {
-    mockValidConnection();
+    mockValidPodmanConnection();
     const fakeProc = mockTunnelProcess();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -355,7 +356,7 @@ describe('setupSshAgentPodmanMacOS', () => {
   }, 10000);
 
   it('throws FatalSandboxError when tunnel fails to start (R7.7)', async () => {
-    mockValidConnection();
+    mockValidPodmanConnection();
     mockTunnelProcess(1); // exitCode=1 means process died
 
     await expect(
@@ -392,6 +393,33 @@ describe('setupSshAgentPodmanMacOS', () => {
     ).rejects.toThrow(/SSH agent forwarding timed out/);
   }, 10000);
 
+  it('honors excluded tunnel ports and reserves selected port', async () => {
+    mockValidPodmanConnection();
+    mockTunnelProcess();
+
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy
+      .mockReturnValueOnce(0.0)
+      .mockReturnValueOnce(0.0)
+      .mockReturnValueOnce(0.0001);
+
+    const reserved: number[] = [];
+    await setupSshAgentPodmanMacOS([], '/tmp/auth.sock', 800, {
+      excludedTunnelPorts: new Set([49152]),
+      reserveTunnelPort: (port) => {
+        reserved.push(port);
+      },
+    });
+
+    const spawnCall = vi.mocked(child_process.spawn).mock.calls[0];
+    const sshArgs = spawnCall[1] as string[];
+    const rIdx = sshArgs.indexOf('-R');
+    const tunnelPort = Number(sshArgs[rIdx + 1].split(':')[1]);
+
+    expect(tunnelPort).not.toBe(49152);
+    expect(reserved).toEqual([tunnelPort]);
+  }, 10000);
+
   it('kills tunnel process when poll timeout expires (R7.8)', async () => {
     vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
       const cmdStr = String(cmd);
@@ -423,5 +451,207 @@ describe('setupSshAgentPodmanMacOS', () => {
 
     // Tunnel process should have been killed on timeout
     expect(fakeProc.kill).toHaveBeenCalledWith('SIGTERM');
+  }, 10000);
+});
+
+describe('setupCredentialProxyPodmanMacOS', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('spawns SSH reverse tunnel to host credential socket', async () => {
+    mockValidPodmanConnection();
+    mockTunnelProcess();
+
+    await setupCredentialProxyPodmanMacOS([], '/tmp/cred-proxy.sock');
+
+    const spawnCall = vi.mocked(child_process.spawn).mock.calls[0];
+    expect(spawnCall[0]).toBe('ssh');
+    const sshArgs = spawnCall[1] as string[];
+    expect(sshArgs).toContain('-R');
+    const rIdx = sshArgs.indexOf('-R');
+    expect(sshArgs[rIdx + 1]).toMatch(
+      /^127\.0\.0\.1:\d+:\/tmp\/cred-proxy\.sock$/,
+    );
+  }, 10000);
+
+  it('returns container socket path and entrypoint relay command', async () => {
+    mockValidPodmanConnection();
+    mockTunnelProcess();
+
+    const args: string[] = [];
+    const result = await setupCredentialProxyPodmanMacOS(
+      args,
+      '/tmp/cred-proxy.sock',
+    );
+
+    expect(args).toContain('--network');
+    const netIdx = args.indexOf('--network');
+    expect(args[netIdx + 1]).toBe('host');
+    expect(result.containerSocketPath).toBe('/tmp/llxprt-credential.sock');
+    expect(result.entrypointPrefix).toContain(
+      'socat UNIX-LISTEN:/tmp/llxprt-credential.sock,fork TCP4:127.0.0.1:',
+    );
+    expect(result.entrypointPrefix).toContain('command -v socat');
+    expect(result.entrypointPrefix).toContain(
+      'rm -f /tmp/llxprt-credential.sock',
+    );
+  }, 10000);
+
+  it('reuses existing --network=host if already present', async () => {
+    mockValidPodmanConnection();
+    mockTunnelProcess();
+
+    const args = ['--network', 'host'];
+    const result = await setupCredentialProxyPodmanMacOS(
+      args,
+      '/tmp/cred-proxy.sock',
+    );
+
+    const networkFlags = args.filter((arg) => arg === '--network');
+    expect(networkFlags).toHaveLength(1);
+    expect(result.containerSocketPath).toBe('/tmp/llxprt-credential.sock');
+  }, 10000);
+
+  it('throws when conflicting network mode is already set', async () => {
+    mockValidPodmanConnection();
+    const fakeProc = mockTunnelProcess();
+
+    await expect(
+      setupCredentialProxyPodmanMacOS(
+        ['--network', 'none'],
+        '/tmp/cred-proxy.sock',
+      ),
+    ).rejects.toThrow(
+      /requires --network=host but --network=none is already set/i,
+    );
+
+    expect(fakeProc.kill).toHaveBeenCalledWith('SIGTERM');
+  }, 10000);
+
+  it('returns cleanup that kills tunnel and is idempotent', async () => {
+    mockValidPodmanConnection();
+    const fakeProc = mockTunnelProcess();
+
+    const result = await setupCredentialProxyPodmanMacOS(
+      [],
+      '/tmp/cred-proxy.sock',
+    );
+
+    expect(result.cleanup).toBeDefined();
+    result.cleanup!();
+    result.cleanup!();
+
+    expect(fakeProc.kill).toHaveBeenCalledTimes(1);
+    expect(fakeProc.kill).toHaveBeenCalledWith('SIGTERM');
+  }, 10000);
+
+  it('throws when tunnel process fails to start', async () => {
+    mockValidPodmanConnection();
+    mockTunnelProcess(1);
+
+    await expect(
+      setupCredentialProxyPodmanMacOS([], '/tmp/cred-proxy.sock'),
+    ).rejects.toThrow(/bridge tunnel failed to start/i);
+  }, 10000);
+
+  it('throws when bridge port never becomes ready and kills tunnel', async () => {
+    vi.mocked(child_process.execSync).mockImplementation((cmd: string) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('connection list')) {
+        return Buffer.from(
+          JSON.stringify([
+            {
+              Name: 'default',
+              URI: 'ssh://core@localhost:12345/run/podman/podman.sock',
+              Identity: '/Users/test/.ssh/key',
+              Default: true,
+            },
+          ]),
+        );
+      }
+      if (cmdStr.includes('ss -tln')) {
+        throw new Error('port not found');
+      }
+      return Buffer.from('');
+    });
+
+    const fakeProc = mockTunnelProcess();
+
+    await expect(
+      setupCredentialProxyPodmanMacOS([], '/tmp/cred-proxy.sock', 800),
+    ).rejects.toThrow(/timed out waiting for TCP tunnel/i);
+
+    expect(fakeProc.kill).toHaveBeenCalledWith('SIGTERM');
+  }, 10000);
+
+  it('honors excluded tunnel ports and reserves selected bridge port', async () => {
+    mockValidPodmanConnection();
+    mockTunnelProcess();
+
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy
+      .mockReturnValueOnce(0.0)
+      .mockReturnValueOnce(0.0)
+      .mockReturnValueOnce(0.0001);
+
+    const reserved: number[] = [];
+    await setupCredentialProxyPodmanMacOS([], '/tmp/cred-proxy.sock', 800, {
+      excludedTunnelPorts: new Set([49152]),
+      reserveTunnelPort: (port) => {
+        reserved.push(port);
+      },
+    });
+
+    const spawnCall = vi.mocked(child_process.spawn).mock.calls[0];
+    const sshArgs = spawnCall[1] as string[];
+    const rIdx = sshArgs.indexOf('-R');
+    const tunnelPort = Number(sshArgs[rIdx + 1].split(':')[1]);
+
+    expect(tunnelPort).not.toBe(49152);
+    expect(reserved).toEqual([tunnelPort]);
+  }, 10000);
+
+  it('coordinates shared reserved ports across SSH and credential proxy tunnels', async () => {
+    mockValidPodmanConnection();
+    mockTunnelProcess();
+
+    const randomSpy = vi.spyOn(Math, 'random');
+    randomSpy
+      .mockReturnValueOnce(0.0)
+      .mockReturnValueOnce(0.0)
+      .mockReturnValueOnce(0.0001);
+
+    const reservedTunnelPorts = new Set<number>();
+    const reserveTunnelPort = (port: number) => {
+      reservedTunnelPorts.add(port);
+    };
+
+    await setupSshAgentPodmanMacOS([], '/tmp/auth.sock', 800, {
+      reserveTunnelPort,
+      excludedTunnelPorts: reservedTunnelPorts,
+    });
+
+    await setupCredentialProxyPodmanMacOS([], '/tmp/cred-proxy.sock', 800, {
+      reserveTunnelPort,
+      excludedTunnelPorts: reservedTunnelPorts,
+    });
+
+    const spawnCalls = vi.mocked(child_process.spawn).mock.calls;
+    const sshArgs = spawnCalls[0][1] as string[];
+    const proxyArgs = spawnCalls[1][1] as string[];
+
+    const sshPort = Number(sshArgs[sshArgs.indexOf('-R') + 1].split(':')[1]);
+    const proxyPort = Number(
+      proxyArgs[proxyArgs.indexOf('-R') + 1].split(':')[1],
+    );
+
+    expect(proxyPort).not.toBe(sshPort);
+    expect(reservedTunnelPorts.has(sshPort)).toBe(true);
+    expect(reservedTunnelPorts.has(proxyPort)).toBe(true);
   }, 10000);
 });

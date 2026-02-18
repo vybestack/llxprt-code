@@ -49,11 +49,16 @@ import {
   formatNormalizationFailureMessage,
 } from './messages.js';
 import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-registration.js';
+// @plan:PLAN-20250214-CREDPROXY.P35
+// @requirement:R2.3 - Use factory instead of direct getProviderKeyStorage
+import { createProviderKeyStorage } from '../auth/proxy/credential-store-factory.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,
   type ModelDefaultRule,
 } from '../providers/providerAliases.js';
+
+export { createProviderKeyStorage };
 
 type ProfileApplicationResult = Awaited<
   ReturnType<typeof applyProfileWithGuards>
@@ -1066,7 +1071,7 @@ export async function applyProfileSnapshot(
   profile: Profile,
   options: ProfileLoadOptions = {},
 ): Promise<ProfileLoadResult> {
-  const { settingsService } = getCliRuntimeServices();
+  const { settingsService, config } = getCliRuntimeServices();
 
   const applicationResult: ProfileApplicationResult =
     await applyProfileWithGuards(profile, options);
@@ -1090,15 +1095,47 @@ export async function applyProfileSnapshot(
         );
       });
 
+    // @fix issue1467 - Clear stale session bucket state when profile buckets change
+    // When a profile is reloaded with different buckets, the in-memory session bucket
+    // and failover handler state may point to exhausted/stale buckets. Clear them so
+    // the new handler starts fresh from the first bucket in the updated profile.
+    // Also handles downgrade from multi-bucket to no-bucket.
+    const standardProfile = profile as {
+      auth?: { type?: string; buckets?: string[] };
+    };
+    const authConfig = standardProfile.auth;
+    const newBuckets =
+      authConfig?.type === 'oauth' && Array.isArray(authConfig.buckets)
+        ? authConfig.buckets
+        : [];
+
+    const existingHandler = config.getBucketFailoverHandler?.();
+    const existingBuckets = existingHandler?.getBuckets?.() ?? [];
+    const bucketsChanged =
+      existingBuckets.length !== newBuckets.length ||
+      !existingBuckets.every((b, i) => b === newBuckets[i]);
+
+    if (
+      bucketsChanged &&
+      (existingBuckets.length > 0 || newBuckets.length > 0)
+    ) {
+      logger.debug(
+        () =>
+          `[issue1467] Profile buckets changed for ${profile.provider}: ` +
+          `[${existingBuckets.join(', ')}] → [${newBuckets.join(', ')}]. ` +
+          `Clearing session bucket and failover handler.`,
+      );
+      // Clear stale session bucket so new handler starts at first bucket
+      oauthManager.clearSessionBucket(profile.provider);
+      // Clear the old failover handler so a fresh one is created
+      config.setBucketFailoverHandler?.(undefined);
+    }
+
     // @fix issue1151 - Proactively wire the failover handler BEFORE any API calls
     // This ensures the handler is available when the first 403 error occurs.
     // Without this, the handler is only created inside getOAuthToken() which may
     // be too late if the 403 happens on the first request.
     // Only applies to StandardProfile (not LoadBalancerProfile)
-    const standardProfile = profile as {
-      auth?: { type?: string; buckets?: string[] };
-    };
-    const authConfig = standardProfile.auth;
     if (
       authConfig?.type === 'oauth' &&
       authConfig.buckets &&
@@ -1124,12 +1161,20 @@ export async function applyProfileSnapshot(
     // This is a follow-up to issue #1151 which only handled StandardProfile.
     // For LoadBalancer profiles, we need to iterate through all sub-profiles and
     // proactively wire failover handlers for any OAuth multi-bucket sub-profiles.
+    // @fix issue1467 - Also clear stale session bucket state for sub-profiles
     if (isLoadBalancerProfile(profile)) {
       const subProfileNames = profile.profiles || [];
       logger.debug(
         () =>
           `[issue1250] LoadBalancer profile detected with ${subProfileNames.length} sub-profile(s)`,
       );
+
+      // @fix issue1467 - Capture handler snapshot BEFORE the loop to avoid
+      // cascade clearing: if we clear inside the loop, subsequent iterations
+      // would see an empty handler and falsely detect bucket changes
+      const lbExistingHandler = config.getBucketFailoverHandler?.();
+      const lbExistingBuckets = lbExistingHandler?.getBuckets?.() ?? [];
+      let shouldClearHandler = false;
 
       for (const subProfileName of subProfileNames) {
         try {
@@ -1146,6 +1191,26 @@ export async function applyProfileSnapshot(
             subProfileAuth.buckets.length > 1
           ) {
             const subBucketCount = subProfileAuth.buckets.length;
+            const subNewBuckets = subProfileAuth.buckets;
+
+            // @fix issue1467 - Clear stale session state for sub-profile if buckets changed
+            // Note: For LB profiles, each sub-profile may have its own provider,
+            // so we check/clear based on the sub-profile's provider
+            const subBucketsChanged =
+              lbExistingBuckets.length !== subNewBuckets.length ||
+              !lbExistingBuckets.every((b, i) => b === subNewBuckets[i]);
+
+            if (subBucketsChanged) {
+              logger.debug(
+                () =>
+                  `[issue1467] Sub-profile '${subProfileName}' buckets changed for ${subProfile.provider}: ` +
+                  `[${lbExistingBuckets.join(', ')}] → [${subNewBuckets.join(', ')}]. ` +
+                  `Clearing session bucket.`,
+              );
+              oauthManager.clearSessionBucket(subProfile.provider);
+              shouldClearHandler = true;
+            }
+
             // Touch getOAuthToken to ensure handler is wired to config
             void oauthManager
               .getOAuthToken(subProfile.provider)
@@ -1170,6 +1235,15 @@ export async function applyProfileSnapshot(
               }`,
           );
         }
+      }
+
+      // Clear the handler once after the loop if any sub-profile had changed buckets
+      if (shouldClearHandler) {
+        logger.debug(
+          () =>
+            `[issue1467] Clearing failover handler after LB sub-profile bucket changes`,
+        );
+        config.setBucketFailoverHandler?.(undefined);
       }
     }
   }
@@ -2409,12 +2483,13 @@ export async function applyCliArgumentOverrides(
  * Does NOT fall through to lower-precedence auth sources.
  *
  * @plan PLAN-20260211-SECURESTORE.P16
- * @requirement R24.1, R24.2
+ * @plan:PLAN-20250214-CREDPROXY.P35
+ * @requirement R24.1, R24.2, R2.3
  * @pseudocode auth-key-name.md lines 96-119
  */
 async function resolveNamedKey(name: string): Promise<string> {
-  const { getProviderKeyStorage } = await import('@vybestack/llxprt-code-core');
-  const storage = getProviderKeyStorage();
+  // R2.3: Use factory instead of direct getProviderKeyStorage to support proxy mode
+  const storage = createProviderKeyStorage();
 
   let key: string | null;
   try {

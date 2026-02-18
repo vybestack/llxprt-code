@@ -77,6 +77,7 @@ export type HistoryItemGemini = HistoryItemBase & {
   type: 'gemini';
   text: string;
   model?: string;
+  profileName?: string;
   thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 };
 
@@ -84,6 +85,7 @@ export type HistoryItemGeminiContent = HistoryItemBase & {
   type: 'gemini_content';
   text: string;
   model?: string;
+  profileName?: string;
   thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 };
 

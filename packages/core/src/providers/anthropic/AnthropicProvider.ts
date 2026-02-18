@@ -26,10 +26,7 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import {
-  flushRuntimeAuthScope,
-  type OAuthManager,
-} from '../../auth/precedence.js';
+import { type OAuthManager } from '../../auth/precedence.js';
 import {
   type IContent,
   type ContentBlock,
@@ -49,11 +46,7 @@ import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-de
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
-import {
-  retryWithBackoff,
-  getErrorStatus,
-  isNetworkTransientError,
-} from '../../utils/retry.js';
+import { isNetworkTransientError } from '../../utils/retry.js';
 import { delay } from '../../utils/delay.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import {
@@ -442,6 +435,14 @@ export class AnthropicProvider extends BaseProvider {
           maxOutputTokens: 32000,
         },
         {
+          id: 'claude-sonnet-4-6',
+          name: 'Claude Sonnet 4.6',
+          provider: this.name,
+          supportedToolFormats: ['anthropic'],
+          contextWindow: 400000,
+          maxOutputTokens: 64000,
+        },
+        {
           id: 'claude-sonnet-4-5-20250929',
           name: 'Claude Sonnet 4.5',
           provider: this.name,
@@ -583,6 +584,14 @@ export class AnthropicProvider extends BaseProvider {
         supportedToolFormats: ['anthropic'],
         contextWindow: 500000,
         maxOutputTokens: 32000,
+      },
+      {
+        id: 'claude-sonnet-4-6',
+        name: 'Claude Sonnet 4.6',
+        provider: this.name,
+        supportedToolFormats: ['anthropic'],
+        contextWindow: 400000,
+        maxOutputTokens: 64000,
       },
       {
         id: 'claude-sonnet-4-5-20250929',
@@ -2162,134 +2171,18 @@ ${block.code}
       | Anthropic.Message
       | AsyncIterable<Anthropic.MessageStreamEvent>;
 
-    // Track failover client - only rebuilt after bucket failover succeeds
-    // The initialClient is created at the start of generateChatCompletionWithOptions
-    // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
-    let failoverClient: Anthropic | null = null;
-
-    // Bucket failover callback for 429 errors
-    // @plan PLAN-20251213issue686 Bucket failover integration for AnthropicProvider
-    // @fix issue1029 - Enhanced failover handler lookup with multiple config sources
-    const logger = this.getLogger();
-    const onPersistent429Callback = async (): Promise<boolean | null> => {
-      // Try to get the bucket failover handler from multiple config sources
-      // Issue 1029: The handler may be set on a different Config instance than options.runtime?.config
-      // We need to check multiple sources to find it
-      const runtimeConfig = options.runtime?.config;
-      const optionsConfig = options.config;
-      const globalConfig = this.globalConfig;
-
-      // Debug logging to diagnose failover handler availability
-      logger.debug(
-        () =>
-          `[issue1029] Checking failover handler availability: ` +
-          `hasRuntimeConfig=${!!runtimeConfig}, ` +
-          `hasOptionsConfig=${!!optionsConfig}, ` +
-          `hasGlobalConfig=${!!globalConfig}`,
-      );
-
-      // Try to get failover handler from multiple config sources
-      let failoverHandler = runtimeConfig?.getBucketFailoverHandler?.();
-
-      if (!failoverHandler && optionsConfig) {
-        failoverHandler = optionsConfig.getBucketFailoverHandler?.();
-        if (failoverHandler) {
-          logger.debug(
-            () =>
-              '[issue1029] Found failover handler on options.config (not runtime.config)',
-          );
-        }
-      }
-
-      if (!failoverHandler && globalConfig) {
-        failoverHandler = globalConfig.getBucketFailoverHandler?.();
-        if (failoverHandler) {
-          logger.debug(
-            () =>
-              '[issue1029] Found failover handler on globalConfig (not runtime.config)',
-          );
-        }
-      }
-
-      // Log detailed state for debugging
-      if (failoverHandler) {
-        logger.debug(
-          () =>
-            `[issue1029] Failover handler found: enabled=${failoverHandler.isEnabled()}, ` +
-            `currentBucket=${failoverHandler.getCurrentBucket() ?? 'undefined'}, ` +
-            `buckets=${JSON.stringify(failoverHandler.getBuckets?.() ?? [])}`,
-        );
-      } else {
-        logger.debug(
-          () =>
-            '[issue1029] No failover handler found on any config. ' +
-            'Bucket failover will NOT be attempted. ' +
-            'Check that profile has auth.buckets configured and OAuthManager.setConfigGetter is wired.',
-        );
-      }
-
-      if (failoverHandler && failoverHandler.isEnabled()) {
-        logger.debug(() => 'Attempting bucket failover on persistent 429');
-        const currentBucket = failoverHandler.getCurrentBucket();
-        const success = await failoverHandler.tryFailover();
-        if (success) {
-          // Clear runtime-scoped auth cache so subsequent auth resolution can pick up the new bucket.
-          if (typeof options.runtime?.runtimeId === 'string') {
-            flushRuntimeAuthScope(options.runtime.runtimeId);
-          }
-
-          // Force re-resolution of the auth token after bucket failover.
-          // BaseProvider caches the resolved token in options.resolved.authToken for the duration
-          // of a call; we must refresh it so the rebuilt client uses the new bucket credentials.
-          options.resolved.authToken = '';
-          const refreshedAuthToken = await this.getAuthTokenForPrompt();
-          options.resolved.authToken = refreshedAuthToken;
-
-          // Rebuild client with fresh credentials from new bucket
-          const { client: newClient } = await this.buildProviderClient(
-            options,
-            options.resolved.telemetry,
-          );
-          failoverClient = newClient;
-          const newBucket = failoverHandler.getCurrentBucket();
-          logger.debug(
-            () =>
-              `Bucket failover successful: ${currentBucket} -> ${newBucket}`,
-          );
-          return true; // Signal retry with new bucket
-        }
-        logger.debug(
-          () =>
-            `Bucket failover failed - no more buckets available after ${currentBucket}`,
-        );
-        return false; // No more buckets, stop retrying
-      }
-
-      // No bucket failover configured or not enabled
-      if (failoverHandler && !failoverHandler.isEnabled()) {
-        logger.debug(
-          () =>
-            '[issue1029] Failover handler exists but is NOT enabled (likely single bucket profile)',
-        );
-      }
-      return null;
-    };
-
-    // Use failover client if bucket failover happened, otherwise use initial client
     const apiCallWithResponse = async () => {
-      const currentClient = failoverClient ?? initialClient;
-
       const apiCall = () =>
         Object.keys(customHeaders).length > 0
-          ? currentClient.messages.create(
+          ? initialClient.messages.create(
               requestBody as Parameters<
-                typeof currentClient.messages.create
+                typeof initialClient.messages.create
               >[0],
               { headers: customHeaders },
             )
-          : currentClient.messages.create(
+          : initialClient.messages.create(
               requestBody as Parameters<
-                typeof currentClient.messages.create
+                typeof initialClient.messages.create
               >[0],
             );
 
@@ -2312,13 +2205,8 @@ ${block.code}
     };
 
     try {
-      const result = await retryWithBackoff(apiCallWithResponse, {
-        maxAttempts,
-        initialDelayMs,
-        shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
-        trackThrottleWaitTime: this.throttleTracker,
-        onPersistent429: onPersistent429Callback,
-      });
+      // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
+      const result = await apiCallWithResponse();
 
       response = result.data;
 
@@ -2408,18 +2296,13 @@ ${block.code}
         streamingAttempt++;
 
         // If this is a retry, make a fresh API call to get a new stream
+        // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
         if (streamingAttempt > 1) {
           streamingLogger.debug(
             () =>
               `Stream retry attempt ${streamingAttempt}/${maxAttempts}: Making fresh API call`,
           );
-          const retryResult = await retryWithBackoff(apiCallWithResponse, {
-            maxAttempts,
-            initialDelayMs,
-            shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
-            trackThrottleWaitTime: this.throttleTracker,
-            onPersistent429: onPersistent429Callback,
-          });
+          const retryResult = await apiCallWithResponse();
           response = retryResult.data;
         }
 
@@ -2823,42 +2706,6 @@ ${block.code}
     const initialDelayMs =
       (ephemeralSettings['retrywait'] as number | undefined) ?? 4000;
     return { maxAttempts, initialDelayMs };
-  }
-
-  private shouldRetryAnthropicResponse(error: unknown): boolean {
-    // Check for Anthropic-specific error types (overloaded_error)
-    if (error && typeof error === 'object') {
-      const errorObj = error as {
-        error?: { type?: string; message?: string };
-        type?: string;
-      };
-      const errorType = errorObj.error?.type || errorObj.type;
-
-      if (errorType === 'overloaded_error') {
-        this.getLogger().debug(
-          () => 'Will retry Anthropic request due to overloaded_error',
-        );
-        return true;
-      }
-    }
-
-    const status = getErrorStatus(error);
-    if (status === 429 || (status && status >= 500 && status < 600)) {
-      this.getLogger().debug(
-        () => `Will retry Anthropic request due to status ${status}`,
-      );
-      return true;
-    }
-
-    if (isNetworkTransientError(error)) {
-      this.getLogger().debug(
-        () =>
-          'Will retry Anthropic request due to transient network error signature.',
-      );
-      return true;
-    }
-
-    return false;
   }
 
   /**

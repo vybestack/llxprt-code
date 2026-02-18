@@ -152,31 +152,8 @@ vi.mock('../../core/prompts.js', () => ({
   ),
 }));
 
-// Mock the retry utility
+// Mock the retry utility (REQ-RETRY-001: retryWithBackoff removed from providers)
 vi.mock('../../utils/retry.js', () => ({
-  retryWithBackoff: vi.fn(async (fn, options) => {
-    let lastError;
-    let attempts = 0;
-    const maxAttempts = 2;
-
-    while (attempts < maxAttempts) {
-      try {
-        return await fn();
-      } catch (error) {
-        lastError = error;
-        attempts++;
-        if (
-          attempts < maxAttempts &&
-          options?.shouldRetry &&
-          options.shouldRetry(error)
-        ) {
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw lastError;
-  }),
   getErrorStatus: vi.fn(() => undefined),
   isNetworkTransientError: vi.fn(() => false),
 }));
