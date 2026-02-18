@@ -269,6 +269,8 @@ export async function startInteractiveUI(
   workspaceRoot: string,
   recordingIntegration?: RecordingIntegration,
   resumedHistory?: IContent[],
+  initialRecordingService?: SessionRecordingService,
+  initialLockHandle?: LockHandle | null,
 ) {
   const version = await getCliVersion();
 
@@ -307,6 +309,8 @@ export async function startInteractiveUI(
             version={version}
             recordingIntegration={recordingIntegration}
             resumedHistory={resumedHistory}
+            initialRecordingService={initialRecordingService}
+            initialLockHandle={initialLockHandle}
           />
         </SettingsContext.Provider>
       </ErrorBoundary>
@@ -1205,6 +1209,8 @@ export async function main() {
       workspaceRoot,
       recordingIntegration,
       resumedHistory ?? undefined,
+      recordingService,
+      resumedLockHandle,
     );
     return;
   }

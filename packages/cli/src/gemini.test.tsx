@@ -333,7 +333,6 @@ describe('gemini.tsx main function', () => {
       promptWords: [],
       query: undefined,
       set: undefined,
-      resume: undefined,
       continue: undefined,
       nobrowser: undefined,
       listSessions: undefined,

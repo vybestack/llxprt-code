@@ -81,7 +81,11 @@ import {
   type UserFeedbackPayload,
   ShellExecutionService,
   type RecordingIntegration,
+  type SessionRecordingService,
+  type LockHandle,
+  type SessionMetadata,
 } from '@vybestack/llxprt-code-core';
+import type { RecordingSwapCallbacks } from '../services/performResume.js';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useSessionStats } from './contexts/SessionContext.js';
@@ -155,6 +159,10 @@ interface AppContainerProps {
   appDispatch: React.Dispatch<AppAction>;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
   recordingIntegration?: RecordingIntegration;
+  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
+  initialRecordingService?: SessionRecordingService;
+  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
+  initialLockHandle?: LockHandle | null;
 }
 
 function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
@@ -178,6 +186,8 @@ export const AppContainer = (props: AppContainerProps) => {
     appState,
     appDispatch,
     recordingIntegration,
+    initialRecordingService,
+    initialLockHandle,
   } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
@@ -231,6 +241,57 @@ export const AppContainer = (props: AppContainerProps) => {
     todoPauseController.registerTodoPause();
     todoContinuationRef.current?.handleTodoPause('paused by model');
   }, [todoPauseController]);
+
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   * Recording infrastructure refs for session resume (performResume swap callbacks).
+   * These refs hold the current recording service, integration, and lock handle,
+   * allowing performResume to swap them during session resume.
+   */
+  const recordingServiceRef = useRef<SessionRecordingService | null>(
+    initialRecordingService ?? null,
+  );
+  const recordingIntegrationRef = useRef<RecordingIntegration | null>(
+    recordingIntegration ?? null,
+  );
+  const lockHandleRef = useRef<LockHandle | null>(initialLockHandle ?? null);
+
+  // Keep recording refs in sync with props
+  useEffect(() => {
+    recordingServiceRef.current = initialRecordingService ?? null;
+  }, [initialRecordingService]);
+
+  useEffect(() => {
+    recordingIntegrationRef.current = recordingIntegration ?? null;
+  }, [recordingIntegration]);
+
+  useEffect(() => {
+    lockHandleRef.current = initialLockHandle ?? null;
+  }, [initialLockHandle]);
+
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   * RecordingSwapCallbacks for performResume - provides ref-based access to
+   * current recording infrastructure and setters for swapping during resume.
+   */
+  const recordingSwapCallbacks = useMemo(
+    (): RecordingSwapCallbacks => ({
+      getCurrentRecording: () => recordingServiceRef.current,
+      getCurrentIntegration: () => recordingIntegrationRef.current,
+      getCurrentLockHandle: () => lockHandleRef.current,
+      setRecording: (
+        recording: SessionRecordingService,
+        integration: RecordingIntegration,
+        lock: LockHandle | null,
+        _metadata: SessionMetadata,
+      ) => {
+        recordingServiceRef.current = recording;
+        recordingIntegrationRef.current = integration;
+        lockHandleRef.current = lock;
+      },
+    }),
+    [],
+  );
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = config.getIdeClient()?.getCurrentIde();
@@ -307,7 +368,7 @@ export const AppContainer = (props: AppContainerProps) => {
         count: 1,
       });
       if (payload.severity === 'error' || payload.severity === 'warning') {
-        recordingIntegration?.recordSessionEvent(
+        recordingIntegrationRef.current?.recordSessionEvent(
           payload.severity,
           payload.message,
         );
@@ -320,7 +381,7 @@ export const AppContainer = (props: AppContainerProps) => {
     return () => {
       coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
     };
-  }, [handleNewMessage, recordingIntegration]);
+  }, [handleNewMessage]);
 
   useEffect(() => {
     const consolePatcher = new ConsolePatcher({
@@ -427,7 +488,7 @@ export const AppContainer = (props: AppContainerProps) => {
    */
   const recordingSubscribedServiceRef = useRef<unknown>(null);
   useEffect(() => {
-    if (!recordingIntegration) return;
+    if (!recordingIntegrationRef.current) return;
 
     let intervalCleared = false;
     const checkInterval = setInterval(() => {
@@ -441,7 +502,9 @@ export const AppContainer = (props: AppContainerProps) => {
           historyService !== recordingSubscribedServiceRef.current
         ) {
           recordingSubscribedServiceRef.current = historyService;
-          recordingIntegration.onHistoryServiceReplaced(historyService);
+          recordingIntegrationRef.current?.onHistoryServiceReplaced(
+            historyService,
+          );
           debug.log('RecordingIntegration subscribed to HistoryService');
         }
       }
@@ -452,7 +515,7 @@ export const AppContainer = (props: AppContainerProps) => {
       intervalCleared = true;
       recordingSubscribedServiceRef.current = null;
     };
-  }, [config, recordingIntegration]);
+  }, [config]);
 
   const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
@@ -625,6 +688,13 @@ export const AppContainer = (props: AppContainerProps) => {
     ModelsDialogData | undefined
   >(undefined);
 
+  /**
+   * Session browser dialog state
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  const [isSessionBrowserDialogOpen, setIsSessionBrowserDialogOpen] =
+    useState(false);
+
   // Queue error message state (for preventing slash/shell commands from being queued)
   const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(
     null,
@@ -662,6 +732,18 @@ export const AppContainer = (props: AppContainerProps) => {
   const closeModelsDialog = useCallback(() => {
     setIsModelsDialogOpen(false);
     setModelsDialogData(undefined);
+  }, []);
+
+  /**
+   * Session browser dialog actions
+   * @plan PLAN-20260214-SESSIONBROWSER.P21
+   */
+  const openSessionBrowserDialog = useCallback(() => {
+    setIsSessionBrowserDialogOpen(true);
+  }, []);
+
+  const closeSessionBrowserDialog = useCallback(() => {
+    setIsSessionBrowserDialogOpen(false);
   }, []);
 
   const {
@@ -1171,6 +1253,10 @@ export const AppContainer = (props: AppContainerProps) => {
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
       openWelcomeDialog: welcomeActions.resetAndReopen,
+      /**
+       * @plan PLAN-20260214-SESSIONBROWSER.P21
+       */
+      openSessionBrowserDialog,
     }),
     [
       openAuthDialog,
@@ -1195,6 +1281,7 @@ export const AppContainer = (props: AppContainerProps) => {
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
       welcomeActions.resetAndReopen,
+      openSessionBrowserDialog,
     ],
   );
 
@@ -1234,7 +1321,8 @@ export const AppContainer = (props: AppContainerProps) => {
     extensionsUpdateState,
     true, // isConfigInitialized
     todoContextForCommands, // @plan PLAN-20260129-TODOPERSIST.P07
-    recordingIntegration,
+    recordingIntegrationRef.current ?? undefined,
+    recordingSwapCallbacks, // @plan PLAN-20260214-SESSIONBROWSER.P23
   );
 
   // Memoize viewport to ensure it updates when inputWidth changes
@@ -1978,6 +2066,10 @@ export const AppContainer = (props: AppContainerProps) => {
     isLoggingDialogOpen,
     isSubagentDialogOpen,
     isModelsDialogOpen,
+    /**
+     * @plan PLAN-20260214-SESSIONBROWSER.P21
+     */
+    isSessionBrowserDialogOpen,
 
     // Dialog data
     providerOptions: isCreateProfileDialogOpen
@@ -2196,6 +2288,13 @@ export const AppContainer = (props: AppContainerProps) => {
       openModelsDialog,
       closeModelsDialog,
 
+      /**
+       * Session browser dialog
+       * @plan PLAN-20260214-SESSIONBROWSER.P21
+       */
+      openSessionBrowserDialog,
+      closeSessionBrowserDialog,
+
       // Workspace migration dialog
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
@@ -2292,6 +2391,8 @@ export const AppContainer = (props: AppContainerProps) => {
       closeSubagentDialog,
       openModelsDialog,
       closeModelsDialog,
+      openSessionBrowserDialog,
+      closeSessionBrowserDialog,
       onWorkspaceMigrationDialogOpen,
       onWorkspaceMigrationDialogClose,
       openPrivacyNotice,

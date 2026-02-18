@@ -424,11 +424,13 @@ describe('Config LSP Integration (P33)', () => {
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.navigationTools).toBe(true);
 
-      const tools = config.getToolRegistry().getAllTools();
-      const lspNavTools = tools.filter(
-        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-      );
-      expect(lspNavTools.length).toBeGreaterThan(0);
+      await vi.waitFor(() => {
+        const tools = config.getToolRegistry().getAllTools();
+        const lspNavTools = tools.filter(
+          (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+        );
+        expect(lspNavTools.length).toBeGreaterThan(0);
+      });
     });
 
     it('should default to enabled when navigationTools is absent', async () => {
@@ -443,11 +445,14 @@ describe('Config LSP Integration (P33)', () => {
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.navigationTools).toBeUndefined();
-      const tools = config.getToolRegistry().getAllTools();
-      const lspNavTools = tools.filter(
-        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-      );
-      expect(lspNavTools.length).toBeGreaterThan(0);
+
+      await vi.waitFor(() => {
+        const tools = config.getToolRegistry().getAllTools();
+        const lspNavTools = tools.filter(
+          (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+        );
+        expect(lspNavTools.length).toBeGreaterThan(0);
+      });
     });
   });
 

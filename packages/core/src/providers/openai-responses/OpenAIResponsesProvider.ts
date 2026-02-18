@@ -60,11 +60,7 @@ import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { CodexOAuthTokenSchema } from '../../auth/types.js';
 import type { OAuthManager } from '../../auth/precedence.js';
-import {
-  retryWithBackoff,
-  getErrorStatus,
-  isNetworkTransientError,
-} from '../../utils/retry.js';
+import { getErrorStatus, isNetworkTransientError } from '../../utils/retry.js';
 import { delay } from '../../utils/delay.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
@@ -213,20 +209,14 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }
 
     try {
-      // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
+      // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
       // Fetch models from the API
-      const response = await retryWithBackoff(
-        () =>
-          fetch(`${baseURL}/models`, {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-            },
-          }),
-        {
-          shouldRetryOnError: this.shouldRetryOnError.bind(this),
+      const response = await fetch(`${baseURL}/models`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
         },
-      );
+      });
 
       if (response.ok) {
         const data = (await response.json()) as { data: Array<{ id: string }> };
@@ -1044,20 +1034,12 @@ export class OpenAIResponsesProvider extends BaseProvider {
     while (streamingAttempt < maxStreamingAttempts) {
       streamingAttempt++;
 
-      // @fix #1076: Use maxAttempts: 1 so the outer while loop owns all retry
-      // logic. Previously both retryWithBackoff and the outer loop retried
-      // network errors independently, risking maxAttempts^2 total fetch calls.
-      const response = await retryWithBackoff(
-        () =>
-          fetch(responsesURL, {
-            method: 'POST',
-            headers,
-            body: bodyBlob,
-          }),
-        {
-          maxAttempts: 1,
-        },
-      );
+      // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
+      const response = await fetch(responsesURL, {
+        method: 'POST',
+        headers,
+        body: bodyBlob,
+      });
 
       try {
         // @fix #1076: Move HTTP error check inside try block so retryable HTTP errors

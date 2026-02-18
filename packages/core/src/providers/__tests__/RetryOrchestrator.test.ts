@@ -890,7 +890,10 @@ describe('RetryOrchestrator', () => {
       });
     });
 
-    it('should retry entire stream on mid-stream error', async () => {
+    it('should NOT retry when chunks were already yielded (prevents mixed response)', async () => {
+      // When chunks have already been yielded to the caller and an error occurs,
+      // we should NOT retry - that would produce a mixed response (partial + retry).
+      // Instead, propagate the error immediately.
       let attemptCount = 0;
 
       const provider: IProvider = {
@@ -906,7 +909,7 @@ describe('RetryOrchestrator', () => {
             } as IContent;
             throw createNetworkError('STREAM_INTERRUPTED');
           } else {
-            // Second attempt - succeed
+            // Second attempt - should never be reached
             yield {
               speaker: 'ai',
               blocks: [{ type: 'text', text: 'complete' }],
@@ -936,22 +939,31 @@ describe('RetryOrchestrator', () => {
         contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
       };
 
-      const chunks = await consumeStream(
-        orchestrator.generateChatCompletion(options),
-      );
+      const chunks: IContent[] = [];
+      let thrownError: Error | null = null;
+      try {
+        for await (const chunk of orchestrator.generateChatCompletion(
+          options,
+        )) {
+          chunks.push(chunk);
+        }
+      } catch (e) {
+        thrownError = e as Error;
+      }
 
-      // With true streaming (streamingTimeoutMs=0), chunks are yielded immediately
-      // So we see the partial chunk from first attempt, then complete chunk from retry
-      expect(chunks).toHaveLength(2);
+      // Should have received the partial chunk before the error
+      expect(chunks).toHaveLength(1);
       expect(chunks[0].blocks[0]).toMatchObject({
         type: 'text',
         text: 'partial',
       });
-      expect(chunks[1].blocks[0]).toMatchObject({
-        type: 'text',
-        text: 'complete',
-      });
-      expect(attemptCount).toBe(2);
+
+      // Should have thrown an error (no retry when chunks were yielded)
+      expect(thrownError).not.toBeNull();
+      expect(thrownError?.message).toContain('Connection reset');
+
+      // Should NOT have attempted a second try
+      expect(attemptCount).toBe(1);
     });
 
     it('should apply timeout for first chunk', async () => {

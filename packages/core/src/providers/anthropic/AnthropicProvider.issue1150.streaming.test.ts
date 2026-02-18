@@ -54,8 +54,8 @@ vi.mock('../../core/prompts.js', () => ({
   ),
 }));
 
+// REQ-RETRY-001: retryWithBackoff removed from providers
 vi.mock('../../utils/retry.js', () => ({
-  retryWithBackoff: vi.fn(async (fn) => await fn()),
   getErrorStatus: vi.fn(() => undefined),
   isNetworkTransientError: vi.fn(() => false),
 }));
