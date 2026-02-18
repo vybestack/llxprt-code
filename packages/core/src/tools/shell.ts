@@ -299,7 +299,12 @@ class ShellToolInvocation extends BaseToolInvocation<
             const parts = splitCommands(command);
             if (parts.length > 1) {
               command = parts
-                .map((seg) => `echo __LLXPRT_CMD__:${seg}; ${seg}`)
+                .map((seg) => {
+                  // Escape single quotes for single-quoted string: ' -> '\''
+                  // This prevents shell operators like 2>&1 from being interpreted by printf
+                  const escapedForEcho = seg.replace(/'/g, "'\\''");
+                  return `printf '%s\\n' '__LLXPRT_CMD__:${escapedForEcho}'; ${seg}`;
+                })
                 .join(' && ');
             }
             if (!command.endsWith('&')) command += ';';

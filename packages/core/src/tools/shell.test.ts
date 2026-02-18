@@ -286,6 +286,145 @@ describe('ShellTool', () => {
       );
     });
 
+    describe('command instrumentation escaping for chained commands', () => {
+      const resolveChainExecution = () => {
+        resolveExecutionPromise({
+          rawOutput: Buffer.from(''),
+          output: '',
+          exitCode: 0,
+          signal: null,
+          error: null,
+          aborted: false,
+          pid: 12345,
+          executionMethod: 'child_process',
+        });
+      };
+
+      it('should use printf with single-quoted segment for 2>&1 redirection in chained commands', async () => {
+        const invocation = shellTool.build({
+          command: 'ls nonexistent 2>&1 && echo done',
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveChainExecution();
+        await promise;
+
+        const [[calledCommand]] = mockShellExecutionService.mock.calls;
+        // The marker for the first segment must not let 2>&1 redirect printf's stderr
+        expect(calledCommand).toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:ls nonexistent 2>&1'",
+        );
+        // The actual command must remain unchanged
+        expect(calledCommand).toContain('ls nonexistent 2>&1');
+      });
+
+      it('should use printf with single-quoted segment for >&2 redirection in chained commands', async () => {
+        const invocation = shellTool.build({
+          command: 'echo hello >&2 && echo world',
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveChainExecution();
+        await promise;
+
+        const [[calledCommand]] = mockShellExecutionService.mock.calls;
+        expect(calledCommand).toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:echo hello >&2'",
+        );
+        expect(calledCommand).toContain('echo hello >&2');
+      });
+
+      it('should escape single quotes in the segment when used in printf marker', async () => {
+        // Use grep 'pattern' which has single quotes in the segment after splitting
+        const invocation = shellTool.build({
+          command: "grep 'error' log.txt && cat log.txt",
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveChainExecution();
+        await promise;
+
+        const [[calledCommand]] = mockShellExecutionService.mock.calls;
+        // Single quotes in the segment must be escaped as '\'' in the printf arg
+        expect(calledCommand).toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:grep '\\''error'\\'' log.txt'",
+        );
+        // The actual command must remain unchanged
+        expect(calledCommand).toContain("grep 'error' log.txt");
+      });
+
+      it('should handle double quotes in the segment safely in the printf marker', async () => {
+        const invocation = shellTool.build({
+          command: 'echo "hello world" && ls',
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveChainExecution();
+        await promise;
+
+        const [[calledCommand]] = mockShellExecutionService.mock.calls;
+        expect(calledCommand).toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:echo \"hello world\"'",
+        );
+        expect(calledCommand).toContain('echo "hello world"');
+      });
+
+      it('should handle backticks in the segment safely in the printf marker', async () => {
+        const invocation = shellTool.build({
+          command: 'echo `date` && ls',
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveChainExecution();
+        await promise;
+
+        const [[calledCommand]] = mockShellExecutionService.mock.calls;
+        expect(calledCommand).toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:echo `date`'",
+        );
+        // The actual command must remain unchanged
+        expect(calledCommand).toContain('echo `date`');
+      });
+
+      it('should handle pipe operators: each segment of a piped command is individually marked', async () => {
+        // With the regex fallback (used in tests without tree-sitter), | is treated
+        // as a command separator, so 'ls | grep foo && echo done' splits into
+        // 'ls', 'grep foo', and 'echo done' as three separate segments.
+        // Each segment gets its own printf marker. The key behavior is that the
+        // markers do not misinterpret the segment content.
+        const invocation = shellTool.build({
+          command: 'ls | grep foo && echo done',
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveChainExecution();
+        await promise;
+
+        const [[calledCommand]] = mockShellExecutionService.mock.calls;
+        // Each segment gets a printf marker
+        expect(calledCommand).toContain("printf '%s\\n' '__LLXPRT_CMD__:ls'");
+        expect(calledCommand).toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:grep foo'",
+        );
+        expect(calledCommand).toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:echo done'",
+        );
+      });
+
+      it('should handle chained commands each with 2>&1 redirections', async () => {
+        const invocation = shellTool.build({
+          command: 'cmd1 2>&1 && cmd2 2>&1',
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveChainExecution();
+        await promise;
+
+        const [[calledCommand]] = mockShellExecutionService.mock.calls;
+        expect(calledCommand).toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:cmd1 2>&1'",
+        );
+        expect(calledCommand).toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:cmd2 2>&1'",
+        );
+        expect(calledCommand).toContain('cmd1 2>&1');
+        expect(calledCommand).toContain('cmd2 2>&1');
+      });
+    });
+
     itWindowsOnly(
       'should not wrap command on windows',
       async () => {

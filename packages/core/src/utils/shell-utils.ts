@@ -167,7 +167,20 @@ function splitCommandsRegex(command: string): string[] {
         commands.push(currentCommand.trim());
         currentCommand = '';
         i++; // Skip the next character
-      } else if (char === ';' || char === '&' || char === '|') {
+      } else if (char === ';') {
+        commands.push(currentCommand.trim());
+        currentCommand = '';
+      } else if (char === '&') {
+        // Check if this & is part of a redirection operator (e.g., >&1, 2>&1, &>file)
+        const prevChar = currentCommand[currentCommand.length - 1];
+        const isRedirection = prevChar === '>' || nextChar === '>';
+        if (isRedirection) {
+          currentCommand += char;
+        } else {
+          commands.push(currentCommand.trim());
+          currentCommand = '';
+        }
+      } else if (char === '|') {
         commands.push(currentCommand.trim());
         currentCommand = '';
       } else {

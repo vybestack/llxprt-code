@@ -19,6 +19,7 @@ import {
   getCommandRoots,
   getShellConfiguration,
   isCommandAllowed,
+  splitCommands,
   stripShellWrapper,
 } from './shell-utils.js';
 import { isShellInvocationAllowlisted } from './tool-utils.js';
@@ -770,5 +771,42 @@ describe('getShellConfiguration', () => {
       expect(config.argsPrefix).toEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
     });
+  });
+});
+
+describe('splitCommands', () => {
+  it('should keep 2>&1 redirection within a single command segment', () => {
+    const result = splitCommands('ls nonexistent 2>&1');
+    expect(result).toEqual(['ls nonexistent 2>&1']);
+  });
+
+  it('should split && chains while preserving 2>&1 redirection in each segment', () => {
+    const result = splitCommands('ls nonexistent 2>&1 && echo done');
+    expect(result).toEqual(['ls nonexistent 2>&1', 'echo done']);
+  });
+
+  it('should keep >&2 redirection within a single command segment', () => {
+    const result = splitCommands('echo hello >&2');
+    expect(result).toEqual(['echo hello >&2']);
+  });
+
+  it('should split && chains while preserving >&2 redirection in each segment', () => {
+    const result = splitCommands('echo hello >&2 && echo world');
+    expect(result).toEqual(['echo hello >&2', 'echo world']);
+  });
+
+  it('should handle multiple chained commands each with redirections', () => {
+    const result = splitCommands('cmd1 2>&1 && cmd2 2>&1');
+    expect(result).toEqual(['cmd1 2>&1', 'cmd2 2>&1']);
+  });
+
+  it('should handle a single command without chaining', () => {
+    const result = splitCommands('echo hello');
+    expect(result).toEqual(['echo hello']);
+  });
+
+  it('should split on semicolons correctly', () => {
+    const result = splitCommands('echo a; echo b');
+    expect(result).toEqual(['echo a', 'echo b']);
   });
 });
