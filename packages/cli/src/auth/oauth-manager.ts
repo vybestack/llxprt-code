@@ -2006,6 +2006,22 @@ export class OAuthManager {
       const profileManager = await createProfileManager();
       const profile = await profileManager.loadProfile(currentProfileName);
 
+      // Issue #1468: Verify the profile's provider matches the requested provider
+      // Without this check, buckets from one provider's profile could be returned
+      // when requesting buckets for a different provider, causing token storage
+      // corruption (e.g., Anthropic tokens saved under codex:bucket keys)
+      const profileProvider =
+        'provider' in profile && typeof profile.provider === 'string'
+          ? profile.provider
+          : null;
+
+      if (profileProvider !== providerName) {
+        logger.debug(
+          `Profile provider '${profileProvider}' does not match requested provider '${providerName}', returning empty buckets`,
+        );
+        return [];
+      }
+
       // Check if profile has auth.buckets for this provider
       if (
         'auth' in profile &&
