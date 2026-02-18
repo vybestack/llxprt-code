@@ -222,7 +222,7 @@ describe('getProtectedSettingKeys', () => {
     expect(keys).toContain('auth-key');
   });
 
-  it('includes baseUrl in protected settings', () => {
+  it('includes base-url in protected settings', () => {
     const keys = getProtectedSettingKeys();
 
     expect(keys).toContain('base-url');

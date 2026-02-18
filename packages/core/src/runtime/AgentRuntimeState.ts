@@ -283,7 +283,7 @@ export function updateAgentRuntimeState(
   const allowedKeys = [
     'provider',
     'model',
-    'base-url',
+    'baseUrl',
     'proxyUrl',
     'modelParams',
   ];
