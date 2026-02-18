@@ -5,20 +5,24 @@
  */
 
 /**
- * Issue #1468: Quota display shows Anthropic buckets under Codex
+ * Issue #1468: getProfileBuckets must validate provider matches
  *
- * getAllCodexUsageInfo() must skip any token stored under the 'codex' provider
- * key that is actually an Anthropic OAuth token (access_token starts with
- * 'sk-ant-'). Without this guard, Anthropic tokens accidentally stored under
- * codex bucket keys (e.g. codex:gmail, codex:vybestack) appear in the Codex
- * Quota section.
+ * Root cause: getProfileBuckets(providerName) was returning buckets from the
+ * currently loaded profile WITHOUT checking if profile.provider === providerName.
+ * This could cause tokens to be stored under the wrong provider keys when:
+ * 1. User has Anthropic profile loaded (provider: "anthropic", buckets: ["gmail"])
+ * 2. Something calls getOAuthToken("codex")
+ * 3. getProfileBuckets("codex") would return ["gmail"] from the Anthropic profile
+ * 4. Token operations would use those buckets with the "codex" provider
+ *
+ * Fix: getProfileBuckets now verifies profile.provider === providerName before
+ * returning buckets, returning [] if they don't match.
  */
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-const { fetchCodexUsageMock } = vi.hoisted(() => ({
-  fetchCodexUsageMock: vi.fn().mockResolvedValue({ plan_type: 'pro' }),
-}));
+// Hoisted mock for ProfileManager that returns controlled profiles
+const mockLoadProfile = vi.fn();
 
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual<
@@ -26,34 +30,31 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   >('@vybestack/llxprt-code-core');
   return {
     ...actual,
-    fetchCodexUsage: fetchCodexUsageMock,
+    ProfileManager: class MockProfileManager {
+      async loadProfile(name: string) {
+        return mockLoadProfile(name);
+      }
+    },
   };
 });
 
-vi.mock('../runtime/runtimeSettings.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../runtime/runtimeSettings.js')
-  >('../runtime/runtimeSettings.js');
-  return {
-    ...actual,
-    getCliRuntimeServices: vi.fn(() => ({
-      settingsService: {
-        getCurrentProfileName: vi.fn(() => null),
-        get: vi.fn(() => null),
-      },
-    })),
-  };
-});
+// Mock runtime settings to control the current profile name
+const mockGetCurrentProfileName = vi.fn();
+const mockSettingsGet = vi.fn();
+
+vi.mock('../runtime/runtimeSettings.js', () => ({
+  getCliRuntimeServices: vi.fn(() => ({
+    settingsService: {
+      getCurrentProfileName: mockGetCurrentProfileName,
+      get: mockSettingsGet,
+    },
+  })),
+}));
 
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthToken, TokenStore } from './types.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
-import {
-  resetSettingsService,
-  registerSettingsService,
-  SettingsService,
-} from '@vybestack/llxprt-code-core';
 
 class MockTokenStore implements TokenStore {
   private tokens = new Map<string, OAuthToken>();
@@ -90,7 +91,6 @@ class MockTokenStore implements TokenStore {
   }
 
   async listBuckets(provider: string): Promise<string[]> {
-    // Use Set to avoid duplicates (CodeRabbit feedback)
     const buckets = new Set<string>();
     for (const key of this.tokens.keys()) {
       if (key.startsWith(`${provider}:`)) {
@@ -121,41 +121,6 @@ class MockTokenStore implements TokenStore {
   }
 }
 
-function makeCodexToken(bucket: string): OAuthToken {
-  return {
-    access_token: `chatgpt-token-${bucket}`,
-    expiry: Math.floor(Date.now() / 1000) + 3600,
-    token_type: 'Bearer',
-    scope: null,
-    account_id: `account-${bucket}`,
-  } as OAuthToken;
-}
-
-function makeAnthropicOAuthToken(bucket: string): OAuthToken {
-  return {
-    access_token: `sk-ant-oat01-token-${bucket}`,
-    expiry: Math.floor(Date.now() / 1000) + 3600,
-    token_type: 'Bearer',
-    scope: null,
-    account_id: `account-${bucket}`,
-  } as OAuthToken;
-}
-
-/**
- * Factory for Anthropic API-key-style tokens (sk-ant-api03-...)
- * These should also be filtered by the sk-ant- prefix guard
- * (CodeRabbit feedback: test API-key-style tokens too)
- */
-function makeAnthropicApiKeyToken(bucket: string): OAuthToken {
-  return {
-    access_token: `sk-ant-api03-key-${bucket}`,
-    expiry: Math.floor(Date.now() / 1000) + 3600,
-    token_type: 'Bearer',
-    scope: null,
-    account_id: `account-${bucket}`,
-  } as OAuthToken;
-}
-
 function createLoadedSettings(): LoadedSettings {
   const empty = {} as Settings;
   return new LoadedSettings(
@@ -167,7 +132,7 @@ function createLoadedSettings(): LoadedSettings {
   );
 }
 
-describe('Issue #1468: getAllCodexUsageInfo filters Anthropic tokens stored under codex provider', () => {
+describe('Issue #1468: getProfileBuckets validates provider matches profile', () => {
   let tokenStore: MockTokenStore;
   let manager: OAuthManager;
 
@@ -175,186 +140,143 @@ describe('Issue #1468: getAllCodexUsageInfo filters Anthropic tokens stored unde
     tokenStore = new MockTokenStore();
     const settings = createLoadedSettings();
     manager = new OAuthManager(tokenStore, settings);
-    fetchCodexUsageMock.mockResolvedValue({ plan_type: 'pro' });
-
-    const mockSettingsService = new SettingsService();
-    registerSettingsService(mockSettingsService);
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
     tokenStore.clear();
-    try {
-      resetSettingsService();
-    } catch {
-      // may not be registered
-    }
-    vi.clearAllMocks();
   });
 
-  describe('when codex buckets contain only genuine Codex tokens', () => {
+  describe('when requesting buckets for a provider that matches the loaded profile', () => {
     /**
      * @requirement Issue #1468
-     * @scenario Only the default bucket exists with a real Codex token
-     * @given 'codex:default' has a genuine Codex token (no sk-ant- prefix, has account_id)
-     * @when getAllCodexUsageInfo() is called
-     * @then The default bucket is included in the result
+     * @scenario Profile provider matches requested provider
+     * @given Current profile is 'my-anthropic-profile' with provider='anthropic' and buckets=['gmail','work']
+     * @when getProfileBuckets('anthropic') is called internally
+     * @then The buckets ['gmail','work'] should be used
      */
-    it('should include a bucket that holds a genuine Codex token', async () => {
-      await tokenStore.saveToken('codex', makeCodexToken('default'), 'default');
+    it('should use profile buckets when provider matches', async () => {
+      // Setup: Anthropic profile loaded
+      mockGetCurrentProfileName.mockReturnValue('my-anthropic-profile');
+      mockLoadProfile.mockResolvedValue({
+        provider: 'anthropic',
+        auth: {
+          type: 'oauth',
+          buckets: ['gmail', 'work'],
+        },
+      });
 
-      const result = await manager.getAllCodexUsageInfo();
-
-      expect(result.has('default')).toBe(true);
-    });
-  });
-
-  describe('when Anthropic OAuth tokens (sk-ant-oat01-) are stored under codex provider keys', () => {
-    /**
-     * @requirement Issue #1468
-     * @scenario An Anthropic OAuth token is stored under 'codex:gmail'
-     * @given 'codex:gmail' has an Anthropic OAuth token (starts with 'sk-ant-oat01-')
-     * @when getAllCodexUsageInfo() is called
-     * @then The gmail bucket is excluded from the result
-     */
-    it('should skip a bucket whose token starts with sk-ant-oat01- (OAuth token)', async () => {
-      await tokenStore.saveToken(
-        'codex',
-        makeAnthropicOAuthToken('gmail'),
-        'gmail',
-      );
-
-      const result = await manager.getAllCodexUsageInfo();
-
-      expect(result.has('gmail')).toBe(false);
-      expect(result.size).toBe(0);
-    });
-
-    /**
-     * @requirement Issue #1468
-     * @scenario Mixed buckets: genuine Codex token in 'default', Anthropic OAuth tokens in others
-     * @given 'codex:default' has a real Codex token
-     * @and 'codex:gmail' has an Anthropic OAuth token
-     * @and 'codex:vybestack' has an Anthropic OAuth token
-     * @when getAllCodexUsageInfo() is called
-     * @then Only 'default' appears in the result
-     */
-    it('should only include genuine Codex buckets when mixed with Anthropic OAuth tokens', async () => {
-      await tokenStore.saveToken('codex', makeCodexToken('default'), 'default');
-      await tokenStore.saveToken(
-        'codex',
-        makeAnthropicOAuthToken('gmail'),
-        'gmail',
-      );
-      await tokenStore.saveToken(
-        'codex',
-        makeAnthropicOAuthToken('vybestack'),
-        'vybestack',
-      );
-
-      const result = await manager.getAllCodexUsageInfo();
-
-      expect(result.has('default')).toBe(true);
-      expect(result.has('gmail')).toBe(false);
-      expect(result.has('vybestack')).toBe(false);
-      expect(result.size).toBe(1);
-    });
-
-    /**
-     * @requirement Issue #1468
-     * @scenario All codex buckets contain Anthropic OAuth tokens
-     * @given 'codex:default', 'codex:gmail', 'codex:vybestack' all have Anthropic OAuth tokens
-     * @when getAllCodexUsageInfo() is called
-     * @then The result is empty
-     */
-    it('should return an empty map when all codex buckets have Anthropic OAuth tokens', async () => {
-      for (const bucket of ['default', 'gmail', 'vybestack']) {
-        await tokenStore.saveToken(
-          'codex',
-          makeAnthropicOAuthToken(bucket),
-          bucket,
-        );
-      }
-
-      const result = await manager.getAllCodexUsageInfo();
-
-      expect(result.size).toBe(0);
-    });
-  });
-
-  describe('when Anthropic API-key-style tokens (sk-ant-api03-) are stored under codex provider keys', () => {
-    /**
-     * @requirement Issue #1468
-     * @scenario An Anthropic API-key-style token is stored under 'codex:work'
-     * @given 'codex:work' has an Anthropic API key token (starts with 'sk-ant-api03-')
-     * @when getAllCodexUsageInfo() is called
-     * @then The work bucket is excluded from the result
-     * (CodeRabbit feedback: ensure API-key-style tokens are also filtered)
-     */
-    it('should skip a bucket whose token starts with sk-ant-api03- (API key token)', async () => {
-      await tokenStore.saveToken(
-        'codex',
-        makeAnthropicApiKeyToken('work'),
-        'work',
-      );
-
-      const result = await manager.getAllCodexUsageInfo();
-
-      expect(result.has('work')).toBe(false);
-      expect(result.size).toBe(0);
-    });
-
-    /**
-     * @requirement Issue #1468
-     * @scenario Mixed tokens: genuine Codex, Anthropic OAuth, and Anthropic API key
-     * @given 'codex:default' has a real Codex token
-     * @and 'codex:oauth-bucket' has an Anthropic OAuth token (sk-ant-oat01-)
-     * @and 'codex:apikey-bucket' has an Anthropic API key token (sk-ant-api03-)
-     * @when getAllCodexUsageInfo() is called
-     * @then Only 'default' appears in the result
-     */
-    it('should filter both OAuth and API-key-style Anthropic tokens', async () => {
-      await tokenStore.saveToken('codex', makeCodexToken('default'), 'default');
-      await tokenStore.saveToken(
-        'codex',
-        makeAnthropicOAuthToken('oauth-bucket'),
-        'oauth-bucket',
-      );
-      await tokenStore.saveToken(
-        'codex',
-        makeAnthropicApiKeyToken('apikey-bucket'),
-        'apikey-bucket',
-      );
-
-      const result = await manager.getAllCodexUsageInfo();
-
-      expect(result.has('default')).toBe(true);
-      expect(result.has('oauth-bucket')).toBe(false);
-      expect(result.has('apikey-bucket')).toBe(false);
-      expect(result.size).toBe(1);
-    });
-  });
-
-  describe('when codex tokens lack account_id', () => {
-    /**
-     * @requirement Issue #1468
-     * @scenario Token stored under codex provider lacks account_id (not a valid Codex token)
-     * @given 'codex:default' has a token that doesn't have account_id
-     * @when getAllCodexUsageInfo() is called
-     * @then The bucket is excluded from the result
-     */
-    it('should skip a bucket whose token has no account_id', async () => {
-      const bareToken: OAuthToken = {
-        access_token: 'some-other-token-without-account-id',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        token_type: 'Bearer',
-        scope: null,
+      // Access getProfileBuckets via the manager's private method
+      const managerInternal = manager as unknown as {
+        getProfileBuckets: (provider: string) => Promise<string[]>;
       };
-      await tokenStore.saveToken('codex', bareToken, 'default');
 
-      const result = await manager.getAllCodexUsageInfo();
+      const buckets = await managerInternal.getProfileBuckets('anthropic');
 
-      expect(result.has('default')).toBe(false);
-      expect(result.size).toBe(0);
+      expect(buckets).toEqual(['gmail', 'work']);
+    });
+  });
+
+  describe('when requesting buckets for a provider that does NOT match the loaded profile', () => {
+    /**
+     * @requirement Issue #1468
+     * @scenario Profile provider does NOT match requested provider
+     * @given Current profile is 'my-anthropic-profile' with provider='anthropic' and buckets=['gmail','vybestack']
+     * @when getProfileBuckets('codex') is called internally
+     * @then Empty array should be returned (NOT the anthropic buckets)
+     */
+    it('should return empty array when provider does not match profile', async () => {
+      // Setup: Anthropic profile loaded, but we request codex buckets
+      mockGetCurrentProfileName.mockReturnValue('my-anthropic-profile');
+      mockLoadProfile.mockResolvedValue({
+        provider: 'anthropic',
+        auth: {
+          type: 'oauth',
+          buckets: ['gmail', 'vybestack'],
+        },
+      });
+
+      const managerInternal = manager as unknown as {
+        getProfileBuckets: (provider: string) => Promise<string[]>;
+      };
+
+      // This is the bug fix: requesting 'codex' buckets while anthropic profile is loaded
+      // SHOULD return [] because the providers don't match
+      const buckets = await managerInternal.getProfileBuckets('codex');
+
+      expect(buckets).toEqual([]);
+    });
+
+    /**
+     * @requirement Issue #1468
+     * @scenario Codex profile loaded, but requesting Anthropic buckets
+     * @given Current profile is 'my-codex-profile' with provider='codex' and buckets=['default']
+     * @when getProfileBuckets('anthropic') is called internally
+     * @then Empty array should be returned
+     */
+    it('should return empty array when codex profile loaded but anthropic requested', async () => {
+      mockGetCurrentProfileName.mockReturnValue('my-codex-profile');
+      mockLoadProfile.mockResolvedValue({
+        provider: 'codex',
+        auth: {
+          type: 'oauth',
+          buckets: ['default'],
+        },
+      });
+
+      const managerInternal = manager as unknown as {
+        getProfileBuckets: (provider: string) => Promise<string[]>;
+      };
+
+      const buckets = await managerInternal.getProfileBuckets('anthropic');
+
+      expect(buckets).toEqual([]);
+    });
+  });
+
+  describe('when no profile is loaded', () => {
+    /**
+     * @requirement Issue #1468
+     * @scenario No current profile
+     * @given No profile is currently loaded (getCurrentProfileName returns null)
+     * @when getProfileBuckets('anthropic') is called
+     * @then Empty array should be returned
+     */
+    it('should return empty array when no profile is loaded', async () => {
+      mockGetCurrentProfileName.mockReturnValue(null);
+
+      const managerInternal = manager as unknown as {
+        getProfileBuckets: (provider: string) => Promise<string[]>;
+      };
+
+      const buckets = await managerInternal.getProfileBuckets('anthropic');
+
+      expect(buckets).toEqual([]);
+    });
+  });
+
+  describe('when profile has no auth.buckets', () => {
+    /**
+     * @requirement Issue #1468
+     * @scenario Profile has no buckets configured
+     * @given Current profile has provider='anthropic' but no auth.buckets
+     * @when getProfileBuckets('anthropic') is called
+     * @then Empty array should be returned
+     */
+    it('should return empty array when profile has no buckets', async () => {
+      mockGetCurrentProfileName.mockReturnValue('my-anthropic-profile');
+      mockLoadProfile.mockResolvedValue({
+        provider: 'anthropic',
+        // No auth section
+      });
+
+      const managerInternal = manager as unknown as {
+        getProfileBuckets: (provider: string) => Promise<string[]>;
+      };
+
+      const buckets = await managerInternal.getProfileBuckets('anthropic');
+
+      expect(buckets).toEqual([]);
     });
   });
 });

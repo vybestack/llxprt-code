@@ -1942,15 +1942,6 @@ export class OAuthManager {
         continue;
       }
 
-      // Issue #1468: Skip Anthropic tokens that may be incorrectly stored under codex keys
-      // Anthropic tokens start with 'sk-ant-' prefix
-      if (token.access_token.startsWith('sk-ant-')) {
-        logger.debug(
-          `Token for codex bucket ${bucket} is an Anthropic token, skipping`,
-        );
-        continue;
-      }
-
       // Extract account_id from token (Codex tokens have this field)
       // Use runtime property access without narrowing type assertion
       const tokenObj = token as Record<string, unknown>;
@@ -2014,6 +2005,22 @@ export class OAuthManager {
       // Load the profile to check for auth.buckets
       const profileManager = await createProfileManager();
       const profile = await profileManager.loadProfile(currentProfileName);
+
+      // Issue #1468: Verify the profile's provider matches the requested provider
+      // Without this check, buckets from one provider's profile could be returned
+      // when requesting buckets for a different provider, causing token storage
+      // corruption (e.g., Anthropic tokens saved under codex:bucket keys)
+      const profileProvider =
+        'provider' in profile && typeof profile.provider === 'string'
+          ? profile.provider
+          : null;
+
+      if (profileProvider !== providerName) {
+        logger.debug(
+          `Profile provider '${profileProvider}' does not match requested provider '${providerName}', returning empty buckets`,
+        );
+        return [];
+      }
 
       // Check if profile has auth.buckets for this provider
       if (
