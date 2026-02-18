@@ -1633,6 +1633,10 @@ export async function switchActiveProvider(
     };
   }
 
+  // Clear any bucket failover handler from the previous provider to prevent
+  // stale handlers from firing for requests to the new provider.
+  config.setBucketFailoverHandler?.(undefined);
+
   logger.debug(
     () =>
       `[cli-runtime] Switching provider from ${currentProvider ?? 'none'} to ${name}`,
