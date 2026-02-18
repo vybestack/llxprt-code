@@ -17,6 +17,7 @@ interface ConfigCommandResult {
   handled: boolean;
   nextConfig: SessionConfig;
   messages: string[];
+  profileName?: string;
 }
 
 interface UseAppCommandsProps {

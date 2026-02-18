@@ -21,6 +21,7 @@ export function useStreamingLifecycle(
   appendMessage: (
     role: 'user' | 'model' | 'thinking' | 'system',
     text: string,
+    profileName?: string,
   ) => string,
   appendToMessage: (id: string, text: string) => void,
   appendToolCall: (
@@ -36,6 +37,7 @@ export function useStreamingLifecycle(
   setStreamState: Dispatch<SetStateAction<'idle' | 'busy'>>,
   scheduleTools: ScheduleFn,
   onConfirmationNeeded?: (event: ToolConfirmationEvent) => void,
+  profileName?: string,
 ): UseStreamingLifecycleResult {
   const streamRunId = useRef(0);
   const mountedRef = useRef(true);
@@ -53,6 +55,7 @@ export function useStreamingLifecycle(
     abortRef,
     scheduleTools,
     onConfirmationNeeded,
+    profileName,
   );
 
   const cancelStreaming = useCallback(() => {

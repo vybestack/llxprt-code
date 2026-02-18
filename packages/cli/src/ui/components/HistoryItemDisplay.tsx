@@ -93,6 +93,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
           }
           terminalWidth={terminalWidth}
           model={itemForDisplay.model}
+          profileName={itemForDisplay.profileName}
           thinkingBlocks={itemForDisplay.thinkingBlocks} // @plan:PLAN-20251202-THINKING-UI.P06
         />
       )}

@@ -37,7 +37,18 @@ export function renderMessage(
   id: string,
   text: string,
   theme: ThemeDefinition,
+  profileName?: string,
 ): React.ReactNode {
+  if (role === 'model') {
+    return (
+      <ModelMessage
+        id={id}
+        text={text}
+        theme={theme}
+        profileName={profileName}
+      />
+    );
+  }
   const MessageComponent = getMessageRenderer(role);
   return <MessageComponent id={id} text={text} theme={theme} />;
 }

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
@@ -100,6 +100,19 @@ export const useProfileManagement = ({
   const [detailOpenedDirectly, setDetailOpenedDirectly] = useState(false);
   // Track if editor was opened directly (vs from detail)
   const [editorOpenedDirectly, setEditorOpenedDirectly] = useState(false);
+
+  // Initialize activeProfileName on mount from runtime diagnostics
+  useEffect(() => {
+    try {
+      const diagnostics = runtime.getRuntimeDiagnosticsSnapshot();
+      const current = diagnostics?.profileName;
+      if (current) {
+        setActiveProfileName(current);
+      }
+    } catch {
+      // Ignore errors getting active profile on mount
+    }
+  }, [runtime]);
 
   // Load profiles list
   const loadProfiles = useCallback(async () => {
@@ -245,6 +258,8 @@ export const useProfileManagement = ({
             timestamp: new Date(),
           });
         }
+        // Update activeProfileName after successful load
+        setActiveProfileName(profileName);
         // Close all profile dialogs
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileList' });

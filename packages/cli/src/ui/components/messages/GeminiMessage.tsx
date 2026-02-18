@@ -20,6 +20,7 @@ interface GeminiMessageProps {
   availableTerminalHeight?: number;
   terminalWidth: number;
   model?: string;
+  profileName?: string;
   thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 }
 
@@ -29,6 +30,7 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
   availableTerminalHeight,
   terminalWidth,
   model,
+  profileName,
   thinkingBlocks,
 }) => {
   /**
@@ -51,6 +53,11 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
 
   return (
     <Box flexDirection="column">
+      {profileName && (
+        <Box marginBottom={0}>
+          <Text color={Colors.DimComment}>[{profileName}]</Text>
+        </Box>
+      )}
       {model && (
         <Box marginBottom={0}>
           <Text color={Colors.DimComment}>{model}</Text>

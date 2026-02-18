@@ -46,6 +46,8 @@ import {
   HistoryItem,
   HistoryItemWithoutId,
   HistoryItemToolGroup,
+  HistoryItemGemini,
+  HistoryItemGeminiContent,
   MessageType,
   SlashCommandProcessorResult,
   ToolCallStatus,
@@ -195,6 +197,26 @@ function showCitations(settings: LoadedSettings, config: Config): boolean {
   return (server && server.userTier !== UserTierId.FREE) ?? false;
 }
 
+/**
+ * Get the current profile name from config's settings service.
+ * This reads the live value rather than relying on React state,
+ * ensuring profile changes via slash commands are immediately reflected.
+ */
+function getCurrentProfileName(config: Config): string | null {
+  try {
+    const settingsService = config.getSettingsService();
+    if (
+      settingsService &&
+      typeof settingsService.getCurrentProfileName === 'function'
+    ) {
+      return settingsService.getCurrentProfileName() ?? null;
+    }
+  } catch {
+    // Fall through if settings service unavailable
+  }
+  return null;
+}
+
 const geminiStreamLogger = new DebugLogger('llxprt:ui:gemini-stream');
 
 /**
@@ -226,7 +248,6 @@ export const useGeminiStream = (
   terminalHeight?: number,
   onTodoPause?: () => void,
   onEditorOpen: () => void = () => {},
-  activeProfileName: string | null = null,
   recordingIntegration?: RecordingIntegration,
 ) => {
   const [initError, setInitError] = useState<string | null>(null);
@@ -690,6 +711,10 @@ export const useGeminiStream = (
         return '';
       }
 
+      // Get live profile name from settings service to ensure profile changes
+      // via slash commands are immediately reflected (not stale React state)
+      const liveProfileName = getCurrentProfileName(config);
+
       const combined = currentGeminiMessageBuffer + eventValue;
       const {
         text: sanitizedCombined,
@@ -735,6 +760,7 @@ export const useGeminiStream = (
         setPendingHistoryItem({
           type: 'gemini',
           text: '',
+          ...(liveProfileName != null ? { profileName: liveProfileName } : {}),
           ...(thinkingBlocksRef.current.length > 0
             ? { thinkingBlocks: [...thinkingBlocksRef.current] }
             : {}),
@@ -744,14 +770,22 @@ export const useGeminiStream = (
       const splitPoint = findLastSafeSplitPoint(sanitizedCombined);
       if (splitPoint === sanitizedCombined.length) {
         // @plan:PLAN-20251202-THINKING-UI.P08
-        // Preserve thinkingBlocks during streaming updates
-        setPendingHistoryItem((item) => ({
-          type: item?.type as 'gemini' | 'gemini_content',
-          text: sanitizedCombined,
-          ...(thinkingBlocksRef.current.length > 0
-            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
-            : {}),
-        }));
+        // Preserve thinkingBlocks and profileName during streaming updates
+        setPendingHistoryItem((item) => {
+          const existingProfileName = (
+            item as HistoryItemGemini | HistoryItemGeminiContent | undefined
+          )?.profileName;
+          return {
+            type: item?.type as 'gemini' | 'gemini_content',
+            text: sanitizedCombined,
+            ...((liveProfileName ?? existingProfileName) != null
+              ? { profileName: (liveProfileName ?? existingProfileName)! }
+              : {}),
+            ...(thinkingBlocksRef.current.length > 0
+              ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+              : {}),
+          };
+        });
         return sanitizedCombined;
       }
 
@@ -771,6 +805,9 @@ export const useGeminiStream = (
           {
             type: pendingType,
             text: beforeText,
+            ...(liveProfileName != null
+              ? { profileName: liveProfileName }
+              : {}),
             ...(thinkingBlocksRef.current.length > 0
               ? { thinkingBlocks: [...thinkingBlocksRef.current] }
               : {}),
@@ -786,11 +823,13 @@ export const useGeminiStream = (
       setPendingHistoryItem({
         type: 'gemini_content',
         text: afterText,
+        ...(liveProfileName != null ? { profileName: liveProfileName } : {}),
       });
       return afterText;
     },
     [
       addItem,
+      config,
       pendingHistoryItemRef,
       sanitizeContent,
       setPendingHistoryItem,
@@ -1053,11 +1092,28 @@ export const useGeminiStream = (
 
                 // Update pending history item with thinking blocks so they
                 // are visible in pendingHistoryItems during streaming
-                setPendingHistoryItem((item) => ({
-                  type: (item?.type as 'gemini' | 'gemini_content') || 'gemini',
-                  text: item?.text || '',
-                  thinkingBlocks: [...thinkingBlocksRef.current],
-                }));
+                // Also preserve profileName during this update (use live value or existing)
+                const liveProfileName = getCurrentProfileName(config);
+                setPendingHistoryItem((item) => {
+                  const existingProfileName = (
+                    item as
+                      | HistoryItemGemini
+                      | HistoryItemGeminiContent
+                      | undefined
+                  )?.profileName;
+                  return {
+                    type:
+                      (item?.type as 'gemini' | 'gemini_content') || 'gemini',
+                    text: item?.text || '',
+                    ...((liveProfileName ?? existingProfileName) != null
+                      ? {
+                          profileName: (liveProfileName ??
+                            existingProfileName)!,
+                        }
+                      : {}),
+                    thinkingBlocks: [...thinkingBlocksRef.current],
+                  };
+                });
               }
             }
             break;
@@ -1150,6 +1206,7 @@ export const useGeminiStream = (
       return StreamProcessingStatus.Completed;
     },
     [
+      config,
       handleContentEvent,
       handleUserCancelledEvent,
       handleErrorEvent,
@@ -1206,29 +1263,30 @@ export const useGeminiStream = (
           userMessageTimestamp,
         );
 
-        // Profile change detection
-        // Read the showProfileChangeInChat setting
+        // Profile change detection - use live profile name from settings service
+        // to ensure slash command profile changes are detected
         const showProfileChangeInChat =
           settings?.merged?.showProfileChangeInChat ?? true;
+        const liveProfileName = getCurrentProfileName(config);
 
         if (
           showProfileChangeInChat &&
-          activeProfileName &&
+          liveProfileName &&
           lastProfileNameRef.current !== undefined &&
-          activeProfileName !== lastProfileNameRef.current
+          liveProfileName !== lastProfileNameRef.current
         ) {
           // Profile changed since last turn
           addItem(
             {
               type: 'profile_change',
-              profileName: activeProfileName,
+              profileName: liveProfileName,
             } as Omit<HistoryItem, 'id'>,
             userMessageTimestamp,
           );
         }
 
         // Always update lastProfileNameRef on new turns
-        lastProfileNameRef.current = activeProfileName ?? undefined;
+        lastProfileNameRef.current = liveProfileName ?? undefined;
       }
 
       const { queryToSend, shouldProceed } = await prepareQueryForGemini(
@@ -1325,7 +1383,6 @@ export const useGeminiStream = (
       handleLoopDetectedEvent,
       flushPendingHistoryItem,
       scheduleNextQueuedSubmission,
-      activeProfileName,
       settings?.merged?.showProfileChangeInChat,
       recordingIntegration,
     ],
