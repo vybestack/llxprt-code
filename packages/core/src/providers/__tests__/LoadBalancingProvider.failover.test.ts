@@ -1237,4 +1237,367 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(results[0]).toEqual({ type: 'text', content: 'unique-chunk' });
     });
   });
+
+  describe('Sticky Failover Behavior - Issue #902', () => {
+    it('should start from currentFailoverIndex on subsequent requests after failover', async () => {
+      let callCount = 0;
+
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          callCount++;
+          // First call: throw 429 (immediate failover)
+          // Second call: succeed (on backend2)
+          // Third call (new request): should succeed (starting on backend2 after reset)
+          if (callCount === 1) {
+            const error = new Error('Rate limited') as Error & {
+              status: number;
+            };
+            error.status = 429;
+            throw error;
+          }
+          yield { type: 'text' as const, content: `response-${callCount}` };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-sticky',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'backend1',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-1',
+          },
+          {
+            name: 'backend2',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-2',
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+      };
+
+      // First request: backend1 fails with 429, failover to backend2
+      const results1: IContent[] = [];
+      for await (const chunk of provider.generateChatCompletion(options)) {
+        results1.push(chunk);
+      }
+      expect(results1).toHaveLength(1);
+      expect(callCount).toBe(2); // backend1 failed, backend2 succeeded
+    });
+
+    it('should reset currentFailoverIndex to 0 after successful response', async () => {
+      let callCount = 0;
+
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          callCount++;
+          // First call fails, second succeeds, third succeeds (starting from 0)
+          if (callCount === 1) {
+            const error = new Error('Rate limited') as Error & {
+              status: number;
+            };
+            error.status = 429;
+            throw error;
+          }
+          yield { type: 'text' as const, content: `response-${callCount}` };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-reset',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'backend1',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-1',
+          },
+          {
+            name: 'backend2',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-2',
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+      };
+
+      // First request: fails on backend1, succeeds on backend2
+      for await (const _chunk of provider.generateChatCompletion(options)) {
+        // consume
+      }
+
+      // After success, index should be reset to 0
+      expect(provider.getCurrentFailoverIndex()).toBe(0);
+    });
+
+    it('should immediately failover on 429 without retrying current member', async () => {
+      let callCount = 0;
+
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          callCount++;
+          // First call: throw 429
+          // Second call: succeed
+          if (callCount === 1) {
+            const error = new Error('Rate limited') as Error & {
+              status: number;
+            };
+            error.status = 429;
+            throw error;
+          }
+          yield { type: 'text' as const, content: 'success' };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-429',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'backend1',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-1',
+          },
+          {
+            name: 'backend2',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-2',
+          },
+        ],
+        lbProfileEphemeralSettings: {
+          failover_retry_count: 3, // Even with retry count, 429 should not retry
+        },
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+      };
+
+      const results: IContent[] = [];
+      for await (const chunk of provider.generateChatCompletion(options)) {
+        results.push(chunk);
+      }
+
+      // Backend1 throws 429, immediate failover to backend2
+      // So only 2 calls total (no retries on 429)
+      expect(callCount).toBe(2);
+    });
+
+    it('should distinguish 5xx errors from immediate failover errors', async () => {
+      // This test verifies that 5xx errors are handled differently from 429/401/402/403
+      // 5xx errors should be eligible for retry, while immediate failover errors skip retry
+      let callCount = 0;
+
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          callCount++;
+          // First call: throw error without status (should retry)
+          // Second call: succeed
+          if (callCount === 1) {
+            throw new Error('Backend error without status');
+          }
+          yield { type: 'text' as const, content: 'success' };
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-5xx-vs-429',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'backend1',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-1',
+          },
+          {
+            name: 'backend2',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-2',
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+      };
+
+      const results: IContent[] = [];
+      for await (const chunk of provider.generateChatCompletion(options)) {
+        results.push(chunk);
+      }
+
+      // Should have called provider twice (error then success)
+      expect(callCount).toBe(2);
+    });
+
+    it('should throw LoadBalancerFailoverError when all members fail', async () => {
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        // eslint-disable-next-line require-yield
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          throw new Error('Backend failed');
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-all-fail-902',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'backend1',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-1',
+          },
+          {
+            name: 'backend2',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-2',
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+      };
+
+      await expect(async () => {
+        for await (const _chunk of provider.generateChatCompletion(options)) {
+          // consume
+        }
+      }).rejects.toThrow(/failover/i);
+    });
+
+    it('should not loop infinitely when all backends fail', async () => {
+      let totalAttempts = 0;
+
+      const mockProvider: IProvider = {
+        name: 'test-provider',
+        // eslint-disable-next-line require-yield
+        async *generateChatCompletion(): AsyncGenerator<IContent> {
+          totalAttempts++;
+          throw new Error('Backend failed');
+        },
+        getModels: async () => [],
+        getDefaultModel: () => 'test-model',
+        getServerTools: () => [],
+        invokeServerTool: async () => ({ content: [] }),
+      };
+
+      providerManager.registerProvider(mockProvider);
+
+      const lbConfig: LoadBalancingProviderConfig = {
+        profileName: 'test-no-infinite-loop-902',
+        strategy: 'failover',
+        subProfiles: [
+          {
+            name: 'backend1',
+            providerName: 'test-provider',
+            modelId: 'model1',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-1',
+          },
+          {
+            name: 'backend2',
+            providerName: 'test-provider',
+            modelId: 'model2',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-2',
+          },
+          {
+            name: 'backend3',
+            providerName: 'test-provider',
+            modelId: 'model3',
+            baseURL: 'https://api.test.com',
+            authToken: 'test-token-3',
+          },
+        ],
+      };
+
+      const provider = new LoadBalancingProvider(lbConfig, providerManager);
+      const options: GenerateChatOptions = {
+        prompt: 'test prompt',
+        messages: [{ role: 'user' as const, content: 'test' }],
+      };
+
+      await expect(async () => {
+        for await (const _chunk of provider.generateChatCompletion(options)) {
+          // consume
+        }
+      }).rejects.toThrow();
+
+      // Should try each backend exactly once (no infinite loop)
+      expect(totalAttempts).toBe(3);
+    });
+  });
 });

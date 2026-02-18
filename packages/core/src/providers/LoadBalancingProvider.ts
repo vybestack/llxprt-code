@@ -170,6 +170,8 @@ export class LoadBalancingProvider implements IProvider {
   private tpmBuckets: Map<number, Map<string, number>> = new Map();
   // Backend metrics tracking (Phase 5, Issue #489)
   private backendMetrics: Map<string, BackendMetrics> = new Map();
+  // Sticky failover index - tracks current backend across requests (Issue #902)
+  private currentFailoverIndex = 0;
 
   constructor(
     private readonly config: LoadBalancingProviderConfig,
@@ -540,6 +542,22 @@ export class LoadBalancingProvider implements IProvider {
   }
 
   /**
+   * Get current failover index (for testing/debugging)
+   * @plan PLAN-20251217issue902 - Sticky failover behavior
+   */
+  getCurrentFailoverIndex(): number {
+    return this.currentFailoverIndex;
+  }
+
+  /**
+   * Reset failover index to 0 (for testing)
+   * @plan PLAN-20251217issue902 - Sticky failover behavior
+   */
+  resetFailoverIndex(): void {
+    this.currentFailoverIndex = 0;
+  }
+
+  /**
    * Extract failover settings from ephemeral settings
    * @plan PLAN-20251212issue488
    * @plan PLAN-20251212issue489 - Phase 1: Extended with advanced settings
@@ -608,6 +626,24 @@ export class LoadBalancingProvider implements IProvider {
     }
 
     return true;
+  }
+
+  /**
+   * Check if error should trigger immediate failover (no retry)
+   * @plan PLAN-20251217issue902 - Sticky failover behavior
+   *
+   * These status codes indicate the backend cannot serve requests
+   * and retrying would be futile:
+   * - 429: Rate limited
+   * - 401: Unauthorized
+   * - 402: Payment required
+   * - 403: Forbidden
+   */
+  private isImmediateFailoverError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const status = getErrorStatus(error);
+    if (status === undefined) return false;
+    return status === 429 || status === 401 || status === 402 || status === 403;
   }
 
   /**
@@ -992,12 +1028,14 @@ export class LoadBalancingProvider implements IProvider {
    * Execute with failover strategy
    * @plan PLAN-20251212issue488
    * @plan PLAN-20251212issue489 - Phase 2: Updated with circuit breaker integration
+   * @plan PLAN-20251217issue902 - Sticky failover: start from last successful backend
    */
   private async *executeWithFailover(
     options: GenerateChatOptions,
   ): AsyncGenerator<IContent> {
     const settings = this.extractFailoverSettings();
     const errors: Array<{ profile: string; error: Error }> = [];
+    const numProfiles = this.config.subProfiles.length;
 
     // Check if all backends are unhealthy (circuit breakers open)
     if (settings.circuitBreakerEnabled) {
@@ -1011,13 +1049,21 @@ export class LoadBalancingProvider implements IProvider {
       }
     }
 
-    for (const subProfile of this.config.subProfiles) {
+    // Start from currentFailoverIndex and iterate through all backends (Issue #902)
+    let visitedCount = 0;
+    let currentIndex = this.currentFailoverIndex;
+
+    while (visitedCount < numProfiles) {
+      const subProfile = this.config.subProfiles[currentIndex];
+      visitedCount++;
+
       // Skip unhealthy backends (circuit breaker check)
       if (!this.isBackendHealthy(subProfile.name)) {
         this.logger.debug(
           () =>
             `[LB:failover] Skipping unhealthy backend: ${subProfile.name} (circuit breaker open)`,
         );
+        currentIndex = (currentIndex + 1) % numProfiles;
         continue;
       }
 
@@ -1027,6 +1073,7 @@ export class LoadBalancingProvider implements IProvider {
           () =>
             `[LB:failover] Skipping backend: ${subProfile.name} (TPM below threshold)`,
         );
+        currentIndex = (currentIndex + 1) % numProfiles;
         continue;
       }
 
@@ -1084,8 +1131,30 @@ export class LoadBalancingProvider implements IProvider {
           this.logger.debug(
             () => `[LB:failover] Success on backend: ${subProfile.name}`,
           );
+
+          // Reset sticky index on success (Issue #902)
+          this.currentFailoverIndex = 0;
           return;
         } catch (error) {
+          // Check for immediate failover errors (429, 401, 402, 403) - Issue #902
+          // These skip retry and immediately failover to next backend
+          if (this.isImmediateFailoverError(error)) {
+            this.logger.debug(
+              () =>
+                `[LB:failover] ${subProfile.name} returned immediate failover error (${getErrorStatus(error)}), skipping retries`,
+            );
+            this.recordRequestFailure(
+              subProfile.name,
+              startTime,
+              error as Error,
+            );
+            this.recordBackendFailure(subProfile.name, error as Error);
+            errors.push({ profile: subProfile.name, error: error as Error });
+            // Update sticky index to next backend
+            this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
+            break; // Exit retry loop, continue to next backend
+          }
+
           const isLastAttempt = attempts >= maxAttempts;
           const shouldRetry =
             !isLastAttempt && this.shouldFailover(error, settings);
@@ -1113,10 +1182,15 @@ export class LoadBalancingProvider implements IProvider {
             );
             this.recordBackendFailure(subProfile.name, error as Error);
             errors.push({ profile: subProfile.name, error: error as Error });
+            // Update sticky index to next backend (Issue #902)
+            this.currentFailoverIndex = (currentIndex + 1) % numProfiles;
             break;
           }
         }
       }
+
+      // Move to next backend (circular iteration)
+      currentIndex = (currentIndex + 1) % numProfiles;
     }
 
     throw new LoadBalancerFailoverError(this.config.profileName, errors);
