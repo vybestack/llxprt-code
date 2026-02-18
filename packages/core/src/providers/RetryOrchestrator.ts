@@ -240,6 +240,10 @@ export class RetryOrchestrator implements IProvider {
 
     const bucketFailoverHandler = this.getBucketFailoverHandler(options);
 
+    // Reset session tracking so this request can try all buckets fresh
+    // @fix issue1477 - prevents stale "already tried" state from previous requests
+    bucketFailoverHandler?.resetSession?.();
+
     let attempt = 0;
     let currentDelay = initialDelayMs;
     let consecutive429s = 0;

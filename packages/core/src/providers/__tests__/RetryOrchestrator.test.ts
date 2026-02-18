@@ -851,6 +851,42 @@ describe('RetryOrchestrator', () => {
 
       expect(result).toHaveLength(1);
     });
+
+    it('should call resetSession at the start of each request', async () => {
+      let resetSessionCalled = false;
+
+      const provider = createTestProvider({
+        responses: ['success'],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => false,
+        isEnabled: () => true,
+        resetSession: () => {
+          resetSessionCalled = true;
+        },
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      await consumeStream(orchestrator.generateChatCompletion(options));
+
+      expect(resetSessionCalled).toBe(true);
+    });
   });
 
   describe('Streaming Support', () => {
