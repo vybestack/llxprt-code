@@ -258,6 +258,8 @@ export const useProfileManagement = ({
             timestamp: new Date(),
           });
         }
+        // Update activeProfileName after successful load
+        setActiveProfileName(profileName);
         // Close all profile dialogs
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileDetail' });
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'profileList' });
