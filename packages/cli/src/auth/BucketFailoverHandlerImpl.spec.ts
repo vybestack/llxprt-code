@@ -214,6 +214,7 @@ describe('BucketFailoverHandlerImpl', () => {
       handler.resetSession();
       const thirdResult = await handler.tryFailover();
       expect(thirdResult).toBe(true);
+      expect(handler.getCurrentBucket()).toBe('bucket-a');
     });
 
     it('prevents infinite cycling when all buckets have valid tokens', async () => {
