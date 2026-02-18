@@ -1071,7 +1071,7 @@ export async function applyProfileSnapshot(
   profile: Profile,
   options: ProfileLoadOptions = {},
 ): Promise<ProfileLoadResult> {
-  const { settingsService } = getCliRuntimeServices();
+  const { settingsService, config } = getCliRuntimeServices();
 
   const applicationResult: ProfileApplicationResult =
     await applyProfileWithGuards(profile, options);
@@ -1099,7 +1099,7 @@ export async function applyProfileSnapshot(
     // When a profile is reloaded with different buckets, the in-memory session bucket
     // and failover handler state may point to exhausted/stale buckets. Clear them so
     // the new handler starts fresh from the first bucket in the updated profile.
-    const { config } = getCliRuntimeServices();
+    // Also handles downgrade from multi-bucket to no-bucket.
     const standardProfile = profile as {
       auth?: { type?: string; buckets?: string[] };
     };
@@ -1109,25 +1109,26 @@ export async function applyProfileSnapshot(
         ? authConfig.buckets
         : [];
 
-    if (newBuckets.length > 0) {
-      const existingHandler = config.getBucketFailoverHandler?.();
-      const existingBuckets = existingHandler?.getBuckets?.() ?? [];
-      const bucketsChanged =
-        existingBuckets.length !== newBuckets.length ||
-        !existingBuckets.every((b, i) => b === newBuckets[i]);
+    const existingHandler = config.getBucketFailoverHandler?.();
+    const existingBuckets = existingHandler?.getBuckets?.() ?? [];
+    const bucketsChanged =
+      existingBuckets.length !== newBuckets.length ||
+      !existingBuckets.every((b, i) => b === newBuckets[i]);
 
-      if (bucketsChanged) {
-        logger.debug(
-          () =>
-            `[issue1467] Profile buckets changed for ${profile.provider}: ` +
-            `[${existingBuckets.join(', ')}] → [${newBuckets.join(', ')}]. ` +
-            `Clearing session bucket and failover handler.`,
-        );
-        // Clear stale session bucket so new handler starts at first bucket
-        oauthManager.clearSessionBucket(profile.provider);
-        // Clear the old failover handler so a fresh one is created
-        config.setBucketFailoverHandler?.(undefined);
-      }
+    if (
+      bucketsChanged &&
+      (existingBuckets.length > 0 || newBuckets.length > 0)
+    ) {
+      logger.debug(
+        () =>
+          `[issue1467] Profile buckets changed for ${profile.provider}: ` +
+          `[${existingBuckets.join(', ')}] → [${newBuckets.join(', ')}]. ` +
+          `Clearing session bucket and failover handler.`,
+      );
+      // Clear stale session bucket so new handler starts at first bucket
+      oauthManager.clearSessionBucket(profile.provider);
+      // Clear the old failover handler so a fresh one is created
+      config.setBucketFailoverHandler?.(undefined);
     }
 
     // @fix issue1151 - Proactively wire the failover handler BEFORE any API calls
@@ -1199,11 +1200,11 @@ export async function applyProfileSnapshot(
                 () =>
                   `[issue1467] Sub-profile '${subProfileName}' buckets changed for ${subProfile.provider}: ` +
                   `[${subExistingBuckets.join(', ')}] → [${subNewBuckets.join(', ')}]. ` +
-                  `Clearing session bucket.`,
+                  `Clearing session bucket and failover handler.`,
               );
               oauthManager.clearSessionBucket(subProfile.provider);
-              // Note: We don't clear the handler here since it may be shared or
-              // will be recreated by the getOAuthToken call below
+              // Clear the old failover handler so a fresh one is created by getOAuthToken
+              config.setBucketFailoverHandler?.(undefined);
             }
 
             // Touch getOAuthToken to ensure handler is wired to config
