@@ -10,7 +10,10 @@ import {
   getPassthroughEnvVars,
   mountGitConfigFiles,
   setupSshAgentLinux,
+  getProfileScopedCredentialAllowlist,
 } from './sandbox.js';
+import { Config } from '@vybestack/llxprt-code-core';
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -409,6 +412,44 @@ describe('mountGitConfigFiles', () => {
     const vol = args.find((a) => a.includes('.ssh/known_hosts'));
     expect(vol).toBeDefined();
     expect(vol).toMatch(/:ro$/);
+  });
+});
+
+describe('getProfileScopedCredentialAllowlist', () => {
+  it('returns scoped provider when config has active provider', () => {
+    const config = {
+      getProvider: () => 'anthropic',
+      getBucketFailoverHandler: () => undefined,
+    } as unknown as Config;
+
+    expect(getProfileScopedCredentialAllowlist(config)).toEqual({
+      allowedProviders: ['anthropic'],
+      allowedBuckets: undefined,
+    });
+  });
+
+  it('returns provider and deduplicated buckets when failover handler is enabled', () => {
+    const config = {
+      getProvider: () => 'anthropic',
+      getBucketFailoverHandler: () => ({
+        isEnabled: () => true,
+        getBuckets: () => ['default', 'work', 'default', '  work  '],
+      }),
+    } as unknown as Config;
+
+    expect(getProfileScopedCredentialAllowlist(config)).toEqual({
+      allowedProviders: ['anthropic'],
+      allowedBuckets: ['default', 'work'],
+    });
+  });
+
+  it('returns empty allowlist when provider is unavailable', () => {
+    const config = {
+      getProvider: () => undefined,
+      getBucketFailoverHandler: () => undefined,
+    } as unknown as Config;
+
+    expect(getProfileScopedCredentialAllowlist(config)).toEqual({});
   });
 });
 

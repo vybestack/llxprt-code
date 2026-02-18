@@ -58,7 +58,13 @@ const sleep = (ms: number): Promise<void> =>
 /**
  * Keyring-backed token store with filesystem advisory locks.
  *
+ * @internal **DO NOT instantiate directly in consumer code.**
+ * Use `createTokenStore()` from `credential-store-factory.ts` instead.
+ * This ensures proper environment detection (sandbox vs. direct mode)
+ * and consistent singleton management across the application.
+ *
  * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
+ * @plan PLAN-20250214-CREDPROXY.P36
  */
 export class KeyringTokenStore implements TokenStore {
   private readonly secureStore: SecureStore;
