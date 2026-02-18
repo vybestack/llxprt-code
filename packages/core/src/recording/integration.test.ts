@@ -949,15 +949,23 @@ describe('integration: full session recording lifecycle', () => {
   it.prop([fc.uuid()], { numRuns: 10 })(
     'P4: (property) session ID preserved through record → replay',
     async (sessionId) => {
-      const { filePath } = await createAndRecordSession(chatsDir, {
-        sessionId,
-        contents: [makeContent('hello', 'human')],
-      });
+      const localTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-sid-'));
+      const localChats = path.join(localTemp, 'chats');
+      await fs.mkdir(localChats, { recursive: true });
 
-      const replay = await replaySession(filePath, PROJECT_HASH);
-      expect(replay.ok).toBe(true);
-      if (!replay.ok) return;
-      expect(replay.metadata.sessionId).toBe(sessionId);
+      try {
+        const { filePath } = await createAndRecordSession(localChats, {
+          sessionId,
+          contents: [makeContent('hello', 'human')],
+        });
+
+        const replay = await replaySession(filePath, PROJECT_HASH);
+        expect(replay.ok).toBe(true);
+        if (!replay.ok) return;
+        expect(replay.metadata.sessionId).toBe(sessionId);
+      } finally {
+        await fs.rm(localTemp, { recursive: true, force: true });
+      }
     },
   );
 

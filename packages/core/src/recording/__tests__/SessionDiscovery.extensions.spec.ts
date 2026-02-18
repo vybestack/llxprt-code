@@ -304,23 +304,24 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('returns sessions sorted newest-first by modification time', async () => {
-      // Create sessions with different timestamps
+      // Create sessions, then set explicit mtimes to avoid filesystem precision races.
       const path1 = await writeSession('session-oldest.jsonl', [
         createSessionStartLine(1, 'sess-oldest', 'project-hash'),
       ]);
-      // Add a small delay to ensure different mtimes
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const _path2 = await writeSession('session-middle.jsonl', [
+      const path2 = await writeSession('session-middle.jsonl', [
         createSessionStartLine(1, 'sess-middle', 'project-hash'),
       ]);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const _path3 = await writeSession('session-newest.jsonl', [
+      const path3 = await writeSession('session-newest.jsonl', [
         createSessionStartLine(1, 'sess-newest', 'project-hash'),
       ]);
 
-      // Touch the oldest file to make it newest
-      const now = new Date();
-      await fs.utimes(path1, now, now);
+      // "Touch" the oldest file by assigning it the newest deterministic mtime.
+      const t1 = new Date('2025-01-01T00:00:03.000Z');
+      const t2 = new Date('2025-01-01T00:00:02.000Z');
+      const t3 = new Date('2025-01-01T00:00:01.000Z');
+      await fs.utimes(path1, t1, t1);
+      await fs.utimes(path2, t2, t2);
+      await fs.utimes(path3, t3, t3);
 
       const result = await SessionDiscovery.listSessionsDetailed(
         tempDir,
@@ -328,7 +329,6 @@ describe('SessionDiscovery extensions', () => {
       );
 
       expect(result.sessions).toHaveLength(3);
-      // After touching, sess-oldest should be first (newest mtime)
       expect(result.sessions[0].sessionId).toBe('sess-oldest');
     });
   });
