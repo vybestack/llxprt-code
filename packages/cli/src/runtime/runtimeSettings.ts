@@ -1095,15 +1095,46 @@ export async function applyProfileSnapshot(
         );
       });
 
+    // @fix issue1467 - Clear stale session bucket state when profile buckets change
+    // When a profile is reloaded with different buckets, the in-memory session bucket
+    // and failover handler state may point to exhausted/stale buckets. Clear them so
+    // the new handler starts fresh from the first bucket in the updated profile.
+    const { config } = getCliRuntimeServices();
+    const standardProfile = profile as {
+      auth?: { type?: string; buckets?: string[] };
+    };
+    const authConfig = standardProfile.auth;
+    const newBuckets =
+      authConfig?.type === 'oauth' && Array.isArray(authConfig.buckets)
+        ? authConfig.buckets
+        : [];
+
+    if (newBuckets.length > 0) {
+      const existingHandler = config.getBucketFailoverHandler?.();
+      const existingBuckets = existingHandler?.getBuckets?.() ?? [];
+      const bucketsChanged =
+        existingBuckets.length !== newBuckets.length ||
+        !existingBuckets.every((b, i) => b === newBuckets[i]);
+
+      if (bucketsChanged) {
+        logger.debug(
+          () =>
+            `[issue1467] Profile buckets changed for ${profile.provider}: ` +
+            `[${existingBuckets.join(', ')}] → [${newBuckets.join(', ')}]. ` +
+            `Clearing session bucket and failover handler.`,
+        );
+        // Clear stale session bucket so new handler starts at first bucket
+        oauthManager.clearSessionBucket(profile.provider);
+        // Clear the old failover handler so a fresh one is created
+        config.setBucketFailoverHandler?.(undefined);
+      }
+    }
+
     // @fix issue1151 - Proactively wire the failover handler BEFORE any API calls
     // This ensures the handler is available when the first 403 error occurs.
     // Without this, the handler is only created inside getOAuthToken() which may
     // be too late if the 403 happens on the first request.
     // Only applies to StandardProfile (not LoadBalancerProfile)
-    const standardProfile = profile as {
-      auth?: { type?: string; buckets?: string[] };
-    };
-    const authConfig = standardProfile.auth;
     if (
       authConfig?.type === 'oauth' &&
       authConfig.buckets &&
@@ -1129,6 +1160,7 @@ export async function applyProfileSnapshot(
     // This is a follow-up to issue #1151 which only handled StandardProfile.
     // For LoadBalancer profiles, we need to iterate through all sub-profiles and
     // proactively wire failover handlers for any OAuth multi-bucket sub-profiles.
+    // @fix issue1467 - Also clear stale session bucket state for sub-profiles
     if (isLoadBalancerProfile(profile)) {
       const subProfileNames = profile.profiles || [];
       logger.debug(
@@ -1151,6 +1183,29 @@ export async function applyProfileSnapshot(
             subProfileAuth.buckets.length > 1
           ) {
             const subBucketCount = subProfileAuth.buckets.length;
+            const subNewBuckets = subProfileAuth.buckets;
+
+            // @fix issue1467 - Clear stale session state for sub-profile if buckets changed
+            // Note: For LB profiles, each sub-profile may have its own provider,
+            // so we check/clear based on the sub-profile's provider
+            const subExistingHandler = config.getBucketFailoverHandler?.();
+            const subExistingBuckets = subExistingHandler?.getBuckets?.() ?? [];
+            const subBucketsChanged =
+              subExistingBuckets.length !== subNewBuckets.length ||
+              !subExistingBuckets.every((b, i) => b === subNewBuckets[i]);
+
+            if (subBucketsChanged) {
+              logger.debug(
+                () =>
+                  `[issue1467] Sub-profile '${subProfileName}' buckets changed for ${subProfile.provider}: ` +
+                  `[${subExistingBuckets.join(', ')}] → [${subNewBuckets.join(', ')}]. ` +
+                  `Clearing session bucket.`,
+              );
+              oauthManager.clearSessionBucket(subProfile.provider);
+              // Note: We don't clear the handler here since it may be shared or
+              // will be recreated by the getOAuthToken call below
+            }
+
             // Touch getOAuthToken to ensure handler is wired to config
             void oauthManager
               .getOAuthToken(subProfile.provider)
