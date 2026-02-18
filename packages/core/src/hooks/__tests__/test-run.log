@@ -1,0 +1,748 @@
+
+> @vybestack/llxprt-code@0.9.0 test
+> npm run test --workspaces --if-present --testPathPattern=hookSystem-lifecycle
+
+
+> @vybestack/llxprt-code-core@0.9.0 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core
+      Coverage enabled with v8
+
+ ❯ src/hooks/__tests__/hookSystem-lifecycle.test.ts (21 tests | 3 failed) 50ms
+   ✓ HookSystem composition (DELTA-HSYS-001) > forwards messageBus to HookEventHandler @plan:PLAN-20250218-HOOKSYSTEM.P04 2ms
+   ✓ HookSystem composition (DELTA-HSYS-001) > forwards injected debugLogger to HookEventHandler @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   ✓ HookSystem composition (DELTA-HSYS-001) > works gracefully when messageBus is absent @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   ✓ HookSystem composition (DELTA-HSYS-001) > works gracefully when debugLogger is absent @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   × HookSystem management APIs (DELTA-HSYS-002) > getAllHooks() returns registered hooks @plan:PLAN-20250218-HOOKSYSTEM.P04 5ms
+     → expected 0 to be greater than 0
+   × HookSystem management APIs (DELTA-HSYS-002) > setHookEnabled(id, false) disables the hook @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+     → expected 0 to be greater than 0
+   × HookSystem management APIs (DELTA-HSYS-002) > setHookEnabled(id, true) re-enables a disabled hook @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+     → expected undefined to be defined
+   ✓ HookSystem management APIs (DELTA-HSYS-002) > setHookEnabled on non-existent id does not throw @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   ✓ HookSystem management APIs (DELTA-HSYS-002) > PROPERTY: toggling enabled twice returns to original state @plan:PLAN-20250218-HOOKSYSTEM.P04 (with seed=-1372126800) 2ms
+   ✓ dispose() lifecycle (DELTA-HEVT-004) > HookSystem.dispose() calls eventHandler.dispose() once @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   ✓ dispose() lifecycle (DELTA-HEVT-004) > HookSystem.dispose() is idempotent @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   ✓ dispose() lifecycle (DELTA-HEVT-004) > HookEventHandler.dispose() leaves handler in disposed state @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   ✓ Session event types (DELTA-HPAY-006) > PROPERTY: fireSessionStartEvent accepts all SessionStartSource values @plan:PLAN-20250218-HOOKSYSTEM.P04 (with seed=-825333780) 2ms
+   ✓ Session event types (DELTA-HPAY-006) > PROPERTY: fireSessionEndEvent accepts all SessionEndReason values @plan:PLAN-20250218-HOOKSYSTEM.P04 (with seed=976430131) 2ms
+   ✓ No-match success behavior (DELTA-HFAIL-003) > when no hooks registered, fireBeforeModelEvent returns success @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   ✓ No-match success behavior (DELTA-HFAIL-003) > no-match result has empty outputs and errors @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   ✓ No-match success behavior (DELTA-HFAIL-003) > no-match result has success=true for AfterModel @plan:PLAN-20250218-HOOKSYSTEM.P04 0ms
+   ✓ No-match success behavior (DELTA-HFAIL-003) > PROPERTY: repeated no-match calls return identical shape @plan:PLAN-20250218-HOOKSYSTEM.P04 (with seed=710156091) 6ms
+   ✓ Property-based invariants @plan:PLAN-20250218-HOOKSYSTEM.P04 > PROPERTY: getAllHooks() always returns an array @plan:PLAN-20250218-HOOKSYSTEM.P04 (with seed=-327565442) 6ms
+   ✓ Property-based invariants @plan:PLAN-20250218-HOOKSYSTEM.P04 > PROPERTY: no-match result always has non-negative totalDuration @plan:PLAN-20250218-HOOKSYSTEM.P04 (with seed=247173911) 7ms
+   ✓ Property-based invariants @plan:PLAN-20250218-HOOKSYSTEM.P04 > PROPERTY: HookSystem initializes regardless of optional dep presence @plan:PLAN-20250218-HOOKSYSTEM.P04 (with seed=-927881518) 15ms
+ ✓ src/recording/integration.test.ts (36 tests) 1283ms
+   ✓ integration: full session recording lifecycle > 20: (property) discovery returns sessions sorted newest-first (with seed=475438907)  588ms
+ ✓ src/tools/glob.test.ts (34 tests) 1608ms
+ ✓ src/recording/SessionRecordingService.test.ts (32 tests) 1926ms
+ ✓ src/providers/__tests__/RetryOrchestrator.test.ts (30 tests) 2028ms
+   ✓ RetryOrchestrator > Basic Retry Behavior > should apply exponential backoff with jitter  314ms
+   ✓ RetryOrchestrator > Basic Retry Behavior > should respect Retry-After header  1001ms
+ ✓ src/recording/resumeSession.test.ts (20 tests) 2897ms
+   ✓ resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > preserves any IContent through write-resume cycle @requirement:REQ-RSM-004 (with seed=1295497630)  328ms
+   ✓ resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > detects provider mismatch for any two different provider strings @requirement:REQ-RSM-005 (with seed=-790357921)  418ms
+   ✓ resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > sequence is monotonic across resume boundary @requirement:REQ-RSM-006 (with seed=1184494962)  308ms
+   ✓ resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > resume always returns a non-null active recording service @requirement:REQ-RSM-006 (with seed=-394302920)  375ms
+   ✓ resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > compression + new content produces correct history length @requirement:REQ-RSM-004 (with seed=-1415945010)  520ms
+   ✓ resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > resume succeeds for any N content items @requirement:REQ-RSM-004 (with seed=-1030873146)  734ms
+ ✓ src/services/history/HistoryService.test.ts (36 tests) 2815ms
+ ✓ src/auth/token-store.refresh-race.spec.ts (9 tests) 1362ms
+   ✓ KeyringTokenStore - Token Refresh Race Condition (Issue #1159) > should wait when lock is held and then acquire after release  419ms
+   ✓ KeyringTokenStore - Token Refresh Race Condition (Issue #1159) > should wait for existing recent lock before attempting refresh  512ms
+   ✓ KeyringTokenStore - Token Refresh Race Condition (Issue #1159) > should prevent concurrent refresh when multiple clients race  410ms
+ ✓ src/storage/secure-store.test.ts (46 tests) 1476ms
+ ✓ src/config/config-lsp-integration.test.ts (26 tests) 2523ms
+ ✓ src/services/shellExecutionService.test.ts (66 tests | 1 skipped) 1471ms
+   ✓ ShellExecutionService > Inactivity Timeout > should handle inactivity timeout independently from total timeout  607ms
+ ✓ src/services/__tests__/asyncTask.integration.test.ts (13 tests) 1166ms
+   ✓ Async Task Integration > concurrency scenarios > should handle rapid completions without races  502ms
+ ✓ src/core/__tests__/compression-boundary.test.ts (9 tests) 1623ms
+   ✓ Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history > should not crash with edge case histories  314ms
+ ✓ src/prompt-config/prompt-service.test.ts (46 tests) 3041ms
+ ✓ src/tools/tool-key-storage.test.ts (41 tests) 1537ms
+ ✓ src/prompt-config/prompt-loader.test.ts (45 tests | 1 skipped) 828ms
+   ✓ PromptLoader > watchFiles > should notify on file changes  311ms
+ ✓ src/core/__tests__/compression-dispatcher.test.ts (8 tests) 1810ms
+   ✓ Compression Dispatcher Integration (P13) > atomicity (REQ-CS-006.4) > should unlock historyService after successful compression  378ms
+ ✓ src/providers/openai-vercel/modelListing.test.ts (2 tests) 571ms
+   ✓ OpenAIVercelProvider - Model Listing > returns the expected static model list with provider metadata  318ms
+ ✓ src/core/__tests__/sandwich-compression.test.ts (7 tests) 1529ms
+   ✓ Sandwich Compression (Issue #1011) > performCompression integration > should integrate all three sections correctly  333ms
+   ✓ Sandwich Compression (Issue #1011) > applyCompression order via performCompression > should maintain proper order: top + summary + ack + bottom  402ms
+ ✓ src/tools/read-file.test.ts (42 tests) 832ms
+ ✓ src/core/__tests__/compression-threshold-system-prompt.test.ts (17 tests) 1015ms
+ ✓ src/tools/read-line-range.test.ts (8 tests) 800ms
+ ✓ src/recording/ReplayEngine.test.ts (65 tests) 7289ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > eventCount matches total valid events regardless of optional corrupt last line @requirement:REQ-RPL-001 (with seed=1909383008)  329ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > any valid IContent round-trips through record -> replay losslessly @requirement:REQ-RPL-002 (with seed=-887775784)  358ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > warnings array is always present regardless of input @requirement:REQ-RPL-001 (with seed=-1125992208)  507ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > seq monotonicity preserved across N resumes @requirement:REQ-RPL-001 (with seed=-1833295562)  483ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > arbitrary interleaving of content/compressed/rewind produces valid history @requirement:REQ-RPL-002 (with seed=128366255)  305ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > malformed payload for any known event type is skipped without crash @requirement:REQ-RPL-005 (with seed=-1904976139)  418ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > rewind after compression: max(0, 1+postCount - rewindN) items @requirement:REQ-RPL-002d, REQ-RPL-003 (with seed=-472162281)  393ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > provider switch always updates metadata to latest provider/model @requirement:REQ-RPL-007 (with seed=-2123645158)  450ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > directories_changed always updates metadata to latest directories @requirement:REQ-RPL-007 (with seed=944154742)  601ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > session_events never appear in history regardless of count @requirement:REQ-RPL-008 (with seed=615187960)  554ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > BOM on first line never prevents replay @requirement:REQ-RPL-005 (with seed=1874976805)  390ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > multiple compressions: only post-last-compression content survives @requirement:REQ-RPL-003 (with seed=345913980)  421ms
+   ✓ ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P07 > corrupt last line is always silently discarded regardless of event count @requirement:REQ-RPL-005 (with seed=704073232)  328ms
+ ✓ src/services/history/__tests__/density-history.test.ts (23 tests) 6357ms
+   ✓ HistoryService — Density Extensions > property-based tests > history length after removal equals original minus removal count  497ms
+   ✓ HistoryService — Density Extensions > property-based tests > non-removed non-replaced entries are unchanged (same reference)  650ms
+   ✓ HistoryService — Density Extensions > property-based tests > replaced entries match the replacement content  670ms
+   ✓ HistoryService — Density Extensions > property-based tests > all conflict combinations are caught (index in both removals and replacements)  539ms
+   ✓ HistoryService — Density Extensions > property-based tests > getRawHistory length equals number of add() calls  802ms
+   ✓ HistoryService — Density Extensions > property-based tests > out-of-bounds indices always throw regardless of history size  950ms
+   ✓ HistoryService — Density Extensions > property-based tests > totalTokens is non-negative after any valid density operation  1050ms
+ ✓ src/core/coreToolScheduler.test.ts (44 tests | 7 skipped) 910ms
+ ✓ src/providers/__tests__/LoadBalancingProvider.timeout.test.ts (7 tests) 799ms
+   ✓ LoadBalancingProvider Timeout Wrapper - Phase 3 > No timeout after first chunk > should not timeout after first chunk received  503ms
+ ✓ src/services/asyncTaskAutoTrigger.test.ts (8 tests) 614ms
+ ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.models.test.ts (9 tests) 286ms
+ ✓ src/auth/codex-device-flow.spec.ts (11 tests) 537ms
+ ✓ src/lsp/__tests__/system-integration.test.ts (13 tests) 977ms
+ ✓ src/providers/__tests__/LoadBalancingProvider.circuitbreaker.test.ts (10 tests) 622ms
+ ✓ src/hooks/hookRunner.test.ts (17 tests) 493ms
+ ✓ src/recording/RecordingIntegration.test.ts (44 tests) 678ms
+ ✓ src/mcp/token-storage/file-token-storage.test.ts (17 tests) 654ms
+ ✓ src/auth/__tests__/keyring-token-store.test.ts (58 tests) 589ms
+   ✓ KeyringTokenStore (mode: keyring) > acquireRefreshLock times out when lock is already held  316ms
+ ✓ src/utils/toolOutputLimiter.test.ts (17 tests) 788ms
+   ✓ toolOutputLimiter > limitOutputTokens > should truncate content in truncate mode  305ms
+ ✓ src/integration/compression-duplicate-ids.test.ts (2 tests) 675ms
+   ✓ Compression and duplicate tool call IDs > should not create duplicate tool IDs when rebuilding history after compression  405ms
+ ✓ src/core/geminiChat.runtime.test.ts (5 tests) 870ms
+   ✓ GeminiChat runtime context > closes pending tool calls in provider payload when sending a new user message  326ms
+ ✓ src/tools/read-many-files.test.ts (32 tests) 564ms
+ ✓ src/recording/SessionLockManager.test.ts (52 tests) 688ms
+ ✓ src/lsp/__tests__/e2e-lsp.test.ts (19 tests) 652ms
+ ✓ src/config/config.scheduler.test.ts (11 tests) 8340ms
+   ✓ Config - CoreToolScheduler Singleton > getOrCreateScheduler > should create a new scheduler instance for a given sessionId if none exists  763ms
+   ✓ Config - CoreToolScheduler Singleton > getOrCreateScheduler > should return the same scheduler instance for the same sessionId  613ms
+   ✓ Config - CoreToolScheduler Singleton > getOrCreateScheduler > should not create duplicate schedulers for concurrent requests  627ms
+   ✓ Config - CoreToolScheduler Singleton > getOrCreateScheduler > should create different scheduler instances for different sessionIds  683ms
+   ✓ Config - CoreToolScheduler Singleton > disposeScheduler > should dispose and remove the scheduler for a given sessionId  730ms
+   ✓ Config - CoreToolScheduler Singleton > disposeScheduler > should not throw if disposing a non-existent scheduler  852ms
+   ✓ Config - CoreToolScheduler Singleton > disposeScheduler > should keep scheduler alive until all references disposed  830ms
+   ✓ Config - CoreToolScheduler Singleton > disposeScheduler > should properly dispose the scheduler instance  712ms
+   ✓ Config - CoreToolScheduler Singleton > disposeScheduler > should dispose scheduler entry even if dispose throws  721ms
+   ✓ Config - CoreToolScheduler Singleton > Integration: Single scheduler per session > should ensure only one CoreToolScheduler instance exists per sessionId across multiple components  878ms
+   ✓ Config - CoreToolScheduler Singleton > Integration: Single scheduler per session > should handle multiple sessions with separate schedulers  929ms
+ ✓ src/prompt-config/prompt-installer.test.ts (66 tests | 4 skipped) 418ms
+ ✓ src/services/history/compression-locking.test.ts (4 tests) 410ms
+ ✓ src/core/__tests__/geminiChat-density.test.ts (25 tests) 9028ms
+   ✓ Density Optimization Orchestration (P19) > property-based tests > dirty flag is always false after ensureDensityOptimized completes  688ms
+   ✓ Density Optimization Orchestration (P19) > property-based tests > history is unchanged when strategy has no optimize method  735ms
+   ✓ Density Optimization Orchestration (P19) > property-based tests > history length after optimization <= history length before  855ms
+   ✓ Density Optimization Orchestration (P19) > property-based tests > empty result produces no history changes  987ms
+   ✓ Density Optimization Orchestration (P19) > property-based tests > optimization never increases token count  1172ms
+   ✓ Density Optimization Orchestration (P19) > property-based tests > clean flag always skips optimization regardless of history  849ms
+   ✓ Density Optimization Orchestration (P19) > property-based tests > optimization only removes entries, never fabricates new ones  823ms
+   ✓ Density Optimization Orchestration (P19) > property-based tests > consecutive clean optimizations are no-ops  1132ms
+ ✓ src/services/history/circular-reference.test.ts (4 tests) 451ms
+ ✓ src/services/history/orphaned-tools-comprehensive.test.ts (9 tests | 4 skipped) 415ms
+ ✓ src/tools/task.test.ts (35 tests) 372ms
+ ✓ src/tools/shell.test.ts (50 tests | 1 skipped) 602ms
+ ✓ src/tools/grep.test.ts (29 tests) 458ms
+ ✓ src/tools/mcp-client.test.ts (37 tests) 394ms
+   ✓ connectToMcpServer with OAuth > should discover oauth config if not in www-authenticate header  342ms
+ ✓ src/recording/SessionDiscovery.test.ts (22 tests) 11369ms
+   ✓ SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > finds all N sessions for a random project hash @requirement:REQ-RSM-003 (with seed=-974968034)  4591ms
+   ✓ SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > resolveSessionRef always finds exact match for any UUID @requirement:REQ-RSM-002 (with seed=1047038371)  517ms
+   ✓ SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > newest session is always first regardless of count @requirement:REQ-RSM-003 (with seed=500832562)  2820ms
+   ✓ SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > returns empty for any non-matching hash @requirement:REQ-RSM-003 (with seed=-377297558)  324ms
+   ✓ SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > numeric index within range always resolves correctly @requirement:REQ-RSM-002 (with seed=-1711064030)  1890ms
+   ✓ SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19 > mtime tiebreaker is deterministic for any two session IDs @requirement:REQ-RSM-003 (with seed=-437393938)  646ms
+ ✓ src/recording/sessionCleanupUtils.test.ts (27 tests) 893ms
+ ✓ src/services/loopDetectionService.test.ts (39 tests | 2 skipped) 632ms
+ ✓ src/utils/memoryDiscovery.test.ts (37 tests) 640ms
+ ✓ src/core/geminiChat.thinking-toolcalls.test.ts (9 tests) 686ms
+   ✓ Issue #1150: Thinking blocks must be attached to tool call messages > ISSUE #1150 ROOT CAUSE: thinking blocks are lost during Gemini format round-trip  336ms
+ ✓ src/integration-tests/geminiChat-isolation.integration.test.ts (11 tests) 942ms
+   ✓ GeminiChat Isolation Integration Tests > History Isolation > should not share history between multiple subagents  688ms
+ ✓ test/models/registry.test.ts (32 tests) 228ms
+ ✓ src/tools/ripGrep.test.ts (36 tests) 746ms
+ ✓ src/tools/grep.timeout.test.ts (9 tests) 444ms
+ ✓ src/core/logger.test.ts (38 tests) 226ms
+ ✓ src/policy/config.test.ts (29 tests) 560ms
+   ✓ policy config > should have default ASK_USER rule for discovered tools  426ms
+ ✓ src/auth/__tests__/keyring-token-store.integration.test.ts (19 tests) 210ms
+ ✓ src/utils/filesearch/fileSearch.test.ts (27 tests) 196ms
+ ✓ src/providers/integration/multi-provider.integration.test.ts (12 tests | 1 skipped) 309ms
+   ✓ Multi-Provider Integration Tests > Error Handling > should handle missing API key  305ms
+ ✓ src/mcp/oauth-provider.test.ts (25 tests) 236ms
+ ✓ src/core/coreToolScheduler.duplication.test.ts (4 tests) 363ms
+ ✓ src/providers/openai-vercel/errorHandling.test.ts (22 tests) 215ms
+ ✓ src/providers/openai-vercel/providerRegistry.test.ts (12 tests) 307ms
+ ✓ src/core/geminiChat.tokenSync.test.ts (11 tests) 390ms
+ ✓ src/config/test/subagentManager.test.ts (23 tests) 160ms
+ ✓ src/utils/fileUtils.test.ts (71 tests) 216ms
+ ✓ src/core/client.test.ts (75 tests | 5 skipped) 352ms
+ ✓ src/tools/structural-analysis.test.ts (21 tests) 159ms
+ ✓ src/utils/shellPathCompletion.test.ts (38 tests) 274ms
+ ✓ src/storage/provider-key-storage.test.ts (27 tests) 242ms
+ ✓ src/auth/token-store.spec.ts (28 tests) 256ms
+ ✓ src/utils/gitIgnoreParser.test.ts (28 tests) 203ms
+ ✓ src/utils/bfsFileSearch.test.ts (16 tests) 347ms
+ ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.reasoningSummary.test.ts (5 tests) 196ms
+ ✓ src/core/coreToolScheduler.cancellation.test.ts (3 tests) 296ms
+ ✓ src/tools/edit.test.ts (49 tests) 366ms
+ ✓ src/utils/getFolderStructure.test.ts (15 tests) 185ms
+ ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.codex.malformedCallId.test.ts (1 test) 208ms
+ ✓ src/debug/DebugLogger.test.ts (42 tests | 1 skipped) 249ms
+ ✓ src/tools/ast-edit.test.ts (9 tests) 343ms
+ ✓ src/core/coreToolScheduler.contextBudget.test.ts (5 tests) 240ms
+ ✓ src/providers/anthropic/AnthropicProvider.test.ts (75 tests) 169ms
+ ✓ src/tools/mcp-tool.test.ts (42 tests) 111ms
+ ✓ src/providers/openai/__tests__/OpenAIProvider.e2e.test.ts (10 tests) 173ms
+ ✓ src/services/gitService.test.ts (15 tests) 193ms
+ ✓ src/core/coreToolScheduler.raceCondition.test.ts (6 tests) 332ms
+ ✓ src/services/fileDiscoveryService.test.ts (22 tests) 150ms
+ ✓ src/providers/openai-vercel/OpenAIVercelProvider.reasoning.test.ts (14 tests) 164ms
+ ✓ src/tools/codesearch.test.ts (13 tests) 249ms
+ ✓ src/hooks/hooks-caller-application.test.ts (9 tests) 319ms
+ ✓ src/utils/filesearch/crawler.test.ts (18 tests) 262ms
+ ✓ src/providers/openai-vercel/nonStreaming.test.ts (18 tests) 278ms
+ ✓ src/providers/anthropic/AnthropicProvider.issue1150.toolresult.test.ts (12 tests) 175ms
+ ✓ src/core/prompts-async.test.ts (22 tests | 2 skipped) 166ms
+ ✓ src/storage/secure-store-integration.test.ts (17 tests) 179ms
+ ✓ src/core/coreToolScheduler.publishingError.test.ts (2 tests) 202ms
+ ✓ src/providers/anthropic/AnthropicProvider.dumpContext.test.ts (5 tests) 171ms
+ ✓ src/providers/gemini/__tests__/gemini.stateless.test.ts (6 tests) 162ms
+ ✓ src/core/nonInteractiveToolExecutor.test.ts (20 tests) 186ms
+ ✓ src/tools/edit-fuzzy.test.ts (18 tests) 193ms
+ ✓ src/tools/shell.multibyte.test.ts (1 test) 187ms
+ ✓ src/core/toolExecutorUnification.integration.test.ts (12 tests) 175ms
+ ✓ src/core/coreToolScheduler.interactiveMode.test.ts (6 tests) 182ms
+ ✓ src/filters/EmojiFilter.property.test.ts (30 tests) 121ms
+ ✓ src/providers/openai-vercel/OpenAIVercelProvider.caching.test.ts (7 tests) 116ms
+ ✓ src/confirmation-bus/integration.test.ts (24 tests) 121ms
+ ✓ src/tools/exa-web-search.test.ts (8 tests) 173ms
+ ✓ src/providers/anthropic/AnthropicProvider.thinking.test.ts (31 tests) 136ms
+ ✓ src/providers/anthropic/AnthropicProvider.issue1150.shape.test.ts (8 tests) 131ms
+ ✓ src/providers/openai-vercel/streaming.test.ts (14 tests) 229ms
+ ✓ src/services/history/findfiles-circular.test.ts (1 test) 151ms
+ ✓ src/providers/anthropic/AnthropicProvider.issue1150.redacted.test.ts (6 tests) 120ms
+ ✓ src/providers/gemini/GeminiProvider.test.ts (15 tests) 129ms
+ ✓ src/providers/openai/OpenAIProvider.emptyResponseRetry.test.ts (7 tests) 210ms
+ ✓ src/providers/anthropic/AnthropicProvider.issue1150.streaming.test.ts (6 tests) 162ms
+ ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.ephemerals.toolOutput.test.ts (2 tests) 139ms
+ ✓ src/providers/utils/toolResponsePayload.test.ts (8 tests) 156ms
+ ✓ src/providers/anthropic/AnthropicProvider.issue1150-repro.test.ts (5 tests) 133ms
+ ✓ src/providers/anthropic/AnthropicProvider.issue1150.test.ts (7 tests) 146ms
+ ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.textVerbosity.test.ts (5 tests) 153ms
+ ✓ src/code_assist/oauth2.test.ts (14 tests) 91ms
+ ✓ src/core/prompts.test.ts (6 tests) 195ms
+ ✓ src/tools/write-file.test.ts (27 tests) 181ms
+ ✓ src/providers/openai-vercel/OpenAIVercelProvider.test.ts (33 tests) 111ms
+ ✓ src/providers/openai/__tests__/openai.stateless.test.ts (7 tests) 138ms
+ ✓ src/providers/anthropic/AnthropicProvider.bucketFailover.test.ts (1 test) 110ms
+ ✓ src/policy/toml-loader.test.ts (25 tests) 162ms
+ ✓ src/providers/openai/__tests__/OpenAIProvider.bucketFailover.errorHandling.test.ts (1 test) 96ms
+ ✓ src/utils/terminalSerializer.test.ts (17 tests) 81ms
+ ✓ src/hooks/hooks-caller-integration.test.ts (9 tests) 98ms
+ ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.promptCacheKey.test.ts (5 tests) 96ms
+ ✓ src/hooks/notification-hook.test.ts (4 tests) 70ms
+ ✓ src/providers/openai/__tests__/openai.localEndpoint.test.ts (16 tests) 127ms
+ ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.reasoningEffort.test.ts (1 test) 195ms
+ ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.reasoningInclude.test.ts (8 tests) 321ms
+ ✓ src/tools/ast-grep.test.ts (15 tests) 270ms
+ ✓ src/core/compression/__tests__/high-density-optimize.test.ts (45 tests) 198ms
+ ✓ src/core/prompts.coreMemory.test.ts (8 tests) 146ms
+ ✓ src/auth/__tests__/codex-device-flow.test.ts (11 tests) 106ms
+ ✓ src/storage/SessionPersistenceService.test.ts (30 tests) 56ms
+ ✓ src/utils/userAccountManager.test.ts (23 tests) 146ms
+ ✓ src/utils/__tests__/resolveTextSearchTarget.test.ts (12 tests) 103ms
+ ✓ src/core/compression/__tests__/high-density-settings.test.ts (33 tests) 177ms
+ ✓ src/providers/gemini/__tests__/gemini.thinkingLevel.test.ts (6 tests) 162ms
+ ✓ src/providers/__tests__/LoadBalancingProvider.metrics.test.ts (13 tests) 80ms
+ ✓ src/utils/retry.test.ts (32 tests | 5 skipped) 43ms
+ ✓ src/tools/delete_line_range.test.ts (12 tests) 149ms
+ ✓ src/tools/__tests__/file-read-max-lines.test.ts (5 tests) 214ms
+ ✓ src/tools/ls.test.ts (22 tests) 117ms
+ ✓ src/tools/memoryTool.test.ts (29 tests) 111ms
+ ✓ src/utils/workspaceContext.test.ts (34 tests) 79ms
+ ✓ src/tools/direct-web-fetch.test.ts (5 tests) 66ms
+ ✓ src/utils/memoryImportProcessor.test.ts (25 tests) 34ms
+ ✓ src/telemetry/metrics.test.ts (11 tests) 32ms
+ ✓ src/core/compression/__tests__/high-density-compress.test.ts (25 tests) 125ms
+ ✓ src/runtime/AgentRuntimeState.spec.ts (39 tests) 40ms
+ ✓ src/tools/modifiable-tool.test.ts (11 tests) 54ms
+ ✓ src/tools/__tests__/edit-lsp-integration.test.ts (12 tests) 156ms
+ ✓ src/utils/shell-parser.test.ts (33 tests) 29ms
+ ✓ src/tools/insert_at_line.test.ts (14 tests) 65ms
+ ✓ src/tools/todo-store.test.ts (13 tests) 121ms
+ ✓ src/tools/google-web-search.test.ts (8 tests) 35ms
+ ✓ src/confirmation-bus/message-bus.test.ts (25 tests) 41ms
+ ✓ src/config/config.test.ts (79 tests) 73ms
+ ✓ src/tools/google-web-fetch.integration.test.ts (22 tests) 86ms
+ ✓ src/utils/schemaValidator.test.ts (14 tests) 124ms
+ ✓ src/tools/edit-tabs-issue473.test.ts (5 tests) 105ms
+ ✓ src/tools/__tests__/write-file-lsp-integration.test.ts (13 tests) 117ms
+ ✓ src/core/compression/__tests__/types-highdensity.test.ts (32 tests) 74ms
+ ✓ src/tools/check-async-tasks.test.ts (12 tests) 78ms
+ ✓ src/services/shellExecutionService.raceCondition.test.ts (4 tests) 160ms
+ ✓ src/tools/list-subagents.test.ts (4 tests) 46ms
+ ✓ src/utils/editor.test.ts (108 tests) 89ms
+ ✓ src/utils/errorReporting.test.ts (6 tests) 42ms
+ ✓ src/tools/google-web-fetch.test.ts (24 tests) 90ms
+ ✓ src/auth/oauth-errors.spec.ts (38 tests | 2 skipped) 105ms
+ ✓ test/utils/ripgrepPathResolver.test.ts (13 tests) 25ms
+ ✓ src/config/profileManager.test.ts (31 tests) 65ms
+ ✓ src/telemetry/uiTelemetry.test.ts (18 tests) 46ms
+ ✓ src/services/ClipboardService.test.ts (7 tests) 17ms
+ ✓ src/tools/__tests__/grep-params.test.ts (7 tests) 44ms
+ ✓ src/tools/__tests__/insert-at-line-lsp-integration.test.ts (6 tests) 49ms
+ ✓ src/lsp/__tests__/lsp-service-client.test.ts (17 tests) 28ms
+ ✓ src/tools/__tests__/edit-params.test.ts (9 tests) 49ms
+ ✓ src/tools/__tests__/delete-line-range-lsp-integration.test.ts (6 tests) 55ms
+ ✓ src/utils/summarizer.test.ts (8 tests) 34ms
+ ✓ src/prompt-config/TemplateEngine.test.ts (43 tests) 15ms
+ ✓ src/tools/__tests__/ls-params.test.ts (8 tests) 19ms
+ ✓ src/tools/__tests__/apply-patch-lsp-integration.test.ts (13 tests) 36ms
+ ✓ src/providers/openai/openai-oauth.spec.ts (25 tests) 14ms
+ ✓ src/providers/gemini/GeminiProvider.retry.test.ts (12 tests) 33ms
+ ✓ src/utils/memoryImportProcessor.issue391.test.ts (5 tests) 24ms
+ ✓ src/filters/EmojiFilter.consistency.test.ts (158 tests) 30ms
+ ✓ src/agents/executor.test.ts (13 tests) 32ms
+ ✓ src/core/__tests__/bucketFailoverIntegration.spec.ts (21 tests) 14ms
+ ✓ src/providers/utils/dumpContext.test.ts (10 tests) 37ms
+ ✓ src/core/lifecycleHookTriggers.test.ts (16 tests) 20ms
+ ✓ src/mcp/token-storage/keychain-token-storage.test.ts (25 tests) 15ms
+ ✓ src/utils/filesearch/ignore.test.ts (12 tests) 112ms
+ ✓ src/lsp/__tests__/lsp-service-client-integration.test.ts (12 tests) 44ms
+ ✓ src/debug/ConfigurationManager.test.ts (26 tests) 21ms
+ ✓ src/providers/openai/parseResponsesStream.reasoning.test.ts (11 tests) 19ms
+ ✓ src/mcp/google-auth-provider.test.ts (11 tests) 68ms
+ ✓ src/providers/openai-responses/OpenAIResponsesProvider.streamRetry.test.ts (11 tests) 30ms
+ ✓ src/providers/BaseProvider.test.ts (22 tests) 18ms
+ ✓ src/tools/__tests__/shell-params.test.ts (8 tests) 33ms
+ ✓ src/providers/__tests__/LoadBalancingProvider.failover.test.ts (25 tests) 20ms
+ ✓ src/mcp/sa-impersonation-provider.test.ts (8 tests) 49ms
+ ✓ src/code_assist/server.test.ts (7 tests) 21ms
+ ✓ src/mcp/oauth-utils.test.ts (29 tests) 11ms
+ ✓ src/providers/openai/codexUsageInfo.test.ts (27 tests) 32ms
+ ✓ src/providers/openai/ToolCallPipeline.integration.test.ts (17 tests) 10ms
+ ✓ src/providers/__tests__/LoadBalancingProvider.test.ts (94 tests) 24ms
+ ✓ src/utils/unicodeUtils.test.ts (15 tests) 13ms
+ ✓ src/telemetry/telemetry.test.ts (2 tests) 15ms
+ ✓ src/tools/tool-registry.test.ts (23 tests | 1 skipped) 66ms
+ ✓ src/providers/synthetic/usageInfo.test.ts (17 tests) 15ms
+ ✓ src/tools/base-tool-invocation.test.ts (3 tests) 10ms
+ ✓ src/code_assist/oauth-credential-storage.test.ts (13 tests) 25ms
+ ✓ src/prompt-config/prompt-resolver.test.ts (10 tests) 18ms
+ ✓ src/tools/__tests__/glob-params.test.ts (7 tests) 46ms
+ ✓ src/runtime/__tests__/regression-guards.test.ts (13 tests) 12ms
+ ✓ src/prompt-config/prompt-cache.test.ts (45 tests) 15ms
+ ✓ src/providers/kimi/usageInfo.test.ts (33 tests) 15ms
+ ✓ src/utils/delay.test.ts (7 tests) 18ms
+ ✓ src/auth/auth-integration.spec.ts (11 tests) 15ms
+ ✓ src/ide/ide-installer.test.ts (11 tests) 11ms
+ ✓ src/providers/openai/parseResponsesStream.responsesToolCalls.test.ts (7 tests) 20ms
+ ✓ src/utils/systemEncoding.test.ts (38 tests) 15ms
+ ✓ src/providers/openai/OpenAIProvider.reasoning.test.ts (52 tests) 39ms
+ ✓ src/config/flashFallback.test.ts (6 tests) 18ms
+ ✓ src/settings/__tests__/settingsRegistry.test.ts (74 tests) 14ms
+ ✓ src/core/__tests__/subagent.stateless.test.ts (13 tests) 23ms
+ ✓ src/utils/events.test.ts (8 tests) 18ms
+ ✓ src/telemetry/loggers.test.ts (22 tests) 18ms
+ ✓ src/filters/EmojiFilter.test.ts (68 tests) 16ms
+ ✓ src/providers/anthropic/AnthropicProvider.stateless.test.ts (4 tests) 17ms
+ ✓ src/tools/todo-schemas.test.ts (24 tests) 17ms
+ ✓ src/providers/__tests__/ProviderManager.guard.test.ts (15 tests) 13ms
+ ✓ src/hooks/hookPlanner.test.ts (9 tests) 13ms
+ ✓ src/providers/zai/usageInfo.test.ts (22 tests) 14ms
+ ✓ src/providers/openai/buildResponsesRequest.test.ts (22 tests) 15ms
+ ✓ src/services/asyncTaskManager.test.ts (43 tests) 14ms
+ ✓ src/providers/openai-vercel/messageConversion.test.ts (28 tests) 11ms
+ ✓ test/models/provider-integration.test.ts (20 tests) 14ms
+ ✓ src/providers/utils/contentPreview.test.ts (8 tests) 9ms
+ ✓ src/mcp/file-token-store.test.ts (27 tests) 45ms
+ ✓ src/core/compression/MiddleOutStrategy.test.ts (18 tests) 26ms
+ ✓ src/providers/openai/parseResponsesStream.test.ts (13 tests | 5 skipped) 21ms
+ ✓ src/providers/openai/OpenAIProvider.toolNameErrors.test.ts (13 tests) 8ms
+ ✓ src/providers/openai/OpenAIProvider.caching.test.ts (4 tests) 15ms
+ ✓ src/hooks/hookSystem.test.ts (18 tests) 12ms
+ ✓ src/providers/gemini/__tests__/gemini.userMemory.test.ts (2 tests) 14ms
+ ✓ src/hooks/hookEventHandler.test.ts (19 tests) 27ms
+ ✓ src/utils/parameterCoercion.test.ts (35 tests) 8ms
+ ✓ src/services/asyncTaskReminderService.test.ts (19 tests) 9ms
+ ✓ src/tools/__tests__/write-file-params.test.ts (8 tests) 16ms
+ ✓ src/parsers/TextToolCallParser.test.ts (15 tests) 10ms
+ ✓ src/utils/generateContentResponseUtilities.test.ts (36 tests) 17ms
+ ✓ src/utils/shell-utils.test.ts (77 tests | 2 skipped) 27ms
+ ✓ src/providers/anthropic/AnthropicProvider.streamRetry.test.ts (6 tests) 14ms
+ ✓ src/core/turn.undefined_issue.test.ts (26 tests) 15ms
+ ✓ src/tools/__tests__/ast-edit-lsp-integration.test.ts (6 tests) 85ms
+ ✓ src/utils/ignorePatterns.test.ts (28 tests) 21ms
+ ✓ src/ide/ideContext.test.ts (16 tests) 10ms
+ ✓ src/hooks/hookRegistry.test.ts (17 tests) 13ms
+ ✓ src/core/baseLlmClient.test.ts (19 tests) 13ms
+ ✓ src/utils/secure-browser-launcher.test.ts (20 tests) 14ms
+ ✓ src/tools/todo-read.test.ts (12 tests) 12ms
+ ✓ src/runtime/AgentRuntimeLoader.test.ts (4 tests) 12ms
+ ✓ src/utils/shell-utils.shellReplacement.test.ts (16 tests) 11ms
+ ✓ src/core/__tests__/geminiChat.runtimeState.test.ts (12 tests) 16ms
+ ✓ src/ide/ide-client.test.ts (6 tests) 12ms
+ ✓ src/runtime/createAgentRuntimeContext.test.ts (28 tests) 12ms
+ ✓ src/core/subagentOrchestrator.test.ts (13 tests) 13ms
+ ✓ src/providers/gemini/__tests__/gemini.thoughtSignature.test.ts (17 tests) 8ms
+ ✓ src/debug/FileOutput.test.ts (15 tests) 15ms
+ ✓ src/providers/anthropic/usageInfo.test.ts (18 tests) 16ms
+ ✓ src/utils/errorParsing.test.ts (23 tests) 6ms
+ ✓ src/providers/openai/OpenAIProvider.modelParamsAndHeaders.test.ts (3 tests) 13ms
+ ✓ src/utils/paths.test.ts (96 tests | 17 skipped) 42ms
+ ✓ src/core/geminiChat.contextlimit.test.ts (3 tests) 10ms
+ ✓ src/providers/__tests__/LoggingProviderWrapper.apiTelemetry.test.ts (10 tests) 20ms
+ ✓ src/auth/precedence.test.ts (25 tests) 12ms
+ ✓ src/mcp/token-storage/hybrid-token-storage.test.ts (11 tests) 15ms
+ ✓ src/core/turn.test.ts (17 tests) 12ms
+ ✓ test/models/schema.test.ts (33 tests) 11ms
+ ✓ src/providers/fake/FakeProvider.test.ts (4 tests) 11ms
+ ✓ src/agents/invocation.test.ts (11 tests) 15ms
+ ✓ src/providers/__tests__/baseProvider.stateless.test.ts (5 tests) 8ms
+ ✓ src/providers/chutes/usageInfo.test.ts (12 tests) 13ms
+ ✓ src/ide/process-utils.test.ts (8 tests) 6ms
+ ✓ src/core/__tests__/turn.thinking.test.ts (9 tests) 21ms
+ ✓ src/types/__tests__/modelParams.bucket.spec.ts (38 tests) 121ms
+ ✓ src/providers/openai/OpenAIProvider.mistralCompatibility.test.ts (9 tests) 28ms
+ ✓ src/providers/openai/__tests__/ToolNameValidator.test.ts (18 tests) 11ms
+ ✓ src/tools/ToolIdStrategy.test.ts (39 tests) 8ms
+ ✓ src/providers/openai-responses/OpenAIResponsesProvider.retry.test.ts (5 tests) 14ms
+ ✓ src/providers/openai/ToolCallPipeline.test.ts (17 tests) 9ms
+ ✓ src/integration-tests/settings-remediation.test.ts (13 tests) 18ms
+ ✓ src/core/compression/OneShotStrategy.test.ts (14 tests) 11ms
+ ✓ src/runtime/AgentRuntimeContext.stateless.test.ts (2 tests) 7ms
+ ✓ src/policy/policy-engine.test.ts (39 tests) 8ms
+ ✓ src/tools/ToolFormatter.test.ts (10 tests) 10ms
+ ✓ src/core/compression/__tests__/migration-compatibility.test.ts (9 tests) 10ms
+ ✓ src/providers/reasoning/reasoningUtils.test.ts (26 tests) 8ms
+ink stdout ✓ src/utils/stdio.test.ts (7 tests) 16ms
+ ✓ test/settings/SettingsService.spec.ts (31 tests) 12ms
+ ✓ src/core/contentGenerator.test.ts (8 tests) 10ms
+ ✓ src/core/googleGenAIWrapper.test.ts (3 tests) 6ms
+ ✓ src/tools/toolNameUtils.integration.test.ts (28 tests) 27ms
+ ✓ src/tools/ToolFormatter.toResponsesTool.test.ts (6 tests) 6ms
+ ✓ test/models/transformer.test.ts (47 tests) 33ms
+ ✓ src/tools/todo-write.test.ts (2 tests) 8ms
+ ✓ src/services/shellExecutionService.windows.multibyte.test.ts (5 tests | 1 skipped) 53ms
+ ✓ src/services/complexity-analyzer.test.ts (8 tests) 9ms
+ ✓ src/core/compression/TopDownTruncationStrategy.test.ts (16 tests) 10ms
+ ✓ src/providers/openai-responses/OpenAIResponsesProvider.headers.test.ts (1 test) 9ms
+ ✓ src/tools/mcp-client-manager.test.ts (6 tests) 8ms
+ ✓ src/providers/openai-responses/__tests__/openaiResponses.stateless.test.ts (4 tests) 8ms
+ ✓ src/auth/__tests__/authRuntimeScope.test.ts (3 tests) 9ms
+ ✓ src/utils/filesearch/crawlCache.test.ts (9 tests) 22ms
+ ✓ src/providers/logging/ProviderPerformanceTracker.test.ts (10 tests) 11ms
+ ✓ src/tools/todo-pause.spec.ts (21 tests) 7ms
+ ✓ src/utils/environmentContext.test.ts (6 tests) 8ms
+ ✓ src/core/compression/compressionStrategyFactory.test.ts (16 tests) 9ms
+ ✓ src/core/compression/__tests__/integration-high-density.test.ts (9 tests) 6ms
+ ✓ src/auth/qwen-device-flow.spec.ts (24 tests) 40045ms
+   ✓ QwenDeviceFlow - Behavioral Tests > Token Polling > should poll for token until authorization completes  10009ms
+   ✓ QwenDeviceFlow - Behavioral Tests > Token Polling > should use correct Qwen token endpoint  1184ms
+   ✓ QwenDeviceFlow - Behavioral Tests > Token Polling > should respect server-specified polling interval  10012ms
+   ✓ QwenDeviceFlow - Behavioral Tests > Error Handling > should handle network failures with retry logic  18764ms
+ ✓ src/auth/oauth-logout-cache-invalidation.spec.ts (3 tests) 5ms
+ ✓ src/integration-tests/profile-integration.test.ts (4 tests) 8ms
+ ✓ src/core/__tests__/config-regression-guard.test.ts (6 tests) 8ms
+ ✓ src/providers/__tests__/BaseProvider.guard.test.ts (2 tests) 7ms
+ ✓ src/core/toolGovernance.test.ts (34 tests) 8ms
+ ✓ src/code_assist/setup.test.ts (7 tests) 13ms
+ ✓ src/providers/__tests__/LoadBalancingProvider.tpm.test.ts (10 tests) 12ms
+ ✓ src/utils/installationManager.test.ts (4 tests) 54ms
+ ✓ src/providers/openai/buildResponsesRequest.stripToolCalls.test.ts (4 tests) 5ms
+ ✓ src/recording/sessionManagement.test.ts (21 tests) 40657ms
+   ✓ sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22 > listSessions returns correct session count for any N @requirement:REQ-MGT-001 (with seed=-2007787679)  7893ms
+   ✓ sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22 > delete always removes session file and any lock sidecar @requirement:REQ-MGT-002 (with seed=334049151)  461ms
+   ✓ sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22 > listSessions always returns sessions sorted newest-first @requirement:REQ-MGT-001 (with seed=1696939320)  15210ms
+   ✓ sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22 > deleteSession by any valid numeric index removes correct session @requirement:REQ-MGT-002 (with seed=1946869440)  10382ms
+   ✓ sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22 > any session created with a UUID can be listed then deleted @requirement:REQ-MGT-002 (with seed=2139702296)  591ms
+   ✓ sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22 > every listed session has a positive file size @requirement:REQ-MGT-001 (with seed=-1392363128)  5011ms
+   ✓ sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22 > Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22 > delete always returns error for any non-matching ref @requirement:REQ-MGT-002 (with seed=-415141216)  567ms
+ ✓ src/prompt-config/defaults/manifest-loader.test.ts (2 tests) 5ms
+ ✓ src/hooks/hookAggregator.test.ts (11 tests) 53ms
+ ✓ src/tools/tools.test.ts (11 tests) 14ms
+ ✓ src/providers/__tests__/ProviderManager.settingsSeparation.test.ts (10 tests) 16ms
+ ✓ src/code_assist/converter.test.ts (24 tests) 6ms
+ ✓ src/providers/apiKeyQuotaResolver.test.ts (25 tests) 9ms
+ ✓ src/utils/extensionLoader.test.ts (6 tests) 10ms
+ ✓ src/mcp/oauth-token-storage.test.ts (10 tests) 9ms
+ ✓ src/mcp/token-store.test.ts (23 tests) 7ms
+ ✓ src/providers/openai/ToolCallNormalizer.test.ts (18 tests) 9ms
+ ✓ src/providers/openai/ToolCallPipeline.toolCallId.test.ts (8 tests) 7ms
+ ✓ src/providers/utils/cacheMetricsExtractor.test.ts (11 tests) 7ms
+ ✓ src/core/__tests__/geminiClient.runtimeState.test.ts (13 tests) 9ms
+ ✓ src/services/history/ContentConverters.test.ts (13 tests) 8ms
+ ✓ src/providers/openai/__tests__/OpenAIProvider.thinkTags.test.ts (29 tests) 9ms
+ ✓ src/services/tool-call-tracker-service.test.ts (6 tests) 6ms
+ ✓ src/config/endpoints.test.ts (26 tests) 6ms
+ ✓ src/ide/detect-ide.test.ts (16 tests) 6ms
+ ✓ src/utils/googleQuotaErrors.test.ts (15 tests) 8ms
+ ✓ src/ide/__tests__/detect-ide.antigravity.test.ts (7 tests) 5ms
+ ✓ src/providers/openai/OpenAIProvider.toolFormatDetection.test.ts (2 tests) 4ms
+ ✓ src/runtime/RuntimeInvocationContext.failfast.test.ts (2 tests) 8ms
+ ✓ test/models/profiles.test.ts (25 tests) 8ms
+ ✓ src/utils/ast-grep-utils.test.ts (19 tests) 8ms
+ ✓ src/tools/todo-write.spec.ts (6 tests) 7ms
+ ✓ src/integration-tests/todo-system.test.ts (2 tests) 6ms
+ ✓ src/providers/openai-vercel/toolIdUtils.test.ts (13 tests) 7ms
+ ✓ src/hooks/hookTranslator.test.ts (10 tests) 7ms
+ ✓ src/utils/__tests__/editor.antigravity.test.ts (4 tests) 5ms
+ ✓ src/utils/channel.test.ts (17 tests) 7ms
+ ✓ src/mcp/token-storage/keychain-token-storage.missing-keytar.test.ts (2 tests) 6ms
+ ✓ src/test-utils/__tests__/providerCallOptions.test.ts (2 tests) 5ms
+ ✓ src/services/fileSystemService.test.ts (3 tests) 6ms
+ ✓ src/config/config.alwaysAllow.test.ts (9 tests) 13ms
+ ✓ src/tools/diffOptions.test.ts (9 tests) 7ms
+ ✓ src/providers/providerInterface.compat.test.ts (2 tests) 8ms
+ ✓ src/providers/openai/ToolCallCollector.test.ts (9 tests) 10ms
+ ✓ src/runtime/__tests__/AgentRuntimeState.stub.test.ts (13 tests | 10 skipped) 5ms
+ ✓ src/providers/openai/buildResponsesRequest.undefined.test.ts (3 tests) 6ms
+ ✓ src/providers/__tests__/LoadBalancingProvider.types.test.ts (12 tests) 18ms
+ ✓ src/providers/openai/getOpenAIProviderInfo.context.test.ts (3 tests) 5ms
+ ✓ src/parsers/TextToolCallParser.multibyte.test.ts (1 test) 6ms
+ ✓ src/filters/EmojiFilter.subagent.test.ts (11 tests) 5ms
+ ✓ src/integration-tests/provider-settings-integration.spec.ts (4 tests) 13ms
+ ✓ src/providers/openai/toolNameUtils.test.ts (20 tests) 7ms
+ ✓ src/providers/utils/thinkingExtraction.test.ts (10 tests) 9ms
+ ✓ src/providers/utils/textSanitizer.test.ts (12 tests) 10ms
+ ✓ src/providers/openai/openaiRequestParams.test.ts (3 tests) 6ms
+ ✓ src/runtime/__tests__/RuntimeInvocationContext.separation.test.ts (20 tests) 10ms
+ ✓ src/providers/utils/toolIdNormalization.test.ts (13 tests) 5ms
+ ✓ src/core/geminiChat.issue1150.integration.test.ts (6 tests) 7ms
+ ✓ src/prompt-config/subagent-delegation.test.ts (13 tests) 5ms
+ ✓ src/config/storage.test.ts (16 tests) 5ms
+ ✓ src/config/config.ephemeral.test.ts (10 tests) 16ms
+ ✓ src/providers/utils/retryStrategy.test.ts (10 tests) 5ms
+ ✓ src/utils/thoughtUtils.test.ts (11 tests) 18ms
+ ✓ src/core/loggingContentGenerator.test.ts (6 tests) 12ms
+ ✓ src/core/compression/utils.test.ts (19 tests) 5ms
+ ✓ src/utils/partUtils.test.ts (23 tests) 6ms
+ ✓ src/providers/openai/ConversationCache.accumTokens.test.ts (9 tests) 4ms
+ ✓ src/services/history/canonicalToolIds.test.ts (6 tests) 5ms
+ ✓ src/core/geminiChat.thinkingHistory.test.ts (8 tests) 5ms
+ ✓ src/runtime/providerRuntimeContext.test.ts (3 tests) 4ms
+ ✓ src/commands/extensions.test.ts (1 test) 4ms
+ ✓ src/mcp/token-storage/base-token-storage.test.ts (12 tests) 6ms
+ ✓ src/providers/openai/OpenAIProvider.setModel.test.ts (4 tests) 6ms
+ ✓ src/providers/ProviderManager.test.ts (3 tests) 7ms
+ ✓ src/providers/openai/OpenAIProvider.shouldRetry.test.ts (14 tests) 6ms
+ ✓ src/providers/openai/__tests__/formatArrayResponse.test.ts (13 tests) 6ms
+ ✓ src/providers/openai/estimateRemoteTokens.test.ts (10 tests) 5ms
+ ✓ src/providers/openai/buildResponsesRequest.toolIdNormalization.test.ts (4 tests) 4ms
+ ✓ src/auth/precedence.adapter.test.ts (1 test) 3ms
+ ✓ src/services/history/__tests__/ThinkingBlock.test.ts (9 tests) 5ms
+ ✓ src/hooks/types.test.ts (2 tests) 5ms
+ ✓ test/settings/model-diagnostics.test.ts (5 tests) 5ms
+ ✓ src/providers/openai-vercel/OpenAIVercelProvider.shouldRetry.test.ts (14 tests) 5ms
+ ✓ src/utils/__tests__/googleQuotaErrors.404.test.ts (4 tests) 4ms
+ ✓ src/utils/__tests__/retry.ModelNotFoundError.test.ts (5 tests) 4ms
+ ✓ src/config/__tests__/models.test.ts (9 tests) 3ms
+ ✓ src/tools/doubleEscapeUtils.test.ts (3 tests) 5ms
+ ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.toolIdNormalization.test.ts (6 tests) 4ms
+ ✓ src/core/compression/__tests__/continuation-directive.test.ts (7 tests) 5ms
+ ✓ src/core/tokenLimits.test.ts (15 tests) 4ms
+ ✓ src/providers/anthropic/AnthropicProvider.normalizeToAnthropicToolId.test.ts (5 tests) 4ms
+ ✓ src/utils/sanitization.test.ts (14 tests) 11ms
+ ✓ src/telemetry/tool-call-decision.test.ts (7 tests) 12ms
+ ✓ src/core/__tests__/geminiClient.dispose.test.ts (1 test) 5ms
+ ✓ src/providers/__tests__/LoggingProviderWrapper.stateless.test.ts (7 tests) 7ms
+ ✓ src/services/shellExecutionService.multibyte.test.ts (2 tests) 7ms
+ ✓ src/providers/utils/toolFormatDetection.test.ts (6 tests) 5ms
+ ✓ src/providers/anthropic/AnthropicProvider.toolFormatDetection.test.ts (2 tests) 8ms
+ ✓ src/core/compression/__tests__/compression-todos.test.ts (2 tests) 3ms
+ ✓ src/core/geminiChat.thinking-spacing.test.ts (14 tests) 8ms
+ ✓ src/providers/utils/qwenEndpoint.test.ts (7 tests) 5ms
+ ✓ src/utils/errors.test.ts (3 tests) 10ms
+ ✓ src/utils/safeJsonStringify.test.ts (8 tests) 4ms
+ ✓ src/providers/openai/OpenAIProvider.retry.test.ts (3 tests) 4ms
+ ✓ src/providers/gemini/GeminiProvider.e2e.test.ts (3 tests) 18ms
+ ✓ src/providers/utils/toolNameNormalization.test.ts (5 tests) 4ms
+ ✓ src/lsp/__tests__/lsp-entry-path.test.ts (3 tests) 6ms
+ ✓ src/utils/filesearch/result-cache.test.ts (3 tests) 25ms
+ ✓ src/index.test.ts (1 test) 3ms
+ ✓ src/core/__tests__/compression-prompts.test.ts (6 tests) 14ms
+ ✓ src/config/config-session-adoption.test.ts (4 tests) 6ms
+ ✓ src/types/modelParams.test.ts (6 tests) 17ms
+ ✓ src/code_assist/oauth2.e2e.test.ts (1 test) 3ms
+ ✓ src/core/__tests__/compression-logic.test.ts (1 test) 4ms
+ ✓ src/core/__tests__/compression.test.ts (1 test) 5ms
+ ✓ src/services/history/orphaned-tools.test.ts (0 test) 5ms
+ ✓ src/hooks/tool-render-suppression-hook.test.ts (2 tests) 4ms
+ ↓ src/providers/__tests__/BaseProvider.guard.stub.test.ts (1 test | 1 skipped)
+ ✓ src/providers/openai/OpenAIProvider.stateful.integration.test.ts (2 tests | 1 skipped) 3ms
+ ↓ src/providers/openai/OpenAIProvider.callResponses.stateless.test.ts (5 tests | 5 skipped)
+ ↓ src/providers/openai/OpenAIProvider.integration.test.ts (3 tests | 3 skipped)
+ ↓ src/providers/openai/ResponsesContextTrim.integration.test.ts (4 tests | 4 skipped)
+ ↓ src/providers/openai/OpenAIProvider.responsesIntegration.test.ts (6 tests | 6 skipped)
+ ✓ src/providers/providerManager.context.test.ts (2 tests) 10ms
+ ✓ src/utils/tool-utils.test.ts (8 tests) 6ms
+ ✓ src/providers/ProviderManager.gemini-switch.test.ts (3 tests) 4ms
+ ✓ src/config/__tests__/config.previewFeatures.test.ts (1 test) 3ms
+ ↓ src/services/shellExecutionService.windows.test.ts (3 tests | 3 skipped)
+ ✓ src/providers/anthropic/AnthropicProvider.modelParams.test.ts (1 test) 4ms
+ ✓ src/core/subagent.test.ts (41 tests) 56469ms
+   ✓ subagent.ts > SubAgentScope > Stateless compliance (STATELESS7) > should not read provider manager directly from Config  726ms
+   ✓ subagent.ts > SubAgentScope > create (Tool Validation) > should create a SubAgentScope successfully with minimal config  594ms
+   ✓ subagent.ts > SubAgentScope > create (Tool Validation) > does not preflight tools even when they request confirmation  608ms
+   ✓ subagent.ts > SubAgentScope > create (Tool Validation) > avoids eagerly building tools when confirmation is not required  734ms
+   ✓ subagent.ts > SubAgentScope > create (Tool Validation) > should skip interactivity check and warn for tools with required parameters  764ms
+   ✓ subagent.ts > SubAgentScope > stateless runtime enforcement > does not access foreground Config tool registry when runtime bundle provided  871ms
+   ✓ subagent.ts > SubAgentScope > stateless runtime enforcement > builds tool declarations from runtime tool view metadata  809ms
+   ✓ subagent.ts > SubAgentScope > stateless runtime enforcement > prefers injected environment context loader over foreground Config  715ms
+   ✓ subagent.ts > SubAgentScope > stateless runtime enforcement > propagates tool whitelist into tool executor ephemerals  731ms
+   ✓ subagent.ts > SubAgentScope > stateless runtime enforcement > never passes foreground Config into executeToolCall  910ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Initialization and Prompting > should correctly template the system prompt and initialize GeminiChat  833ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Initialization and Prompting > should include output instructions in the system prompt when outputs are defined  817ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Initialization and Prompting > should use initialMessages instead of systemPrompt if provided  1508ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Initialization and Prompting > should throw an error if template variables are missing  1526ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Initialization and Prompting > should throw an error if sessionId template variable is missing  1054ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Initialization and Prompting > should validate that systemPrompt and initialMessages are mutually exclusive  1231ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Initialization and Prompting > should pass interactionMode subagent when building system prompt  1622ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Execution and Tool Use > should terminate with GOAL if no outputs are expected and model stops  913ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Execution and Tool Use > prompts the model to finish outstanding todos before completing  974ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Execution and Tool Use > should handle self_emitvalue and terminate with GOAL when outputs are met  1888ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Execution and Tool Use > should execute external tools and provide the response to the model  1906ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Execution and Tool Use > should provide specific tool error responses to the model  2076ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Execution and Tool Use > should filter functionCall from error responseParts in non-interactive flow (Anthropic boundary)  1694ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Execution and Tool Use > fails fast when a tool is disabled in the current profile  1815ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Execution and Tool Use > should nudge the model if it stops before emitting all required variables  1978ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Termination and Recovery > should terminate with MAX_TURNS if the limit is reached  2221ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Termination and Recovery > should terminate with TIMEOUT if the time limit is reached during an LLM call  2127ms
+   ✓ subagent.ts > SubAgentScope > runNonInteractive - Termination and Recovery > should terminate with ERROR if the model call throws  1874ms
+   ✓ subagent.ts > SubAgentScope > dispose > should abort active operations when dispose is called  2417ms
+   ✓ subagent.ts > SubAgentScope > dispose > should clean up parent abort signal listener when dispose is called  2586ms
+   ✓ subagent.ts > SubAgentScope > dispose > should be safe to call dispose multiple times  2084ms
+   ✓ subagent.ts > SubAgentScope > dispose > should nullify active abort controller reference  2707ms
+   ✓ subagent.ts > SubAgentScope > buildPartsFromCompletedCalls output deduplication > should not call onMessage for tools with canUpdateOutput=true (fixes #898)  2338ms
+   ✓ subagent.ts > SubAgentScope > buildPartsFromCompletedCalls output deduplication > should call onMessage for tools with canUpdateOutput=false  1767ms
+   ✓ subagent.ts > SubAgentScope > buildPartsFromCompletedCalls output deduplication > should call onMessage for error calls even if tool had canUpdateOutput=true  1434ms
+   ✓ subagent.ts > SubAgentScope > buildPartsFromCompletedCalls output deduplication > should produce functionResponse-only parts for error tool calls (Anthropic boundary)  1443ms
+   ✓ subagent.ts > SubAgentScope > buildPartsFromCompletedCalls output deduplication > should produce valid paired parts for mixed success+error calls (Anthropic boundary)  1378ms
+   ✓ subagent.ts > SubAgentScope > buildPartsFromCompletedCalls output deduplication > should handle calls where tool is undefined gracefully  1457ms
+   ✓ subagent.ts > SubAgentScope > Hook delegation to parent config > should trigger BeforeTool hook when subagent executes a tool  1337ms
+
+ Test Files  1 failed | 460 passed | 6 skipped (467)
+      Tests  3 failed | 7693 passed | 95 skipped (7791)
+   Start at  13:43:20
+   Duration  67.03s (transform 10.75s, setup 22.58s, collect 322.78s, tests 258.45s, environment 135ms, prepare 54.70s)
+
+JUNIT report written to /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/core/junit.xml
+
+> @vybestack/llxprt-code@0.9.0 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt/branch-1/llxprt-code/packages/cli
+      Coverage enabled with v8
+
+ ✓ src/integration-tests/test-utils.test.ts (15 tests | 1 skipped) 826ms
+   ✓ Test Utilities > waitForFile > should timeout if file is not created  507ms
+ ✓ src/auth/anthropic-oauth-provider.test.ts (10 tests) 639ms
+ ✓ src/auth/__tests__/codex-oauth-provider.test.ts (16 tests) 1111ms
+ ✓ src/auth/oauth-manager.refresh-race.spec.ts (8 tests) 1176ms
+   ✓ OAuthManager - Token Refresh Race Condition (Issue #1159) > Reactive refresh path (getOAuthToken) > should check disk for updated token before acquiring lock  359ms
+   ✓ OAuthManager - Token Refresh Race Condition (Issue #1159) > Reactive refresh path (getOAuthToken) > should prevent concurrent refreshes when multiple requests race  437ms
+ ✓ src/ui/hooks/useAtCompletion.test.ts (14 tests) 1184ms
+ ✓ src/ui/hooks/useShellPathCompletion.test.ts (15 tests) 2359ms
+ ✓ test/ui/commands/authCommand-logout.test.ts (21 tests) 2601ms
+   ✓ AuthCommand - Logout Property-Based Tests > should parse commands correctly with random whitespace (with seed=1352482503)  593ms
+   ✓ AuthCommand - Logout Property-Based Tests > should handle concurrent logout commands safely (with seed=2132905429)  1364ms
+   ✓ AuthCommand - Logout Property-Based Tests > should always include provider name in response messages (with seed=-253747563)  453ms
+ ✓ src/ui/hooks/useSlashCompletion.test.ts (49 tests) 3413ms
+ ✓ src/config/config.test.ts (171 tests | 16 skipped) 2985ms
+ ✓ src/services/BuiltinCommandLoader.test.ts (12 tests) 3624ms
+   ✓ BuiltinCommandLoader profile > should not include uiprofile command when isDevelopment is false  1852ms
+   ✓ BuiltinCommandLoader profile > should include uiprofile command when isDevelopment is true  1763ms
+ ✓ src/ui/commands/ideCommand.test.ts (11 tests) 5025ms
+   ✓ ideCommand > install subcommand > should install the extension  5014ms
+ ✓ src/providers/providerManagerInstance.oauthRegistration.test.ts (3 tests) 5069ms
+   ✓ Anthropic OAuth registration with environment key > registers Anthropic OAuth provider even when ANTHROPIC_API_KEY is set  2200ms
+   ✓ Anthropic OAuth registration with environment key > ignores API keys when authOnly is enabled  1330ms
+   ✓ Anthropic OAuth registration with environment key > passes the shared OAuth manager into OpenAIVercelProvider  1537ms
+ ✓ src/config/config.kimiModelBootstrap.test.ts (1 test) 4187ms
+   ✓ loadCliConfig provider alias model bootstrap > uses kimi alias defaultModel when --provider kimi is set and no --model is provided  4186ms
+ ✓ src/utils/sandbox-ssh.test.ts (22 tests) 6153ms
+   ✓ setupSshAgentPodmanMacOS > spawns SSH tunnel with -R TCP reverse forwarding (R7.1)  512ms
+   ✓ setupSshAgentPodmanMacOS > adds --network host and SSH_AUTH_SOCK env on success (R7.5)  501ms
+   ✓ setupSshAgentPodmanMacOS > returns entrypointPrefix with socat relay command (R7.5)  502ms
+   ✓ setupSshAgentPodmanMacOS > returns cleanup function that kills tunnel (R7.9)  501ms
+   ✓ setupSshAgentPodmanMacOS > cleanup is idempotent (R7.10)  500ms
+   ✓ setupSshAgentPodmanMacOS > warns and skips when --network already set (conflict guard)  504ms
+   ✓ setupSshAgentPodmanMacOS > throws FatalSandboxError when tunnel fails to start (R7.7)  503ms
+   ✓ setupSshAgentPodmanMacOS > throws when poll timeout expires and TCP port never ready (R7.4)  1308ms
+   ✓ setupSshAgentPodmanMacOS > kills tunnel process when poll timeout expires (R7.8)  1310ms
+ ✓ src/ui/utils/clipboardUtils.test.ts (7 tests | 3 skipped) 278ms
+ ✓ src/gemini.renderOptions.test.tsx (2 tests) 9023ms
+   ✓ startInteractiveUI ink render options > passes computed Ink render options to ink.render()  9020ms
+ ✓ src/ui/hooks/useShellHistory.test.ts (7 tests) 559ms
+ ✓ src/auth/codex-oauth-provider.spec.ts (8 tests) 435ms
+ ✓ src/ui/components/InputPrompt.paste.spec.tsx (6 tests) 839ms
+   ✓ InputPrompt paste functionality > should handle multi-line paste as a single message  303ms
+ ✓ src/ui/commands/test/subagentCommand.test.ts (25 tests) 1952ms
+ ✓ src/ui/hooks/atCommandProcessor.test.ts (40 tests) 1234ms
+ ✓ src/auth/__tests__/anthropic-oauth-provider.fallback.spec.ts (8 tests) 445ms
+ ✓ src/ui/hooks/useGeminiStream.thinking.test.tsx (13 tests) 469ms
+ ✓ src/commands/extensions/install.test.ts (8 tests) 377ms
+   ✓ handleInstall > should install an extension from a 'local path'  357ms
+ ✓ src/config/extension.test.ts (55 tests) 822ms
+ ✓ src/ui/hooks/useCommandCompletion.autoexecute.test.tsx (25 tests) 497ms
+   ✓ autoExecute classifications — subcommands > /memory show, list, refresh should have autoExecute: true  467ms
+ ✓ src/ui/components/messages/ToolResultDisplay.test.tsx (11 tests) 13103ms
+   ✓ <ToolResultDisplay /> > truncates extremely long strings to MAXIMUM_RESULT_DISPLAY_CHARACTERS  12460ms
+ ✓ src/ui/hooks/vim.test.ts (87 tests) 1002ms
+ ✓ src/ui/hooks/usePrivacySettings.test.ts (4 tests) 201ms
+ ✓ src/ui/commands/setupGithubCommand.test.ts (10 tests) 471ms
+ ✓ src/ui/utils/commandUtils.test.ts (28 tests) 211ms
+ ✓ src/runtime/__tests__/runtimeIsolation.test.ts (9 tests) 423ms
+   ✓ CLI runtime isolation > scopes command mutations to active runtime contexts @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003 @pseudocode cli-runtime-isolation.md lines 4-10  309ms
+ ✓ src/ui/commands/keyCommand.subcommands.test.ts (38 tests) 273ms
+ ✓ src/storage/ConversationStorage.test.ts (11 tests) 88ms
+ ✓ src/ui/components/messages/ToolShared.test.tsx (10 tests) 398ms
+ ✓ src/ui/hooks/useExtensionUpdates.test.ts (3 tests) 144ms
+ ✓ src/ui/components/messages/ProfileChangeMessage.test.tsx (4 tests) 273ms
+ ✓ src/services/FileCommandLoader.test.ts (36 tests) 552ms
+ ✓ src/ui/commands/schema/argumentResolver.test.ts (42 tests) 282ms
+ ✓ src/auth/__tests__/codex-oauth-provider.fallback.spec.ts (2 tests) 150ms
+ ✓ src/auth/anthropic-oauth-provider.local-flow.spec.ts (2 tests) 197ms
+ ✓ src/ui/hooks/useGeminiStream.dedup.test.tsx (3 tests) 242ms
+ ✓ src/runtime/__tests__/authKeyName.test.ts (24 tests) 174ms
+ ✓ src/ui/commands/toolkeyfileCommand.test.ts (16 tests) 164ms
+ ✓ src/ui/hooks/useToolScheduler.test.ts (21 tests | 4 skipped) 178ms
+ ✓ src/config/extensions/settingsIntegration.test.ts (14 tests) 136ms
+ ✓ src/ui/commands/restoreCommand.test.ts (13 tests) 297ms
+ ✓ src/config/extensions/github.test.ts (34 tests) 144ms
+ ✓ src/auth/oauth-manager.concurrency.spec.ts (8 tests) 144ms
+ ✓ src/auth/__tests__/multi-bucket-auth.spec.ts (37 tests) 75ms
+ ✓ src/ui/contexts/KeypressContext.test.tsx (76 tests) 199ms
+ ✓ src/gemini.test.tsx (16 tests) 89ms
+ ✓ src/ui/commands/test/setCommand.phase09.test.ts (15 tests) 87ms
+ ✓ src/ui/hooks/useLoadingIndicator.test.ts (6 tests) 171ms
+ ✓ src/config/extensions/update.test.ts (8 tests) 121ms
+ ✓ src/utils/userStartupWarnings.test.ts (5 tests) 91ms
+ ✓ src/ui/commands/__tests__/diagnosticsCommand.bucket.spec.ts (24 tests) 139ms
+ ✓ src/ui/utils/terminalContract.test.ts (10 tests) 64ms
+ ✓ src/providers/providerAliases.modelDefaults.test.ts (23 tests) 110ms
+ ✓ src/config/config.loadMemory.test.ts (1 test) 232ms
+ ✓ src/ui/commands/mcpCommand.test.ts (35 tests) 176ms
+ ✓ src/ui/utils/textUtils.stringWidthCache.test.ts (2 tests) 67ms
+ ✓ src/commands/mcp/add.test.ts (17 tests) 196ms
+ ✓ src/ui/hooks/useSelectionList.test.ts (46 tests) 116ms
+ ✓ src/ui/contexts/ScrollProvider.test.tsx (9 tests) 79ms
+ ✓ src/config/extensions/settingsStorage.test.ts (21 tests) 42ms
+ ✓ src/ui/hooks/useConsoleMessages.test.tsx (7 tests) 73ms
+ ✓ src/runtime/agentRuntimeAdapter.spec.ts (49 tests) 113ms
+ ✓ src/ui/commands/initCommand.test.ts (3 tests) 105ms
+ ✓ src/ui/commands/helpCommand.test.ts (2 tests) 5ms
+ ✓ src/ui/hooks/shellCommandProcessor.test.ts (15 tests) 94ms
+ ✓ src/auth/oauth-manager.token-reuse.spec.ts (10 tests) 42ms
+ ✓ src/auth/oauth-manager.logout.spec.ts (3 tests) 68ms
+ ✓ src/ui/hooks/useCommandCompletion.test.ts (21 tests) 97ms
+ ✓ src/config/extensions/extensionEnablement.test.ts (48 tests) 42ms
+ ✓ src/auth/BucketFailoverHandlerImpl.spec.ts (6 tests) 7ms
+ ✓ src/ui/hooks/useGeminiStream.subagent.spec.tsx (1 test) 110ms

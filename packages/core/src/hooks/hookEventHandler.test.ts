@@ -139,14 +139,17 @@ describe('HookEventHandler', () => {
       );
     });
 
-    it('should handle errors gracefully and return empty success', async () => {
+    it('should handle errors gracefully and return failure envelope', async () => {
       // @requirement:HOOK-147 - Wraps in try/catch, never propagates exceptions
+      // @requirement:DELTA-HFAIL-001 - Errors surface via failure envelope, not masked
       vi.mocked(mockPlanner.createExecutionPlan).mockImplementation(() => {
         throw new Error('Planner error');
       });
 
       const result = await eventHandler.fireBeforeModelEvent({ messages: [] });
-      expect(result).toEqual(EMPTY_SUCCESS_RESULT);
+      expect(result.success).toBe(false);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].message).toBe('Planner error');
     });
   });
 
@@ -168,8 +171,9 @@ describe('HookEventHandler', () => {
       );
     });
 
-    it('should handle errors gracefully', async () => {
+    it('should handle errors gracefully and return failure envelope', async () => {
       // @requirement:HOOK-147
+      // @requirement:DELTA-HFAIL-001 - Errors surface via failure envelope, not masked
       vi.mocked(mockPlanner.createExecutionPlan).mockImplementation(() => {
         throw new Error('Unexpected error');
       });
@@ -178,7 +182,9 @@ describe('HookEventHandler', () => {
         { messages: [] },
         { text: 'Response' },
       );
-      expect(result).toEqual(EMPTY_SUCCESS_RESULT);
+      expect(result.success).toBe(false);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].message).toBe('Unexpected error');
     });
   });
 
@@ -199,8 +205,9 @@ describe('HookEventHandler', () => {
       );
     });
 
-    it('should handle errors gracefully', async () => {
+    it('should handle errors gracefully and return failure envelope', async () => {
       // @requirement:HOOK-147
+      // @requirement:DELTA-HFAIL-001 - Errors surface via failure envelope, not masked
       vi.mocked(mockPlanner.createExecutionPlan).mockImplementation(() => {
         throw new Error('Tool selection error');
       });
@@ -208,7 +215,9 @@ describe('HookEventHandler', () => {
       const result = await eventHandler.fireBeforeToolSelectionEvent({
         messages: [],
       });
-      expect(result).toEqual(EMPTY_SUCCESS_RESULT);
+      expect(result.success).toBe(false);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].message).toBe('Tool selection error');
     });
   });
 

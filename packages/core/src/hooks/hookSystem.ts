@@ -11,13 +11,14 @@
  */
 
 import type { Config } from '../config/config.js';
-import { HookRegistry } from './hookRegistry.js';
+import { HookRegistry, type HookRegistryEntry } from './hookRegistry.js';
 import { HookPlanner } from './hookPlanner.js';
 import { HookRunner } from './hookRunner.js';
 import { HookAggregator } from './hookAggregator.js';
 import { HookEventHandler } from './hookEventHandler.js';
 import { HookSystemNotInitializedError } from './errors.js';
 import { DebugLogger } from '../debug/index.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
 
@@ -54,8 +55,30 @@ export class HookSystem {
   private eventHandler: HookEventHandler | null = null;
   private initialized = false;
 
-  constructor(config: Config) {
+  /**
+   * @plan PLAN-20250218-HOOKSYSTEM.P03
+   * @requirement DELTA-HSYS-001
+   */
+  private readonly messageBus: MessageBus | undefined;
+
+  /**
+   * @plan PLAN-20250218-HOOKSYSTEM.P03
+   * @requirement DELTA-HSYS-001
+   */
+  private readonly injectedDebugLogger: DebugLogger | undefined;
+
+  /**
+   * @plan PLAN-20250218-HOOKSYSTEM.P03
+   * @requirement DELTA-HSYS-001
+   */
+  constructor(
+    config: Config,
+    messageBus?: MessageBus,
+    injectedDebugLogger?: DebugLogger,
+  ) {
     this.config = config;
+    this.messageBus = messageBus;
+    this.injectedDebugLogger = injectedDebugLogger;
     // Create infrastructure components but don't initialize yet
     // @requirement:HOOK-006 - Own single shared instances
     this.registry = new HookRegistry(config);
@@ -83,13 +106,16 @@ export class HookSystem {
     // Initialize the registry (loads hooks from config)
     await this.registry.initialize();
 
-    // Create the event handler now that registry is ready
+    // Create the event handler now that registry is ready,
+    // forwarding injected dependencies per DELTA-HSYS-001
     this.eventHandler = new HookEventHandler(
       this.config,
       this.registry,
       this.planner,
       this.runner,
       this.aggregator,
+      this.messageBus,
+      this.injectedDebugLogger,
     );
 
     this.initialized = true;
@@ -144,5 +170,43 @@ export class HookSystem {
    */
   isInitialized(): boolean {
     return this.initialized;
+  }
+
+  /**
+   * Enable or disable a specific hook by ID.
+   *
+   * @plan PLAN-20250218-HOOKSYSTEM.P05
+   * @requirement DELTA-HSYS-002
+   * @pseudocode message-bus-integration.md lines 30-36
+   */
+  setHookEnabled(hookId: string, enabled: boolean): void {
+    if (!this.initialized) {
+      return;
+    }
+    this.registry.setHookEnabled(hookId, enabled);
+  }
+
+  /**
+   * Return all registered hook definitions.
+   *
+   * @plan PLAN-20250218-HOOKSYSTEM.P05
+   * @requirement DELTA-HSYS-002
+   * @pseudocode message-bus-integration.md lines 30-36
+   */
+  getAllHooks(): HookRegistryEntry[] {
+    if (!this.initialized) {
+      return [];
+    }
+    return this.registry.getAllHooks();
+  }
+
+  /**
+   * Dispose the HookSystem, releasing any held resources.
+   *
+   * @plan PLAN-20250218-HOOKSYSTEM.P03
+   * @requirement DELTA-HEVT-004
+   */
+  dispose(): void {
+    this.eventHandler?.dispose();
   }
 }
