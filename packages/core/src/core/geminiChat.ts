@@ -2174,15 +2174,6 @@ export class GeminiChat {
       compressionSummary = result.newHistory[0];
 
       this.logger.debug('Compression completed', result.metadata);
-
-      // Sync token count using actual LLM usage data to prevent drift
-      if (result.metadata.usage?.totalTokens) {
-        this.logger.debug(
-          'Syncing token count from compression usage metadata',
-          { actualTokens: result.metadata.usage.totalTokens },
-        );
-        this.historyService.syncTotalTokens(result.metadata.usage.totalTokens);
-      }
     } catch (error) {
       this.logger.error('Compression failed:', error);
       throw error;
