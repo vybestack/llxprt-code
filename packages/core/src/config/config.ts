@@ -354,6 +354,12 @@ export interface BucketFailoverHandler {
    * Check if bucket failover is enabled
    */
   isEnabled(): boolean;
+
+  /**
+   * Reset the session tracking so failover can try buckets again in a new request.
+   * Call this at the start of each new request to prevent infinite cycling.
+   */
+  resetSession?(): void;
 }
 
 export interface ConfigParameters {

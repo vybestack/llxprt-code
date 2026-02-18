@@ -1306,6 +1306,9 @@ export const useGeminiStream = (
         setThought(null); // Reset thought when starting a new prompt
         // @plan:PLAN-20251202-THINKING-UI.P08
         thinkingBlocksRef.current = [];
+        // Reset bucket failover session tracking so this user turn can try all buckets fresh.
+        // This should only happen on new user turns, not on continuations (tool call responses).
+        config.getBucketFailoverHandler?.()?.resetSession?.();
       }
 
       setIsResponding(true);

@@ -851,6 +851,88 @@ describe('RetryOrchestrator', () => {
 
       expect(result).toHaveLength(1);
     });
+
+    it('should call resetSession on successful request completion', async () => {
+      let resetSessionCallCount = 0;
+
+      const provider = createTestProvider({
+        responses: ['success', 'success'],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => false,
+        isEnabled: () => true,
+        resetSession: () => {
+          resetSessionCallCount++;
+        },
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      // Each successful request should call resetSession once
+      await consumeStream(orchestrator.generateChatCompletion(options));
+      await consumeStream(orchestrator.generateChatCompletion(options));
+
+      expect(resetSessionCallCount).toBe(2);
+    });
+
+    it('should NOT call resetSession when request fails after exhausting retries', async () => {
+      let resetSessionCallCount = 0;
+      const rateLimitError = createRateLimitError();
+
+      const provider = createTestProvider({
+        responses: [
+          { error: rateLimitError },
+          { error: rateLimitError },
+          { error: rateLimitError },
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => false, // No more buckets
+        isEnabled: () => true,
+        resetSession: () => {
+          resetSessionCallCount++;
+        },
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 1,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      await expect(
+        consumeStream(orchestrator.generateChatCompletion(options)),
+      ).rejects.toThrow();
+
+      // resetSession should NOT be called since request never succeeded
+      expect(resetSessionCallCount).toBe(0);
+    });
   });
 
   describe('Streaming Support', () => {

@@ -187,4 +187,80 @@ describe('BucketFailoverHandlerImpl', () => {
     // Should remain on the current bucket since all others failed
     expect(handler.getCurrentBucket()).toBe('bucket-b');
   });
+
+  describe('resetSession()', () => {
+    it('clears the tried-buckets tracking so failover can try buckets again', async () => {
+      await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+      await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+
+      oauthManager.setSessionBucket('anthropic', 'bucket-a');
+
+      const handler = new BucketFailoverHandlerImpl(
+        ['bucket-a', 'bucket-b'],
+        'anthropic',
+        oauthManager,
+      );
+
+      // First failover session: succeeds switching to bucket-b
+      const firstResult = await handler.tryFailover();
+      expect(firstResult).toBe(true);
+      expect(handler.getCurrentBucket()).toBe('bucket-b');
+
+      // Second tryFailover without resetSession: all buckets tried, returns false
+      const secondResult = await handler.tryFailover();
+      expect(secondResult).toBe(false);
+
+      // After resetSession, failover can try buckets again
+      handler.resetSession();
+      const thirdResult = await handler.tryFailover();
+      expect(thirdResult).toBe(true);
+      expect(handler.getCurrentBucket()).toBe('bucket-a');
+    });
+
+    it('prevents infinite cycling when all buckets have valid tokens', async () => {
+      await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+      await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+
+      oauthManager.setSessionBucket('anthropic', 'bucket-a');
+
+      const handler = new BucketFailoverHandlerImpl(
+        ['bucket-a', 'bucket-b'],
+        'anthropic',
+        oauthManager,
+      );
+
+      // First failover: switches to bucket-b (valid token)
+      const first = await handler.tryFailover();
+      expect(first).toBe(true);
+      expect(handler.getCurrentBucket()).toBe('bucket-b');
+
+      // Second failover without reset: bucket-a already tried this session, returns false
+      const second = await handler.tryFailover();
+      expect(second).toBe(false);
+      // Should remain on bucket-b, not cycle back to bucket-a
+      expect(handler.getCurrentBucket()).toBe('bucket-b');
+    });
+
+    it('resetSession() allows fresh failover after session ends', async () => {
+      await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+      await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+
+      oauthManager.setSessionBucket('anthropic', 'bucket-a');
+
+      const handler = new BucketFailoverHandlerImpl(
+        ['bucket-a', 'bucket-b'],
+        'anthropic',
+        oauthManager,
+      );
+
+      await handler.tryFailover(); // switches to bucket-b
+      await handler.tryFailover(); // returns false (all buckets tried)
+
+      handler.resetSession();
+
+      // After reset, a new request starts fresh - bucket-a is no longer in tried set
+      const result = await handler.tryFailover();
+      expect(result).toBe(true);
+    });
+  });
 });

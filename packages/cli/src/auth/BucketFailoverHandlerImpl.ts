@@ -31,12 +31,14 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private currentBucketIndex: number;
   private readonly provider: string;
   private readonly oauthManager: OAuthManager;
+  private triedBucketsThisSession: Set<string>;
 
   constructor(buckets: string[], provider: string, oauthManager: OAuthManager) {
     this.buckets = buckets;
     this.currentBucketIndex = 0;
     this.provider = provider;
     this.oauthManager = oauthManager;
+    this.triedBucketsThisSession = new Set<string>();
 
     // Align the handler state with any existing session override.
     const sessionBucket = this.oauthManager.getSessionBucket(provider);
@@ -88,6 +90,16 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     for (let i = 1; i < this.buckets.length; i++) {
       const nextIndex = (this.currentBucketIndex + i) % this.buckets.length;
       const nextBucket = this.buckets[nextIndex];
+
+      // Skip buckets already tried in this failover session to prevent infinite cycling
+      if (this.triedBucketsThisSession.has(nextBucket)) {
+        logger.debug('Skipping already-tried bucket in this session', {
+          provider: this.provider,
+          bucket: nextBucket,
+        });
+        continue;
+      }
+
       logger.debug('Attempting bucket failover', {
         provider: this.provider,
         fromBucket: currentBucket,
@@ -108,11 +120,17 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
           );
         }
 
+        // Mark current bucket as tried before switching
+        if (currentBucket) {
+          this.triedBucketsThisSession.add(currentBucket);
+        }
+        this.triedBucketsThisSession.add(nextBucket);
         this.currentBucketIndex = nextIndex;
         this.oauthManager.setSessionBucket(this.provider, nextBucket);
 
-        console.warn(
-          `Bucket failover: switching from ${currentBucket} to ${nextBucket}`,
+        logger.warn(
+          () =>
+            `Bucket failover: switching from ${currentBucket} to ${nextBucket}`,
         );
         logger.debug('Bucket failover successful', {
           provider: this.provider,
@@ -122,6 +140,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
 
         return true;
       } catch (error) {
+        this.triedBucketsThisSession.add(nextBucket);
         logger.debug('Bucket failover failed - could not refresh token', {
           provider: this.provider,
           bucket: nextBucket,
@@ -131,8 +150,9 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       }
     }
 
-    console.error(
-      `Bucket failover: all buckets exhausted for provider ${this.provider}`,
+    logger.error(
+      () =>
+        `Bucket failover: all buckets exhausted for provider ${this.provider}`,
     );
     logger.debug('No more buckets available for failover', {
       provider: this.provider,
@@ -151,10 +171,22 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   }
 
   /**
+   * Reset the session tracking so failover can try buckets again in a new request.
+   * Call this at the start of each new request to prevent infinite cycling.
+   */
+  resetSession(): void {
+    this.triedBucketsThisSession.clear();
+    logger.debug('Bucket failover session reset', {
+      provider: this.provider,
+    });
+  }
+
+  /**
    * Reset to the first bucket (useful for new sessions)
    */
   reset(): void {
     this.currentBucketIndex = 0;
+    this.triedBucketsThisSession.clear();
     logger.debug('Bucket failover handler reset', {
       provider: this.provider,
     });

@@ -297,9 +297,12 @@ export class RetryOrchestrator implements IProvider {
           }
         }
 
-        // Success - reset error counters and return
+        // Success - reset error counters and bucket failover tracking
         consecutive429s = 0;
         consecutiveAuthErrors = 0;
+        // Reset bucket failover session on success so future failures in this turn
+        // can try all buckets again (rate limits may have cleared)
+        bucketFailoverHandler?.resetSession?.();
         return;
       } catch (error) {
         // Check for abort
