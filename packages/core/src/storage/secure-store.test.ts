@@ -1434,8 +1434,8 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
    * - Windows: %LOCALAPPDATA%\llxprt-code\secure-store\{service}
    */
   it('default fallbackDir uses platform-standard paths, not ~/.llxprt', () => {
-    // Access the private fallbackDir via a test that writes and checks the path
-    // We create a store without fallbackDir option and verify the path structure
+    // Access the private fallbackDir via reflection to verify the path structure
+    // without writing any files to disk
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null, // Force fallback mode
       fallbackPolicy: 'allow',

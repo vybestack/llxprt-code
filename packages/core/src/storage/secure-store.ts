@@ -21,8 +21,8 @@ import * as os from 'node:os';
 import envPaths from 'env-paths';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
-// Platform-standard paths for llxprt-code app data
-const platformPaths = envPaths('llxprt-code');
+// Platform-standard paths for llxprt-code app data (no suffix to match documented paths)
+const platformPaths = envPaths('llxprt-code', { suffix: '' });
 
 // ─── Error Type ──────────────────────────────────────────────────────────────
 
