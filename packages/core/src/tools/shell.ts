@@ -295,8 +295,9 @@ class ShellToolInvocation extends BaseToolInvocation<
             // Instrument chained commands with a lightweight marker to indicate which subcommand is starting.
             // This helps the UI display the currently running segment without guessing.
             // Uses the parser-backed splitCommands utility for robust handling of quotes,
-            // escaped delimiters, and other shell operators (||, ;, |).
-            const parts = splitCommands(command);
+            // escaped delimiters, and other shell operators (||, ;).
+            // Pipelines (|) are NOT split - they are single logical commands with one marker.
+            const parts = splitCommands(command, { splitOnPipes: false });
             if (parts.length > 1) {
               command = parts
                 .map((seg) => {

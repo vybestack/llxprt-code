@@ -337,10 +337,28 @@ export function hasCommandSubstitution(tree: Tree): boolean {
 }
 
 /**
- * Split a command string into individual commands respecting shell syntax.
- * Handles &&, ||, ;, |, and properly ignores these inside quotes.
+ * Options for splitCommandsWithTree function.
  */
-export function splitCommandsWithTree(tree: Tree): string[] {
+export interface SplitCommandsTreeOptions {
+  /**
+   * Whether to split on pipe operators (|).
+   * Default: true (split pipes for security checks).
+   * Set to false for command instrumentation where pipelines should stay intact.
+   */
+  splitOnPipes?: boolean;
+}
+
+/**
+ * Split a command string into individual commands respecting shell syntax.
+ * Handles &&, ||, ;. Pipe splitting is controlled by options.
+ * @param tree The parsed tree-sitter tree
+ * @param options Optional settings for split behavior
+ */
+export function splitCommandsWithTree(
+  tree: Tree,
+  options?: SplitCommandsTreeOptions,
+): string[] {
+  const splitOnPipes = options?.splitOnPipes ?? true;
   const commands: string[] = [];
 
   function extractCommands(node: Node): void {
@@ -350,8 +368,18 @@ export function splitCommandsWithTree(tree: Tree): string[] {
         commands.push(node.text);
         break;
       case 'pipeline':
+        if (splitOnPipes) {
+          // Recurse into pipeline children to get individual commands
+          for (const child of node.children) {
+            if (child) extractCommands(child);
+          }
+        } else {
+          // Treat pipeline as atomic for instrumentation
+          commands.push(node.text);
+        }
+        break;
       case 'list':
-        // Recurse into children
+        // Lists are command chains (&&, ||, ;) - recurse into children
         for (const child of node.children) {
           if (child) extractCommands(child);
         }

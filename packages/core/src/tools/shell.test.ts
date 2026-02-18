@@ -381,12 +381,10 @@ describe('ShellTool', () => {
         expect(calledCommand).toContain('echo `date`');
       });
 
-      it('should handle pipe operators: each segment of a piped command is individually marked', async () => {
-        // With the regex fallback (used in tests without tree-sitter), | is treated
-        // as a command separator, so 'ls | grep foo && echo done' splits into
-        // 'ls', 'grep foo', and 'echo done' as three separate segments.
-        // Each segment gets its own printf marker. The key behavior is that the
-        // markers do not misinterpret the segment content.
+      it('should handle pipe operators: pipelines are kept as single logical units', async () => {
+        // Pipelines are NOT split - they are single logical commands.
+        // 'ls | grep foo && echo done' splits on && into two segments:
+        // 'ls | grep foo' and 'echo done'. The pipe is part of the first segment.
         const invocation = shellTool.build({
           command: 'ls | grep foo && echo done',
         });
@@ -395,13 +393,20 @@ describe('ShellTool', () => {
         await promise;
 
         const [[calledCommand]] = mockShellExecutionService.mock.calls;
-        // Each segment gets a printf marker
-        expect(calledCommand).toContain("printf '%s\\n' '__LLXPRT_CMD__:ls'");
+        // Pipeline gets ONE marker (not split on |)
         expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:grep foo'",
+          "printf '%s\\n' '__LLXPRT_CMD__:ls | grep foo'",
         );
+        // && segment gets its own marker
         expect(calledCommand).toContain(
           "printf '%s\\n' '__LLXPRT_CMD__:echo done'",
+        );
+        // Should NOT have separate markers for ls and grep foo
+        expect(calledCommand).not.toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:ls'",
+        );
+        expect(calledCommand).not.toContain(
+          "printf '%s\\n' '__LLXPRT_CMD__:grep foo'",
         );
       });
 
@@ -422,6 +427,20 @@ describe('ShellTool', () => {
         );
         expect(calledCommand).toContain('cmd1 2>&1');
         expect(calledCommand).toContain('cmd2 2>&1');
+      });
+
+      it('should NOT split simple pipe commands - single pipeline has no markers', async () => {
+        const invocation = shellTool.build({
+          command: 'cat file | grep foo',
+        });
+        const promise = invocation.execute(mockAbortSignal);
+        resolveChainExecution();
+        await promise;
+
+        const [[calledCommand]] = mockShellExecutionService.mock.calls;
+        // Single pipeline (no && or ;) has no markers - it's just one command
+        expect(calledCommand).not.toContain("printf '%s\\n' '__LLXPRT_CMD__:");
+        expect(calledCommand).toContain('cat file | grep foo');
       });
     });
 
