@@ -279,8 +279,7 @@ export class Turn {
       // Fallback: check user tier for code assist server
       const server = getCodeAssistServer(config as never);
       return (server && server.userTier !== UserTierId.FREE) ?? false;
-    } catch (error) {
-      this.logger.debug('Failed to determine citation settings:', error);
+    } catch {
       return false;
     }
   }
