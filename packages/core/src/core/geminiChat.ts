@@ -2310,9 +2310,9 @@ export class GeminiChat {
       // Use the strategy factory so tests can intercept via getCompressionStrategy mock
       const fallback = getCompressionStrategy('top-down-truncation');
       const result = await fallback.compress(context);
-      // Fallback succeeded — record as a partial failure for cooldown purposes
-      this.compressionFailureCount++;
-      this.lastCompressionFailureTime = Date.now();
+      // Fallback succeeded — compression produced a valid result, reset failure counters
+      this.compressionFailureCount = 0;
+      this.lastCompressionFailureTime = null;
       this.logger.debug(
         'Compression completed with fallback (TopDownTruncation)',
       );
