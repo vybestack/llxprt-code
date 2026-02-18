@@ -853,10 +853,10 @@ describe('RetryOrchestrator', () => {
     });
 
     it('should call resetSession at the start of each request', async () => {
-      let resetSessionCalled = false;
+      let resetSessionCallCount = 0;
 
       const provider = createTestProvider({
-        responses: ['success'],
+        responses: ['success', 'success'],
       });
 
       const failoverHandler = {
@@ -865,7 +865,7 @@ describe('RetryOrchestrator', () => {
         tryFailover: async () => false,
         isEnabled: () => true,
         resetSession: () => {
-          resetSessionCalled = true;
+          resetSessionCallCount++;
         },
       };
 
@@ -884,8 +884,9 @@ describe('RetryOrchestrator', () => {
       };
 
       await consumeStream(orchestrator.generateChatCompletion(options));
+      await consumeStream(orchestrator.generateChatCompletion(options));
 
-      expect(resetSessionCalled).toBe(true);
+      expect(resetSessionCallCount).toBe(2);
     });
   });
 
