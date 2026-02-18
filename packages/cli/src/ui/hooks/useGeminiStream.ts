@@ -46,6 +46,8 @@ import {
   HistoryItem,
   HistoryItemWithoutId,
   HistoryItemToolGroup,
+  HistoryItemGemini,
+  HistoryItemGeminiContent,
   MessageType,
   SlashCommandProcessorResult,
   ToolCallStatus,
@@ -769,14 +771,21 @@ export const useGeminiStream = (
       if (splitPoint === sanitizedCombined.length) {
         // @plan:PLAN-20251202-THINKING-UI.P08
         // Preserve thinkingBlocks and profileName during streaming updates
-        setPendingHistoryItem((item) => ({
-          type: item?.type as 'gemini' | 'gemini_content',
-          text: sanitizedCombined,
-          ...(liveProfileName != null ? { profileName: liveProfileName } : {}),
-          ...(thinkingBlocksRef.current.length > 0
-            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
-            : {}),
-        }));
+        setPendingHistoryItem((item) => {
+          const existingProfileName = (
+            item as HistoryItemGemini | HistoryItemGeminiContent | undefined
+          )?.profileName;
+          return {
+            type: item?.type as 'gemini' | 'gemini_content',
+            text: sanitizedCombined,
+            ...((liveProfileName ?? existingProfileName) != null
+              ? { profileName: (liveProfileName ?? existingProfileName)! }
+              : {}),
+            ...(thinkingBlocksRef.current.length > 0
+              ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+              : {}),
+          };
+        });
         return sanitizedCombined;
       }
 
@@ -1083,16 +1092,28 @@ export const useGeminiStream = (
 
                 // Update pending history item with thinking blocks so they
                 // are visible in pendingHistoryItems during streaming
-                // Also preserve profileName during this update (use live value)
+                // Also preserve profileName during this update (use live value or existing)
                 const liveProfileName = getCurrentProfileName(config);
-                setPendingHistoryItem((item) => ({
-                  type: (item?.type as 'gemini' | 'gemini_content') || 'gemini',
-                  text: item?.text || '',
-                  ...(liveProfileName != null
-                    ? { profileName: liveProfileName }
-                    : {}),
-                  thinkingBlocks: [...thinkingBlocksRef.current],
-                }));
+                setPendingHistoryItem((item) => {
+                  const existingProfileName = (
+                    item as
+                      | HistoryItemGemini
+                      | HistoryItemGeminiContent
+                      | undefined
+                  )?.profileName;
+                  return {
+                    type:
+                      (item?.type as 'gemini' | 'gemini_content') || 'gemini',
+                    text: item?.text || '',
+                    ...((liveProfileName ?? existingProfileName) != null
+                      ? {
+                          profileName: (liveProfileName ??
+                            existingProfileName)!,
+                        }
+                      : {}),
+                    thinkingBlocks: [...thinkingBlocksRef.current],
+                  };
+                });
               }
             }
             break;
