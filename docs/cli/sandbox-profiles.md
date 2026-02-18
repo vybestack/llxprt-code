@@ -6,7 +6,7 @@ Sandbox profiles configure the security boundaries and resource limits for conta
 
 Profiles are stored as JSON files:
 
-```
+```text
 ~/.llxprt/sandboxes/<profile-name>.json
 ```
 
@@ -381,8 +381,8 @@ You can override the profile's engine via command line:
 # Profile says "auto" but force Podman
 llxprt --sandbox-engine podman --sandbox-profile-load dev
 
-# Profile says "docker" but force Podman
-llxprt --sandbox-engine podman --sandbox-profile-load dev
+# Profile says "podman" but force Docker
+llxprt --sandbox-engine docker --sandbox-profile-load dev
 ```
 
 ## Platform-Specific Notes
@@ -452,7 +452,7 @@ ls ~/.llxprt/sandboxes/
 
 Or from within llxprt:
 
-```
+```text
 > /help sandbox
 ```
 

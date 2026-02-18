@@ -43,7 +43,7 @@ llxprt --provider openai --keyfile ~/.yourkeyfile
 
 **Interactive Mode:**
 
-```
+```text
 /key        # Enter key directly
 /keyfile    # Load key from file
 ```
@@ -254,8 +254,8 @@ llxprt --key $YOUR_API_KEY --sandbox
 **Diagnosis:**
 
 ```bash
-# Check if the env var is set inside sandbox
-llxprt --sandbox "run shell command: echo $LLXPRT_CREDENTIAL_SOCKET"
+# Check if the env var is set inside sandbox (use single quotes)
+llxprt --sandbox 'run shell command: echo $LLXPRT_CREDENTIAL_SOCKET'
 ```
 
 If empty, the proxy did not start correctly on the host.

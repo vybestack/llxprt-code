@@ -219,21 +219,24 @@ If this shows a path like `/tmp/llxprt-credential-xxx.sock`, the proxy is active
 
 ### What You Cannot Do in Sandbox
 
-Some operations are blocked for security:
+Some operations are blocked for security. You cannot save keys from inside the sandbox. Keys must be saved on the host first.
 
-```
-> /key save mykey sk-xxx
-```
-
-This will fail. Keys must be saved on the host first:
+To save a key securely on the host, start an interactive session:
 
 ```bash
-# Exit the sandbox and run on host
-llxprt "/key save mykey sk-xxx"
-
-# Now use the key in sandbox
-llxprt --sandbox "/key load mykey"
+# Start llxprt on the host (not sandboxed)
+llxprt
 ```
+
+Then use the interactive command:
+
+```text
+> /key save mykey
+```
+
+The command will prompt you to paste the key value securely without it appearing in your shell history.
+
+Once saved on the host, the key is available inside the sandbox through the credential proxy.
 
 ## Step 7: Creating a Custom Profile
 

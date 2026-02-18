@@ -59,7 +59,7 @@ When running in a container, llxprt-code uses a **credential proxy** to protect 
 
 ### How the Credential Proxy Works
 
-```
+```text
 Host System                          Container
 -------------                        ----------
 OS Keyring                           No credentials stored
@@ -415,8 +415,8 @@ llxprt --sandbox "run shell command: env | grep -E 'SANDBOX|LLXPRT'"
 # List mounts
 llxprt --sandbox "run shell command: mount | grep workspace"
 
-# Test credential proxy
-llxprt --sandbox "run shell command: echo $LLXPRT_CREDENTIAL_SOCKET"
+# Test credential proxy (use single quotes so variable expands inside sandbox)
+llxprt --sandbox 'run shell command: echo $LLXPRT_CREDENTIAL_SOCKET'
 ```
 
 ### Container Logs
