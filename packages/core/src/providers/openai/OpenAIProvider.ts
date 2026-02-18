@@ -982,10 +982,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           };
 
           if (includeInContext && thinkingBlocks.length > 0) {
+            // Strict OpenAI-compatible gateways (e.g. Chutes/MiniMax) can reject
+            // assistant+tool_calls payloads that include extra non-standard fields.
+            // However, deepseek-reasoner REQUIRES reasoning_content on all assistant
+            // messages including those with tool_calls, so we detect it as 'deepseek'
+            // format and include reasoning_content.
             const isStrictOpenAI = toolFormat === 'openai';
             if (isStrictOpenAI) {
-              // Strict OpenAI-compatible gateways (e.g. Chutes/MiniMax) can reject
-              // assistant+tool_calls payloads that include extra non-standard fields.
               messages.push(baseMessage);
             } else {
               const messageWithReasoning = baseMessage as unknown as Record<
@@ -2189,43 +2192,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         hasEmittedThinking = true;
       }
 
-      // Emit accumulated reasoning_content as ONE ThinkingBlock (legacy path)
-      // This consolidates token-by-token reasoning from Synthetic API into a single block
-      // Clean Kimi tokens from the accumulated content (not per-chunk) to handle split tokens
+      // Emit accumulated reasoning_content and tool calls as a single combined IContent (legacy path).
+      // DeepSeek-reasoner and similar models require reasoning_content to be in the SAME assistant
+      // message as tool_calls when sent back in history; yielding them as separate IContents causes
+      // the message with tool_calls to have no ThinkingBlock, so buildMessagesWithReasoning cannot
+      // attach reasoning_content — triggering "Missing reasoning_content field" on the next turn.
       // @plan PLAN-20251202-THINKING.P16
-      if (accumulatedReasoningContent.length > 0) {
-        // Extract Kimi tool calls from the complete accumulated reasoning content
+      // @issue #1142
+      {
+        // Extract Kimi tool calls from the complete accumulated reasoning content (handles split tokens)
         const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
-          this.extractKimiToolCallsFromText(accumulatedReasoningContent);
+          accumulatedReasoningContent.length > 0
+            ? this.extractKimiToolCallsFromText(accumulatedReasoningContent)
+            : { cleanedText: '', toolCalls: [] as ToolCallBlock[] };
 
-        // Emit the cleaned thinking block
-        if (cleanedReasoning.length > 0) {
-          yield {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'thinking',
-                thought: cleanedReasoning,
-                sourceField: 'reasoning_content',
-                isHidden: false,
-              } as ThinkingBlock,
-            ],
-          } as IContent;
-        }
-
-        // Emit any tool calls extracted from reasoning content
-        if (reasoningToolCalls.length > 0) {
-          yield {
-            speaker: 'ai',
-            blocks: reasoningToolCalls,
-          } as IContent;
-        }
-      }
-
-      // Process and emit tool calls using legacy accumulated approach
-      if (accumulatedToolCalls.length > 0) {
-        const blocks: ToolCallBlock[] = [];
-
+        // Build the main tool call blocks from the legacy accumulated tool calls
+        const mainToolCallBlocks: ToolCallBlock[] = [];
         for (const tc of accumulatedToolCalls) {
           if (!tc) continue;
 
@@ -2242,7 +2224,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             normalizedName,
           );
 
-          blocks.push({
+          mainToolCallBlocks.push({
             type: 'tool_call',
             id: normalizeToHistoryToolId(tc.id),
             name: normalizedName,
@@ -2250,16 +2232,32 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           });
         }
 
-        if (blocks.length > 0) {
-          const toolCallsContent: IContent = {
+        // Combine all blocks into a single IContent so ThinkingBlock and ToolCallBlocks
+        // are stored together in history and correctly round-tripped to the API.
+        const combinedBlocks: Array<ThinkingBlock | ToolCallBlock> = [];
+
+        if (cleanedReasoning.length > 0) {
+          combinedBlocks.push({
+            type: 'thinking',
+            thought: cleanedReasoning,
+            sourceField: 'reasoning_content',
+            isHidden: false,
+          } as ThinkingBlock);
+        }
+
+        // Kimi tool calls embedded in reasoning_content come first, then main API tool calls
+        combinedBlocks.push(...reasoningToolCalls, ...mainToolCallBlocks);
+
+        if (combinedBlocks.length > 0) {
+          const combinedContent: IContent = {
             speaker: 'ai',
-            blocks,
+            blocks: combinedBlocks,
           };
 
           // Add usage metadata if we captured it from streaming
           if (streamingUsage) {
             const cacheMetrics = extractCacheMetrics(streamingUsage);
-            toolCallsContent.metadata = {
+            combinedContent.metadata = {
               usage: {
                 promptTokens: streamingUsage.prompt_tokens || 0,
                 completionTokens: streamingUsage.completion_tokens || 0,
@@ -2274,12 +2272,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             };
           }
 
-          yield toolCallsContent;
+          yield combinedContent;
+        } else if (accumulatedReasoningContent.length > 0) {
+          // Only had reasoning content but it was entirely Kimi tool calls with no text;
+          // tool calls were already captured in reasoningToolCalls (empty combinedBlocks case
+          // is impossible here since reasoningToolCalls would have been added). No-op.
         }
       }
 
-      // If we have usage information but no tool calls, emit a metadata-only response
-      if (streamingUsage && accumulatedToolCalls.length === 0) {
+      // If we have usage information but no tool calls or reasoning, emit a metadata-only response
+      if (
+        streamingUsage &&
+        accumulatedToolCalls.length === 0 &&
+        accumulatedReasoningContent.length === 0
+      ) {
         const cacheMetrics = extractCacheMetrics(streamingUsage);
         yield {
           speaker: 'ai',
@@ -2652,8 +2658,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         'api-key',
         'apiKeyfile',
         'api-keyfile',
-        'baseUrl',
-        'baseURL',
         'base-url',
         'model',
         'toolFormat',
@@ -3773,86 +3777,85 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         hasEmittedThinking = true;
       }
 
-      // Emit accumulated reasoning_content as ONE ThinkingBlock (pipeline path)
-      // This consolidates token-by-token reasoning from Synthetic API into a single block
-      // Clean Kimi tokens from the accumulated content (not per-chunk) to handle split tokens
+      // Emit accumulated reasoning_content and pipeline tool calls as a single combined IContent.
+      // DeepSeek-reasoner and similar models require reasoning_content in the SAME assistant
+      // message as tool_calls; separate IContents prevent buildMessagesWithReasoning from
+      // attaching reasoning_content, causing "Missing reasoning_content field" on the next turn.
       // @plan PLAN-20251202-THINKING.P16
-      if (accumulatedReasoningContent.length > 0) {
-        // Extract Kimi tool calls from the complete accumulated reasoning content
-        const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
-          this.extractKimiToolCallsFromText(accumulatedReasoningContent);
+      // @issue #1142
 
-        // Emit the cleaned thinking block
-        if (cleanedReasoning.length > 0) {
-          yield {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'thinking',
-                thought: cleanedReasoning,
-                sourceField: 'reasoning_content',
-                isHidden: false,
-              } as ThinkingBlock,
-            ],
-          } as IContent;
-        }
-
-        // Emit any tool calls extracted from reasoning content
-        if (reasoningToolCalls.length > 0) {
-          yield {
-            speaker: 'ai',
-            blocks: reasoningToolCalls,
-          } as IContent;
-        }
-      }
-
-      // Process and emit tool calls using the pipeline
+      // Process tool calls through the pipeline first
       cachedPipelineResult = await this.toolCallPipeline.process(abortSignal);
-      if (
-        cachedPipelineResult.normalized.length > 0 ||
-        cachedPipelineResult.failed.length > 0
-      ) {
-        const blocks: ToolCallBlock[] = [];
 
-        // Process successful tool calls
-        for (const normalizedCall of cachedPipelineResult.normalized) {
-          const sanitizedArgs = this.sanitizeToolArgumentsString(
-            normalizedCall.originalArgs ?? normalizedCall.args,
-          );
+      {
+        // Extract Kimi tool calls from the complete accumulated reasoning content (handles split tokens)
+        const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
+          accumulatedReasoningContent.length > 0
+            ? this.extractKimiToolCallsFromText(accumulatedReasoningContent)
+            : { cleanedText: '', toolCalls: [] as ToolCallBlock[] };
 
-          // Process tool parameters with double-escape handling
-          const processedParameters = processToolParameters(
-            sanitizedArgs,
-            normalizedCall.name,
-          );
+        // Build pipeline tool call blocks
+        const pipelineToolCallBlocks: ToolCallBlock[] = [];
+        if (
+          cachedPipelineResult.normalized.length > 0 ||
+          cachedPipelineResult.failed.length > 0
+        ) {
+          // Process successful tool calls
+          for (const normalizedCall of cachedPipelineResult.normalized) {
+            const sanitizedArgs = this.sanitizeToolArgumentsString(
+              normalizedCall.originalArgs ?? normalizedCall.args,
+            );
 
-          blocks.push({
-            type: 'tool_call',
-            id: normalizeToHistoryToolId(
-              normalizedCall.id || `call_${normalizedCall.index}`,
-            ),
-            name: normalizedCall.name,
-            parameters: processedParameters,
-          });
+            // Process tool parameters with double-escape handling
+            const processedParameters = processToolParameters(
+              sanitizedArgs,
+              normalizedCall.name,
+            );
+
+            pipelineToolCallBlocks.push({
+              type: 'tool_call',
+              id: normalizeToHistoryToolId(
+                normalizedCall.id || `call_${normalizedCall.index}`,
+              ),
+              name: normalizedCall.name,
+              parameters: processedParameters,
+            });
+          }
+
+          // Handle failed tool calls
+          for (const failed of cachedPipelineResult.failed) {
+            this.getLogger().warn(
+              `Tool call validation failed for index ${failed.index}: ${failed.validationErrors.join(', ')}`,
+            );
+          }
         }
 
-        // Handle failed tool calls (could emit as errors or warnings)
-        for (const failed of cachedPipelineResult.failed) {
-          this.getLogger().warn(
-            `Tool call validation failed for index ${failed.index}: ${failed.validationErrors.join(', ')}`,
-          );
+        // Combine all blocks into a single IContent so ThinkingBlock and ToolCallBlocks
+        // are stored together in history and correctly round-tripped to the API.
+        const combinedBlocks: Array<ThinkingBlock | ToolCallBlock> = [];
+
+        if (cleanedReasoning.length > 0) {
+          combinedBlocks.push({
+            type: 'thinking',
+            thought: cleanedReasoning,
+            sourceField: 'reasoning_content',
+            isHidden: false,
+          } as ThinkingBlock);
         }
 
-        if (blocks.length > 0) {
-          const toolCallsContent: IContent = {
+        // Kimi tool calls embedded in reasoning_content come first, then pipeline tool calls
+        combinedBlocks.push(...reasoningToolCalls, ...pipelineToolCallBlocks);
+
+        if (combinedBlocks.length > 0) {
+          const combinedContent: IContent = {
             speaker: 'ai',
-            blocks,
+            blocks: combinedBlocks,
           };
 
           // Add usage metadata if we captured it from streaming
           if (streamingUsage) {
             const cacheMetrics = extractCacheMetrics(streamingUsage);
-            toolCallsContent.metadata = {
+            combinedContent.metadata = {
               usage: {
                 promptTokens: streamingUsage.prompt_tokens || 0,
                 completionTokens: streamingUsage.completion_tokens || 0,
@@ -3867,13 +3870,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             };
           }
 
-          yield toolCallsContent;
+          yield combinedContent;
         }
       }
 
-      // If we have usage information but no tool calls, emit a metadata-only response
+      // If we have usage information but no tool calls or reasoning, emit a metadata-only response
       if (
         streamingUsage &&
+        accumulatedReasoningContent.length === 0 &&
         this.toolCallPipeline.getStats().collector.totalCalls === 0
       ) {
         const cacheMetrics = extractCacheMetrics(streamingUsage);

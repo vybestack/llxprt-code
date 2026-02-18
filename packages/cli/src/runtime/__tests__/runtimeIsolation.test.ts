@@ -216,7 +216,7 @@ describe('CLI runtime isolation', () => {
     ).toEqual({ 'x-runtime': runtimeA.id });
     expect(aSecondarySettings.temperature).toBe(0.6);
     expect(aSecondarySettings.apiKey).toBe('alpha-updated-key');
-    expect(aSecondarySettings.baseUrl).toBe(
+    expect(aSecondarySettings['base-url']).toBe(
       'https://alpha.isolated.example.com',
     );
 
@@ -242,7 +242,7 @@ describe('CLI runtime isolation', () => {
     ).toEqual({ 'x-runtime': runtimeB.id });
     expect(bSecondarySettings.temperature).toBe(0.4);
     expect(bSecondarySettings.apiKey).toBe('beta-updated-key');
-    expect(bSecondarySettings.baseUrl).toBe(
+    expect(bSecondarySettings['base-url']).toBe(
       'https://beta.isolated.example.com',
     );
   });
@@ -492,7 +492,7 @@ async function bootstrapRuntimeFixture(options: {
       );
       settingsService.setProviderSetting(
         options.primaryProvider,
-        'baseUrl',
+        'base-url',
         `https://${options.id}.primary.example.com`,
       );
       settingsService.setProviderSetting(

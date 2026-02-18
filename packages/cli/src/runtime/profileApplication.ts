@@ -604,8 +604,7 @@ export async function applyProfileWithGuards(
     if (!baseUrl || baseUrl.trim() === '') {
       return;
     }
-    settingsService.setProviderSetting(targetProviderName, 'baseUrl', baseUrl);
-    settingsService.setProviderSetting(targetProviderName, 'baseURL', baseUrl);
+    settingsService.setProviderSetting(targetProviderName, 'base-url', baseUrl);
   };
 
   const propagateModelParamToEphemeral = (
@@ -640,10 +639,7 @@ export async function applyProfileWithGuards(
     ['auth-keyfile', 'authKeyfile'],
     'auth-keyfile',
   );
-  propagateModelParamToEphemeral(
-    ['base-url', 'baseUrl', 'baseURL'],
-    'base-url',
-  );
+  propagateModelParamToEphemeral(['base-url'], 'base-url');
   if (sanitizedProfile.modelParams) {
     const extraSensitiveKeys = [
       'apiKey',

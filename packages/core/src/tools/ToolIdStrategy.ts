@@ -77,6 +77,18 @@ export function isKimiModel(model: string): boolean {
 }
 
 /**
+ * Checks if a model name indicates a DeepSeek model that requires
+ * reasoning_content in tool call messages.
+ *
+ * @param model - The model name to check
+ * @returns true if this is a DeepSeek reasoning model
+ */
+export function isDeepSeekReasonerModel(model: string): boolean {
+  const lowerModel = model.toLowerCase();
+  return lowerModel.includes('deepseek-reasoner');
+}
+
+/**
  * Checks if a model name indicates a Mistral model that requires
  * the special 9-character alphanumeric ID format.
  *

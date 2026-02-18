@@ -222,10 +222,10 @@ describe('getProtectedSettingKeys', () => {
     expect(keys).toContain('auth-key');
   });
 
-  it('includes baseUrl in protected settings', () => {
+  it('includes base-url in protected settings', () => {
     const keys = getProtectedSettingKeys();
 
-    expect(keys).toContain('baseUrl');
+    expect(keys).toContain('base-url');
   });
 
   it('includes model in protected settings', () => {
@@ -260,10 +260,10 @@ describe('getProviderConfigKeys', () => {
     expect(keys).toContain('api-key');
   });
 
-  it('includes baseUrl in provider config keys', () => {
+  it('includes base-url in provider config keys', () => {
     const keys = getProviderConfigKeys();
 
-    expect(keys).toContain('baseUrl');
+    expect(keys).toContain('base-url');
   });
 
   it('includes base-url alias in provider config keys', () => {
