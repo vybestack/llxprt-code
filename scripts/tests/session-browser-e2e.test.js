@@ -20,6 +20,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
 
+const isEnabled = process.env.LLXPRT_E2E_OLDUI_TMUX === '1';
+const runTmuxE2E = isEnabled ? it : it.skip;
+
 function runHarness(scriptName, extraArgs = []) {
   const scriptPath = path.join(projectRoot, 'scripts', scriptName);
   const harnessPath = path.join(projectRoot, 'scripts/oldui-tmux-harness.js');
@@ -44,17 +47,21 @@ function runHarness(scriptName, extraArgs = []) {
 }
 
 describe('Session Browser E2E', () => {
-  it('opens session browser with /continue and supports keyboard navigation', () => {
-    const result = runHarness('oldui-tmux-script.session-browser.json');
+  runTmuxE2E(
+    'opens session browser with /continue and supports keyboard navigation',
+    () => {
+      const result = runHarness('oldui-tmux-script.session-browser.json');
 
-    if (result.error) {
-      throw result.error;
-    }
+      if (result.error) {
+        throw result.error;
+      }
 
-    if (result.status !== 0) {
-      console.error('STDOUT:', result.stdout);
-      console.error('STDERR:', result.stderr);
-      throw new Error(`Harness exited with status ${result.status}`);
-    }
-  }, 120000);
+      if (result.status !== 0) {
+        console.error('STDOUT:', result.stdout);
+        console.error('STDERR:', result.stderr);
+        throw new Error(`Harness exited with status ${result.status}`);
+      }
+    },
+    120000,
+  );
 });
