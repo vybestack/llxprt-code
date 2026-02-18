@@ -340,10 +340,8 @@ export async function runNonInteractive({
               process.stdout.write(`[${activeProfileName}]
 `);
             }
-            firstContentInTurn = false;
-          } else {
-            firstContentInTurn = false;
           }
+          firstContentInTurn = false;
           let outputValue = event.value;
 
           if (emojiFilter) {

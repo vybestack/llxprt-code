@@ -116,7 +116,7 @@ export function useAppCommands({
           }
         }
       }
-      return { ...configResult, profileName: configResult.profileName };
+      return configResult;
     },
     [appendMessage, sessionConfig, setSessionConfig, createSession],
   );

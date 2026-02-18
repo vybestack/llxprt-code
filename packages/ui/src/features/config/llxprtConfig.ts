@@ -398,9 +398,15 @@ export async function applyProfileWithSession(
   const profileArg = parseProfileArgs(tokens.slice(1));
   const loadedProfileName = 'error' in profileArg ? undefined : profileArg.name;
 
+  // Check if the profile was actually loaded by comparing references.
+  // applyProfile returns `current` by reference on failure and a new spread
+  // object on success, so !== is a reliable guard.
+  const profileActuallyLoaded = result.nextConfig !== current;
+
   // If profile load failed or config is incomplete, don't return options
   if (
     !result.handled ||
+    !profileActuallyLoaded ||
     !result.nextConfig.model ||
     !result.nextConfig.baseUrl
   ) {

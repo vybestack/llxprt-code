@@ -747,10 +747,13 @@ export const useGeminiStream = (
       const splitPoint = findLastSafeSplitPoint(sanitizedCombined);
       if (splitPoint === sanitizedCombined.length) {
         // @plan:PLAN-20251202-THINKING-UI.P08
-        // Preserve thinkingBlocks during streaming updates
+        // Preserve thinkingBlocks and profileName during streaming updates
         setPendingHistoryItem((item) => ({
           type: item?.type as 'gemini' | 'gemini_content',
           text: sanitizedCombined,
+          ...(activeProfileName != null
+            ? { profileName: activeProfileName }
+            : {}),
           ...(thinkingBlocksRef.current.length > 0
             ? { thinkingBlocks: [...thinkingBlocksRef.current] }
             : {}),
@@ -1063,9 +1066,13 @@ export const useGeminiStream = (
 
                 // Update pending history item with thinking blocks so they
                 // are visible in pendingHistoryItems during streaming
+                // Also preserve profileName during this update
                 setPendingHistoryItem((item) => ({
                   type: (item?.type as 'gemini' | 'gemini_content') || 'gemini',
                   text: item?.text || '',
+                  ...(activeProfileName != null
+                    ? { profileName: activeProfileName }
+                    : {}),
                   thinkingBlocks: [...thinkingBlocksRef.current],
                 }));
               }
@@ -1171,6 +1178,7 @@ export const useGeminiStream = (
       handleCitationEvent,
       sanitizeContent,
       setPendingHistoryItem,
+      activeProfileName,
     ],
   );
 
