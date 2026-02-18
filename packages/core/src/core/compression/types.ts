@@ -14,7 +14,7 @@
  * Types and constants for the compression strategy module.
  */
 
-import type { IContent } from '../../services/history/IContent.js';
+import type { IContent, UsageStats } from '../../services/history/IContent.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import type { DebugLogger } from '../../debug/DebugLogger.js';
@@ -148,6 +148,8 @@ export interface CompressionResultMetadata {
   topPreserved?: number;
   bottomPreserved?: number;
   middleCompressed?: number;
+  /** Actual token usage returned by the LLM during compression, if available. */
+  usage?: UsageStats;
 }
 
 // ---------------------------------------------------------------------------
