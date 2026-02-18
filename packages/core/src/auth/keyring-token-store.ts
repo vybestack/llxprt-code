@@ -75,7 +75,7 @@ export class KeyringTokenStore implements TokenStore {
     this.secureStore =
       options?.secureStore ??
       new SecureStore(SERVICE_NAME, {
-        fallbackDir: join(homedir(), '.llxprt', 'secure-store', SERVICE_NAME),
+        // fallbackDir defaults to platform-standard path via env-paths
         fallbackPolicy: 'allow',
       });
     this.lockDir = options?.lockDir ?? getLockDir();
