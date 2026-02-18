@@ -579,11 +579,6 @@ export function ensureStatelessProviderReady(): void {
   });
 
   providerManager!.prepareStatelessProviderInvocation(runtimeContext);
-
-  logger.debug(
-    () =>
-      `[cli-runtime] Stateless provider ready for runtime ${runtimeId} (REQ-SP4-004, REQ-SP4-005)`,
-  );
 }
 
 /**
