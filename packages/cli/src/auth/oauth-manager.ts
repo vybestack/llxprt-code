@@ -1942,6 +1942,15 @@ export class OAuthManager {
         continue;
       }
 
+      // Issue #1468: Skip Anthropic tokens that may be incorrectly stored under codex keys
+      // Anthropic tokens start with 'sk-ant-' prefix
+      if (token.access_token.startsWith('sk-ant-')) {
+        logger.debug(
+          `Token for codex bucket ${bucket} is an Anthropic token, skipping`,
+        );
+        continue;
+      }
+
       // Extract account_id from token (Codex tokens have this field)
       // Use runtime property access without narrowing type assertion
       const tokenObj = token as Record<string, unknown>;
