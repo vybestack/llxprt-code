@@ -1239,7 +1239,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
   });
 
   describe('Sticky Failover Behavior - Issue #902', () => {
-    it('should start from currentFailoverIndex on subsequent requests after failover', async () => {
+    it('should track failover across requests via currentFailoverIndex', async () => {
+      // This test verifies sticky behavior by checking getCurrentFailoverIndex()
+      // after a failover. On success, it resets to 0. On 429 immediate failover,
+      // it advances to the next index.
       let callCount = 0;
 
       const mockProvider: IProvider = {
@@ -1248,7 +1251,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
           callCount++;
           // First call: throw 429 (immediate failover)
           // Second call: succeed (on backend2)
-          // Third call (new request): should succeed (starting on backend2 after reset)
           if (callCount === 1) {
             const error = new Error('Rate limited') as Error & {
               status: number;
@@ -1293,13 +1295,15 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      // First request: backend1 fails with 429, failover to backend2
+      // Request: backend1 fails with 429, failover to backend2, succeeds
       const results1: IContent[] = [];
       for await (const chunk of provider.generateChatCompletion(options)) {
         results1.push(chunk);
       }
       expect(results1).toHaveLength(1);
       expect(callCount).toBe(2); // backend1 failed, backend2 succeeded
+      // After success, index resets to 0
+      expect(provider.getCurrentFailoverIndex()).toBe(0);
     });
 
     it('should reset currentFailoverIndex to 0 after successful response', async () => {
@@ -1429,16 +1433,26 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(callCount).toBe(2);
     });
 
-    it('should distinguish 5xx errors from immediate failover errors', async () => {
-      // This test verifies that 5xx errors are handled differently from 429/401/402/403
-      // 5xx errors should be eligible for retry, while immediate failover errors skip retry
+    it('should distinguish non-status errors from immediate failover errors (429)', async () => {
+      // This test verifies that errors without HTTP status are handled differently
+      // from 429/401/402/403. Non-status errors follow normal retry flow, while
+      // immediate failover errors (429, etc.) skip retry entirely.
+      //
+      // With failover_retry_count: 1 (default), a non-status error will:
+      // 1. Try backend1, fail, exhaust retries (1 attempt)
+      // 2. Move to backend2, succeed
+      // Total: 2 calls
+      //
+      // This is the same as 429, but the key difference is:
+      // - 429: No retry attempt on same backend (immediate failover)
+      // - Non-status error: Would retry if failover_retry_count > 1
       let callCount = 0;
 
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           callCount++;
-          // First call: throw error without status (should retry)
+          // First call: throw error without status
           // Second call: succeed
           if (callCount === 1) {
             throw new Error('Backend error without status');
@@ -1454,7 +1468,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       providerManager.registerProvider(mockProvider);
 
       const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-5xx-vs-429',
+        profileName: 'test-non-status-error',
         strategy: 'failover',
         subProfiles: [
           {
@@ -1485,7 +1499,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         results.push(chunk);
       }
 
-      // Should have called provider twice (error then success)
+      // Should have called provider twice (error on backend1, success on backend2)
       expect(callCount).toBe(2);
     });
 

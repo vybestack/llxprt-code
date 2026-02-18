@@ -635,7 +635,8 @@ export class LoadBalancingProvider implements IProvider {
    * These status codes indicate the backend cannot serve requests
    * and retrying would be futile:
    * - 429: Rate limited
-   * - 401: Unauthorized
+   * - 401: Unauthorized (per Issue #902 spec; OAuth bucket failover has
+   *        separate auto-renew logic that doesn't apply to load balancer)
    * - 402: Payment required
    * - 403: Forbidden
    */
