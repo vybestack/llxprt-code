@@ -40,9 +40,22 @@ export function encodeFrame(payload: Record<string, unknown>): Buffer {
 
 // ─── FrameDecoder Class ──────────────────────────────────────────────────────
 
+export interface FrameDecoderOptions {
+  /**
+   * Called when a partial frame times out. The buffer is reset after this
+   * callback returns. Use this to close the connection or log the error.
+   */
+  onPartialFrameTimeout?: () => void;
+}
+
 export class FrameDecoder {
   private buffer: Buffer = Buffer.alloc(0);
   private partialFrameTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly onPartialFrameTimeout?: () => void;
+
+  constructor(options: FrameDecoderOptions = {}) {
+    this.onPartialFrameTimeout = options.onPartialFrameTimeout;
+  }
 
   feed(chunk: Buffer): Array<Record<string, unknown>> {
     this.buffer = Buffer.concat([this.buffer, chunk]);
@@ -84,6 +97,7 @@ export class FrameDecoder {
     if (this.partialFrameTimer !== null) return;
     this.partialFrameTimer = setTimeout(() => {
       this.partialFrameTimer = null;
+      this.onPartialFrameTimeout?.();
       this.buffer = Buffer.alloc(0);
     }, PARTIAL_FRAME_TIMEOUT_MS);
   }

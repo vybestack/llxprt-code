@@ -289,10 +289,21 @@ describe('proxy integration (phase 31)', () => {
     });
   });
 
-  it('persists token via saveToken round-trip and strips refresh_token host-side', async () => {
+  it('persists token via saveToken round-trip and preserves host refresh_token', async () => {
     // @requirement R8.1
-    // @scenario Sandbox saveToken should round-trip through proxy and store sanitized host token.
+    // @scenario Sandbox saveToken should strip sandbox refresh_token while preserving an existing host refresh_token.
     await withServer(async ({ socketPath, tokenStore }) => {
+      await tokenStore.saveToken(
+        'anthropic',
+        {
+          access_token: 'acc-host',
+          refresh_token: 'ref-host',
+          expiry: Date.now() + 60_000,
+          token_type: 'Bearer',
+        },
+        'primary',
+      );
+
       const proxyStore = new ProxyTokenStore(socketPath);
       await proxyStore.saveToken(
         'anthropic',
@@ -307,7 +318,7 @@ describe('proxy integration (phase 31)', () => {
 
       const hostToken = await tokenStore.getToken('anthropic', 'primary');
       expect(hostToken?.access_token).toBe('acc-save');
-      expect(hostToken?.refresh_token).toBeUndefined();
+      expect(hostToken?.refresh_token).toBe('ref-host');
     });
   });
 

@@ -308,4 +308,35 @@ describe('FrameDecoder partial frame timer', () => {
       vi.advanceTimersByTime(PARTIAL_FRAME_TIMEOUT_MS);
     }).not.toThrow();
   });
+
+  /**
+   * @requirement R5.3
+   * @scenario Partial frame timeout triggers the onPartialFrameTimeout callback
+   */
+  it('calls onPartialFrameTimeout callback when partial frame times out', () => {
+    const onTimeout = vi.fn();
+    const decoder = new FrameDecoder({ onPartialFrameTimeout: onTimeout });
+    const payload = { timeout: 'test' };
+    const frame = encodeFrame(payload);
+
+    // Feed only part of the frame
+    const partial = frame.subarray(0, 6);
+    decoder.feed(partial);
+
+    // Callback should not have been called yet
+    expect(onTimeout).not.toHaveBeenCalled();
+
+    // Advance time past the timeout
+    vi.advanceTimersByTime(PARTIAL_FRAME_TIMEOUT_MS);
+
+    // Now the callback should have been called
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+
+    // Buffer should be reset - feeding new complete frame should work
+    const newPayload = { new: 'frame' };
+    const newFrame = encodeFrame(newPayload);
+    const results = decoder.feed(newFrame);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toEqual(newPayload);
+  });
 });

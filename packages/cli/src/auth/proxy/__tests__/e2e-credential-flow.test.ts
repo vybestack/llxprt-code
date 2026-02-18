@@ -245,8 +245,8 @@ describe('E2E Credential Flow (Phase 37)', () => {
         );
         const hostUpdated = await tokenStore.getToken('anthropic', 'default');
         expect(hostUpdated!.access_token).toBe('new-access-token');
-        // refresh_token should NOT be overwritten by the inner process
-        expect(hostUpdated!.refresh_token).toBeUndefined();
+        // refresh_token should NOT be overwritten by the inner process - it should be preserved
+        expect(hostUpdated!.refresh_token).toBe('host-refresh-secret');
 
         // 5. removeToken() → verify host store is empty
         await proxyStore.removeToken('anthropic', 'default');

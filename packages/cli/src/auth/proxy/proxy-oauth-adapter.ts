@@ -5,28 +5,27 @@
  * @pseudocode analysis/pseudocode/009-proxy-oauth-adapter.md
  */
 
-import { ProxySocketClient } from '@vybestack/llxprt-code-core';
+import {
+  ProxySocketClient,
+  type OAuthToken,
+} from '@vybestack/llxprt-code-core';
+
+type FlowType = 'pkce_redirect' | 'device_code' | 'browser_redirect';
+
+type PollStatus = 'pending' | 'complete' | 'error';
 
 export interface InitiateResponse {
-  readonly flow_type?:
-    | 'pkce_redirect'
-    | 'device_code'
-    | 'browser_redirect'
-    | string;
+  readonly flow_type?: FlowType | string;
+  readonly mode?: 'pkce' | 'device_code' | 'browser_redirect';
+
   readonly session_id?: string;
+  readonly sessionId?: string;
+
   readonly auth_url?: string;
   readonly verification_url?: string;
   readonly user_code?: string;
   readonly pollIntervalMs?: number;
-  readonly status?: 'pending' | 'complete' | 'error' | string;
-  readonly access_token?: string;
-  readonly expiry?: number;
-  readonly token_type?: string;
-  readonly scope?: string;
-  readonly error?: string;
 
-  readonly mode?: 'pkce' | 'device_code' | 'browser_redirect';
-  readonly sessionId?: string;
   readonly verificationUri?: string;
   readonly verificationUriComplete?: string;
   readonly userCode?: string;
@@ -36,8 +35,14 @@ export interface InitiateResponse {
   readonly authorizationUrl?: string;
   readonly redirectUri?: string;
   readonly state?: string;
-  readonly code?: string;
-  readonly codeVerifier?: string;
+
+  readonly status?: PollStatus | string;
+  readonly token?: Omit<OAuthToken, 'refresh_token'>;
+  readonly access_token?: string;
+  readonly expiry?: number;
+  readonly token_type?: string;
+  readonly scope?: string;
+  readonly error?: string;
 }
 
 export class ProxyOAuthAdapter {
@@ -95,10 +100,63 @@ export class ProxyOAuthAdapter {
   ): Promise<unknown> {
     void data;
 
-    const rawCode = await new Promise<string>((resolve) => {
-      process.stdin.once('data', (chunk: string | Buffer) => {
-        resolve(String(chunk));
-      });
+    const rawCode = await new Promise<string>((resolve, reject) => {
+      let settled = false;
+
+      const cleanup = (): void => {
+        process.stdin.removeListener('data', onData);
+        process.stdin.removeListener('end', onEnd);
+        process.stdin.removeListener('close', onClose);
+        process.stdin.removeListener('error', onError);
+      };
+
+      const settleResolve = (value: string): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+
+      const settleReject = (error: Error): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+
+      const onData = (chunk: string | Buffer): void => {
+        settleResolve(String(chunk));
+      };
+
+      const onEnd = (): void => {
+        settleReject(
+          new Error(
+            'Authorization cancelled — stdin closed without providing a code',
+          ),
+        );
+      };
+
+      const onClose = (): void => {
+        settleReject(
+          new Error(
+            'Authorization cancelled — stdin closed without providing a code',
+          ),
+        );
+      };
+
+      const onError = (error: Error): void => {
+        settleReject(error);
+      };
+
+      process.stdin.on('data', onData);
+      process.stdin.once('end', onEnd);
+      process.stdin.once('close', onClose);
+      process.stdin.once('error', onError);
+      process.stdin.resume();
     });
 
     const code = rawCode.trim();

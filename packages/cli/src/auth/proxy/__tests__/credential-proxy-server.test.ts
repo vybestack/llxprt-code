@@ -675,6 +675,7 @@ describe('CredentialProxyServer', () => {
     expect(stored).not.toBeNull();
     expect(stored!.access_token).toBe('new-at');
     // The original refresh_token must be preserved, not overwritten
+    expect(stored!.refresh_token).toBe('original-rt');
     expect(stored!.refresh_token).not.toBe('malicious-rt');
   });
 

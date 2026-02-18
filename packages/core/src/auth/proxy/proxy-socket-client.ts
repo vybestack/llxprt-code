@@ -37,7 +37,9 @@ interface PendingRequest {
 export class ProxySocketClient {
   private readonly socketPath: string;
   private socket: net.Socket | null = null;
-  private decoder: FrameDecoder = new FrameDecoder();
+  private decoder: FrameDecoder = new FrameDecoder({
+    onPartialFrameTimeout: () => this.handlePartialFrameTimeout(),
+  });
   private pendingRequests: Map<string, PendingRequest> = new Map();
   private handshakeComplete: boolean = false;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -138,7 +140,9 @@ export class ProxySocketClient {
 
   private async connect(): Promise<void> {
     this.socket = net.createConnection(this.socketPath);
-    this.decoder = new FrameDecoder();
+    this.decoder = new FrameDecoder({
+      onPartialFrameTimeout: () => this.handlePartialFrameTimeout(),
+    });
     this.socket.on('data', (chunk: Buffer) => this.onData(chunk));
     this.socket.on('error', (err: Error) => this.onError(err));
     this.socket.on('close', () => this.onClose());
@@ -222,6 +226,12 @@ export class ProxySocketClient {
     if (this.handshakeComplete || this.handshakeResolver) {
       this.destroy('Credential proxy connection lost. Restart the session.');
     }
+  }
+
+  private handlePartialFrameTimeout(): void {
+    this.destroy(
+      'Credential proxy partial frame timeout. Connection will be reset.',
+    );
   }
 
   private destroy(message: string): void {

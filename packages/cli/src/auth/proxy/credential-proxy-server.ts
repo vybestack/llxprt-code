@@ -27,6 +27,7 @@ import {
   FrameDecoder,
   encodeFrame,
   sanitizeTokenForProxy,
+  mergeRefreshedToken,
 } from '@vybestack/llxprt-code-core';
 import { RefreshCoordinator } from './refresh-coordinator.js';
 
@@ -179,7 +180,11 @@ export class CredentialProxyServer {
 
   private handleConnection(socket: net.Socket): void {
     this.connections.add(socket);
-    const decoder = new FrameDecoder();
+    const decoder = new FrameDecoder({
+      onPartialFrameTimeout: () => {
+        socket.destroy();
+      },
+    });
     let handshakeCompleted = false;
 
     socket.on('data', (chunk: Buffer) => {
@@ -427,13 +432,19 @@ export class CredentialProxyServer {
       return;
     }
 
-    // Strip refresh_token from incoming token
+    // Strip refresh_token from incoming token and preserve existing host-side
+    // refresh_token when sandbox payload omits it.
     const { refresh_token: _stripped, ...safeToken } = tokenData;
-    await this.options.tokenStore.saveToken(
+    const existingToken = await this.options.tokenStore.getToken(
       provider,
-      safeToken as unknown as OAuthToken,
       bucket,
     );
+    const mergedToken = mergeRefreshedToken(
+      (existingToken ?? {}) as OAuthToken,
+      safeToken as OAuthToken,
+    );
+
+    await this.options.tokenStore.saveToken(provider, mergedToken, bucket);
     this.sendOk(socket, id, {});
   }
 
@@ -941,6 +952,15 @@ export class CredentialProxyServer {
         'SESSION_NOT_FOUND',
         'OAuth session not found',
       );
+      return;
+    }
+
+    // Check session timeout
+    const sessionTimeoutMs =
+      this.options.oauthSessionTimeoutMs ?? 10 * 60 * 1000;
+    if (Date.now() - session.createdAt > sessionTimeoutMs) {
+      this.oauthSessions.delete(sessionId);
+      this.sendError(socket, id, 'SESSION_EXPIRED', 'OAuth session expired');
       return;
     }
 

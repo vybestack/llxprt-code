@@ -153,6 +153,10 @@ const CONTAINER_CREDENTIAL_PROXY_SOCK = '/tmp/llxprt-credential.sock';
 export async function setupSshAgentForwarding(
   config: { command: 'docker' | 'podman' | 'sandbox-exec' },
   args: string[],
+  options: {
+    reserveTunnelPort?: (port: number) => void;
+    excludedTunnelPorts?: ReadonlySet<number>;
+  } = {},
 ): Promise<SshAgentResult> {
   const sshAgentSetting =
     process.env.LLXPRT_SANDBOX_SSH_AGENT ?? process.env.SANDBOX_SSH_AGENT;
@@ -200,7 +204,15 @@ export async function setupSshAgentForwarding(
     }
 
     if (config.command === 'podman') {
-      return setupSshAgentPodmanMacOS(args, sshAuthSock);
+      return setupSshAgentPodmanMacOS(
+        args,
+        sshAuthSock,
+        SSH_TUNNEL_POLL_TIMEOUT_MS,
+        {
+          reserveTunnelPort: options.reserveTunnelPort,
+          excludedTunnelPorts: options.excludedTunnelPorts,
+        },
+      );
     }
   }
 
@@ -344,6 +356,19 @@ export function getPodmanMachineConnection(): {
 
 const SSH_TUNNEL_POLL_INTERVAL_MS = 200;
 const SSH_TUNNEL_POLL_TIMEOUT_MS = 10000;
+const TUNNEL_PORT_MIN = 49152;
+const TUNNEL_PORT_SPAN = 16383;
+
+function sampleTunnelPort(
+  exclude: ReadonlySet<number> = new Set<number>(),
+): number {
+  let tunnelPort =
+    TUNNEL_PORT_MIN + Math.floor(Math.random() * TUNNEL_PORT_SPAN);
+  while (exclude.has(tunnelPort)) {
+    tunnelPort = TUNNEL_PORT_MIN + Math.floor(Math.random() * TUNNEL_PORT_SPAN);
+  }
+  return tunnelPort;
+}
 
 /**
  * Sets up SSH agent forwarding for Podman on macOS via an SSH reverse tunnel
@@ -360,11 +385,16 @@ export async function setupSshAgentPodmanMacOS(
   args: string[],
   sshAuthSock: string,
   pollTimeoutMs: number = SSH_TUNNEL_POLL_TIMEOUT_MS,
+  options: {
+    reserveTunnelPort?: (port: number) => void;
+    excludedTunnelPorts?: ReadonlySet<number>;
+  } = {},
 ): Promise<SshAgentResult> {
   const conn = getPodmanMachineConnection();
 
-  // Pick a random ephemeral port for the TCP tunnel
-  const tunnelPort = 49152 + Math.floor(Math.random() * 16383);
+  // Pick a random ephemeral port for the TCP tunnel.
+  const tunnelPort = sampleTunnelPort(options.excludedTunnelPorts);
+  options.reserveTunnelPort?.(tunnelPort);
 
   // R7.1: Spawn SSH reverse tunnel (TCP port, not Unix socket)
   const tunnelProcess = spawn(
@@ -510,11 +540,16 @@ export async function setupCredentialProxyPodmanMacOS(
   args: string[],
   hostCredentialSocketPath: string,
   pollTimeoutMs: number = SSH_TUNNEL_POLL_TIMEOUT_MS,
+  options: {
+    reserveTunnelPort?: (port: number) => void;
+    excludedTunnelPorts?: ReadonlySet<number>;
+  } = {},
 ): Promise<CredentialProxyBridgeResult> {
   const conn = getPodmanMachineConnection();
 
   // Pick a random ephemeral port for the TCP tunnel.
-  const tunnelPort = 49152 + Math.floor(Math.random() * 16383);
+  const tunnelPort = sampleTunnelPort(options.excludedTunnelPorts);
+  options.reserveTunnelPort?.(tunnelPort);
 
   const tunnelProcess = spawn(
     'ssh',
@@ -1273,8 +1308,15 @@ export async function start_sandbox(
       }
     }
 
+    const reservedTunnelPorts = new Set<number>();
+
     // Platform-aware SSH agent forwarding
-    const sshResult = await setupSshAgentForwarding(config, args);
+    const sshResult = await setupSshAgentForwarding(config, args, {
+      reserveTunnelPort: (port) => {
+        reservedTunnelPorts.add(port);
+      },
+      excludedTunnelPorts: reservedTunnelPorts,
+    });
 
     // expose env-specified ports on the sandbox
     ports().forEach((p) => args.push('--publish', `${p}:${p}`));
@@ -1534,6 +1576,13 @@ export async function start_sandbox(
           credentialProxyBridgeResult = await setupCredentialProxyPodmanMacOS(
             args,
             socketPath,
+            SSH_TUNNEL_POLL_TIMEOUT_MS,
+            {
+              reserveTunnelPort: (port) => {
+                reservedTunnelPorts.add(port);
+              },
+              excludedTunnelPorts: reservedTunnelPorts,
+            },
           );
           credentialProxyBridgeCleanup = credentialProxyBridgeResult.cleanup;
           if (credentialProxyBridgeResult.entrypointPrefix) {

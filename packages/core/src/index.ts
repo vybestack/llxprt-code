@@ -144,6 +144,7 @@ export { ProxyProviderKeyStorage } from './auth/proxy/proxy-provider-key-storage
 export { ProxySocketClient } from './auth/proxy/proxy-socket-client.js';
 export {
   FrameDecoder,
+  FrameDecoderOptions,
   FrameError,
   encodeFrame,
   MAX_FRAME_SIZE,

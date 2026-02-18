@@ -763,6 +763,10 @@ export async function applyProfileWithGuards(
   const currentAuthKey = config.getEphemeralSetting('auth-key') as
     | string
     | undefined;
+  // Capture auth-key-name before updateActiveProviderApiKey (which clears it)
+  const currentAuthKeyName = authKeyNameApplied
+    ? (config.getEphemeralSetting('auth-key-name') as string | undefined)
+    : undefined;
   if (currentAuthKey) {
     logger.debug(() => {
       const displayValue = `***redacted*** (len=${currentAuthKey.length})`;
@@ -785,6 +789,10 @@ export async function applyProfileWithGuards(
 
   if (authKeyNameApplied) {
     setEphemeralSetting('auth-key', undefined);
+    // Restore auth-key-name after updateActiveProviderApiKey cleared it
+    if (currentAuthKeyName) {
+      setEphemeralSetting('auth-key-name', currentAuthKeyName);
+    }
   }
 
   const hasBaseUrlDirective = hasOwnEphemeral('base-url');
