@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2250,SC2292
 # @plan PLAN-20250218-HOOKSYSTEM.P16
 # End-to-end verification for hook system refactor
 
@@ -136,7 +137,7 @@ echo "=============================================="
 echo "PASS: $PASS_COUNT"
 echo "FAIL: $FAIL_COUNT"
 
-if [ ${#FAILURES[@]} -gt 0 ]; then
+if [[ ${#FAILURES[@]} -gt 0 ]]; then
   echo ""
   echo "Failed checks:"
   for f in "${FAILURES[@]}"; do
