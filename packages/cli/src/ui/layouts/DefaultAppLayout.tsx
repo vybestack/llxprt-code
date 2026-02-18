@@ -12,6 +12,7 @@ import { StreamingState } from '../types.js';
 import { LoadedSettings } from '../../config/settings.js';
 import { UpdateObject } from '../utils/updateCheck.js';
 import { useUIState } from '../contexts/UIStateContext.js';
+import type { UIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
@@ -70,6 +71,36 @@ function keyExtractorScrollableMainContentItem(
 
 function estimateScrollableMainContentItemHeight(_index: number): number {
   return 100;
+}
+
+function hasActiveDialog(uiState: UIState): boolean {
+  return (
+    uiState.showWorkspaceMigrationDialog ||
+    uiState.shouldShowIdePrompt ||
+    uiState.showIdeRestartPrompt ||
+    uiState.isFolderTrustDialogOpen ||
+    uiState.isWelcomeDialogOpen ||
+    uiState.isPermissionsDialogOpen ||
+    Boolean(uiState.shellConfirmationRequest) ||
+    Boolean(uiState.confirmationRequest) ||
+    uiState.isThemeDialogOpen ||
+    uiState.isSettingsDialogOpen ||
+    uiState.isAuthDialogOpen ||
+    uiState.isOAuthCodeDialogOpen ||
+    uiState.isEditorDialogOpen ||
+    uiState.isProviderDialogOpen ||
+    uiState.isLoadProfileDialogOpen ||
+    uiState.isCreateProfileDialogOpen ||
+    uiState.isProfileListDialogOpen ||
+    uiState.isProfileDetailDialogOpen ||
+    uiState.isProfileEditorDialogOpen ||
+    uiState.isToolsDialogOpen ||
+    uiState.isLoggingDialogOpen ||
+    uiState.isSubagentDialogOpen ||
+    uiState.isModelsDialogOpen ||
+    uiState.isSessionBrowserDialogOpen ||
+    uiState.showPrivacyNotice
+  );
 }
 
 export const DefaultAppLayout = ({
@@ -145,31 +176,7 @@ export const DefaultAppLayout = ({
   const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
 
   // Check if any dialog is visible
-  const dialogsVisible =
-    uiState.showWorkspaceMigrationDialog ||
-    uiState.shouldShowIdePrompt ||
-    uiState.showIdeRestartPrompt ||
-    uiState.isFolderTrustDialogOpen ||
-    uiState.isWelcomeDialogOpen ||
-    uiState.isPermissionsDialogOpen ||
-    uiState.shellConfirmationRequest ||
-    uiState.confirmationRequest ||
-    uiState.isThemeDialogOpen ||
-    uiState.isSettingsDialogOpen ||
-    uiState.isAuthDialogOpen ||
-    uiState.isOAuthCodeDialogOpen ||
-    uiState.isEditorDialogOpen ||
-    uiState.isProviderDialogOpen ||
-    uiState.isLoadProfileDialogOpen ||
-    uiState.isCreateProfileDialogOpen ||
-    uiState.isProfileListDialogOpen ||
-    uiState.isProfileDetailDialogOpen ||
-    uiState.isProfileEditorDialogOpen ||
-    uiState.isToolsDialogOpen ||
-    uiState.isLoggingDialogOpen ||
-    uiState.isSubagentDialogOpen ||
-    uiState.isModelsDialogOpen ||
-    uiState.showPrivacyNotice;
+  const dialogsVisible = hasActiveDialog(uiState);
 
   if (quittingMessages) {
     return (
