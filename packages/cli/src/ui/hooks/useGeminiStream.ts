@@ -246,7 +246,6 @@ export const useGeminiStream = (
   terminalHeight?: number,
   onTodoPause?: () => void,
   onEditorOpen: () => void = () => {},
-  _activeProfileName: string | null = null, // Deprecated: profile name now read live from config
   recordingIntegration?: RecordingIntegration,
 ) => {
   const [initError, setInitError] = useState<string | null>(null);

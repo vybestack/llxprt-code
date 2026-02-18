@@ -1405,7 +1405,6 @@ export const AppContainer = (props: AppContainerProps) => {
     stdout?.rows,
     registerTodoPause,
     handleExternalEditorOpen,
-    activeProfileName,
     recordingIntegration,
   );
 
