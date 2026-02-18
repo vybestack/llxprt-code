@@ -83,7 +83,7 @@ export function formatRelativeTime(
     // 36 hours to < 7 days: "N days ago"
     if (deltaDays < 7) {
       const days = Math.round(deltaDays);
-      return `${days} days ago`;
+      return days === 1 ? '1 day ago' : `${days} days ago`;
     }
 
     // 7 days to < 26 days: "N weeks ago"

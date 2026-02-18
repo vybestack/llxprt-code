@@ -167,12 +167,25 @@ export async function performResume(
   const oldRecording = recordingCallbacks.getCurrentRecording();
   const oldLock = recordingCallbacks.getCurrentLockHandle();
 
-  // Dispose in order: integration -> recording -> lock
+  // Dispose in order: integration -> recording -> lock.
+  // Failures are warnings so newly acquired infrastructure can still be installed.
   if (oldIntegration) {
-    oldIntegration.dispose();
+    try {
+      oldIntegration.dispose();
+    } catch (e) {
+      logger?.warn(
+        `Failed to dispose old recording integration (continuing): ${e}`,
+      );
+    }
   }
   if (oldRecording) {
-    await oldRecording.dispose();
+    try {
+      await oldRecording.dispose();
+    } catch (e) {
+      logger?.warn(
+        `Failed to dispose old recording service (continuing): ${e}`,
+      );
+    }
   }
   if (oldLock) {
     try {

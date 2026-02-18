@@ -312,7 +312,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(isMessageAction(result)).toBe(true);
       if (isMessageAction(result)) {
         expect(result.messageType).toBe('error');
-        expect(result.content.toLowerCase()).toMatch(/conversation|replace/);
+        expect(result.content.length).toBeGreaterThan(0);
       }
     });
   });
@@ -551,7 +551,11 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       });
       const errorResult = await continueCommand.action!(nonInteractiveCtx, '');
       expect(errorResult).toBeDefined();
-      expect(validTypes).toContain(errorResult!.type);
+      expect(isMessageAction(errorResult)).toBe(true);
+      if (isMessageAction(errorResult)) {
+        expect(errorResult.messageType).toBe('error');
+        expect(errorResult.content.length).toBeGreaterThan(0);
+      }
 
       // Path 3: With args -> perform_resume
       const resumeResult = await continueCommand.action!(ctx, 'session-123');

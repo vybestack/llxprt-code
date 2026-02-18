@@ -122,6 +122,9 @@ describe('formatRelativeTime', () => {
 
     it('returns "N days ago" for 36 hours to <7 days', () => {
       expect(
+        formatRelativeTime(ago(35.9 * HOUR), { mode: 'long', now: NOW }),
+      ).toBe('1 day ago');
+      expect(
         formatRelativeTime(ago(36 * HOUR), { mode: 'long', now: NOW }),
       ).toBe('2 days ago');
       expect(formatRelativeTime(ago(3 * DAY), { mode: 'long', now: NOW })).toBe(

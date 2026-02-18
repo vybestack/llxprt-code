@@ -159,6 +159,10 @@ interface AppContainerProps {
   appDispatch: React.Dispatch<AppAction>;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
   recordingIntegration?: RecordingIntegration;
+  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
+  initialRecordingService?: SessionRecordingService;
+  /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
+  initialLockHandle?: LockHandle | null;
 }
 
 function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
@@ -182,6 +186,8 @@ export const AppContainer = (props: AppContainerProps) => {
     appState,
     appDispatch,
     recordingIntegration,
+    initialRecordingService,
+    initialLockHandle,
   } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
@@ -242,16 +248,26 @@ export const AppContainer = (props: AppContainerProps) => {
    * These refs hold the current recording service, integration, and lock handle,
    * allowing performResume to swap them during session resume.
    */
-  const recordingServiceRef = useRef<SessionRecordingService | null>(null);
+  const recordingServiceRef = useRef<SessionRecordingService | null>(
+    initialRecordingService ?? null,
+  );
   const recordingIntegrationRef = useRef<RecordingIntegration | null>(
     recordingIntegration ?? null,
   );
-  const lockHandleRef = useRef<LockHandle | null>(null);
+  const lockHandleRef = useRef<LockHandle | null>(initialLockHandle ?? null);
 
-  // Keep recordingIntegrationRef in sync with prop
+  // Keep recording refs in sync with props
+  useEffect(() => {
+    recordingServiceRef.current = initialRecordingService ?? null;
+  }, [initialRecordingService]);
+
   useEffect(() => {
     recordingIntegrationRef.current = recordingIntegration ?? null;
   }, [recordingIntegration]);
+
+  useEffect(() => {
+    lockHandleRef.current = initialLockHandle ?? null;
+  }, [initialLockHandle]);
 
   /**
    * @plan PLAN-20260214-SESSIONBROWSER.P23
@@ -352,7 +368,7 @@ export const AppContainer = (props: AppContainerProps) => {
         count: 1,
       });
       if (payload.severity === 'error' || payload.severity === 'warning') {
-        recordingIntegration?.recordSessionEvent(
+        recordingIntegrationRef.current?.recordSessionEvent(
           payload.severity,
           payload.message,
         );
@@ -365,7 +381,7 @@ export const AppContainer = (props: AppContainerProps) => {
     return () => {
       coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
     };
-  }, [handleNewMessage, recordingIntegration]);
+  }, [handleNewMessage]);
 
   useEffect(() => {
     const consolePatcher = new ConsolePatcher({
@@ -472,7 +488,7 @@ export const AppContainer = (props: AppContainerProps) => {
    */
   const recordingSubscribedServiceRef = useRef<unknown>(null);
   useEffect(() => {
-    if (!recordingIntegration) return;
+    if (!recordingIntegrationRef.current) return;
 
     let intervalCleared = false;
     const checkInterval = setInterval(() => {
@@ -486,7 +502,9 @@ export const AppContainer = (props: AppContainerProps) => {
           historyService !== recordingSubscribedServiceRef.current
         ) {
           recordingSubscribedServiceRef.current = historyService;
-          recordingIntegration.onHistoryServiceReplaced(historyService);
+          recordingIntegrationRef.current?.onHistoryServiceReplaced(
+            historyService,
+          );
           debug.log('RecordingIntegration subscribed to HistoryService');
         }
       }
@@ -497,7 +515,7 @@ export const AppContainer = (props: AppContainerProps) => {
       intervalCleared = true;
       recordingSubscribedServiceRef.current = null;
     };
-  }, [config, recordingIntegration]);
+  }, [config]);
 
   const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
@@ -1303,7 +1321,7 @@ export const AppContainer = (props: AppContainerProps) => {
     extensionsUpdateState,
     true, // isConfigInitialized
     todoContextForCommands, // @plan PLAN-20260129-TODOPERSIST.P07
-    recordingIntegration,
+    recordingIntegrationRef.current ?? undefined,
     recordingSwapCallbacks, // @plan PLAN-20260214-SESSIONBROWSER.P23
   );
 

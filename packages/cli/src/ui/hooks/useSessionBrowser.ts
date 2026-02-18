@@ -254,7 +254,13 @@ export function useSessionBrowser(
 
   // For useEffect dependencies, compute these once per render
   const sortedSessions = getSortedSessions();
-  const { clampedPage, pageItems } = getPaginationValues();
+  const totalPages = Math.max(1, Math.ceil(sortedSessions.length / PAGE_SIZE));
+  const clampedPage = Math.min(pageRef.current, totalPages - 1);
+  const startIndex = clampedPage * PAGE_SIZE;
+  const pageItems = sortedSessions.slice(startIndex, startIndex + PAGE_SIZE);
+  const previewPageKey = pageItems
+    .map((session) => session.sessionId)
+    .join('|');
 
   // === Preview Loading ===
 
@@ -399,7 +405,7 @@ export function useSessionBrowser(
     void loadSessions();
   }, [loadSessions]);
 
-  // Load previews when page changes
+  // Load previews when current page content changes (pagination, search, sort).
   useEffect(() => {
     if (!isLoading && sortedSessions.length > 0) {
       void loadPreviewsForPage(
@@ -408,10 +414,13 @@ export function useSessionBrowser(
         clampedPage,
       );
     }
-    // Note: sortedSessions is excluded from deps to prevent infinite loop.
-    // This effect only triggers on explicit page changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clampedPage, isLoading, loadPreviewsForPage]);
+  }, [
+    clampedPage,
+    isLoading,
+    loadPreviewsForPage,
+    previewPageKey,
+    sortedSessions,
+  ]);
 
   // === Execute Resume ===
 

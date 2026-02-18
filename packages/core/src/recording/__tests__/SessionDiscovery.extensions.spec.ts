@@ -460,19 +460,27 @@ describe('SessionDiscovery extensions', () => {
       expect(result).toBeNull();
     });
 
-    it('returns null for file I/O error (unreadable file)', async () => {
-      const filePath = path.join(tempDir, 'unreadable.jsonl');
-      await fs.writeFile(filePath, 'content');
-      // Make file unreadable (this may not work on all platforms)
-      try {
-        await fs.chmod(filePath, 0o000);
-        const result = await SessionDiscovery.readFirstUserMessage(filePath);
-        expect(result).toBeNull();
-      } finally {
-        // Restore permissions for cleanup
-        await fs.chmod(filePath, 0o644);
-      }
-    });
+    const isRootUser =
+      typeof process.getuid === 'function' && process.getuid() === 0;
+
+    const runUnreadableFileTest =
+      process.platform === 'win32' || isRootUser ? it.skip : it;
+
+    runUnreadableFileTest(
+      'returns null for file I/O error (unreadable file)',
+      async () => {
+        const filePath = path.join(tempDir, 'unreadable.jsonl');
+        await fs.writeFile(filePath, 'content');
+        try {
+          await fs.chmod(filePath, 0o000);
+          const result = await SessionDiscovery.readFirstUserMessage(filePath);
+          expect(result).toBeNull();
+        } finally {
+          // Restore permissions for cleanup
+          await fs.chmod(filePath, 0o644);
+        }
+      },
+    );
 
     it('returns null for non-existent file', async () => {
       const nonExistentPath = path.join(tempDir, 'ghost.jsonl');

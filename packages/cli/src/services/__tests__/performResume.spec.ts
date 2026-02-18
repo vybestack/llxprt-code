@@ -283,6 +283,10 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
           text: 'target session content',
         });
       }
+
+      // Track new lock for cleanup
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
 
     /**
@@ -317,6 +321,10 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
         });
         expect(result.metadata.sessionId).toBe(newerSessionId);
       }
+
+      // Track new lock for cleanup
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
 
     /**
@@ -349,6 +357,10 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
           text: 'newest session for index',
         });
       }
+
+      // Track new lock for cleanup
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
 
     /**
@@ -374,6 +386,10 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       if (result.ok) {
         expect(result.metadata.sessionId).toBe(targetId);
       }
+
+      // Track new lock for cleanup
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
   });
 
