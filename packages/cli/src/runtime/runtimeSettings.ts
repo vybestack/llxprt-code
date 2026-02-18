@@ -915,8 +915,6 @@ const SENSITIVE_MODEL_PARAM_KEYS = new Set([
   'apiKeyfile',
   'api-keyfile',
   'base-url',
-  'baseUrl',
-  'baseURL',
 ]);
 
 function stripSensitiveModelParams<T extends Record<string, unknown>>(
@@ -1722,12 +1720,10 @@ export async function switchActiveProvider(
 
   if (finalBaseUrl) {
     config.setEphemeralSetting('base-url', finalBaseUrl);
-    settingsService.setProviderSetting(name, 'baseUrl', finalBaseUrl);
-    settingsService.setProviderSetting(name, 'baseURL', finalBaseUrl);
+    settingsService.setProviderSetting(name, 'base-url', finalBaseUrl);
   } else {
     config.setEphemeralSetting('base-url', undefined);
-    settingsService.setProviderSetting(name, 'baseUrl', undefined);
-    settingsService.setProviderSetting(name, 'baseURL', undefined);
+    settingsService.setProviderSetting(name, 'base-url', undefined);
   }
 
   const aliasDefaultModel = normalizeSetting(aliasConfig?.defaultModel);
@@ -2115,8 +2111,7 @@ export async function updateActiveProviderBaseUrl(
     trimmed && trimmed.toLowerCase() === 'none' ? '' : trimmed;
 
   if (!normalizedBaseUrl) {
-    settingsService.setProviderSetting(providerName, 'baseUrl', undefined);
-    settingsService.setProviderSetting(providerName, 'baseURL', undefined);
+    settingsService.setProviderSetting(providerName, 'base-url', undefined);
     config.setEphemeralSetting('base-url', undefined);
     return {
       changed: true,
@@ -2127,12 +2122,7 @@ export async function updateActiveProviderBaseUrl(
 
   settingsService.setProviderSetting(
     providerName,
-    'baseUrl',
-    normalizedBaseUrl,
-  );
-  settingsService.setProviderSetting(
-    providerName,
-    'baseURL',
+    'base-url',
     normalizedBaseUrl,
   );
   config.setEphemeralSetting('base-url', normalizedBaseUrl);

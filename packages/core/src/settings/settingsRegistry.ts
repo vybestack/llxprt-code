@@ -96,8 +96,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
-    key: 'baseUrl',
-    aliases: ['baseURL', 'base-url'],
+    key: 'base-url',
     category: 'provider-config',
     description: 'Provider API base URL',
     type: 'string',

@@ -982,10 +982,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           };
 
           if (includeInContext && thinkingBlocks.length > 0) {
+            // Strict OpenAI-compatible gateways (e.g. Chutes/MiniMax) can reject
+            // assistant+tool_calls payloads that include extra non-standard fields.
+            // However, deepseek-reasoner REQUIRES reasoning_content on all assistant
+            // messages including those with tool_calls, so we detect it as 'deepseek'
+            // format and include reasoning_content.
             const isStrictOpenAI = toolFormat === 'openai';
             if (isStrictOpenAI) {
-              // Strict OpenAI-compatible gateways (e.g. Chutes/MiniMax) can reject
-              // assistant+tool_calls payloads that include extra non-standard fields.
               messages.push(baseMessage);
             } else {
               const messageWithReasoning = baseMessage as unknown as Record<
@@ -2648,8 +2651,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         'api-key',
         'apiKeyfile',
         'api-keyfile',
-        'baseUrl',
-        'baseURL',
         'base-url',
         'model',
         'toolFormat',

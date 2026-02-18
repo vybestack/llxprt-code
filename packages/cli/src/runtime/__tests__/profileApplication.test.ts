@@ -1202,8 +1202,7 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
     await applyProfileWithGuards(profile);
 
     const provSettings = settingsServiceStub.getProviderSettings('anthropic');
-    expect(provSettings['baseUrl']).toBe('https://custom.api.com/v1');
-    expect(provSettings['baseURL']).toBe('https://custom.api.com/v1');
+    expect(provSettings['base-url']).toBe('https://custom.api.com/v1');
   });
 
   it('resolves auth-key-name from secure storage and preserves auth-key-name ephemeral', async () => {

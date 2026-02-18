@@ -15,7 +15,11 @@
  */
 
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
-import { isKimiModel, isMistralModel } from '../../tools/ToolIdStrategy.js';
+import {
+  isKimiModel,
+  isMistralModel,
+  isDeepSeekReasonerModel,
+} from '../../tools/ToolIdStrategy.js';
 import type { DebugLogger } from '../../debug/index.js';
 
 /**
@@ -28,6 +32,14 @@ export function detectToolFormat(
   modelName: string,
   logger?: DebugLogger,
 ): ToolFormat {
+  if (isDeepSeekReasonerModel(modelName)) {
+    logger?.debug(
+      () =>
+        `Auto-detected 'deepseek' format for DeepSeek Reasoner model: ${modelName}`,
+    );
+    return 'deepseek';
+  }
+
   if (isKimiModel(modelName)) {
     logger?.debug(
       () => `Auto-detected 'kimi' format for K2 model: ${modelName}`,

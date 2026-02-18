@@ -81,9 +81,9 @@ describe('ProviderManager Settings Separation', () => {
     expect(getSnapshot('openai')['api-key']).toBeUndefined();
   });
 
-  it('snapshot does NOT include baseUrl in root level', () => {
-    settingsService.set('baseUrl', 'https://api.example.com');
-    expect(getSnapshot('openai').baseUrl).toBeUndefined();
+  it('snapshot does NOT include base-url in root level', () => {
+    settingsService.set('base-url', 'https://api.example.com');
+    expect(getSnapshot('openai')['base-url']).toBeUndefined();
   });
 
   it('snapshot does NOT include model in root level', () => {

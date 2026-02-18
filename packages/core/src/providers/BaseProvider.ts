@@ -1058,14 +1058,14 @@ export abstract class BaseProvider implements IProvider {
    * Get base URL from SettingsService if available
    */
   protected async getBaseUrlFromSettings(): Promise<string | undefined> {
-    return this.getProviderSetting('baseUrl');
+    return this.getProviderSetting('base-url');
   }
 
   /**
    * Set base URL in SettingsService if available
    */
   protected async setBaseUrlInSettings(baseUrl?: string): Promise<void> {
-    await this.setProviderSetting('baseUrl', baseUrl);
+    await this.setProviderSetting('base-url', baseUrl);
   }
 
   /**
@@ -1083,7 +1083,7 @@ export abstract class BaseProvider implements IProvider {
       const {
         enabled: _enabled,
         apiKey: _apiKey,
-        baseUrl: _baseUrl,
+        'base-url': _baseUrl,
         model: _model,
         maxTokens,
         temperature,

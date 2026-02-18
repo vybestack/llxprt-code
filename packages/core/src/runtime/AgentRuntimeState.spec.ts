@@ -408,12 +408,12 @@ describe('AgentRuntimeState - Batch Updates', () => {
     const newState = updateAgentRuntimeStateBatch(baseState, {
       provider: 'anthropic',
       model: 'claude-3-5-sonnet-20241022',
-      baseUrl: 'https://api.anthropic.com',
+      'base-url': 'https://api.anthropic.com',
     });
 
     expect(newState.provider).toBe('anthropic');
     expect(newState.model).toBe('claude-3-5-sonnet-20241022');
-    expect(newState.baseUrl).toBe('https://api.anthropic.com');
+    expect(newState['base-url']).toBe('https://api.anthropic.com');
   });
 
   it('should emit single event for batch update', () => {
