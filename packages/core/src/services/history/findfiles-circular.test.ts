@@ -95,11 +95,11 @@ describe('FindFiles Circular Reference Bug', () => {
     // getCuratedForProvider should handle circular refs
     expect(errorForProvider).toBeNull();
 
-    // Should NOT have synthetic response added in current implementation
-    // getCuratedForProvider only cleans circular refs, doesn't add synthetic responses
+    // SHOULD have synthetic response for orphaned tool call (strict mode always enabled)
+    // getCuratedForProvider both cleans circular refs AND synthesizes responses
     expect(
       curatedForProvider!.filter((c) => c.speaker === 'tool'),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
 
     // Step 4: Add the real tool response
     historyService.add({

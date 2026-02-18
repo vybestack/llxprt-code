@@ -14,6 +14,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { ToolStatus } from '../types/events';
 import { getLogger } from '../lib/logger';
+import type { ConfirmationPayload } from './useToolApproval';
 
 const logger = getLogger('nui:tool-scheduler');
 
@@ -65,6 +66,7 @@ export type CancelAllFn = () => void;
 export type RespondToConfirmationFn = (
   callId: string,
   outcome: ToolConfirmationOutcome,
+  payload?: ConfirmationPayload,
 ) => void;
 
 export interface UseToolSchedulerResult {
@@ -457,13 +459,19 @@ export function useToolScheduler(
 
   // Respond to a tool confirmation request
   const respondToConfirmation: RespondToConfirmationFn = useCallback(
-    (callId: string, outcome: ToolConfirmationOutcome) => {
+    (
+      callId: string,
+      outcome: ToolConfirmationOutcome,
+      payload?: ConfirmationPayload,
+    ) => {
       logger.debug(
         'respondToConfirmation called',
         'callId:',
         callId,
         'outcome:',
         outcome,
+        'hasEditedCommand:',
+        payload?.editedCommand != null,
       );
 
       // Find the tool call with matching callId that is awaiting approval
@@ -483,7 +491,7 @@ export function useToolScheduler(
 
       const waitingCall = toolCall as WaitingToolCall;
       logger.debug('Calling onConfirm callback', 'callId:', callId);
-      void waitingCall.confirmationDetails.onConfirm(outcome);
+      void waitingCall.confirmationDetails.onConfirm(outcome, payload);
     },
     [toolCalls],
   );

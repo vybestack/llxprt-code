@@ -11,15 +11,19 @@ describe('useTodoPausePreserver', () => {
   it('skips clearing todos once after a todo_pause and then resumes clearing', () => {
     const controller = new TodoPausePreserver();
     const onClear = vi.fn();
+    // Use completed todos - shouldClearTodos returns true for all-completed
+    const completedTodos = [
+      { id: '1', content: 'done', status: 'completed' as const },
+    ];
 
-    controller.handleSubmit(onClear, []);
+    controller.handleSubmit(onClear, completedTodos);
     expect(onClear).toHaveBeenCalledTimes(1);
 
     controller.registerTodoPause();
-    controller.handleSubmit(onClear, []);
+    controller.handleSubmit(onClear, completedTodos);
     expect(onClear).toHaveBeenCalledTimes(1);
 
-    controller.handleSubmit(onClear, []);
+    controller.handleSubmit(onClear, completedTodos);
     expect(onClear).toHaveBeenCalledTimes(2);
   });
 });

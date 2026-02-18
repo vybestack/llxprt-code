@@ -233,11 +233,12 @@ export class TemplateEngine {
     const hasListSubagentsTool =
       enabledTools.includes('ListSubagents') ||
       enabledTools.includes('list_subagents');
-    if (
+    const includeSubagentDelegation =
       context.includeSubagentDelegation === true &&
       hasTaskTool &&
-      hasListSubagentsTool
-    ) {
+      hasListSubagentsTool;
+
+    if (includeSubagentDelegation) {
       // The content will be loaded from subagent-delegation.md file
       // We load it here directly to include in template variables
       try {
@@ -249,6 +250,24 @@ export class TemplateEngine {
       }
     } else {
       variables['SUBAGENT_DELEGATION'] = '';
+    }
+
+    // Add ASYNC_SUBAGENT_GUIDANCE - only when subagent delegation is included AND async is globally and profile enabled
+    const globalAsyncEnabled = context.asyncSubagentsEnabled !== false;
+    const profileAsyncEnabled = context.profileAsyncEnabled !== false;
+    if (
+      includeSubagentDelegation &&
+      globalAsyncEnabled &&
+      profileAsyncEnabled
+    ) {
+      try {
+        const asyncGuidanceContent = this.loadAsyncSubagentGuidanceContent();
+        variables['ASYNC_SUBAGENT_GUIDANCE'] = asyncGuidanceContent;
+      } catch {
+        variables['ASYNC_SUBAGENT_GUIDANCE'] = '';
+      }
+    } else {
+      variables['ASYNC_SUBAGENT_GUIDANCE'] = '';
     }
 
     return variables;
@@ -263,6 +282,20 @@ export class TemplateEngine {
     if (!content) {
       throw new Error(
         'Failed to load subagent-delegation.md from CORE_DEFAULTS',
+      );
+    }
+    return content;
+  }
+
+  /**
+   * Load the async subagent guidance content from the default file
+   * @returns The content of async-subagent-guidance.md
+   */
+  private loadAsyncSubagentGuidanceContent(): string {
+    const content = CORE_DEFAULTS['async-subagent-guidance.md'];
+    if (!content) {
+      throw new Error(
+        'Failed to load async-subagent-guidance.md from CORE_DEFAULTS',
       );
     }
     return content;

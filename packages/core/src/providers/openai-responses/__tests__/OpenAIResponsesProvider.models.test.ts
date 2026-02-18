@@ -57,9 +57,10 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       );
       const models = await provider.getModels();
 
-      // Verify all expected Codex models are present (based on codex-rs list_models.rs + #1308 update)
+      // Verify all expected Codex models are present (based on codex-rs list_models.rs + #1308 update + #1433 gpt-5.3-codex-spark)
       const modelIds = models.map((m) => m.id);
       expect(modelIds).toContain('gpt-5.3-codex');
+      expect(modelIds).toContain('gpt-5.3-codex-spark');
       expect(modelIds).toContain('gpt-5.2-codex');
       expect(modelIds).toContain('gpt-5.1-codex-max');
       expect(modelIds).toContain('gpt-5.1-codex');
@@ -102,9 +103,10 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       );
       const models = await provider.getModels();
 
-      // Expected models in priority order (with #1308 gpt-5.3-codex addition)
+      // Expected models in priority order (with #1308 gpt-5.3-codex addition + #1433 gpt-5.3-codex-spark)
       const expectedModelIds = [
         'gpt-5.3-codex',
+        'gpt-5.3-codex-spark',
         'gpt-5.2-codex',
         'gpt-5.1-codex-max',
         'gpt-5.1-codex',
@@ -139,6 +141,19 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       const gpt51 = models.find((m) => m.id === 'gpt-5.1');
       expect(gpt51).toBeDefined();
       expect(gpt51?.name).toBe('gpt-5.1');
+    });
+
+    it('should set contextWindow for gpt-5.3-codex-spark (128K)', async () => {
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        'https://chatgpt.com/backend-api/codex',
+      );
+      const models = await provider.getModels();
+
+      // gpt-5.3-codex-spark has explicit 128K context window (smaller than default 256K)
+      const spark = models.find((m) => m.id === 'gpt-5.3-codex-spark');
+      expect(spark).toBeDefined();
+      expect(spark?.contextWindow).toBe(131072);
     });
   });
 

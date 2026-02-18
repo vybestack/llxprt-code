@@ -1245,8 +1245,8 @@ describe('HistoryService - Behavioral Tests', () => {
       });
     });
 
-    describe('Strict tool adjacency mode', () => {
-      it('should synthesize tool responses for orphaned tool calls when strictToolAdjacency is true', () => {
+    describe('Tool adjacency enforcement', () => {
+      it('should always synthesize tool responses for orphaned tool calls', () => {
         service.add(createUserMessage('Question'));
         service.add({
           speaker: 'ai',
@@ -1262,9 +1262,7 @@ describe('HistoryService - Behavioral Tests', () => {
 
         expect(service.getAll()).toHaveLength(2);
 
-        const curated = service.getCuratedForProvider([], {
-          strictToolAdjacency: true,
-        });
+        const curated = service.getCuratedForProvider();
         expect(curated).toHaveLength(3);
 
         const toolCallIndex = curated.findIndex(
@@ -1287,41 +1285,7 @@ describe('HistoryService - Behavioral Tests', () => {
         ).toBe(true);
       });
 
-      it('should NOT synthesize tool responses for orphaned tool calls without later non-tool message when strictToolAdjacency is false', () => {
-        service.add(createUserMessage('Question'));
-        service.add({
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'tool_call',
-              id: 'hist_tool_orphan2',
-              name: 'tool1',
-              parameters: {},
-            },
-          ],
-        });
-
-        expect(service.getAll()).toHaveLength(2);
-
-        const curated = service.getCuratedForProvider([], {
-          strictToolAdjacency: false,
-        });
-        expect(curated).toHaveLength(2);
-
-        const toolCallIndex = curated.findIndex(
-          (c) =>
-            c.speaker === 'ai' &&
-            c.blocks.some(
-              (b) =>
-                b.type === 'tool_call' &&
-                (b as ToolCallBlock).id === 'hist_tool_orphan2',
-            ),
-        );
-        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
-        expect(curated[toolCallIndex + 1]?.speaker).not.toBe('tool');
-      });
-
-      it('should synthesize tool responses in strict mode even without later non-tool message', () => {
+      it('should synthesize tool responses even without later non-tool message', () => {
         service.add(createUserMessage('Question'));
         service.add({
           speaker: 'ai',
@@ -1337,9 +1301,7 @@ describe('HistoryService - Behavioral Tests', () => {
 
         expect(service.getAll()).toHaveLength(2);
 
-        const curated = service.getCuratedForProvider([], {
-          strictToolAdjacency: true,
-        });
+        const curated = service.getCuratedForProvider();
         expect(curated).toHaveLength(3);
 
         const syntheticToolMessage = curated[2];
@@ -1350,36 +1312,47 @@ describe('HistoryService - Behavioral Tests', () => {
         );
       });
 
-      it('should handle strictToolAdjacency default as false', () => {
+      it('should not duplicate tool responses for already-responded tool calls', () => {
         service.add(createUserMessage('Question'));
         service.add({
           speaker: 'ai',
           blocks: [
             {
               type: 'tool_call',
-              id: 'hist_tool_default',
+              id: 'hist_tool_responded',
               name: 'tool1',
               parameters: {},
             },
           ],
         });
+        service.add({
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'hist_tool_responded',
+              toolName: 'tool1',
+              result: 'success',
+              isComplete: true,
+            },
+          ],
+        });
 
-        expect(service.getAll()).toHaveLength(2);
+        expect(service.getAll()).toHaveLength(3);
 
         const curated = service.getCuratedForProvider();
-        expect(curated).toHaveLength(2);
+        // Should still be 3 - no synthetic response needed
+        expect(curated).toHaveLength(3);
 
-        const toolCallIndex = curated.findIndex(
-          (c) =>
-            c.speaker === 'ai' &&
-            c.blocks.some(
-              (b) =>
-                b.type === 'tool_call' &&
-                (b as ToolCallBlock).id === 'hist_tool_default',
-            ),
+        // Count tool responses for this call ID
+        const toolResponses = curated.flatMap((c) =>
+          c.blocks.filter(
+            (b) =>
+              b.type === 'tool_response' &&
+              (b as ToolResponseBlock).callId === 'hist_tool_responded',
+          ),
         );
-        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
-        expect(curated[toolCallIndex + 1]?.speaker).not.toBe('tool');
+        expect(toolResponses).toHaveLength(1);
       });
     });
   });

@@ -437,13 +437,12 @@ describe('OAuth Token Reuse (Issues #1262 and #1195)', () => {
 
   describe('OAuth enablement checks', () => {
     /**
-     * @scenario OAuth disabled should not trigger any auth
-     * @given OAuth is disabled for the provider
+     * @scenario OAuth disabled in loaded settings should not use stored token
+     * @given OAuth is disabled for the provider in explicit settings
      * @when getToken() is called
      * @then Should return null without triggering OAuth
      */
-    it('should return null without OAuth when OAuth is disabled', async () => {
-      // Setup: OAuth disabled for anthropic
+    it('should return null when OAuth is disabled in loaded settings', async () => {
       const disabledSettings = createLoadedSettings({
         oauthEnabledProviders: { anthropic: false },
       });
@@ -451,10 +450,50 @@ describe('OAuth Token Reuse (Issues #1262 and #1195)', () => {
       const provider = new MockOAuthProvider('anthropic');
       disabledManager.registerProvider(provider);
 
-      // Even if a token exists, OAuth disabled means we don't use it
       tokenStore.simulateExternalToken('anthropic');
 
       const token = await disabledManager.getToken('anthropic');
+
+      expect(token).toBeNull();
+      expect(provider.initiateAuthCalled).toBe(false);
+    });
+
+    /**
+     * @scenario Runtime without loaded settings should reuse existing token
+     * @given OAuth manager has no LoadedSettings and a valid stored token exists
+     * @when getToken() is called
+     * @then Should return the existing token without triggering OAuth
+     */
+    it('should reuse existing token when runtime has no loaded settings', async () => {
+      const managerWithoutSettings = new OAuthManager(tokenStore);
+      const provider = new MockOAuthProvider('anthropic');
+      managerWithoutSettings.registerProvider(provider);
+
+      const existingToken = tokenStore.simulateExternalToken('anthropic');
+
+      const token = await managerWithoutSettings.getToken('anthropic');
+
+      expect(token).toBe(existingToken.access_token);
+      expect(provider.initiateAuthCalled).toBe(false);
+    });
+
+    /**
+     * @scenario Runtime with explicit in-memory disable should not reuse stored token
+     * @given OAuth manager has no LoadedSettings and provider was explicitly disabled in-memory
+     * @and A valid stored token exists
+     * @when getToken() is called
+     * @then Should return null without triggering OAuth
+     */
+    it('should return null when runtime has explicit in-memory OAuth disable state', async () => {
+      const managerWithoutSettings = new OAuthManager(tokenStore);
+      const provider = new MockOAuthProvider('anthropic');
+      managerWithoutSettings.registerProvider(provider);
+
+      tokenStore.simulateExternalToken('anthropic');
+      await managerWithoutSettings.toggleOAuthEnabled('anthropic');
+      await managerWithoutSettings.toggleOAuthEnabled('anthropic');
+
+      const token = await managerWithoutSettings.getToken('anthropic');
 
       expect(token).toBeNull();
       expect(provider.initiateAuthCalled).toBe(false);

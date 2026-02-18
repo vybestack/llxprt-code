@@ -1,0 +1,52 @@
+{
+  "tmux": {
+    "cols": 180,
+    "rows": 50,
+    "historyLimit": 50000,
+    "scrollbackLines": 10000,
+    "initialWaitMs": 20000
+  },
+  "startCommand": [
+    "bash",
+    "-c",
+    "cd /Users/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/fakeproject && exec node /Users/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli/dist/index.js --profile-load chutesminimax --yolo"
+  ],
+  "yolo": true,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": ">",
+      "timeoutMs": 25000
+    },
+    { "type": "capture", "label": "01-startup", "scope": "screen" },
+
+    {
+      "type": "line",
+      "text": "In src/calculator.ts, change the return type of the 'add' method from 'number' to 'string', but do NOT change the implementation (leave it returning a + b which is a number). This will create a deliberate type mismatch. Only change the return type annotation, nothing else."
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "calculator",
+      "timeoutMs": 120000
+    },
+    { "type": "wait", "ms": 45000 },
+    { "type": "capture", "label": "02-after-edit", "scope": "scrollback" },
+    { "type": "capture", "label": "02-after-edit-screen", "scope": "screen" },
+
+    { "type": "line", "text": "/lsp status" },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "server status",
+      "timeoutMs": 45000
+    },
+    { "type": "wait", "ms": 5000 },
+    { "type": "capture", "label": "03-lsp-status", "scope": "scrollback" },
+    { "type": "capture", "label": "03-lsp-status-screen", "scope": "screen" },
+
+    { "type": "line", "text": "/quit" },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

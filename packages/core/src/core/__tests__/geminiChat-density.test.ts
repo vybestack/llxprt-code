@@ -114,6 +114,7 @@ function buildRuntimeContext(
     'compression.density.fileDedupe'?: boolean;
     'compression.density.recencyPruning'?: boolean;
     'compression.density.recencyRetention'?: number;
+    'compression.density.optimizeThreshold'?: number;
   } = {},
 ): AgentRuntimeContext {
   const runtimeState = createAgentRuntimeState({
@@ -156,6 +157,8 @@ function buildRuntimeContext(
         overrides['compression.density.recencyPruning'],
       'compression.density.recencyRetention':
         overrides['compression.density.recencyRetention'],
+      'compression.density.optimizeThreshold':
+        overrides['compression.density.optimizeThreshold'],
     },
     provider: mockProviderAdapter,
     telemetry: mockTelemetryAdapter,
@@ -269,6 +272,7 @@ describe('Density Optimization Orchestration (P19)', () => {
     it('calls optimize when dirty and strategy supports it', async () => {
       const runtimeContext = buildRuntimeContext(historyService, {
         compressionStrategy: 'high-density',
+        'compression.density.optimizeThreshold': 0, // Always run for test
       });
 
       // Add prunable content: a read→write pair on the same file
@@ -353,6 +357,7 @@ describe('Density Optimization Orchestration (P19)', () => {
     it('applies result when optimize returns changes', async () => {
       const runtimeContext = buildRuntimeContext(historyService, {
         compressionStrategy: 'high-density',
+        'compression.density.optimizeThreshold': 0, // Always run for test
       });
 
       historyService.add(makeUserMessage('Fix the bug'));
@@ -790,6 +795,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       const runtimeContext = buildRuntimeContext(historyService, {
         compressionStrategy: 'high-density',
         contextLimit: 200_000,
+        'compression.density.optimizeThreshold': 0, // Always run for test
       });
 
       // Add prunable read→write pairs — density optimization can remove the stale reads
@@ -1029,6 +1035,7 @@ describe('Density Optimization Orchestration (P19)', () => {
 
               const ctx = buildRuntimeContext(hs, {
                 compressionStrategy: 'high-density',
+                'compression.density.optimizeThreshold': 0, // Always run for test
               });
               const gen = buildMockContentGenerator();
               const chat = new GeminiChat(ctx, gen, {}, []);

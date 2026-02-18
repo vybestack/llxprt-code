@@ -10,6 +10,7 @@ export enum ToolConfirmationOutcome {
   ProceedAlwaysServer = 'proceed_always_server',
   ProceedAlwaysTool = 'proceed_always_tool',
   ModifyWithEditor = 'modify_with_editor',
+  SuggestEdit = 'suggest_edit',
   Cancel = 'cancel',
 }
 
@@ -18,5 +19,10 @@ export interface ToolConfirmationPayload {
    * Used to override `modifiedProposedContent` for modifiable tools in the
    * inline modify flow.
    */
-  newContent: string;
+  newContent?: string;
+
+  /**
+   * Used to override command text for shell-like tool confirmations.
+   */
+  editedCommand?: string;
 }

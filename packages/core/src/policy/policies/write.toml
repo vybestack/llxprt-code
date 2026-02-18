@@ -83,3 +83,14 @@ toolName = "delete_line_range"
 decision = "allow"
 priority = 15
 modes = ["autoEdit"]
+
+[[rule]]
+toolName = "apply_patch"
+decision = "ask_user"
+priority = 10
+
+[[rule]]
+toolName = "apply_patch"
+decision = "allow"
+priority = 15
+modes = ["autoEdit"]

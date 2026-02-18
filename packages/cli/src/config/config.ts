@@ -34,7 +34,6 @@ import {
   SHELL_TOOL_NAMES,
   isRipgrepAvailable,
   normalizeShellReplacement,
-  loadCoreMemoryContent,
   type GeminiCLIExtension,
   type Profile,
 } from '@vybestack/llxprt-code-core';
@@ -164,9 +163,6 @@ export interface CliArgs {
   keyfile: string | undefined;
   baseurl: string | undefined;
   proxy: string | undefined;
-  resume: string | typeof RESUME_LATEST | undefined;
-  listSessions: boolean | undefined;
-  deleteSession: string | undefined;
   includeDirectories: string[] | undefined;
   profileLoad: string | undefined;
   loadMemoryFromIncludeDirectories: boolean | undefined;
@@ -177,8 +173,14 @@ export interface CliArgs {
   promptWords: string[] | undefined;
   query: string | undefined;
   set: string[] | undefined;
-  continue: boolean | undefined;
+  /** @plan PLAN-20260211-SESSIONRECORDING.P24 — widened to support --continue <session-id> */
+  continue: string | boolean | undefined;
+  resume: string | typeof RESUME_LATEST | undefined;
   nobrowser: boolean | undefined;
+  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 — list recorded sessions */
+  listSessions: boolean | undefined;
+  /** @plan:PLAN-20260211-SESSIONRECORDING.P26 — delete a recorded session by ref */
+  deleteSession: string | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -356,15 +358,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
             return value;
           },
         })
-        .option('list-sessions', {
-          type: 'boolean',
-          description:
-            'List available sessions for the current project and exit.',
-        })
-        .option('delete-session', {
-          type: 'string',
-          description: 'Delete a session by index and exit.',
-        })
         .option('include-directories', {
           type: 'array',
           string: true,
@@ -389,10 +382,26 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .option('continue', {
           alias: 'C',
-          type: 'boolean',
+          type: 'string',
+          skipValidation: true,
           description:
-            'Resume the most recent session for this project. Can be combined with --prompt to continue with a new message.',
+            'Resume a previous session. Bare --continue resumes the most recent. --continue <id> resumes a specific session.',
+          coerce: (value: string): string => {
+            if (value === '') {
+              return value;
+            }
+            return value;
+          },
+        })
+        .option('list-sessions', {
+          type: 'boolean',
+          description: 'List recorded sessions for the current project.',
           default: false,
+        })
+        .option('delete-session', {
+          type: 'string',
+          description:
+            'Delete a recorded session by ID, prefix, or 1-based index.',
         })
         .option('nobrowser', {
           type: 'boolean',
@@ -620,20 +629,27 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
   yargsInstance.wrap(yargsInstance.terminalWidth());
   const result = await yargsInstance.parseAsync();
 
-  // Subcommand handlers (extensions, mcp) execute during parseAsync().
-  // If one ran successfully, exit now so we don't fall through to the
-  // main interactive/non-interactive stdin check.
-  const SUBCOMMAND_NAMES = new Set(['extensions', 'extension', 'ext', 'mcp']);
-  const matchedCommand = (result._ as string[])?.[0];
-  if (matchedCommand && SUBCOMMAND_NAMES.has(matchedCommand)) {
-    const { exitCli } = await import('../commands/utils.js');
-    await exitCli(0);
-  }
-
   // The import format is now only controlled by settings.memoryImportFormat
   // We no longer accept it as a CLI argument
 
   // Map camelCase names to match CliArgs interface
+  // Check if an MCP or extensions subcommand was handled
+  // The _ array contains the commands that were run
+  if (result._ && result._.length > 0 && result._[0] === 'mcp') {
+    // An MCP subcommand was executed (like 'mcp list'), exit cleanly
+    process.exit(0);
+  }
+
+  if (
+    result._ &&
+    result._.length > 0 &&
+    (result._[0] === 'extensions' ||
+      result._[0] === 'extension' ||
+      result._[0] === 'ext')
+  ) {
+    // An extensions subcommand was executed (like 'extensions install'), exit cleanly
+    process.exit(0);
+  }
 
   const promptWords = result.promptWords as string[] | undefined;
   const promptWordsFiltered =
@@ -675,8 +691,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     baseurl: result.baseurl as string | undefined,
     proxy: result.proxy as string | undefined,
     resume: result.resume as string | typeof RESUME_LATEST | undefined,
-    listSessions: result.listSessions as boolean | undefined,
-    deleteSession: result.deleteSession as string | undefined,
     includeDirectories: result.includeDirectories as string[] | undefined,
     profileLoad: result.profileLoad as string | undefined,
     loadMemoryFromIncludeDirectories:
@@ -689,8 +703,10 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     promptWords: result.promptWords as string[] | undefined,
     query: queryFromPromptWords,
     set: result.set as string[] | undefined,
-    continue: result.continue as boolean | undefined,
+    continue: result.continue as string | boolean | undefined,
     nobrowser: result.nobrowser as boolean | undefined,
+    listSessions: result.listSessions as boolean | undefined,
+    deleteSession: result.deleteSession as string | undefined,
   };
 
   return cliArgs;
@@ -1098,14 +1114,6 @@ export async function loadCliConfig(
       memoryFileFiltering,
     );
 
-  // Load core (system) memory from .LLXPRT_SYSTEM files
-  let coreMemoryContent = '';
-  try {
-    coreMemoryContent = await loadCoreMemoryContent(cwd);
-  } catch {
-    // Non-fatal: proceed without core memory
-  }
-
   let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
   const question =
     argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
@@ -1170,7 +1178,6 @@ export async function loadCliConfig(
     argv.promptWords && argv.promptWords.some((word) => word.trim() !== '');
   const interactive =
     !!argv.promptInteractive ||
-    !!argv.experimentalAcp ||
     (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
 
   const allowedTools = argv.allowedTools || settings.allowedTools || [];
@@ -1178,7 +1185,7 @@ export async function loadCliConfig(
 
   // In non-interactive mode, exclude tools that require a prompt.
   const extraExcludes: string[] = [];
-  if (!interactive) {
+  if (!interactive && !argv.experimentalAcp) {
     const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
     const autoEditExcludes = [ShellTool.Name];
 
@@ -1362,7 +1369,6 @@ export async function loadCliConfig(
     mcpServerCommand: effectiveSettings.mcpServerCommand,
     mcpServers,
     userMemory: memoryContent,
-    coreMemory: coreMemoryContent,
     llxprtMdFileCount: fileCount,
     llxprtMdFilePaths: filePaths,
     approvalMode,
@@ -1443,7 +1449,12 @@ export async function loadCliConfig(
     ptyScrollbackLimit: effectiveSettings.ptyScrollbackLimit,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
-    continueSession: argv.continue ?? false,
+    // @plan PLAN-20260211-SESSIONRECORDING.P24 — normalize --continue flag:
+    // bare --continue (yargs gives "") → true, --continue <id> → id string, absent → false
+    continueSession:
+      argv.continue === '' || argv.continue === true
+        ? true
+        : argv.continue || false,
     // TODO: loading of hooks based on workspace trust
     enableHooks: effectiveSettings.tools?.enableHooks ?? false,
     hooks: effectiveSettings.hooks || {},
@@ -1486,15 +1497,13 @@ export async function loadCliConfig(
       `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
   );
 
-  // CRITICAL FIX for #492: When --provider is specified with CLI auth (--key/--keyfile/--key-name/--baseurl),
+  // CRITICAL FIX for #492: When --provider is specified with CLI auth (--key/--keyfile/--baseurl),
   // create a synthetic profile to apply the auth credentials using the same flow as profile loading.
   // This ensures auth is applied BEFORE provider switch, just like profile loading does.
-  // @plan PLAN-20260211-SECURESTORE.P16 @requirement R21.3, R22.2
   if (
     argv.provider &&
     (bootstrapArgs.keyOverride ||
       bootstrapArgs.keyfileOverride ||
-      bootstrapArgs.keyNameOverride ||
       bootstrapArgs.baseurlOverride)
   ) {
     logger.debug(
@@ -1515,11 +1524,6 @@ export async function loadCliConfig(
     if (bootstrapArgs.keyfileOverride) {
       syntheticProfile.ephemeralSettings['auth-keyfile'] =
         bootstrapArgs.keyfileOverride;
-    }
-    // @plan PLAN-20260211-SECURESTORE.P16 @requirement R21.3
-    if (bootstrapArgs.keyNameOverride) {
-      syntheticProfile.ephemeralSettings['auth-key-name'] =
-        bootstrapArgs.keyNameOverride;
     }
     if (bootstrapArgs.baseurlOverride) {
       syntheticProfile.ephemeralSettings['base-url'] =
@@ -1650,12 +1654,10 @@ export async function loadCliConfig(
   // Apply CLI argument overrides AFTER provider switch (switchActiveProvider clears ephemerals)
   // Note: We already applied key/keyfile/baseurl earlier, but we need to reapply after provider switch
   // Also apply --set arguments which weren't handled earlier
-  // @plan PLAN-20260211-SECURESTORE.P16 @requirement R22.1 — include keyNameOverride in override check
   if (
     bootstrapArgs &&
     (bootstrapArgs.keyOverride ||
       bootstrapArgs.keyfileOverride ||
-      bootstrapArgs.keyNameOverride ||
       bootstrapArgs.baseurlOverride ||
       (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
   ) {
@@ -1756,14 +1758,9 @@ export async function loadCliConfig(
     argv.provider === undefined
   ) {
     // Extract ephemeral settings that were merged from the profile
-    /**
-     * @plan PLAN-20260211-SECURESTORE.P16
-     * @requirement R21.2
-     */
     const ephemeralKeys = [
       'auth-key',
       'auth-keyfile',
-      'auth-key-name',
       'context-limit',
       'compression-threshold',
       'base-url',

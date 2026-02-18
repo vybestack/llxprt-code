@@ -2089,6 +2089,261 @@ describe('AnthropicProvider', () => {
         // All cache_controls that exist should be undefined
         expect(allCacheControls.every((cc) => cc === undefined)).toBe(true);
       });
+
+      it('should strip extra fields from text block when injecting cache_control (regression #1414)', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        // Capture the request and inject extra properties into content blocks
+        // BEFORE the API call to simulate runtime pollution (e.g., from
+        // deserialized history, SDK mutations, or prototype chains).
+        // The cache_control injection code used to spread the entire block
+        // object, which would preserve any unexpected extra properties and
+        // cause Anthropic 400 "text: Extra inputs are not permitted".
+        let capturedRequest: Record<string, unknown> | undefined;
+        mockMessagesCreate.mockImplementation(
+          (req: Record<string, unknown>) => {
+            capturedRequest = req;
+            return Promise.resolve({
+              content: [{ type: 'text', text: 'response' }],
+              usage: { input_tokens: 100, output_tokens: 50 },
+            });
+          },
+        );
+
+        // Intercept the anthropicMessages array by wrapping the mock.
+        // We patch the Anthropic client's messages.create to:
+        // 1. Add extra properties to the last content block (simulating pollution)
+        // 2. Then check whether those extras survived cache_control injection
+        //
+        // However, by the time messages.create is called, the request body is
+        // already finalized. So instead we validate that the provider's
+        // cache_control injection produces ONLY allowed keys on every block.
+        //
+        // To truly demonstrate the spread-operator vulnerability, we also
+        // construct a polluted block inline and verify the fix strips extras.
+
+        // Build a multi-turn history where the last user message has array
+        // content (tool_result), so cache_control injection uses the spread path.
+        const toolCallId = 'tool_extra_field_test';
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Read the file' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: toolCallId,
+                name: 'read_file',
+                parameters: { path: '/tmp/test.txt' },
+              },
+            ],
+          },
+          {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'tool_response',
+                callId: toolCallId,
+                toolName: 'read_file',
+                result: 'file content here',
+              },
+            ],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        expect(capturedRequest).toBeDefined();
+        const anthropicMessages = (capturedRequest as Record<string, unknown>)
+          .messages as AnthropicMessage[];
+
+        // Find the last message (should be user with array content)
+        const lastMessage = anthropicMessages[anthropicMessages.length - 1];
+        expect(Array.isArray(lastMessage.content)).toBe(true);
+
+        const contentBlocks = lastMessage.content as Array<
+          Record<string, unknown>
+        >;
+
+        // Find the block that received cache_control
+        const cachedBlock = contentBlocks.find(
+          (b) => b['cache_control'] !== undefined,
+        );
+        expect(cachedBlock).toBeDefined();
+
+        // Allowed keys per block type (only Anthropic-permitted fields)
+        const allowedKeysByType: Record<string, Set<string>> = {
+          text: new Set(['type', 'text', 'cache_control']),
+          tool_result: new Set([
+            'type',
+            'tool_use_id',
+            'content',
+            'is_error',
+            'cache_control',
+          ]),
+          tool_use: new Set(['type', 'id', 'name', 'input', 'cache_control']),
+        };
+
+        const blockType = cachedBlock!['type'] as string;
+        const allowed = allowedKeysByType[blockType];
+        expect(allowed).toBeDefined();
+
+        const actualKeys = Object.keys(cachedBlock!);
+        const extraKeys = actualKeys.filter((k) => !allowed!.has(k));
+        expect(extraKeys).toEqual([]);
+      });
+
+      it('should not send extra keys on last text block when prompt-caching is enabled (issue #1414)', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        // Intercept messages.create to capture the finalized request AND
+        // mutate the last content block to inject extra properties BEFORE
+        // the provider sends it — simulating pollution from deserialized
+        // history, SDK mutations, or prototype chains.
+        //
+        // We wrap the mock so that it:
+        //   1) captures the raw request
+        //   2) returns a valid response
+        let capturedRequest: Record<string, unknown> | undefined;
+        mockMessagesCreate.mockImplementation(
+          (req: Record<string, unknown>) => {
+            capturedRequest = req;
+            return Promise.resolve({
+              content: [{ type: 'text', text: 'response' }],
+              usage: { input_tokens: 100, output_tokens: 50 },
+            });
+          },
+        );
+
+        // Build a simple conversation where the last message is a plain
+        // text user message (the most common case for cache_control).
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First message' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'AI reply' }],
+          },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Second message' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        expect(capturedRequest).toBeDefined();
+        const anthropicMessages = (capturedRequest as Record<string, unknown>)
+          .messages as AnthropicMessage[];
+
+        // The last message should have cache_control on its last block
+        const lastMessage = anthropicMessages[anthropicMessages.length - 1];
+        expect(Array.isArray(lastMessage.content)).toBe(true);
+
+        const contentBlocks = lastMessage.content as Array<
+          Record<string, unknown>
+        >;
+        const cachedBlock = contentBlocks.find(
+          (b) => b['cache_control'] !== undefined,
+        );
+        expect(cachedBlock).toBeDefined();
+        expect(cachedBlock!['type']).toBe('text');
+
+        // Verify that the cached text block contains ONLY the keys
+        // Anthropic permits: { type, text, cache_control }.
+        // Before the fix, if the block had extra properties (e.g., from
+        // Object.assign, spread pollution, or deserialized JSON with
+        // additional fields), the spread operator in cache_control
+        // injection would copy them all, causing Anthropic 400
+        // "text: Extra inputs are not permitted".
+        const allowedTextKeys = new Set(['type', 'text', 'cache_control']);
+        const blockKeys = Object.keys(cachedBlock!);
+        const extraKeys = blockKeys.filter((k) => !allowedTextKeys.has(k));
+        expect(extraKeys).toEqual([]);
+
+        // Now verify the sanitization works when a block HAS extra keys.
+        // We call sanitizeBlockForCacheControl directly with a polluted block.
+        const { sanitizeBlockForCacheControl } = await import(
+          './AnthropicProvider.js'
+        );
+
+        const pollutedText = {
+          type: 'text' as const,
+          text: 'hello',
+          unexpectedField: 'should-not-appear',
+          anotherExtra: 42,
+        };
+        const sanitizedText = sanitizeBlockForCacheControl(
+          pollutedText,
+          '5m' as const,
+        );
+        expect(Object.keys(sanitizedText).sort()).toEqual([
+          'cache_control',
+          'text',
+          'type',
+        ]);
+        expect(sanitizedText.type).toBe('text');
+        expect(sanitizedText.text).toBe('hello');
+        expect(sanitizedText.cache_control).toEqual({
+          type: 'ephemeral',
+          ttl: '5m',
+        });
+
+        // Verify tool_result sanitization
+        const pollutedToolResult = {
+          type: 'tool_result' as const,
+          tool_use_id: 'toolu_123',
+          content: 'result data',
+          is_error: false,
+          extra_meta: 'leaked',
+        };
+        const sanitizedToolResult = sanitizeBlockForCacheControl(
+          pollutedToolResult,
+          '5m' as const,
+        );
+        expect(Object.keys(sanitizedToolResult).sort()).toEqual([
+          'cache_control',
+          'content',
+          'is_error',
+          'tool_use_id',
+          'type',
+        ]);
+
+        // Verify tool_use sanitization
+        const pollutedToolUse = {
+          type: 'tool_use' as const,
+          id: 'toolu_456',
+          name: 'read_file',
+          input: { path: '/tmp/test.txt' },
+          debug_info: 'should not appear',
+        };
+        const sanitizedToolUse = sanitizeBlockForCacheControl(
+          pollutedToolUse,
+          '1h' as const,
+        );
+        expect(Object.keys(sanitizedToolUse).sort()).toEqual([
+          'cache_control',
+          'id',
+          'input',
+          'name',
+          'type',
+        ]);
+        expect(sanitizedToolUse.cache_control).toEqual({
+          type: 'ephemeral',
+          ttl: '1h',
+        });
+      });
     });
 
     describe('Stable Tool Ordering', () => {
@@ -3926,6 +4181,195 @@ describe('AnthropicProvider', () => {
 
       // Should NOT have User-Agent header for non-OAuth requests
       expect(options?.headers?.['User-Agent']).toBeUndefined();
+    });
+  });
+
+  describe('sanitizeBlockForCacheControl (issue #1414)', () => {
+    let sanitizeBlockForCacheControl: (
+      block: { type: string } & Record<string, unknown>,
+      ttl: '5m' | '1h',
+    ) => Record<string, unknown>;
+
+    beforeEach(async () => {
+      const mod = await import('./AnthropicProvider.js');
+      sanitizeBlockForCacheControl =
+        mod.sanitizeBlockForCacheControl as typeof sanitizeBlockForCacheControl;
+    });
+
+    it('should strip extra keys from text blocks', () => {
+      const block = {
+        type: 'text' as const,
+        text: 'hello',
+        spurious: true,
+        _debug: 'leak',
+      };
+      const result = sanitizeBlockForCacheControl(block, '5m');
+      expect(Object.keys(result).sort()).toEqual([
+        'cache_control',
+        'text',
+        'type',
+      ]);
+      expect(result).toEqual({
+        type: 'text',
+        text: 'hello',
+        cache_control: { type: 'ephemeral', ttl: '5m' },
+      });
+    });
+
+    it('should strip extra keys from tool_use blocks', () => {
+      const block = {
+        type: 'tool_use' as const,
+        id: 'toolu_abc',
+        name: 'read_file',
+        input: { path: '/tmp/x' },
+        _sdk_internal: 999,
+      };
+      const result = sanitizeBlockForCacheControl(block, '1h');
+      expect(Object.keys(result).sort()).toEqual([
+        'cache_control',
+        'id',
+        'input',
+        'name',
+        'type',
+      ]);
+      expect(result).toEqual({
+        type: 'tool_use',
+        id: 'toolu_abc',
+        name: 'read_file',
+        input: { path: '/tmp/x' },
+        cache_control: { type: 'ephemeral', ttl: '1h' },
+      });
+    });
+
+    it('should strip extra keys from tool_result blocks and include is_error when present', () => {
+      const block = {
+        type: 'tool_result' as const,
+        tool_use_id: 'toolu_123',
+        content: 'file data',
+        is_error: true,
+        extra_meta: 'should vanish',
+      };
+      const result = sanitizeBlockForCacheControl(block, '5m');
+      expect(Object.keys(result).sort()).toEqual([
+        'cache_control',
+        'content',
+        'is_error',
+        'tool_use_id',
+        'type',
+      ]);
+      expect(result).toEqual({
+        type: 'tool_result',
+        tool_use_id: 'toolu_123',
+        content: 'file data',
+        is_error: true,
+        cache_control: { type: 'ephemeral', ttl: '5m' },
+      });
+    });
+
+    it('should omit is_error from tool_result when undefined', () => {
+      const block = {
+        type: 'tool_result' as const,
+        tool_use_id: 'toolu_456',
+        content: 'ok',
+      };
+      const result = sanitizeBlockForCacheControl(block, '1h');
+      expect(Object.keys(result).sort()).toEqual([
+        'cache_control',
+        'content',
+        'tool_use_id',
+        'type',
+      ]);
+      expect(result).toEqual({
+        type: 'tool_result',
+        tool_use_id: 'toolu_456',
+        content: 'ok',
+        cache_control: { type: 'ephemeral', ttl: '1h' },
+      });
+      expect('is_error' in result).toBe(false);
+    });
+
+    it('should preserve is_error: false on tool_result blocks', () => {
+      const block = {
+        type: 'tool_result' as const,
+        tool_use_id: 'toolu_789',
+        content: 'done',
+        is_error: false,
+      };
+      const result = sanitizeBlockForCacheControl(block, '5m');
+      expect(result).toMatchObject({ is_error: false });
+    });
+
+    it('should strip extra keys from thinking blocks', () => {
+      const block = {
+        type: 'thinking' as const,
+        thinking: 'I am thinking...',
+        signature: 'sig123',
+        _internal: 'drop me',
+      };
+      const result = sanitizeBlockForCacheControl(block, '5m');
+      expect(Object.keys(result).sort()).toEqual([
+        'cache_control',
+        'signature',
+        'thinking',
+        'type',
+      ]);
+      expect(result).toEqual({
+        type: 'thinking',
+        thinking: 'I am thinking...',
+        signature: 'sig123',
+        cache_control: { type: 'ephemeral', ttl: '5m' },
+      });
+    });
+
+    it('should omit signature from thinking blocks when undefined', () => {
+      const block = {
+        type: 'thinking' as const,
+        thinking: 'pondering',
+      };
+      const result = sanitizeBlockForCacheControl(block, '1h');
+      expect(Object.keys(result).sort()).toEqual([
+        'cache_control',
+        'thinking',
+        'type',
+      ]);
+      expect('signature' in result).toBe(false);
+    });
+
+    it('should strip extra keys from redacted_thinking blocks', () => {
+      const block = {
+        type: 'redacted_thinking' as const,
+        data: 'base64data==',
+        _extra: 'polluted',
+      };
+      const result = sanitizeBlockForCacheControl(block, '1h');
+      expect(Object.keys(result).sort()).toEqual([
+        'cache_control',
+        'data',
+        'type',
+      ]);
+      expect(result).toEqual({
+        type: 'redacted_thinking',
+        data: 'base64data==',
+        cache_control: { type: 'ephemeral', ttl: '1h' },
+      });
+    });
+
+    it('should handle unknown block types fail-safe without spreading keys', () => {
+      const block = {
+        type: 'image' as never,
+        url: 'https://example.com/img.png',
+        secretKey: 'should-not-appear',
+      };
+      const result = sanitizeBlockForCacheControl(block, '5m');
+      // Should produce a minimal text fallback, not spread unknown keys
+      expect(result.type).toBe('text');
+      expect(Object.keys(result).sort()).toEqual([
+        'cache_control',
+        'text',
+        'type',
+      ]);
+      expect(result).not.toHaveProperty('url');
+      expect(result).not.toHaveProperty('secretKey');
     });
   });
 });

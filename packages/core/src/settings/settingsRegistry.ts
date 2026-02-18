@@ -723,6 +723,18 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     },
   },
   {
+    key: 'subagents.async.enabled',
+    category: 'cli-behavior',
+    description: 'Enable async subagents for this profile.',
+    type: 'boolean',
+    default: true,
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Enable async subagents' },
+      { value: 'false', description: 'Disable async subagents' },
+    ],
+  },
+  {
     key: 'shell-default-timeout-seconds',
     category: 'cli-behavior',
     description: 'Default timeout in seconds for shell command executions',
@@ -1097,6 +1109,28 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
         success: false,
         message:
           'compression.density.compressHeadroom must be a number > 0 and <= 1',
+      };
+    },
+  },
+  {
+    key: 'compression.density.optimizeThreshold',
+    category: 'cli-behavior',
+    description:
+      'Context usage threshold (0-1) for when density optimization runs. If not set, uses the compression strategy default (e.g., 0.9 for high-density).',
+    type: 'number',
+    default: undefined,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (value === undefined || value === null) {
+        return { success: true, value: undefined };
+      }
+      if (typeof value === 'number' && value >= 0 && value <= 1) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'compression.density.optimizeThreshold must be a number >= 0 and <= 1',
       };
     },
   },

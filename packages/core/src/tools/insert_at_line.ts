@@ -29,6 +29,7 @@ import { getSpecificMimeType } from '../utils/fileUtils.js';
 import { isNodeError } from '../utils/errors.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 
 /**
  * Parameters for the InsertAtLine tool
@@ -228,8 +229,29 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
       );
 
       const action = fileExists ? 'inserted' : 'created and inserted';
+
+      // @plan PLAN-20250212-LSP.P31
+      // @requirement REQ-DIAG-010
+      // Append LSP diagnostics after successful edit
+      const llmSuccessMessageParts: string[] = [
+        `Successfully ${action} content at line ${this.params.line_number} in ${this.params.absolute_path}`,
+      ];
+
+      try {
+        const diagBlock = await collectLspDiagnosticsBlock(
+          this.config,
+          this.params.absolute_path,
+        );
+        if (diagBlock) {
+          llmSuccessMessageParts.push(diagBlock);
+        }
+      } catch (_error) {
+        // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
+        // Silently continue - edit was already successful
+      }
+
       return {
-        llmContent: `Successfully ${action} content at line ${this.params.line_number} in ${this.params.absolute_path}`,
+        llmContent: llmSuccessMessageParts.join('\n\n'),
         returnDisplay: `${action.charAt(0).toUpperCase() + action.slice(1)} ${linesInserted} lines at line ${this.params.line_number}`,
       };
     } catch (error) {

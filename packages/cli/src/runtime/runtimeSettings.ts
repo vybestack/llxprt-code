@@ -1016,32 +1016,6 @@ export function buildRuntimeProfileSnapshot(): Profile {
     }
   }
 
-  const snapshotHasAuthKeyfile =
-    snapshot['auth-keyfile'] !== undefined && snapshot['auth-keyfile'] !== null;
-  const snapshotHasAuthKeyName =
-    snapshot['auth-key-name'] !== undefined &&
-    snapshot['auth-key-name'] !== null;
-
-  if (
-    !snapshotHasAuthKeyfile &&
-    !snapshotHasAuthKeyName &&
-    snapshot['auth-key'] === undefined
-  ) {
-    const authKey =
-      ephemeralRecord['auth-key'] ??
-      (settingsService.get('auth-key') as string | undefined);
-    if (authKey) {
-      snapshot['auth-key'] = authKey;
-    }
-  }
-
-  if (snapshot['base-url'] === undefined) {
-    const baseUrl = providerSettings.baseUrl as string | undefined;
-    if (baseUrl) {
-      snapshot['base-url'] = baseUrl;
-    }
-  }
-
   if (snapshot['GOOGLE_CLOUD_PROJECT'] === undefined) {
     const project = process.env.GOOGLE_CLOUD_PROJECT;
     if (typeof project === 'string' && project.trim().length > 0) {
@@ -2082,8 +2056,11 @@ export async function updateActiveProviderApiKey(
   if (!trimmed) {
     settingsService.setProviderSetting(providerName, 'apiKey', undefined);
     settingsService.setProviderSetting(providerName, 'auth-key', undefined);
+    settingsService.setProviderSetting(providerName, 'apiKeyfile', undefined);
+    settingsService.setProviderSetting(providerName, 'auth-keyfile', undefined);
     config.setEphemeralSetting('auth-key', undefined);
     config.setEphemeralSetting('auth-keyfile', undefined);
+    config.setEphemeralSetting('auth-key-name', undefined);
 
     const isPaidMode = provider.isPaidMode?.();
     logger.debug(
@@ -2103,8 +2080,11 @@ export async function updateActiveProviderApiKey(
   }
 
   settingsService.setProviderSetting(providerName, 'apiKey', trimmed);
+  settingsService.setProviderSetting(providerName, 'apiKeyfile', undefined);
+  settingsService.setProviderSetting(providerName, 'auth-keyfile', undefined);
   config.setEphemeralSetting('auth-key', trimmed);
   config.setEphemeralSetting('auth-keyfile', undefined);
+  config.setEphemeralSetting('auth-key-name', undefined);
 
   const isPaidMode = provider.isPaidMode?.();
   logger.debug(
@@ -2131,10 +2111,13 @@ export async function updateActiveProviderBaseUrl(
   const providerName = provider.name;
   const trimmed = baseUrl?.trim();
 
-  if (!trimmed || trimmed === '' || trimmed === 'none') {
+  const normalizedBaseUrl =
+    trimmed && trimmed.toLowerCase() === 'none' ? '' : trimmed;
+
+  if (!normalizedBaseUrl) {
     settingsService.setProviderSetting(providerName, 'baseUrl', undefined);
     settingsService.setProviderSetting(providerName, 'baseURL', undefined);
-    config.setEphemeralSetting('base-url', trimmed ?? undefined);
+    config.setEphemeralSetting('base-url', undefined);
     return {
       changed: true,
       providerName,
@@ -2142,14 +2125,22 @@ export async function updateActiveProviderBaseUrl(
     };
   }
 
-  settingsService.setProviderSetting(providerName, 'baseUrl', trimmed);
-  settingsService.setProviderSetting(providerName, 'baseURL', trimmed);
-  config.setEphemeralSetting('base-url', trimmed);
+  settingsService.setProviderSetting(
+    providerName,
+    'baseUrl',
+    normalizedBaseUrl,
+  );
+  settingsService.setProviderSetting(
+    providerName,
+    'baseURL',
+    normalizedBaseUrl,
+  );
+  config.setEphemeralSetting('base-url', normalizedBaseUrl);
   return {
     changed: true,
     providerName,
-    message: `Base URL updated to '${trimmed}' for provider '${providerName}'.`,
-    baseUrl: trimmed,
+    message: `Base URL updated to '${normalizedBaseUrl}' for provider '${providerName}'.`,
+    baseUrl: normalizedBaseUrl,
   };
 }
 
@@ -2381,8 +2372,9 @@ export async function applyCliArgumentOverrides(
     if (profileKeyName) {
       const resolvedKey = await resolveNamedKey(profileKeyName);
       await updateActiveProviderApiKey(resolvedKey);
-      // Clear raw key from ephemeral settings — the profile already has
-      // auth-key-name, so snapshots should preserve that, not the secret.
+      // Preserve the name reference so snapshots persist auth-key-name,
+      // not the resolved secret.
+      config.setEphemeralSetting('auth-key-name', profileKeyName);
       config.setEphemeralSetting('auth-key', undefined);
       config.setEphemeralSetting('auth-keyfile', undefined);
       logger.debug(

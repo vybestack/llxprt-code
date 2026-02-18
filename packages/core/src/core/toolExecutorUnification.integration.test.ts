@@ -17,7 +17,7 @@
  * 3. agentId preservation - agentId flows correctly through execution paths
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
@@ -37,6 +37,11 @@ import { MockTool } from '../test-utils/mock-tool.js';
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 import { PolicyDecision } from '../policy/types.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
+import {
+  getOrCreateScheduler,
+  disposeScheduler,
+  clearAllSchedulers,
+} from '../config/schedulerSingleton.js';
 
 function createMockMessageBus() {
   return {
@@ -123,8 +128,10 @@ function createMockExecutionConfig(
 ): ToolExecutionConfig {
   const policyEngine = options?.policyEngine ?? createAllowPolicyEngine();
   const ephemeralSettings = options?.ephemeralSettings ?? {};
+  const messageBus = createMockMessageBus();
 
-  return {
+  // Create a base config object that we'll extend with scheduler methods
+  const baseConfig = {
     getSessionId: () => 'test-session-id',
     getTelemetryLogPromptsEnabled: () => false,
     getExcludeTools: () => [],
@@ -134,14 +141,38 @@ function createMockExecutionConfig(
     getPolicyEngine: () => policyEngine,
     getApprovalMode: () => options?.approvalMode ?? ApprovalMode.DEFAULT,
     getAllowedTools: () => undefined,
+    getMessageBus: () => messageBus,
+    getUsageStatisticsEnabled: () => false,
+    getDebugMode: () => false,
+    getContentGeneratorConfig: () => ({ model: 'test-model' }),
   };
+
+  // Add scheduler singleton methods - they need the full config reference
+  const config: ToolExecutionConfig = {
+    ...baseConfig,
+    getOrCreateScheduler: (sessionId, callbacks, schedulerOptions) =>
+      getOrCreateScheduler(
+        config as unknown as Config,
+        sessionId,
+        callbacks,
+        schedulerOptions,
+      ),
+    disposeScheduler: (sessionId) => disposeScheduler(sessionId),
+  };
+
+  return config;
 }
 
 describe('Tool Executor Unification - Integration Tests', () => {
   let abortController: AbortController;
 
   beforeEach(() => {
+    clearAllSchedulers();
     abortController = new AbortController();
+  });
+
+  afterEach(() => {
+    clearAllSchedulers();
   });
 
   describe('Tool Governance Consistency', () => {

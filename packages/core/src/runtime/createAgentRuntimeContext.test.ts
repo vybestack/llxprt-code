@@ -321,7 +321,7 @@ describe('createAgentRuntimeContext', () => {
       };
 
       const context = createAgentRuntimeContext(options);
-      expect(context.ephemerals.preserveThreshold()).toBe(0.2);
+      expect(context.ephemerals.preserveThreshold()).toBe(0.4);
     });
 
     it('should return tool format override when set', () => {

@@ -15,6 +15,8 @@ import {
   clearActiveProviderRuntimeContext,
   SettingsService,
 } from '@vybestack/llxprt-code-core';
+import { inkRenderOptions } from './ui/inkRenderOptions.js';
+
 import { LoadedSettings } from './config/settings.js';
 
 vi.mock('./utils/version.js', () => ({
@@ -104,17 +106,20 @@ describe('startInteractiveUI ink render options', () => {
       accessibility: { screenReader: false },
     });
 
-    await startInteractiveUI(config, createLoadedSettings(), [], tempDir);
+    const settings = createLoadedSettings();
+
+    await startInteractiveUI(config, settings, [], tempDir);
 
     expect(renderSpy).toHaveBeenCalledTimes(1);
     const [_reactElement, options] = renderSpy.mock.calls[0];
+    const expectedRenderOptions = inkRenderOptions(config, settings);
     expect(options).toEqual(
       expect.objectContaining({
         exitOnCtrlC: false,
         patchConsole: false,
         isScreenReaderEnabled: false,
-        alternateBuffer: false,
-        incrementalRendering: false,
+        alternateBuffer: expectedRenderOptions.alternateBuffer,
+        incrementalRendering: expectedRenderOptions.incrementalRendering,
       }),
     );
   });

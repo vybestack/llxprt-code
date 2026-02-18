@@ -151,7 +151,7 @@ function makeCodexToken(): OAuthToken & {
 
 const validNameArb = fc.string({
   unit: fc.constantFrom(
-    ...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-'.split(
+    ...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-@.'.split(
       '',
     ),
   ),
@@ -159,13 +159,19 @@ const validNameArb = fc.string({
   maxLength: 30,
 });
 
+const uniqueNameArrayArb = FORCE_FALLBACK
+  ? fc.uniqueArray(validNameArb, {
+      minLength: 1,
+      maxLength: 5,
+      selector: (name) => name.toLowerCase(),
+    })
+  : fc.uniqueArray(validNameArb, { minLength: 1, maxLength: 5 });
+
 const invalidNameArb = fc.oneof(
   fc.constant(''),
   fc.constant('has space'),
   fc.constant('has/slash'),
   fc.constant('has:colon'),
-  fc.constant('has.dot'),
-  fc.constant('has@at'),
   fc.constant('has!bang'),
 );
 
@@ -294,12 +300,16 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    * @when saveToken is called
    * @then Operation succeeds without error
    */
-  it('accepts valid provider and bucket names matching [a-zA-Z0-9_-]+', async () => {
+  it('accepts valid provider and bucket names matching [a-zA-Z0-9._@-]+', async () => {
     const token = makeMinimalToken();
-    await tokenStore.saveToken('valid-name_123', token, 'also_valid-1');
+    await tokenStore.saveToken(
+      'valid-name_123@example.com',
+      token,
+      'also.valid_1@example.com',
+    );
     const retrieved = await tokenStore.getToken(
-      'valid-name_123',
-      'also_valid-1',
+      'valid-name_123@example.com',
+      'also.valid_1@example.com',
     );
     expect(retrieved).not.toBeNull();
     expect(retrieved!.access_token).toBe(token.access_token);
@@ -956,7 +966,9 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     } catch (e) {
       const msg = (e as Error).message;
       expect(msg).toContain('my provider');
-      expect(msg).toContain('Allowed: letters, numbers, dashes, underscores.');
+      expect(msg).toContain(
+        'Allowed: letters, numbers, dashes, underscores, dots, @ (1-64 chars).',
+      );
     }
   });
 
@@ -1093,22 +1105,19 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    */
   it('PROP: multiple providers can coexist and listProviders is sorted', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.uniqueArray(validNameArb, { minLength: 1, maxLength: 5 }),
-        async (providers) => {
-          const setup = await createTestStore();
-          try {
-            for (const p of providers) {
-              await setup.tokenStore.saveToken(p, makeMinimalToken());
-            }
-            const listed = await setup.tokenStore.listProviders();
-            const sortedProviders = [...providers].sort();
-            expect(listed).toEqual(sortedProviders);
-          } finally {
-            await fs.rm(setup.tempDir, { recursive: true, force: true });
+      fc.asyncProperty(uniqueNameArrayArb, async (providers) => {
+        const setup = await createTestStore();
+        try {
+          for (const p of providers) {
+            await setup.tokenStore.saveToken(p, makeMinimalToken());
           }
-        },
-      ),
+          const listed = await setup.tokenStore.listProviders();
+          const sortedProviders = [...providers].sort();
+          expect(listed).toEqual(sortedProviders);
+        } finally {
+          await fs.rm(setup.tempDir, { recursive: true, force: true });
+        }
+      }),
       { numRuns: 10 },
     );
   });
@@ -1122,26 +1131,23 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    */
   it('PROP: bucket listing is always sorted', async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.uniqueArray(validNameArb, { minLength: 1, maxLength: 5 }),
-        async (buckets) => {
-          const setup = await createTestStore();
-          try {
-            for (const b of buckets) {
-              await setup.tokenStore.saveToken(
-                'sortprovider',
-                makeMinimalToken(),
-                b,
-              );
-            }
-            const listed = await setup.tokenStore.listBuckets('sortprovider');
-            const sorted = [...listed].sort();
-            expect(listed).toEqual(sorted);
-          } finally {
-            await fs.rm(setup.tempDir, { recursive: true, force: true });
+      fc.asyncProperty(uniqueNameArrayArb, async (buckets) => {
+        const setup = await createTestStore();
+        try {
+          for (const b of buckets) {
+            await setup.tokenStore.saveToken(
+              'sortprovider',
+              makeMinimalToken(),
+              b,
+            );
           }
-        },
-      ),
+          const listed = await setup.tokenStore.listBuckets('sortprovider');
+          const sorted = [...listed].sort();
+          expect(listed).toEqual(sorted);
+        } finally {
+          await fs.rm(setup.tempDir, { recursive: true, force: true });
+        }
+      }),
       { numRuns: 10 },
     );
   });

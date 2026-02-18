@@ -412,20 +412,21 @@ describe.skipIf(skipInCI)(
       /**
        * @requirement REQ-003.1
        * @scenario Get token for OAuth disabled provider
-       * @given Provider registered with OAuth disabled
+       * @given Provider registered with OAuth explicitly disabled in LoadedSettings
        * @when getToken() called
        * @then Returns null without triggering OAuth
        */
       it('should return null for OAuth disabled provider without triggering auth', async () => {
-        manager.registerProvider(qwenProvider);
+        const disabledSettings = createLoadedSettings({
+          oauthEnabledProviders: { qwen: false },
+        });
+        const managerWithSettings = new OAuthManager(
+          tokenStore,
+          disabledSettings,
+        );
+        managerWithSettings.registerProvider(qwenProvider);
 
-        // Mock OAuth as disabled
-        const mockIsEnabled = vi.fn().mockReturnValue(false);
-        (
-          manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
-        ).isOAuthEnabled = mockIsEnabled;
-
-        const token = await manager.getToken('qwen');
+        const token = await managerWithSettings.getToken('qwen');
         expect(token).toBeNull();
 
         // OAuth should not have been triggered
@@ -553,7 +554,7 @@ describe.skipIf(skipInCI)(
        * @scenario Get token for unknown provider
        * @given Provider 'unknown' not registered
        * @when getToken('unknown') called
-       * @then Throws provider not found error
+       * @then Returns null
        */
       it('should return null for unknown provider token request', async () => {
         const token = await manager.getToken('unknown');

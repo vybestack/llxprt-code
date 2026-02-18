@@ -13,6 +13,7 @@ import {
   type ToolConfirmationRequest,
   type ToolConfirmationResponse,
 } from '../confirmation-bus/types.js';
+import { ToolConfirmationOutcome } from './tools.js';
 
 class TestBaseToolInvocation extends BaseToolInvocation<object, ToolResult> {
   getDescription(): string {
@@ -134,6 +135,56 @@ describe('BaseToolInvocation', () => {
     expect(capturedRequest?.serverName).toBeUndefined();
 
     abortController.abort();
+    const result = await decisionPromise;
+    expect(result).toBe('DENY');
+  });
+
+  it('should treat SuggestEdit response as DENY to trigger legacy confirmation flow', async () => {
+    const tool = new TestBaseToolInvocation(
+      {},
+      messageBus,
+      'test-tool',
+      'Test Tool',
+    );
+
+    let capturedRequest: ToolConfirmationRequest | undefined;
+    vi.mocked(messageBus.publish).mockImplementation((request: Message) => {
+      if (request.type === MessageBusType.TOOL_CONFIRMATION_REQUEST) {
+        capturedRequest = request;
+      }
+    });
+
+    let responseHandler:
+      | ((response: ToolConfirmationResponse) => void)
+      | undefined;
+    vi.mocked(messageBus.subscribe).mockImplementation(
+      (type: MessageBusType, handler: (message: Message) => void) => {
+        if (type === MessageBusType.TOOL_CONFIRMATION_RESPONSE) {
+          responseHandler = handler as (
+            response: ToolConfirmationResponse,
+          ) => void;
+        }
+      },
+    );
+
+    const decisionPromise = tool.testGetMessageBusDecision(
+      abortController.signal,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(capturedRequest).toBeDefined();
+    if (responseHandler && capturedRequest) {
+      responseHandler({
+        type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+        correlationId: capturedRequest.correlationId,
+        outcome: ToolConfirmationOutcome.SuggestEdit,
+        payload: {
+          editedCommand: 'ls -la',
+        },
+      });
+    }
+
     const result = await decisionPromise;
     expect(result).toBe('DENY');
   });

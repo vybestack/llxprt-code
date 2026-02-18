@@ -12,6 +12,7 @@ import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import {
   ShellExecutionService,
+  splitCommands,
   type Config,
 } from '@vybestack/llxprt-code-core';
 import { ShellInputPrompt } from '../ShellInputPrompt.js';
@@ -123,10 +124,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
           : Math.min(paren, bracket);
     if (cut > 0) raw = raw.slice(0, cut);
 
-    const segments = raw
-      .split('&&')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    const segments = splitCommands(raw).filter((s) => s.length > 0);
     if (segments.length === 0) return null;
 
     const lastLine =

@@ -64,6 +64,13 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+#### `lsp`
+
+- **`lsp`** (boolean):
+  - **Description:** Enable experimental Language Server Protocol integration for real-time type-error diagnostics after file edits.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
 #### `emojifilter`
 
 - **`emojifilter`** (string):
@@ -264,7 +271,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`ui.useAlternateBuffer`** (boolean):
   - **Description:** Use an alternate screen buffer for the UI, preserving shell history.
-  - **Default:** `false`
+  - **Default:** `true`
   - **Requires restart:** Yes
 
 - **`ui.incrementalRendering`** (boolean):
@@ -283,7 +290,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`ui.showLineNumbers`** (boolean):
   - **Description:** Show line numbers in the chat.
-  - **Default:** `true`
+  - **Default:** `false`
 
 - **`ui.showCitations`** (boolean):
   - **Description:** Show citations for generated text in the chat.
@@ -509,6 +516,16 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** A list of MCP servers to exclude.
   - **Default:** `undefined`
   - **Requires restart:** Yes
+
+#### `subagents`
+
+- **`subagents.asyncEnabled`** (boolean):
+  - **Description:** Globally allow background subagent runs. If off, async=true launches are blocked even if a profile enables them.
+  - **Default:** `true`
+
+- **`subagents.maxAsync`** (number):
+  - **Description:** Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.
+  - **Default:** `5`
 
 #### `security`
 

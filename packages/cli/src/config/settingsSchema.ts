@@ -112,6 +112,14 @@ export interface SettingDefinition {
    */
   ref?: string;
   subSettings?: SettingsSchema;
+  /**
+   * For number types, the minimum allowed value.
+   */
+  minimum?: number;
+  /**
+   * For number types, the maximum allowed value.
+   */
+  maximum?: number;
 }
 
 export interface SettingsSchema {
@@ -198,6 +206,17 @@ export const SETTINGS_SCHEMA = {
         showInDialog: false,
       },
     },
+  },
+  lsp: {
+    type: 'boolean',
+    label: 'Experimental LSP Servers',
+    category: 'Advanced',
+    requiresRestart: true,
+    default: false,
+    ref: 'BooleanOrLspConfig',
+    description:
+      'Enable experimental Language Server Protocol integration for real-time type-error diagnostics after file edits.',
+    showInDialog: true,
   },
   emojifilter: {
     type: 'string',
@@ -586,7 +605,7 @@ export const SETTINGS_SCHEMA = {
         label: 'Use Alternate Screen Buffer',
         category: 'UI',
         requiresRestart: true,
-        default: false,
+        default: true,
         description:
           'Use an alternate screen buffer for the UI, preserving shell history.',
         showInDialog: true,
@@ -625,7 +644,7 @@ export const SETTINGS_SCHEMA = {
         label: 'Show Line Numbers',
         category: 'UI',
         requiresRestart: false,
-        default: true,
+        default: false,
         description: 'Show line numbers in the chat.',
         showInDialog: true,
       },
@@ -1106,6 +1125,38 @@ export const SETTINGS_SCHEMA = {
         default: undefined as string[] | undefined,
         description: 'A list of MCP servers to exclude.',
         showInDialog: false,
+      },
+    },
+  },
+  subagents: {
+    type: 'object',
+    label: 'Subagents',
+    category: 'Subagents',
+    requiresRestart: false,
+    default: {},
+    description: 'Settings for subagent behavior.',
+    showInDialog: false,
+    properties: {
+      asyncEnabled: {
+        type: 'boolean',
+        label: 'Async Subagents Enabled',
+        category: 'Subagents',
+        requiresRestart: false,
+        default: true,
+        description:
+          'Globally allow background subagent runs. If off, async=true launches are blocked even if a profile enables them.',
+        showInDialog: true,
+      },
+      maxAsync: {
+        type: 'number',
+        label: 'Maximum Async Tasks',
+        category: 'Subagents',
+        requiresRestart: false,
+        default: 5,
+        minimum: -1,
+        description:
+          'Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.',
+        showInDialog: true,
       },
     },
   },
@@ -1873,6 +1924,62 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
   BooleanOrString: {
     description: 'Accepts either a boolean flag or a string command name.',
     anyOf: [{ type: 'boolean' }, { type: 'string' }],
+  },
+  BooleanOrLspConfig: {
+    description:
+      'Set to false to disable LSP entirely, or provide an object to configure LSP servers and diagnostics behavior.',
+    anyOf: [
+      { type: 'boolean', const: false },
+      {
+        type: 'object',
+        properties: {
+          servers: {
+            type: 'array',
+            description: 'Custom LSP server definitions.',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                command: { type: 'string' },
+                args: { type: 'array', items: { type: 'string' } },
+              },
+              required: ['id', 'command'],
+            },
+          },
+          includeSeverities: {
+            type: 'array',
+            description: 'Diagnostic severity levels to include.',
+            items: {
+              type: 'string',
+              enum: ['error', 'warning', 'info', 'hint'],
+            },
+          },
+          maxDiagnosticsPerFile: {
+            type: 'number',
+            description: 'Maximum number of diagnostics per file.',
+          },
+          maxProjectDiagnosticsFiles: {
+            type: 'number',
+            description:
+              'Maximum number of files included in project diagnostics.',
+          },
+          diagnosticTimeout: {
+            type: 'number',
+            description: 'Timeout in milliseconds for diagnostic requests.',
+          },
+          firstTouchTimeout: {
+            type: 'number',
+            description:
+              'Timeout in milliseconds for first-touch diagnostic requests.',
+          },
+          navigationTools: {
+            type: 'boolean',
+            description:
+              'Whether to register LSP navigation tools (goto definition, find references, etc.).',
+          },
+        },
+      },
+    ],
   },
 };
 

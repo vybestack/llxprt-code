@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* @plan PLAN-20250212-LSP.P31 */
+/* @requirement REQ-DIAG-010, REQ-GRACE-050, REQ-GRACE-055 */
+
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import * as Diff from 'diff';
@@ -35,6 +38,7 @@ import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';
+import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -656,8 +660,25 @@ class EditToolInvocation extends BaseToolInvocation<
         );
       }
 
+      // @plan PLAN-20250212-LSP.P31
+      // @requirement REQ-DIAG-010
+      // @pseudocode edit-integration.md lines 10-44
+      // Append LSP diagnostics after successful edit
+      try {
+        const diagBlock = await collectLspDiagnosticsBlock(
+          this.config,
+          filePath,
+        );
+        if (diagBlock) {
+          llmSuccessMessageParts.push(diagBlock);
+        }
+      } catch (_error) {
+        // LSP failure must never fail the edit (REQ-GRACE-050, REQ-GRACE-055)
+        // Silently continue - edit was already successful
+      }
+
       const result: ToolResult = {
-        llmContent: llmSuccessMessageParts.join(' '),
+        llmContent: llmSuccessMessageParts.join('\n\n'),
         returnDisplay: displayResult,
       };
 

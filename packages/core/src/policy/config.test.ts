@@ -201,11 +201,11 @@ describe('policy config', () => {
         });
         const rules = migrateLegacyApprovalMode(config);
 
-        // 4 AUTO_EDIT tools + 2 allowed tools
-        expect(rules.length).toBe(6);
+        // 5 AUTO_EDIT tools (including apply_patch) + 2 allowed tools
+        expect(rules.length).toBe(7);
 
         const autoEditRules = rules.filter((r) => r.priority === 1.015);
-        expect(autoEditRules.length).toBe(4);
+        expect(autoEditRules.length).toBe(5);
 
         const allowedRules = rules.filter((r) => r.priority === 2.3);
         expect(allowedRules.length).toBe(2);

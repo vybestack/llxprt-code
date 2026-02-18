@@ -41,10 +41,29 @@ interface HistoryServiceEventEmitter {
     event: 'tokensUpdated',
     listener: (eventData: TokensUpdatedEvent) => void,
   ): this;
+  on(event: 'contentAdded', listener: (content: IContent) => void): this;
+  on(event: 'compressionStarted', listener: () => void): this;
+  on(
+    event: 'compressionEnded',
+    listener: (summary: IContent, itemsCompressed: number) => void,
+  ): this;
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
+  emit(event: 'contentAdded', content: IContent): boolean;
+  emit(event: 'compressionStarted'): boolean;
+  emit(
+    event: 'compressionEnded',
+    summary: IContent,
+    itemsCompressed: number,
+  ): boolean;
   off(
     event: 'tokensUpdated',
     listener: (eventData: TokensUpdatedEvent) => void,
+  ): this;
+  off(event: 'contentAdded', listener: (content: IContent) => void): this;
+  off(event: 'compressionStarted', listener: () => void): this;
+  off(
+    event: 'compressionEnded',
+    listener: (summary: IContent, itemsCompressed: number) => void,
   ): this;
 }
 
@@ -284,6 +303,8 @@ export class HistoryService
         'Content added successfully, history length:',
         this.history.length,
       );
+
+      this.emit('contentAdded', content);
 
       // Update token count asynchronously but atomically
       this.updateTokenCount(content, modelName);
@@ -1062,12 +1083,7 @@ export class HistoryService
    * Get curated history with circular references removed for providers.
    * This ensures the history can be safely serialized and sent to providers.
    */
-  getCuratedForProvider(
-    tailContents: IContent[] = [],
-    options?: { strictToolAdjacency?: boolean },
-  ): IContent[] {
-    const strictToolAdjacency = options?.strictToolAdjacency ?? false;
-
+  getCuratedForProvider(tailContents: IContent[] = []): IContent[] {
     // Get the curated history
     const curated = this.getCurated();
     const combined =
@@ -1084,15 +1100,14 @@ export class HistoryService
 
     // Ensure every tool call has some corresponding tool response in provider
     // payloads, even if the tool execution was interrupted or cancelled.
-    const completed = this.ensureToolResponseCompleteness(
-      normalized,
-      strictToolAdjacency,
-    );
+    // All providers require strict tool call/response matching - orphaned tool
+    // calls cause 400 errors from Anthropic, Gemini, OpenAI, and others.
+    const completed = this.ensureToolResponseCompleteness(normalized);
 
-    // Providers like OpenAI Chat and Anthropic require strict tool adjacency:
-    // tool results must appear directly after the assistant tool call message.
-    // Corrupted histories can contain duplicate or out-of-order tool results,
-    // which will 400 on provider switching. Normalize ordering and drop dupes.
+    // All providers require strict tool adjacency: tool results must appear
+    // directly after the assistant tool call message. Corrupted histories can
+    // contain duplicate or out-of-order tool results, which will 400 on provider
+    // switching. Normalize ordering and drop dupes.
     const ordered = this.ensureToolResponseAdjacency(completed);
 
     // Deep clone to avoid circular references in tool call parameters
@@ -1216,21 +1231,17 @@ export class HistoryService
    * Ensure every tool_call has a corresponding tool_response.
    *
    * Provider transcripts with orphaned tool calls can hard-fail strict APIs
-   * (e.g., Anthropic requires tool_result blocks immediately after tool_use).
+   * (e.g., Anthropic requires tool_result blocks immediately after tool_use,
+   * Gemini returns 400 if function response count doesn't match function call count,
+   * OpenAI Chat tool messages must follow an assistant tool_calls message).
+   *
    * For provider-visible payloads, synthesize a minimal "cancelled" tool result
    * so the transcript remains structurally valid.
-   *
-   * When strictToolAdjacency is true, synthesize tool responses for all orphaned
-   * tool calls regardless of whether a later non-tool message exists. This is
-   * required for providers like Anthropic that enforce strict tool-use/tool-result pairing.
    *
    * This is intentionally non-mutating: it does not modify the stored history,
    * only the provider-facing view.
    */
-  private ensureToolResponseCompleteness(
-    contents: IContent[],
-    strictToolAdjacency: boolean = false,
-  ): IContent[] {
+  private ensureToolResponseCompleteness(contents: IContent[]): IContent[] {
     const respondedCallIds = new Set<string>();
 
     for (const content of contents) {
@@ -1240,20 +1251,6 @@ export class HistoryService
         const callId = (block as ToolResponseBlock).callId;
         if (callId) {
           respondedCallIds.add(callId);
-        }
-      }
-    }
-
-    const hasLaterNonToolMessageByIndex = strictToolAdjacency
-      ? []
-      : new Array<boolean>(contents.length).fill(false);
-
-    if (!strictToolAdjacency) {
-      let seenNonToolAfter = false;
-      for (let i = contents.length - 1; i >= 0; i--) {
-        hasLaterNonToolMessageByIndex[i] = seenNonToolAfter;
-        if (contents[i]?.speaker !== 'tool') {
-          seenNonToolAfter = true;
         }
       }
     }
@@ -1276,15 +1273,8 @@ export class HistoryService
       );
       if (missing.length === 0) continue;
 
-      // In strict mode or when the conversation has advanced past this tool call,
-      // synthesize tool responses for orphaned tool calls.
-      // Strict mode (e.g., for Anthropic): always synthesize tool responses.
-      // Non-strict mode: only synthesize if there's a later non-tool message.
-      // This preserves "pending tool call" state for UI while fixing orphaned calls.
-      if (!strictToolAdjacency && !hasLaterNonToolMessageByIndex[i]) {
-        continue;
-      }
-
+      // Always synthesize tool responses for orphaned tool calls.
+      // All providers require strict tool call/response matching.
       result.push({
         speaker: 'tool',
         blocks: missing.map(
@@ -1614,13 +1604,16 @@ export class HistoryService
   startCompression(): void {
     this.logger.debug('Starting compression - locking history');
     this.isCompressing = true;
+    this.emit('compressionStarted');
   }
 
   /**
    * Mark compression as complete
-   * This will flush all queued operations
+   * This will flush all queued operations.
+   * When summary and itemsCompressed are provided, emits a compressionEnded
+   * event so the recording service can log the compression.
    */
-  endCompression(): void {
+  endCompression(summary?: IContent, itemsCompressed?: number): void {
     this.logger.debug('Compression complete - unlocking history', {
       pendingCount: this.pendingOperations.length,
     });
@@ -1638,6 +1631,10 @@ export class HistoryService
     this.logger.debug('Flushed pending operations', {
       count: operations.length,
     });
+
+    if (summary && itemsCompressed !== undefined) {
+      this.emit('compressionEnded', summary, itemsCompressed);
+    }
   }
 
   /**

@@ -34,6 +34,7 @@ import {
   DEFAULT_AGENT_ID,
   type FilterFilesOptions,
   ReadManyFilesTool,
+  type ToolConfirmationPayload,
 } from '@vybestack/llxprt-code-core';
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -832,20 +833,38 @@ export class Session {
         };
 
         const output = await this.client.requestPermission(params);
-        const outcome =
-          output.outcome.outcome === 'cancelled'
-            ? ToolConfirmationOutcome.Cancel
-            : z
-                .nativeEnum(ToolConfirmationOutcome)
-                .parse(output.outcome.optionId);
+        let outcome: ToolConfirmationOutcome;
+        let payload: ToolConfirmationPayload | undefined;
 
-        await confirmationDetails.onConfirm(outcome);
+        if (output.outcome.outcome === 'cancelled') {
+          outcome = ToolConfirmationOutcome.Cancel;
+        } else {
+          outcome = z
+            .nativeEnum(ToolConfirmationOutcome)
+            .parse(output.outcome.optionId);
+          const editedCommand = output.outcome.payload?.editedCommand?.trim();
+          if (editedCommand) {
+            payload = { editedCommand };
+          }
+        }
+
+        await confirmationDetails.onConfirm(outcome, payload);
 
         switch (outcome) {
           case ToolConfirmationOutcome.Cancel:
             return errorResponse(
               new Error(`Tool "${fc.name}" was canceled by the user.`),
             );
+          case ToolConfirmationOutcome.SuggestEdit:
+            if (
+              confirmationDetails.type !== 'exec' ||
+              !payload?.editedCommand
+            ) {
+              return errorResponse(
+                new Error(`Tool "${fc.name}" was canceled by the user.`),
+              );
+            }
+            break;
           case ToolConfirmationOutcome.ProceedOnce:
           case ToolConfirmationOutcome.ProceedAlways:
           case ToolConfirmationOutcome.ProceedAlwaysServer:
@@ -1466,6 +1485,11 @@ function toPermissionOptions(
           optionId: ToolConfirmationOutcome.ProceedAlways,
           name: `Always Allow ${confirmation.rootCommand}`,
           kind: 'allow_always',
+        },
+        {
+          optionId: ToolConfirmationOutcome.SuggestEdit,
+          name: 'Suggest changes',
+          kind: 'suggest_changes',
         },
         ...basicPermissionOptions,
       ];

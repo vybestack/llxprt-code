@@ -8,6 +8,7 @@ import type { IProvider, Profile } from '@vybestack/llxprt-code-core';
 import {
   activateIsolatedRuntimeContext,
   applyProfileSnapshot,
+  buildRuntimeProfileSnapshot,
   createIsolatedRuntimeContext,
   configureCliStatelessHardening,
   setActiveModel,
@@ -244,6 +245,57 @@ describe('CLI runtime isolation', () => {
     expect(bSecondarySettings.baseUrl).toBe(
       'https://beta.isolated.example.com',
     );
+  });
+
+  it('does not resurrect cleared auth and base-url state in runtime snapshots @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003', async () => {
+    const runtime = await bootstrapRuntimeFixture({
+      id: 'runtime-clear-state',
+      profileName: 'profile-clear-state',
+      primaryProvider: 'primary',
+      secondaryProvider: 'secondary',
+      primaryModel: 'primary-model',
+      secondaryModel: 'secondary-model',
+    });
+
+    await activateIsolatedRuntimeContext(runtime.handle, {
+      runtimeId: runtime.handle.runtimeId,
+      metadata: {
+        profileName: runtime.profileName,
+        source: `runtime-isolation-test:${runtime.id}`,
+      },
+    });
+
+    await updateActiveProviderApiKey('runtime-clear-secret');
+    await updateActiveProviderBaseUrl('https://runtime-clear.example.com/v1');
+
+    expect(runtime.handle.config.getEphemeralSetting('auth-key')).toBe(
+      'runtime-clear-secret',
+    );
+    expect(runtime.handle.config.getEphemeralSetting('base-url')).toBe(
+      'https://runtime-clear.example.com/v1',
+    );
+
+    await updateActiveProviderApiKey(null);
+    await updateActiveProviderBaseUrl('NONE');
+
+    expect(
+      runtime.handle.config.getEphemeralSetting('auth-key'),
+    ).toBeUndefined();
+    expect(
+      runtime.handle.config.getEphemeralSetting('auth-keyfile'),
+    ).toBeUndefined();
+    expect(
+      runtime.handle.config.getEphemeralSetting('auth-key-name'),
+    ).toBeUndefined();
+    expect(
+      runtime.handle.config.getEphemeralSetting('base-url'),
+    ).toBeUndefined();
+
+    const runtimeSnapshot = buildRuntimeProfileSnapshot();
+    expect(runtimeSnapshot.ephemeralSettings['auth-key']).toBeUndefined();
+    expect(runtimeSnapshot.ephemeralSettings['auth-keyfile']).toBeUndefined();
+    expect(runtimeSnapshot.ephemeralSettings['auth-key-name']).toBeUndefined();
+    expect(runtimeSnapshot.ephemeralSettings['base-url']).toBeUndefined();
   });
 
   it('keeps other runtimes stable when disposing one in flight @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003 @pseudocode cli-runtime-isolation.md lines 2-3', async () => {

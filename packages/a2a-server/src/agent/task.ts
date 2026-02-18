@@ -722,6 +722,8 @@ export class Task {
       confirmationOutcome = ToolConfirmationOutcome.ProceedAlwaysTool;
     } else if (outcomeString === 'modify_with_editor') {
       confirmationOutcome = ToolConfirmationOutcome.ModifyWithEditor;
+    } else if (outcomeString === 'suggest_edit') {
+      confirmationOutcome = ToolConfirmationOutcome.SuggestEdit;
     } else {
       logger.warn(
         `[Task] Unknown tool confirmation outcome: "${outcomeString}" for callId: ${callId}`,
@@ -753,18 +755,30 @@ export class Task {
         // This will trigger the scheduler to continue or cancel the specific tool.
         // The scheduler's onToolCallsUpdate will then reflect the new state (e.g., executing or cancelled).
 
-        // If `edit` tool call, pass updated payload if presesent
+        const payload: ToolConfirmationPayload = {
+          newContent:
+            typeof part.data['newContent'] === 'string'
+              ? part.data['newContent']
+              : undefined,
+          editedCommand:
+            typeof part.data['editedCommand'] === 'string'
+              ? part.data['editedCommand']
+              : undefined,
+        };
+        const hasPayload =
+          payload.newContent !== undefined ||
+          payload.editedCommand !== undefined;
+
+        // Preserve existing inline-edit behavior: final event should be emitted
+        // only after the follow-up confirmation completes.
         if (confirmationDetails.type === 'edit') {
-          const payload = part.data['newContent']
-            ? ({
-                newContent: part.data['newContent'] as string,
-              } as ToolConfirmationPayload)
-            : undefined;
-          this.skipFinalTrueAfterInlineEdit = !!payload;
-          await confirmationDetails.onConfirm(confirmationOutcome, payload);
-        } else {
-          await confirmationDetails.onConfirm(confirmationOutcome);
+          this.skipFinalTrueAfterInlineEdit = payload.newContent !== undefined;
         }
+
+        await confirmationDetails.onConfirm(
+          confirmationOutcome,
+          hasPayload ? payload : undefined,
+        );
       } finally {
         if (gcpProject) {
           process.env['GOOGLE_CLOUD_PROJECT'] = gcpProject;

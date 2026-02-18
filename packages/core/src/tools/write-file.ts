@@ -424,6 +424,113 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         );
       }
 
+      /**
+       * @plan PLAN-20250212-LSP.P32
+       * @requirement REQ-DIAG-040
+       * @requirement REQ-DIAG-070
+       * @requirement REQ-GRACE-050
+       * @pseudocode write-integration.md lines 12-84
+       *
+       * Append LSP diagnostics after successful write
+       */
+      try {
+        const lspClient = this.config.getLspServiceClient();
+        if (lspClient && lspClient.isAlive()) {
+          // Check the written file to trigger diagnostics
+          await lspClient.checkFile(filePath);
+
+          // Get all diagnostics from known files (files with non-empty diagnostics)
+          const allDiagnostics = await lspClient.getAllDiagnostics();
+
+          // Extract config values for formatting
+          const lspConfig = this.config.getLspConfig();
+          const includeSeverities = lspConfig?.includeSeverities ?? ['error'];
+          const maxDiagnosticsPerFile = lspConfig?.maxDiagnosticsPerFile ?? 20;
+          const maxProjectDiagnosticsFiles =
+            lspConfig?.maxProjectDiagnosticsFiles ?? 5;
+          const maxTotalLines = 50;
+
+          // Separate written file from other files
+          const allFiles = Object.keys(allDiagnostics);
+          const otherFiles = allFiles.filter((f) => f !== filePath);
+          const otherFilesSorted = otherFiles.sort();
+          const cappedOtherFiles = otherFilesSorted.slice(
+            0,
+            maxProjectDiagnosticsFiles,
+          );
+
+          // Format multi-file diagnostics with proper ordering and caps
+          const filesToFormat = [filePath, ...cappedOtherFiles];
+          const blocks: string[] = [];
+          let totalLines = 0;
+
+          for (const file of filesToFormat) {
+            if (totalLines >= maxTotalLines) {
+              break;
+            }
+
+            const fileDiagnostics = allDiagnostics[file] || [];
+            // Filter by severity
+            const filtered = fileDiagnostics.filter((d) =>
+              includeSeverities.includes(d.severity),
+            );
+            // Sort by line, then column
+            const sorted = filtered.sort(
+              (a, b) =>
+                (a.line ?? 0) - (b.line ?? 0) ||
+                (a.column ?? 0) - (b.column ?? 0),
+            );
+
+            if (sorted.length === 0) {
+              continue;
+            }
+
+            const remainingTotal = maxTotalLines - totalLines;
+            const includeCount = Math.min(
+              maxDiagnosticsPerFile,
+              remainingTotal,
+              sorted.length,
+            );
+            const included = sorted.slice(0, includeCount);
+
+            const relPath = path.relative(this.config.getTargetDir(), file);
+            const isWrittenFile = file === filePath;
+            const sectionLabel = isWrittenFile
+              ? 'LSP errors detected in this file, please fix:'
+              : 'LSP errors detected in other files:';
+
+            blocks.push(`${sectionLabel}\n<diagnostics file="${relPath}">`);
+            for (const diag of included) {
+              const codeStr = diag.code !== undefined ? ` (${diag.code})` : '';
+              blocks.push(
+                `${diag.severity.toUpperCase()} [${diag.line ?? 1}:${diag.column ?? 1}] ${diag.message}${codeStr}`,
+              );
+              totalLines++;
+            }
+
+            const overflow = sorted.length - includeCount;
+            if (overflow > 0) {
+              const lastDiag = sorted[sorted.length - 1];
+              const lastCodeStr =
+                lastDiag.code !== undefined ? ` (${lastDiag.code})` : '';
+              blocks.push(
+                `... and ${overflow} more (last: ${lastDiag.severity.toUpperCase()} [${lastDiag.line ?? 1}:${lastDiag.column ?? 1}] ${lastDiag.message}${lastCodeStr})`,
+              );
+            }
+
+            blocks.push('</diagnostics>');
+          }
+
+          // Append formatted diagnostics if present
+          if (blocks.length > 0) {
+            llmSuccessMessageParts.push(blocks.join('\n'));
+          }
+        }
+      } catch (_error) {
+        // LSP failure must never fail write (REQ-GRACE-050, REQ-GRACE-055)
+        // Silently continue - write was already successful
+      }
+
       const displayResult: FileDiff = {
         fileDiff,
         fileName,
@@ -456,7 +563,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       }
 
       const result: ToolResult = {
-        llmContent: llmSuccessMessageParts.join(' '),
+        llmContent: llmSuccessMessageParts.join('\n\n'),
         returnDisplay: displayResult,
       };
 

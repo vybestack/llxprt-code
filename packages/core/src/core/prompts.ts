@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import process from 'node:process';
-import * as fs from 'node:fs/promises';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
@@ -175,6 +175,20 @@ function compactFolderStructureSnapshot(
 }
 
 /**
+ * Options for getCoreSystemPromptAsync
+ */
+export interface CoreSystemPromptOptions {
+  userMemory?: string;
+  coreMemory?: string;
+  model?: string;
+  tools?: string[];
+  provider?: string;
+  includeSubagentDelegation?: boolean;
+  asyncSubagentsEnabled?: boolean;
+  profileAsyncEnabled?: boolean;
+}
+
+/**
  * Loads core (system) memory content from .LLXPRT_SYSTEM files.
  * Reads both global (~/.llxprt/.LLXPRT_SYSTEM) and project-level
  * (<cwd>/.llxprt/.LLXPRT_SYSTEM) files and concatenates them.
@@ -199,7 +213,9 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
       const content = await fs.readFile(filePath, 'utf-8');
       if (content.trim()) {
         parts.push(
-          `--- Core System Memory from: ${tildeifyPath(filePath)} ---\n${content.trim()}\n--- End of Core System Memory ---`,
+          `--- Core System Memory from: ${tildeifyPath(filePath)} ---
+${content.trim()}
+--- End of Core System Memory ---`,
         );
       }
     } catch (err) {
@@ -213,18 +229,6 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
   }
 
   return parts.join('\n\n');
-}
-
-/**
- * Options for getCoreSystemPromptAsync
- */
-export interface CoreSystemPromptOptions {
-  userMemory?: string;
-  coreMemory?: string;
-  model?: string;
-  tools?: string[];
-  provider?: string;
-  includeSubagentDelegation?: boolean;
 }
 
 /**
@@ -359,6 +363,35 @@ async function buildPromptContext(
     }
   }
 
+  // Determine async subagent settings (global and profile)
+  let asyncSubagentsEnabled = options.asyncSubagentsEnabled;
+  let profileAsyncEnabled = options.profileAsyncEnabled;
+  if (
+    asyncSubagentsEnabled === undefined ||
+    profileAsyncEnabled === undefined
+  ) {
+    try {
+      const settingsService = getSettingsService();
+      if (asyncSubagentsEnabled === undefined) {
+        // Global setting from /settings (nested under subagents.asyncEnabled)
+        const globalSettings = settingsService.getAllGlobalSettings();
+        const subagentsSettings = globalSettings['subagents'] as
+          | { asyncEnabled?: boolean }
+          | undefined;
+        asyncSubagentsEnabled = subagentsSettings?.asyncEnabled !== false;
+      }
+      if (profileAsyncEnabled === undefined) {
+        // Profile setting from /set (subagents.async.enabled)
+        const profileValue = settingsService.get('subagents.async.enabled');
+        profileAsyncEnabled = profileValue !== false;
+      }
+    } catch (_error) {
+      // If we can't get settings, default to enabled
+      asyncSubagentsEnabled = asyncSubagentsEnabled ?? true;
+      profileAsyncEnabled = profileAsyncEnabled ?? true;
+    }
+  }
+
   return {
     provider: resolvedProvider,
     model: model || 'gemini-1.5-pro',
@@ -366,6 +399,8 @@ async function buildPromptContext(
     environment,
     enableToolPrompts,
     includeSubagentDelegation,
+    asyncSubagentsEnabled,
+    profileAsyncEnabled,
   };
 }
 
@@ -387,6 +422,8 @@ export async function getCoreSystemPromptAsync(
   let toolsArg: string[] | undefined = undefined;
   let providerArg: string | undefined = undefined;
   let includeSubagentDelegation: boolean | undefined = undefined;
+  let asyncSubagentsEnabledArg: boolean | undefined = undefined;
+  let profileAsyncEnabledArg: boolean | undefined = undefined;
 
   if (typeof userMemoryOrOptions === 'object' && userMemoryOrOptions !== null) {
     // Options object mode
@@ -397,6 +434,8 @@ export async function getCoreSystemPromptAsync(
     toolsArg = opts.tools;
     providerArg = opts.provider;
     includeSubagentDelegation = opts.includeSubagentDelegation;
+    asyncSubagentsEnabledArg = opts.asyncSubagentsEnabled;
+    profileAsyncEnabledArg = opts.profileAsyncEnabled;
   } else {
     // Legacy positional args mode
     userMemory = userMemoryOrOptions as string | undefined;
@@ -430,6 +469,7 @@ export async function getCoreSystemPromptAsync(
         (p) => p && p.trim(),
       );
       effectiveCoreMemory = parts.join('\n\n') || undefined;
+
       effectiveUserMemory = undefined;
     }
   } catch {
@@ -441,6 +481,8 @@ export async function getCoreSystemPromptAsync(
     tools: toolsArg,
     provider: providerArg,
     includeSubagentDelegation,
+    asyncSubagentsEnabled: asyncSubagentsEnabledArg,
+    profileAsyncEnabled: profileAsyncEnabledArg,
   });
 
   return await service.getPrompt(

@@ -297,14 +297,14 @@ describe('Circular Reference Bug', () => {
     );
     expect(hasOrphanInCurated).toBe(false);
 
-    // getCuratedForProvider does NOT add synthetic responses in current implementation
+    // getCuratedForProvider DOES add synthetic responses for orphaned tool calls (strict mode always enabled)
     const curatedForProvider = historyService.getCuratedForProvider();
     const hasOrphanInProvider = curatedForProvider.some(
       (c) =>
         c.speaker === 'tool' &&
         c.blocks.some((b) => (b as ToolResponseBlock).callId === toolCallId),
     );
-    expect(hasOrphanInProvider).toBe(false); // No synthetic responses in atomic implementation
+    expect(hasOrphanInProvider).toBe(true); // Synthetic response synthesized for orphaned call
 
     // Should be able to stringify the curated-for-provider version
     // Even though original params have circular refs - this is the main test goal

@@ -462,4 +462,88 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     config.setEphemeralSetting('auth-key-name', 'mykey');
     expect(config.getEphemeralSetting('auth-key-name')).toBe('mykey');
   });
+
+  describe('Issue #208 auth-key-name clear behavior', () => {
+    let mockKeyring: KeyringAdapter & { store: Map<string, string> };
+    let tempDir: string;
+    let runtimeMod: typeof import('../runtimeSettings.js');
+    let contextFactoryMod: typeof import('../runtimeContextFactory.js');
+    let cleanupHandle: (() => Promise<void> | void) | null = null;
+
+    beforeEach(async () => {
+      mockKeyring = createMockKeyring();
+      tempDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'auth-key-name-clear-'),
+      );
+      mockStorageRef = createTestStorage(mockKeyring, tempDir);
+
+      runtimeMod = await import('../runtimeSettings.js');
+      contextFactoryMod = await import('../runtimeContextFactory.js');
+    });
+
+    afterEach(async () => {
+      if (cleanupHandle) {
+        await Promise.resolve(cleanupHandle()).catch(() => {});
+        cleanupHandle = null;
+      }
+      clearActiveProviderRuntimeContext();
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    });
+
+    async function setupRuntime(): Promise<{
+      config: {
+        getEphemeralSetting: (key: string) => unknown;
+        setEphemeralSetting: (key: string, value: unknown) => void;
+      };
+      settingsService: {
+        getProviderSettings: (providerName: string) => Record<string, unknown>;
+      };
+    }> {
+      const handle = await contextFactoryMod.createIsolatedRuntimeContext({
+        runtimeId: 'auth-key-clear-test',
+        workspaceDir: tempDir,
+        prepare: async ({ providerManager }) => {
+          providerManager.registerProvider(createStubProvider());
+          providerManager.setActiveProvider('test-provider');
+        },
+      });
+      await handle.activate();
+      cleanupHandle = handle.cleanup;
+
+      return {
+        config: handle.config as {
+          getEphemeralSetting: (key: string) => unknown;
+          setEphemeralSetting: (key: string, value: unknown) => void;
+        },
+        settingsService: handle.settingsService as {
+          getProviderSettings: (
+            providerName: string,
+          ) => Record<string, unknown>;
+        },
+      };
+    }
+
+    it('clears auth-key-name and keyfile state when API key is cleared', async () => {
+      const { config, settingsService } = await setupRuntime();
+
+      config.setEphemeralSetting('auth-key-name', 'saved-name');
+      config.setEphemeralSetting('auth-keyfile', '/tmp/test-provider.key');
+
+      const providerSettings =
+        settingsService.getProviderSettings('test-provider');
+      providerSettings.apiKeyfile = '/tmp/test-provider.key';
+      providerSettings['auth-keyfile'] = '/tmp/test-provider.key';
+
+      await runtimeMod.updateActiveProviderApiKey(null);
+
+      expect(config.getEphemeralSetting('auth-key-name')).toBeUndefined();
+      expect(config.getEphemeralSetting('auth-keyfile')).toBeUndefined();
+      expect(
+        settingsService.getProviderSettings('test-provider').apiKeyfile,
+      ).toBeUndefined();
+      expect(
+        settingsService.getProviderSettings('test-provider')['auth-keyfile'],
+      ).toBeUndefined();
+    });
+  });
 });

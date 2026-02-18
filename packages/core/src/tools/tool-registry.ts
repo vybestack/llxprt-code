@@ -474,19 +474,69 @@ export class ToolRegistry {
   }
 
   /**
+   * Gets schema transformation config based on current settings.
+   * Used to conditionally hide tool parameters that are disabled by settings.
+   */
+  private getSchemaTransforms(): { hideTaskAsync: boolean } {
+    const settingsService = this.config.getSettingsService?.();
+
+    // Global setting from /settings (subagents.asyncEnabled)
+    let globalAsyncEnabled = true;
+    if (settingsService) {
+      const globalSettings = settingsService.getAllGlobalSettings?.();
+      const subagentsSettings = globalSettings?.['subagents'] as
+        | { asyncEnabled?: boolean }
+        | undefined;
+      globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
+    }
+
+    // Profile setting from /set (subagents.async.enabled)
+    const profileAsyncEnabled =
+      settingsService?.get('subagents.async.enabled') !== false;
+
+    return {
+      hideTaskAsync: !globalAsyncEnabled || !profileAsyncEnabled,
+    };
+  }
+
+  /**
+   * Applies schema transformations based on settings.
+   * Removes parameters that are disabled by user/profile settings.
+   */
+  private applySchemaTransforms(
+    schema: FunctionDeclaration,
+    transforms: { hideTaskAsync: boolean },
+  ): FunctionDeclaration {
+    // Hide 'async' parameter from task tool when async subagents are disabled
+    if (schema.name === 'task' && transforms.hideTaskAsync) {
+      const newSchema = structuredClone(schema);
+      const jsonSchema = newSchema.parametersJsonSchema as
+        | { properties?: Record<string, unknown> }
+        | undefined;
+      if (jsonSchema?.properties) {
+        delete jsonSchema.properties.async;
+      }
+      return newSchema;
+    }
+    return schema;
+  }
+
+  /**
    * Retrieves the list of tool schemas (FunctionDeclaration array).
    * Extracts the declarations from the ToolListUnion structure.
    * Includes discovered (vs registered) tools if configured.
    * Filters out disabled tools based on ephemeral settings.
+   * Applies schema transformations to hide disabled parameters.
    * @returns An array of FunctionDeclarations.
    */
   getFunctionDeclarations(): FunctionDeclaration[] {
     const governance = this.getToolGovernance();
+    const transforms = this.getSchemaTransforms();
 
     const declarations: FunctionDeclaration[] = [];
     this.tools.forEach((tool) => {
       if (this.isToolActive(tool.name, governance)) {
-        declarations.push(tool.schema);
+        declarations.push(this.applySchemaTransforms(tool.schema, transforms));
       }
     });
     return declarations;
@@ -494,16 +544,18 @@ export class ToolRegistry {
 
   /**
    * Retrieves a filtered list of tool schemas based on a list of tool names.
+   * Applies schema transformations to hide disabled parameters.
    * @param toolNames - An array of tool names to include.
    * @returns An array of FunctionDeclarations for the specified tools.
    */
   getFunctionDeclarationsFiltered(toolNames: string[]): FunctionDeclaration[] {
     const governance = this.getToolGovernance();
+    const transforms = this.getSchemaTransforms();
     const declarations: FunctionDeclaration[] = [];
     for (const name of toolNames) {
       const tool = this.tools.get(name);
       if (tool && this.isToolActive(tool.name, governance)) {
-        declarations.push(tool.schema);
+        declarations.push(this.applySchemaTransforms(tool.schema, transforms));
       }
     }
     return declarations;

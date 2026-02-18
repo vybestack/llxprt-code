@@ -764,10 +764,7 @@ export class GeminiChat {
 
     // Build a provider-safe request transcript that includes the new message(s)
     // without committing them to history yet.
-    const strictToolAdjacency = provider.name.includes('anthropic');
-    const iContents = this.historyService.getCuratedForProvider(userIContents, {
-      strictToolAdjacency,
-    });
+    const iContents = this.historyService.getCuratedForProvider(userIContents);
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-004.1
@@ -1484,13 +1481,8 @@ export class GeminiChat {
         });
         // Build a provider-safe request transcript that includes the new message(s)
         // without committing them to history yet.
-        const strictToolAdjacency = provider.name.includes('anthropic');
-        requestContents = this.historyService.getCuratedForProvider(
-          userIContents,
-          {
-            strictToolAdjacency,
-          },
-        );
+        requestContents =
+          this.historyService.getCuratedForProvider(userIContents);
       } else {
         const turnKey = this.historyService.generateTurnKey();
         const idGen = this.historyService.getIdGeneratorCallback(turnKey);
@@ -1503,11 +1495,9 @@ export class GeminiChat {
         );
         // Build a provider-safe request transcript that includes the new message
         // without committing it to history yet.
-        const strictToolAdjacency = provider.name.includes('anthropic');
-        requestContents = this.historyService.getCuratedForProvider(
-          [userIContent],
-          { strictToolAdjacency },
-        );
+        requestContents = this.historyService.getCuratedForProvider([
+          userIContent,
+        ]);
       }
 
       // DEBUG: Check for malformed entries
@@ -1791,6 +1781,22 @@ export class GeminiChat {
 
       // REQ-HD-002.2: If strategy has no optimize method or trigger isn't continuous, skip
       if (!strategy.optimize || strategy.trigger?.mode !== 'continuous') {
+        return;
+      }
+
+      // Check threshold: use ephemeral override or strategy's defaultThreshold
+      const contextLimit = this.runtimeContext.ephemerals.contextLimit();
+      const optimizeThreshold =
+        this.runtimeContext.ephemerals.densityOptimizeThreshold() ??
+        strategy.trigger.defaultThreshold;
+      const currentTokens = this.historyService.getTotalTokens();
+      const currentUsage = currentTokens / contextLimit;
+
+      if (currentUsage < optimizeThreshold) {
+        this.logger.debug(
+          () =>
+            `[GeminiChat] Skipping density optimization: ${(currentUsage * 100).toFixed(1)}% < ${(optimizeThreshold * 100).toFixed(1)}% threshold`,
+        );
         return;
       }
 
@@ -2143,7 +2149,10 @@ export class GeminiChat {
    */
   async performCompression(prompt_id: string): Promise<void> {
     this.logger.debug('Starting compression');
+    const preCompressionCount =
+      this.historyService.getStatistics().totalMessages;
     this.historyService.startCompression();
+    let compressionSummary: IContent | undefined;
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
@@ -2162,13 +2171,18 @@ export class GeminiChat {
         this.historyService.add(content, this.runtimeState.model);
       }
 
+      compressionSummary = result.newHistory[0];
+
       this.logger.debug('Compression completed', result.metadata);
     } catch (error) {
       this.logger.error('Compression failed:', error);
       throw error;
     } finally {
       this._suppressDensityDirty = false;
-      this.historyService.endCompression();
+      this.historyService.endCompression(
+        compressionSummary,
+        preCompressionCount,
+      );
     }
 
     await this.historyService.waitForTokenUpdates();
@@ -2427,13 +2441,12 @@ export class GeminiChat {
   /**
    * Records completed tool calls with full metadata.
    * This is called by external components when tool calls complete, before sending responses to Gemini.
-   * NOTE: llxprt does not use ChatRecordingService, so this is a no-op stub for compatibility.
    */
   recordCompletedToolCalls(
     _model: string,
     _toolCalls: CompletedToolCall[],
   ): void {
-    // No-op: llxprt does not record chat sessions like gemini-cli
+    // No-op stub for compatibility
   }
 
   private recordHistory(

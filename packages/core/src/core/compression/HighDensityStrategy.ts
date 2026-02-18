@@ -53,7 +53,9 @@ export const WRITE_TOOLS = [
   'insert_at_line',
   'delete_line_range',
 ] as const;
-export const PRUNED_POINTER = '[Result pruned — re-run tool to retrieve]';
+/** Shared suffix hint used in both pruned pointers and tool summaries */
+export const RERUN_HINT_SUFFIX = '— re-run to view';
+export const PRUNED_POINTER = `[Result pruned ${RERUN_HINT_SUFFIX}]`;
 export const FILE_INCLUSION_OPEN_REGEX = /^--- (.+) ---$/m;
 export const FILE_INCLUSION_CLOSE = '--- End of content ---';
 
@@ -157,7 +159,7 @@ export class HighDensityStrategy implements CompressionStrategy {
   readonly requiresLLM = false;
   readonly trigger: StrategyTrigger = {
     mode: 'continuous',
-    defaultThreshold: 0.85,
+    defaultThreshold: 0.9,
   };
 
   /**
@@ -444,9 +446,9 @@ export class HighDensityStrategy implements CompressionStrategy {
     }
 
     if (keyParam) {
-      return `[${toolName} ${keyParam}: ${outcome}]`;
+      return `[${toolName} ${keyParam}: ${outcome} ${RERUN_HINT_SUFFIX}]`;
     }
-    return `[${toolName}: ${outcome}]`;
+    return `[${toolName}: ${outcome} ${RERUN_HINT_SUFFIX}]`;
   }
 
   /**
