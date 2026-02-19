@@ -143,11 +143,6 @@ describe('ProfileManager', () => {
   });
 
   describe('save method with SettingsService', () => {
-    beforeEach(() => {
-      // SettingsService is already mocked in the main beforeEach
-      profileManager = new ProfileManager();
-    });
-
     it('should export from SettingsService and save profile', async () => {
       const settingsData = {
         defaultProvider: 'openai',
@@ -180,9 +175,6 @@ describe('ProfileManager', () => {
     });
 
     it('should work when SettingsService is always available', async () => {
-      // In the new architecture, SettingsService is always available
-      const manager = new ProfileManager();
-
       mockSettingsService.exportForProfile.mockResolvedValue({
         defaultProvider: 'openai',
         providers: {
@@ -200,7 +192,7 @@ describe('ProfileManager', () => {
       mockFs.writeFile.mockResolvedValue();
 
       await expect(
-        manager.save(
+        profileManager.save(
           'test-profile',
           mockSettingsService as unknown as SettingsService,
         ),
@@ -208,7 +200,6 @@ describe('ProfileManager', () => {
     });
 
     it('should persist tool enablement lists from settings service', async () => {
-      const manager = new ProfileManager();
       const payloadCapture: { value?: unknown } = {};
 
       mockSettingsService.exportForProfile.mockResolvedValue({
@@ -229,7 +220,7 @@ describe('ProfileManager', () => {
         payloadCapture.value = JSON.parse(data);
       });
 
-      await manager.save(
+      await profileManager.save(
         'tool-profile',
         mockSettingsService as unknown as SettingsService,
       );
@@ -246,7 +237,6 @@ describe('ProfileManager', () => {
     });
 
     it('should persist toolFormat from settings service to ephemeralSettings', async () => {
-      const manager = new ProfileManager();
       const payloadCapture: { value?: unknown } = {};
 
       mockSettingsService.exportForProfile.mockResolvedValue({
@@ -264,7 +254,7 @@ describe('ProfileManager', () => {
         payloadCapture.value = JSON.parse(data);
       });
 
-      await manager.save(
+      await profileManager.save(
         'kimi-profile',
         mockSettingsService as unknown as SettingsService,
       );
@@ -277,11 +267,6 @@ describe('ProfileManager', () => {
   });
 
   describe('load method with SettingsService', () => {
-    beforeEach(() => {
-      // SettingsService is already mocked in the main beforeEach
-      profileManager = new ProfileManager();
-    });
-
     it('should load profile and invoke importFromProfile', async () => {
       const profileJson = JSON.stringify(testProfile);
       mockFs.readFile.mockResolvedValue(profileJson);
