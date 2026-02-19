@@ -150,7 +150,7 @@ exit 0
 
 ### Cost Control
 
-Limit expensive model calls:
+Limit expensive model calls by estimating content size:
 
 ```python
 #!/usr/bin/env python3
@@ -159,11 +159,21 @@ import json, sys
 input_data = json.load(sys.stdin)
 request = input_data.get('llm_request', {})
 
-# Check token count
-if request.get('estimated_tokens', 0) > 100000:
+# Estimate token count from contents (rough approximation: ~4 chars per token)
+total_chars = 0
+for content in request.get('contents', []):
+    for part in content.get('parts', []):
+        if isinstance(part, str):
+            total_chars += len(part)
+        elif isinstance(part, dict) and 'text' in part:
+            total_chars += len(part['text'])
+
+estimated_tokens = total_chars // 4
+
+if estimated_tokens > 100000:
     print(json.dumps({
         "continue": False,
-        "reason": "Request exceeds token limit"
+        "reason": f"Request exceeds token limit (~{estimated_tokens} tokens)"
     }))
     sys.exit(2)
 

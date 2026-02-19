@@ -300,7 +300,7 @@ This shows:
 
 ## Performance Considerations
 
-1. **Keep hooks fast**: They run synchronously in the execution path
+1. **Keep hooks fast**: The entire hook phase blocks the agent until all hooks complete
 2. **Use matchers**: Don't run hooks for events you don't care about
 3. **Prefer parallel**: Sequential is slower
 4. **Set appropriate timeouts**: Don't let slow hooks block execution

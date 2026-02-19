@@ -581,7 +581,13 @@ class BeforeModelHookOutput extends DefaultHookOutput {
 ```typescript
 class BeforeToolSelectionHookOutput extends DefaultHookOutput {
   /** Apply tool configuration modifications */
-  applyToolConfigModifications(target: { toolConfig?: GenAIToolConfig; tools?: ToolListUnion }): { ... };
+  applyToolConfigModifications(target: {
+    toolConfig?: GenAIToolConfig;
+    tools?: ToolListUnion;
+  }): {
+    toolConfig?: GenAIToolConfig;
+    tools?: ToolListUnion;
+  };
 }
 ```
 
@@ -600,6 +606,21 @@ class AfterModelHookOutput extends DefaultHookOutput {
 
 - Any `block` or `deny` decision → aggregated result is blocked
 - Messages (`reason`, `systemMessage`) are concatenated
+- `suppressOutput` uses OR logic (any true wins)
+- Default decision is `allow` if no blocking
+
+### Field Replacement (BeforeModel, AfterModel)
+
+- Later hook outputs override earlier ones
+- `hookSpecificOutput` fields are merged (last write wins)
+
+### Tool Selection (BeforeToolSelection)
+
+- `allowedFunctionNames` are unioned across all hooks
+- `NONE` mode wins if any hook uses it
+- Otherwise `ANY` if any hook uses it, else `AUTO`
+- Results are sorted for deterministic behavior
+  are concatenated
 - `suppressOutput` uses OR logic (any true wins)
 - Default decision is `allow` if no blocking
 

@@ -440,6 +440,7 @@ fi
 ```python
 import logging
 import sys
+import os
 
 logging.basicConfig(
     filename=os.path.expanduser('~/.llxprt/hooks/debug.log'),
@@ -531,3 +532,4 @@ else:
 1. Check timeout setting in config
 2. Profile your hook to find slow parts
 3. Consider async patterns for slow operations
+   operations
