@@ -9,11 +9,38 @@ import { CodexOAuthProvider } from '../codex-oauth-provider.js';
 import {
   KeyringTokenStore,
   CodexOAuthTokenSchema,
+  SecureStore,
+  type KeyringAdapter,
+  type TokenStore,
 } from '@vybestack/llxprt-code-core';
-import type { TokenStore } from '@vybestack/llxprt-code-core';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+
+function createMockKeyring(): KeyringAdapter {
+  const store = new Map<string, string>();
+  return {
+    getPassword: async (service: string, account: string) =>
+      store.get(`${service}:${account}`) ?? null,
+    setPassword: async (service: string, account: string, password: string) => {
+      store.set(`${service}:${account}`, password);
+    },
+    deletePassword: async (service: string, account: string) =>
+      store.delete(`${service}:${account}`),
+    findCredentials: async (service: string) => {
+      const credentials: Array<{ account: string; password: string }> = [];
+      for (const [key, value] of store.entries()) {
+        if (key.startsWith(`${service}:`)) {
+          credentials.push({
+            account: key.slice(service.length + 1),
+            password: value,
+          });
+        }
+      }
+      return credentials;
+    },
+  };
+}
 
 describe('CodexOAuthProvider', () => {
   let tokenStore: TokenStore;
@@ -35,8 +62,12 @@ describe('CodexOAuthProvider', () => {
 
     process.env.HOME = tempDir;
 
-    // tokenStore constructor uses homedir() which reads from process.env.HOME
-    tokenStore = new KeyringTokenStore();
+    const secureStore = new SecureStore('llxprt-code-oauth', {
+      fallbackDir: tempDir,
+      fallbackPolicy: 'allow',
+      keyringLoader: async () => createMockKeyring(),
+    });
+    tokenStore = new KeyringTokenStore({ secureStore });
     provider = new CodexOAuthProvider(tokenStore);
   });
 
