@@ -272,7 +272,7 @@ export class ProfileManager {
         max_tokens: providerSettings?.maxTokens,
       },
       ephemeralSettings: {
-        'base-url': providerSettings?.baseUrl,
+        'base-url': providerSettings?.['base-url'],
         'auth-key': providerSettings?.apiKey,
         'prompt-caching': providerSettings?.['prompt-caching'],
         'include-folder-structure':

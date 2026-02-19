@@ -133,7 +133,7 @@ function applyBaseUrl(
   }
   return {
     handled: true,
-    nextConfig: { ...current, baseUrl: argument },
+    nextConfig: { ...current, 'base-url': argument },
     messages: [`Base URL set to ${argument}`],
   };
 }
@@ -220,7 +220,6 @@ function parseProfileArgs(args: string[]): ProfileArgResult {
 
 export interface ProfileData {
   readonly provider?: string;
-  readonly baseUrl?: string;
   readonly model?: string;
   readonly authKeyfile?: string;
   readonly ephemeralSettings?: Record<string, unknown>;
@@ -231,9 +230,7 @@ function mapProfileToSessionConfig(
 ): Partial<SessionConfig> | null {
   const ephemeral = profile.ephemeralSettings ?? {};
   const provider = normalizeProvider(profile.provider);
-  const baseUrl = (ephemeral['base-url'] ??
-    ephemeral.baseUrl ??
-    profile.baseUrl) as string | undefined;
+  const baseUrl = ephemeral['base-url'] as string | undefined;
   const keyFilePath = (ephemeral['auth-keyfile'] ??
     ephemeral.authKeyfile ??
     profile.authKeyfile) as string | undefined;
@@ -246,7 +243,7 @@ function mapProfileToSessionConfig(
   // Pass through all ephemeral settings to the session config
   return {
     provider,
-    baseUrl,
+    'base-url': baseUrl,
     keyFilePath,
     model,
     apiKey: undefined,
@@ -318,7 +315,7 @@ export function validateSessionConfig(
   options?: { requireModel?: boolean },
 ): string[] {
   const messages: string[] = [];
-  if (!config.baseUrl?.trim()) {
+  if (!config['base-url']?.trim()) {
     messages.push('Base URL not set. Use /baseurl <url>.');
   }
   if (options?.requireModel !== false) {
@@ -358,9 +355,7 @@ export function profileToConfigOptions(
     model: ((ephemeral.model ?? profile.model) as string) || 'gemini-2.5-flash',
     provider: profile.provider,
     workingDir,
-    baseUrl: (ephemeral['base-url'] ?? ephemeral.baseUrl ?? profile.baseUrl) as
-      | string
-      | undefined,
+    'base-url': ephemeral['base-url'] as string | undefined,
     authKeyfile: (ephemeral['auth-keyfile'] ??
       ephemeral.authKeyfile ??
       profile.authKeyfile) as string | undefined,
@@ -408,7 +403,7 @@ export async function applyProfileWithSession(
     !result.handled ||
     !profileActuallyLoaded ||
     !result.nextConfig.model ||
-    !result.nextConfig.baseUrl
+    !result.nextConfig['base-url']
   ) {
     return { ...result, sessionOptions: undefined };
   }
@@ -418,7 +413,6 @@ export async function applyProfileWithSession(
     {
       provider: result.nextConfig.provider,
       model: result.nextConfig.model,
-      baseUrl: result.nextConfig.baseUrl,
       authKeyfile: result.nextConfig.keyFilePath,
       ephemeralSettings: result.nextConfig.ephemeralSettings,
     },

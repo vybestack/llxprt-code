@@ -16,7 +16,7 @@ export interface CredentialInputs {
 export interface CredentialPrecedenceResult {
   inlineKey?: string;
   keyfilePath?: string;
-  baseUrl?: string;
+  'base-url'?: string;
   inlineSource?: 'cli' | 'profile';
   keyfileSource?: 'cli' | 'profile';
   baseUrlSource?: 'cli' | 'profile';
@@ -46,10 +46,10 @@ export function resolveCredentialPrecedence(
 
   const cleanedCliBaseUrl = cleanString(inputs.cliBaseUrl);
   if (cleanedCliBaseUrl) {
-    result.baseUrl = inputs.cliBaseUrl;
+    result['base-url'] = inputs.cliBaseUrl;
     result.baseUrlSource = 'cli';
   } else if (inputs.profileBaseUrl) {
-    result.baseUrl = inputs.profileBaseUrl;
+    result['base-url'] = inputs.profileBaseUrl;
     result.baseUrlSource = 'profile';
   }
 

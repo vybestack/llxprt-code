@@ -317,7 +317,7 @@ describe('Multi-Provider Integration Tests', () => {
         );
         if (baseURL) {
           settingsService.set('base-url', baseURL);
-          settingsService.setProviderSetting('openai', 'baseUrl', baseURL);
+          settingsService.setProviderSetting('openai', 'base-url', baseURL);
         }
 
         const stream = openaiProvider.generateChatCompletion(

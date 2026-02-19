@@ -273,11 +273,7 @@ export abstract class BaseProvider implements IProvider {
     }
 
     const providerSettings = settingsService.getProviderSettings(this.name);
-    const providerBaseUrl =
-      normalizeBaseUrl(providerSettings?.baseUrl) ??
-      normalizeBaseUrl(
-        (providerSettings as { baseURL?: string | undefined })?.baseURL,
-      );
+    const providerBaseUrl = normalizeBaseUrl(providerSettings?.['base-url']);
     if (providerBaseUrl) {
       return providerBaseUrl;
     }

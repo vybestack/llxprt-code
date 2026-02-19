@@ -62,7 +62,7 @@ describe('GeminiChat runtime context', () => {
     settingsService = new SettingsService();
     config = new Config(createConfigParams(settingsService));
 
-    settingsService.set('providers.stub.baseURL', 'https://stub.example.com');
+    settingsService.set('providers.stub.base-url', 'https://stub.example.com');
     settingsService.set('providers.stub.apiKey', 'stub-api-key');
     settingsService.set('providers.stub.model', 'stub-model');
 

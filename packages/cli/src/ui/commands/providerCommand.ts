@@ -146,7 +146,7 @@ async function handleSaveAlias(
 
   const aliasConfig: ProviderAliasConfig = {
     baseProvider: baseProviderId,
-    baseUrl: resolvedBaseUrl,
+    'base-url': resolvedBaseUrl,
     description: `User-defined alias for ${baseProviderId}`,
   };
 

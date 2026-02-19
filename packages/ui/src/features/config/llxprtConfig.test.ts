@@ -39,7 +39,7 @@ describe('applyConfigCommand', () => {
       BASE_CONFIG,
     );
     expect(result.handled).toBe(true);
-    expect(result.nextConfig.baseUrl).toBe('https://example.test/api');
+    expect(result.nextConfig['base-url']).toBe('https://example.test/api');
   });
 
   it('sets key and clears keyfile', async () => {
@@ -100,7 +100,7 @@ describe('applyConfigCommand', () => {
     expect(result.messages[0]).toContain('Loaded profile: synthetic');
     expect(result.nextConfig.provider).toBe('openai');
     expect(result.nextConfig.model).toBe('hf:zai-org/GLM-4.6');
-    expect(result.nextConfig.baseUrl).toBe(
+    expect(result.nextConfig['base-url']).toBe(
       'https://api.synthetic.new/openai/v1',
     );
     expect(result.nextConfig.keyFilePath).toBe('/Users/example/.synthetic_key');
@@ -169,31 +169,32 @@ describe('profileToConfigOptions', () => {
     const profile: ProfileData = {
       provider: 'openai',
       model: 'gpt-4',
-      baseUrl: 'https://api.example.com',
       authKeyfile: '/path/to/key',
-      ephemeralSettings: { streaming: 'disabled' },
+      ephemeralSettings: {
+        'base-url': 'https://api.example.com',
+        streaming: 'disabled',
+      },
     };
 
     const options = profileToConfigOptions(profile, '/work/dir');
 
     expect(options.model).toBe('gpt-4');
     expect(options.provider).toBe('openai');
-    expect(options.baseUrl).toBe('https://api.example.com');
+    expect(options['base-url']).toBe('https://api.example.com');
     expect(options.authKeyfile).toBe('/path/to/key');
     expect(options.workingDir).toBe('/work/dir');
   });
 
-  it('should handle ephemeral settings override for baseUrl', () => {
+  it('should use base-url from ephemeral settings', () => {
     const profile: ProfileData = {
       provider: 'openai',
       model: 'gpt-4',
-      baseUrl: 'https://default.api.com',
       ephemeralSettings: { 'base-url': 'https://override.api.com' },
     };
 
     const options = profileToConfigOptions(profile, '/work');
 
-    expect(options.baseUrl).toBe('https://override.api.com');
+    expect(options['base-url']).toBe('https://override.api.com');
   });
 
   it('should handle ephemeral settings override for model', () => {
@@ -231,7 +232,7 @@ describe('profileToConfigOptions', () => {
 
     expect(options.model).toBe('gemini-2.5-flash');
     expect(options.provider).toBe('gemini');
-    expect(options.baseUrl).toBeUndefined();
+    expect(options['base-url']).toBeUndefined();
     expect(options.authKeyfile).toBeUndefined();
   });
 

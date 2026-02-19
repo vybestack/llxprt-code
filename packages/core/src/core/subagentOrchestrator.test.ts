@@ -462,7 +462,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(result.dispose).toBeTypeOf('function');
   });
 
-  it('copies base-url into both baseUrl and baseURL provider settings for subagent runtimes', async () => {
+  it('copies base-url into provider settings for subagent runtimes', async () => {
     const qwenBaseUrl = 'https://portal.qwen.ai/v1';
     const qwenProfile: Profile = {
       version: 1,
@@ -513,8 +513,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       loaderArgs.profile.providerRuntime.settingsService.getProviderSettings(
         'qwen',
       );
-    expect(providerSettings.baseUrl).toBe(qwenBaseUrl);
-    expect(providerSettings.baseURL).toBe(qwenBaseUrl);
+    expect(providerSettings['base-url']).toBe(qwenBaseUrl);
   });
 
   it('injects base-url into runtime state for provider normalization', async () => {

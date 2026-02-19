@@ -95,7 +95,7 @@ const createSettings = (overrides: { callId: string; baseUrl?: string }) => {
   svc.set('call-id', overrides.callId);
   if (overrides.baseUrl) {
     svc.set('base-url', overrides.baseUrl);
-    svc.setProviderSetting('openai', 'baseUrl', overrides.baseUrl);
+    svc.setProviderSetting('openai', 'base-url', overrides.baseUrl);
   }
   return svc;
 };
