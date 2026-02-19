@@ -1,29 +1,42 @@
 # Sandbox Profiles Reference
 
-Sandbox profiles configure the security boundaries and resource limits for container-based sandboxing. This document covers all available options and how to configure them.
+Sandbox profiles define runtime, network, SSH passthrough, mounts, and resource limits for container sandboxing.
 
-## Profile Location
+This guide is focused on Linux and macOS. Windows is not tested yet for this workflow. Contributions are welcome.
 
-Profiles are stored as JSON files:
+## Profile location
 
 ```text
 ~/.llxprt/sandboxes/<profile-name>.json
 ```
 
-For example, the `dev` profile is at `~/.llxprt/sandboxes/dev.json`.
+Example: `~/.llxprt/sandboxes/dev.json`
 
-## Built-in Profiles
+Built-in profile files are created automatically when profile loading is used.
 
-LLxprt-code creates these profiles on first run:
+## Loading profiles
 
-### dev
+```bash
+# Load profile
+llxprt --sandbox-profile-load dev
 
-Full-featured profile for daily development.
+# Override runtime engine
+llxprt --sandbox-engine podman --sandbox-profile-load dev
+
+# Disable sandboxing
+llxprt --sandbox-engine none
+```
+
+Important behavior: loading a profile implies sandbox intent, even without `--sandbox`.
+
+## Built-in profiles
+
+### `dev`
 
 ```json
 {
   "engine": "auto",
-  "image": "ghcr.io/vybestack/llxprt-code/sandbox:latest",
+  "image": "ghcr.io/vybestack/llxprt-code/sandbox:<version>",
   "resources": { "cpus": 2, "memory": "4g", "pids": 256 },
   "network": "on",
   "sshAgent": "auto",
@@ -32,16 +45,14 @@ Full-featured profile for daily development.
 }
 ```
 
-Use when: Normal development with trusted code.
+Use for normal development.
 
-### safe
-
-Restricted profile for untrusted code analysis.
+### `safe`
 
 ```json
 {
   "engine": "auto",
-  "image": "ghcr.io/vybestack/llxprt-code/sandbox:latest",
+  "image": "ghcr.io/vybestack/llxprt-code/sandbox:<version>",
   "resources": { "cpus": 2, "memory": "4g", "pids": 128 },
   "network": "off",
   "sshAgent": "off",
@@ -50,16 +61,14 @@ Restricted profile for untrusted code analysis.
 }
 ```
 
-Use when: Analyzing pull requests, external contributions, or any code you did not write.
+Use for untrusted code review.
 
-### tight
-
-Maximum restriction for suspicious code.
+### `tight`
 
 ```json
 {
   "engine": "auto",
-  "image": "ghcr.io/vybestack/llxprt-code/sandbox:latest",
+  "image": "ghcr.io/vybestack/llxprt-code/sandbox:<version>",
   "resources": { "cpus": 1, "memory": "2g", "pids": 64 },
   "network": "off",
   "sshAgent": "off",
@@ -68,125 +77,45 @@ Maximum restriction for suspicious code.
 }
 ```
 
-Use when: Analyzing potentially malicious code or when maximum isolation is required.
+Use for strict isolation.
 
-### offline
-
-For work that does not require network access but may still need SSH for local repositories.
+### `offline`
 
 ```json
 {
   "engine": "auto",
-  "image": "ghcr.io/vybestack/llxprt-code/sandbox:latest",
+  "image": "ghcr.io/vybestack/llxprt-code/sandbox:<version>",
   "resources": { "cpus": 2, "memory": "4g", "pids": 128 },
   "network": "off",
-  "sshAgent": "auto",
+  "sshAgent": "off",
   "mounts": [],
   "env": {}
 }
 ```
 
-Use when: Working on airplanes, reading documentation, or any offline task where you still need git access to local repos.
+Use for local/offline workflows.
 
-**Note:** With `network: "off"`, SSH agent passthrough only works for local operations like commit signing or accessing local filesystem keys. Git push/pull to remote servers over SSH will not work because TCP connections are blocked.
+## Schema
 
-## Profile Schema
+### `engine`
 
-### engine
+Type: `"auto" | "docker" | "podman" | "sandbox-exec" | "none"`
 
-Which container runtime to use.
+- `auto`: picks available runtime
+- `docker`: force Docker
+- `podman`: force Podman
+- `sandbox-exec`: macOS Seatbelt
+- `none`: disable sandboxing
 
-**Type:** `"auto"` | `"docker"` | `"podman"` | `"sandbox-exec"` | `"none"`
+### `image`
 
-**Default:** `"auto"`
+Type: `string`
 
-**Values:**
+Defaults to the current release image configured in package metadata (`config.sandboxImageUri`).
 
-- `auto`: Automatically detect available runtime (prefers Docker over Podman)
-- `docker`: Use Docker explicitly
-- `podman`: Use Podman explicitly
-- `sandbox-exec`: Use macOS Seatbelt (macOS only)
-- `none`: Disable sandboxing
+You can provide your own image if it includes required utilities (`git`, `bash`, and `socat` for Podman macOS bridge paths).
 
-**Example:**
-
-```json
-{
-  "engine": "podman"
-}
-```
-
-### image
-
-Container image to use for the sandbox.
-
-**Type:** `string` (Docker image reference)
-
-**Default:** `"ghcr.io/vybestack/llxprt-code/sandbox:latest"`
-
-The default image is pulled automatically. You can specify a custom image if you have built one with additional tools.
-
-**Example:**
-
-```json
-{
-  "image": "my-registry.example.com/custom-sandbox:v1"
-}
-```
-
-### resources
-
-CPU, memory, and process limits.
-
-**Type:** `object`
-
-#### resources.cpus
-
-Maximum CPU cores the container can use.
-
-**Type:** `number`
-
-**Example:**
-
-```json
-{
-  "resources": { "cpus": 4 }
-}
-```
-
-This prevents the AI from spawning CPU-intensive operations that slow down your host.
-
-#### resources.memory
-
-Maximum memory the container can allocate.
-
-**Type:** `string` (e.g., `"2g"`, `"512m"`)
-
-**Example:**
-
-```json
-{
-  "resources": { "memory": "8g" }
-}
-```
-
-#### resources.pids
-
-Maximum number of processes the container can create.
-
-**Type:** `number`
-
-**Example:**
-
-```json
-{
-  "resources": { "pids": 512 }
-}
-```
-
-This prevents fork bombs and runaway process spawning.
-
-**Full example:**
+### `resources`
 
 ```json
 {
@@ -198,205 +127,79 @@ This prevents fork bombs and runaway process spawning.
 }
 ```
 
-### network
+- `cpus`: CPU limit
+- `memory`: memory limit
+- `pids`: process count limit
 
-Network access policy.
+### `network`
 
-**Type:** `"on"` | `"off"` | `"proxied"`
+Type: `"on" | "off" | "proxied"`
 
-**Default:** `"on"`
+- `on`: default networking
+- `off`: launches container with network disabled
+- `proxied`: accepted by schema, but currently not implemented as a dedicated mode. Runtime logs a warning and falls back to default networking.
 
-**Values:**
+### `sshAgent`
 
-- `on`: Full network access
-- `off`: No network access
-- `proxied`: Network access only through HTTP proxy (advanced)
+Type: `"auto" | "on" | "off"`
 
-**When to use `off`:**
+- `auto`: enable if `SSH_AUTH_SOCK` exists
+- `on`: require/attempt setup and warn if unavailable
+- `off`: disable passthrough
 
-- Analyzing untrusted code that might make network calls
-- Working in air-gapped environments
-- Reducing attack surface for sensitive operations
-
-**Example:**
-
-```json
-{
-  "network": "off"
-}
-```
-
-### sshAgent
-
-SSH agent passthrough for git operations.
-
-**Type:** `"auto"` | `"on"` | `"off"`
-
-**Default:** `"auto"`
-
-**Values:**
-
-- `auto`: Enable if `SSH_AUTH_SOCK` is detected
-- `on`: Require SSH agent, warn if not available
-- `off`: Disable SSH passthrough
-
-**What this does:**
-
-When enabled, your SSH agent socket is mounted into the container at `/ssh-agent`. This allows git operations with private repositories.
-
-**Example:**
-
-```json
-{
-  "sshAgent": "on"
-}
-```
-
-**Note for Podman on macOS:** SSH passthrough requires additional setup. See the [Podman macOS](#podman-macos) section below.
-
-### mounts
-
-Additional volume mounts.
-
-**Type:** `array` of mount objects
-
-**Mount object:**
-
-```typescript
-{
-  from: string;   // Host path (supports ~ expansion)
-  to?: string;    // Container path (defaults to same as from)
-  mode?: "ro" | "rw";  // Read-only or read-write (default: "rw")
-}
-```
-
-**Example:**
+### `mounts`
 
 ```json
 {
   "mounts": [
     { "from": "~/.npmrc", "to": "/home/node/.npmrc", "mode": "ro" },
-    { "from": "~/shared-libs", "to": "/shared", "mode": "ro" }
+    { "from": "~/shared", "to": "/shared" }
   ]
 }
 ```
 
-**Security note:** Be careful with write mounts. Only mount directories you trust the AI to modify.
+Mount object:
 
-### env
+- `from`: host path (`~` expansion supported)
+- `to`: container path (defaults to same path as `from`)
+- `mode`: `"ro" | "rw"` (defaults to `"ro"`)
 
-Additional environment variables.
-
-**Type:** `object` (key-value pairs)
-
-**Example:**
+### `env`
 
 ```json
 {
   "env": {
-    "NPM_CONFIG_REGISTRY": "https://registry.npmjs.org",
-    "NODE_ENV": "development"
+    "NPM_CONFIG_REGISTRY": "https://registry.npmjs.org"
   }
 }
 ```
 
-## Creating Custom Profiles
+Adds environment variables to sandbox launch context.
 
-### Example: High-Resource Development
+## Engine selection notes
 
-For large projects with many dependencies:
+When engine is `auto`, fallback preference is:
 
-```json
-{
-  "engine": "auto",
-  "resources": {
-    "cpus": 8,
-    "memory": "16g",
-    "pids": 1024
-  },
-  "network": "on",
-  "sshAgent": "auto",
-  "mounts": [
-    {
-      "from": "~/.m2/repository",
-      "to": "/home/node/.m2/repository",
-      "mode": "ro"
-    }
-  ]
-}
-```
+1. Docker
+2. Podman
+3. `sandbox-exec` (macOS)
+4. no sandbox (if nothing available)
 
-### Example: CI/CD Runner
+Notes:
 
-For automated tasks in CI:
+- With `--sandbox-profile-load`, this fallback list is used directly.
+- With `--sandbox` on macOS, base command detection checks `sandbox-exec` first, then Docker, then Podman.
+- You can always force engine with `--sandbox-engine`.
 
-```json
-{
-  "engine": "docker",
-  "resources": {
-    "cpus": 2,
-    "memory": "4g",
-    "pids": 256
-  },
-  "network": "on",
-  "sshAgent": "off",
-  "env": {
-    "CI": "true"
-  }
-}
-```
+## Podman macOS notes
 
-### Example: Restricted Analysis
+Podman runs in a VM on macOS, so there are extra constraints:
 
-For analyzing untrusted code with strict limits:
+- launchd SSH socket paths are often unusable in VM bridge paths
+- SSH and credential proxy bridges require `--network=host`
+- conflicting `--network` values can disable bridge setup
 
-```json
-{
-  "engine": "auto",
-  "resources": {
-    "cpus": 2,
-    "memory": "4g",
-    "pids": 128
-  },
-  "network": "off",
-  "sshAgent": "off",
-  "mounts": []
-}
-```
-
-Note: The project directory is always mounted read-write. The `mounts` field controls additional mounts only. For true read-only access, use the `safe` or `tight` built-in profiles which restrict network and SSH access.
-
-## Engine Selection Behavior
-
-When `engine` is `auto`, llxprt-code selects the runtime in this order:
-
-1. Docker (if available)
-2. Podman (if available)
-3. sandbox-exec (macOS only, if enabled)
-4. None (no sandboxing)
-
-### Overriding Engine
-
-You can override the profile's engine via command line:
-
-```bash
-# Profile says "auto" but force Podman
-llxprt --sandbox-engine podman --sandbox-profile-load dev
-
-# Profile says "podman" but force Docker
-llxprt --sandbox-engine docker --sandbox-profile-load dev
-```
-
-## Platform-Specific Notes
-
-### Podman macOS
-
-Podman on macOS runs in a virtual machine. This affects:
-
-**SSH Agent:**
-
-- Host sockets in `/private/tmp/com.apple.launchd.*` are not accessible from the VM
-- Use a dedicated socket at a normal path:
+If SSH forwarding is unreliable, use a dedicated socket path:
 
 ```bash
 ssh-agent -a ~/.llxprt/ssh-agent.sock
@@ -404,82 +207,38 @@ export SSH_AUTH_SOCK=~/.llxprt/ssh-agent.sock
 ssh-add ~/.ssh/id_ed25519
 ```
 
-**Credential Proxy:**
-
-- Automatic SSH tunnel bridge is set up for credential proxy
-- Requires `socat` in the sandbox image
-- May have slight latency compared to Docker
-
-**Recommendation:** For the best macOS experience, use Docker Desktop. Podman works but requires workarounds.
-
-### Linux
-
-Docker and Podman work without special configuration.
-
-**SELinux:** Podman automatically adds `:z` relabeling for SSH socket mounts.
-
-**Rootless Podman:** Fully supported. UID/GID mapping is handled automatically.
-
-## Using Profiles
-
-### From Command Line
-
-Load a profile via CLI flag:
-
-```bash
-llxprt --sandbox-profile-load dev
-
-# Combine with engine override
-llxprt --sandbox-engine podman --sandbox-profile-load dev
-
-# Combine with other flags
-llxprt --sandbox-profile-load safe --key $API_KEY
-```
-
-### Listing Available Profiles
+## Listing and inspecting profiles
 
 ```bash
 ls ~/.llxprt/sandboxes/
+cat ~/.llxprt/sandboxes/dev.json
 ```
 
-Or from within llxprt:
+## Common issues
 
-```text
-> /help sandbox
+### Profile not found
+
+If `--sandbox-profile-load custom` fails, verify file exists:
+
+```bash
+ls ~/.llxprt/sandboxes/custom.json
 ```
 
-## Troubleshooting Profiles
-
-### Profile Not Found
-
-**Symptom:** `Profile 'custom' not found`
-
-**Fix:** Ensure the file exists at `~/.llxprt/sandboxes/custom.json`
-
-### Invalid Profile JSON
-
-**Symptom:** `Failed to parse sandbox profile`
-
-**Fix:** Validate your JSON with `jq`:
+### Invalid JSON
 
 ```bash
 jq . ~/.llxprt/sandboxes/custom.json
 ```
 
-### Engine Not Available
-
-**Symptom:** `Docker not found` or `Podman not found`
-
-**Fix:** Ensure the runtime is installed and in your PATH:
+### Engine missing
 
 ```bash
 which docker
 which podman
 ```
 
-## Related Documentation
+## Related docs
 
-- [Sandbox Overview](../sandbox.md)
-- [Tutorial: Sandbox Setup](../tutorials/sandbox-setup.md)
-- [Configuration](./configuration.md)
+- [Sandbox overview](../sandbox.md)
+- [Sandbox setup tutorial](../tutorials/sandbox-setup.md)
 - [Troubleshooting](../troubleshooting.md)

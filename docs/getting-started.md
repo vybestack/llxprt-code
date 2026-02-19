@@ -191,7 +191,7 @@ When working with code from external sources, enable sandboxing to protect your 
 llxprt --sandbox-profile-load safe "review this pull request"
 ```
 
-Sandboxing isolates the AI from your host system using Docker or Podman containers. Your credentials stay on the host, and the AI cannot access files outside your project directory.
+Sandboxing isolates tool execution from your host using Docker or Podman containers. Credentials stay on the host through the credential proxy, and host access is limited to explicit mounts used by sandbox runtime.
 
 For a full walkthrough, see the [Sandbox Tutorial](./tutorials/sandbox-setup.md).
 

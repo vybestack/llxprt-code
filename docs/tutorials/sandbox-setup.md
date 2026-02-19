@@ -1,248 +1,192 @@
-# Tutorial: Setting Up Sandbox Security
+# Tutorial: Set up sandboxing for real development work
 
-This tutorial walks you through setting up and using llxprt-code's sandbox features. By the end, you will understand when and how to use sandboxing for secure AI-assisted development.
+This tutorial is for developers who want to run llxprt with sandbox protection turned on by default, then validate login and key behavior without guessing.
 
-**Time required:** 15-20 minutes
+Focus: Linux and macOS.
 
-## What You Will Learn
+Windows is not tested yet for this workflow. Contributions are welcome.
 
-- How sandboxing protects your system
-- Setting up Docker or Podman
-- Running your first sandboxed session
-- Understanding sandbox profiles
-- Configuring SSH for git operations
-- Troubleshooting common issues
+Time: about 15-20 minutes.
+
+## Why this is worth doing
+
+If you use llxprt on external repos, PRs, or shell-heavy tasks, sandboxing gives you practical safety wins:
+
+- commands run in a container instead of directly on your host
+- resource limits reduce runaway CPU/memory/process usage
+- OAuth refresh tokens stay on host via credential proxy
+- key management writes are blocked inside sandbox mode
+
+You keep velocity, but with better guardrails.
 
 ## Prerequisites
 
-- Node.js 20 or later
-- llxprt-code installed globally
-- Docker Desktop (macOS/Windows) or Docker/Podman (Linux)
+- Node.js 20+
+- `llxprt` installed
+- one working runtime:
+  - Docker (macOS/Linux), or
+  - Podman (macOS/Linux)
 
-## Step 1: Verify Your Container Engine
-
-First, check that your container runtime is installed and running.
+## Step 1: verify your runtime
 
 ### Docker
 
 ```bash
-# Check Docker is installed
 docker --version
-
-# Check Docker daemon is running
 docker ps
 ```
 
-If `docker ps` fails with "Cannot connect to the Docker daemon", start Docker Desktop or the Docker daemon.
+If `docker ps` fails, start Docker daemon/Desktop first.
 
 ### Podman (Linux)
 
 ```bash
-# Check Podman is installed
 podman --version
-
-# Test basic operation
 podman run --rm hello-world
 ```
 
 ### Podman (macOS)
 
 ```bash
-# Check Podman is installed
 podman --version
-
-# Ensure Podman machine is running
 podman machine start
 podman machine ls
 ```
 
-## Step 2: Your First Sandbox Session
-
-Start a simple sandboxed session:
+## Step 2: run your first sandboxed command
 
 ```bash
 cd your-project
 llxprt --sandbox "list the files in this directory"
 ```
 
-What happens:
+What happened:
 
-1. llxprt-code detects `--sandbox` flag
-2. It starts a container from the sandbox image
-3. Your project directory is mounted
-4. The AI responds from inside the container
+1. runtime selected (Docker/Podman/Seatbelt depending on config and platform)
+2. sandbox container launched
+3. project mounted
+4. command executed from sandboxed context
 
-### Verify You Are in a Sandbox
+## Step 3: load a profile (this implies sandbox mode)
 
-Ask the AI to check:
-
-```
-> run shell command: hostname
-```
-
-You should see a container hostname, not your actual machine name.
-
-```
-> run shell command: cat /etc/os-release
-```
-
-You should see the container OS, not your host OS.
-
-## Step 3: Understanding the Default Profile
-
-The `dev` profile is used by default. Let's examine what it allows:
+You do not need `--sandbox` when using `--sandbox-profile-load`.
 
 ```bash
-llxprt --sandbox-profile-load dev "show me the sandbox environment"
+llxprt --sandbox-profile-load dev "show sandbox environment"
 ```
 
-The `dev` profile provides:
-
-- Network access (for package installation, API calls)
-- SSH agent passthrough (for git operations)
-- Moderate resource limits (2 CPU, 4GB RAM, 256 processes)
-
-### Test Network Access
-
-```
-> fetch the title of https://example.com
-```
-
-This should work because `dev` has `network: on`.
-
-## Step 4: Using the Safe Profile
-
-The `safe` profile is more restrictive. Use it for untrusted code:
+Try strict mode for untrusted code:
 
 ```bash
-llxprt --sandbox-profile-load safe "analyze this code from an untrusted source"
+llxprt --sandbox-profile-load safe "analyze this external repository"
 ```
 
-### Test Network Restriction
+## Step 4: validate network behavior
 
-With `safe`, network is disabled:
-
-```
-> run shell command: curl -I https://example.com
-```
-
-You should see a connection error because `safe` has `network: off`.
-
-### When to Use Each Profile
-
-| Profile   | Use When                                |
-| --------- | --------------------------------------- |
-| `dev`     | Normal development, trusted code        |
-| `safe`    | Analyzing pull requests, external code  |
-| `tight`   | Maximum restriction for suspicious code |
-| `offline` | Working without network, reading docs   |
-
-## Step 5: Git Operations with SSH Passthrough
-
-If you use SSH for git (private repositories), you need SSH agent passthrough.
-
-### Check Your SSH Setup
+`dev` profile has network on:
 
 ```bash
-# Verify SSH agent is running
+llxprt --sandbox-profile-load dev "run shell command: curl -I https://example.com"
+```
+
+`safe` profile has network off:
+
+```bash
+llxprt --sandbox-profile-load safe "run shell command: curl -I https://example.com"
+```
+
+The second command should fail due to disabled network.
+
+## Step 5: validate SSH passthrough for git workflows
+
+Check host agent first:
+
+```bash
 echo $SSH_AUTH_SOCK
-
-# List loaded keys
 ssh-add -l
 ```
 
-If `SSH_AUTH_SOCK` is empty, start the agent:
+If needed:
 
 ```bash
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
 ```
 
-### Test SSH in Sandbox
+Then test inside sandbox:
 
 ```bash
 llxprt --sandbox-profile-load dev "run shell command: ssh-add -l"
 ```
 
-You should see your loaded keys.
+If keys appear, SSH passthrough is working.
 
-### Clone a Private Repository
+### Podman on macOS: reliable socket setup
 
-```
-> clone git@github.com:your-org/private-repo.git
-```
-
-The clone should succeed because the SSH agent socket is mounted into the container.
-
-### Podman on macOS Caveat
-
-Podman on macOS runs in a VM. Host SSH sockets may not be accessible. If you see errors:
+If forwarding fails with launchd socket paths, switch to a dedicated socket:
 
 ```bash
-# Create a dedicated socket at a normal path
 ssh-agent -a ~/.llxprt/ssh-agent.sock
 export SSH_AUTH_SOCK=~/.llxprt/ssh-agent.sock
 ssh-add ~/.ssh/id_ed25519
-
-# Now use Podman
 llxprt --sandbox-engine podman --sandbox-profile-load dev
 ```
 
-## Step 6: Understanding Credential Security
+## Step 6: validate login and credential proxy behavior
 
-One of the most important features of container sandboxing is credential isolation.
-
-### How Credentials Work
-
-When you use `/auth login` inside a sandbox:
-
-1. The login URL is displayed in the sandbox
-2. You open it in your host browser
-3. You authenticate with the provider
-4. The OAuth code is sent back
-5. The **host** exchanges the code for tokens
-6. The sandbox receives only a short-lived access token
-
-Your `refresh_token` never enters the container. This means:
-
-- A compromised container cannot steal your credentials
-- Token refresh happens automatically via the credential proxy
-- You can safely analyze untrusted code
-
-### Verifying the Credential Proxy
-
-```
-> run shell command: echo $LLXPRT_CREDENTIAL_SOCKET
-```
-
-If this shows a path like `/tmp/llxprt-credential-xxx.sock`, the proxy is active.
-
-### What You Cannot Do in Sandbox
-
-Some operations are blocked for security. You cannot save keys from inside the sandbox. Keys must be saved on the host first.
-
-To save a key securely on the host, start an interactive session:
+Start interactive sandbox session:
 
 ```bash
-# Start llxprt on the host (not sandboxed)
+llxprt --sandbox-profile-load dev
+```
+
+Then inside session:
+
+```text
+/auth anthropic enable
+/auth anthropic login
+```
+
+(Use another provider if preferred, e.g. `/auth gemini enable` then `/auth gemini login`.)
+
+What to expect:
+
+- login flow is initiated from sandbox session
+- host handles secure token exchange and refresh storage
+- sandbox receives usable short-lived credentials via proxy
+
+Check socket env inside sandbox:
+
+```text
+run shell command: echo $LLXPRT_CREDENTIAL_SOCKET
+```
+
+If set, proxy path is active.
+
+## Step 7: validate key command behavior (host vs sandbox)
+
+### On host (non-sandbox session)
+
+```bash
 llxprt
 ```
 
-Then use the interactive command:
+Then:
 
 ```text
-> /key save mykey
+/key save workkey sk-your-key-value
+/key list
+/key load workkey
 ```
 
-The command will prompt you to paste the key value securely without it appearing in your shell history.
+### In sandbox session
 
-Once saved on the host, the key is available inside the sandbox through the credential proxy.
+- `/key list` and `/key load workkey` should work
+- `/key save ...` and `/key delete ...` should be blocked
 
-## Step 7: Creating a Custom Profile
+This is expected and protects host key storage from sandbox writes.
 
-For specific workflows, create a custom profile.
-
-### Example: Profile with Extra Mounts
+## Step 8: create your own profile
 
 Create `~/.llxprt/sandboxes/custom.json`:
 
@@ -261,106 +205,79 @@ Create `~/.llxprt/sandboxes/custom.json`:
       "from": "~/.npmrc",
       "to": "/home/node/.npmrc",
       "mode": "ro"
-    },
-    {
-      "from": "~/projects/shared",
-      "to": "/shared",
-      "mode": "ro"
     }
-  ],
-  "env": {
-    "CUSTOM_VAR": "value"
-  }
+  ]
 }
 ```
 
-### Use Your Custom Profile
+Use it:
 
 ```bash
 llxprt --sandbox-profile-load custom "help me with this project"
 ```
 
-## Step 8: Troubleshooting Common Issues
+## Step 9: quick troubleshooting
 
-### Docker Daemon Not Running
+### image pull/load issues
 
-**Symptom:** `Cannot connect to the Docker daemon`
+Symptom:
 
-**Fix:** Start Docker Desktop or run `sudo systemctl start docker`
+`Sandbox image '<image>' is missing or could not be pulled.`
 
-### Image Not Found
-
-**Symptom:** `Unable to find image 'llxprt-code-sandbox:latest' locally`
-
-**Fix:** The image should pull automatically. If it fails, check your network and Docker registry access.
-
-### SSH Agent Not Working
-
-**Symptom:** `SSH_AUTH_SOCK not set` or `Permission denied (publickey)`
-
-**Fix:**
+Check:
 
 ```bash
-# Start agent
-eval "$(ssh-agent -s)"
-
-# Add your key
-ssh-add ~/.ssh/id_ed25519
-
-# Verify
-ssh-add -l
+docker images | grep 'vybestack/llxprt-code/sandbox'
+# or
+podman images | grep 'vybestack/llxprt-code/sandbox'
 ```
 
-### Credential Proxy Errors
+The default image comes from current release config (`ghcr.io/vybestack/llxprt-code/sandbox:<version>`).
 
-**Symptom:** `Failed to start credential proxy`
+### credential proxy startup issue
 
-**Fix:** This usually means the OS keyring is unavailable.
+Symptom:
 
-- **Linux:** Ensure `gnome-keyring-daemon` is running
-- **macOS:** Keychain should always be available
-- **Fallback:** Use `--key` flag with an API key
+`Failed to start credential proxy: ...`
 
-### Podman VM Issues (macOS)
+Typical fixes:
 
-**Symptom:** `Error: cannot connect to Podman socket`
+- Linux: verify keyring service is running/unlocked
+- macOS: ensure Keychain access is available
+- temporary fallback: run with `--key` for immediate work
 
-**Fix:**
+### Podman macOS VM issue
+
+Symptom:
+
+`cannot connect to Podman socket`
+
+Fix:
 
 ```bash
-# Start the VM
 podman machine start
-
-# Check status
 podman machine ls
+```
 
-# If stuck, recreate
+If stuck:
+
+```bash
 podman machine stop
 podman machine rm
 podman machine init
 podman machine start
 ```
 
-## Step 9: Best Practices Summary
+## Recommended daily pattern
 
-1. **Default to sandboxed** when working with code you did not write
-2. **Use `safe` profile** for pull requests and external contributions
-3. **Keep SSH agent running** if you use git with SSH
-4. **Save keys on the host** before using them in sandbox
-5. **Check profiles** with `cat ~/.llxprt/sandboxes/dev.json`
+- trusted project work: `--sandbox-profile-load dev`
+- unknown or external code: `--sandbox-profile-load safe`
+- force runtime only when needed: `--sandbox-engine docker|podman`
+- disable sandbox only intentionally: `--sandbox-engine none`
 
-## Next Steps
+## Next docs
 
-- Read the full [Sandbox Documentation](../sandbox.md)
-- Learn about [Authentication](../cli/authentication.md)
-- Explore [Profile Configuration](../cli/profiles.md)
-- Review [Security Best Practices](../sandbox.md#security-considerations)
-
-## Getting Help
-
-If you encounter issues not covered here:
-
-1. Check the [Troubleshooting](../sandbox.md#troubleshooting) section
-2. Search existing GitHub issues
-3. Ask in the community Discord
-4. Open a new issue with debug output: `DEBUG=1 llxprt --sandbox ...`
+- [Sandbox overview](../sandbox.md)
+- [Sandbox profiles reference](../cli/sandbox-profiles.md)
+- [Authentication](../cli/authentication.md)
+- [Troubleshooting](../troubleshooting.md)

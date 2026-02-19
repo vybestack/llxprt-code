@@ -159,9 +159,9 @@ Both syntaxes work in PowerShell, but `+` avoids the IntelliSense interference. 
   - **Solution:** If the `CI_` prefixed variable is not needed for the CLI to function, you can temporarily unset it for the command. e.g., `env -u CI_TOKEN llxprt`
 
 - **DEBUG mode not working from project .env file**
-  - **Issue:** Setting `DEBUG=true` in a project's `.env` file doesn't enable debug mode for gemini-cli.
-  - **Cause:** The `DEBUG` and `DEBUG_MODE` variables are automatically excluded from project `.env` files to prevent interference with gemini-cli behavior.
-  - **Solution:** Use a `.gemini/.env` file instead, or configure the `excludedProjectEnvVars` setting in your `settings.json` to exclude fewer variables.
+  - **Issue:** Setting `DEBUG=true` in a project's `.env` file doesn't enable debug mode for llxprt.
+  - **Cause:** The `DEBUG` and `DEBUG_MODE` variables are automatically excluded from project `.env` files to prevent interference with llxprt behavior.
+  - **Solution:** Use a `.llxprt/.env` file instead, or configure the `excludedProjectEnvVars` setting in your `settings.json` to exclude fewer variables.
 
 ## Exit Codes
 
@@ -185,8 +185,10 @@ LLxprt Code uses specific exit codes to indicate the reason for termination. Thi
 
 **Solutions:**
 
-- **macOS/Windows:** Start Docker Desktop
+- **macOS:** Start Docker Desktop
 - **Linux:** Run `sudo systemctl start docker` or `sudo service docker start`
+
+Windows is not currently tested for this sandbox workflow.
 
 #### Podman machine not running (macOS)
 
@@ -210,7 +212,7 @@ podman machine start
 
 #### Image pull failures
 
-**Symptom:** `Unable to find image 'ghcr.io/vybestack/llxprt-code/sandbox:latest'`
+**Symptom:** `Sandbox image '<image>' is missing or could not be pulled.`
 
 **Causes and solutions:**
 
@@ -276,7 +278,7 @@ If empty, the proxy did not start correctly on the host.
 
 #### socat not found (Podman macOS)
 
-**Symptom:** `ERROR: socat not found — credential proxy relay requires socat in the sandbox image`
+**Symptom:** `ERROR: socat not found - credential proxy relay requires socat in the sandbox image`
 
 **Cause:** The sandbox image lacks the `socat` utility needed for credential proxy bridging on Podman macOS.
 
@@ -449,13 +451,13 @@ llxprt --sandbox "run shell command: curl -I https://example.com 2>&1"
 
 ```bash
 # Find the image
-docker images | grep llxprt-code-sandbox
+docker images | grep 'vybestack/llxprt-code/sandbox'
 
-# Run interactively
+# Run interactively (replace tag with the one you have locally)
 docker run -it --rm \
   -v $(pwd):/workspace \
   -v ~/.llxprt:/home/node/.llxprt \
-  llxprt-code-sandbox:latest \
+  ghcr.io/vybestack/llxprt-code/sandbox:0.9.0 \
   bash
 
 # Inside container, debug
