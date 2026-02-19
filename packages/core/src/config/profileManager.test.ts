@@ -300,7 +300,6 @@ describe('ProfileManager', () => {
     });
 
     it('should pass provider and model from profile to SettingsService', async () => {
-      const manager = new ProfileManager();
       const capturedData: { value?: unknown } = {};
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(testProfile));
@@ -309,11 +308,12 @@ describe('ProfileManager', () => {
         return Promise.resolve();
       });
 
-      await manager.load(
+      await profileManager.load(
         'test-profile',
         mockSettingsService as unknown as SettingsService,
       );
 
+      expect(capturedData.value).toBeDefined();
       const imported = capturedData.value as {
         defaultProvider?: string;
         providers?: Record<string, { model?: string }>;
@@ -323,7 +323,6 @@ describe('ProfileManager', () => {
     });
 
     it('should pass base-url from profile ephemeralSettings', async () => {
-      const manager = new ProfileManager();
       const capturedData: { value?: unknown } = {};
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(testProfile));
@@ -332,11 +331,12 @@ describe('ProfileManager', () => {
         return Promise.resolve();
       });
 
-      await manager.load(
+      await profileManager.load(
         'test-profile',
         mockSettingsService as unknown as SettingsService,
       );
 
+      expect(capturedData.value).toBeDefined();
       const imported = capturedData.value as {
         providers?: Record<string, Record<string, unknown>>;
       };
@@ -346,7 +346,6 @@ describe('ProfileManager', () => {
     });
 
     it('should pass toolFormat from profile to SettingsService', async () => {
-      const manager = new ProfileManager();
       const capturedData: { value?: unknown } = {};
       const profileWithToolFormat: Profile = {
         version: 1,
@@ -366,11 +365,12 @@ describe('ProfileManager', () => {
         return Promise.resolve();
       });
 
-      await manager.load(
+      await profileManager.load(
         'kimi-profile',
         mockSettingsService as unknown as SettingsService,
       );
 
+      expect(capturedData.value).toBeDefined();
       const imported = capturedData.value as {
         providers?: Record<string, { toolFormat?: string }>;
       };
@@ -378,7 +378,6 @@ describe('ProfileManager', () => {
     });
 
     it('should pass tool enablement lists from profile', async () => {
-      const manager = new ProfileManager();
       const capturedData: { value?: unknown } = {};
       const profileWithTools: Profile = {
         version: 1,
@@ -397,11 +396,12 @@ describe('ProfileManager', () => {
         return Promise.resolve();
       });
 
-      await manager.load(
+      await profileManager.load(
         'tools-profile',
         mockSettingsService as unknown as SettingsService,
       );
 
+      expect(capturedData.value).toBeDefined();
       const imported = capturedData.value as {
         tools?: { allowed?: string[]; disabled?: string[] };
       };
