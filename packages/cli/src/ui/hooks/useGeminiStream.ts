@@ -1252,10 +1252,12 @@ export const useGeminiStream = (
 
       // Display user message IMMEDIATELY for string queries (not continuations)
       // This ensures the user sees their input right away, before any async processing
+      // Skip slash commands - slashCommandProcessor handles adding those (with sanitization for secure commands)
       if (
         typeof query === 'string' &&
         query.trim().length > 0 &&
-        !options?.isContinuation
+        !options?.isContinuation &&
+        !isSlashCommand(query.trim())
       ) {
         const trimmedQuery = query.trim();
         addItem(
