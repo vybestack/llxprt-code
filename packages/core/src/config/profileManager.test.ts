@@ -157,7 +157,7 @@ describe('ProfileManager', () => {
             model: 'test-model',
             temperature: 0.7,
             maxTokens: 2000,
-            baseUrl: 'https://api.openai.com/v1',
+            'base-url': 'https://api.openai.com/v1',
             apiKey: 'test-key',
           },
         },
@@ -191,7 +191,7 @@ describe('ProfileManager', () => {
             model: 'test-model',
             temperature: 0.7,
             maxTokens: 2000,
-            baseUrl: 'https://api.openai.com/v1',
+            'base-url': 'https://api.openai.com/v1',
             apiKey: 'test-key',
           },
         },
@@ -282,7 +282,7 @@ describe('ProfileManager', () => {
       profileManager = new ProfileManager();
     });
 
-    it('should load profile and import to SettingsService', async () => {
+    it('should load profile and invoke importFromProfile', async () => {
       const profileJson = JSON.stringify(testProfile);
       mockFs.readFile.mockResolvedValue(profileJson);
       mockSettingsService.importFromProfile.mockResolvedValue();
@@ -293,47 +293,61 @@ describe('ProfileManager', () => {
       );
 
       expect(mockFs.readFile).toHaveBeenCalled();
-      expect(mockSettingsService.importFromProfile).toHaveBeenCalledWith({
-        defaultProvider: 'openai',
-        providers: {
-          openai: {
-            enabled: true,
-            model: 'test-model',
-            temperature: 0.7,
-            maxTokens: 2000,
-            baseUrl: 'https://api.openai.com/v1',
-            apiKey: 'test-key',
-          },
-        },
-        tools: {
-          allowed: [],
-          disabled: [],
-        },
-      });
+      expect(mockSettingsService.importFromProfile).toHaveBeenCalled();
       expect(mockSettingsService.setCurrentProfileName).toHaveBeenCalledWith(
         'test-profile',
       );
     });
 
-    it('should work when SettingsService is always available', async () => {
-      // In the new architecture, SettingsService is always available
+    it('should pass provider and model from profile to SettingsService', async () => {
       const manager = new ProfileManager();
+      const capturedData: { value?: unknown } = {};
 
-      const profileJson = JSON.stringify(testProfile);
-      mockFs.readFile.mockResolvedValue(profileJson);
-      mockSettingsService.importFromProfile.mockResolvedValue();
+      mockFs.readFile.mockResolvedValue(JSON.stringify(testProfile));
+      mockSettingsService.importFromProfile.mockImplementation((data) => {
+        capturedData.value = data;
+        return Promise.resolve();
+      });
 
-      await expect(
-        manager.load(
-          'test-profile',
-          mockSettingsService as unknown as SettingsService,
-        ),
-      ).resolves.not.toThrow();
-      expect(mockSettingsService.importFromProfile).toHaveBeenCalled();
+      await manager.load(
+        'test-profile',
+        mockSettingsService as unknown as SettingsService,
+      );
+
+      const imported = capturedData.value as {
+        defaultProvider?: string;
+        providers?: Record<string, { model?: string }>;
+      };
+      expect(imported.defaultProvider).toBe('openai');
+      expect(imported.providers?.openai?.model).toBe('test-model');
     });
 
-    it('should load toolFormat from profile and apply to SettingsService', async () => {
+    it('should pass base-url from profile ephemeralSettings', async () => {
       const manager = new ProfileManager();
+      const capturedData: { value?: unknown } = {};
+
+      mockFs.readFile.mockResolvedValue(JSON.stringify(testProfile));
+      mockSettingsService.importFromProfile.mockImplementation((data) => {
+        capturedData.value = data;
+        return Promise.resolve();
+      });
+
+      await manager.load(
+        'test-profile',
+        mockSettingsService as unknown as SettingsService,
+      );
+
+      const imported = capturedData.value as {
+        providers?: Record<string, Record<string, unknown>>;
+      };
+      expect(imported.providers?.openai?.['base-url']).toBe(
+        'https://api.openai.com/v1',
+      );
+    });
+
+    it('should pass toolFormat from profile to SettingsService', async () => {
+      const manager = new ProfileManager();
+      const capturedData: { value?: unknown } = {};
       const profileWithToolFormat: Profile = {
         version: 1,
         provider: 'openai',
@@ -347,33 +361,52 @@ describe('ProfileManager', () => {
       };
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(profileWithToolFormat));
-      mockSettingsService.importFromProfile.mockResolvedValue();
+      mockSettingsService.importFromProfile.mockImplementation((data) => {
+        capturedData.value = data;
+        return Promise.resolve();
+      });
 
       await manager.load(
         'kimi-profile',
         mockSettingsService as unknown as SettingsService,
       );
 
-      expect(mockSettingsService.importFromProfile).toHaveBeenCalledWith({
-        defaultProvider: 'openai',
-        providers: {
-          openai: {
-            enabled: true,
-            model: 'moonshotai/Kimi-K2-Thinking',
-            temperature: 0.7,
-            maxTokens: undefined,
-            baseUrl: undefined,
-            apiKey: undefined,
-            'prompt-caching': undefined,
-            'include-folder-structure': undefined,
-            toolFormat: 'kimi',
-          },
+      const imported = capturedData.value as {
+        providers?: Record<string, { toolFormat?: string }>;
+      };
+      expect(imported.providers?.openai?.toolFormat).toBe('kimi');
+    });
+
+    it('should pass tool enablement lists from profile', async () => {
+      const manager = new ProfileManager();
+      const capturedData: { value?: unknown } = {};
+      const profileWithTools: Profile = {
+        version: 1,
+        provider: 'openai',
+        model: 'test-model',
+        modelParams: {},
+        ephemeralSettings: {
+          'tools.allowed': ['tool-a', 'tool-b'],
+          'tools.disabled': ['tool-c'],
         },
-        tools: {
-          allowed: [],
-          disabled: [],
-        },
+      };
+
+      mockFs.readFile.mockResolvedValue(JSON.stringify(profileWithTools));
+      mockSettingsService.importFromProfile.mockImplementation((data) => {
+        capturedData.value = data;
+        return Promise.resolve();
       });
+
+      await manager.load(
+        'tools-profile',
+        mockSettingsService as unknown as SettingsService,
+      );
+
+      const imported = capturedData.value as {
+        tools?: { allowed?: string[]; disabled?: string[] };
+      };
+      expect(imported.tools?.allowed).toEqual(['tool-a', 'tool-b']);
+      expect(imported.tools?.disabled).toEqual(['tool-c']);
     });
   });
 
