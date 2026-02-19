@@ -449,15 +449,17 @@ llxprt --sandbox "run shell command: curl -I https://example.com 2>&1"
 
 #### Run container manually for debugging
 
+Replace <version> below with the tag shown by the docker images command.
+
 ```bash
 # Find the image
 docker images | grep 'vybestack/llxprt-code/sandbox'
 
-# Run interactively (replace tag with the one you have locally)
+# Run interactively (replace <version> with the tag you found above)
 docker run -it --rm \
   -v $(pwd):/workspace \
   -v ~/.llxprt:/home/node/.llxprt \
-  ghcr.io/vybestack/llxprt-code/sandbox:0.9.0 \
+  ghcr.io/vybestack/llxprt-code/sandbox:<version> \
   bash
 
 # Inside container, debug
