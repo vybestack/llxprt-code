@@ -100,7 +100,7 @@ describe('ProviderManager runtime guard plumbing', () => {
     settingsService.setProviderSetting(provider.name, 'apiKey', 'stub-key');
     settingsService.setProviderSetting(
       provider.name,
-      'baseURL',
+      'base-url',
       'https://stub.example.com',
     );
     manager.setActiveProvider(provider.name);
@@ -146,7 +146,7 @@ describe('ProviderManager runtime guard plumbing', () => {
     settingsService.setProviderSetting(provider.name, 'apiKey', 'stub-key');
     settingsService.setProviderSetting(
       provider.name,
-      'baseURL',
+      'base-url',
       'https://stub.example.com',
     );
     manager.setActiveProvider(provider.name);
@@ -288,7 +288,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
     settingsService.setProviderSetting(
       'stub-provider',
-      'baseURL',
+      'base-url',
       'https://api.test.com',
     );
 
@@ -568,7 +568,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
     settingsService.setProviderSetting(
       'stub-provider',
-      'baseURL',
+      'base-url',
       'https://api.test.com',
     );
 

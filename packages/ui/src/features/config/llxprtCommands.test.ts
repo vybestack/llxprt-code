@@ -6,7 +6,7 @@ import { handleModelListCommand } from './llxprtCommands';
 
 const BASE: SessionConfig = {
   provider: 'openai',
-  baseUrl: 'https://example.test/api',
+  'base-url': 'https://example.test/api',
   keyFilePath: path.join(os.tmpdir(), 'nui-test-key'),
   model: 'dummy',
 };

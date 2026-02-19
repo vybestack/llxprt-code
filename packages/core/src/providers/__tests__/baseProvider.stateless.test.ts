@@ -78,7 +78,7 @@ const createSettingsService = (
 
   if (overrides.baseUrl) {
     service.set('base-url', overrides.baseUrl);
-    service.setProviderSetting(PROVIDER_NAME, 'baseUrl', overrides.baseUrl);
+    service.setProviderSetting(PROVIDER_NAME, 'base-url', overrides.baseUrl);
   }
 
   if (overrides.authKey) {

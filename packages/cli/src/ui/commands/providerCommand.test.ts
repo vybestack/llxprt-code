@@ -137,7 +137,7 @@ describe('providerCommand /provider save', () => {
     const aliasConfig = JSON.parse(fs.readFileSync(aliasPath, 'utf-8'));
     expect(aliasConfig).toMatchObject({
       baseProvider: 'openai',
-      baseUrl,
+      'base-url': baseUrl,
       defaultModel,
     });
 

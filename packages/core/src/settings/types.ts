@@ -40,7 +40,7 @@ export interface GlobalSettings {
 export interface ProviderSettings {
   enabled: boolean;
   apiKey?: string;
-  baseUrl?: string;
+  'base-url'?: string;
   model?: string;
   maxTokens?: number;
   temperature?: number;

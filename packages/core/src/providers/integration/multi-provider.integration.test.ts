@@ -77,7 +77,7 @@ describe('Multi-Provider Integration Tests', () => {
         getModel: resolveDefaultModel,
         getEphemeralSettings: () => ({
           model: resolveDefaultModel(),
-          baseUrl: baseURL,
+          'base-url': baseURL,
         }),
       },
     });
@@ -198,7 +198,7 @@ describe('Multi-Provider Integration Tests', () => {
             getModel: resolveDefaultModel,
             getEphemeralSettings: () => ({
               model: resolveDefaultModel(),
-              baseUrl: baseURL,
+              'base-url': baseURL,
             }),
           },
         });
@@ -317,7 +317,7 @@ describe('Multi-Provider Integration Tests', () => {
         );
         if (baseURL) {
           settingsService.set('base-url', baseURL);
-          settingsService.setProviderSetting('openai', 'baseUrl', baseURL);
+          settingsService.setProviderSetting('openai', 'base-url', baseURL);
         }
 
         const stream = openaiProvider.generateChatCompletion(
@@ -355,7 +355,7 @@ describe('Multi-Provider Integration Tests', () => {
           getModel: resolveDefaultModel,
           getEphemeralSettings: () => ({
             model: resolveDefaultModel(),
-            baseUrl: baseURL,
+            'base-url': baseURL,
           }),
         },
       });
@@ -419,7 +419,7 @@ describe('Multi-Provider Integration Tests', () => {
           getModel: resolveDefaultModel,
           getEphemeralSettings: () => ({
             model: resolveDefaultModel(),
-            baseUrl: baseURL,
+            'base-url': baseURL,
           }),
         },
       });
@@ -483,7 +483,7 @@ describe('Multi-Provider Integration Tests', () => {
             getModel: resolveDefaultModel,
             getEphemeralSettings: () => ({
               model: resolveDefaultModel(),
-              baseUrl: baseURL,
+              'base-url': baseURL,
             }),
           },
         });
@@ -597,7 +597,7 @@ describe('Multi-Provider Integration Tests', () => {
           getModel: () => 'invalid-model-xyz',
           getEphemeralSettings: () => ({
             model: 'invalid-model-xyz',
-            baseUrl: baseURL,
+            'base-url': baseURL,
           }),
         },
       });

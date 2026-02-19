@@ -474,9 +474,7 @@ export class ProviderManager implements IProviderManager {
         undefined,
       baseURL:
         rawOptions.resolved?.baseURL ??
-        (providerSettings['base-url'] as string | undefined) ??
-        (providerSettings.baseURL as string | undefined) ??
-        (providerSettings.baseUrl as string | undefined),
+        (providerSettings['base-url'] as string | undefined),
       authToken:
         rawOptions.resolved?.authToken ??
         (providerSettings.apiKey as string | undefined),

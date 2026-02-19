@@ -83,7 +83,7 @@ describe('Base URL Runtime Helper Integration', () => {
 
     expect(result.success).toBe(true);
     expect(
-      config.getSettingsService().getProviderSettings('openai').baseUrl,
+      config.getSettingsService().getProviderSettings('openai')['base-url'],
     ).toBe(customUrl);
     expect(config.getEphemeralSetting('base-url')).toBe(customUrl);
   });
@@ -95,20 +95,20 @@ describe('Base URL Runtime Helper Integration', () => {
 
     await setProviderBaseUrl('https://custom.openai.api/v1');
     expect(
-      config.getSettingsService().getProviderSettings('openai').baseUrl,
+      config.getSettingsService().getProviderSettings('openai')['base-url'],
     ).toBe('https://custom.openai.api/v1');
 
     const clearResult = await setProviderBaseUrl('none');
     expect(clearResult.success).toBe(true);
     expect(
-      config.getSettingsService().getProviderSettings('openai').baseUrl,
+      config.getSettingsService().getProviderSettings('openai')['base-url'],
     ).toBeUndefined();
     expect(config.getEphemeralSetting('base-url')).toBeUndefined();
 
     const emptyResult = await setProviderBaseUrl('');
     expect(emptyResult.success).toBe(true);
     expect(
-      config.getSettingsService().getProviderSettings('openai').baseUrl,
+      config.getSettingsService().getProviderSettings('openai')['base-url'],
     ).toBeUndefined();
   });
 
@@ -121,7 +121,7 @@ describe('Base URL Runtime Helper Integration', () => {
     const result = await setProviderBaseUrl('https://gemini.example/v1');
     expect(result.success).toBe(true);
     expect(
-      config.getSettingsService().getProviderSettings('gemini').baseUrl,
+      config.getSettingsService().getProviderSettings('gemini')['base-url'],
     ).toBe('https://gemini.example/v1');
   });
 
@@ -134,15 +134,15 @@ describe('Base URL Runtime Helper Integration', () => {
     providerManager.setActiveProvider('openai');
     await setProviderBaseUrl('https://provider-a.example');
     expect(
-      config.getSettingsService().getProviderSettings('openai').baseUrl,
+      config.getSettingsService().getProviderSettings('openai')['base-url'],
     ).toBe('https://provider-a.example');
 
     await switchActiveProvider('anthropic');
     expect(
-      config.getSettingsService().getProviderSettings('openai').baseUrl,
+      config.getSettingsService().getProviderSettings('openai')['base-url'],
     ).toBeUndefined();
     expect(
-      config.getSettingsService().getProviderSettings('anthropic').baseUrl,
+      config.getSettingsService().getProviderSettings('anthropic')['base-url'],
     ).toBeUndefined();
   });
 
@@ -172,7 +172,7 @@ describe('Base URL Runtime Helper Integration', () => {
     );
     expect(result.success).toBe(true);
     expect(
-      config.getSettingsService().getProviderSettings('openai').baseUrl,
+      config.getSettingsService().getProviderSettings('openai')['base-url'],
     ).toBe('https://profile.base.url');
   });
 });

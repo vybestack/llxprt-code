@@ -338,9 +338,7 @@ export function createProviderManager(
   // NOTE: Bootstrap args (--baseurl) should be applied to ephemeral settings
   // by calling applyCliArgumentOverrides() BEFORE creating the provider manager.
   const ephemeralBaseUrl = ephemeralSettings['base-url'];
-  const providerBaseUrl =
-    (openaiSettings?.baseUrl as string | undefined) ||
-    (openaiSettings?.baseURL as string | undefined);
+  const providerBaseUrl = openaiSettings?.['base-url'] as string | undefined;
   const openaiBaseUrl =
     ephemeralBaseUrl && typeof ephemeralBaseUrl === 'string'
       ? ephemeralBaseUrl
@@ -617,8 +615,7 @@ function createOpenAIAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIProvider | null {
-  const resolvedBaseUrl =
-    entry.config['base-url'] || entry.config.baseUrl || openaiBaseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
   if (!resolvedBaseUrl) {
     console.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -691,8 +688,7 @@ function createOpenAIResponsesAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIResponsesProvider | null {
-  const resolvedBaseUrl =
-    entry.config['base-url'] || entry.config.baseUrl || openaiBaseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
   if (!resolvedBaseUrl) {
     console.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -770,8 +766,7 @@ function createOpenAIVercelAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIVercelProvider | null {
-  const resolvedBaseUrl =
-    entry.config['base-url'] || entry.config.baseUrl || openaiBaseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
   if (!resolvedBaseUrl) {
     console.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -849,7 +844,7 @@ function createGeminiAliasProvider(
     }
   }
 
-  const resolvedBaseUrl = entry.config['base-url'] || entry.config.baseUrl;
+  const resolvedBaseUrl = entry.config['base-url'];
 
   const provider = new GeminiProvider(
     aliasApiKey || undefined,
@@ -891,7 +886,7 @@ function createAnthropicAliasProvider(
     }
   }
 
-  const resolvedBaseUrl = entry.config['base-url'] || entry.config.baseUrl;
+  const resolvedBaseUrl = entry.config['base-url'];
 
   const providerConfig: IProviderConfig = {};
   if (entry.config.providerConfig) {

@@ -49,7 +49,7 @@ describe('resolveCredentialPrecedence', () => {
 
     expect(result.keyfilePath).toBe('/tmp/profile.key');
     expect(result.keyfileSource).toBe('profile');
-    expect(result.baseUrl).toBe('https://profile.example.com');
+    expect(result['base-url']).toBe('https://profile.example.com');
     expect(result.baseUrlSource).toBe('profile');
   });
 
@@ -61,7 +61,7 @@ describe('resolveCredentialPrecedence', () => {
 
     const result = resolveCredentialPrecedence(inputs);
 
-    expect(result.baseUrl).toBe('https://cli.example.com');
+    expect(result['base-url']).toBe('https://cli.example.com');
     expect(result.baseUrlSource).toBe('cli');
   });
 });

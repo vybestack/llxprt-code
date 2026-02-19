@@ -16,7 +16,7 @@ export interface ConfigSessionOptions {
   readonly model: string;
   readonly workingDir: string;
   readonly provider?: string;
-  readonly baseUrl?: string;
+  readonly 'base-url'?: string;
   readonly authKeyfile?: string;
   readonly apiKey?: string;
   readonly debugMode?: boolean;
@@ -72,8 +72,8 @@ export function createConfigSession(
   // CRITICAL: Set model in SettingsService - providers read from here, not from Config
   settings.set('model', options.model);
 
-  if (options.baseUrl) {
-    settings.set('base-url', options.baseUrl);
+  if (options['base-url']) {
+    settings.set('base-url', options['base-url']);
   }
   if (options.authKeyfile) {
     settings.set('auth-keyfile', options.authKeyfile);
@@ -124,7 +124,7 @@ export function createConfigSession(
         const provider = createProvider(
           options.provider ?? '',
           options.apiKey,
-          options.baseUrl,
+          options['base-url'],
         );
 
         if (provider) {

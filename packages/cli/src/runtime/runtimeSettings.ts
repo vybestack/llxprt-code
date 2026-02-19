@@ -1743,11 +1743,9 @@ export async function switchActiveProvider(
     aliasConfig = undefined;
   }
   const storedModelSetting = normalizeSetting(providerSettingsBefore.model);
-  const storedBaseUrlSetting =
-    normalizeSetting(providerSettingsBefore.baseUrl) ??
-    normalizeSetting(
-      (providerSettingsBefore as Record<string, unknown>).baseURL,
-    );
+  const storedBaseUrlSetting = normalizeSetting(
+    providerSettingsBefore['base-url'],
+  );
   const hadCustomBaseUrl = Boolean(storedBaseUrlSetting);
   const explicitConfigModel =
     currentProvider === name

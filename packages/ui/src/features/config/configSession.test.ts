@@ -107,7 +107,7 @@ describe('ConfigSession', () => {
         const session = createConfigSession({
           model: 'gpt-4',
           provider: 'openai',
-          baseUrl: 'https://api.openai.com/v1',
+          'base-url': 'https://api.openai.com/v1',
           apiKey: 'test-key',
           workingDir: tempDir,
         });
@@ -126,7 +126,7 @@ describe('ConfigSession', () => {
         const session = createConfigSession({
           model: 'claude-3-sonnet',
           provider: 'anthropic',
-          baseUrl: 'https://api.anthropic.com',
+          'base-url': 'https://api.anthropic.com',
           apiKey: 'test-key',
           workingDir: tempDir,
         });
@@ -158,7 +158,7 @@ describe('ConfigSession', () => {
         const session = createConfigSession({
           model: 'gpt-4',
           provider: 'openai',
-          baseUrl: 'https://api.openai.com/v1',
+          'base-url': 'https://api.openai.com/v1',
           apiKey: 'test-key',
           workingDir: tempDir,
         });

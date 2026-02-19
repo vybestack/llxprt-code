@@ -33,7 +33,7 @@ export interface SessionConfig {
   readonly model?: string;
   readonly apiKey?: string;
   readonly keyFilePath?: string;
-  readonly baseUrl?: string;
+  readonly 'base-url'?: string;
   readonly ephemeralSettings?: Record<string, unknown>;
 }
 
@@ -255,7 +255,7 @@ export async function* sendMessage(
     model: sessionConfig.model ?? 'gemini-2.5-flash',
     workingDir: process.cwd(),
     provider: sessionConfig.provider,
-    baseUrl: sessionConfig.baseUrl,
+    'base-url': sessionConfig['base-url'],
     authKeyfile: sessionConfig.keyFilePath,
     apiKey: sessionConfig.apiKey,
   });

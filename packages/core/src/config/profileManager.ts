@@ -272,7 +272,7 @@ export class ProfileManager {
         max_tokens: providerSettings?.maxTokens,
       },
       ephemeralSettings: {
-        'base-url': providerSettings?.baseUrl,
+        'base-url': providerSettings?.['base-url'],
         'auth-key': providerSettings?.apiKey,
         'prompt-caching': providerSettings?.['prompt-caching'],
         'include-folder-structure':
@@ -327,7 +327,7 @@ export class ProfileManager {
           model: profile.model,
           temperature: profile.modelParams.temperature,
           maxTokens: profile.modelParams.max_tokens,
-          baseUrl: profile.ephemeralSettings['base-url'],
+          'base-url': profile.ephemeralSettings['base-url'],
           apiKey: profile.ephemeralSettings['auth-key'],
           'prompt-caching': profile.ephemeralSettings['prompt-caching'],
           'include-folder-structure':

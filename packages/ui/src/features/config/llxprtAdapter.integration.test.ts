@@ -20,7 +20,6 @@ const SYNTHETIC_PROFILE_PATH = path.join(
 interface ProfileData {
   provider?: string;
   model?: string;
-  baseUrl?: string;
   authKeyfile?: string;
   ephemeralSettings?: Record<string, unknown>;
 }
@@ -49,9 +48,7 @@ function readApiKey(keyfilePath: string): string | undefined {
 function createSessionFromProfile(profile: ProfileData): ConfigSession | null {
   const ephemeral = profile.ephemeralSettings ?? {};
   const provider = profile.provider;
-  const baseUrl = (ephemeral['base-url'] ??
-    ephemeral.baseUrl ??
-    profile.baseUrl) as string | undefined;
+  const baseUrl = ephemeral['base-url'] as string | undefined;
   const keyFilePath = (ephemeral['auth-keyfile'] ??
     ephemeral.authKeyfile ??
     profile.authKeyfile) as string | undefined;
@@ -70,7 +67,7 @@ function createSessionFromProfile(profile: ProfileData): ConfigSession | null {
   return createConfigSession({
     model,
     provider,
-    baseUrl,
+    'base-url': baseUrl,
     apiKey,
     workingDir: process.cwd(),
   });

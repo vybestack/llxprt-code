@@ -146,16 +146,16 @@ describe('Runtime Provider Switching Integration', () => {
     providerManager.setServerToolsProvider(providerManager.getActiveProvider());
     config
       .getSettingsService()
-      .setProviderSetting('gemini', 'baseUrl', 'https://gemini.server-tools');
+      .setProviderSetting('gemini', 'base-url', 'https://gemini.server-tools');
 
     await switchActiveProvider('other');
     expect(
-      config.getSettingsService().getProviderSettings('gemini').baseUrl,
+      config.getSettingsService().getProviderSettings('gemini')['base-url'],
     ).toBe('https://gemini.server-tools');
 
     await switchActiveProvider('gemini');
     expect(
-      config.getSettingsService().getProviderSettings('gemini').baseUrl,
+      config.getSettingsService().getProviderSettings('gemini')['base-url'],
     ).toBeUndefined();
   });
 
@@ -194,12 +194,7 @@ describe('Runtime Provider Switching Integration', () => {
     providerManager.setActiveProvider('providerA');
     settingsService.setProviderSetting(
       'providerA',
-      'baseUrl',
-      'https://legacy.example/v1',
-    );
-    settingsService.setProviderSetting(
-      'providerA',
-      'baseURL',
+      'base-url',
       'https://legacy.example/v1',
     );
     settingsService.setProviderSetting('providerA', 'model', 'legacy-model');
@@ -210,8 +205,7 @@ describe('Runtime Provider Switching Integration', () => {
     await switchActiveProvider('providerA');
 
     const refreshedSettings = settingsService.getProviderSettings('providerA');
-    expect(refreshedSettings.baseUrl).toBeUndefined();
-    expect(refreshedSettings.baseURL).toBeUndefined();
+    expect(refreshedSettings['base-url']).toBeUndefined();
     expect(refreshedSettings.model).toBe('providerA-default');
     expect(config.getModel()).toBe('providerA-default');
     expect(config.getEphemeralSetting('base-url')).toBeUndefined();

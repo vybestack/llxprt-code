@@ -385,11 +385,9 @@ export class SubagentOrchestrator {
       'base-url',
     ]);
     if (baseUrl) {
-      service.set(`providers.${provider}.baseUrl`, baseUrl);
-      service.set(`providers.${provider}.baseURL`, baseUrl);
+      service.set(`providers.${provider}.base-url`, baseUrl);
     } else {
-      service.set(`providers.${provider}.baseUrl`, undefined);
-      service.set(`providers.${provider}.baseURL`, undefined);
+      service.set(`providers.${provider}.base-url`, undefined);
     }
 
     const authKey = this.getStringSetting(profile.ephemeralSettings, [
