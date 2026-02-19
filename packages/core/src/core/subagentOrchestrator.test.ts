@@ -35,7 +35,7 @@ const createRuntimeBundle = (label = 'bundle') => {
     state: { runtimeId: `${label}-runtime-id`, sessionId: `${label}-session` },
     history,
     ephemerals: {
-      compressionThreshold: () => 0.5,
+      compressionThreshold: () => 0.85,
       contextLimit: () => 20_000,
       preserveThreshold: () => 0.3,
       toolFormatOverride: () => undefined,

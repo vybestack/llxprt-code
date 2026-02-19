@@ -23,7 +23,7 @@ import { tokenLimit } from '../core/tokenLimits.js';
 import { getSettingSpec } from '../settings/settingsRegistry.js';
 
 const EPHEMERAL_DEFAULTS = {
-  compressionThreshold: 0.5,
+  compressionThreshold: 0.85,
   preserveThreshold: 0.4,
   topPreserveThreshold: 0.2,
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */

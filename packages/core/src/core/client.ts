@@ -1114,7 +1114,7 @@ ${jitMemory}`
           : undefined;
 
       const settings: ReadonlySettingsSnapshot = {
-        compressionThreshold: compressionThreshold ?? 0.5,
+        compressionThreshold: compressionThreshold ?? 0.85,
         contextLimit,
         preserveThreshold: preserveThreshold ?? 0.2,
         telemetry: {
