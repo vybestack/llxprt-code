@@ -4,9 +4,9 @@ This guide explains how the LLxprt Code hook system works internally, which help
 
 ## System Overview
 
-The hook system consists of four main components:
+The hook system consists of five main components:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                        HookSystem                                │
 │  (Owns all components, provides lazy initialization)            │
