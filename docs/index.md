@@ -21,6 +21,7 @@ Essential guides for daily use:
 - **[Provider Configuration](./cli/providers.md):** Configure and manage LLM providers (Anthropic, OpenAI, Gemini, and more).
 - **[Authentication](./cli/authentication.md):** Set up authentication for various providers.
 - **[Profiles](./cli/profiles.md):** Save and manage configurations for different contexts.
+- **[Sandboxing](./sandbox.md):** Protect your system with container-based isolation.
 - **[Subagents](./subagents.md):** Create and manage specialized AI assistants tied to profiles.
 
 ### Advanced Topics
@@ -65,7 +66,6 @@ For contributors and developers:
 - **[Provider interface](./core/provider-interface.md):** Implement providers against the stateless runtime.
 - **[Tools API](./core/tools-api.md):** Information on how the core manages and exposes tools.
 - **[Memory Import Processor](./core/memport.md):** Modular LLXPRT.md import feature.
-- **[Sandbox Security](./sandbox.md):** Security and sandboxing mechanisms.
 - **[Shell Replacement](./shell-replacement.md):** Command substitution in shell commands.
 - **[Contributing & Development Guide](../CONTRIBUTING.md):** Information for contributors and developers.
 - **[NPM Workspaces and Publishing](./npm.md):** Details on how the project's packages are managed and published.

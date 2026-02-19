@@ -182,10 +182,24 @@ Or set it as your default:
 3. **Iterate** — Follow up with clarifications or ask for alternatives
 4. **Use the right model** — Larger models (claude-opus-4-5, gpt-5.2) for complex tasks, faster models (gemini-flash, claude-haiku-4-5) for quick questions
 
+## Security Tip: Sandboxing
+
+When working with code from external sources, enable sandboxing to protect your system:
+
+```bash
+# Use the safe profile for untrusted code
+llxprt --sandbox-profile-load safe "review this pull request"
+```
+
+Sandboxing isolates the AI from your host system using Docker or Podman containers. Your credentials stay on the host, and the AI cannot access files outside your project directory.
+
+For a full walkthrough, see the [Sandbox Tutorial](./tutorials/sandbox-setup.md).
+
 ## Next Steps
 
 Now that you're up and running:
 
+- **[Sandboxing](./sandbox.md)** — Protect your system with container isolation
 - **[Profiles](./cli/profiles.md)** — Save and manage multiple configurations
 - **[Subagents](./subagents.md)** — Create specialized AI assistants for different tasks
 - **[Local Models](./local-models.md)** — Run models locally for complete privacy

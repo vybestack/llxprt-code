@@ -2,6 +2,12 @@
 
 This page contains tutorials for interacting with LLxprt Code.
 
+## Sandbox Setup
+
+Learn how to use container-based sandboxing to protect your system when working with untrusted code:
+
+**[Sandbox Setup Tutorial](../tutorials/sandbox-setup.md)** — Step-by-step guide covering Docker/Podman setup, profile configuration, SSH passthrough, and troubleshooting.
+
 ## Setting up a Model Context Protocol (MCP) server
 
 > [!CAUTION]
