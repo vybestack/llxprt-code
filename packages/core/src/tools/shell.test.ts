@@ -286,7 +286,7 @@ describe('ShellTool', () => {
       );
     });
 
-    describe('command instrumentation escaping for chained commands', () => {
+    describe('command wrapping preserves original command', () => {
       const resolveChainExecution = () => {
         resolveExecutionPromise({
           rawOutput: Buffer.from(''),
@@ -300,7 +300,7 @@ describe('ShellTool', () => {
         });
       };
 
-      it('should use printf with single-quoted segment for 2>&1 redirection in chained commands', async () => {
+      it('should NOT inject __LLXPRT_CMD__ markers into chained commands', async () => {
         const invocation = shellTool.build({
           command: 'ls nonexistent 2>&1 && echo done',
         });
@@ -309,138 +309,107 @@ describe('ShellTool', () => {
         await promise;
 
         const [[calledCommand]] = mockShellExecutionService.mock.calls;
-        // The marker for the first segment must not let 2>&1 redirect printf's stderr
-        expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:ls nonexistent 2>&1'",
-        );
-        // The actual command must remain unchanged
-        expect(calledCommand).toContain('ls nonexistent 2>&1');
+        // Should NOT contain any __LLXPRT_CMD__ markers
+        expect(calledCommand).not.toContain('__LLXPRT_CMD__');
+        // Should contain the original command string as-is
+        expect(calledCommand).toContain('ls nonexistent 2>&1 && echo done');
       });
 
-      it('should use printf with single-quoted segment for >&2 redirection in chained commands', async () => {
+      it('should preserve background & operator in commands', async () => {
         const invocation = shellTool.build({
-          command: 'echo hello >&2 && echo world',
+          command: 'cd /tmp && npx serve -l 3000 &',
         });
         const promise = invocation.execute(mockAbortSignal);
         resolveChainExecution();
         await promise;
 
         const [[calledCommand]] = mockShellExecutionService.mock.calls;
-        expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:echo hello >&2'",
-        );
-        expect(calledCommand).toContain('echo hello >&2');
+        // Should NOT contain any markers
+        expect(calledCommand).not.toContain('__LLXPRT_CMD__');
+        // Should preserve the & operator at the end
+        expect(calledCommand).toContain('cd /tmp && npx serve -l 3000 &');
       });
 
-      it('should escape single quotes in the segment when used in printf marker', async () => {
-        // Use grep 'pattern' which has single quotes in the segment after splitting
+      it('should preserve || operators', async () => {
         const invocation = shellTool.build({
-          command: "grep 'error' log.txt && cat log.txt",
+          command: 'test -f file || touch file',
         });
         const promise = invocation.execute(mockAbortSignal);
         resolveChainExecution();
         await promise;
 
         const [[calledCommand]] = mockShellExecutionService.mock.calls;
-        // Single quotes in the segment must be escaped as '\'' in the printf arg
-        expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:grep '\\''error'\\'' log.txt'",
-        );
-        // The actual command must remain unchanged
-        expect(calledCommand).toContain("grep 'error' log.txt");
+        // Should NOT contain any markers
+        expect(calledCommand).not.toContain('__LLXPRT_CMD__');
+        // Should preserve the || operator
+        expect(calledCommand).toContain('test -f file || touch file');
       });
 
-      it('should handle double quotes in the segment safely in the printf marker', async () => {
+      it('should preserve semicolon operators', async () => {
         const invocation = shellTool.build({
-          command: 'echo "hello world" && ls',
+          command: 'echo a; echo b',
         });
         const promise = invocation.execute(mockAbortSignal);
         resolveChainExecution();
         await promise;
 
         const [[calledCommand]] = mockShellExecutionService.mock.calls;
-        expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:echo \"hello world\"'",
-        );
-        expect(calledCommand).toContain('echo "hello world"');
+        // Should NOT contain any markers
+        expect(calledCommand).not.toContain('__LLXPRT_CMD__');
+        // Should preserve the semicolon operator
+        expect(calledCommand).toContain('echo a; echo b');
       });
 
-      it('should handle backticks in the segment safely in the printf marker', async () => {
+      it('should preserve pipe operators in commands', async () => {
         const invocation = shellTool.build({
-          command: 'echo `date` && ls',
+          command: 'cat file | grep foo && echo done',
         });
         const promise = invocation.execute(mockAbortSignal);
         resolveChainExecution();
         await promise;
 
         const [[calledCommand]] = mockShellExecutionService.mock.calls;
-        expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:echo `date`'",
-        );
-        // The actual command must remain unchanged
-        expect(calledCommand).toContain('echo `date`');
+        // Should NOT contain any markers
+        expect(calledCommand).not.toContain('__LLXPRT_CMD__');
+        // Should preserve the pipe and && operators
+        expect(calledCommand).toContain('cat file | grep foo && echo done');
       });
 
-      it('should handle pipe operators: pipelines are kept as single logical units', async () => {
-        // Pipelines are NOT split - they are single logical commands.
-        // 'ls | grep foo && echo done' splits on && into two segments:
-        // 'ls | grep foo' and 'echo done'. The pipe is part of the first segment.
+      it('should wrap command with pgrep on non-Windows', async () => {
         const invocation = shellTool.build({
-          command: 'ls | grep foo && echo done',
+          command: 'echo hello',
         });
         const promise = invocation.execute(mockAbortSignal);
         resolveChainExecution();
         await promise;
 
         const [[calledCommand]] = mockShellExecutionService.mock.calls;
-        // Pipeline gets ONE marker (not split on |)
-        expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:ls | grep foo'",
+        const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
+        // Should match pattern: { echo hello; }; __code=$?; pgrep ...
+        expect(calledCommand).toMatch(
+          /\{ echo hello; \}; __code=\$\?; pgrep -g 0 >/,
         );
-        // && segment gets its own marker
-        expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:echo done'",
-        );
-        // Should NOT have separate markers for ls and grep foo
-        expect(calledCommand).not.toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:ls'",
-        );
-        expect(calledCommand).not.toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:grep foo'",
-        );
+        expect(calledCommand).toContain(tmpFile);
+        expect(calledCommand).toContain('exit $__code;');
       });
 
-      it('should handle chained commands each with 2>&1 redirections', async () => {
+      it('should not add semicolon when command ends with &', async () => {
         const invocation = shellTool.build({
-          command: 'cmd1 2>&1 && cmd2 2>&1',
+          command: 'sleep 100 &',
         });
         const promise = invocation.execute(mockAbortSignal);
         resolveChainExecution();
         await promise;
 
         const [[calledCommand]] = mockShellExecutionService.mock.calls;
-        expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:cmd1 2>&1'",
+        const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
+        // Should match pattern: { sleep 100 & }; __code=$?; pgrep ...
+        // Note: NO semicolon after the & within the braces
+        expect(calledCommand).toMatch(
+          /\{ sleep 100 & \}; __code=\$\?; pgrep -g 0 >/,
         );
-        expect(calledCommand).toContain(
-          "printf '%s\\n' '__LLXPRT_CMD__:cmd2 2>&1'",
-        );
-        expect(calledCommand).toContain('cmd1 2>&1');
-        expect(calledCommand).toContain('cmd2 2>&1');
-      });
-
-      it('should NOT split simple pipe commands - single pipeline has no markers', async () => {
-        const invocation = shellTool.build({
-          command: 'cat file | grep foo',
-        });
-        const promise = invocation.execute(mockAbortSignal);
-        resolveChainExecution();
-        await promise;
-
-        const [[calledCommand]] = mockShellExecutionService.mock.calls;
-        // Single pipeline (no && or ;) has no markers - it's just one command
-        expect(calledCommand).not.toContain("printf '%s\\n' '__LLXPRT_CMD__:");
-        expect(calledCommand).toContain('cat file | grep foo');
+        expect(calledCommand).toContain(tmpFile);
+        expect(calledCommand).toContain('exit $__code;');
       });
     });
 

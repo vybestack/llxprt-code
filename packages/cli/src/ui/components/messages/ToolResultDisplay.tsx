@@ -11,10 +11,7 @@ import { Colors } from '../../colors.js';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { AnsiOutputText } from '../AnsiOutput.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
-import {
-  stripShellMarkers,
-  type AnsiOutput,
-} from '@vybestack/llxprt-code-core';
+import { type AnsiOutput } from '@vybestack/llxprt-code-core';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { STATUS_INDICATOR_WIDTH } from './ToolShared.js';
 
@@ -63,11 +60,8 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
     }
   }
 
-  // Build a filtered version for visual rendering (hide runtime markers).
-  const visualResultDisplay =
-    typeof displayContent === 'string'
-      ? stripShellMarkers(displayContent)
-      : displayContent;
+  // Use display content as-is (no more markers to strip).
+  const visualResultDisplay = displayContent;
 
   if (!displayContent) return null;
 

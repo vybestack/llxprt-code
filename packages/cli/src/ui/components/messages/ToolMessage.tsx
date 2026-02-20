@@ -98,21 +98,6 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     if (!description) return null;
     const outputString =
       typeof resultDisplay === 'string' ? resultDisplay : undefined;
-    if (outputString) {
-      const lines = outputString
-        .split('\n')
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0);
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
-        const marker = '__LLXPRT_CMD__:';
-        const idx = line.indexOf(marker);
-        if (idx !== -1) {
-          const seg = line.slice(idx + marker.length).trim();
-          if (seg) return seg;
-        }
-      }
-    }
     let raw = description;
     const paren = raw.indexOf(' (');
     const bracket = raw.indexOf(' [in ');
