@@ -2025,28 +2025,37 @@ ${block.code}
 
     // Build thinking configuration per Anthropic API semantics
     // @issue #1307: Correct adaptive thinking support for Opus 4.6
-    // Adaptive mode: thinking.type='adaptive' (no budget_tokens)
-    // Manual mode: thinking.type='enabled' with budget_tokens
-    // Effort: sent in output_config.effort (not under thinking)
+    // @issue #1494: Non-Claude models (GLM-5, etc.) don't support budget_tokens or output_config.effort
+    // Adaptive mode: thinking.type='adaptive' (no budget_tokens) - Claude Opus 4.6+ only
+    // Manual mode: thinking.type='enabled' with budget_tokens - Claude only
+    // Effort: sent in output_config.effort (not under thinking) - Claude only
+    const isClaude = currentModel.toLowerCase().includes('claude');
     let thinkingConfig: {
       thinking?: { type: 'adaptive' | 'enabled'; budget_tokens?: number };
       output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
     } = {};
     if (shouldIncludeThinking) {
-      // For Opus 4.6+ with reasoning enabled, use adaptive thinking by default unless explicit budgetTokens
-      if (
+      if (!isClaude) {
+        // Non-Claude models (GLM-5, etc.): simple thinking.type='enabled' without budget_tokens
+        // @issue #1494: GLM-5 on z.ai doesn't support budget_tokens or output_config.effort
+        thinkingConfig = {
+          thinking: {
+            type: 'enabled' as const,
+          },
+        };
+      } else if (
         isOpus46Plus &&
         !reasoningBudgetTokens &&
         adaptiveThinking !== false
       ) {
-        // Adaptive thinking mode: type='adaptive', no budget_tokens
+        // Claude Opus 4.6+: Adaptive thinking mode: type='adaptive', no budget_tokens
         thinkingConfig = {
           thinking: {
             type: 'adaptive' as const,
           },
         };
       } else {
-        // Manual mode with budget_tokens (for backwards compatibility or when budgetTokens is set)
+        // Claude: Manual mode with budget_tokens (for backwards compatibility or when budgetTokens is set)
         thinkingConfig = {
           thinking: {
             type: 'enabled' as const,
@@ -2056,8 +2065,9 @@ ${block.code}
         };
       }
 
-      // Add effort to output_config if specified (not under thinking)
-      if (mappedEffort) {
+      // Add effort to output_config if specified (Claude only, not for non-Claude models)
+      // @issue #1494: Non-Claude models don't support output_config.effort
+      if (mappedEffort && isClaude) {
         thinkingConfig.output_config = { effort: mappedEffort };
       }
     }
