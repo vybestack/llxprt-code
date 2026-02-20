@@ -26,6 +26,16 @@ If you already pay for a subscription to Anthropic, OpenAI (ChatGPT Plus/Pro), G
 
 Authentication happens lazily — the browser opens when you make your first request, not when you run the command. Once authenticated, tokens are stored securely and refresh automatically.
 
+If you don't want the browser to open automatically (e.g., you're on a remote machine), use `--nobrowser` or the `auth.noBrowser` setting to get a manual code entry prompt instead:
+
+```bash
+llxprt --nobrowser
+```
+
+```
+/set auth.noBrowser true
+```
+
 For details on each provider's OAuth flow, see [OAuth Setup](../oauth-setup.md).
 
 ### Multiple Accounts (Buckets)
