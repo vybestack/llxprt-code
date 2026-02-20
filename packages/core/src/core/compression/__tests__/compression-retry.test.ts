@@ -216,6 +216,13 @@ describe('shouldRetryCompressionError @plan PLAN-20260218-COMPRESSION-RETRY.P01'
   it('returns false for HTTP 400', () => {
     expect(shouldRetryCompressionError(makeHttpError(400))).toBe(false);
   });
+
+  it('returns true for CompressionExecutionError with isTransient: true', () => {
+    const err = new CompressionExecutionError('middle-out', 'empty summary', {
+      isTransient: true,
+    });
+    expect(shouldRetryCompressionError(err)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

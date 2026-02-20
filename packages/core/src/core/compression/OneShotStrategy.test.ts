@@ -502,4 +502,53 @@ describe('OneShotStrategy', () => {
       ).toBe(20);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Empty summary handling — transient error for retry
+  // -----------------------------------------------------------------------
+
+  describe('empty summary handling', () => {
+    it('throws a transient CompressionExecutionError when LLM returns empty summary', async () => {
+      const emptyProvider = createFakeProvider('empty-provider', '');
+      const history = generateHistory(20);
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => emptyProvider,
+      });
+      const strategy = new OneShotStrategy();
+
+      await expect(strategy.compress(ctx)).rejects.toThrow(
+        CompressionExecutionError,
+      );
+      try {
+        await strategy.compress(ctx);
+      } catch (error) {
+        expect(error).toBeInstanceOf(CompressionExecutionError);
+        expect((error as CompressionExecutionError).isTransient).toBe(true);
+      }
+    });
+
+    it('throws a transient CompressionExecutionError when LLM returns whitespace-only summary', async () => {
+      const whitespaceProvider = createFakeProvider(
+        'whitespace-provider',
+        '   \n  \t  ',
+      );
+      const history = generateHistory(20);
+      const ctx = buildContext({
+        history,
+        resolveProvider: () => whitespaceProvider,
+      });
+      const strategy = new OneShotStrategy();
+
+      await expect(strategy.compress(ctx)).rejects.toThrow(
+        CompressionExecutionError,
+      );
+      try {
+        await strategy.compress(ctx);
+      } catch (error) {
+        expect(error).toBeInstanceOf(CompressionExecutionError);
+        expect((error as CompressionExecutionError).isTransient).toBe(true);
+      }
+    });
+  });
 });
