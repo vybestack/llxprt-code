@@ -680,6 +680,36 @@ describe('CLI --profile-load Integration Tests', () => {
   });
 });
 
+describe('CLI --version and --help flags', () => {
+  it('should print version with --version flag', async () => {
+    const result = await runCli(['--version']);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/); // semver-like
+  });
+
+  it('should print version with -v flag', async () => {
+    const result = await runCli(['-v']);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it('should print help with --help flag', async () => {
+    const result = await runCli(['--help']);
+    expect(result.exitCode).toBe(0);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain('llxprt');
+    expect(output).toContain('--version');
+    expect(output).toContain('--help');
+  });
+
+  it('should print help with -h flag', async () => {
+    const result = await runCli(['-h']);
+    expect(result.exitCode).toBe(0);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain('llxprt');
+  });
+});
+
 /**
  * @plan PLAN-20251118-ISSUE533.P12
  * CLI Integration Tests for --profile flag (inline JSON profiles)
