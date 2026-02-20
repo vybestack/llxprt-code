@@ -1806,7 +1806,6 @@ export async function switchActiveProvider(
     '';
 
   modelToApply = modelToApply?.trim() ?? '';
-  let autoSelectedModel: string | undefined;
 
   settingsService.setProviderSetting(name, 'model', modelToApply || undefined);
   config.setModel(modelToApply);
@@ -2016,11 +2015,7 @@ export async function switchActiveProvider(
     );
   }
 
-  if (autoSelectedModel) {
-    infoMessages.push(
-      `Model set to '${autoSelectedModel}' for provider '${name}'.`,
-    );
-  } else if (modelToApply) {
+  if (modelToApply) {
     infoMessages.push(
       `Active model is '${modelToApply}' for provider '${name}'.`,
     );
