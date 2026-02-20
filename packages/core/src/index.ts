@@ -98,7 +98,6 @@ export * from './utils/fileUtils.js';
 export * from './utils/delay.js';
 export * from './utils/retry.js';
 export * from './utils/shell-utils.js';
-export * from './utils/shell-markers.js';
 export * from './utils/systemEncoding.js';
 export * from './utils/textUtils.js';
 export * from './utils/formatters.js';

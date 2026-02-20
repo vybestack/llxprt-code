@@ -40,7 +40,6 @@ import {
   clipMiddle,
 } from '../utils/toolOutputLimiter.js';
 import { summarizeToolOutput } from '../utils/summarizer.js';
-import { stripShellMarkers } from '../utils/shell-markers.js';
 import {
   ShellExecutionService,
   type ShellOutputEvent,
@@ -50,7 +49,6 @@ import { formatMemoryUsage } from '../utils/formatters.js';
 import {
   getCommandRoots,
   isCommandAllowed,
-  splitCommands,
   stripShellWrapper,
 } from '../utils/shell-utils.js';
 import { isShellInvocationAllowlisted } from '../utils/tool-utils.js';
@@ -292,22 +290,6 @@ class ShellToolInvocation extends BaseToolInvocation<
         : (() => {
             // wrap command to append subprocess pids (via pgrep) to temporary file
             let command = strippedCommand.trim();
-            // Instrument chained commands with a lightweight marker to indicate which subcommand is starting.
-            // This helps the UI display the currently running segment without guessing.
-            // Uses the parser-backed splitCommands utility for robust handling of quotes,
-            // escaped delimiters, and other shell operators (||, ;).
-            // Pipelines (|) are NOT split - they are single logical commands with one marker.
-            const parts = splitCommands(command, { splitOnPipes: false });
-            if (parts.length > 1) {
-              command = parts
-                .map((seg) => {
-                  // Escape single quotes for single-quoted string: ' -> '\''
-                  // This prevents shell operators like 2>&1 from being interpreted by printf
-                  const escapedForEcho = seg.replace(/'/g, "'\\''");
-                  return `printf '%s\\n' '__LLXPRT_CMD__:${escapedForEcho}'; ${seg}`;
-                })
-                .join(' && ');
-            }
             if (!command.endsWith('&')) command += ';';
             return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
           })();
@@ -532,9 +514,7 @@ class ShellToolInvocation extends BaseToolInvocation<
               }
             : {};
 
-      // Remove runtime marker lines from model-facing content to reduce summarization cost
-      const llmContentStripped = stripShellMarkers(llmContent);
-      let llmPayload = llmContentStripped;
+      let llmPayload = llmContent;
       if (
         summarizeConfig &&
         summarizeConfig[ShellTool.Name] &&
@@ -553,7 +533,7 @@ class ShellToolInvocation extends BaseToolInvocation<
             // For now, check if it's a Gemini provider and use the existing function
             if (serverToolsProvider.name === 'gemini') {
               const summary = await summarizeToolOutput(
-                llmContentStripped,
+                llmContent,
                 this.config.getGeminiClient(),
                 signal,
                 summarizeConfig[ShellTool.Name].tokenBudget,

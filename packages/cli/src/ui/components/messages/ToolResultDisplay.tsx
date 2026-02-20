@@ -11,10 +11,7 @@ import { Colors } from '../../colors.js';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { AnsiOutputText } from '../AnsiOutput.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
-import {
-  stripShellMarkers,
-  type AnsiOutput,
-} from '@vybestack/llxprt-code-core';
+import { type AnsiOutput } from '@vybestack/llxprt-code-core';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { STATUS_INDICATOR_WIDTH } from './ToolShared.js';
 
@@ -63,12 +60,6 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
     }
   }
 
-  // Build a filtered version for visual rendering (hide runtime markers).
-  const visualResultDisplay =
-    typeof displayContent === 'string'
-      ? stripShellMarkers(displayContent)
-      : displayContent;
-
   if (!displayContent) return null;
 
   // Check if displayContent is AnsiOutput (array of arrays)
@@ -94,7 +85,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
       {typeof displayContent === 'string' && shouldRenderMarkdown && (
         <Box flexDirection="column">
           <MarkdownDisplay
-            text={visualResultDisplay as string}
+            text={displayContent as string}
             isPending={false}
             terminalWidth={childWidth}
             renderMarkdown={renderMarkdown}
@@ -105,7 +96,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
         <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
           <Box>
             <Text color={Colors.Foreground} wrap="wrap">
-              {visualResultDisplay as string}
+              {displayContent as string}
             </Text>
           </Box>
         </MaxSizedBox>
