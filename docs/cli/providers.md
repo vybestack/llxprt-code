@@ -55,7 +55,7 @@ If you have an existing subscription with Anthropic, OpenAI, Google, or Qwen, us
 From the command line:
 
 ```bash
-llxprt --provider codex --auth openai
+llxprt --provider codex
 ```
 
 Each command opens a browser for authentication with your existing account. See [OAuth Setup](../oauth-setup.md) for details.
@@ -78,16 +78,16 @@ Then load a saved key:
 /key load synthetic
 ```
 
-From the command line:
+From the command line, use `--key-name` to load a saved key:
 
 ```bash
-llxprt --provider anthropic --key-load anthropic
-llxprt --provider Synthetic --key-load synthetic
+llxprt --provider anthropic --key-name anthropic
+llxprt --provider Synthetic --key-name synthetic
 ```
 
-After saving a key once, you only need `/key load <name>` in future sessions.
+After saving a key once, you only need `/key load <name>` (or `--key-name <name>`) in future sessions.
 
-> **Note:** Avoid using environment variables for API keys. The keyring is more secure — keys aren't visible in your shell environment or process list, and the LLM never has access to them.
+> **Note:** Avoid environment variables for API keys when possible. The keyring is more secure — keys aren't visible in your shell environment, process list, or shell history, and the LLM never has access to them. See [Authentication](./authentication.md) for details on all key methods and why the keyring is preferred.
 
 ## Model Selection
 
@@ -182,7 +182,7 @@ Fields:
 ### Rate Limiting and Quotas
 
 - Use `/stats quota` to check your current usage
-- Consider switching providers or setting up [multi-account failover](./profiles.md) if you hit limits frequently
+- Consider switching providers or setting up [multi-account failover](./ tos.md) if you hit limits frequently
 
 ## Related
 
