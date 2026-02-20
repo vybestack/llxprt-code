@@ -210,6 +210,36 @@ describe('Runtime Provider Switching Integration', () => {
     expect(config.getModel()).toBe('providerA-default');
     expect(config.getEphemeralSetting('base-url')).toBeUndefined();
   });
+
+  it('does not call getModels during provider switch', async () => {
+    const providerA = createMockProvider('providerA');
+    const providerB = createMockProvider('providerB');
+    providerB.getModels = vi.fn(providerB.getModels);
+
+    providerManager.registerProvider(providerA);
+    providerManager.registerProvider(providerB);
+    providerManager.setActiveProvider('providerA');
+
+    await switchActiveProvider('providerB');
+
+    expect(providerB.getModels).not.toHaveBeenCalled();
+  });
+
+  it('resolves model from provider default without network call', async () => {
+    const providerA = createMockProvider('providerA');
+    const providerB = createMockProvider('providerB');
+    providerB.getDefaultModel = vi.fn(() => 'custom-default-model');
+    providerB.getModels = vi.fn(providerB.getModels);
+
+    providerManager.registerProvider(providerA);
+    providerManager.registerProvider(providerB);
+    providerManager.setActiveProvider('providerA');
+
+    await switchActiveProvider('providerB');
+
+    expect(config.getModel()).toBe('custom-default-model');
+    expect(providerB.getModels).not.toHaveBeenCalled();
+  });
 });
 function createMockProvider(name: string): IProvider & {
   apiKey?: string;
