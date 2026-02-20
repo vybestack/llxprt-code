@@ -342,6 +342,21 @@ export async function startInteractiveUI(
 }
 
 export async function main() {
+  // Handle --version and --help before patchStdio() redirects stdout.
+  // patchStdio() redirects process.stdout.write to an internal event bus,
+  // but no listeners are registered yet, so yargs output would be lost.
+  const rawArgs = process.argv.slice(2);
+  if (rawArgs.includes('--version') || rawArgs.includes('-v')) {
+    console.log(await getCliVersion());
+    process.exit(0);
+  }
+  if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
+    const workspaceRoot = process.cwd();
+    const settings = loadSettings(workspaceRoot);
+    await parseArguments(settings.merged);
+    process.exit(0);
+  }
+
   const cleanupStdio = patchStdio();
   registerSyncCleanup(() => {
     // This is needed to ensure we don't lose any buffered output.
