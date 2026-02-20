@@ -29,7 +29,11 @@ import type {
   CompressionStrategy,
   StrategyTrigger,
 } from './types.js';
-import { CompressionExecutionError, PromptResolutionError } from './types.js';
+import {
+  CompressionExecutionError,
+  PromptResolutionError,
+  isTransientCompressionError,
+} from './types.js';
 import {
   adjustForToolCallBoundary,
   aggregateTextFromBlocks,
@@ -102,7 +106,8 @@ export class OneShotStrategy implements CompressionStrategy {
     if (!summary.trim()) {
       throw new CompressionExecutionError(
         'one-shot',
-        'LLM returned empty summary during compression',
+        'LLM returned empty summary during compression; this may be caused by rate limiting or a transient provider issue',
+        { isTransient: true },
       );
     }
 
@@ -227,6 +232,7 @@ export class OneShotStrategy implements CompressionStrategy {
       throw new CompressionExecutionError(
         'one-shot',
         `LLM provider call failed: ${error instanceof Error ? error.message : String(error)}`,
+        { isTransient: isTransientCompressionError(error) },
       );
     }
   }
