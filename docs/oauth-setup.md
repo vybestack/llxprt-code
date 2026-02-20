@@ -1,311 +1,120 @@
-# OAuth Setup Guide
+# OAuth Setup
 
-This guide explains how to set up OAuth authentication for various AI providers in llxprt-code.
+OAuth lets you authenticate with AI providers without managing API keys. Tokens are stored securely in your OS keyring (or an encrypted fallback file) and refresh automatically.
 
-## Overview
+## Supported Providers
 
-llxprt-code supports OAuth 2.0 authentication for multiple providers:
+| Provider                     | Flow          | What Opens                     |
+| ---------------------------- | ------------- | ------------------------------ |
+| **Gemini** (Google AI)       | Browser-based | Browser opens automatically    |
+| **Anthropic**                | Browser-based | Browser opens automatically    |
+| **Codex** (ChatGPT Plus/Pro) | Browser-based | Browser opens to ChatGPT login |
+| **Qwen** (Alibaba Cloud)     | Device code   | Shows a code and URL to visit  |
 
-- **Gemini** (Google AI) - Browser-based OAuth flow
-- **Anthropic** - Authorization code via dialog
-- **OpenAI** (Codex) - Browser-based OAuth flow for ChatGPT Plus/Pro subscribers
-- **Qwen** (Alibaba Cloud) - Device code flow
+## Enabling OAuth
 
-OAuth provides secure authentication without requiring API keys, offering better security and user experience.
+Use the `/auth` command inside a session:
 
-**Important:** All OAuth authentication is lazy - the authentication flow only starts when you make your first API request to the provider, not when you enable OAuth.
-
-## Authentication Precedence
-
-The system uses the following authentication precedence (highest to lowest):
-
-1. **Command line API key** (`--key`/`--keyfile` flags or `--set auth-key=...`)
-2. **Profiles / settings files** (values saved via `/profile save` or `settings.json`)
-3. **Environment variables** (`OPENAI_API_KEY`, `GEMINI_API_KEY`, etc.)
-4. **OAuth tokens** (stored securely in `~/.llxprt/oauth/`)
-
-## Setting Up OAuth
-
-### Using the Auth Command
-
-The `/auth` command manages OAuth authentication for all providers:
-
-```bash
-# Show OAuth authentication menu/status
-/auth
-
-# Enable OAuth for a provider (authentication happens on first use)
+```
 /auth gemini enable
 /auth anthropic enable
 /auth codex enable
 /auth qwen enable
-
-# Disable OAuth for a provider
-/auth gemini disable
-/auth anthropic disable
-/auth codex disable
-/auth qwen disable
-
-# Log out from a provider (clears stored tokens)
-/auth gemini logout
-/auth anthropic logout
-/auth codex logout
-/auth qwen logout
 ```
 
-### Gemini OAuth Setup
+Authentication is **lazy** — nothing happens until you make your first request to that provider. At that point, a browser opens (or a code is displayed for Qwen) and you complete the login.
 
-1. Enable OAuth for Gemini:
+### What Happens During Login
 
-   ```bash
-   /auth gemini enable
-   ```
+1. You send a message to a provider with OAuth enabled
+2. LLxprt opens your browser to the provider's login page (or displays a device code for Qwen)
+3. You complete the login and grant permissions
+4. Tokens are stored in your keyring and refresh automatically going forward
 
-2. Make your first request to Gemini (e.g., send a message)
-3. Browser will open automatically for authentication
-4. Grant permissions to llxprt-code
-5. Authentication complete!
+For Anthropic and Codex, LLxprt starts a local callback server to receive the authorization code. For Gemini, the flow redirects back to a local URL. For Qwen, LLxprt polls for completion after you enter the device code.
 
-### Anthropic OAuth Setup
+### No Browser Available?
 
-1. Enable OAuth for Anthropic:
-
-   ```bash
-   /auth anthropic enable
-   ```
-
-2. Make your first request to Anthropic
-3. A dialog will appear asking for your authorization code
-4. Go to https://console.anthropic.com/settings/oauth to get your code
-5. Paste the code into the dialog
-6. Authentication complete!
-
-### OpenAI Codex OAuth Setup (ChatGPT Plus/Pro)
-
-If you have a ChatGPT Plus or Pro subscription, you can authenticate using OAuth:
-
-1. Enable OAuth for OpenAI:
-
-   ```bash
-   /auth codex enable
-   ```
-
-2. Make your first request to OpenAI
-3. Browser will open to ChatGPT login page
-4. Sign in with your ChatGPT Plus/Pro account
-5. Authorize llxprt-code to access your account
-6. Authentication complete!
-
-**Note:** This requires an active ChatGPT Plus ($20/month) or Pro subscription. For pay-per-token API access, use API keys instead.
-
-### Qwen OAuth Setup
-
-1. Enable OAuth for Qwen:
-
-   ```bash
-   /auth qwen enable
-   ```
-
-2. Make your first request to Qwen
-3. You'll see a device code and URL (device code flow):
-
-   ```
-   Device code: ABC-DEF-123
-   Visit: https://oauth.qwen.alibaba.com/device
-   Enter code: ABC-DEF-123
-   ```
-
-4. Open the URL in your browser
-5. Enter the device code when prompted
-6. Grant permissions to llxprt-code
-7. Authentication completes automatically
-
-## Multi-Provider Authentication
-
-You can enable OAuth for multiple providers simultaneously:
+On remote machines, SSH sessions, or CI environments, LLxprt automatically detects that no browser is available and shows a URL you can copy instead. You can also force manual mode:
 
 ```bash
-/auth gemini enable     # Enable Gemini OAuth
-/auth anthropic enable  # Enable Anthropic OAuth
-/auth codex enable     # Enable OpenAI Codex OAuth
-/auth qwen enable       # Enable Qwen OAuth
+llxprt --nobrowser
 ```
 
-Each provider:
+Or set it persistently:
 
-- Stores tokens separately and securely
-- Authenticates lazily on first use
-- Maintains independent authentication state
-
-## Authentication Status
-
-Check your current authentication status:
-
-```bash
-/auth
+```
+/set auth.noBrowser true
 ```
 
-This shows:
+In manual mode, you'll see a clickable URL (if your terminal supports it) and a paste box to enter the authorization code.
 
-- ✓ Authenticated providers with expiry time
-- ✗ Unauthenticated providers
-- Auth method (oauth, api-key, etc.)
+## Buckets (Multiple Accounts)
 
-## Token Management
+You can log in to the same provider with multiple accounts by giving each login a **bucket** name. Buckets are just labels — most people use the email address of the account:
 
-### Token Storage
+```
+/auth anthropic login work@company.com
+/auth anthropic login personal@gmail.com
+```
 
-OAuth tokens are stored as plain JSON files:
+Buckets are useful for:
 
-- **Location**: `~/.llxprt/oauth/`
-- **Files**:
-  - `gemini.json` - Gemini OAuth tokens
-  - `anthropic.json` - Anthropic OAuth tokens
-  - `codex.json` - OpenAI Codex OAuth tokens
-  - `qwen.json` - Qwen OAuth tokens
-- **Permissions**: `0600` (user read/write only)
-- **Note**: Tokens are stored as plain text JSON files. For enhanced security in production environments, consider using system keychains or encrypted storage.
+- **Rate limit distribution** — spread requests across accounts
+- **Failover** — if one account hits quota, automatically try the next
+- **Team vs personal** — separate work and personal usage
 
-### Automatic Refresh
+Save a profile with multiple buckets for automatic failover:
 
-Tokens are automatically refreshed when:
+```
+/profile save model claude-ha work@company.com personal@gmail.com
+```
 
-- They expire within 30 seconds
-- An API call is made with an expired token
-- The system detects token expiration
+See [Profiles](./cli/profiles.md) for more on multi-bucket failover.
 
-### Manual Token Removal
+## Token Storage
 
-To remove a provider's OAuth token:
+OAuth tokens are stored in your **OS keyring** (macOS Keychain, GNOME Keyring, Windows Credential Vault) via `@napi-rs/keyring`. If the keyring is unavailable, tokens fall back to encrypted files in `~/.llxprt/secure-store/`.
 
-```bash
-rm ~/.llxprt/oauth/{provider}.json
+Tokens are **not** stored as plain JSON files. The old `~/.llxprt/oauth/*.json` file locations are obsolete.
+
+Tokens refresh automatically when they approach expiration. You should never need to manage token files directly.
+
+## Authentication Precedence
+
+When multiple credentials exist, LLxprt uses the highest-priority one:
+
+1. **CLI flags** — `--key`, `--keyfile`, `--key-name`
+2. **Profile / settings** — values from `/profile save` or `settings.json`
+3. **Environment variables** — `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.
+4. **OAuth tokens** — from keyring
+
+If you have an API key set and OAuth enabled, the API key wins. Remove the API key (or unset the env var) to use OAuth.
+
+## Managing OAuth
+
+```
+/auth                         # Show status for all providers
+/auth <provider> status       # Show status and buckets for one provider
+/auth <provider> enable       # Enable OAuth for provider
+/auth <provider> disable      # Disable OAuth for provider
+/auth <provider> login        # Log in (default bucket)
+/auth <provider> login <name> # Log in with named bucket
+/auth <provider> logout       # Log out (default bucket)
+/auth <provider> logout --all # Log out all buckets
 ```
 
 ## Troubleshooting
 
-### Authentication Timeout
+**Browser doesn't open** — you may be in an SSH session or CI environment. LLxprt auto-detects this and falls back to manual mode. You can also use `--nobrowser` or `/set auth.noBrowser true`.
 
-Different providers have different timeout behaviors:
+**Token refresh fails** — run `/auth <provider> logout` then `/auth <provider> login` to re-authenticate.
 
-1. **Gemini**: No timeout - browser flow waits for user
-2. **Anthropic**: Dialog waits indefinitely for code input
-3. **OpenAI**: No timeout - browser flow waits for user
-4. **Qwen**: Device flow has polling timeout (typically 5-15 minutes)
-5. **Solution**: Complete authentication promptly after initiating
+**"No OAuth token" after login** — check that OAuth is enabled with `/auth <provider> status`. The `enable` step is required before `login`.
 
-### Token Refresh Issues
+**Codex requires subscription** — `/auth codex` only works with an active ChatGPT Plus ($20/month) or Pro subscription. For pay-per-token API access, use an API key instead.
 
-If token refresh fails:
+## Related
 
-1. **Re-authenticate**: Run `/auth {provider}` again
-2. **Check**: Provider service status
-3. **Verify**: Network connectivity
-
-### Permission Errors
-
-If you see file permission errors:
-
-```bash
-# Fix OAuth directory permissions
-chmod 700 ~/.llxprt/oauth/
-chmod 600 ~/.llxprt/oauth/*.json
-```
-
-### Browser Issues
-
-For browser-related problems:
-
-1. **Manual URL**: Copy the OAuth URL and open manually
-2. **Different Browser**: Try a different browser
-3. **Private Mode**: Use incognito/private browsing mode
-
-## Security Considerations
-
-### Token Security
-
-- Tokens are stored with `0600` permissions (user-only access)
-- No tokens are logged or displayed in plain text
-- Automatic refresh minimizes token exposure time
-
-### OAuth vs API Keys
-
-OAuth provides better security than API keys:
-
-- **Scoped Access**: Limited to specific operations
-- **Revocable**: Can be revoked from provider console
-- **Temporary**: Automatic expiration and refresh
-- **No Secrets**: No long-lived credentials in files
-
-### Best Practices
-
-1. **Regular Cleanup**: Remove unused provider tokens
-2. **Secure Storage**: Keep `~/.llxprt/` directory secure
-3. **Monitor Access**: Review OAuth grants in provider consoles
-4. **Use OAuth**: Prefer OAuth over API keys when available
-
-## Migration Guide
-
-### From API Keys to OAuth
-
-If you're currently using API keys:
-
-1. **Current Setup**: API keys continue to work
-2. **Add OAuth**: Run `/auth {provider}` for OAuth setup
-3. **Precedence**: API keys take precedence over OAuth
-4. **Remove API Keys**: Unset environment variables to use OAuth
-5. **Test**: Verify functionality with OAuth
-
-Example migration:
-
-```bash
-# Before: Using API key
-export OPENAI_API_KEY="sk-..."
-
-# Add OAuth (optional)
-/auth qwen
-
-# Remove API key to use OAuth
-unset OPENAI_API_KEY
-
-# Verify OAuth is working
-/auth  # Should show qwen as authenticated
-```
-
-### Existing Gemini Users
-
-If you already have Gemini OAuth:
-
-1. **No Changes**: Existing Gemini OAuth continues working
-2. **Add Qwen**: Run `/auth qwen` to add Qwen support
-3. **Multi-Provider**: Both providers work simultaneously
-4. **Cross-Compatible**: Use Qwen content with Gemini tools
-
-## Command Reference
-
-| Command                    | Description                           |
-| -------------------------- | ------------------------------------- |
-| `/auth`                    | Show OAuth authentication menu/status |
-| `/auth <provider> enable`  | Enable OAuth for provider             |
-| `/auth <provider> disable` | Disable OAuth for provider            |
-| `/auth <provider> logout`  | Clear OAuth tokens for provider       |
-
-Supported providers: `gemini`, `anthropic`, `codex`, `qwen`
-
-## File Locations
-
-| File/Directory                   | Purpose                       |
-| -------------------------------- | ----------------------------- |
-| `~/.llxprt/oauth/`               | OAuth token storage directory |
-| `~/.llxprt/oauth/gemini.json`    | Gemini OAuth tokens           |
-| `~/.llxprt/oauth/anthropic.json` | Anthropic OAuth tokens        |
-| `~/.llxprt/oauth/codex.json`     | OpenAI Codex OAuth tokens     |
-| `~/.llxprt/oauth/qwen.json`      | Qwen OAuth tokens             |
-
-## Support
-
-For additional help:
-
-1. **Documentation**: Check `/docs` command in llxprt-code
-2. **Issues**: Report problems on GitHub
-3. **Provider Support**: Contact provider for OAuth service issues
+- [Authentication](./cli/authentication.md) — choosing between OAuth, API keys, and keyring
+- [Profiles](./cli/profiles.md) — multi-bucket failover profiles
