@@ -220,8 +220,10 @@ describe('Runtime Provider Switching Integration', () => {
     providerManager.registerProvider(providerB);
     providerManager.setActiveProvider('providerA');
 
-    await switchActiveProvider('providerB');
+    const result = await switchActiveProvider('providerB');
 
+    expect(result.changed).toBe(true);
+    expect(result.nextProvider).toBe('providerB');
     expect(providerB.getModels).not.toHaveBeenCalled();
   });
 
