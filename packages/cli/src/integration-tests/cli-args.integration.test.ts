@@ -681,20 +681,36 @@ describe('CLI --profile-load Integration Tests', () => {
 });
 
 describe('CLI --version and --help flags', () => {
+  let tempDir: string;
+  let originalHome: string | undefined;
+
+  beforeEach(async () => {
+    tempDir = await createTempDirectory();
+    originalHome = process.env.HOME;
+    process.env.HOME = tempDir;
+  });
+
+  afterEach(async () => {
+    if (originalHome) {
+      process.env.HOME = originalHome;
+    }
+    await cleanupTempDirectory(tempDir);
+  });
+
   it('should print version with --version flag', async () => {
-    const result = await runCli(['--version']);
+    const result = await runCli(['--version'], { HOME: tempDir });
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/); // semver-like
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
   it('should print version with -v flag', async () => {
-    const result = await runCli(['-v']);
+    const result = await runCli(['-v'], { HOME: tempDir });
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
   it('should print help with --help flag', async () => {
-    const result = await runCli(['--help']);
+    const result = await runCli(['--help'], { HOME: tempDir });
     expect(result.exitCode).toBe(0);
     const output = result.stdout + result.stderr;
     expect(output).toContain('llxprt');
@@ -703,10 +719,12 @@ describe('CLI --version and --help flags', () => {
   });
 
   it('should print help with -h flag', async () => {
-    const result = await runCli(['-h']);
+    const result = await runCli(['-h'], { HOME: tempDir });
     expect(result.exitCode).toBe(0);
     const output = result.stdout + result.stderr;
     expect(output).toContain('llxprt');
+    expect(output).toContain('--version');
+    expect(output).toContain('--help');
   });
 });
 
