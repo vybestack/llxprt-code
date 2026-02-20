@@ -60,9 +60,6 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
     }
   }
 
-  // Use display content as-is (no more markers to strip).
-  const visualResultDisplay = displayContent;
-
   if (!displayContent) return null;
 
   // Check if displayContent is AnsiOutput (array of arrays)
@@ -88,7 +85,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
       {typeof displayContent === 'string' && shouldRenderMarkdown && (
         <Box flexDirection="column">
           <MarkdownDisplay
-            text={visualResultDisplay as string}
+            text={displayContent as string}
             isPending={false}
             terminalWidth={childWidth}
             renderMarkdown={renderMarkdown}
@@ -99,7 +96,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
         <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
           <Box>
             <Text color={Colors.Foreground} wrap="wrap">
-              {visualResultDisplay as string}
+              {displayContent as string}
             </Text>
           </Box>
         </MaxSizedBox>
