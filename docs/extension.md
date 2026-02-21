@@ -5,6 +5,8 @@ familiar and user-friendly format. With extensions, you can expand the
 capabilities of LLxprt Code and share those capabilities with others. They are
 designed to be easily installable and shareable.
 
+**Gemini CLI compatible:** LLxprt Code extensions use the same format as Gemini CLI extensions. Extensions built for Gemini CLI work in LLxprt Code — we look for `llxprt-extension.json` first, then fall back to `gemini-extension.json`. You can install Gemini CLI extensions directly from their repositories. Browse community extensions in the [Gemini CLI extensions topic on GitHub](https://github.com/topics/gemini-cli-extension).
+
 ## Extension Management
 
 LLxprt Code provides a suite of extension management commands via
@@ -199,14 +201,19 @@ same name exists in both locations, the extension in the workspace directory
 takes precedence.
 
 Within each location, individual extensions exist as a directory containing a
-`llxprt-extension.json` file. For example:
+`llxprt-extension.json` file (or `gemini-extension.json` for Gemini CLI
+extensions). For example:
 
 `<home>/.llxprt/extensions/my-extension/llxprt-extension.json`
 
 ### `llxprt-extension.json`
 
 The `llxprt-extension.json` file contains the configuration for the extension.
-It has the following structure:
+LLxprt Code also accepts `gemini-extension.json` as a fallback — if no
+`llxprt-extension.json` is found, it looks for `gemini-extension.json`
+automatically. The format is identical.
+
+The file has the following structure:
 
 ```json
 {
