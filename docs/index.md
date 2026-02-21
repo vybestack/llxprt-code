@@ -11,7 +11,7 @@ llxprt
 
 Once inside the REPL, authenticate with a provider and start coding:
 
-```
+```text
 /auth gemini enable
 /provider gemini
 /model gemini-2.5-flash
@@ -19,7 +19,7 @@ Once inside the REPL, authenticate with a provider and start coding:
 
 Or use an API key with an open-weight model provider:
 
-```
+```text
 /key save synthetic syn****************b6
 /provider Synthetic
 /key load synthetic
