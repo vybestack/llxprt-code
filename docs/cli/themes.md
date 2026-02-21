@@ -13,7 +13,7 @@ LLxprt Code comes with a selection of pre-defined themes, which you can list usi
   - `Default`
   - `Dracula`
   - `GitHub`
-  - `Green Screen` - Classic retro terminal look with green phosphor aesthetics
+  - `Green Screen` - Classic retro terminal look with green phosphor aesthetics **(default)**
 - **Light Themes:**
   - `ANSI Light`
   - `Ayu Light`
@@ -151,7 +151,7 @@ The theme file must be a valid JSON file that follows the same structure as a cu
 }
 ```
 
-**Security Note:** For your safety, Gemini CLI will only load theme files that are located within your home directory. If you attempt to load a theme from outside your home directory, a warning will be displayed and the theme will not be loaded. This is to prevent loading potentially malicious theme files from untrusted sources.
+**Security Note:** For your safety, LLxprt Code will only load theme files that are located within your home directory. If you attempt to load a theme from outside your home directory, a warning will be displayed and the theme will not be loaded. This is to prevent loading potentially malicious theme files from untrusted sources.
 
 ### Example Custom Theme
 
@@ -166,6 +166,12 @@ The theme file must be a valid JSON file that follows the same structure as a cu
 ---
 
 ## Dark Themes
+
+### Green Screen (Default)
+
+The default theme. A classic retro terminal aesthetic with green phosphor colors, easy on the eyes for long sessions.
+
+<!-- Screenshot placeholder: theme-green-screen.png -->
 
 ### ANSI
 
