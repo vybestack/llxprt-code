@@ -83,7 +83,6 @@ LLxprt Code ships with built-in tools for file editing, shell commands, web sear
 - [Keyboard Shortcuts](./keyboard-shortcuts.md)
 - [Troubleshooting](./troubleshooting.md)
 - [Emoji Filter](./EMOJI-FILTER.md)
-- [Runtime Helpers](./cli/runtime-helpers.md)
 - [Context Dumping](./cli/context-dumping.md)
 
 ## Contributing

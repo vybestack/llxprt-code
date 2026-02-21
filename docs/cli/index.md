@@ -9,7 +9,6 @@ LLxprt Code is an AI-powered coding assistant that works with any LLM provider. 
 - **[Profiles](./profiles.md):** Save and manage configuration profiles, load balancing, and OAuth bucket failover.
 - **[Sandbox Profiles](./sandbox-profiles.md):** Configure container-based sandboxing for secure code execution.
 - **[Configuration](./configuration.md):** A guide to tailoring LLxprt Code behavior using configuration files.
-- **[Runtime helper APIs](./runtime-helpers.md):** Reference for the CLI runtime helper surface that powers provider switching, profiles, and diagnostics.
 - **[Enterprise](./enterprise.md):** A guide to enterprise configuration.
 - **[Token Caching](./token-caching.md):** Optimize API costs through token caching.
 - **[Themes](./themes.md)**: A guide to customizing the CLI's appearance with different themes.
