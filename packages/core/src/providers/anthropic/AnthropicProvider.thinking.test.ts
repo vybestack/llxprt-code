@@ -1689,4 +1689,117 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       });
     });
   });
+
+  describe('Issue #1545: prefill guard for thinking models', () => {
+    it('should append user placeholder when conversation ends with assistant and thinking is enabled', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.budgetTokens', 5000);
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      // Simulate a conversation that ends with an assistant message.
+      // This can occur after cross-provider --continue when orphan
+      // tool_result removal drops the trailing user message.
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'I will help you.' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      // The last message must be user to avoid Anthropic prefill rejection
+      const lastMessage = request.messages[request.messages.length - 1];
+      expect(lastMessage.role).toBe('user');
+      // Content may be wrapped in array by prompt caching
+      const textContent = Array.isArray(lastMessage.content)
+        ? (lastMessage.content as Array<{ type: string; text?: string }>).find(
+            (b) => b.type === 'text',
+          )?.text
+        : lastMessage.content;
+      expect(textContent).toBe('Continue the conversation');
+    });
+
+    it('should NOT append user placeholder when thinking is disabled and conversation ends with assistant', async () => {
+      settingsService.set('reasoning.enabled', false);
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'I will help you.' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      // Without thinking, prefill (ending with assistant) is allowed
+      const lastMessage = request.messages[request.messages.length - 1];
+      expect(lastMessage.role).toBe('assistant');
+    });
+
+    it('should NOT append user placeholder when conversation already ends with user and thinking is enabled', async () => {
+      settingsService.set('reasoning.enabled', true);
+      settingsService.set('reasoning.budgetTokens', 5000);
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+      await generator.next();
+
+      const request = mockMessagesCreate.mock
+        .calls[0][0] as AnthropicRequestBody;
+
+      // Last message should be the original user message, not a placeholder
+      const lastMessage = request.messages[request.messages.length - 1];
+      expect(lastMessage.role).toBe('user');
+      // Content may be wrapped in array by prompt caching — extract text to verify
+      const textContent = Array.isArray(lastMessage.content)
+        ? (lastMessage.content as Array<{ type: string; text?: string }>).find(
+            (b) => b.type === 'text',
+          )?.text
+        : lastMessage.content;
+      expect(textContent).not.toBe('Continue the conversation');
+    });
+  });
 });

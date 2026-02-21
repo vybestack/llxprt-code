@@ -1694,6 +1694,26 @@ ${block.code}
     anthropicMessages.length = 0;
     anthropicMessages.push(...sanitizedMessages);
 
+    // Issue #1545: When extended thinking is enabled, Anthropic rejects requests
+    // where the last message has role 'assistant' ("This model does not support
+    // assistant message prefill"). This can happen after tool normalization drops
+    // trailing user messages (e.g., orphaned tool_result removal during
+    // cross-provider --continue). Append a placeholder to satisfy the constraint.
+    if (
+      shouldIncludeThinking &&
+      anthropicMessages.length > 0 &&
+      anthropicMessages[anthropicMessages.length - 1].role === 'assistant'
+    ) {
+      this.getLogger().debug(
+        () =>
+          `Last message is assistant with thinking enabled, adding placeholder user message to avoid prefill error`,
+      );
+      anthropicMessages.push({
+        role: 'user',
+        content: 'Continue the conversation',
+      });
+    }
+
     // Convert Gemini format tools to Anthropic format using provider-specific converter
     let anthropicTools = convertToolsToAnthropic(tools, isOAuth);
 
