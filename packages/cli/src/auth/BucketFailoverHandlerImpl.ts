@@ -187,6 +187,9 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   reset(): void {
     this.currentBucketIndex = 0;
     this.triedBucketsThisSession.clear();
+    if (this.buckets.length > 0) {
+      this.oauthManager.setSessionBucket(this.provider, this.buckets[0]);
+    }
     logger.debug('Bucket failover handler reset', {
       provider: this.provider,
     });
