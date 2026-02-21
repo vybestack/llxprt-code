@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { WritableStream, ReadableStream } from 'node:stream/web';
-
 import {
   Config,
   ContentGeneratorConfig,
@@ -35,10 +33,11 @@ import {
   type FilterFilesOptions,
   ReadManyFilesTool,
   type ToolConfirmationPayload,
+  writeToStdout,
 } from '@vybestack/llxprt-code-core';
-import * as acp from './acp.js';
+import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
-import { Readable, Writable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
 import { LoadedSettings } from '../config/settings.js';
 import * as fs from 'fs/promises';
@@ -82,7 +81,16 @@ export async function runZedIntegration(
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
 
-  const stdout = Writable.toWeb(process.stdout) as WritableStream;
+  const stdout = new WritableStream<Uint8Array>({
+    write(chunk) {
+      return new Promise<void>((resolve, reject) => {
+        writeToStdout(Buffer.from(chunk), undefined, (err?: Error | null) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    },
+  });
 
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
 
@@ -100,26 +108,19 @@ export async function runZedIntegration(
   });
 
   try {
-    new acp.AgentSideConnection(
-      (client: acp.Client) => {
-        logger.debug(() => 'Creating GeminiAgent');
-        return new GeminiAgent(config, settings, client);
-      },
-      stdout,
-      stdin,
-    );
+    const stream = acp.ndJsonStream(stdout, stdin);
+    const connection = new acp.AgentSideConnection((conn) => {
+      logger.debug(() => 'Creating GeminiAgent');
+      return new GeminiAgent(config, settings, conn);
+    }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
+
+    await connection.closed;
+    return undefined as never;
   } catch (e) {
     logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${e}`);
     throw e;
   }
-
-  logger.debug(() => 'Zed integration ready, waiting for messages');
-
-  // Keep the process alive - the Connection's #receive method will handle messages
-  return new Promise<never>(() => {
-    // This promise never resolves, keeping the process alive
-  });
 }
 
 export class GeminiAgent {
@@ -130,7 +131,7 @@ export class GeminiAgent {
   constructor(
     private config: Config,
     _settings: LoadedSettings,
-    private client: acp.Client,
+    private connection: acp.AgentSideConnection,
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
   }
@@ -232,7 +233,7 @@ export class GeminiAgent {
 
       if (this.clientCapabilities?.fs) {
         const acpFileSystemService = new AcpFileSystemService(
-          this.client,
+          this.connection,
           sessionId,
           this.clientCapabilities.fs,
           sessionConfig.getFileSystemService(),
@@ -482,16 +483,37 @@ export class GeminiAgent {
           throw error;
         }
       }
-      const session = new Session(sessionId, chat, sessionConfig, this.client);
+      const session = new Session(
+        sessionId,
+        chat,
+        sessionConfig,
+        this.connection,
+      );
       this.sessions.set(sessionId, session);
 
       return {
         sessionId,
+        modes: {
+          availableModes: buildAvailableModes(),
+          currentModeId: 'default',
+        },
       };
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
       throw error;
     }
+  }
+
+  async setSessionMode(
+    params: acp.SetSessionModeRequest,
+  ): Promise<acp.SetSessionModeResponse> {
+    const session = this.sessions.get(params.sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${params.sessionId}`);
+    }
+    // TODO: Actually change the approval mode on the session's config
+    // For now, acknowledge the mode change
+    return {};
   }
 
   async cancel(params: acp.CancelNotification): Promise<void> {
@@ -514,13 +536,15 @@ export class GeminiAgent {
 export class Session {
   private pendingPrompt: AbortController | null = null;
   private emojiFilter: EmojiFilter;
+  private logger: DebugLogger;
 
   constructor(
     private readonly id: string,
     private readonly chat: GeminiChat,
     private readonly config: Config,
-    private readonly client: acp.Client,
+    private readonly connection: acp.AgentSideConnection,
   ) {
+    this.logger = new DebugLogger('llxprt:zed-integration');
     // Initialize emoji filter from settings
     const emojiFilterMode =
       (this.config.getEphemeralSetting('emojifilter') as
@@ -729,7 +753,24 @@ export class Session {
       update,
     };
 
-    await this.client.sessionUpdate(params);
+    this.logger.debug(
+      () =>
+        `sendUpdate: ${update.sessionUpdate} ${
+          'content' in update && update.content && 'text' in update.content
+            ? `(${(update.content as { text: string }).text.length} chars)`
+            : ''
+        }`,
+    );
+
+    try {
+      await this.connection.sessionUpdate(params);
+      this.logger.debug(() => 'sendUpdate: delivered');
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `sendUpdate ERROR: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private async runTool(
@@ -832,7 +873,7 @@ export class Session {
           },
         };
 
-        const output = await this.client.requestPermission(params);
+        const output = await this.connection.requestPermission(params);
         let outcome: ToolConfirmationOutcome;
         let payload: ToolConfirmationPayload | undefined;
 
@@ -1408,6 +1449,7 @@ export class Session {
     const entries: acp.PlanEntry[] = todos.map((todo) => ({
       content: todo.content,
       status: todo.status,
+      priority: 'medium' as const,
     }));
 
     // Send plan update to Zed via ACP protocol
@@ -1516,4 +1558,24 @@ function toPermissionOptions(
       throw new Error(`Unexpected: ${unreachable}`);
     }
   }
+}
+
+function buildAvailableModes(): acp.SessionMode[] {
+  return [
+    {
+      id: 'default',
+      name: 'Default',
+      description: 'Prompts for approval',
+    },
+    {
+      id: 'auto-edit',
+      name: 'Auto Edit',
+      description: 'Auto-approves edit tools',
+    },
+    {
+      id: 'yolo',
+      name: 'YOLO',
+      description: 'Auto-approves all tools',
+    },
+  ];
 }
