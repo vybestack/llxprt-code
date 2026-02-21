@@ -360,6 +360,12 @@ export interface BucketFailoverHandler {
    * Call this at the start of each new request to prevent infinite cycling.
    */
   resetSession?(): void;
+
+  /**
+   * Full reset for new user turns: clears tried set, resets to first bucket, and
+   * resets session bucket to the primary (first) bucket so the next request starts fresh.
+   */
+  reset?(): void;
 }
 
 export interface ConfigParameters {

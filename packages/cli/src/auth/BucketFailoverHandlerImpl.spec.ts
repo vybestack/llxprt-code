@@ -262,5 +262,106 @@ describe('BucketFailoverHandlerImpl', () => {
       const result = await handler.tryFailover();
       expect(result).toBe(true);
     });
+
+    it('resetSession() clears tried set but keeps current bucket position', async () => {
+      await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+      await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+      await tokenStore.saveToken('anthropic', makeToken('t3'), 'bucket-c');
+
+      oauthManager.setSessionBucket('anthropic', 'bucket-a');
+
+      const handler = new BucketFailoverHandlerImpl(
+        ['bucket-a', 'bucket-b', 'bucket-c'],
+        'anthropic',
+        oauthManager,
+      );
+
+      await handler.tryFailover(); // switches to bucket-b
+
+      handler.resetSession();
+
+      expect(handler.getCurrentBucket()).toBe('bucket-b');
+      expect(oauthManager.getSessionBucket('anthropic')).toBe('bucket-b');
+    });
+  });
+
+  describe('reset()', () => {
+    it('resets to first bucket and restores session bucket to primary for fresh turn', async () => {
+      await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+      await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+      await tokenStore.saveToken('anthropic', makeToken('t3'), 'bucket-c');
+
+      oauthManager.setSessionBucket('anthropic', 'bucket-a');
+
+      const handler = new BucketFailoverHandlerImpl(
+        ['bucket-a', 'bucket-b', 'bucket-c'],
+        'anthropic',
+        oauthManager,
+      );
+
+      await handler.tryFailover(); // switches to bucket-b
+
+      expect(handler.getCurrentBucket()).toBe('bucket-b');
+      expect(oauthManager.getSessionBucket('anthropic')).toBe('bucket-b');
+
+      handler.reset();
+
+      expect(handler.getCurrentBucket()).toBe('bucket-a');
+      expect(oauthManager.getSessionBucket('anthropic')).toBe('bucket-a');
+    });
+
+    it('clears triedBucketsThisSession so all buckets can be retried', async () => {
+      await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+      await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+
+      oauthManager.setSessionBucket('anthropic', 'bucket-a');
+
+      const handler = new BucketFailoverHandlerImpl(
+        ['bucket-a', 'bucket-b'],
+        'anthropic',
+        oauthManager,
+      );
+
+      await handler.tryFailover(); // switches to bucket-b
+      const failoverAfterAllTried = await handler.tryFailover(); // all tried, returns false
+      expect(failoverAfterAllTried).toBe(false);
+
+      handler.reset();
+
+      const canFailoverAgain = await handler.tryFailover();
+      expect(canFailoverAgain).toBe(true);
+    });
+
+    it('sets session bucket to first bucket when buckets array is not empty', async () => {
+      await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+      await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+
+      oauthManager.setSessionBucket('anthropic', 'bucket-b');
+
+      const handler = new BucketFailoverHandlerImpl(
+        ['bucket-a', 'bucket-b'],
+        'anthropic',
+        oauthManager,
+      );
+
+      handler.reset();
+
+      expect(oauthManager.getSessionBucket('anthropic')).toBe('bucket-a');
+    });
+
+    it('handles empty buckets array gracefully', async () => {
+      const setSessionBucketSpy = vi.spyOn(oauthManager, 'setSessionBucket');
+
+      const handler = new BucketFailoverHandlerImpl(
+        [],
+        'anthropic',
+        oauthManager,
+      );
+
+      handler.reset();
+
+      expect(handler.getCurrentBucket()).toBeUndefined();
+      expect(setSessionBucketSpy).not.toHaveBeenCalled();
+    });
   });
 });
