@@ -177,18 +177,13 @@ describe('E2E Credential Flow (Phase 37)', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  async function startServer(options?: {
-    allowedProviders?: string[];
-    allowedBuckets?: string[];
-  }): Promise<StartedServer> {
+  async function startServer(): Promise<StartedServer> {
     const tokenStore = new InMemoryTokenStore();
     const keyStorage = new InMemoryProviderKeyStorage();
     const server = new CredentialProxyServer({
       tokenStore,
       providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
       socketDir: tmpDir,
-      allowedProviders: options?.allowedProviders,
-      allowedBuckets: options?.allowedBuckets,
     });
     const socketPath = await server.start();
     return { server, socketPath, tokenStore, keyStorage };
@@ -359,18 +354,15 @@ describe('E2E Credential Flow (Phase 37)', () => {
   describe('Scenario 6: Profile Scoping', () => {
     /**
      * @requirement E2E.6
-     * @scenario Provider access restriction
-     * @given A proxy with allowedProviders: ["anthropic"]
-     * @when getToken is called for anthropic vs gemini
-     * @then anthropic succeeds, gemini returns UNAUTHORIZED
+     * @scenario Multiple provider access without restrictions
+     * @given A proxy with multiple providers configured
+     * @when getToken is called for different providers
+     * @then All providers are accessible
      */
-    it('enforces provider allowlist', async () => {
-      const { server, socketPath, tokenStore } = await startServer({
-        allowedProviders: ['anthropic'],
-      });
+    it('allows access to all providers', async () => {
+      const { server, socketPath, tokenStore } = await startServer();
 
       try {
-        // Store tokens for both providers on host
         await tokenStore.saveToken(
           'anthropic',
           {
@@ -392,7 +384,6 @@ describe('E2E Credential Flow (Phase 37)', () => {
 
         const proxyStore = new ProxyTokenStore(socketPath);
 
-        // Allowed provider succeeds
         const anthropicToken = await proxyStore.getToken(
           'anthropic',
           'default',
@@ -400,10 +391,9 @@ describe('E2E Credential Flow (Phase 37)', () => {
         expect(anthropicToken).not.toBeNull();
         expect(anthropicToken!.access_token).toBe('anthropic-token');
 
-        // Disallowed provider fails with UNAUTHORIZED
-        await expect(proxyStore.getToken('gemini', 'default')).rejects.toThrow(
-          /UNAUTHORIZED/i,
-        );
+        const geminiToken = await proxyStore.getToken('gemini', 'default');
+        expect(geminiToken).not.toBeNull();
+        expect(geminiToken!.access_token).toBe('gemini-token');
       } finally {
         await server.stop();
       }
@@ -683,21 +673,18 @@ describe('E2E Credential Flow (Phase 37)', () => {
     });
   });
 
-  describe('Additional E2E: Bucket Scoping', () => {
+  describe('Additional E2E: Multiple Buckets', () => {
     /**
      * @requirement E2E.BUCKET.1
-     * @scenario Bucket access restriction
-     * @given A proxy with allowedBuckets: ["default", "prod"]
+     * @scenario Multiple bucket access without restrictions
+     * @given A proxy with multiple buckets configured
      * @when Operations are performed for different buckets
-     * @then Allowed buckets succeed, disallowed fail
+     * @then All buckets are accessible
      */
-    it('enforces bucket allowlist', async () => {
-      const { server, socketPath, tokenStore } = await startServer({
-        allowedBuckets: ['default', 'prod'],
-      });
+    it('allows access to all buckets', async () => {
+      const { server, socketPath, tokenStore } = await startServer();
 
       try {
-        // Store tokens in different buckets
         await tokenStore.saveToken(
           'anthropic',
           {
@@ -719,14 +706,13 @@ describe('E2E Credential Flow (Phase 37)', () => {
 
         const proxyStore = new ProxyTokenStore(socketPath);
 
-        // Allowed bucket succeeds
         const defaultToken = await proxyStore.getToken('anthropic', 'default');
         expect(defaultToken).not.toBeNull();
+        expect(defaultToken!.access_token).toBe('default-token');
 
-        // Disallowed bucket fails
-        await expect(
-          proxyStore.getToken('anthropic', 'staging'),
-        ).rejects.toThrow(/UNAUTHORIZED/i);
+        const stagingToken = await proxyStore.getToken('anthropic', 'staging');
+        expect(stagingToken).not.toBeNull();
+        expect(stagingToken!.access_token).toBe('staging-token');
       } finally {
         await server.stop();
       }

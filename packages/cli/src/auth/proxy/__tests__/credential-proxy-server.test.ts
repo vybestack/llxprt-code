@@ -549,66 +549,65 @@ describe('CredentialProxyServer', () => {
 
   /**
    * @requirement R9.5
-   * @scenario list_buckets enforces provider allowlist and key endpoints enforce provider allowlist
-   * @given A server restricted to allowedProviders ['anthropic']
-   * @when list_buckets/get_api_key/list_api_keys/has_api_key are requested for disallowed providers
-   * @then Requests are rejected or filtered according to allowlist
+   * @scenario All providers are accessible when no allowlist is configured
+   * @given A server with tokens and keys for multiple providers
+   * @when Various provider operations are requested
+   * @then All providers can be accessed without restriction
    */
-  it('enforces provider allowlist for list_buckets and API key operations', async () => {
+  it('allows access to all providers without allowlist restrictions', async () => {
     await tokenStore.saveToken('anthropic', makeToken(), 'default');
     await tokenStore.saveToken('openai', makeToken(), 'default');
     await keyStorage.saveKey('anthropic', 'sk-ant-123');
     await keyStorage.saveKey('openai', 'sk-oai-456');
 
-    server = createServer({ allowedProviders: ['anthropic'] });
+    server = createServer({});
     client = await startAndConnect(server);
 
-    const allowedBuckets = await client.request('list_buckets', {
+    const anthropicBuckets = await client.request('list_buckets', {
       provider: 'anthropic',
     });
-    expect(allowedBuckets.ok).toBe(true);
+    expect(anthropicBuckets.ok).toBe(true);
 
-    const blockedBuckets = await client.request('list_buckets', {
+    const openAiBuckets = await client.request('list_buckets', {
       provider: 'openai',
     });
-    expect(blockedBuckets.ok).toBe(false);
-    expect(blockedBuckets.code).toBe('UNAUTHORIZED');
+    expect(openAiBuckets.ok).toBe(true);
 
-    const blockedGetKey = await client.request('get_api_key', {
+    const anthropicKey = await client.request('get_api_key', {
+      name: 'anthropic',
+    });
+    expect(anthropicKey.ok).toBe(true);
+    expect(anthropicKey.data!.key).toBe('sk-ant-123');
+
+    const openaiKey = await client.request('get_api_key', {
       name: 'openai',
     });
-    expect(blockedGetKey.ok).toBe(false);
-    expect(blockedGetKey.code).toBe('UNAUTHORIZED');
+    expect(openaiKey.ok).toBe(true);
+    expect(openaiKey.data!.key).toBe('sk-oai-456');
 
     const listedKeys = await client.request('list_api_keys', {});
     expect(listedKeys.ok).toBe(true);
-    expect(listedKeys.data!.keys).toEqual(['anthropic']);
+    expect(listedKeys.data!.keys).toContain('anthropic');
+    expect(listedKeys.data!.keys).toContain('openai');
 
-    const blockedHasKey = await client.request('has_api_key', {
-      name: 'openai',
-    });
-    expect(blockedHasKey.ok).toBe(false);
-    expect(blockedHasKey.code).toBe('UNAUTHORIZED');
-
-    const allowedHasKey = await client.request('has_api_key', {
+    const hasAnthropicKey = await client.request('has_api_key', {
       name: 'anthropic',
     });
-    expect(allowedHasKey.ok).toBe(true);
-    expect(allowedHasKey.data!.exists).toBe(true);
+    expect(hasAnthropicKey.ok).toBe(true);
+    expect(hasAnthropicKey.data!.exists).toBe(true);
+
+    const hasOpenaiKey = await client.request('has_api_key', {
+      name: 'openai',
+    });
+    expect(hasOpenaiKey.ok).toBe(true);
+    expect(hasOpenaiKey.data!.exists).toBe(true);
   });
 
-  /**
-   * @requirement R9.5
-   * @scenario list_buckets enforces bucket allowlist by filtering
-   * @given A server restricted to allowedBuckets ['default']
-   * @when list_buckets is requested
-   * @then Only allowed buckets are returned
-   */
-  it('filters list_buckets by bucket allowlist', async () => {
+  it('returns all buckets without bucket allowlist filtering', async () => {
     await tokenStore.saveToken('anthropic', makeToken(), 'default');
     await tokenStore.saveToken('anthropic', makeToken(), 'work');
 
-    server = createServer({ allowedBuckets: ['default'] });
+    server = createServer({});
     client = await startAndConnect(server);
 
     const response = await client.request('list_buckets', {
@@ -616,7 +615,8 @@ describe('CredentialProxyServer', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(response.data!.buckets).toEqual(['default']);
+    expect(response.data!.buckets).toContain('default');
+    expect(response.data!.buckets).toContain('work');
   });
 
   // ─── Security ──────────────────────────────────────────────────────────────

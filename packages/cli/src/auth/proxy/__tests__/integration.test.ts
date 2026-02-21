@@ -152,18 +152,13 @@ describe('proxy integration (phase 31)', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  async function startServer(options?: {
-    allowedProviders?: string[];
-    allowedBuckets?: string[];
-  }): Promise<StartedServer> {
+  async function startServer(): Promise<StartedServer> {
     const tokenStore = new InMemoryTokenStore();
     const keyStorage = new InMemoryProviderKeyStorage();
     const server = new CredentialProxyServer({
       tokenStore,
       providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
       socketDir: tmpDir,
-      allowedProviders: options?.allowedProviders,
-      allowedBuckets: options?.allowedBuckets,
     });
     const socketPath = await server.start();
     return { server, socketPath, tokenStore, keyStorage };
@@ -171,9 +166,8 @@ describe('proxy integration (phase 31)', () => {
 
   async function withServer(
     run: (started: StartedServer) => Promise<void>,
-    options?: { allowedProviders?: string[]; allowedBuckets?: string[] },
   ): Promise<void> {
-    const started = await startServer(options);
+    const started = await startServer();
     try {
       await run(started);
     } finally {
@@ -486,18 +480,36 @@ describe('proxy integration (phase 31)', () => {
     });
   });
 
-  it('rejects unauthorized provider access when provider is out of allowed scope', async () => {
-    // @requirement R3.2
-    // @scenario Requests for provider outside allowlist should fail with UNAUTHORIZED.
-    await withServer(
-      async ({ socketPath }) => {
-        const proxyStore = new ProxyTokenStore(socketPath);
-        await expect(proxyStore.getToken('openai', 'default')).rejects.toThrow(
-          /UNAUTHORIZED/i,
-        );
-      },
-      { allowedProviders: ['anthropic'] },
-    );
+  it('allows access to all providers without restrictions', async () => {
+    await withServer(async ({ socketPath, tokenStore }) => {
+      await tokenStore.saveToken(
+        'openai',
+        {
+          access_token: 'openai-token',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+        },
+        'default',
+      );
+      await tokenStore.saveToken(
+        'anthropic',
+        {
+          access_token: 'anthropic-token',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+        },
+        'default',
+      );
+
+      const proxyStore = new ProxyTokenStore(socketPath);
+      const openaiToken = await proxyStore.getToken('openai', 'default');
+      expect(openaiToken).not.toBeNull();
+      expect(openaiToken!.access_token).toBe('openai-token');
+
+      const anthropicToken = await proxyStore.getToken('anthropic', 'default');
+      expect(anthropicToken).not.toBeNull();
+      expect(anthropicToken!.access_token).toBe('anthropic-token');
+    });
   });
 
   it('surfaces hard error to client when proxy connection is lost', async () => {

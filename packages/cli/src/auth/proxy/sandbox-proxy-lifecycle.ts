@@ -37,8 +37,6 @@ import { RefreshCoordinator } from './refresh-coordinator.js';
 export interface SandboxProxyConfig {
   socketPath: string;
   idleTimeoutMs?: number;
-  allowedProviders?: string[];
-  allowedBuckets?: string[];
 }
 
 export interface SandboxProxyHandle {
@@ -204,8 +202,6 @@ export async function createAndStartProxy(
     tokenStore,
     providerKeyStorage,
     socketDir: requestedSocketDir,
-    allowedProviders: config.allowedProviders,
-    allowedBuckets: config.allowedBuckets,
     flowFactories,
     refreshCoordinator,
   });
