@@ -26,7 +26,7 @@ LLxprt Code ships with aliases for these providers — just use `/provider <name
 
 ## Switching Providers
 
-```
+```text
 /provider anthropic
 /provider gemini
 /provider Synthetic
@@ -45,7 +45,7 @@ llxprt --provider Synthetic
 
 If you have an existing subscription with Anthropic, OpenAI, Google, or Qwen, use OAuth — no API key needed:
 
-```
+```text
 /auth anthropic enable
 /auth codex enable
 /auth gemini enable
@@ -64,7 +64,7 @@ Each command opens a browser for authentication with your existing account. See 
 
 Use `/key save` to store an API key in your system keyring. You only need to do this once — the key is stored securely and never exposed to the LLM. Keys are automatically masked when you paste them.
 
-```
+```text
 /key save anthropic sk-ant-***your-key***
 /key save openai sk-***your-key***
 /key save synthetic syn-***your-key***
@@ -73,7 +73,7 @@ Use `/key save` to store an API key in your system keyring. You only need to do 
 
 Then load a saved key:
 
-```
+```text
 /key load anthropic
 /key load synthetic
 ```
@@ -93,7 +93,7 @@ After saving a key once, you only need `/key load <name>` (or `--key-name <name>
 
 Select a model with `/model`:
 
-```
+```text
 /model claude-opus-4-6
 /model gemini-2.5-pro
 /model grok-3
@@ -111,7 +111,7 @@ Use `/model` with no arguments to see available models for the current provider.
 
 Some providers or self-hosted endpoints need a custom base URL. Use `/baseurl`:
 
-```
+```text
 /provider openai
 /baseurl https://my-company-proxy.example.com/v1/
 /model my-custom-model
@@ -133,7 +133,7 @@ If you frequently use a provider that isn't built in, or a custom endpoint, save
 
 Configure your provider, then save:
 
-```
+```text
 /provider openai
 /baseurl https://api.myprovider.com/v1/
 /key save myprovider mp-***your-key***
