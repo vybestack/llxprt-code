@@ -73,9 +73,13 @@ LLxprt Code supports running in sandboxed containers (Docker/Podman) for safety.
 ```bash
 # Run sandboxed
 llxprt --sandbox docker
+```
 
-# Create a sandbox profile
-llxprt --sandbox docker --sandbox-engine podman
+Create a sandbox profile from inside a session:
+
+```
+/set sandbox docker
+/set sandbox-engine podman
 /profile save sandboxed
 ```
 
@@ -112,7 +116,7 @@ ln -s ~/.gemini/settings.json ~/.llxprt/settings.json
 **Recommended approach:** Start fresh rather than symlinking everything.
 
 1. Install LLxprt Code and run it without symlinks
-2. Set up auth: `/auth` for OAuth providers, or `--key-name` for API keys
+2. Set up auth: `/auth <provider> enable` for OAuth providers, or `--key-name` for API keys
 3. Configure your preferred setup and save a profile
 4. Optionally symlink your LLXPRT.md / GEMINI.md context file
 

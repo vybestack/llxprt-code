@@ -47,8 +47,9 @@ If you have an existing subscription with Anthropic, OpenAI, Google, or Qwen, us
 
 ```
 /auth anthropic enable
-/auth openai enable
+/auth codex enable
 /auth gemini enable
+/auth anthropic enable
 /auth qwen enable
 ```
 

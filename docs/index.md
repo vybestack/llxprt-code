@@ -6,7 +6,7 @@ LLxprt Code is an autonomous AI coding CLI that supports multi-pass development 
 
 ```bash
 npm install -g @vybestack/llxprt-code
-llxprt-code
+llxprt
 ```
 
 Once inside the REPL, authenticate with a provider and start coding:

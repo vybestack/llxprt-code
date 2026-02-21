@@ -74,7 +74,11 @@ See [Profiles](./cli/profiles.md) for more on multi-bucket failover.
 
 ## Token Storage
 
-OAuth tokens are stored in your **OS keyring** (macOS Keychain, GNOME Keyring, Windows Credential Vault) via `@napi-rs/keyring`. If the keyring is unavailable, tokens fall back to encrypted files in `~/.llxprt/secure-store/`.
+OAuth tokens are stored in your **OS keyring** (macOS Keychain, GNOME Keyring, Windows Credential Vault) via `@napi-rs/keyring`. If the keyring is unavailable, tokens fall back to encrypted files in the OS-standard data directory (via `env-paths`):
+
+- **macOS:** `~/Library/Application Support/llxprt-code/secure-store/`
+- **Linux:** `~/.local/share/llxprt-code/secure-store/`
+- **Windows:** `%APPDATA%/llxprt-code/secure-store/`
 
 Tokens are **not** stored as plain JSON files. The old `~/.llxprt/oauth/*.json` file locations are obsolete.
 
