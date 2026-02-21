@@ -114,5 +114,4 @@ Please refer to the Privacy Notice that applies to your authentication method fo
 
 ## See Also
 
-- [Quotas and Pricing](./quota-and-pricing.md) - Cost information for each provider
 - [Providers Documentation](./cli/providers.md) - Technical setup for each provider
