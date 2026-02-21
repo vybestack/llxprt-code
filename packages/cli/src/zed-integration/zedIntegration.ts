@@ -109,11 +109,9 @@ export async function runZedIntegration(
 
   try {
     const stream = acp.ndJsonStream(stdout, stdin);
-    let connection: acp.AgentSideConnection;
-    // eslint-disable-next-line prefer-const
-    connection = new acp.AgentSideConnection(() => {
+    const connection = new acp.AgentSideConnection((conn) => {
       logger.debug(() => 'Creating GeminiAgent');
-      return new GeminiAgent(config, settings, connection);
+      return new GeminiAgent(config, settings, conn);
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
 
