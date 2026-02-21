@@ -809,43 +809,6 @@ function entrypoint(workdir: string, cliArgs: string[]): string[] {
   return ['bash', '-c', args.join(' ')];
 }
 
-export function getProfileScopedCredentialAllowlist(cliConfig?: Config): {
-  allowedProviders?: string[];
-  allowedBuckets?: string[];
-} {
-  if (!cliConfig) {
-    return {};
-  }
-
-  try {
-    const provider = cliConfig.getProvider();
-    if (!provider) {
-      return {};
-    }
-
-    const scopedProviders = [provider];
-
-    let scopedBuckets: string[] | undefined;
-    const failoverHandler = cliConfig.getBucketFailoverHandler?.();
-    if (failoverHandler?.isEnabled()) {
-      const buckets = failoverHandler
-        .getBuckets()
-        .map((bucket) => bucket.trim())
-        .filter((bucket) => bucket.length > 0);
-      if (buckets.length > 0) {
-        scopedBuckets = Array.from(new Set(buckets));
-      }
-    }
-
-    return {
-      allowedProviders: scopedProviders,
-      allowedBuckets: scopedBuckets,
-    };
-  } catch {
-    return {};
-  }
-}
-
 export async function start_sandbox(
   config: SandboxConfig,
   nodeArgs: string[] = [],
@@ -1559,12 +1522,9 @@ export async function start_sandbox(
     // The proxy must be listening before the container starts so it can connect immediately
     let credentialProxyHandle: { stop: () => Promise<void> } | undefined;
     let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
-    const proxyAllowlist = getProfileScopedCredentialAllowlist(cliConfig);
     try {
       credentialProxyHandle = await createAndStartProxy({
         socketPath: resolvedTmpdir,
-        allowedProviders: proxyAllowlist.allowedProviders,
-        allowedBuckets: proxyAllowlist.allowedBuckets,
       });
       const socketPath = getProxySocketPath();
       if (socketPath) {

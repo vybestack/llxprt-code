@@ -497,33 +497,18 @@ describe('oauth_initiate handler', () => {
 
     /**
      * @requirement R-OAUTH-15
-     * @scenario Provider not in allowedProviders returns UNAUTHORIZED
-     * @given A server with allowedProviders: ['anthropic']
-     * @when oauth_initiate is called for qwen
-     * @then Response is ok:false with code UNAUTHORIZED
+     * @scenario Provider without configured flow factory returns PROVIDER_NOT_CONFIGURED
+     * @given A server without a flow factory for the requested provider
+     * @when oauth_initiate is called for an unconfigured provider
+     * @then Response is ok:false with code PROVIDER_NOT_CONFIGURED
      */
-    it('unauthorized provider returns UNAUTHORIZED', async () => {
-      // Close existing client and server for this test
-      client.close();
-      await server.stop();
-
-      // Create server with restricted providers
-      server = new CredentialProxyServer({
-        tokenStore: backingStore,
-        providerKeyStorage:
-          keyStorage as unknown as CredentialProxyServerOptions['providerKeyStorage'],
-        allowedProviders: ['anthropic'], // Only anthropic allowed
-      });
-      const socketPath = await server.start();
-      client = new ProxySocketClient(socketPath);
-      await client.ensureConnected();
-
+    it('unconfigured provider returns PROVIDER_NOT_CONFIGURED', async () => {
       const response = await client.request('oauth_initiate', {
-        provider: 'qwen',
+        provider: 'totally_unconfigured_provider',
       });
 
       expect(response.ok).toBe(false);
-      expect(response.code).toBe('UNAUTHORIZED');
+      expect(response.code).toBe('PROVIDER_NOT_CONFIGURED');
     });
   });
 

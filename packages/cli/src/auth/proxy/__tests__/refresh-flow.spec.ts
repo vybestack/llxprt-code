@@ -720,27 +720,13 @@ describe('refresh_token handler', () => {
       expect(response.code).toBe('INVALID_REQUEST');
     });
 
-    it('unauthorized provider returns UNAUTHORIZED', async () => {
-      // Recreate server with restricted providers
-      client.close();
-      await server.stop();
-
-      server = new CredentialProxyServer({
-        tokenStore: backingStore,
-        providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
-        flowFactories: new Map([['anthropic', () => testProvider]]),
-        allowedProviders: ['other_provider'], // anthropic not allowed
-      });
-      const socketPath = await server.start();
-      client = new ProxySocketClient(socketPath);
-      await client.ensureConnected();
-
+    it('unconfigured provider returns PROVIDER_NOT_FOUND', async () => {
       const response = await client.request('refresh_token', {
-        provider: 'anthropic',
+        provider: 'unconfigured_provider',
       });
 
       expect(response.ok).toBe(false);
-      expect(response.code).toBe('UNAUTHORIZED');
+      expect(response.code).toBe('PROVIDER_NOT_FOUND');
     });
   });
 

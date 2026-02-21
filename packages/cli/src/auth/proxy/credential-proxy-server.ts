@@ -59,8 +59,6 @@ export interface CredentialProxyServerOptions {
   tokenStore: TokenStore;
   providerKeyStorage: ProviderKeyStorage;
   socketDir?: string;
-  allowedProviders?: string[];
-  allowedBuckets?: string[];
   /** Flow factories for OAuth initiation - maps provider name to factory function */
   flowFactories?: Map<string, () => OAuthFlowInterface>;
   /** OAuth session timeout in milliseconds (default 10 minutes) */
@@ -334,22 +332,6 @@ export class CredentialProxyServer {
     }
   }
 
-  private isProviderAllowed(provider: string): boolean {
-    const { allowedProviders } = this.options;
-    if (!allowedProviders || allowedProviders.length === 0) {
-      return true;
-    }
-    return allowedProviders.includes(provider);
-  }
-
-  private isBucketAllowed(bucket: string | undefined): boolean {
-    const { allowedBuckets } = this.options;
-    if (!allowedBuckets || allowedBuckets.length === 0) {
-      return true;
-    }
-    return allowedBuckets.includes(bucket ?? 'default');
-  }
-
   private async handleGetToken(
     socket: net.Socket,
     id: string,
@@ -361,25 +343,6 @@ export class CredentialProxyServer {
       return;
     }
     const bucket = payload.bucket as string | undefined;
-
-    if (!this.isProviderAllowed(provider)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Provider not allowed: ${provider}`,
-      );
-      return;
-    }
-    if (!this.isBucketAllowed(bucket)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Bucket not allowed: ${bucket ?? 'default'}`,
-      );
-      return;
-    }
 
     const token = await this.options.tokenStore.getToken(provider, bucket);
     if (token === null) {
@@ -413,25 +376,6 @@ export class CredentialProxyServer {
       return;
     }
 
-    if (!this.isProviderAllowed(provider)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Provider not allowed: ${provider}`,
-      );
-      return;
-    }
-    if (!this.isBucketAllowed(bucket)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Bucket not allowed: ${bucket ?? 'default'}`,
-      );
-      return;
-    }
-
     // Strip refresh_token from incoming token and preserve existing host-side
     // refresh_token when sandbox payload omits it.
     const { refresh_token: _stripped, ...safeToken } = tokenData;
@@ -460,25 +404,6 @@ export class CredentialProxyServer {
     }
     const bucket = payload.bucket as string | undefined;
 
-    if (!this.isProviderAllowed(provider)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Provider not allowed: ${provider}`,
-      );
-      return;
-    }
-    if (!this.isBucketAllowed(bucket)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Bucket not allowed: ${bucket ?? 'default'}`,
-      );
-      return;
-    }
-
     await this.options.tokenStore.removeToken(provider, bucket);
     this.sendOk(socket, id, {});
   }
@@ -502,21 +427,8 @@ export class CredentialProxyServer {
       return;
     }
 
-    if (!this.isProviderAllowed(provider)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Provider not allowed: ${provider}`,
-      );
-      return;
-    }
-
     const buckets = await this.options.tokenStore.listBuckets(provider);
-    const filteredBuckets = buckets.filter((bucket) =>
-      this.isBucketAllowed(bucket),
-    );
-    this.sendOk(socket, id, { buckets: filteredBuckets });
+    this.sendOk(socket, id, { buckets });
   }
 
   private async handleGetApiKey(
@@ -527,16 +439,6 @@ export class CredentialProxyServer {
     const name = payload.name as string | undefined;
     if (!name) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing name');
-      return;
-    }
-
-    if (!this.isProviderAllowed(name)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Provider not allowed: ${name}`,
-      );
       return;
     }
 
@@ -553,10 +455,7 @@ export class CredentialProxyServer {
     id: string,
   ): Promise<void> {
     const keys = await this.options.providerKeyStorage.listKeys();
-    const filteredKeys = keys.filter((keyName) =>
-      this.isProviderAllowed(keyName),
-    );
-    this.sendOk(socket, id, { keys: filteredKeys });
+    this.sendOk(socket, id, { keys });
   }
 
   private async handleHasApiKey(
@@ -567,16 +466,6 @@ export class CredentialProxyServer {
     const name = payload.name as string | undefined;
     if (!name) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing name');
-      return;
-    }
-
-    if (!this.isProviderAllowed(name)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Provider not allowed: ${name}`,
-      );
       return;
     }
 
@@ -593,24 +482,6 @@ export class CredentialProxyServer {
     const bucket = payload.bucket as string | undefined;
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
-      return;
-    }
-    if (!this.isProviderAllowed(provider)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `Provider not allowed: ${provider}`,
-      );
-      return;
-    }
-    if (!this.isBucketAllowed(bucket)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `Bucket not allowed: ${bucket ?? 'default'}`,
-      );
       return;
     }
     const stats = await this.options.tokenStore.getBucketStats(
@@ -673,17 +544,6 @@ export class CredentialProxyServer {
     // Validate provider
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
-      return;
-    }
-
-    // Check provider authorization
-    if (!this.isProviderAllowed(provider)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `Provider not allowed: ${provider}`,
-      );
       return;
     }
 
@@ -1126,28 +986,6 @@ export class CredentialProxyServer {
     // Validate required fields
     if (!provider) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing provider');
-      return;
-    }
-
-    // Check provider authorization
-    if (!this.isProviderAllowed(provider)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Provider not allowed: ${provider}`,
-      );
-      return;
-    }
-
-    // Check bucket authorization
-    if (!this.isBucketAllowed(bucket)) {
-      this.sendError(
-        socket,
-        id,
-        'UNAUTHORIZED',
-        `UNAUTHORIZED: Bucket not allowed: ${bucket ?? 'default'}`,
-      );
       return;
     }
 
