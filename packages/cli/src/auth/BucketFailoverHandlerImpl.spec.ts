@@ -286,7 +286,7 @@ describe('BucketFailoverHandlerImpl', () => {
   });
 
   describe('reset()', () => {
-    it('resets to first bucket and clears session bucket for fresh turn', async () => {
+    it('resets to first bucket and restores session bucket to primary for fresh turn', async () => {
       await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
       await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
       await tokenStore.saveToken('anthropic', makeToken('t3'), 'bucket-c');
