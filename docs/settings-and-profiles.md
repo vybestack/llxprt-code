@@ -238,6 +238,7 @@ Then you don't have to remember the tweaks — just load the profile.
 
 ## Related
 
+- [Ephemeral Settings Reference](./reference/ephemerals.md) — complete reference for every setting with defaults, types, and advice
 - [Profiles](./cli/profiles.md) — detailed profile management and multi-bucket failover
 - [Authentication](./cli/authentication.md) — key management
 - [Providers](./cli/providers.md) — provider-specific configuration
