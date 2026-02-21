@@ -1,52 +1,53 @@
 # Shell Command Substitution
 
-By default, LLxprt Code blocks command substitution patterns (`$()`, `<()`, and backticks) in shell commands for security reasons. This prevents potentially dangerous command injections.
+LLxprt Code controls how command substitution patterns (`$()`, `` ` ` ``, `<()`, `>()`) are handled in shell commands. There are three modes:
 
-## Enabling Command Substitution
+| Mode        | Behavior                                                                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `allowlist` | **Default.** Allows substitution but validates nested commands against the coreTools allowlist. Uses tree-sitter parsing when available. |
+| `all`       | Allows all substitution unconditionally. Least restrictive.                                                                              |
+| `none`      | Blocks all command substitution. Most restrictive.                                                                                       |
 
-You can enable command substitution in two ways:
+## Configuring
 
-### 1. Ephemeral Setting (Session Only)
-
-Enable command substitution for your current session:
-
-```
-/set shell-replacement true
-```
-
-To disable it again:
+### Session Setting
 
 ```
-/set shell-replacement false
+/set shell-replacement allowlist    # Default — validate nested commands
+/set shell-replacement all          # Allow everything
+/set shell-replacement none         # Block all substitution
 ```
 
-### 2. Persistent Setting
-
-Add to your settings file (`~/.llxprt/settings.json`):
+### In settings.json
 
 ```json
 {
-  "shellReplacement": true
+  "shell-replacement": "allowlist"
 }
 ```
 
-## Examples
+### In a Profile
 
-When enabled, you can use:
-
-- **Command substitution**: `echo $(date)`
-- **Process substitution**: `diff <(ls dir1) <(ls dir2)`
-- **Backticks**: `` echo `whoami` ``
-- **Variable assignment**: `RESULT=$(curl -s api.example.com)`
-
-## Security Considerations
-
-⚠️ **Warning**: Enabling shell replacement allows execution of nested commands, which can be a security risk if you're running untrusted commands. Only enable this feature if you understand the implications.
-
-## Default Behavior
-
-By default, shell replacement is **disabled**. Attempting to use command substitution will result in an error:
+The setting persists to profiles, so you can save it:
 
 ```
-Command substitution using $(), <(), or >() is not allowed for security reasons
+/set shell-replacement none
+/profile save restricted
 ```
+
+## How Allowlist Mode Works
+
+In `allowlist` mode (the default), LLxprt Code uses tree-sitter to parse the command and extract all nested commands, including those inside `$()` or backticks. Each nested command is validated against the coreTools configuration. If a nested command isn't on the allowlist, the entire command is blocked.
+
+This gives you command substitution where it's safe while preventing unexpected commands from running inside substitutions.
+
+## Security Notes
+
+- **`none` mode** is appropriate if you're running untrusted code or want maximum safety — it blocks all substitution patterns entirely.
+- **`all` mode** allows any nested command execution. Only use this if you trust all commands the model might generate.
+- **`allowlist` mode** (the default) is a middle ground — substitution works, but nested commands must pass the same validation as top-level commands.
+
+## Related
+
+- [Settings and Profiles](./settings-and-profiles.md)
+- [Sandboxing](./sandbox.md) — for running in a container instead of restricting shell commands
