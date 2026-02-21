@@ -33,11 +33,11 @@ import {
   type FilterFilesOptions,
   ReadManyFilesTool,
   type ToolConfirmationPayload,
-  createInkStdio,
+  writeToStdout,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
-import { Readable, Writable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
 import { LoadedSettings } from '../config/settings.js';
 import * as fs from 'fs/promises';
@@ -81,8 +81,16 @@ export async function runZedIntegration(
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
 
-  const { stdout: workingStdout } = createInkStdio();
-  const stdout = Writable.toWeb(workingStdout) as WritableStream<Uint8Array>;
+  const stdout = new WritableStream<Uint8Array>({
+    write(chunk) {
+      return new Promise<void>((resolve, reject) => {
+        writeToStdout(Buffer.from(chunk), undefined, (err?: Error | null) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    },
+  });
 
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
 
@@ -530,6 +538,7 @@ export class GeminiAgent {
 export class Session {
   private pendingPrompt: AbortController | null = null;
   private emojiFilter: EmojiFilter;
+  private logger: DebugLogger;
 
   constructor(
     private readonly id: string,
@@ -537,6 +546,7 @@ export class Session {
     private readonly config: Config,
     private readonly connection: acp.AgentSideConnection,
   ) {
+    this.logger = new DebugLogger('llxprt:zed-integration');
     // Initialize emoji filter from settings
     const emojiFilterMode =
       (this.config.getEphemeralSetting('emojifilter') as
@@ -745,7 +755,24 @@ export class Session {
       update,
     };
 
-    await this.connection.sessionUpdate(params);
+    this.logger.debug(
+      () =>
+        `sendUpdate: ${update.sessionUpdate} ${
+          'content' in update && update.content && 'text' in update.content
+            ? `(${(update.content as { text: string }).text.length} chars)`
+            : ''
+        }`,
+    );
+
+    try {
+      await this.connection.sessionUpdate(params);
+      this.logger.debug(() => 'sendUpdate: delivered');
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `sendUpdate ERROR: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private async runTool(
