@@ -1046,6 +1046,9 @@ export async function main() {
   }
 
   if (config.getExperimentalZedIntegration()) {
+    // Restore real stdout/stderr — ACP uses stdout as its protocol pipe
+    cleanupStdio();
+
     // In ACP mode, authentication happens through the protocol
     // Just ensure the provider manager is set up if configured
     const providerManagerForAcp = config.getProviderManager();

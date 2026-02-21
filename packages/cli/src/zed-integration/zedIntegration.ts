@@ -1486,11 +1486,6 @@ function toPermissionOptions(
           name: `Always Allow ${confirmation.rootCommand}`,
           kind: 'allow_always',
         },
-        {
-          optionId: ToolConfirmationOutcome.SuggestEdit,
-          name: 'Suggest changes',
-          kind: 'suggest_changes',
-        },
         ...basicPermissionOptions,
       ];
     case 'mcp':
