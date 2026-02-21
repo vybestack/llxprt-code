@@ -1,8 +1,14 @@
-# LLxprt Code Keyboard Shortcuts
+# Keyboard Shortcuts
 
-LLxprt Code ships with a set of default keyboard shortcuts for editing input,
-navigating history, and controlling the UI. Use this reference to learn the
-available combinations.
+Default keyboard shortcuts for editing, navigation, and UI control.
+
+> **macOS note:** Where you see `Ctrl`, use `Cmd` on macOS for most shortcuts. Exceptions are noted — some shortcuts (like `Ctrl+C` to cancel) use `Ctrl` on all platforms.
+
+**Quick tips:**
+
+- **Esc** clears the current input. Prefer this over `Ctrl+C`, which cancels the active request and quits if pressed again.
+- **Ctrl+F** toggles focus between the embedded shell and the LLxprt prompt when a shell is attached.
+- **!** on an empty prompt enters shell mode directly.
 
 <!-- KEYBINDINGS-AUTOGEN:START -->
 
@@ -123,35 +129,52 @@ available combinations.
 
 <!-- KEYBINDINGS-AUTOGEN:END -->
 
-## Additional Context-Specific Shortcuts
+## Context-Specific Shortcuts
 
-- `Ctrl+Y`: Toggle YOLO (auto-approval) mode for tool calls during approval
-  workflows; this is context-specific and separate from alternate-buffer copy mode.
-- `Shift+Tab`: Toggle Auto Edit (auto-accept edits) mode.
-- `Option+M` (macOS): Entering `µ` with Option+M also toggles Markdown
-  rendering, matching `Cmd+M`.
-- `!` on an empty prompt: Enter or exit shell mode.
-- `\` (at end of a line) + `Enter`: Insert a newline without leaving single-line
-  mode.
-- `Ctrl+Delete` / `Meta+Delete`: Delete the word to the right of the cursor.
-- `Ctrl+B` or `Left Arrow`: Move the cursor one character to the left while
-  editing text.
-- `Ctrl+F` or `Right Arrow`: Move the cursor one character to the right; with an
-  embedded shell attached, `Ctrl+F` still toggles focus.
-- `Ctrl+D` or `Delete`: Remove the character immediately to the right of the
-  cursor.
-- `Ctrl+H` or `Backspace`: Remove the character immediately to the left of the
-  cursor.
-- `Ctrl+Left Arrow` / `Meta+Left Arrow` / `Meta+B`: Move one word to the left.
-- `Ctrl+Right Arrow` / `Meta+Right Arrow` / `Meta+F`: Move one word to the
-  right.
-- `Ctrl+W`: Delete the word to the left of the cursor (in addition to
-  `Ctrl+Backspace` / `Cmd+Backspace`).
-- `Ctrl+Z` / `Ctrl+Shift+Z`: Undo or redo the most recent text edit.
-- `Meta+Enter`: Open the current input in an external editor (alias for
-  `Ctrl+X`).
-- `Esc` pressed twice quickly: Clear the current input buffer.
-- `Up Arrow` / `Down Arrow`: When the cursor is at the top or bottom of a
-  single-line input, navigate backward or forward through prompt history.
-- `Number keys (1-9, multi-digit)` inside selection dialogs: Jump directly to
-  the numbered radio option and confirm when the full number is entered.
+These shortcuts are active only in specific contexts.
+
+### Tool Approval Dialogs
+
+| Action                                         | Keys        |
+| ---------------------------------------------- | ----------- |
+| Toggle YOLO mode (auto-approve all tool calls) | `Ctrl+Y`    |
+| Toggle Auto Edit (auto-accept file edits)      | `Shift+Tab` |
+| Jump to option by number                       | `1`–`9`     |
+
+### Shell Mode
+
+| Action                                       | Keys                |
+| -------------------------------------------- | ------------------- |
+| Enter/exit shell mode                        | `!` on empty prompt |
+| Toggle focus between shell and LLxprt prompt | `Ctrl+F`            |
+
+### Text Editing
+
+| Action                            | Keys                             |
+| --------------------------------- | -------------------------------- |
+| Move cursor left one character    | `Ctrl+B` / `Left Arrow`          |
+| Move cursor right one character   | `Ctrl+F` / `Right Arrow`         |
+| Move left one word                | `Ctrl+Left` / `Meta+B`           |
+| Move right one word               | `Ctrl+Right` / `Meta+F`          |
+| Delete character right of cursor  | `Ctrl+D` / `Delete`              |
+| Delete character left of cursor   | `Ctrl+H` / `Backspace`           |
+| Delete word right of cursor       | `Ctrl+Delete` / `Meta+Delete`    |
+| Delete word left of cursor        | `Ctrl+W` / `Ctrl+Backspace`      |
+| Undo last edit                    | `Ctrl+Z`                         |
+| Redo last edit                    | `Ctrl+Shift+Z`                   |
+| Insert newline (single-line mode) | `\` at end of line, then `Enter` |
+| Open in external editor           | `Meta+Enter` / `Ctrl+X`          |
+| Clear input buffer                | `Esc` (press twice quickly)      |
+
+### History Navigation
+
+| Action          | Keys                              |
+| --------------- | --------------------------------- |
+| Previous prompt | `Up Arrow` (at top of input)      |
+| Next prompt     | `Down Arrow` (at bottom of input) |
+
+### macOS-Specific
+
+| Action                    | Keys                 |
+| ------------------------- | -------------------- |
+| Toggle Markdown rendering | `Cmd+M` / `Option+M` |
