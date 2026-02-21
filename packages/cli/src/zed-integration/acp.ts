@@ -167,7 +167,12 @@ class Connection {
     this.#handler = handler;
     this.#peerInput = peerInput;
     this.#textEncoder = new TextEncoder();
-    this.#receive(peerOutput);
+    this.#receive(peerOutput).catch((error) => {
+      acpLogger.debug(
+        () =>
+          `Receive loop error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
   }
 
   async #receive(output: ReadableStream<Uint8Array>) {
@@ -184,8 +189,15 @@ class Connection {
         const trimmedLine = line.trim();
 
         if (trimmedLine) {
-          const message = JSON.parse(trimmedLine);
-          this.#processMessage(message);
+          try {
+            const message = JSON.parse(trimmedLine);
+            await this.#processMessage(message);
+          } catch (error) {
+            acpLogger.debug(
+              () =>
+                `Error processing message: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
       }
     }
