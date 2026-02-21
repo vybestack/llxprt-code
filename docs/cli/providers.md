@@ -43,7 +43,7 @@ llxprt --provider Synthetic
 
 ### OAuth (Recommended for Subscriptions)
 
-If you have an existing subscription with Anthropic, OpenAI, Google, or Qwen, use OAuth — no API key needed:
+If you have an existing subscription with Anthropic, OpenAI (via Codex), Google, or Qwen, use OAuth — no API key needed:
 
 ```text
 /auth anthropic enable
