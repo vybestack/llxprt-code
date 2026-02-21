@@ -1793,7 +1793,13 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       // Last message should be the original user message, not a placeholder
       const lastMessage = request.messages[request.messages.length - 1];
       expect(lastMessage.role).toBe('user');
-      expect(lastMessage.content).not.toBe('Continue the conversation');
+      // Content may be wrapped in array by prompt caching — extract text to verify
+      const textContent = Array.isArray(lastMessage.content)
+        ? (lastMessage.content as Array<{ type: string; text?: string }>).find(
+            (b) => b.type === 'text',
+          )?.text
+        : lastMessage.content;
+      expect(textContent).not.toBe('Continue the conversation');
     });
   });
 });
