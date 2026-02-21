@@ -350,6 +350,8 @@ describe('BucketFailoverHandlerImpl', () => {
     });
 
     it('handles empty buckets array gracefully', async () => {
+      const setSessionBucketSpy = vi.spyOn(oauthManager, 'setSessionBucket');
+
       const handler = new BucketFailoverHandlerImpl(
         [],
         'anthropic',
@@ -359,6 +361,7 @@ describe('BucketFailoverHandlerImpl', () => {
       handler.reset();
 
       expect(handler.getCurrentBucket()).toBeUndefined();
+      expect(setSessionBucketSpy).not.toHaveBeenCalled();
     });
   });
 });

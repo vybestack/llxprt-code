@@ -363,7 +363,7 @@ export interface BucketFailoverHandler {
 
   /**
    * Full reset for new user turns: clears tried set, resets to first bucket, and
-   * clears session bucket override so the next request starts fresh.
+   * resets session bucket to the primary (first) bucket so the next request starts fresh.
    */
   reset?(): void;
 }
