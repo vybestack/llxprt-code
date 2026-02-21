@@ -33,6 +33,7 @@ import {
   type FilterFilesOptions,
   ReadManyFilesTool,
   type ToolConfirmationPayload,
+  createInkStdio,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -80,7 +81,8 @@ export async function runZedIntegration(
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
 
-  const stdout = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
+  const { stdout: workingStdout } = createInkStdio();
+  const stdout = Writable.toWeb(workingStdout) as WritableStream<Uint8Array>;
 
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
 
