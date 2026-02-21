@@ -1,4 +1,4 @@
-# LLxprt Code
+eem # LLxprt Code
 
 LLxprt Code is an autonomous AI coding CLI that supports multi-pass development workflows. It works with any major LLM provider — Anthropic, OpenAI, Google Gemini, or local models — using your own subscriptions. No telemetry, no lock-in, fully open source under Apache 2.0.
 
@@ -76,6 +76,8 @@ LLxprt Code ships with built-in tools for file editing, shell commands, web sear
 
 ## Reference
 
+- [Ephemeral Settings Reference](./reference/ephemerals.md) — every ephemeral setting with defaults, types, and advice
+- [Profile File Reference](./reference/profiles.md) — the profile JSON format, auth config, load balancers, precedence
 - [Commands](./cli/commands.md)
 - [Configuration](./cli/configuration.md)
 - [Keyboard Shortcuts](./keyboard-shortcuts.md)

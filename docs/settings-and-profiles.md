@@ -236,9 +236,13 @@ Good model ergonomics require tuning to a model's specific strengths and weaknes
 
 Then you don't have to remember the tweaks — just load the profile.
 
+## Reference Documentation
+
+- [Ephemeral Settings Reference](./reference/ephemerals.md) — complete reference for every ephemeral setting with defaults, types, and advice
+- [Profile File Reference](./reference/profiles.md) — the profile JSON format, all fields, auth config, load balancers, precedence rules
+
 ## Related
 
-- [Ephemeral Settings Reference](./reference/ephemerals.md) — complete reference for every setting with defaults, types, and advice
 - [Profiles](./cli/profiles.md) — detailed profile management and multi-bucket failover
 - [Authentication](./cli/authentication.md) — key management
 - [Providers](./cli/providers.md) — provider-specific configuration
