@@ -10,44 +10,65 @@ There are several ways to run LLxprt Code. The option you choose depends on how 
 
 ### 1. Standard installation (Recommended for typical users)
 
-This is the recommended way for end-users to install LLxprt Code. It involves downloading the LLxprt Code package from the NPM registry.
-
-- **Global install:**
+- **npm (global install):**
 
   ```bash
   npm install -g @vybestack/llxprt-code
-  ```
-
-  Then, run the CLI from anywhere:
-
-  ```bash
   llxprt
   ```
 
-- **NPX execution:**
+- **Homebrew (macOS/Linux):**
 
   ```bash
-  # Execute the latest version from NPM without a global install
+  brew tap vybestack/tap
+  brew install llxprt-code
+  llxprt
+  ```
+
+- **npx (no install):**
+
+  ```bash
   npx @vybestack/llxprt-code
   ```
 
+- **Nightly builds:**
+
+  ```bash
+  npm install -g @vybestack/llxprt-code@nightly
+  ```
+
+  Nightly builds are published from the latest commit on main. They may contain unreleased features and breaking changes.
+
 ---
 
-### 2. Running in a sandbox (Docker/Podman)
+### 2. Running in a sandbox (Docker or Podman)
 
-For security and isolation, LLxprt Code can be run inside a container. This is the default way that the CLI executes tools that might have side effects.
+LLxprt Code can run inside a container for security isolation. Both Docker and Podman are supported.
 
-- **Directly from the Registry:**
-  You can run the published sandbox image directly. This is useful for environments where you only have Docker and want to run the CLI.
-  ```bash
-  # Run the published sandbox image
-  docker run --rm -it us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.1.1
-  ```
 - **Using the `--sandbox` flag:**
-  If you have LLxprt Code installed locally (using the standard installation described above), you can instruct it to run inside the sandbox container.
+
   ```bash
-  llxprt --sandbox -y -p "your prompt here"
+  # Auto-detect Docker or Podman
+  llxprt --sandbox
+
+  # Explicitly choose the engine
+  llxprt --sandbox-engine docker
+  llxprt --sandbox-engine podman
   ```
+
+- **Directly from the container image:**
+
+  ```bash
+  docker run --rm -it ghcr.io/vybestack/llxprt-code/sandbox:latest
+  ```
+
+  Or with Podman:
+
+  ```bash
+  podman run --rm -it ghcr.io/vybestack/llxprt-code/sandbox:latest
+  ```
+
+See [Sandboxing](./sandbox.md) for full documentation including credential proxying, SSH agent passthrough, and custom sandbox profiles.
 
 ---
 

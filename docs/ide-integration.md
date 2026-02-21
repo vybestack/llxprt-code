@@ -1,8 +1,10 @@
-# IDE Integration
+# VS Code Integration
 
-llxprt can integrate with your IDE to provide a more seamless and context-aware experience. This integration allows the CLI to understand your workspace better and enables powerful features like native in-editor diffing.
+LLxprt Code integrates with VS Code through a companion extension that gives the CLI awareness of your editor state — open files, cursor position, selected text — and lets you review file changes as native diffs right in the editor.
 
-Currently, the only supported IDE is [Visual Studio Code](https://code.visualstudio.com/) and other editors that support VS Code extensions.
+This works with **Visual Studio Code** and VS Code forks including **Cursor**, **Windsurf**, and any editor that supports VS Code extensions or the [Open VSX Registry](https://open-vsx.org/).
+
+> **Other editors:** For Zed integration, see the [Zed Integration](./zed-integration.md) page.
 
 ## Features
 
@@ -127,7 +129,6 @@ If you encounter issues with IDE integration, here are some common error message
 
 - **Message:** `🔴 Disconnected: Directory mismatch. LLxprt Code is running in a different location than the open workspace in [IDE Name]. Please run the CLI from one of the following directories: [List of directories]`
   - **Cause:** The CLI's current working directory is outside the workspace you have open in your IDE.
-    > > > > > > > 776627c85 (refactor(ide): Improve IDE detection discovery (#6765))
   - **Solution:** `cd` into the same directory that is open in your IDE and restart the CLI.
 
 - **Message:** `🔴 Disconnected: To use this feature, please open a workspace folder in [IDE Name] and try again.`

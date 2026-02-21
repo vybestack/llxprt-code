@@ -103,13 +103,18 @@ Settings are applied in this order (highest priority first):
 - `write_file` - File creation/writing
 - Tool arguments for file operations
 
-### NOT Filtered (Search/Read Tools)
+### NOT Filtered
 
-- `grep`, `glob`, `find`, `ls` - Search operations
-- `bash`, `shell` - Shell commands
-- `read_file` - File reading
+- `grep`, `glob`, `find`, `ls` — search operations
+- `bash`, `shell` — shell commands (input and output pass through unmodified)
+- `read_file` — file reading
 - File paths (even with emojis)
 - User input
+- Search-side arguments of tool calls (e.g., the pattern in a grep call)
+
+### Streaming Display
+
+For streamed model responses, emoji filtering is applied at the **display layer** only. The model's actual output is preserved unmodified in conversation history. This is required because some providers (notably Anthropic) need the model's original thinking and response text to remain unchanged for correct context handling. You see the filtered version; the model sees the original.
 
 ## Examples
 
@@ -179,14 +184,3 @@ File paths are preserved:
 # This works - file paths aren't filtered
 /edit "my-file-🎉.txt"
 ```
-
-## Requirements Compliance
-
-- **REQ-003.1**: Session-level configuration via /set command ✅
-- **REQ-003.2**: Default configuration in settings.json ✅
-- **REQ-003.3**: Profile support for saving configurations ✅
-- **REQ-003.4**: Configuration hierarchy (Session > Profile > Default) ✅
-- **REQ-004.1**: Silent filtering in auto mode ✅
-- **REQ-004.2**: Post-execution feedback in warn mode ✅
-- **REQ-004.3**: Block execution in error mode ✅
-- **REQ-005**: Search tool exclusions ✅

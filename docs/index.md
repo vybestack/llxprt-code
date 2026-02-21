@@ -1,90 +1,90 @@
-# Welcome to LLxprt Code documentation
+# LLxprt Code
 
-This documentation provides a comprehensive guide to installing, using, and developing LLxprt Code. This tool lets you interact with AI models from multiple providers through a command-line interface.
+LLxprt Code is an autonomous AI coding CLI that supports multi-pass development workflows. It works with any major LLM provider — Anthropic, OpenAI, Google Gemini, or local models — using your own subscriptions. No telemetry, no lock-in, fully open source under Apache 2.0.
 
-## Overview
+## Quick Start
 
-LLxprt Code brings the capabilities of large language models to your terminal in an interactive Read-Eval-Print Loop (REPL) environment. LLxprt Code consists of a client-side application (`packages/cli`) that communicates with a local server (`packages/core`), which in turn manages requests to the provider APIs and its AI models. LLxprt Code also contains a variety of tools for tasks such as performing file system operations, running shells, and web fetching, which are managed by `packages/core`.
+```bash
+npm install -g @vybestack/llxprt-code
+llxprt
+```
 
-## Navigating the documentation
+Once inside the REPL, authenticate with a provider and start coding:
 
-### Getting Started
+```text
+/auth gemini enable
+/provider gemini
+/model gemini-2.5-flash
+```
 
-New to LLxprt Code? Start here:
+Or use an API key with an open-weight model provider:
 
-- **[Getting Started Guide](./getting-started.md):** Your first session — installation, authentication, and your first AI-assisted coding task.
+```text
+/key save synthetic syn****************b6
+/provider Synthetic
+/key load synthetic
+/model hf:zai-org/GLM-4.7
+```
 
-### Core Workflows
+For a full walkthrough including other providers, see the **[Getting Started Guide](./getting-started.md)**.
 
-Essential guides for daily use:
+## What You Can Do
 
-- **[Provider Configuration](./cli/providers.md):** Configure and manage LLM providers (Anthropic, OpenAI, Gemini, and more).
-- **[Authentication](./cli/authentication.md):** Set up authentication for various providers.
-- **[Profiles](./cli/profiles.md):** Save and manage configurations for different contexts.
-- **[Sandboxing](./sandbox.md):** Protect your system with container-based isolation.
-- **[Subagents](./subagents.md):** Create and manage specialized AI assistants tied to profiles.
+### Use Any Provider
 
-### Advanced Topics
+Configure Claude, GPT, Gemini, or local models. Switch providers mid-session, set up multi-account failover, or load balance across API keys.
 
-Power features for advanced users:
+Recent open-weight models like DeepSeek, Kimi, Minimax, GLM, and Qwen are available through providers such as Z.ai, Synthetic, Chutes, Kimi.com, and Deepseek.ai.
 
-- **[OAuth Setup](./oauth-setup.md):** Configure OAuth authentication for subscription access.
-- **[Local Models](./local-models.md):** Complete guide to using local AI models with LM Studio, Ollama, llama.cpp, and more.
-- **[Zed Editor Integration](./zed-integration.md):** Connect LLxprt Code to the Zed editor as an AI assistant.
-- **[OpenAI Responses API](./cli/providers-openai-responses.md):** Using OpenAI's enhanced Responses API.
-- **[Prompt Configuration](./prompt-configuration.md):** How to customize AI behavior with prompts.
-- **[Settings and Profiles](./settings-and-profiles.md):** How to manage settings and use profiles.
-- **[Checkpointing](./checkpointing.md):** Save and restore session state.
-- **[Extensions](./extension.md):** How to extend the CLI with new functionality.
-- **[IDE Integration](./ide-integration.md):** Connect the CLI to your editor.
+- [Provider Configuration](./cli/providers.md)
+- [Authentication](./cli/authentication.md)
+- [Local Models](./local-models.md)
 
-### Reference
+### Multi-Pass Development
 
-Configuration, commands, and troubleshooting:
+LLxprt Code plans, implements, tests, debugs, and iterates — across hours, not minutes. Delegate complex tasks to specialized subagents that run autonomously.
 
-- **[Configuration](./cli/configuration.md):** Configure the CLI behavior.
-- **[Commands Reference](./cli/commands.md):** Complete documentation of available CLI commands.
-- **[Troubleshooting Guide](./troubleshooting.md):** Find solutions to common problems and FAQs.
-- **[CLI Introduction](./cli/index.md):** Overview of the command-line interface.
-- **[Execution and Deployment](./deployment.md):** Information for running LLxprt Code.
-- **[Keyboard Shortcuts](./keyboard-shortcuts.md):** Quick reference for keyboard shortcuts.
-- **[Themes](./cli/themes.md):** Customize the visual appearance.
-- **[Emoji Filter](./EMOJI-FILTER.md):** Control emoji usage in LLM responses.
-- **[Runtime helper APIs](./cli/runtime-helpers.md):** Reference for runtime-scoped helper functions.
-- **[Context Dumping](./cli/context-dumping.md):** Capture API requests/responses for debugging and curl replay.
-- **[Telemetry](./telemetry.md):** Overview of telemetry in the CLI.
-- **[Telemetry Privacy](./telemetry-privacy.md):** Privacy information for telemetry.
-- **[Migration from Gemini CLI](./gemini-cli-tips.md):** Guide for users migrating from Gemini CLI.
+- [Getting Started Guide](./getting-started.md)
+- [Subagents](./subagents.md)
 
-### Architecture & Development
+### Your Subscriptions, Your Control
 
-For contributors and developers:
+Use your existing Claude, OpenAI, Google, or Qwen accounts via OAuth. Create profiles for different projects, teams, or workflows. Configure models, temperature, context limits, and more.
 
-- **[Architecture Overview](./architecture.md):** Understand the high-level design of LLxprt Code.
-- **[Core Introduction](./core/index.md):** Overview of the core component.
-- **[Provider runtime context](./core/provider-runtime-context.md):** Manage `ProviderRuntimeContext` lifecycles.
-- **[Provider interface](./core/provider-interface.md):** Implement providers against the stateless runtime.
-- **[Tools API](./core/tools-api.md):** Information on how the core manages and exposes tools.
-- **[Memory Import Processor](./core/memport.md):** Modular LLXPRT.md import feature.
-- **[Shell Replacement](./shell-replacement.md):** Command substitution in shell commands.
-- **[Contributing & Development Guide](../CONTRIBUTING.md):** Information for contributors and developers.
-- **[NPM Workspaces and Publishing](./npm.md):** Details on how the project's packages are managed and published.
-- **[Stateless provider migration](./migration/stateless-provider.md):** Upgrade guide for the new provider runtime model.
+- [Profiles](./cli/profiles.md)
+- [OAuth Setup](./oauth-setup.md)
+- [Configuration](./cli/configuration.md)
+- [Prompt Configuration](./prompt-configuration.md)
 
-### Tools Documentation
+### Stay Safe
 
-- **[Tools Overview](./tools/index.md):** Overview of the available tools.
-- **[File System Tools](./tools/file-system.md):** Documentation for the `read_file` and `write_file` tools.
-- **[Multi-File Read Tool](./tools/multi-file.md):** Documentation for the `read_many_files` tool.
-- **[Shell Tool](./tools/shell.md):** Documentation for the `run_shell_command` tool.
-- **[MCP Server](./tools/mcp-server.md):** Model Context Protocol server integration.
-- **[Web Fetch Tool](./tools/web-fetch.md):** Documentation for the `web_fetch` tool.
-- **[Web Search Tool](./tools/web-search.md):** Documentation for the `google_web_search` tool.
-- **[Memory Tool](./tools/memory.md):** Documentation for the `save_memory` tool.
+Run commands in sandboxed containers. Configure approval policies to control what the AI can do without asking. Store API keys and auth tokens in your system keyring — the LLM never has access to them. Use `.llxprtignore` to keep sensitive files out of context.
 
-### Additional Resources
+- [Sandboxing](./sandbox.md)
 
-- **[Release notes: Stateless Provider](./release-notes/stateless-provider.md):** Summary of new runtime features, breaking changes, and validation steps.
-- **[Terms of Service and Privacy Notice](./tos-privacy.md):** Information on the terms of service and privacy notices.
+### Extend It
 
-We hope this documentation helps you make the most of the LLxprt Code!
+Add capabilities through MCP servers, lifecycle hooks, custom themes, and more.
+
+- [Hooks](./hooks/index.md)
+- [MCP Server Integration](./tools/mcp-server.md)
+- [Themes](./cli/themes.md)
+
+## Tools
+
+LLxprt Code ships with built-in tools for file editing, shell commands, web search, code analysis, and memory. It also supports [MCP servers](./tools/mcp-server.md) and [extensions](./extension.md) for adding additional tools and capabilities. See the **[Tools Overview](./tools/index.md)** for the full list.
+
+## Reference
+
+- [Ephemeral Settings Reference](./reference/ephemerals.md) — every ephemeral setting with defaults, types, and advice
+- [Profile File Reference](./reference/profiles.md) — the profile JSON format, auth config, load balancers, precedence
+- [Commands](./cli/commands.md)
+- [Configuration](./cli/configuration.md)
+- [Keyboard Shortcuts](./keyboard-shortcuts.md)
+- [Troubleshooting](./troubleshooting.md)
+- [Emoji Filter](./EMOJI-FILTER.md)
+- [Context Dumping](./cli/context-dumping.md)
+
+## Contributing
+
+LLxprt Code is open source and community-driven. See the **[Contributing Guide](./CONTRIBUTING.md)** to get started.

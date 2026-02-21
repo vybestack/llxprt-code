@@ -1,80 +1,93 @@
 # Sandboxing
 
-Sandboxing runs llxprt tool execution in an isolated environment so you can work with less risk when running shell commands, editing files, or reviewing untrusted code.
+You should use sandboxing. LLMs leak PATs and other secrets into shell commands, write files outside your working directory, and love launching dozens of parallel test runs that black-screen your machine. Sandboxing makes all of this nearly impossible.
 
-## Platform support
-
-| Platform | Docker       | Podman                 | Seatbelt      |
-| -------- | ------------ | ---------------------- | ------------- |
-| macOS    | Full support | Full support (caveats) | Built-in      |
-| Linux    | Full support | Full support           | Not available |
-
-Windows is not tested yet for this workflow. Contributions are welcome.
-
-## Quick start
+## Quick Start
 
 ```bash
-# Start a sandboxed session with automatic engine selection
-llxprt --sandbox "review this repository"
+# Sandbox with automatic engine detection (Docker > Podman > Seatbelt)
+llxprt --sandbox "fix the tests"
 
-# Load a specific sandbox profile
-llxprt --sandbox-profile-load safe "analyze this untrusted code"
+# Load a sandbox profile with resource limits
+llxprt --sandbox-profile-load dev "refactor this module"
 
-# Explicitly disable sandboxing
-llxprt --sandbox-engine none
+# Explicitly pick an engine
+llxprt --sandbox-engine podman "review this code"
 ```
 
-## Why developers use sandboxing
+## What Sandboxing Does
 
-Use sandboxing when you want to:
+Container sandboxing (Docker or Podman) runs LLxprt's tool execution inside an isolated container. This gives you:
 
-- review code you did not write
-- run shell-heavy tasks safely
-- keep refresh tokens and key storage on the host
-- cap CPU, memory, and process count for noisy workloads
+- **File isolation** — the LLM can only touch your project directory (mounted read-write) and temp files. It can't access `~/.ssh`, `~/.aws`, other repos, or anything else on your system.
+- **Credential isolation** — API keys, refresh tokens, and keyring data stay on the host. The container gets short-lived access tokens via a credential proxy over a Unix socket. The LLM never sees your stored secrets.
+- **Resource limits** — cap CPU, memory, and process count. No more black-screened laptops from `vitest --run` spawning 200 workers.
+- **Network control** — disable networking entirely for untrusted code, or leave it on for normal development.
+- **SSH agent forwarding** — git push/pull still works inside the sandbox via agent forwarding (no private keys copied in).
 
-## How sandbox mode is selected
+## Choosing an Engine
 
-Selection behavior comes from `packages/cli/src/config/sandboxConfig.ts` and works like this:
+| Engine       | Best for                   | Notes                                                                                          |
+| ------------ | -------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Docker**   | Most users on macOS/Linux  | Best tested, auto-detected first                                                               |
+| **Podman**   | Rootless containers, Linux | Full support; macOS needs extra setup for SSH/credential tunneling                             |
+| **Seatbelt** | Lightweight macOS fallback | Uses `sandbox-exec`. No resource limits, no credential isolation. Discouraged for serious use. |
 
-1. `--sandbox-engine none` disables sandboxing immediately.
-2. `LLXPRT_SANDBOX` takes precedence over `--sandbox` and `settings.sandbox` when choosing the base sandbox command.
-3. `--sandbox-profile-load <name>` implies sandbox intent, even if `--sandbox` is not set.
-4. `--sandbox-engine <engine>` overrides the resolved runtime.
+Engine auto-detection order: Docker → Podman → Seatbelt (macOS only).
 
-### `LLXPRT_SANDBOX` accepted values
+### Why Not Seatbelt?
 
-- truthy: `1`, `true` (requests sandbox with automatic command selection)
-- falsy: `0`, `false` (disables sandboxing)
-- explicit engine: `docker`, `podman`, `sandbox-exec`
+Seatbelt (`sandbox-exec`) runs directly on the host with macOS kernel restrictions. It restricts file system access but:
 
-`--sandbox-engine none` always disables sandboxing, even when `LLXPRT_SANDBOX` is set.
+- **No resource limits** — can't cap CPU, memory, or process count
+- **No credential isolation** — runs with your full keyring and token store
+- **No network isolation** — `network: off` is not enforced
+- **Deprecated by Apple** — `sandbox-exec` has been informally deprecated since macOS 10.15
 
-## Built-in profiles
+Use Docker or Podman if at all possible. Seatbelt is a last resort.
 
-Profiles are stored at:
+## Configuring Sandboxing
 
-```text
-~/.llxprt/sandboxes/<name>.json
+### CLI Flags
+
+```bash
+llxprt --sandbox                              # Enable with auto-detected engine
+llxprt --sandbox-engine docker                # Force Docker
+llxprt --sandbox-engine podman                # Force Podman
+llxprt --sandbox-engine sandbox-exec          # Force Seatbelt (macOS only)
+llxprt --sandbox-engine none                  # Explicitly disable
+llxprt --sandbox-profile-load <name>          # Load a profile (implies sandbox)
 ```
 
-Default profile files are created automatically when profile loading is used.
+### Environment Variable
 
-| Profile   | Network | SSH Agent | Resources            | Typical use case        |
-| --------- | ------- | --------- | -------------------- | ----------------------- |
-| `dev`     | on      | auto      | 2 CPU, 4GB, 256 pids | normal development      |
-| `safe`    | off     | off       | 2 CPU, 4GB, 128 pids | untrusted code review   |
-| `tight`   | off     | off       | 1 CPU, 2GB, 64 pids  | maximum restriction     |
-| `offline` | off     | off       | 2 CPU, 4GB, 128 pids | local/offline workflows |
+```bash
+export LLXPRT_SANDBOX=true                    # Enable sandbox
+export LLXPRT_SANDBOX=docker                  # Force engine
+export LLXPRT_SANDBOX=false                   # Disable
+```
 
-See full profile reference: [Sandbox Profiles](./cli/sandbox-profiles.md)
+`--sandbox-engine none` always wins, even when `LLXPRT_SANDBOX` is set.
 
-## Profile fields
+## Sandbox Profiles
+
+Profiles are JSON files in `~/.llxprt/sandboxes/`. They control engine, image, resources, networking, SSH agent, and extra mounts. Default profiles are created automatically the first time you use `--sandbox-profile-load`.
+
+### Built-in Profiles
+
+| Profile   | Network | SSH Agent | CPUs | Memory | PIDs | Use case                |
+| --------- | ------- | --------- | ---- | ------ | ---- | ----------------------- |
+| `dev`     | on      | auto      | 2    | 4 GB   | 256  | Normal development      |
+| `safe`    | off     | off       | 2    | 4 GB   | 128  | Untrusted code review   |
+| `tight`   | off     | off       | 1    | 2 GB   | 64   | Maximum restriction     |
+| `offline` | off     | off       | 2    | 4 GB   | 128  | Local/offline workflows |
+
+### Profile Format
 
 ```json
 {
   "engine": "auto",
-  "image": "ghcr.io/vybestack/llxprt-code/sandbox:<version>",
+  "image": "ghcr.io/vybestack/llxprt-code/sandbox:0.9.0",
   "resources": {
     "cpus": 2,
     "memory": "4g",
@@ -87,48 +100,60 @@ See full profile reference: [Sandbox Profiles](./cli/sandbox-profiles.md)
 }
 ```
 
-Field behavior:
+| Field              | Values                                             | Description                                                |
+| ------------------ | -------------------------------------------------- | ---------------------------------------------------------- |
+| `engine`           | `auto`, `docker`, `podman`, `sandbox-exec`, `none` | Container runtime                                          |
+| `image`            | string                                             | Container image (defaults to release image)                |
+| `resources.cpus`   | number                                             | CPU core limit                                             |
+| `resources.memory` | string                                             | Memory limit (e.g., `4g`, `512m`)                          |
+| `resources.pids`   | number                                             | Max process count                                          |
+| `network`          | `on`, `off`                                        | Container networking (`off` = `--network none`)            |
+| `sshAgent`         | `auto`, `on`, `off`                                | SSH agent forwarding into container                        |
+| `mounts`           | array                                              | Extra mounts (`{from, to?, mode?}`); mode defaults to `ro` |
+| `env`              | object                                             | Additional environment variables                           |
 
-- `engine`: `auto`, `docker`, `podman`, `sandbox-exec`, `none`
-- `image`: container image. Defaults to the current release `config.sandboxImageUri` value.
-- `resources`: `cpus`, `memory`, `pids`
-- `network`: `on`, `off`, `proxied`
-  - `proxied` is accepted by schema, but runtime proxy mode is not implemented yet. The launcher logs a warning and falls back to default networking.
-- `sshAgent`: `auto`, `on`, `off`
-- `mounts`: extra mounts; mount mode defaults to `ro` when omitted
-- `env`: additional environment variables
+### Creating Custom Profiles
 
-## Credential security in container mode
+Create a JSON file in `~/.llxprt/sandboxes/`:
 
-Container mode uses a host-side credential proxy over a Unix socket.
+```bash
+cat > ~/.llxprt/sandboxes/beefy.json << 'EOF'
+{
+  "engine": "docker",
+  "resources": { "cpus": 4, "memory": "8g", "pids": 512 },
+  "network": "on",
+  "sshAgent": "auto"
+}
+EOF
 
-What this means:
+llxprt --sandbox-profile-load beefy "run the full test suite"
+```
 
-- refresh tokens stay on the host
-- sandbox receives short-lived access tokens as needed
-- `/auth <provider> login` works from inside sandbox (OAuth handling is host-side)
-- `/key save` and `/key delete` are blocked in sandbox proxy mode
-- `/key load`, `/key list`, and `/key show` can read host-saved keys
+## Credential Proxy (Container Mode)
 
-The socket path is passed through `LLXPRT_CREDENTIAL_SOCKET` automatically.
+In Docker/Podman mode, a host-side credential proxy runs over a Unix socket. The container never sees your stored secrets:
 
-## SSH agent passthrough
+- **Refresh tokens stay on the host** — the container only receives short-lived access tokens
+- **OAuth works from inside the sandbox** — `/auth <provider> login` opens the browser on the host
+- **Key reads work** — `/key load`, `/key list`, and `/key show` read host-saved keys via the proxy
+- **Key writes are blocked** — `/key save` and `/key delete` throw an error in container mode (keys must be managed on the host)
+- **PATs and API keys never enter the container** — the proxy injects authorization headers without exposing the underlying credential
 
-If `sshAgent` is enabled:
+The socket path is set automatically via `LLXPRT_CREDENTIAL_SOCKET`.
 
-1. `SSH_AUTH_SOCK` is detected on host
-2. socket is mounted into container
-3. container process gets `SSH_AUTH_SOCK=/ssh-agent`
+> **Note:** Seatbelt mode runs on the host directly, so there is no credential proxy — it uses your normal keyring and token store.
 
-### macOS Podman caveats
+## SSH Agent Forwarding
 
-Podman on macOS runs in a VM. llxprt sets up an SSH tunnel bridge, but:
+When `sshAgent` is `auto` or `on` and `SSH_AUTH_SOCK` is set on the host:
 
-- launchd socket paths under `/private/tmp/com.apple.launchd.*` are often problematic
-- `--network=host` is required for the bridge
-- if a conflicting `--network` value is already set (for example `none`), SSH forwarding is skipped or fails
+- **Docker on Linux:** the socket is mounted directly into the container
+- **Docker on macOS:** the socket is mounted directly (Docker Desktop handles forwarding)
+- **Podman on macOS:** LLxprt sets up an SSH tunnel bridge (requires `socat` in the container image and `--network=host`)
 
-Reliable workaround:
+### Podman macOS SSH Workaround
+
+Podman on macOS runs in a VM, so direct socket mounting doesn't work. LLxprt creates an SSH reverse tunnel, but the default macOS launchd socket paths can be problematic. For reliable SSH agent forwarding:
 
 ```bash
 ssh-agent -a ~/.llxprt/ssh-agent.sock
@@ -137,68 +162,52 @@ ssh-add ~/.ssh/id_ed25519
 llxprt --sandbox-engine podman --sandbox-profile-load dev
 ```
 
-## Network modes
+## Git Config in Containers
 
-- `on`: normal networking
-- `off`: container runs with `--network none`
-- `proxied`: accepted value, but currently falls back to default networking with a warning
-
-## Git config mounts
-
-Container sandbox mounts these read-only when present:
+These files are mounted read-only when they exist on the host:
 
 - `~/.gitconfig`
 - `~/.config/git/config`
 - `~/.gitignore_global`
 - `~/.ssh/known_hosts`
 
-`~/.git-credentials` is intentionally not mounted.
+`~/.git-credentials` is intentionally **not** mounted — credential access goes through the proxy.
 
-## macOS Seatbelt mode
+## Advanced
 
-Seatbelt uses `sandbox-exec` and runs directly on host.
-
-Set profile with `SEATBELT_PROFILE`:
-
-- `permissive-open`
-- `permissive-closed`
-- `permissive-proxied`
-- `restrictive-open`
-- `restrictive-closed`
-- `restrictive-proxied`
-
-Seatbelt is useful for lightweight restrictions, but it does not provide container-level credential isolation.
-
-## Advanced environment controls
+### Extra Container Flags
 
 ```bash
-# pass additional runtime flags to docker/podman launch
 export SANDBOX_FLAGS="--security-opt label=disable"
-
-# control Linux UID/GID mapping behavior
-export SANDBOX_SET_UID_GID=true
-# or
-export SANDBOX_SET_UID_GID=false
 ```
 
-## Troubleshooting quick checks
+### UID/GID Mapping (Linux)
 
 ```bash
-# Verify sandbox env
-llxprt --sandbox "run shell command: env | grep -E 'SANDBOX|LLXPRT'"
-
-# Verify credential proxy variable inside sandbox
-llxprt --sandbox 'run shell command: echo $LLXPRT_CREDENTIAL_SOCKET'
-
-# Verify SSH keys inside sandbox
-llxprt --sandbox-profile-load dev "run shell command: ssh-add -l"
+export SANDBOX_SET_UID_GID=true
 ```
 
-For full troubleshooting guidance, see [Troubleshooting](./troubleshooting.md).
+### Override Sandbox Image
 
-## Related docs
+```bash
+export LLXPRT_SANDBOX_IMAGE=my-registry/my-sandbox:latest
+```
 
-- [Sandbox Profiles](./cli/sandbox-profiles.md)
-- [Sandbox Setup Tutorial](./tutorials/sandbox-setup.md)
-- [Authentication](./cli/authentication.md)
-- [Configuration](./cli/configuration.md)
+## Troubleshooting
+
+**Container not starting** — verify Docker or Podman is running: `docker info` or `podman info`.
+
+**Permission errors on mounted files** — on Linux, try `SANDBOX_SET_UID_GID=true` or `SANDBOX_FLAGS="--security-opt label=disable"` for SELinux systems.
+
+**SSH not working in Podman on macOS** — use a stable socket path (see Podman macOS SSH Workaround above). The default launchd socket paths are unreliable.
+
+**"socat not found" error** — the sandbox container image needs `socat` for SSH agent and credential proxy tunneling. Use the official sandbox image.
+
+**Network access denied** — check your profile's `network` setting. `off` means `--network none`.
+
+## Related
+
+- [Sandbox Profiles](./cli/sandbox-profiles.md) — full profile reference
+- [Sandbox Setup Tutorial](./tutorials/sandbox-setup.md) — step-by-step walkthrough
+- [Authentication](./cli/authentication.md) — credential setup
+- [Profiles](./cli/profiles.md) — model and load balancer profiles (separate from sandbox profiles)

@@ -1,411 +1,124 @@
-# Prompt Configuration System
+# Prompt Configuration
 
-LLxprt Code uses a flexible and customizable prompt configuration system that allows you to tailor the AI's behavior for different providers, models, and environments. This guide explains how to configure and customize prompts.
+LLxprt Code builds its system prompt from markdown files organized in a hierarchy. You can customize any part by placing override files in `~/.llxprt/prompts/`.
 
-## Overview
+## How It Works
 
-The prompt configuration system provides:
+The system prompt is assembled from three types of files:
 
-- **Provider-specific prompts**: Different instructions for Gemini, OpenAI, Anthropic, etc.
-- **Model-specific adaptations**: Special handling for models like Flash that need explicit tool usage reminders
-- **Environment awareness**: Automatic adaptation based on Git repositories, sandboxes, and IDE integration
-- **Tool-specific instructions**: Detailed guidance for each available tool
-- **User customization**: Override any prompt with your own versions
+- **Core** (`core.md`) — the main system prompt with personality, mandates, and workflows
+- **Environment** (`env/*.md`) — context-specific sections (git repo, sandbox, IDE, etc.)
+- **Tool** (`tools/*.md`) — per-tool instructions appended to the system prompt
 
-## Default Prompt Location
-
-LLxprt Code looks for prompts in the following location:
+Files are resolved hierarchically — model-specific overrides beat provider-specific, which beat base defaults:
 
 ```
-~/.llxprt/prompts/
+providers/<provider>/models/<model>/core.md   ← most specific
+providers/<provider>/core.md                  ← provider level
+core.md                                       ← base default
 ```
 
-If custom prompts are not found, the system uses built-in defaults that are optimized for each provider and model.
+The same hierarchy applies to `env/` and `tools/` subdirectories.
 
 ## Directory Structure
 
-The prompt configuration follows a hierarchical structure:
-
 ```
 ~/.llxprt/prompts/
-├── core.md                          # Main system prompt
-├── compression.md                   # Instructions for context compression
-├── providers/
-│   ├── gemini/
-│   │   ├── core.md                 # Gemini-specific overrides
-│   │   └── models/
-│   │       └── gemini-2.5-flash/
-│   │           └── core.md         # Flash-specific instructions
-│   ├── openai/
-│   │   └── core.md                 # OpenAI-specific overrides
-│   └── anthropic/
-│       └── core.md                 # Anthropic-specific overrides
+├── core.md                              # Override the main system prompt
+├── compression.md                       # Override compression instructions
 ├── env/
-│   ├── git-repository.md           # Added when in a Git repo
-│   ├── sandbox.md                  # Added when sandboxed
-│   ├── macos-seatbelt.md          # macOS sandbox specifics
-│   └── ide-mode.md                # IDE integration context
+│   ├── git-repository.md               # Added when in a Git repo
+│   ├── sandbox.md                      # Added when sandboxed (container)
+│   ├── macos-seatbelt.md              # Added when using macOS seatbelt
+│   ├── outside-of-sandbox.md          # Added when NOT sandboxed
+│   └── ide-mode.md                    # Added when IDE companion is connected
 ├── tools/
-│   ├── edit.md                    # Edit tool instructions
-│   ├── shell.md                   # Shell command guidance
-│   ├── web-fetch.md              # Web fetching rules
-│   └── ...                       # Other tool-specific prompts
-└── services/
-    ├── loop-detection.md         # Loop detection warnings
-    └── init-command.md          # Init command prompts
-
+│   ├── shell.md                       # Override shell tool instructions
+│   ├── edit.md                        # Override edit tool instructions
+│   └── ...                            # Any tool name in kebab-case
+├── providers/
+│   └── gemini/
+│       ├── core.md                    # Gemini-specific core override
+│       └── models/
+│           └── gemini-2-5-flash/
+│               └── core.md           # Flash-specific override
+└── subagent-delegation.md             # Subagent delegation directives
 ```
 
-## Prompt Resolution Order
+If a file doesn't exist in your `~/.llxprt/prompts/` directory, the built-in default is used. You only need to create files for things you want to change.
 
-Prompts are resolved in the following order (later overrides earlier):
+## Tool Prompts
 
-1. **Built-in defaults**: Core prompts shipped with LLxprt Code
-2. **Provider defaults**: Provider-specific adaptations
-3. **Model defaults**: Model-specific refinements
-4. **User customizations**: Your custom prompts in `~/.llxprt/prompts/`
+Tool-specific prompt files are **off by default** to reduce system prompt size (which improves prompt caching). Enable them:
+
+```
+/set enable-tool-prompts true
+```
+
+When enabled, each tool gets its instructions appended from `tools/<tool-name>.md`. This is useful for local models that need more explicit guidance about how to use tools.
+
+## Subagent Delegation
+
+When subagents are available (the `task` and `list_subagents` tools are enabled), a delegation directive is automatically injected from `subagent-delegation.md`. This tells the model when and how to delegate work to subagents.
+
+Async subagent guidance is additionally injected when both global and profile async settings are enabled.
 
 ## Template Variables
 
-Prompts support template variables that are automatically replaced:
-
-- `{{enabledTools}}`: List of available tools
-- `{{environment}}`: Current environment details (see below)
-- `{{provider}}`: Active provider name
-- `{{model}}`: Current model name
-
-### `{{environment}}` fields
-
-The environment object exposes the same properties as `PromptEnvironment` in code. Common fields include:
-
-| Field                  | Description                                              |
-| ---------------------- | -------------------------------------------------------- |
-| `workspaceName`        | Basename of the current workspace directory              |
-| `workspaceRoot`        | Absolute path to the workspace root                      |
-| `workspaceDirectories` | Array of directories included in the session             |
-| `workingDirectory`     | The cwd the CLI started in                               |
-| `isGitRepository`      | `true` if git metadata was detected                      |
-| `isSandboxed`          | `true` when running inside Docker/Seatbelt/etc.          |
-| `sandboxType`          | `macos-seatbelt`, `generic`, or omitted                  |
-| `hasIdeCompanion`      | Indicates VS Code integration status                     |
-| `folderStructure`      | A summarized folder tree (may be omitted if unavailable) |
-
-Use these fields in custom prompts, e.g., `{{environment.workspaceName}}`.
-
-### Example Template Usage
-
-```markdown
-You have access to these tools: {{enabledTools}}
-
-Current environment:
-{{environment}}
-
-You are running on {{provider}} with model {{model}}.
-```
-
-## Customizing Prompts
-
-### Method 1: Manual Creation
-
-Create your custom prompts in the `~/.llxprt/prompts/` directory:
-
-```bash
-# Create the prompts directory
-mkdir -p ~/.llxprt/prompts
-
-# Create a custom core prompt
-cat > ~/.llxprt/prompts/core.md << 'EOF'
-You are a helpful AI assistant specializing in Python development.
-Always write clean, well-documented Python code following PEP 8.
-
-{{enabledTools}}
-EOF
-```
-
-### Method 2: Using the Installer
-
-The prompt configuration system includes an installer that can set up the default structure:
-
-```bash
-# Install default prompts (coming soon)
-llxprt prompts install
-
-# Install with custom overrides (coming soon)
-llxprt prompts install --custom
-```
-
-## Environment-Specific Prompts
-
-The system automatically includes environment-specific prompts based on your context:
-
-### Git Repository Context
-
-When working in a Git repository, the system includes `env/git-repository.md`:
-
-```markdown
-## Git Repository Guidelines
-
-You are in a Git repository. Please:
-
-- Respect .gitignore patterns
-- Be aware of branch protection rules
-- Use conventional commit messages
-```
-
-### Sandbox Context
-
-When running in sandbox mode, additional safety instructions are included from `env/sandbox.md`.
-
-### IDE Integration
-
-When IDE mode is active, context about open files and cursor position is included from `env/ide-mode.md`.
-
-## Provider-Specific Customization
-
-### Gemini Flash Models
-
-Flash models require explicit reminders about tool usage. Create a custom prompt:
-
-```bash
-mkdir -p ~/.llxprt/prompts/providers/gemini/models/gemini-2.5-flash/
-cat > ~/.llxprt/prompts/providers/gemini/models/gemini-2.5-flash/core.md << 'EOF'
-IMPORTANT: You MUST use the provided tools when appropriate.
-Do not try to simulate or pretend tool functionality.
-Always use the actual tools for:
-- Reading files: Use read_file tool
-- Listing directories: Use list_directory tool
-- Running commands: Use run_shell_command tool
-EOF
-```
-
-### OpenAI Models
-
-Customize behavior for OpenAI models:
-
-```bash
-mkdir -p ~/.llxprt/prompts/providers/openai/
-cat > ~/.llxprt/prompts/providers/openai/core.md << 'EOF'
-You are powered by OpenAI. Optimize responses for efficiency
-and clarity. Use parallel tool calls when possible.
-EOF
-```
-
-## Tool-Specific Instructions
-
-Customize instructions for individual tools:
-
-### Shell Command Tool
-
-```bash
-cat > ~/.llxprt/prompts/tools/shell.md << 'EOF'
-When using shell commands:
-- Always use absolute paths
-- Check command existence with 'which' first
-- Prefer non-interactive commands
-- Explain any complex commands before running
-EOF
-```
-
-### Edit Tool
-
-```bash
-cat > ~/.llxprt/prompts/tools/edit.md << 'EOF'
-When editing files:
-- Preserve existing code style
-- Make minimal necessary changes
-- Add comments for complex changes
-- Verify file exists before editing
-EOF
-```
-
-## Advanced Configuration
-
-### Compression Prompts
-
-Customize how context compression works:
-
-```bash
-cat > ~/.llxprt/prompts/compression.md << 'EOF'
-When compressing conversation history:
-- Preserve all technical details
-- Keep error messages intact
-- Summarize repetitive content
-- Maintain chronological order
-EOF
-```
-
-### Loop Detection
-
-Customize loop detection warnings:
-
-```bash
-mkdir -p ~/.llxprt/prompts/services/
-cat > ~/.llxprt/prompts/services/loop-detection.md << 'EOF'
-You appear to be in a loop. Please:
-1. Stop and analyze what went wrong
-2. Try a different approach
-3. Ask the user for clarification if needed
-EOF
-```
-
-## Environment Variables
-
-Control prompt behavior with environment variables:
-
-```bash
-# Use a custom prompts directory
-export LLXPRT_PROMPTS_DIR=/path/to/custom/prompts
-
-# Enable debug mode to see prompt resolution
-export DEBUG=true
-```
-
-## Debugging Prompts
-
-To see which prompts are being loaded:
-
-1. Enable debug mode:
-
-   ```bash
-   DEBUG=true llxprt
-   ```
-
-2. Check the prompt resolution in the logs
-
-3. Use the memory command to see the final composed prompt:
-   ```
-   /memory show
-   ```
-
-## Best Practices
-
-1. **Start with defaults**: Only customize what you need to change
-2. **Test incrementally**: Make small changes and test their effect
-3. **Use version control**: Keep your custom prompts in Git
-4. **Document changes**: Add comments explaining why you customized
-5. **Share with team**: Use project-specific prompt directories
-
-## Examples
-
-### Academic Writing Assistant
-
-```bash
-cat > ~/.llxprt/prompts/core.md << 'EOF'
-You are an academic writing assistant. Always:
-- Use formal academic language
-- Cite sources in APA format
-- Maintain objective tone
-- Check facts before stating them
-
-{{enabledTools}}
-EOF
-```
-
-### DevOps Specialist
-
-```bash
-cat > ~/.llxprt/prompts/core.md << 'EOF'
-You are a DevOps specialist. Focus on:
-- Infrastructure as code
-- Container best practices
-- CI/CD optimization
-- Security-first approach
-
-When working with shell commands, prefer:
-- Docker and Kubernetes commands
-- Terraform for infrastructure
-- Ansible for configuration
-
-{{enabledTools}}
-EOF
-```
-
-### Code Reviewer
-
-```bash
-cat > ~/.llxprt/prompts/core.md << 'EOF'
-You are a thorough code reviewer. Always check for:
-- Security vulnerabilities
-- Performance issues
-- Code smells
-- Missing tests
-- Documentation gaps
-
-Provide constructive feedback with examples.
-
-{{enabledTools}}
-EOF
-```
-
-## Troubleshooting
-
-### Prompts Not Loading
-
-1. Check the directory exists:
-
-   ```bash
-   ls -la ~/.llxprt/prompts/
-   ```
-
-2. Verify file permissions:
-
-   ```bash
-   chmod -R 644 ~/.llxprt/prompts/
-   ```
-
-3. Enable debug mode to see loading errors:
-   ```bash
-   DEBUG=true llxprt
-   ```
-
-### Template Variables Not Replaced
-
-Ensure you're using the correct syntax:
-
-- Correct: `{{enabledTools}}`
-- Wrong: `{enabledTools}` or `{{ enabledTools }}`
-
-### Provider-Specific Prompts Not Working
-
-Check the directory structure matches exactly:
-
-```bash
-~/.llxprt/prompts/providers/[provider-name]/core.md
-```
-
-Provider names must be lowercase: `gemini`, `openai`, `anthropic`
-
-## Migration from Hardcoded Prompts
-
-If you were previously modifying LLxprt Code's source code to customize prompts, migrate to the new system:
-
-1. Copy your custom prompts to `~/.llxprt/prompts/`
-2. Remove any source code modifications
-3. Update to the latest LLxprt Code version
-4. Test that your customizations still work
+Prompt files use `{{VARIABLE_NAME}}` syntax. Available variables:
+
+| Variable                      | Description                                            |
+| ----------------------------- | ------------------------------------------------------ |
+| `{{MODEL}}`                   | Current model name                                     |
+| `{{PROVIDER}}`                | Current provider name                                  |
+| `{{PLATFORM}}`                | OS platform (`darwin`, `linux`, `win32`)               |
+| `{{WORKSPACE_NAME}}`          | Basename of the workspace directory                    |
+| `{{WORKSPACE_ROOT}}`          | Absolute path to workspace root                        |
+| `{{WORKSPACE_DIRECTORIES}}`   | Comma-separated list of workspace directories          |
+| `{{WORKING_DIRECTORY}}`       | The cwd the CLI started in                             |
+| `{{IS_GIT_REPO}}`             | `true` or `false`                                      |
+| `{{IS_SANDBOXED}}`            | `true` or `false`                                      |
+| `{{SANDBOX_TYPE}}`            | `macos-seatbelt`, `generic`, or `none`                 |
+| `{{HAS_IDE}}`                 | `true` or `false`                                      |
+| `{{FOLDER_STRUCTURE}}`        | Summarized folder tree (if enabled)                    |
+| `{{SESSION_STARTED_AT}}`      | Timestamp of session start                             |
+| `{{CURRENT_DATE}}`            | Current date                                           |
+| `{{CURRENT_TIME}}`            | Current time                                           |
+| `{{CURRENT_DATETIME}}`        | Current date and time                                  |
+| `{{INTERACTION_MODE}}`        | `interactive`, `non-interactive`, or `subagent`        |
+| `{{INTERACTION_MODE_LABEL}}`  | `an interactive`, `a non-interactive`, or `a subagent` |
+| `{{TOOL_NAME}}`               | Current tool name (in tool prompt files only)          |
+| `{{SUBAGENT_DELEGATION}}`     | Subagent delegation block (auto-populated)             |
+| `{{ASYNC_SUBAGENT_GUIDANCE}}` | Async subagent guidance (auto-populated)               |
+
+## Why Customize Prompts?
+
+The main reason to customize prompts is to **control model behavior for different providers and models**. Some models need different directives — local models often need shorter, more explicit prompts, while larger models benefit from detailed instructions. Provider-specific overrides let you tune this per-model.
+
+Common customizations:
+
+- Shorter core prompts for local models with small context windows
+- Explicit tool-use reminders for models that tend to simulate tool output
+- Project-specific coding conventions injected via core override
+- Different environment instructions for sandboxed vs unsandboxed operation
+
+## Caching Implications
+
+Many providers (Anthropic, Gemini, OpenAI) offer **prefix caching** — if the system prompt is identical across requests, the provider caches the processed prompt and subsequent requests are faster and cheaper. This means anything that changes between requests breaks the cache.
+
+**`{{CURRENT_DATE}}`, `{{CURRENT_TIME}}`, and `{{CURRENT_DATETIME}}` will break prefix caching** because they change every request. If you need a timestamp in your prompt, use `{{SESSION_STARTED_AT}}` instead — it stays constant for the entire session, so the prompt caches properly.
+
+The internal in-memory cache invalidates when prompt files change on disk (via file watcher), but you may need to start a new session for API-level cache benefits to reset cleanly.
+
+## Small / Local Models
+
+If you're running a local model with a constrained context window (e.g., 8K–32K tokens), the default `core.md` may be too large. Create a stripped-down override at `~/.llxprt/prompts/core.md` with just the essentials — shorter instructions, fewer examples, no subagent delegation. Keep `enable-tool-prompts` off (the default) to avoid bloating the prompt further.
 
 ## Contributing Prompt Improvements
 
-If you've created prompts that would benefit others:
+If you find prompt configurations that work better for mainstream models, please open a [discussion](https://github.com/vybestack/llxprt-code/discussions) — we're always trying to optimize the default prompts and community feedback on what works is valuable.
 
-1. Test thoroughly in various scenarios
-2. Document the use case and benefits
-3. Submit a pull request to the LLxprt Code repository
-4. Consider sharing in the community discussions
+## Related
 
-## Future Enhancements
-
-Planned improvements to the prompt system:
-
-- **Prompt marketplace**: Share and download community prompts
-- **Interactive installer**: GUI for prompt customization
-- **A/B testing**: Compare prompt effectiveness
-- **Analytics**: Track which prompts work best
-- **Hot reload**: Change prompts without restarting
-
-## Related Documentation
-
-- [Configuration Guide](./cli/configuration.md) - General LLxprt Code configuration
-- [Memory System](./core/memport.md) - How context and memory work
-- [Provider Guide](./cli/providers.md) - Provider-specific features
-- [Tool Documentation](./tools/index.md) - Available tools and their usage
+- [Configuration](./cli/configuration.md) — general settings
+- [Profiles](./cli/profiles.md) — saving configurations

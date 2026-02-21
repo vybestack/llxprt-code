@@ -1,292 +1,164 @@
-# Authentication Setup
+# Authentication
 
-LLxprt Code supports multiple authentication methods for various AI providers. For Google's AI services, you'll need to configure **one** of the following authentication methods:
+LLxprt Code needs credentials to talk to AI providers. There are three ways to authenticate, and which you should use depends on your situation.
 
-1.  **Login with Google (Gemini Code Assist):**
-    - Use this option to log in with your Google account.
-    - During initial startup, LLxprt Code will direct you to a webpage for authentication. Once authenticated, your credentials will be cached locally so the web login can be skipped on subsequent runs.
-    - Note that the web login must be done in a browser that can communicate with the machine LLxprt Code is being run from. (Specifically, the browser will be redirected to a localhost url that LLxprt Code will be listening on).
-    - <a id="workspace-gca">Users may have to specify a GOOGLE_CLOUD_PROJECT if:</a>
-      1. You have a Google Workspace account. Google Workspace is a paid service for businesses and organizations that provides a suite of productivity tools, including a custom email domain (e.g. your-name@your-company.com), enhanced security features, and administrative controls. These accounts are often managed by an employer or school.
-      1. You have received a Gemini Code Assist license through the [Google Developer Program](https://developers.google.com/program/plans-and-pricing) (including qualified Google Developer Experts)
-      1. You have been assigned a license to a current Gemini Code Assist standard or enterprise subscription.
-      1. You are using the product outside the [supported regions](https://developers.google.com/gemini-code-assist/resources/available-locations) for free individual usage.
-      1. You are a Google account holder under the age of 18
-      - If you fall into one of these categories, you must first configure a Google Cloud Project ID to use, [enable the Gemini for Cloud API](https://cloud.google.com/gemini/docs/discover/set-up-gemini#enable-api) and [configure access permissions](https://cloud.google.com/gemini/docs/discover/set-up-gemini#grant-iam).
+## Which Method Should I Use?
 
-      You can temporarily set the environment variable in your current shell session using the following command:
+| Situation                                  | Method  | Setup                     |
+| ------------------------------------------ | ------- | ------------------------- |
+| You have a ChatGPT Plus/Pro subscription   | OAuth   | `/auth codex enable`      |
+| You have an Anthropic/Google/Qwen account  | OAuth   | `/auth <provider> enable` |
+| You have an API key from any provider      | Keyring | `/key save <name> <key>`  |
+| You're running in CI/headless environments | Keyfile | `--keyfile /path/to/key`  |
 
-      ```bash
-      export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
-      ```
-      - For repeated use, you can add the environment variable to your [.env file](#persisting-environment-variables-with-env-files) or your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following command adds the environment variable to a `~/.bashrc` file:
+**Use OAuth if you can.** It's the easiest setup and you don't manage any secrets. Use the keyring for API keys — it's secure and persistent. Avoid environment variables.
 
-      ```bash
-      echo 'export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"' >> ~/.bashrc
-      source ~/.bashrc
-      ```
+## OAuth (Subscriptions)
 
-2.  **<a id="gemini-api-key"></a>Gemini API key:**
-    - Obtain your API key from Google AI Studio: [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
-    - Set the `GEMINI_API_KEY` environment variable. In the following methods, replace `YOUR_GEMINI_API_KEY` with the API key you obtained from Google AI Studio:
-      - You can temporarily set the environment variable in your current shell session using the following command:
-        ```bash
-        export GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
-        ```
-      - For repeated use, you can add the environment variable to your [.env file](#persisting-environment-variables-with-env-files).
+If you already pay for a subscription to Anthropic, OpenAI (ChatGPT Plus/Pro), Google, or Qwen, OAuth lets you use that subscription directly. No API key needed.
 
-      - Alternatively you can export the API key from your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following command adds the environment variable to a `~/.bashrc` file:
-
-        ```bash
-        echo 'export GEMINI_API_KEY="YOUR_GEMINI_API_KEY"' >> ~/.bashrc
-        source ~/.bashrc
-        ```
-
-        :warning: Be advised that when you export your API key inside your shell configuration file, any other process executed from the shell can read it.
-
-3.  **Vertex AI:**
-    - **API Key:**
-      - Obtain your Google Cloud API key: [Get an API Key](https://cloud.google.com/vertex-ai/generative-ai/docs/start/api-keys?usertype=newuser)
-      - Set the `GOOGLE_API_KEY` environment variable. In the following methods, replace `YOUR_GOOGLE_API_KEY` with your Vertex AI API key:
-        - You can temporarily set the environment variable in your current shell session using the following command:
-          ```bash
-          export GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY"
-          ```
-        - For repeated use, you can add the environment variable to your [.env file](#persisting-environment-variables-with-env-files) or your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following command adds the environment variable to a `~/.bashrc` file:
-
-          ```bash
-          echo 'export GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY"' >> ~/.bashrc
-          source ~/.bashrc
-          ```
-
-          :warning: Be advised that when you export your API key inside your shell configuration file, any other process executed from the shell can read it.
-
-          > **Note:**
-          > If you encounter an error like `"API keys are not supported by this API - Expected OAuth2 access token or other authentication credentials that assert a principal"`, it is likely that your organization has restricted the creation of service account API keys. In this case, please try the [service account JSON key](#service-account-json-key) method described below.
-
-    - **Application Default Credentials (ADC):**
-
-      > **Note:**
-      > If you have previously set the `GOOGLE_API_KEY` or `GEMINI_API_KEY` environment variables, you must unset them to use Application Default Credentials.
-      >
-      > ```bash
-      > unset GOOGLE_API_KEY GEMINI_API_KEY
-      > ```
-      - **Using `gcloud` (for local development):**
-        - Ensure you have a Google Cloud project and have enabled the Vertex AI API.
-        - Log in with your user credentials:
-          ```bash
-          gcloud auth application-default login
-          ```
-          For more information, see [Set up Application Default Credentials for Google Cloud](https://cloud.google.com/docs/authentication/provide-credentials-adc).
-      - **<a id="service-account-json-key"></a>Using a Service Account (for applications or when service account API keys are restricted):**
-        - If you are unable to create an API key due to [organization policies](https://cloud.google.com/vertex-ai/generative-ai/docs/start/api-keys?usertype=existinguser#expandable-2), or if you are running in a non-interactive environment, you can authenticate using a service account key.
-        - [Create a service account and key](https://cloud.google.com/iam/docs/keys-create-delete), and download the JSON key file. The service account will need to be assigned the "Vertex AI User" role.
-        - Set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the absolute path of the JSON file.
-          - You can temporarily set the environment variable in your current shell session:
-            ```bash
-            export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/keyfile.json"
-            ```
-          - For repeated use, you can add the command to your shell's configuration file (e.g., `~/.bashrc`).
-            ```bash
-            echo 'export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/keyfile.json"' >> ~/.bashrc
-            source ~/.bashrc
-            ```
-            :warning: Be advised that when you export service account credentials inside your shell configuration file, any other process executed from the shell can read it.
-
-      - **Required Environment Variables for ADC:**
-        - When using ADC (either with `gcloud` or a service account), you must also set the `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` environment variables. In the following methods, replace `YOUR_PROJECT_ID` and `YOUR_PROJECT_LOCATION` with the relevant values for your project:
-          - You can temporarily set these environment variables in your current shell session using the following commands:
-            ```bash
-            export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
-            export GOOGLE_CLOUD_LOCATION="YOUR_PROJECT_LOCATION" # e.g., us-central1
-            ```
-          - For repeated use, you can add the environment variables to your [.env file](#persisting-environment-variables-with-env-files) or your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following commands add the environment variables to a `~/.bashrc` file:
-            ```bash
-            echo 'export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"' >> ~/.bashrc
-            echo 'export GOOGLE_CLOUD_LOCATION="YOUR_PROJECT_LOCATION"' >> ~/.bashrc
-            source ~/.bashrc
-            ```
-
-4.  **Cloud Shell:**
-    - This option is only available when running in a Google Cloud Shell environment.
-    - It automatically uses the credentials of the logged-in user in the Cloud Shell environment.
-    - This is the default authentication method when running in Cloud Shell and no other method is configured.
-
-          :warning: Be advised that when you export your API key inside your shell configuration file, any other process executed from the shell can read it.
-
-### Persisting Environment Variables with `.env` Files
-
-You can create a **`.gemini/.env`** file in your project directory or in your home directory. Creating a plain **`.env`** file also works, but `.gemini/.env` is recommended to keep Gemini variables isolated from other tools.
-
-**Important:** Some environment variables (like `DEBUG` and `DEBUG_MODE`) are automatically excluded from project `.env` files to prevent interference with llxprt-code behavior. Use `.llxprt/.env` files for llxprt-code specific variables.
-
-LLxprt Code automatically loads environment variables from the **first** `.env` file it finds, using the following search order:
-
-1. Starting in the **current directory** and moving upward toward `/`, for each directory it checks:
-   1. `.gemini/.env`
-   2. `.env`
-2. If no file is found, it falls back to your **home directory**:
-   - `~/.gemini/.env`
-   - `~/.env`
-
-> **Important:** The search stops at the **first** file encountered—variables are **not merged** across multiple files.
-
-#### Examples
-
-**Project-specific overrides** (take precedence when you are inside the project):
-
-```bash
-mkdir -p .gemini
-echo 'GOOGLE_CLOUD_PROJECT="your-project-id"' >> .gemini/.env
+```
+/auth anthropic enable
+/auth codex enable
+/auth gemini enable
+/auth qwen enable
 ```
 
-**User-wide settings** (available in every directory):
+Authentication happens lazily — the browser opens when you make your first request, not when you run the command. Once authenticated, tokens are stored securely and refresh automatically.
+
+If you don't want the browser to open automatically (e.g., you're on a remote machine), use `--nobrowser` or the `auth.noBrowser` setting to get a manual code entry prompt instead:
 
 ```bash
-mkdir -p ~/.gemini
-cat >> ~/.gemini/.env <<'EOF'
-GOOGLE_CLOUD_PROJECT="your-project-id"
-GEMINI_API_KEY="your-gemini-api-key"
-EOF
+llxprt --nobrowser
 ```
 
-## Non-Interactive Mode / Headless Environments
-
-When running LLxprt Code in a non-interactive environment, you cannot use the interactive login flow.
-Instead, you must configure authentication using environment variables.
-
-The CLI will automatically detect if it is running in a non-interactive terminal and will use one of the
-following authentication methods if available:
-
-1.  **Gemini API Key:**
-    - Set the `GEMINI_API_KEY` environment variable.
-    - The CLI will use this key to authenticate with the Gemini API.
-
-2.  **Vertex AI:**
-    - Set the `GOOGLE_GENAI_USE_VERTEXAI=true` environment variable.
-    - **Using an API Key:** Set the `GOOGLE_API_KEY` environment variable.
-    - **Using Application Default Credentials (ADC):**
-      - Run `gcloud auth application-default login` in your environment to configure ADC.
-      - Ensure the `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` environment variables are set.
-
-If none of these environment variables are set in a non-interactive session, the CLI will exit with an error.
-
-## Multi-Provider Authentication
-
-LLxprt Code supports authentication with multiple AI providers beyond Google. Use the `/auth` command to manage OAuth authentication for providers that support it:
-
-- **Anthropic** - OAuth for Claude models
-- **Gemini** - OAuth for Google AI
-- **Codex** - OAuth for ChatGPT Plus/Pro subscribers (use `/auth codex` for OAuth; access GPT-5 without API keys)
-- **Qwen** - OAuth for Alibaba Cloud models
-
-### The `/auth` Command
-
-```bash
-/auth <provider> <action> [bucket-name]
+```
+/set auth.noBrowser true
 ```
 
-**Providers:** `anthropic`, `gemini`, `codex` (OpenAI), `qwen`, and others
+For details on each provider's OAuth flow, see [OAuth Setup](../oauth-setup.md).
 
-**Actions:**
+### Multiple Accounts (Buckets)
 
-- `login [bucket]` - Authenticate with the provider (optionally to a named bucket)
-- `logout [bucket|--all]` - Remove authentication
-- `status` - Show all authenticated buckets and their status
-- `switch <bucket>` - Switch to a different bucket
+If you have more than one account with a provider, "buckets" let you name each OAuth login so you can tell them apart. The name is just a label — most people use the email address of the account:
 
-### OAuth Buckets
-
-OAuth buckets let you manage multiple authentication contexts per provider. This is useful when you have multiple accounts or API credentials for the same provider.
-
-**Creating buckets:**
-
-```bash
-# Default bucket (no name)
-/auth anthropic login
-
-# Named buckets
+```
 /auth anthropic login work@company.com
 /auth anthropic login personal@gmail.com
-
-# OpenAI OAuth for ChatGPT Plus/Pro subscribers
-/auth codex login
-```
-
-**Viewing buckets:**
-
-```bash
 /auth anthropic status
-```
-
-Shows all buckets with their authentication status and token expiry.
-
-**Switching buckets:**
-
-```bash
 /auth anthropic switch work@company.com
 ```
 
-**Logging out:**
+When combined with [profiles](./profiles.md), multiple buckets enable automatic failover — if one account hits rate limits, LLxprt Code switches to the next.
 
-```bash
-# Logout from specific bucket
-/auth anthropic logout work@company.com
+## API Keys (Keyring)
 
-# Logout from all buckets
-/auth anthropic logout --all
+Use `/key save` to store an API key in your OS keyring (macOS Keychain, Windows Credential Manager, or Linux Secret Service). You only do this once — the key persists across sessions.
+
+```
+/key save anthropic sk-ant-***your-key***
+/key save openai sk-***your-key***
+/key save xai xai-***your-key***
 ```
 
-### Using Buckets with Profiles
+Keys are automatically masked when you paste them — the LLM never sees your key.
 
-Buckets are most powerful when combined with profiles. You can save a profile that uses specific buckets:
+Then load a saved key in any session:
 
-```bash
-# Single bucket
-/profile save model work-profile work@company.com
-
-# Multiple buckets (automatic failover on rate limits)
-/profile save model ha-profile bucket1 bucket2 bucket3
+```
+/key load anthropic
 ```
 
-When a profile has multiple buckets, LLxprt Code automatically fails over to the next bucket when encountering rate limits (429) or quota errors (402).
+### CLI Key Flags
 
-For more details, see [Profiles](./profiles.md).
-
-### Viewing Bucket Statistics
+From the command line, prefer `--key-name` to load a saved keyring key — it's the most secure option since the key never appears in your command or shell history:
 
 ```bash
-/stats buckets
+llxprt --provider anthropic --key-name anthropic
+llxprt --provider xai --key-name xai
 ```
 
-Shows request counts and last-used timestamps for all OAuth buckets across providers.
+If you haven't saved a key to the keyring, you can also use:
 
-## API Key Authentication
-
-For providers that use API keys instead of OAuth, you can use environment variables or the `/key` and `/keyfile` commands:
-
-**Environment variables:**
+- `--keyfile /path/to/keyfile` — reads the key from a file (good for CI/headless). The file should contain just the key, nothing else. Set permissions to `600`.
+- `--key <value>` — passes the key inline (least secure — visible in process listings and shell history).
 
 ```bash
-export OPENAI_API_KEY="your-key"
-export ANTHROPIC_API_KEY="your-key"
+# Prefer --key-name when possible
+llxprt --provider anthropic --key-name anthropic
+
+# Use --keyfile for CI or when keyring isn't available
+llxprt --provider anthropic --keyfile /path/to/anthropic.key
+
+# Use --key only when necessary (key is visible in process list)
+llxprt --provider anthropic --key sk-ant-***your-key***
 ```
 
-**In-session commands:**
+### One-Time Key (REPL)
 
-```bash
-/key <api-key>
-/keyfile /path/to/keyfile
+If you just want to try a key without saving it:
+
+```
+/key sk-ant-***your-key***
 ```
 
-These commands set the API key for the current provider. The key is not persisted between sessions unless saved in a profile.
+This sets the key for the current session only.
+
+## How Keys Are Stored
+
+LLxprt Code stores secrets using a two-tier approach:
+
+1. **OS Keyring** (preferred) — Uses your system's native credential store: macOS Keychain, Windows Credential Manager, or Linux Secret Service (via `@napi-rs/keyring`). This is the most secure option.
+
+2. **Encrypted file fallback** — If the keyring is unavailable (e.g., headless Linux without a desktop environment), keys are stored as encrypted `.enc` files in the platform data directory (typically `~/.local/share/llxprt-code/secure-store/` on Linux, `~/Library/Application Support/llxprt-code/secure-store/` on macOS).
+
+You don't need to choose — LLxprt Code tries the keyring first and falls back to encrypted files automatically.
+
+## Why Not Environment Variables?
+
+Environment variables work but have real downsides:
+
+- **Visible to every process** spawned from your shell — any tool, script, or subprocess can read them
+- **Logged in shell history** if you use `export KEY=...`
+- **Leaked in crash reports** and process listings (`ps -e`)
+- **Not scoped** — the key is exposed globally, not just to LLxprt Code
+
+The keyring avoids all of these. If you have existing env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.), they still work — LLxprt Code reads them as a fallback — but `/key save` is the better path.
 
 ## Authentication Priority
 
-When multiple authentication methods are available, LLxprt Code uses this priority:
+When multiple auth methods are configured, LLxprt Code uses this priority (highest first):
 
-1. CLI flags (`--key`, `--keyfile`)
-2. Profile settings (if a profile is loaded)
-3. OAuth tokens (from `/auth login`)
-4. Environment variables
+1. CLI flags (`--key`, `--keyfile`, `--key-name`)
+2. Profile settings (from `/profile save`)
+3. Keyring keys (from `/key save`)
+4. OAuth tokens (from `/auth enable`)
+5. Environment variables
+
+## Checking Auth Status
+
+```
+/auth                      # Show OAuth status for all providers
+/auth anthropic status     # Detailed status for one provider
+/stats buckets             # Request counts and timestamps per OAuth bucket
+```
+
+## Troubleshooting
+
+**"No authentication configured"** — You need to either `/auth <provider> enable` for OAuth, `/key save <name> <key>` for API keys, or set an environment variable.
+
+**OAuth token expired** — Tokens refresh automatically. If refresh fails, run `/auth <provider> logout` then `/auth <provider> enable` again.
+
+**Keyring not available** — On headless Linux, the encrypted file fallback activates automatically. If you see keyring errors, they're informational — your keys are still stored securely.
+
+**Rate limited (429)** — Use `/stats quota` to check usage. Consider setting up multiple OAuth buckets for failover (see [Profiles](./profiles.md)).
+
+## Google Cloud / Vertex AI
+
+If you need to use Vertex AI, Application Default Credentials (ADC), service accounts, or Google Cloud Shell, see [Google Cloud Authentication](./google-cloud-auth.md).
+
+## Related
+
+- [OAuth Setup](../oauth-setup.md) — Detailed OAuth flows for each provider
+- [Providers](./providers.md) — Provider setup and configuration
+- [Profiles](./profiles.md) — Save configurations and multi-account failover

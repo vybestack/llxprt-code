@@ -1,489 +1,273 @@
 # Troubleshooting Guide
 
-This guide provides solutions to common issues and debugging tips.
+## Debugging Tools
+
+LLxprt Code has built-in debugging tools. Start here before digging into logs.
+
+### LLXPRT_DEBUG Environment Variable
+
+Enable debug logging with namespace filtering:
+
+```bash
+# All debug output
+LLXPRT_DEBUG='*' llxprt
+
+# Specific namespaces
+LLXPRT_DEBUG='llxprt:shell' llxprt
+LLXPRT_DEBUG='llxprt:core:*' llxprt
+LLXPRT_DEBUG='llxprt:tools:*,llxprt:shell' llxprt
+```
+
+Available namespaces:
+
+| Namespace                      | What it logs                            |
+| ------------------------------ | --------------------------------------- |
+| `llxprt:shell`                 | Shell command execution                 |
+| `llxprt:scheduler`             | Tool scheduling and dispatch            |
+| `llxprt:core:hooks:*`          | Hook system (planner, registry, runner) |
+| `llxprt:core:hook-triggers:*`  | Model and tool hook triggers            |
+| `llxprt:core:tools:mcp-client` | MCP server communication                |
+| `llxprt:tools:modifiable-tool` | Tool modification/interception          |
+| `*`                            | Everything                              |
+
+You can also use `DEBUG=llxprt:*` (the legacy form still works if the value contains `llxprt` namespaces), but `LLXPRT_DEBUG` is preferred and doesn't conflict with other tools.
+
+Additional environment variables:
+
+| Variable        | Description                               |
+| --------------- | ----------------------------------------- |
+| `DEBUG_LEVEL`   | Log level (e.g., `debug`, `info`, `warn`) |
+| `DEBUG_OUTPUT`  | Output target (e.g., file path)           |
+| `DEBUG_ENABLED` | `true`/`false` to force on/off            |
+
+### /dumpcontext
+
+Dumps the full model context (system prompt, conversation history, tool definitions, context files) to a JSON file so you can inspect exactly what's being sent to the provider:
+
+```
+/dumpcontext          # Show status and dump directory
+/dumpcontext now      # Dump on next request only
+/dumpcontext on       # Dump before every request
+/dumpcontext error    # Dump only when errors occur
+/dumpcontext off      # Stop dumping
+```
+
+Dumps are saved to `~/.llxprt/dumps/` as timestamped JSON files.
+
+### /debug
+
+Control the debug logger at runtime — same namespaces as `LLXPRT_DEBUG` but toggled without restarting:
+
+```
+/debug status                    # Show current debug state
+/debug enable                    # Enable all llxprt:* namespaces
+/debug enable llxprt:shell       # Enable a specific namespace
+/debug disable                   # Disable debug logging
+/debug level debug               # Set log level
+/debug output /tmp/llxprt.log    # Send debug output to a file
+/debug persist                   # Toggle saving debug config across sessions
+```
+
+### /logging
+
+Manages **conversation logging** (recording request/response pairs for later review), not debug logging:
+
+```
+/logging status                     # Show if conversation logging is on
+/logging enable                     # Enable conversation logging
+/logging disable                    # Disable conversation logging
+/logging show [N]                   # Show last N log entries (default 50)
+/logging redaction                  # View redaction settings
+/logging redaction --api-keys=true  # Configure what gets redacted
+```
+
+### /diagnostics
+
+Run system diagnostics to check your environment:
+
+```
+/diagnostics
+```
+
+Reports on Node.js version, installed providers, keyring availability, sandbox readiness, and other environment checks.
 
 ## Authentication
 
-### Understanding Authentication in LLxprt Code
+### Key Storage and the OS Keyring
 
-Authentication in LLxprt Code serves different purposes depending on the provider:
+LLxprt Code stores named keys in the **OS keyring** (macOS Keychain, GNOME Keyring, Windows Credential Manager) via `@napi-rs/keyring`. If the keyring is unavailable, it falls back to encrypted file storage in the OS-standard data directory (via `env-paths`):
 
-**For Gemini Provider:**
+- **macOS:** `~/Library/Application Support/llxprt-code/secure-store/`
+- **Linux:** `~/.local/share/llxprt-code/secure-store/`
+- **Windows:** `%APPDATA%/llxprt-code/secure-store/`
 
-- Authentication options: OAuth, GEMINI_API_KEY, GOOGLE_API_KEY (Vertex AI), or NONE
-- Use `/auth` command to select and store your authentication method in `~/.llxprt/settings.json`
-- OAuth authentication is lazy-loaded (only happens when you first use the Gemini API)
-- Without authentication (NONE), all Gemini operations will fail, including ServerTools (web-search/web-fetch)
-
-**For Other Providers:**
-
-- All non-Gemini providers require API keys
-- No OAuth option available for OpenAI, Anthropic, etc.
-
-### How to Provide API Keys
-
-**Environment Variables:**
+To check which backend is active:
 
 ```bash
-# Less commonly used but supported
-export OPENAI_API_KEY=your-key-here
-export ANTHROPIC_API_KEY=your-key-here
-export GEMINI_API_KEY=your-key-here
+LLXPRT_DEBUG='*' llxprt 2>&1 | grep -i keyring
 ```
 
-**Command Line:**
+Look for `@napi-rs/keyring not loaded — unavailable` in the output — that means it's using the encrypted file fallback.
+
+**Named keys (recommended):**
+
+Save a key from inside a session:
+
+```
+/key save xai-prod your-api-key-value
+```
+
+Then use it at startup:
 
 ```bash
-# Direct key
-llxprt --provider openai --key $YOUR_KEY
-
-# Key from file
-llxprt --provider openai --keyfile ~/.yourkeyfile
+llxprt --provider xai --key-name xai-prod
 ```
 
-**Interactive Mode:**
+**Common keyring issues:**
 
-```text
-/key        # Enter key directly
-/keyfile    # Load key from file
-```
-
-### Gemini-Specific Authentication
-
-Gemini is used in two ways in LLxprt Code:
-
-1. **As the main provider** - when set via `/provider` or used by default
-2. **For ServerTools** - provides web-search and web-fetch capabilities even when using other providers
-
-This means if you're using OpenAI as your main provider but want web search, you'll still need Gemini authentication.
+- **Linux headless/SSH:** No D-Bus session → keyring unavailable → falls back to encrypted files. This is fine — the fallback is secure.
+- **Linux containers:** Same situation. Use `--keyfile` or `--key` if the encrypted fallback doesn't work.
+- **macOS:** Keychain should work out of the box. If not, check `security list-keychains` in Terminal.
 
 ### Common Authentication Errors
 
-- **Error: `Failed to login. Message: Request contains an invalid argument`**
-  - Users with Google Workspace accounts, or users with Google Cloud accounts
-    associated with their Gmail accounts may not be able to activate the free
-    tier of the Google Code Assist plan.
-  - For Google Cloud accounts, you can work around this by setting
-    `GOOGLE_CLOUD_PROJECT` to your project ID.
-  - You can also grab an API key from [AI
-    Studio](https://aistudio.google.com/app/apikey), which also includes a
-    separate free tier.
+**`Failed to login. Message: Request contains an invalid argument`**
 
-- **Error: API key not found**
-  - If you specify `--key` without providing a value, or if the environment variable is empty
-  - Solution: Ensure your API key is properly set in the environment or provided via command line
+Google Workspace or Google Cloud accounts may not qualify for the free Gemini API tier. Workarounds:
 
-- **Error: Invalid API key**
-  - The provided API key is malformed or revoked
-  - Solution: Check your API key in the provider's dashboard and ensure it's active
+- Set `GOOGLE_CLOUD_PROJECT` to your project ID
+- Get an API key from [AI Studio](https://aistudio.google.com/app/apikey)
 
-- **Error: `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` or `unable to get local issuer certificate`**
-  - **Cause:** You may be on a corporate network with a firewall that intercepts and inspects SSL/TLS traffic. This often requires a custom root CA certificate to be trusted by Node.js.
-  - **Solution:** Set the `NODE_EXTRA_CA_CERTS` environment variable to the absolute path of your corporate root CA certificate file.
-    - Example: `export NODE_EXTRA_CA_CERTS=/path/to/your/corporate-ca.crt`
+**`API key not found` / `Invalid API key`**
 
-## Frequently asked questions (FAQs)
+Your key is missing or revoked. Check:
 
-- **Q: How do I update LLxprt Code to the latest version?**
-  - A: If installed globally via npm, update LLxprt Code using the command `npm install -g @vybestack/llxprt-code@latest`. If run from source, pull the latest changes from the repository and rebuild using `npm run build`.
+1. The key is set: `llxprt --provider xai --key-name xai-prod` (does it prompt?)
+2. The key works: test it with curl against the provider API
+3. The provider dashboard shows the key as active
 
-- **Q: Where are LLxprt Code configuration files stored?**
-  - A: The CLI configuration is stored within two `settings.json` files: one in your home directory and one in your project's root directory. In both locations, `settings.json` is found in the `.llxprt/` folder. Refer to [CLI Configuration](./cli/configuration.md) for more details.
+**`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`**
 
-- **Q: Why don't I see cached token counts in my stats output?**
-  - A: Cached token information is only displayed when cached tokens are being used. This feature is available for API key users (Gemini API key or Vertex AI) but not for OAuth users (Google Personal/Enterprise accounts) at this time, as the Code Assist API does not support cached content creation. You can still view your total token usage with the `/stats` command.
+You're behind a corporate proxy that intercepts TLS. Set:
 
-## Streaming / Retry issues
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/your/corporate-ca.crt
+```
 
-- **Message:** `stream interrupted, retrying` (sometimes followed by `attempt 2/6`)
-  - **Cause:** LLxprt detected a transient network problem (SSE disconnect, socket hang-up, etc.) and automatically queued a retry using the global `retries`/`retrywait` settings.
-  - **Resolution:** Normally no action is required; the CLI will retry up to six times with exponential backoff. If you consistently hit this message, consider increasing `/set retrywait <ms>` or `/set retries <n>`, or inspect local proxies/firewalls.
+### OAuth Troubleshooting
 
-- **Error:** `Request would exceed the <limit> token context window even after compression (… including system prompt and a <completion> token completion budget).`
-  - **Cause:** After PR #315, system prompts and the contents of your loaded `LLXPRT.md` files are counted in `context-limit`. Even after compression there isn’t enough room for the pending turn plus the reserved completion budget.
-  - **Resolution:** Shorten or remove entries from your `LLXPRT.md`, run `/compress`, lower `/set maxOutputTokens <n>` (or provider-specific `max_tokens`), or temporarily disable large memories before trying again.
+OAuth tokens are stored in the OS keyring (same as named keys). If authentication fails:
+
+1. Try logging out and re-authenticating: `/auth gemini logout` then `/auth gemini enable`
+2. If on a headless machine, use `--nobrowser` for manual code entry
+3. Check `LLXPRT_DEBUG='*'` output for token refresh errors
+
+See [OAuth Setup](./oauth-setup.md) for detailed OAuth configuration.
+
+## Streaming and Retry Issues
+
+**`stream interrupted, retrying` (attempt 2/6)**
+
+LLxprt detected a transient network issue and is retrying automatically with exponential backoff. Usually no action needed. If persistent:
+
+- Check your network connection
+- Look for local proxy/firewall interference
+- Increase retry settings: `/set retrywait 5000`
+
+**`Request would exceed the <limit> token context window even after compression`**
+
+The conversation plus system prompt exceeds the model's context limit. Solutions:
+
+- Run `/compress` to compress history
+- Shorten your LLXPRT.md files
+- Lower max output tokens: `/set modelparam max_tokens 4096`
+- Start fresh: `/clear`
 
 ## PowerShell @ Symbol Issues
 
-### Problem
-
-When using LLxprt Code in PowerShell, typing the `@` symbol to reference files (e.g., `@example.txt`) causes severe input lag and performance issues.
-
-### Cause
-
-PowerShell's IntelliSense treats `@` as the start of a hashtable literal, triggering tab completion and causing the terminal to freeze or lag significantly. This is a known issue with PowerShell that affects any CLI tool using `@` for file references.
-
-### Solution
-
-LLxprt Code automatically detects when running in PowerShell and provides an alternative `+` prefix for file references:
+PowerShell's IntelliSense treats `@` as a hashtable literal start, causing lag. LLxprt automatically detects PowerShell and enables `+` as an alternative prefix:
 
 ```powershell
-# Instead of:
-@path/to/file.txt
-
-# Use:
+# Use + instead of @ in PowerShell
 +path/to/file.txt
 ```
 
-Both syntaxes work in PowerShell, but `+` avoids the IntelliSense interference. The CLI will show a helpful tip on first use and update the placeholder text accordingly.
+## Common Error Messages
 
-**Note:** This workaround is only active in PowerShell environments. In other shells (bash, zsh, etc.), continue using the standard `@` prefix.
+**`EADDRINUSE` (MCP server)**
 
-## Common error messages and solutions
+Another process is using that port. Stop it or configure a different port in your MCP server settings.
 
-- **Error: `EADDRINUSE` (Address already in use) when starting an MCP server.**
-  - **Cause:** Another process is already using the port that the MCP server is trying to bind to.
-  - **Solution:**
-    Either stop the other process that is using the port or configure the MCP server to use a different port.
+**`Command not found`**
 
-- **Error: Command not found (when attempting to run LLxprt Code).**
-  - **Cause:** LLxprt Code is not correctly installed or not in your system's PATH.
-  - **Solution:**
-    1.  Ensure LLxprt Code installation was successful.
-    2.  If installed globally, check that your npm global binary directory is in your PATH.
-    3.  If running from source, ensure you are using the correct command to invoke it (e.g., `node packages/cli/dist/index.js ...`).
+LLxprt isn't in your PATH. If installed globally: check `npm root -g`. If from source: use `node packages/cli/dist/index.js`.
 
-- **Error: `MODULE_NOT_FOUND` or import errors.**
-  - **Cause:** Dependencies are not installed correctly, or the project hasn't been built.
-  - **Solution:**
-    1.  Run `npm install` to ensure all dependencies are present.
-    2.  Run `npm run build` to compile the project.
+**`MODULE_NOT_FOUND`**
 
-- **Error: "Operation not permitted", "Permission denied", or similar.**
-  - **Cause:** If sandboxing is enabled, then the application is likely attempting an operation restricted by your sandbox, such as writing outside the project directory or system temp directory.
-  - **Solution:** See [Sandboxing](./cli/configuration.md#sandboxing) for more information, including how to customize your sandbox configuration.
+Run `npm install` then `npm run build`.
 
-- **CLI is not interactive in "CI" environments**
-  - **Issue:** The CLI does not enter interactive mode (no prompt appears) if an environment variable starting with `CI_` (e.g., `CI_TOKEN`) is set. This is because the `is-in-ci` package, used by the underlying UI framework, detects these variables and assumes a non-interactive CI environment.
-  - **Cause:** The `is-in-ci` package checks for the presence of `CI`, `CONTINUOUS_INTEGRATION`, or any environment variable with a `CI_` prefix. When any of these are found, it signals that the environment is non-interactive, which prevents the CLI from starting in its interactive mode.
-  - **Solution:** If the `CI_` prefixed variable is not needed for the CLI to function, you can temporarily unset it for the command. e.g., `env -u CI_TOKEN llxprt`
+**`Operation not permitted`**
 
-- **DEBUG mode not working from project .env file**
-  - **Issue:** Setting `DEBUG=true` in a project's `.env` file doesn't enable debug mode for llxprt.
-  - **Cause:** The `DEBUG` and `DEBUG_MODE` variables are automatically excluded from project `.env` files to prevent interference with llxprt behavior.
-  - **Solution:** Use a `.llxprt/.env` file instead, or configure the `excludedProjectEnvVars` setting in your `settings.json` to exclude fewer variables.
+Sandbox is blocking the operation. See [Sandboxing](./sandbox.md) for how to adjust sandbox profiles.
+
+**CLI not interactive in CI environments**
+
+The `is-in-ci` package detects `CI`, `CONTINUOUS_INTEGRATION`, or any `CI_*` env var and forces non-interactive mode. Workaround: `env -u CI_TOKEN llxprt`
 
 ## Exit Codes
 
-LLxprt Code uses specific exit codes to indicate the reason for termination. This is especially useful for scripting and automation.
-
-| Exit Code | Error Type                 | Description                                                                                         |
-| --------- | -------------------------- | --------------------------------------------------------------------------------------------------- |
-| 41        | `FatalAuthenticationError` | An error occurred during the authentication process.                                                |
-| 42        | `FatalInputError`          | Invalid or missing input was provided to the CLI. (non-interactive mode only)                       |
-| 44        | `FatalSandboxError`        | An error occurred with the sandboxing environment (e.g., Docker, Podman, or Seatbelt).              |
-| 52        | `FatalConfigError`         | A configuration file (`settings.json`) is invalid or contains errors.                               |
-| 53        | `FatalTurnLimitedError`    | The maximum number of conversational turns for the session was reached. (non-interactive mode only) |
+| Exit Code | Error Type                 | Description                              |
+| --------- | -------------------------- | ---------------------------------------- |
+| 41        | `FatalAuthenticationError` | Authentication failed                    |
+| 42        | `FatalInputError`          | Invalid input (non-interactive mode)     |
+| 44        | `FatalSandboxError`        | Sandbox setup failed                     |
+| 52        | `FatalConfigError`         | Invalid settings.json                    |
+| 53        | `FatalTurnLimitedError`    | Max turns reached (non-interactive mode) |
 
 ## Sandbox Issues
 
-### Container Engine Problems
+See [Sandboxing](./sandbox.md) for full sandbox documentation including Docker/Podman setup, credential proxying, SSH agent passthrough, and sandbox profiles.
 
-#### Docker daemon not running
+Quick troubleshooting:
 
-**Symptom:** `Cannot connect to the Docker daemon. Is the docker daemon running?`
+**Docker daemon not running:** Start Docker Desktop (macOS) or `sudo systemctl start docker` (Linux).
 
-**Solutions:**
+**Podman machine not running (macOS):** `podman machine start`. If stuck: `podman machine stop && podman machine rm && podman machine init && podman machine start`.
 
-- **macOS:** Start Docker Desktop
-- **Linux:** Run `sudo systemctl start docker` or `sudo service docker start`
+**Credential proxy not starting:** The proxy needs a working OS keyring. On headless Linux, use `--key` or `--keyfile` instead.
 
-Windows is not currently tested for this sandbox workflow.
-
-#### Podman machine not running (macOS)
-
-**Symptom:** `Error: cannot connect to Podman socket`
-
-**Solution:**
+**SSH agent issues in Podman macOS:** Launchd-managed sockets don't work in the VM. Create a dedicated socket:
 
 ```bash
-podman machine start
-podman machine ls  # Verify it's running
-```
-
-If the machine is stuck:
-
-```bash
-podman machine stop
-podman machine rm
-podman machine init
-podman machine start
-```
-
-#### Image pull failures
-
-**Symptom:** `Sandbox image '<image>' is missing or could not be pulled.`
-
-**Causes and solutions:**
-
-- No network: Check internet connection
-- Registry auth required: `docker login ghcr.io`
-- Rate limited: Wait and retry, or use authenticated pull
-
-### Credential Proxy Errors
-
-#### Failed to start credential proxy
-
-**Symptom:** `Failed to start credential proxy: <error message>`
-
-**Causes:**
-
-The credential proxy requires a working OS keyring. Common issues:
-
-- Linux: `gnome-keyring-daemon` not running or D-Bus unavailable
-- Keyring locked after login
-
-**Solutions:**
-
-```bash
-# Linux: Check keyring status
-gnome-keyring-daemon --check
-
-# Linux: Start keyring if needed
-eval "$(gnome-keyring-daemon -s)"
-export SSH_AUTH_SOCK
-
-# Fallback: Use explicit API key
-llxprt --key $YOUR_API_KEY --sandbox
-```
-
-#### LLXPRT_CREDENTIAL_SOCKET not set
-
-**Symptom:** Inside the sandbox, authentication fails or `/auth` commands do not work.
-
-**Cause:** The credential proxy socket was not properly passed to the container.
-
-**Diagnosis:**
-
-```bash
-# Check if the env var is set inside sandbox (use single quotes)
-llxprt --sandbox 'run shell command: echo $LLXPRT_CREDENTIAL_SOCKET'
-```
-
-If empty, the proxy did not start correctly on the host.
-
-**Solution:** Restart the session. If the problem persists, check host keyring availability.
-
-#### Credential proxy connection lost
-
-**Symptom:** `Credential proxy connection lost. Restart the session.`
-
-**Cause:** The container lost its connection to the host-side credential proxy. This usually happens after:
-
-- Host system sleep/hibernate
-- Container crash
-- Network interface changes
-
-**Solution:** Exit and restart the llxprt session.
-
-#### socat not found (Podman macOS)
-
-**Symptom:** `ERROR: socat not found - credential proxy relay requires socat in the sandbox image`
-
-**Cause:** The sandbox image lacks the `socat` utility needed for credential proxy bridging on Podman macOS.
-
-**Solutions:**
-
-- Update to a newer sandbox image
-- Use Docker Desktop instead of Podman on macOS
-- Build a custom image with `socat` installed
-
-### SSH Agent Passthrough
-
-#### SSH_AUTH_SOCK not set
-
-**Symptom:** `SSH agent requested but SSH_AUTH_SOCK is not set.`
-
-**Solution:**
-
-```bash
-# Start the agent
-eval "$(ssh-agent -s)"
-
-# Add your key
-ssh-add ~/.ssh/id_ed25519
-
-# Verify
-ssh-add -l
-```
-
-#### SSH socket not found
-
-**Symptom:** `SSH_AUTH_SOCK path not found at /path/to/socket`
-
-**Cause:** The SSH agent is not running or the socket path is incorrect.
-
-**Solution:**
-
-```bash
-# Check if agent is running
-ps aux | grep ssh-agent
-
-# Restart the agent
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
-```
-
-#### Podman macOS SSH issues
-
-**Symptom:** Git clone fails with `Permission denied (publickey)` even though keys are loaded.
-
-**Cause:** Podman on macOS runs in a VM. Launchd-managed sockets (paths containing `/private/tmp/com.apple.launchd.*`) are not accessible from the VM.
-
-**Solution:**
-
-Create a dedicated SSH agent socket at a normal filesystem path:
-
-```bash
-# Stop any existing agents
-killall ssh-agent 2>/dev/null
-
-# Start agent with dedicated socket
 ssh-agent -a ~/.llxprt/ssh-agent.sock
 export SSH_AUTH_SOCK=~/.llxprt/ssh-agent.sock
-
-# Add keys
 ssh-add ~/.ssh/id_ed25519
-
-# Test
-ssh-add -l
-
-# Now run llxprt
-llxprt --sandbox-engine podman --sandbox-profile-load dev
+llxprt --sandbox-engine podman
 ```
 
-### Sandbox Profile Issues
-
-#### Profile not found
-
-**Symptom:** `Profile 'custom' not found`
-
-**Solution:**
+**Enable sandbox debug output:**
 
 ```bash
-# Check existing profiles
-ls ~/.llxprt/sandboxes/
-
-# Create the profile if missing
-echo '{"engine":"auto"}' > ~/.llxprt/sandboxes/custom.json
+LLXPRT_DEBUG='*' llxprt --sandbox "your prompt"
 ```
 
-#### Invalid profile JSON
+## FAQs
 
-**Symptom:** `Failed to parse sandbox profile`
+**How do I update LLxprt Code?**
 
-**Solution:** Validate the JSON syntax:
+`npm install -g @vybestack/llxprt-code@latest` (global install) or pull and `npm run build` (from source).
 
-```bash
-# Check syntax
-cat ~/.llxprt/sandboxes/custom.json | jq .
-```
+**Where are config files stored?**
 
-If `jq` reports errors, fix the JSON and try again.
+`~/.llxprt/settings.json` (user) and `.llxprt/settings.json` (project). See [Configuration](./cli/configuration.md).
 
-#### Operation not permitted
+**Why don't I see cached token counts in /stats?**
 
-**Symptom:** `Operation not permitted` when running commands in sandbox
+Cache metrics only appear when the provider supports and reports them. OAuth users may not see cache stats if the backend doesn't support cached content creation.
 
-**Cause:** The operation requires access outside the sandbox boundaries.
+## See Also
 
-**Solutions:**
-
-- Use a less restrictive profile (`dev` instead of `safe`)
-- Add the required path to `mounts` in the profile
-- Disable network restrictions if network access is needed
-
-### Resource Limits
-
-#### Container killed (OOM)
-
-**Symptom:** Container exits unexpectedly, possibly with `OOMKilled` status.
-
-**Cause:** The process exceeded the memory limit in the profile.
-
-**Solution:** Increase the memory limit in your profile:
-
-```json
-{
-  "resources": { "memory": "8g" }
-}
-```
-
-#### Process limit reached
-
-**Symptom:** Commands fail with `fork: Resource temporarily unavailable`
-
-**Cause:** The container hit the process count limit (`pids` in profile).
-
-**Solution:** Increase the process limit:
-
-```json
-{
-  "resources": { "pids": 512 }
-}
-```
-
-### Debugging Sandbox Issues
-
-#### Enable debug output
-
-```bash
-DEBUG=1 llxprt --sandbox "your prompt here"
-```
-
-#### Inspect the sandbox environment
-
-```bash
-# Check sandbox environment variables
-llxprt --sandbox "run shell command: env | grep -E 'LLXPRT|SANDBOX'"
-
-# Check credential proxy socket
-llxprt --sandbox "run shell command: ls -la $LLXPRT_CREDENTIAL_SOCKET"
-
-# Check mounts
-llxprt --sandbox "run shell command: mount | grep workspace"
-
-# Test network access
-llxprt --sandbox "run shell command: curl -I https://example.com 2>&1"
-```
-
-#### Run container manually for debugging
-
-Replace <version> below with the tag shown by the docker images command.
-
-```bash
-# Find the image
-docker images | grep 'vybestack/llxprt-code/sandbox'
-
-# Run interactively (replace <version> with the tag you found above)
-docker run -it --rm \
-  -v $(pwd):/workspace \
-  -v ~/.llxprt:/home/node/.llxprt \
-  ghcr.io/vybestack/llxprt-code/sandbox:<version> \
-  bash
-
-# Inside container, debug
-env | grep LLXPRT
-ls -la /workspace
-```
-
-## Debugging Tips
-
-- **CLI debugging:**
-  - Use the `--verbose` flag (if available) with CLI commands for more detailed output.
-  - Check the CLI logs, often found in a user-specific configuration or cache directory.
-
-- **Core debugging:**
-  - Check the server console output for error messages or stack traces.
-  - Increase log verbosity if configurable.
-  - Use Node.js debugging tools (e.g., `node --inspect`) if you need to step through server-side code.
-
-- **Tool issues:**
-  - If a specific tool is failing, try to isolate the issue by running the simplest possible version of the command or operation the tool performs.
-  - For `run_shell_command`, check that the command works directly in your shell first.
-  - For file system tools, double-check paths and permissions.
-
-- **Pre-flight checks:**
-  - Always run `npm run preflight` before committing code. This can catch many common issues related to formatting, linting, and type errors.
-
-If you encounter an issue not covered here, consider searching the project's issue tracker on GitHub or reporting a new issue with detailed information.
+- [Authentication](./cli/authentication.md) — key management, keyring, OAuth
+- [Sandboxing](./sandbox.md) — container setup, credential proxy, SSH agent
+- [Configuration](./cli/configuration.md) — settings.json reference
+- [Settings and Profiles](./settings-and-profiles.md) — ephemeral settings, profiles

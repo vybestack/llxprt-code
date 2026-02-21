@@ -1,6 +1,6 @@
 # Getting Started with LLxprt Code
 
-Welcome to LLxprt Code! This guide walks you through your first session — from installation to your first AI-assisted coding task.
+This guide walks you through your first session — from installation to your first AI-assisted coding task.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ LLxprt Code works with multiple AI providers. Pick the option that works for you
 
 **Gemini (Google)** — Free tier with generous limits:
 
-```bash
+```
 llxprt
 /auth gemini enable
 /provider gemini
@@ -36,64 +36,93 @@ llxprt
 
 **Qwen (Alibaba)** — Free tier for coding tasks:
 
-```bash
+```
 llxprt
 /auth qwen enable
 /provider qwen
 /model qwen-3-coder
 ```
 
-### Option B: Claude Pro/Max Subscription
+### Option B: Use Your Existing Subscription (OAuth)
 
-If you have a Claude Pro ($20/month) or Claude Max ($100-200/month) subscription, you can use it directly:
+If you already pay for Claude, OpenAI, or Qwen, use your subscription directly — no separate API billing:
 
-```bash
+**Claude Pro/Max** ($20–200/month):
+
+```
 llxprt
 /auth anthropic enable
 /provider anthropic
-/model claude-sonnet-4-5
+/model claude-opus-4-6
 ```
 
-This opens a browser for OAuth authentication with your existing Anthropic account.
+**OpenAI ChatGPT Plus/Pro:**
 
-### Option C: API Keys (Pay-per-token)
+```
+llxprt
+/auth codex enable
+/provider codex
+/model gpt-5.3-codex
+```
 
-For direct API access with pay-as-you-go pricing:
+**Qwen:**
+
+```
+llxprt
+/auth qwen enable
+/provider qwen
+/model qwen-3-coder
+```
+
+Each `/auth` command opens a browser for OAuth with your existing account.
+
+### Option C: API Keys
+
+For direct API access, use `/key save` to store your key in your system keyring. You only need to do this once — afterwards, `/key load` retrieves it without exposing the key in your shell history or to the LLM. Keys are automatically masked when you paste them into the REPL.
 
 **Anthropic:**
 
-```bash
+```
 llxprt
+/key save anthropic sk-ant-***your-key***
 /provider anthropic
-/keyfile ~/.anthropic_key
-/model claude-sonnet-4-5-20250929
+/key load anthropic
+/model claude-opus-4-6
 ```
 
 **OpenAI:**
 
-```bash
+```
 llxprt
+/key save openai sk-***your-key***
 /provider openai
-/keyfile ~/.openai_key
+/key load openai
 /model gpt-5.2
 ```
 
-**Gemini (API Key):**
+**Open-weight models** — providers like Synthetic, Z.ai, Chutes, Kimi.com, and Deepseek.ai give you access to models like DeepSeek, Kimi, Minimax, GLM, and Qwen:
 
-```bash
+**Synthetic:**
+
+```
 llxprt
-/provider gemini
-/keyfile ~/.gemini_key
-/model gemini-3-flash-preview
+/key save synthetic syn-***your-key***
+/provider Synthetic
+/key load synthetic
+/model hf:Qwen/Qwen3-Coder
 ```
 
-**Note:** Store your API key in a file (e.g., `~/.anthropic_key`) with `chmod 600` permissions. The `/keyfile` command loads the key securely without exposing it in shell history.
+**Z.ai:**
 
-Get your API keys from:
+```
+llxprt
+/key save zai zai-***your-key***
+/provider zai
+/key load zai
+/model hf:zai-org/GLM-4.7
+```
 
-- [Anthropic Console](https://console.anthropic.com/)
-- [OpenAI Platform](https://platform.openai.com/api-keys)
-- [Google AI Studio](https://aistudio.google.com/app/apikey)
+After saving a key once, you only need `/key load <name>` in future sessions.
 
 ## Your First Session
 
@@ -118,7 +147,7 @@ The AI analyzes your project files and explains the architecture.
 
 ### 3. Try a File Operation
 
-LLxprt Code can read and modify files with your permission:
+LLxprt Code can read and modify files with your approval:
 
 ```
 > Read the README.md file and suggest improvements
@@ -130,7 +159,7 @@ Or create new files:
 > Create a simple unit test for the main module
 ```
 
-**Note:** LLxprt Code will ask for confirmation before writing files. Review changes before accepting.
+LLxprt Code asks for confirmation before writing files. Review changes before accepting.
 
 ### 4. Debug an Issue
 
@@ -144,7 +173,7 @@ Paste an error message directly:
 
 ### 5. Save Your Configuration
 
-Once you have your provider and model configured how you like, save it as a profile:
+Once you have your provider and model configured, save it as a profile so you don't have to set it up again:
 
 ```
 /profile save model my-setup
@@ -170,8 +199,11 @@ Or set it as your default:
 | `/provider`                  | Switch AI provider              |
 | `/model`                     | Change the AI model             |
 | `/auth <provider> enable`    | Set up OAuth authentication     |
+| `/key save <name> <key>`     | Save an API key to your keyring |
+| `/key load <name>`           | Load a saved API key            |
 | `/profile save model <name>` | Save your current configuration |
 | `/profile load <name>`       | Load a saved profile            |
+| `/stats quota`               | Check your current quota usage  |
 | `/clear`                     | Clear conversation history      |
 | `/quit` or `Ctrl+C`          | Exit LLxprt Code                |
 
@@ -180,18 +212,18 @@ Or set it as your default:
 1. **Be specific** — "Add error handling to the login function in src/auth.js" works better than "improve my code"
 2. **Provide context** — Mention relevant files, error messages, or constraints
 3. **Iterate** — Follow up with clarifications or ask for alternatives
-4. **Use the right model** — Larger models (claude-opus-4-5, gpt-5.2) for complex tasks, faster models (gemini-flash, claude-haiku-4-5) for quick questions
+4. **Use the right model** — Larger models (claude-opus-4-6, gpt-5.3-codex) for complex tasks, faster models (gemini-flash, claude-haiku-4-5) for quick questions
+5. **Think bigger for bigger projects** — This guide gets you started with quick tasks, but for larger projects you should have distinct requirements, planning, and execution phases. Check out the [Beyond Vibe Coding](https://www.youtube.com/@AndrewOliver/podcasts) YouTube series for how to approach real-world autonomous development workflows
 
 ## Security Tip: Sandboxing
 
 When working with code from external sources, enable sandboxing to protect your system:
 
 ```bash
-# Use the safe profile for untrusted code
 llxprt --sandbox-profile-load safe "review this pull request"
 ```
 
-Sandboxing isolates tool execution from your host using Docker or Podman containers. Credentials stay on the host through the credential proxy, and host access is limited to explicit mounts used by sandbox runtime.
+Sandboxing isolates tool execution from your host using Docker or Podman containers. Credentials stay on the host through the credential proxy, and host access is limited to explicit mounts used by the sandbox runtime.
 
 For a full walkthrough, see the [Sandbox Tutorial](./tutorials/sandbox-setup.md).
 
@@ -199,34 +231,34 @@ For a full walkthrough, see the [Sandbox Tutorial](./tutorials/sandbox-setup.md)
 
 Now that you're up and running:
 
-- **[Sandboxing](./sandbox.md)** — Protect your system with container isolation
 - **[Profiles](./cli/profiles.md)** — Save and manage multiple configurations
 - **[Subagents](./subagents.md)** — Create specialized AI assistants for different tasks
 - **[Local Models](./local-models.md)** — Run models locally for complete privacy
-- **[Provider Guide](./cli/providers.md)** — Detailed provider configuration
-- **[Commands Reference](./cli/commands.md)** — Complete command documentation
+- **[Sandboxing](./sandbox.md)** — Protect your system with container isolation
 
 ## Troubleshooting
 
 ### Authentication Issues
 
-```bash
-# Check auth status
+```
 /auth <provider> status
-
-# Re-authenticate
 /auth <provider> logout
 /auth <provider> enable
 ```
 
 ### Model Not Available
 
-```bash
-# List available models for current provider
+```
 /model
-
-# Check current provider
 /provider
+```
+
+### Quota Issues
+
+Check your current usage and limits:
+
+```
+/stats quota
 ```
 
 ### Need More Help?
