@@ -1,40 +1,97 @@
-# Checkpointing
+# Continuation and Checkpointing
 
-The LLxprt Code includes a Checkpointing feature that automatically saves a snapshot of your project's state before any file modifications are made by AI-powered tools. This allows you to safely experiment with and apply code changes, knowing you can instantly revert back to the state before the tool was run.
+LLxprt Code automatically records your sessions so you can resume them later. It also has conversation branching via `/chat` for saving and restoring conversation state within a session.
 
-## How It Works
+## Session Recording and Continue
 
-When you approve a tool that modifies the file system (like `write_file` or `replace`), the CLI automatically creates a "checkpoint." This checkpoint includes:
+Sessions are recorded automatically. No configuration needed. When you quit LLxprt and come back, you can pick up right where you left off.
 
-1.  **A Git Snapshot:** A commit is made in a special, shadow Git repository located in your home directory (`~/.llxprt/history/<project_hash>`). This snapshot captures the complete state of your project files at that moment. It does **not** interfere with your own project's Git repository.
-2.  **Conversation History:** The entire conversation you've had with the agent up to that point is saved.
-3.  **The Tool Call:** The specific tool call that was about to be executed is also stored.
+### Resuming Sessions
 
-If you want to undo the change or simply go back, you can use the `/restore` command. Restoring a checkpoint will:
+**From the CLI:**
 
-- Revert all files in your project to the state captured in the snapshot.
-- Restore the conversation history in the CLI.
-- Re-propose the original tool call, allowing you to run it again, modify it, or simply ignore it.
+```bash
+# Resume the most recent session for this project
+llxprt --continue
 
-All checkpoint data, including the Git snapshot and conversation history, is stored locally on your machine. The Git snapshot is stored in the shadow repository while the conversation history and tool calls are saved in a JSON file in your project's temporary directory, typically located at `~/.llxprt/tmp/<project_hash>/checkpoints`.
+# Resume a specific session by ID or index
+llxprt --continue <session-id>
+llxprt --continue 1            # Most recent
+llxprt --continue 2            # Second most recent
+```
 
-## Enabling the Feature
+The `-C` short flag works too:
 
-The Checkpointing feature is disabled by default. To enable it, you can either use a command-line flag or edit your `settings.json` file.
+```bash
+llxprt -C
+llxprt -C 2
+```
 
-### Using the Command-Line Flag
+**From inside a session:**
 
-You can enable checkpointing for the current session by using the `--checkpointing` flag when starting LLxprt Code:
+```
+/continue                   # Opens the session browser
+/continue latest            # Resume the most recent session
+/continue <session-id>      # Resume a specific session
+```
+
+The `/continue` command with no arguments opens an interactive session browser where you can scroll through previous sessions and pick one to resume. If you have an active conversation, you'll be asked to confirm before replacing it.
+
+> **Note for Gemini CLI users:** LLxprt uses `/continue` and `--continue`, not `/resume` or `--resume`.
+
+### Managing Sessions
+
+```bash
+# List all recorded sessions for the current project
+llxprt --list-sessions
+
+# Delete a session by ID, prefix, or index
+llxprt --delete-session <id>
+llxprt --delete-session 3
+```
+
+### How It Works
+
+Sessions are recorded to `~/.llxprt/sessions/`. Each session file contains the full conversation history — model responses, tool calls and results, and thinking blocks. When you resume, the conversation is replayed into the model's context so it picks up with full awareness of what happened before.
+
+Sessions are per-project. Running `llxprt --continue` in a different directory shows that directory's sessions.
+
+## Conversation Branching with /chat
+
+The `/chat` command lets you save and restore conversation state within a session. This is useful when you want to try different approaches and branch back to a known-good state.
+
+```
+/chat save before-refactor     # Tag the current conversation state
+```
+
+Try something. If it doesn't work out:
+
+```
+/chat resume before-refactor   # Roll back to the tagged state
+```
+
+### Commands
+
+```
+/chat save <tag>               # Save current conversation with a tag
+/chat resume <tag>             # Restore conversation to a tagged state
+/chat list                     # List saved tags
+/chat delete <tag>             # Delete a saved tag
+```
+
+Chat tags are stored locally and persist across restarts. They capture the conversation history at the moment you save — not the file state. If you need file-level undo, use git.
+
+## Checkpointing
+
+Checkpointing saves a snapshot of your project files before `write_file` and `replace` tool calls execute. If an edit goes wrong, you can revert files and conversation to the pre-edit state.
+
+It's disabled by default. Enable it with `--checkpointing`:
 
 ```bash
 llxprt --checkpointing
 ```
 
-### Using the `settings.json` File
-
-To enable checkpointing by default for all sessions, you need to edit your `settings.json` file.
-
-Add the following key to your `settings.json`:
+Or in `~/.llxprt/settings.json`:
 
 ```json
 {
@@ -44,32 +101,15 @@ Add the following key to your `settings.json`:
 }
 ```
 
-## Using the `/restore` Command
+When enabled, LLxprt creates a shadow git snapshot (in `~/.llxprt/history/<project_hash>`, separate from your project's git) each time a `write_file` or `replace` tool is about to run. It also saves the conversation state and tool call details to `~/.llxprt/tmp/<project_hash>/checkpoints/`.
 
-Once enabled, checkpoints are created automatically. To manage them, you use the `/restore` command.
-
-### List Available Checkpoints
-
-To see a list of all saved checkpoints for the current project, simply run:
+The `/restore` command (only available when checkpointing is enabled) lets you roll back:
 
 ```
-/restore
+/restore                    # List available checkpoints
+/restore <checkpoint>       # Restore files and conversation to that point
 ```
 
-The CLI will display a list of available checkpoint files. These file names are typically composed of a timestamp, the name of the file being modified, and the name of the tool that was about to be run (e.g., `2025-06-22T10-00-00_000Z-my-file.txt-write_file`).
+Restoring reverts your project files via the shadow git snapshot, reloads the conversation history, and re-proposes the original tool call so you can retry or skip it.
 
-### Restore a Specific Checkpoint
-
-To restore your project to a specific checkpoint, use the checkpoint file from the list:
-
-```
-/restore <checkpoint_file>
-```
-
-For example:
-
-```
-/restore 2025-06-22T10-00-00_000Z-my-file.txt-write_file
-```
-
-After running the command, your files and conversation will be immediately restored to the state they were in when the checkpoint was created, and the original tool prompt will reappear.
+> **Limitation:** Checkpointing currently only covers `write_file` and `replace` tool calls. Other file-modifying tools (`apply_patch`, `delete_line_range`, `insert_at_line`) are not checkpointed.

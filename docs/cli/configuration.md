@@ -1107,7 +1107,7 @@ The following settings remain at the top level of the `settings.json` file.
     ```
 
 - **`checkpointing`** (object):
-  - **Description:** Configures the checkpointing feature, which allows you to save and restore conversation and file states. See the [Checkpointing documentation](../checkpointing.md) for more details.
+  - **Description:** Configures the checkpointing feature, which allows you to save and restore conversation and file states. See the [Continuation and Checkpointing documentation](../checkpointing.md) for more details.
   - **Default:** `{"enabled": false}`
   - **Properties:**
     - **`enabled`** (boolean): When `true`, the `/restore` command is available.
@@ -1594,7 +1594,7 @@ Arguments passed directly when running the CLI can override other configurations
 - **`--telemetry-log-prompts`**:
   - Enables logging of prompts for telemetry. See [telemetry](./telemetry.md) for more information.
 - **`--checkpointing`**:
-  - Enables [checkpointing](../checkpointing.md).
+  - Enables [checkpointing](../checkpointing.md). See [Continuation and Checkpointing](../checkpointing.md).
 - **`--extensions <extension_name ...>`** (**`-e <extension_name ...>`**):
   - Specifies a list of extensions to use for the session. If not provided, all available extensions are used.
   - Use the special term `llxprt -e none` to disable all extensions.
