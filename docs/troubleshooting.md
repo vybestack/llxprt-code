@@ -111,11 +111,15 @@ Look for `@napi-rs/keyring not loaded — unavailable` in the output — that me
 
 **Named keys (recommended):**
 
-```bash
-# Save a key to the keyring
-llxprt --provider xai --key-name xai-prod
+Save a key from inside a session:
 
-# Use it
+```
+/key save xai-prod your-api-key-value
+```
+
+Then use it at startup:
+
+```bash
 llxprt --provider xai --key-name xai-prod
 ```
 
@@ -154,7 +158,7 @@ export NODE_EXTRA_CA_CERTS=/path/to/your/corporate-ca.crt
 
 OAuth tokens are stored in the OS keyring (same as named keys). If authentication fails:
 
-1. Try logging out and re-authenticating: `/logout gemini` then `/auth`
+1. Try logging out and re-authenticating: `/auth gemini logout` then `/auth gemini enable`
 2. If on a headless machine, use `--nobrowser` for manual code entry
 3. Check `LLXPRT_DEBUG='*'` output for token refresh errors
 

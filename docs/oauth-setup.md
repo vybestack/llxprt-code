@@ -86,10 +86,11 @@ When multiple credentials exist, LLxprt uses the highest-priority one:
 
 1. **CLI flags** — `--key`, `--keyfile`, `--key-name`
 2. **Profile / settings** — values from `/profile save` or `settings.json`
-3. **Environment variables** — `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.
-4. **OAuth tokens** — from keyring
+3. **Keyring keys** — from `/key save`
+4. **Environment variables** — `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.
+5. **OAuth tokens** — from `/auth enable`
 
-If you have an API key set and OAuth enabled, the API key wins. Remove the API key (or unset the env var) to use OAuth.
+If you have an API key or env var set and OAuth enabled, the key wins. Remove the key (or unset the env var) to use OAuth.
 
 ## Managing OAuth
 
@@ -101,7 +102,7 @@ If you have an API key set and OAuth enabled, the API key wins. Remove the API k
 /auth <provider> login        # Log in (default bucket)
 /auth <provider> login <name> # Log in with named bucket
 /auth <provider> logout       # Log out (default bucket)
-/auth <provider> logout --all # Log out all buckets
+/auth <provider> logout all   # Log out all buckets
 ```
 
 ## Troubleshooting

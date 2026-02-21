@@ -1,4 +1,4 @@
-eem # LLxprt Code
+# LLxprt Code
 
 LLxprt Code is an autonomous AI coding CLI that supports multi-pass development workflows. It works with any major LLM provider — Anthropic, OpenAI, Google Gemini, or local models — using your own subscriptions. No telemetry, no lock-in, fully open source under Apache 2.0.
 

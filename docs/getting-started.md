@@ -60,7 +60,7 @@ llxprt
 
 ```
 llxprt
-/auth openai enable
+/auth codex enable
 /provider codex
 /model gpt-5.3-codex
 ```

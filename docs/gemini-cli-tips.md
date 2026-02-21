@@ -17,11 +17,15 @@ Gemini CLI uses environment variables (`GEMINI_API_KEY`) or OAuth for Google onl
 
 **Why keyring over env vars?** Environment variables can leak through process listings (`ps`), child process inheritance, shell history, and CI logs. The OS keyring is encrypted at rest and requires authentication to access.
 
-```bash
-# Store a key securely in the OS keyring
-llxprt --provider xai --key-name xai-prod --key xai-key-value-here
+Save a key to the OS keyring from inside a session:
 
-# Use it — key never appears in shell history after initial storage
+```
+/key save xai-prod your-api-key-value
+```
+
+Then use it in future sessions — the key never appears in shell history:
+
+```bash
 llxprt --provider xai --key-name xai-prod
 ```
 
@@ -31,11 +35,14 @@ Or use a keyfile for CI/automation:
 llxprt --provider xai --keyfile ~/.llxprt/keys/.xai_key
 ```
 
-For OAuth providers (Gemini, Anthropic, Codex, Qwen), just run:
+For OAuth providers (Gemini, Anthropic, Codex, Qwen), enable them:
 
 ```
-/auth
+/auth gemini enable
+/auth anthropic enable
 ```
+
+Authentication opens a browser automatically when you make your first request.
 
 See [Authentication](./cli/authentication.md) for full details.
 

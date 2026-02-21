@@ -130,15 +130,15 @@ These prevent a single tool call from flooding the context. This matters more th
 
 ### Timeouts
 
-| Setting                    | Description                        | Default          |
-| -------------------------- | ---------------------------------- | ---------------- |
-| `shell_default_timeout_ms` | Default shell command timeout      | `60000` (1 min)  |
-| `shell_max_timeout_ms`     | Maximum shell command timeout      | `300000` (5 min) |
-| `task_default_timeout_ms`  | Default subagent task timeout      | `60000` (1 min)  |
-| `task_max_timeout_ms`      | Maximum subagent task timeout      | `300000` (5 min) |
-| `socket-timeout`           | HTTP request timeout for API calls | `60000` (1 min)  |
+| Setting                         | Description                             | Default         |
+| ------------------------------- | --------------------------------------- | --------------- |
+| `shell-default-timeout-seconds` | Default shell command timeout           | `300` (5 min)   |
+| `shell-max-timeout-seconds`     | Maximum shell command timeout           | `900` (15 min)  |
+| `task-default-timeout-seconds`  | Default subagent task timeout           | `900` (15 min)  |
+| `task-max-timeout-seconds`      | Maximum subagent task timeout           | `1800` (30 min) |
+| `socket-timeout`                | HTTP request timeout for API calls (ms) | —               |
 
-Some models will kick off commands that wait for user interaction (like an interactive installer or a server that doesn't exit) and then hang indefinitely. The timeouts prevent this from blocking your session forever. If you're running long builds or test suites, increase `shell_max_timeout_ms`. For subagent-heavy workflows, increase `task_max_timeout_ms`.
+Some models will kick off commands that wait for user interaction (like an interactive installer or a server that doesn't exit) and then hang indefinitely. The timeouts prevent this from blocking your session forever. If you're running long builds or test suites, increase `shell-max-timeout-seconds`. For subagent-heavy workflows, increase `task-max-timeout-seconds`.
 
 ### Prompt and Caching
 
@@ -221,7 +221,7 @@ Good model ergonomics require tuning to a model's specific strengths and weaknes
 
 **Models that bite off more than they can chew:** some models will try to read entire directories, run massive greps, or generate very long responses that flood the context. Lower `tool-output-max-tokens` and `tool-output-max-items` to force them to be more targeted. You can also lower `maxOutputTokens` to keep individual responses shorter.
 
-**Models that hang:** some models kick off interactive commands, start servers, or run things that wait for input and never return. Tighter `shell_default_timeout_ms` helps. If you're using a model prone to this, keep the default timeout short and only bump `shell_max_timeout_ms` for when you explicitly need long-running commands.
+**Models that hang:** some models kick off interactive commands, start servers, or run things that wait for input and never return. Tighter `shell-default-timeout-seconds` helps. If you're using a model prone to this, keep the default timeout short and only bump `shell-max-timeout-seconds` for when you explicitly need long-running commands.
 
 **Compression frequency:** if you notice the model losing track of what it's done or repeating work, it's probably compressing too often. Either increase `context-limit` (if the model supports it), lower tool output limits so less junk enters the context, or set `compression-threshold` higher so compression kicks in later. If the model has a small context window, leaner tool output is usually better than pushing the limits.
 
@@ -230,7 +230,7 @@ Good model ergonomics require tuning to a model's specific strengths and weaknes
 ```
 /set tool-output-max-items 30
 /set tool-output-max-tokens 30000
-/set shell_default_timeout_ms 30000
+/set shell-default-timeout-seconds 120
 /profile save kimi-k2-tuned
 ```
 

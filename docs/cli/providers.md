@@ -182,7 +182,7 @@ Fields:
 ### Rate Limiting and Quotas
 
 - Use `/stats quota` to check your current usage
-- Consider switching providers or setting up [multi-account failover](./ tos.md) if you hit limits frequently
+- Consider switching providers or setting up [multi-account failover](./profiles.md) if you hit limits frequently
 
 ## Related
 
