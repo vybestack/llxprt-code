@@ -89,4 +89,4 @@ LLxprt Code ships with built-in tools for file editing, shell commands, web sear
 
 LLxprt Code is open source and community-driven. See the **[Contributing Guide](../CONTRIBUTING.md)** to get started.
 
-For deeper dives into internals, see [Architecture](./architecture.md) and [Tools API](./core/tools-api.md).
+For deeper dives into internals, see the [Tools API](./core/tools-api.md).
