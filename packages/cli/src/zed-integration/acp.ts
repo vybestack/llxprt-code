@@ -167,7 +167,12 @@ class Connection {
     this.#handler = handler;
     this.#peerInput = peerInput;
     this.#textEncoder = new TextEncoder();
-    this.#receive(peerOutput);
+    this.#receive(peerOutput).catch((error) => {
+      acpLogger.debug(
+        () =>
+          `Receive loop error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
   }
 
   async #receive(output: ReadableStream<Uint8Array>) {
@@ -179,13 +184,33 @@ class Connection {
       content += decoder.decode(chunk, { stream: true });
       const lines = content.split('\n');
       content = lines.pop() || '';
-
       for (const line of lines) {
         const trimmedLine = line.trim();
 
         if (trimmedLine) {
-          const message = JSON.parse(trimmedLine);
-          this.#processMessage(message);
+          let message: AnyMessage;
+          try {
+            const parsed: unknown = JSON.parse(trimmedLine);
+            if (typeof parsed !== 'object' || parsed === null) {
+              acpLogger.debug(
+                () => `Received non-object JSON, ignoring: ${trimmedLine}`,
+              );
+              continue;
+            }
+            message = parsed as AnyMessage;
+          } catch (error) {
+            acpLogger.debug(
+              () =>
+                `Error parsing message: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            continue;
+          }
+          this.#processMessage(message).catch((error) => {
+            acpLogger.debug(
+              () =>
+                `Error processing message: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
         }
       }
     }
