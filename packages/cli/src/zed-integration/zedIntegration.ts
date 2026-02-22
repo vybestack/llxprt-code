@@ -33,7 +33,6 @@ import {
   type FilterFilesOptions,
   ReadManyFilesTool,
   type ToolConfirmationPayload,
-  writeToStdout,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -41,6 +40,7 @@ import { Readable } from 'node:stream';
 import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
 import { LoadedSettings } from '../config/settings.js';
 import * as fs from 'fs/promises';
+import { writeSync } from 'node:fs';
 import * as path from 'path';
 import { z } from 'zod';
 import os from 'os';
@@ -83,12 +83,7 @@ export async function runZedIntegration(
 
   const stdout = new WritableStream<Uint8Array>({
     write(chunk) {
-      return new Promise<void>((resolve, reject) => {
-        writeToStdout(Buffer.from(chunk), undefined, (err?: Error | null) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      writeSync(1, chunk);
     },
   });
 
