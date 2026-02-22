@@ -47,7 +47,11 @@ If you have more than one account with a provider, "buckets" let you name each O
 /auth anthropic login personal@gmail.com
 /auth anthropic status
 /auth anthropic switch work@company.com
+/auth anthropic logout work@company.com
+/auth anthropic logout --all
 ```
+
+Use `switch` to change which bucket is active for the current session. Use `logout` with a bucket name to remove a specific account, or `--all` to remove all buckets for that provider.
 
 When combined with [profiles](./profiles.md), multiple buckets enable automatic failover — if one account hits rate limits, LLxprt Code switches to the next.
 
