@@ -1164,6 +1164,7 @@ export async function loadCliConfig(
     argv.promptWords && argv.promptWords.some((word) => word.trim() !== '');
   const interactive =
     !!argv.promptInteractive ||
+    !!argv.experimentalAcp ||
     (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
 
   const allowedTools = argv.allowedTools || settings.allowedTools || [];
@@ -1684,7 +1685,7 @@ export async function loadCliConfig(
     }
   };
 
-  if (!interactive) {
+  if (!interactive && !argv.experimentalAcp) {
     if (approvalMode === ApprovalMode.YOLO) {
       if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
         const finalAllowed = new Set(profileAllowedTools);

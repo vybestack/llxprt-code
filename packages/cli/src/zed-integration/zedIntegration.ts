@@ -33,14 +33,15 @@ import {
   type FilterFilesOptions,
   ReadManyFilesTool,
   type ToolConfirmationPayload,
+  createInkStdio,
+  ApprovalMode,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
-import { Readable } from 'node:stream';
+import { Readable, Writable } from 'node:stream';
 import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
 import { LoadedSettings } from '../config/settings.js';
 import * as fs from 'fs/promises';
-import { writeSync } from 'node:fs';
 import * as path from 'path';
 import { z } from 'zod';
 import os from 'os';
@@ -58,6 +59,7 @@ import {
   getActiveModelParams,
   loadProfileByName,
 } from '../runtime/runtimeSettings.js';
+import { runExitCleanup } from '../utils/cleanup.js';
 
 type ToolRunResult = {
   parts: Part[];
@@ -81,12 +83,8 @@ export async function runZedIntegration(
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
 
-  const stdout = new WritableStream<Uint8Array>({
-    write(chunk) {
-      writeSync(1, chunk);
-    },
-  });
-
+  const { stdout: workingStdout } = createInkStdio();
+  const stdout = Writable.toWeb(workingStdout) as WritableStream;
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
 
   logger.debug(() => 'Streams created');
@@ -110,7 +108,7 @@ export async function runZedIntegration(
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
 
-    await connection.closed;
+    await connection.closed.finally(runExitCleanup);
     return undefined as never;
   } catch (e) {
     logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${e}`);
@@ -221,7 +219,10 @@ export class GeminiAgent {
     try {
       const sessionId = randomUUID();
 
-      // Use the existing config that was passed to runZedIntegration
+      // TODO: Create a per-session Config to isolate approval mode, file system
+      // service, and tool registries between concurrent sessions. Currently all
+      // sessions share one Config, which is safe only while Zed opens one
+      // session at a time.
       const sessionConfig = this.config;
 
       this.logger.debug(() => `newSession - creating session ${sessionId}`);
@@ -490,7 +491,7 @@ export class GeminiAgent {
         sessionId,
         modes: {
           availableModes: buildAvailableModes(),
-          currentModeId: 'default',
+          currentModeId: sessionConfig.getApprovalMode(),
         },
       };
     } catch (error) {
@@ -506,9 +507,7 @@ export class GeminiAgent {
     if (!session) {
       throw new Error(`Session not found: ${params.sessionId}`);
     }
-    // TODO: Actually change the approval mode on the session's config
-    // For now, acknowledge the mode change
-    return {};
+    return session.setMode(params.modeId);
   }
 
   async cancel(params: acp.CancelNotification): Promise<void> {
@@ -562,6 +561,16 @@ export class Session {
     });
   }
 
+  setMode(modeId: acp.SessionModeId): acp.SetSessionModeResponse {
+    const availableModes = buildAvailableModes();
+    const mode = availableModes.find((m) => m.id === modeId);
+    if (!mode) {
+      throw new Error(`Invalid or unavailable mode: ${modeId}`);
+    }
+    this.config.setApprovalMode(mode.id as ApprovalMode);
+    return {};
+  }
+
   async cancelPendingPrompt(): Promise<void> {
     if (!this.pendingPrompt) {
       throw new Error('Not currently generating');
@@ -600,10 +609,47 @@ export class Session {
         );
         nextMessage = null;
 
+        // Batch streaming chunks to reduce NDJSON message count.
+        // Without batching, each model token (~617 for a typical response)
+        // becomes a separate JSON message → Zed parse → UI render cycle.
+        // Accumulating for a short window collapses these into ~10-15
+        // larger messages, significantly reducing protocol overhead.
+        const BATCH_INTERVAL_MS = 100;
+        let pendingText = '';
+        let pendingThought = '';
+        let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const flushBatch = () => {
+          if (batchTimer !== null) {
+            clearTimeout(batchTimer);
+            batchTimer = null;
+          }
+          if (pendingThought.length > 0) {
+            hasStreamedAgentContent = true;
+            void this.sendUpdate({
+              sessionUpdate: 'agent_thought_chunk',
+              content: { type: 'text', text: pendingThought },
+            });
+            pendingThought = '';
+          }
+          if (pendingText.length > 0) {
+            hasStreamedAgentContent = true;
+            void this.sendUpdate({
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: pendingText },
+            });
+            pendingText = '';
+          }
+        };
+
+        const scheduleBatchFlush = () => {
+          if (batchTimer === null) {
+            batchTimer = setTimeout(flushBatch, BATCH_INTERVAL_MS);
+          }
+        };
+
         for await (const resp of responseStream) {
           if (pendingSend.signal.aborted) {
-            // Let the stream processing complete naturally to handle cancellation properly
-            // Don't return early here - let the tool pipeline handle cleanup
             break;
           }
 
@@ -618,24 +664,21 @@ export class Session {
                 continue;
               }
 
-              // Filter the content through emoji filter
-              const filterResult = this.emojiFilter.filterStreamChunk(
-                part.text,
-              );
+              // Filter emojis using single-pass filterText (not the
+              // streaming chunker — providers deliver complete unicode
+              // strings per part.text so there is no split-emoji risk).
+              const filterResult = this.emojiFilter.filterText(part.text);
 
               if (filterResult.blocked) {
-                // In error mode: inject error feedback to model for retry
+                flushBatch();
                 hasStreamedAgentContent = true;
-                this.sendUpdate({
+                void this.sendUpdate({
                   sessionUpdate: 'agent_message_chunk',
                   content: {
                     type: 'text',
                     text: '[Error: Response blocked due to emoji detection]',
                   },
                 });
-
-                // Add system feedback to be sent with next tool response
-                // This could be done by queueing feedback similar to TUI implementation
                 continue;
               }
 
@@ -644,22 +687,16 @@ export class Session {
                   ? filterResult.filtered
                   : '';
 
-              const trimmedText = filteredText.trim();
-              if (trimmedText.length > 0) {
-                hasStreamedAgentContent = true;
+              if (filteredText.length === 0) {
+                continue;
               }
 
-              const content: acp.ContentBlock = {
-                type: 'text',
-                text: filteredText,
-              };
-
-              this.sendUpdate({
-                sessionUpdate: part.thought
-                  ? 'agent_thought_chunk'
-                  : 'agent_message_chunk',
-                content,
-              });
+              if (part.thought) {
+                pendingThought += filteredText;
+              } else {
+                pendingText += filteredText;
+              }
+              scheduleBatchFlush();
             }
           }
 
@@ -671,6 +708,9 @@ export class Session {
             }
           }
         }
+
+        // Flush any remaining batched content after stream ends
+        flushBatch();
 
         if (pendingSend.signal.aborted) {
           return { stopReason: 'cancelled' };
@@ -1558,17 +1598,17 @@ function toPermissionOptions(
 function buildAvailableModes(): acp.SessionMode[] {
   return [
     {
-      id: 'default',
+      id: ApprovalMode.DEFAULT,
       name: 'Default',
       description: 'Prompts for approval',
     },
     {
-      id: 'auto-edit',
+      id: ApprovalMode.AUTO_EDIT,
       name: 'Auto Edit',
       description: 'Auto-approves edit tools',
     },
     {
-      id: 'yolo',
+      id: ApprovalMode.YOLO,
       name: 'YOLO',
       description: 'Auto-approves all tools',
     },
