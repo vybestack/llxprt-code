@@ -1302,17 +1302,10 @@ export class OAuthManager {
 
     // @plan PLAN-20260223-ISSUE1598.P14
     // @requirement REQ-1598-PR01
-    // Fix: Don't schedule proactive renewal for expired tokens (remainingSec <= 0)
-    // Expired tokens are handled by getOAuthToken, not proactive renewal
-    if (remainingSec <= 0) {
-      return;
-    }
-
-    // @plan PLAN-20260223-ISSUE1598.P14
-    // @requirement REQ-1598-PR01
-    // Don't schedule proactive renewal for tokens with < 5 minutes remaining
-    // These short-lived tokens would result in immediate or negative delays
-    if (remainingSec < 300) {
+    // Fix: Don't schedule proactive renewal for expired or short-lived tokens
+    // Clear any stale timer so a prior schedule doesn't fire unexpectedly
+    if (remainingSec <= 0 || remainingSec < 300) {
+      this.clearProactiveRenewal(key);
       return;
     }
 
