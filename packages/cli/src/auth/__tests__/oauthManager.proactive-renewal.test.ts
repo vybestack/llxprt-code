@@ -242,12 +242,12 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     await vi.advanceTimersByTimeAsync(305 * 1000);
     expect(provider.refreshToken).toHaveBeenCalledTimes(1);
 
-    // Trigger second failure (with exponential backoff)
-    await vi.advanceTimersByTimeAsync(60 * 1000); // Wait for retry
+    // Trigger second failure (backoff: 30s * 2^1 = 60s + up to 5s jitter)
+    await vi.advanceTimersByTimeAsync(70 * 1000);
     expect(provider.refreshToken).toHaveBeenCalledTimes(2);
 
-    // Trigger third failure
-    await vi.advanceTimersByTimeAsync(120 * 1000); // Wait for retry
+    // Trigger third failure (backoff: 30s * 2^2 = 120s + up to 5s jitter)
+    await vi.advanceTimersByTimeAsync(130 * 1000);
     expect(provider.refreshToken).toHaveBeenCalledTimes(3);
 
     // Clear the mock to verify no more retries
