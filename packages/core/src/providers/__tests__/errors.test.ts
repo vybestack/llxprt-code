@@ -103,8 +103,6 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
   /**
    * @requirement REQ-1598-ER02
    * Enhanced message: When reasons are provided, error message should include per-bucket failure details
-   * NOTE: This test expects message enhancement but constructor doesn't yet format reasons into message.
-   * This is a FAILING test by design (TDD) - will be fixed in Phase 08.
    */
   it('should include per-bucket failure details in message when reasons provided', () => {
     // Arrange

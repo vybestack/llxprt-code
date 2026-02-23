@@ -323,29 +323,23 @@ export class AllBucketsExhaustedError extends Error {
     lastError: Error,
     bucketFailureReasons?: Record<string, BucketFailureReason>,
   ) {
-    const reasons = bucketFailureReasons ?? {};
-    const hasReasons = Object.keys(reasons).length > 0;
+    const reasons = bucketFailureReasons ? { ...bucketFailureReasons } : {};
 
-    let message = `All buckets exhausted for provider '${providerName}'`;
-    if (attemptedBuckets.length > 0) {
-      if (hasReasons) {
-        // Enhanced message with per-bucket failure details
-        const bucketDetails = attemptedBuckets
-          .map((bucket) => {
-            const reason = reasons[bucket];
-            return reason ? `${bucket}: ${reason}` : bucket;
-          })
-          .join(', ');
-        message += `: ${bucketDetails}`;
-      } else {
-        // Base message format without failure details
-        message += `: ${attemptedBuckets.join(', ')}`;
-      }
-    }
+    // Build enhanced message with per-bucket reasons
+    const bucketDetails = attemptedBuckets
+      .map((b) => {
+        const reason = reasons[b];
+        return reason ? `  - ${b}: ${reason}` : `  - ${b}: unknown`;
+      })
+      .join('\n');
 
-    super(message);
+    super(
+      `All buckets exhausted for provider '${providerName}': ${attemptedBuckets.join(', ')}` +
+        (bucketDetails ? `\n${bucketDetails}` : '') +
+        `\nLast error: ${lastError.message}`,
+    );
     this.name = 'AllBucketsExhaustedError';
-    this.attemptedBuckets = attemptedBuckets;
+    this.attemptedBuckets = [...attemptedBuckets];
     this.lastError = lastError;
     this.bucketFailureReasons = reasons;
   }

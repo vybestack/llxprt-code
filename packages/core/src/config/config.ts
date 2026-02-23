@@ -357,7 +357,7 @@ export interface BucketFailoverHandler {
    * Try to failover to the next bucket
    * @plan PLAN-20260223-ISSUE1598.P03
    * @param context Optional context about the triggering failure
-   * @returns true if successfully switched to a new bucket, false if no more buckets
+   * @returns true if failover succeeded (may switch bucket or refresh/reauth current), false if no recovery possible
    */
   tryFailover(context?: FailoverContext): Promise<boolean>;
 

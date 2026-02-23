@@ -114,24 +114,26 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
 
     let reason: BucketFailureReason | null = null;
 
-    // Check for explicit 429 status (REQ-1598-CL01)
-    if (context?.triggeringStatus === 429) {
+    // Check for explicit 429/402 status (REQ-1598-CL01)
+    if (
+      context?.triggeringStatus === 429 ||
+      context?.triggeringStatus === 402
+    ) {
       reason = 'quota-exhausted';
       logger.debug('Classified triggering bucket as quota-exhausted', {
         provider: this.provider,
         bucket: currentBucket,
-        status: 429,
+        status: context.triggeringStatus,
       });
     } else {
-      // First, check if token exists and its state (expired vs valid)
-      // We need to check the store directly to know the token's INITIAL state
+      // Check if token exists and its state (expired vs valid)
+      // Use getTokenStore() to read raw token state without triggering refresh
       let storedToken: import('@vybestack/llxprt-code-core').OAuthToken | null =
         null;
       try {
-        storedToken = await this.oauthManager['tokenStore'].getToken(
-          this.provider,
-          currentBucket,
-        );
+        storedToken = await this.oauthManager
+          .getTokenStore()
+          .getToken(this.provider, currentBucket);
       } catch (error) {
         // Token-store read error (REQ-1598-CL04)
         logger.warn(
@@ -212,14 +214,13 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
         continue;
       }
 
-      // First check if token exists in store WITHOUT triggering refresh
+      // Check if token exists in store WITHOUT triggering refresh
       let storedToken: import('@vybestack/llxprt-code-core').OAuthToken | null =
         null;
       try {
-        storedToken = await this.oauthManager['tokenStore'].getToken(
-          this.provider,
-          bucket,
-        );
+        storedToken = await this.oauthManager
+          .getTokenStore()
+          .getToken(this.provider, bucket);
       } catch (error) {
         logger.warn(`Token read failed for ${this.provider}/${bucket}:`, error);
         this.lastFailoverReasons[bucket] = 'no-token';
