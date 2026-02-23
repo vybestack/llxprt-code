@@ -212,6 +212,7 @@ export class OAuthManager {
   >;
   private proactiveRenewalFailures: Map<string, number>;
   private proactiveRenewalInFlight: Set<string>;
+  private proactiveRenewalTokens: Map<string, string>;
   // Getter function for message bus (lazy resolution for TUI prompts)
   private getMessageBus?: () => MessageBus | undefined;
   // Getter function for config (lazy resolution for bucket failover handler)
@@ -231,6 +232,7 @@ export class OAuthManager {
     this.proactiveRenewals = new Map();
     this.proactiveRenewalFailures = new Map();
     this.proactiveRenewalInFlight = new Set();
+    this.proactiveRenewalTokens = new Map();
   }
 
   private async withBucketResolutionLock<T>(
@@ -1194,6 +1196,7 @@ export class OAuthManager {
     }
     this.proactiveRenewalFailures.delete(key);
     this.proactiveRenewalInFlight.delete(key);
+    this.proactiveRenewalTokens.delete(key);
   }
 
   private setProactiveTimer(
@@ -1324,6 +1327,7 @@ export class OAuthManager {
     }
 
     this.proactiveRenewalFailures.delete(key);
+    this.proactiveRenewalTokens.set(key, token.access_token);
     this.setProactiveTimer(
       providerName,
       normalizedBucket,
@@ -1388,8 +1392,35 @@ export class OAuthManager {
 
         // @plan PLAN-20260223-ISSUE1598.P14
         // @requirement REQ-1598-PR02
-        // Proceed with refresh - no need to check if token was already refreshed
-        // The lock ensures we won't have multiple concurrent refreshes
+        // Issue #1159: Double-check - skip refresh if another process already updated
+        // the token while we waited for the lock. Two detection methods:
+        // 1. If we have the scheduled token's access_token, compare directly
+        // 2. Otherwise fall back to expiry check (token well beyond 30s validity)
+        const scheduledAccessToken = this.proactiveRenewalTokens.get(key);
+        if (scheduledAccessToken) {
+          if (currentToken.access_token !== scheduledAccessToken) {
+            // Token was refreshed by another process — reschedule with the fresh token
+            this.scheduleProactiveRenewal(
+              providerName,
+              normalizedBucket,
+              currentToken,
+            );
+            return;
+          }
+        } else {
+          // Direct runProactiveRenewal call (no prior schedule) — use expiry-based check
+          const nowInSeconds = Math.floor(Date.now() / 1000);
+          if (currentToken.expiry > nowInSeconds + 30) {
+            // Token is still well-valid — another process likely refreshed it
+            this.scheduleProactiveRenewal(
+              providerName,
+              normalizedBucket,
+              currentToken,
+            );
+            return;
+          }
+        }
+
         const refreshedToken = await provider.refreshToken(currentToken);
         if (!refreshedToken) {
           // @plan PLAN-20260223-ISSUE1598.P14
