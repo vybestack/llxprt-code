@@ -79,7 +79,7 @@ export function parseZedAuthMethodId(
 export async function runZedIntegration(
   config: Config,
   settings: LoadedSettings,
-): Promise<never> {
+): Promise<void> {
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
 
@@ -109,7 +109,6 @@ export async function runZedIntegration(
     logger.debug(() => 'AgentSideConnection created successfully');
 
     await connection.closed.finally(runExitCleanup);
-    return undefined as never;
   } catch (e) {
     logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${e}`);
     throw e;
@@ -573,7 +572,7 @@ export class Session {
 
   async cancelPendingPrompt(): Promise<void> {
     if (!this.pendingPrompt) {
-      throw new Error('Not currently generating');
+      return;
     }
 
     this.pendingPrompt.abort();

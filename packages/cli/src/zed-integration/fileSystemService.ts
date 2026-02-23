@@ -8,7 +8,7 @@ import { FileSystemService } from '@vybestack/llxprt-code-core';
 import type * as acp from '@agentclientprotocol/sdk';
 
 /**
- * ACP client-based implementation of FileSystemService
+ * ACP connection-based implementation of FileSystemService
  */
 export class AcpFileSystemService implements FileSystemService {
   constructor(
