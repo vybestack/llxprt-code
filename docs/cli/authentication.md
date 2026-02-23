@@ -1,40 +1,45 @@
 # Authentication
 
-LLxprt Code needs credentials to talk to AI providers. There are three ways to authenticate, and which you should use depends on your situation.
+LLxprt Code needs credentials to talk to AI providers. How you authenticate depends on what the provider offers.
 
 ## Which Method Should I Use?
 
-| Situation                                  | Method  | Setup                     |
-| ------------------------------------------ | ------- | ------------------------- |
-| You have a ChatGPT Plus/Pro subscription   | OAuth   | `/auth codex enable`      |
-| You have an Anthropic/Google/Qwen account  | OAuth   | `/auth <provider> enable` |
-| You have an API key from any provider      | Keyring | `/key save <name> <key>`  |
-| You're running in CI/headless environments | Keyfile | `--keyfile /path/to/key`  |
+| Situation                                       | Method  | Setup                     |
+| ----------------------------------------------- | ------- | ------------------------- |
+| Provider offers OAuth (Gemini, Anthropic, etc.) | OAuth   | `/auth <provider> enable` |
+| Provider gives you an API key                   | Keyring | `/key save <name> <key>`  |
+| CI / automation (no human to enter codes)       | Keyfile | `--keyfile /path/to/key`  |
 
-**Use OAuth if you can.** It's the easiest setup and you don't manage any secrets. Use the keyring for API keys — it's secure and persistent. Avoid environment variables.
+Some providers offer OAuth with free tiers (Gemini Code Assist, Qwen) or subscription pricing (Anthropic, OpenAI via Codex). Others only offer API keys. Both OAuth tokens and API keys are stored the same way — in your OS keyring.
 
-## OAuth (Subscriptions)
+## OAuth
 
-If you already pay for a subscription to Anthropic, OpenAI (ChatGPT Plus/Pro), Google, or Qwen, OAuth lets you use that subscription directly. No API key needed.
+Four providers support OAuth login: **Gemini**, **Anthropic**, **Codex** (OpenAI/ChatGPT), and **Qwen**.
 
-```
+```text
+/auth gemini enable
 /auth anthropic enable
 /auth codex enable
-/auth gemini enable
 /auth qwen enable
 ```
 
-Authentication happens lazily — the browser opens when you make your first request, not when you run the command. Once authenticated, tokens are stored securely and refresh automatically.
+Gemini uses the Gemini Code Assist login (free tier). Qwen's OAuth is also free. Anthropic and Codex use your existing subscription (Claude Pro, ChatGPT Plus/Pro, etc.) — you get subscription pricing rather than per-token API rates.
 
-If you don't want the browser to open automatically (e.g., you're on a remote machine), use `--nobrowser` or the `auth.noBrowser` setting to get a manual code entry prompt instead:
+Authentication happens lazily — the browser opens when you make your first request, not when you run the command. Once authenticated, tokens are stored in your OS keyring and refresh automatically.
+
+### Headless / Remote Machines
+
+If you're on a machine without a browser (SSH, remote server), use `--nobrowser` to get a URL and code to enter on another device:
 
 ```bash
 llxprt --nobrowser
 ```
 
-```
+```text
 /set auth.noBrowser true
 ```
+
+This works for any interactive session where a human can copy the URL and enter the code. For fully unattended environments (CI, automation), use a keyfile instead — see [CLI Key Flags](#cli-key-flags) below.
 
 For details on each provider's OAuth flow, see [OAuth Setup](../oauth-setup.md).
 
@@ -46,12 +51,11 @@ If you have more than one account with a provider, "buckets" let you name each O
 /auth anthropic login work@company.com
 /auth anthropic login personal@gmail.com
 /auth anthropic status
-/auth anthropic switch work@company.com
 /auth anthropic logout work@company.com
 /auth anthropic logout --all
 ```
 
-Use `switch` to change which bucket is active for the current session. Use `logout` with a bucket name to remove a specific account, or `--all` to remove all buckets for that provider.
+Use `logout` with a bucket name to remove a specific account, or `--all` to remove all buckets for that provider.
 
 When combined with [profiles](./profiles.md), multiple buckets enable automatic failover — if one account hits rate limits, LLxprt Code switches to the next.
 
@@ -84,14 +88,14 @@ llxprt --provider xai --key-name xai
 
 If you haven't saved a key to the keyring, you can also use:
 
-- `--keyfile /path/to/keyfile` — reads the key from a file (good for CI/headless). The file should contain just the key, nothing else. Set permissions to `600`.
+- `--keyfile /path/to/keyfile` — reads the key from a file. The file should contain just the key, nothing else. Set permissions to `600`. This is the best option for CI and automation where no one is present to enter an OAuth code.
 - `--key <value>` — passes the key inline (least secure — visible in process listings and shell history).
 
 ```bash
 # Prefer --key-name when possible
 llxprt --provider anthropic --key-name anthropic
 
-# Use --keyfile for CI or when keyring isn't available
+# Use --keyfile for CI/automation (no human present)
 llxprt --provider anthropic --keyfile /path/to/anthropic.key
 
 # Use --key only when necessary (key is visible in process list)
