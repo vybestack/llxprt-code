@@ -75,22 +75,29 @@ jobs:
           fi
 
           if [[ "${head_repo}" == "${REPO}" ]]; then
-            git fetch --no-tags --prune --depth=1 origin "${head_ref}:${pr_ref}"
+            git fetch --no-tags --prune origin "${head_ref}:${pr_ref}"
           else
             git remote add pr "https://x-access-token:${GITHUB_TOKEN}@github.com/${head_repo}.git"
-            git fetch --no-tags --prune --depth=1 pr "${head_ref}:${pr_ref}"
+            git fetch --no-tags --prune pr "${head_ref}:${pr_ref}"
           fi
 
           base_sha='${{ github.event.pull_request.base.sha }}'
           head_sha="$(git rev-parse "${pr_ref}")"
+
+          # Compute the merge-base so diffs only contain changes the PR
+          # actually introduced, not unrelated main-branch activity.
+          merge_base="$(git merge-base "${base_sha}" "${head_sha}")"
+
           {
             echo "PR_HEAD_REF=${pr_ref}"
             echo "PR_HEAD_SHA=${head_sha}"
             echo "BASE_SHA=${base_sha}"
+            echo "MERGE_BASE=${merge_base}"
           } >> "$GITHUB_ENV"
           {
             echo "head_sha=${head_sha}"
             echo "base_sha=${base_sha}"
+            echo "merge_base=${merge_base}"
           } >> "$GITHUB_OUTPUT"
 
       - name: 'Collect PR metadata and ensure linked issue'
@@ -165,7 +172,7 @@ jobs:
         run: |
           set -euo pipefail
           diff_list="review/changed-list.txt"
-          git diff --name-only "${BASE_SHA}" "${PR_HEAD_SHA}" > "${diff_list}"
+          git diff --name-only "${MERGE_BASE}" "${PR_HEAD_SHA}" > "${diff_list}"
           docs_only=true
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
@@ -246,11 +253,11 @@ jobs:
         if: steps.issue_gate.outputs.should_review == 'true'
         run: |
           set -euo pipefail
-          git diff --stat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diffstat.txt
-          git diff --name-status "${BASE_SHA}" "${PR_HEAD_SHA}" > review/changed-files.txt
-          git diff --numstat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/numstat.txt
+          git diff --stat "${MERGE_BASE}" "${PR_HEAD_SHA}" > review/diffstat.txt
+          git diff --name-status "${MERGE_BASE}" "${PR_HEAD_SHA}" > review/changed-files.txt
+          git diff --numstat "${MERGE_BASE}" "${PR_HEAD_SHA}" > review/numstat.txt
           # Keep full diff for agent exploration - agent can selectively read what it needs
-          git diff -U3 "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diff.patch
+          git diff -U3 "${MERGE_BASE}" "${PR_HEAD_SHA}" > review/diff.patch
           grep -Ei '(/tests?/|__tests__|\\.spec\\.|\\.test\\.)' review/changed-files.txt > review/test-files.txt || true
 
           # Generate per-file diffs for selective exploration
@@ -261,9 +268,9 @@ jobs:
             safe_name="${filename//\//__}"
             if [[ "$status" == "D" ]]; then
               # Deleted file - show the removal
-              git diff "${BASE_SHA}" "${PR_HEAD_SHA}" -- "$filename" > "review/diffs/${safe_name}.diff" 2>/dev/null || true
+              git diff "${MERGE_BASE}" "${PR_HEAD_SHA}" -- "$filename" > "review/diffs/${safe_name}.diff" 2>/dev/null || true
             else
-              git diff "${BASE_SHA}" "${PR_HEAD_SHA}" -- "$filename" > "review/diffs/${safe_name}.diff" 2>/dev/null || true
+              git diff "${MERGE_BASE}" "${PR_HEAD_SHA}" -- "$filename" > "review/diffs/${safe_name}.diff" 2>/dev/null || true
             fi
           done < review/changed-files.txt
 
