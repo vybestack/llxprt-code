@@ -49,7 +49,7 @@ If a file doesn't exist in your `~/.llxprt/prompts/` directory, the built-in def
 
 ## Tool Prompts
 
-Tool-specific prompt files are **off by default** to reduce system prompt size (which improves prompt caching). Enable them:
+Tool-specific prompt files are **off by default** because most modern models don't perform better with them. Enable them if you find your model needs more explicit tool guidance:
 
 ```
 /set enable-tool-prompts true

@@ -4,12 +4,12 @@ OAuth lets you authenticate with AI providers without managing API keys. Tokens 
 
 ## Supported Providers
 
-| Provider                     | Flow          | What Opens                     |
-| ---------------------------- | ------------- | ------------------------------ |
-| **Gemini** (Google AI)       | Browser-based | Browser opens automatically    |
-| **Anthropic**                | Browser-based | Browser opens automatically    |
-| **Codex** (ChatGPT Plus/Pro) | Browser-based | Browser opens to ChatGPT login |
-| **Qwen** (Alibaba Cloud)     | Device code   | Shows a code and URL to visit  |
+| Provider                     | Flow          | What Opens                  |
+| ---------------------------- | ------------- | --------------------------- |
+| **Gemini** (Google AI)       | Browser-based | Browser opens automatically |
+| **Anthropic**                | Browser-based | Browser opens automatically |
+| **Codex** (ChatGPT Plus/Pro) | Browser-based | Browser opens automatically |
+| **Qwen** (Alibaba Cloud)     | Browser-based | Browser opens automatically |
 
 ## Enabling OAuth
 
@@ -22,16 +22,15 @@ Use the `/auth` command inside a session:
 /auth qwen enable
 ```
 
-Authentication is **lazy** — nothing happens until you make your first request to that provider. At that point, a browser opens (or a code is displayed for Qwen) and you complete the login.
+With `/auth <provider> enable`, authentication is **lazy** — nothing happens until you make your first request to that provider. At that point, a browser opens and you complete the login.
+
+If you use `/auth <provider> login` instead, the browser opens immediately.
 
 ### What Happens During Login
 
-1. You send a message to a provider with OAuth enabled
-2. LLxprt opens your browser to the provider's login page (or displays a device code for Qwen)
-3. You complete the login and grant permissions
-4. Tokens are stored in your keyring and refresh automatically going forward
-
-For Anthropic and Codex, LLxprt starts a local callback server to receive the authorization code. For Gemini, the flow redirects back to a local URL. For Qwen, LLxprt polls for completion after you enter the device code.
+1. A browser opens to the provider's login page
+2. You complete the login and grant permissions
+3. Tokens are stored in your keyring and refresh automatically going forward
 
 ### No Browser Available?
 
