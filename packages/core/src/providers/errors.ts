@@ -294,23 +294,59 @@ export class ClientError extends ProviderError {
 }
 
 /**
+ * @plan PLAN-20260223-ISSUE1598.P03
+ * @requirement REQ-1598-IC08
+ * @pseudocode error-reporting.md lines 3-8
+ */
+export type BucketFailureReason =
+  | 'quota-exhausted'
+  | 'expired-refresh-failed'
+  | 'reauth-failed'
+  | 'no-token'
+  | 'skipped';
+
+/**
  * Thrown when all OAuth buckets are exhausted during failover
  * @plan PLAN-20260128issue808
+ * @plan PLAN-20260223-ISSUE1598.P06
+ * @requirement REQ-1598-ER01, REQ-1598-ER02, REQ-1598-ER03
+ * @pseudocode error-reporting.md lines 10-40
  */
 export class AllBucketsExhaustedError extends Error {
   readonly attemptedBuckets: string[];
   readonly lastError: Error;
+  readonly bucketFailureReasons: Record<string, BucketFailureReason>;
 
   constructor(
     providerName: string,
     attemptedBuckets: string[],
     lastError: Error,
+    bucketFailureReasons?: Record<string, BucketFailureReason>,
   ) {
-    super(
-      `All buckets exhausted for provider '${providerName}': ${attemptedBuckets.join(', ')}`,
-    );
+    const reasons = bucketFailureReasons ?? {};
+    const hasReasons = Object.keys(reasons).length > 0;
+
+    let message = `All buckets exhausted for provider '${providerName}'`;
+    if (attemptedBuckets.length > 0) {
+      if (hasReasons) {
+        // Enhanced message with per-bucket failure details
+        const bucketDetails = attemptedBuckets
+          .map((bucket) => {
+            const reason = reasons[bucket];
+            return reason ? `${bucket}: ${reason}` : bucket;
+          })
+          .join(', ');
+        message += `: ${bucketDetails}`;
+      } else {
+        // Base message format without failure details
+        message += `: ${attemptedBuckets.join(', ')}`;
+      }
+    }
+
+    super(message);
     this.name = 'AllBucketsExhaustedError';
     this.attemptedBuckets = attemptedBuckets;
     this.lastError = lastError;
+    this.bucketFailureReasons = reasons;
   }
 }

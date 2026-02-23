@@ -80,6 +80,7 @@ import {
 } from '../telemetry/index.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
+import type { BucketFailureReason } from '../providers/errors.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import { type MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { IdeClient } from '../ide/ide-client.js';
@@ -330,6 +331,14 @@ export interface ActiveExtension {
 }
 
 /**
+ * @plan PLAN-20260223-ISSUE1598.P03
+ * @requirement REQ-1598-IC10
+ */
+export interface FailoverContext {
+  triggeringStatus?: number;
+}
+
+/**
  * Handler for bucket failover on rate limit/quota errors
  * @plan PLAN-20251213issue490
  */
@@ -346,9 +355,11 @@ export interface BucketFailoverHandler {
 
   /**
    * Try to failover to the next bucket
+   * @plan PLAN-20260223-ISSUE1598.P03
+   * @param context Optional context about the triggering failure
    * @returns true if successfully switched to a new bucket, false if no more buckets
    */
-  tryFailover(): Promise<boolean>;
+  tryFailover(context?: FailoverContext): Promise<boolean>;
 
   /**
    * Check if bucket failover is enabled
@@ -366,6 +377,13 @@ export interface BucketFailoverHandler {
    * resets session bucket to the primary (first) bucket so the next request starts fresh.
    */
   reset?(): void;
+
+  /**
+   * @plan PLAN-20260223-ISSUE1598.P03
+   * @requirement REQ-1598-IC09
+   * Get the failure reasons for buckets that were skipped during last failover
+   */
+  getLastFailoverReasons?(): Record<string, BucketFailureReason>;
 }
 
 export interface ConfigParameters {

@@ -13,6 +13,8 @@
 import {
   BucketFailoverHandler,
   DebugLogger,
+  FailoverContext,
+  type BucketFailureReason,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from './oauth-manager.js';
 
@@ -32,6 +34,13 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private readonly provider: string;
   private readonly oauthManager: OAuthManager;
   private triedBucketsThisSession: Set<string>;
+
+  /**
+   * @plan PLAN-20260223-ISSUE1598.P05
+   * @requirement REQ-1598-IC09
+   * Record of failure reasons for buckets evaluated during last failover attempt
+   */
+  private lastFailoverReasons: Record<string, BucketFailureReason> = {};
 
   constructor(buckets: string[], provider: string, oauthManager: OAuthManager) {
     this.buckets = buckets;
@@ -79,77 +88,295 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   /**
    * Try to failover to the next bucket
    *
-   * This method:
-   * 1. Moves to the next bucket in the list
-   * 2. Refreshes the OAuth token for that bucket
-   * 3. Returns true if successful, false if no more buckets
+   * @plan PLAN-20260223-ISSUE1598.P05
+   * @requirement REQ-1598-FL01, CL01, CL02, CL03, CL04, CL07, CL09, FL12
+   * @pseudocode failover-handler.md lines 1-58
+   *
+   * This method implements Pass 1 of the three-pass algorithm:
+   * Pass 1: Classify the triggering bucket based on context and token state
+   * Pass 2: Find next candidate with valid/refreshable token (TODO: Phase 06)
+   * Pass 3: Attempt foreground reauth for expired/missing tokens (TODO: Phase 07)
    */
-  async tryFailover(): Promise<boolean> {
+  async tryFailover(context?: FailoverContext): Promise<boolean> {
+    // Clear reasons from previous attempt (REQ-1598-CL09)
+    this.lastFailoverReasons = {};
+
     const currentBucket = this.getCurrentBucket();
 
-    for (let i = 1; i < this.buckets.length; i++) {
-      const nextIndex = (this.currentBucketIndex + i) % this.buckets.length;
-      const nextBucket = this.buckets[nextIndex];
+    // ============================================================
+    // PASS 1: CLASSIFY TRIGGERING BUCKET
+    // ============================================================
 
-      // Skip buckets already tried in this failover session to prevent infinite cycling
-      if (this.triedBucketsThisSession.has(nextBucket)) {
-        logger.debug('Skipping already-tried bucket in this session', {
-          provider: this.provider,
-          bucket: nextBucket,
-        });
-        continue;
+    if (!currentBucket) {
+      logger.debug('No current bucket to classify');
+      return false;
+    }
+
+    let reason: BucketFailureReason | null = null;
+
+    // Check for explicit 429 status (REQ-1598-CL01)
+    if (context?.triggeringStatus === 429) {
+      reason = 'quota-exhausted';
+      logger.debug('Classified triggering bucket as quota-exhausted', {
+        provider: this.provider,
+        bucket: currentBucket,
+        status: 429,
+      });
+    } else {
+      // First, check if token exists and its state (expired vs valid)
+      // We need to check the store directly to know the token's INITIAL state
+      let storedToken: import('@vybestack/llxprt-code-core').OAuthToken | null =
+        null;
+      try {
+        storedToken = await this.oauthManager['tokenStore'].getToken(
+          this.provider,
+          currentBucket,
+        );
+      } catch (error) {
+        // Token-store read error (REQ-1598-CL04)
+        logger.warn(
+          `Token read failed for ${this.provider}/${currentBucket}:`,
+          error,
+        );
+        reason = 'no-token';
       }
 
-      logger.debug('Attempting bucket failover', {
-        provider: this.provider,
-        fromBucket: currentBucket,
-        toBucket: nextBucket,
-        bucketIndex: nextIndex,
-        totalBuckets: this.buckets.length,
-      });
+      if (storedToken && reason === null) {
+        const nowSec = Math.floor(Date.now() / 1000);
+        const remainingSec = storedToken.expiry - nowSec;
 
-      try {
-        // Ensure the target bucket is usable before switching session state.
-        const token = await this.oauthManager.getOAuthToken(
-          this.provider,
-          nextBucket,
-        );
-        if (!token) {
-          throw new Error(
-            `No OAuth token available for provider '${this.provider}' bucket '${nextBucket}'`,
-          );
+        if (remainingSec <= 0) {
+          // Token expired — attempt refresh via getOAuthToken (REQ-1598-CL02, CL07)
+          try {
+            const refreshedToken = await this.oauthManager.getOAuthToken(
+              this.provider,
+              currentBucket,
+            );
+            if (refreshedToken && refreshedToken.expiry > nowSec) {
+              // Refresh succeeded for triggering bucket — no failover needed (REQ-1598-CL07)
+              logger.debug(
+                'Refresh succeeded for triggering bucket — no failover needed',
+                {
+                  provider: this.provider,
+                  bucket: currentBucket,
+                },
+              );
+              return true;
+            }
+          } catch (refreshError) {
+            logger.debug(`Refresh failed for triggering bucket:`, refreshError);
+          }
+          // Refresh failed or returned null
+          reason = 'expired-refresh-failed';
+        } else {
+          // Token not expired but call failed — fallback classification
+          if (
+            context?.triggeringStatus === 500 ||
+            context?.triggeringStatus === 503
+          ) {
+            reason = 'quota-exhausted';
+          } else {
+            reason = 'no-token';
+          }
         }
-
-        // Mark current bucket as tried before switching
-        if (currentBucket) {
-          this.triedBucketsThisSession.add(currentBucket);
-        }
-        this.triedBucketsThisSession.add(nextBucket);
-        this.currentBucketIndex = nextIndex;
-        this.oauthManager.setSessionBucket(this.provider, nextBucket);
-
-        logger.warn(
-          () =>
-            `Bucket failover: switching from ${currentBucket} to ${nextBucket}`,
-        );
-        logger.debug('Bucket failover successful', {
-          provider: this.provider,
-          newBucket: nextBucket,
-          bucketIndex: nextIndex,
-        });
-
-        return true;
-      } catch (error) {
-        this.triedBucketsThisSession.add(nextBucket);
-        logger.debug('Bucket failover failed - could not refresh token', {
-          provider: this.provider,
-          bucket: nextBucket,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        continue;
+      } else if (reason === null) {
+        // No token in store (REQ-1598-CL03)
+        reason = 'no-token';
       }
     }
 
+    // Record reason and mark bucket as tried (REQ-1598-FL12)
+    this.lastFailoverReasons[currentBucket] = reason;
+    this.triedBucketsThisSession.add(currentBucket);
+
+    logger.debug('Pass 1 complete: triggering bucket classified', {
+      provider: this.provider,
+      bucket: currentBucket,
+      reason,
+    });
+
+    // ============================================================
+    // PASS 2: FIND NEXT CANDIDATE WITH VALID/REFRESHABLE TOKEN
+    // @plan PLAN-20260223-ISSUE1598.P11
+    // @requirement REQ-1598-FL03, FL04, FL05, FL06, FL13, FL14, FL17, FL18, CL05
+    // @pseudocode failover-handler.md lines 60-121
+    // ============================================================
+
+    for (const bucket of this.buckets) {
+      // Skip buckets already tried in this session (REQ-1598-FL13)
+      if (this.triedBucketsThisSession.has(bucket)) {
+        // Only mark as skipped if not already classified in Pass 1
+        if (!this.lastFailoverReasons[bucket]) {
+          this.lastFailoverReasons[bucket] = 'skipped';
+        }
+        continue;
+      }
+
+      // First check if token exists in store WITHOUT triggering refresh
+      let storedToken: import('@vybestack/llxprt-code-core').OAuthToken | null =
+        null;
+      try {
+        storedToken = await this.oauthManager['tokenStore'].getToken(
+          this.provider,
+          bucket,
+        );
+      } catch (error) {
+        logger.warn(`Token read failed for ${this.provider}/${bucket}:`, error);
+        this.lastFailoverReasons[bucket] = 'no-token';
+        continue;
+      }
+
+      if (storedToken === null) {
+        this.lastFailoverReasons[bucket] = 'no-token';
+        continue;
+      }
+
+      const nowSec = Math.floor(Date.now() / 1000);
+      const remainingSec = storedToken.expiry - nowSec;
+
+      // Token expired — attempt refresh (REQ-1598-FL17)
+      if (remainingSec <= 0) {
+        try {
+          const refreshedToken = await this.oauthManager.getOAuthToken(
+            this.provider,
+            bucket,
+          );
+          if (refreshedToken && refreshedToken.expiry > nowSec) {
+            // Refresh succeeded — switch bucket
+            const bucketIndex = this.buckets.indexOf(bucket);
+            if (bucketIndex >= 0) {
+              this.currentBucketIndex = bucketIndex;
+            }
+            this.triedBucketsThisSession.add(bucket);
+            try {
+              this.oauthManager.setSessionBucket(this.provider, bucket);
+            } catch (setError) {
+              logger.warn(
+                `Failed to set session bucket during pass-2 refresh: ${setError}`,
+              );
+              // Continue anyway — setSessionBucket failure should not abort failover
+            }
+            logger.warn(
+              () =>
+                `Bucket failover: switched to ${bucket} after refresh from ${currentBucket}`,
+            );
+            return true;
+          }
+        } catch (refreshError) {
+          logger.debug(`Refresh failed for ${bucket}:`, refreshError);
+        }
+        this.lastFailoverReasons[bucket] = 'expired-refresh-failed';
+        continue;
+      }
+
+      // Valid token found — use getOAuthToken to ensure it's still valid (might trigger refresh)
+      let token: import('@vybestack/llxprt-code-core').OAuthToken | null = null;
+      try {
+        token = await this.oauthManager.getOAuthToken(this.provider, bucket);
+      } catch (error) {
+        logger.warn(
+          `Failed to get token for ${this.provider}/${bucket}:`,
+          error,
+        );
+        this.lastFailoverReasons[bucket] = 'no-token';
+        continue;
+      }
+
+      if (token === null) {
+        this.lastFailoverReasons[bucket] = 'no-token';
+        continue;
+      }
+
+      // Valid token confirmed — switch and succeed (REQ-1598-FL03, FL18)
+      const bucketIndex = this.buckets.indexOf(bucket);
+      if (bucketIndex >= 0) {
+        this.currentBucketIndex = bucketIndex;
+      }
+      this.triedBucketsThisSession.add(bucket);
+      try {
+        this.oauthManager.setSessionBucket(this.provider, bucket);
+      } catch (setError) {
+        logger.warn(
+          `Failed to set session bucket during pass-2 switch: ${setError}`,
+        );
+        // Continue anyway
+      }
+      logger.warn(
+        () => `Bucket failover: switched from ${currentBucket} to ${bucket}`,
+      );
+      return true;
+    }
+
+    // ============================================================
+    // PASS 3: FOREGROUND REAUTH FOR EXPIRED/MISSING TOKENS
+    // @plan PLAN-20260223-ISSUE1598.P11
+    // @requirement REQ-1598-FL07, FL08, FL09, FL10, FL14, FR01, FR03
+    // @pseudocode failover-handler.md lines 123-170
+    // ============================================================
+
+    // Find first bucket classified as expired-refresh-failed or no-token (not tried yet)
+    let candidateBucket: string | undefined = undefined;
+    for (const bucket of this.buckets) {
+      if (
+        !this.triedBucketsThisSession.has(bucket) &&
+        (this.lastFailoverReasons[bucket] === 'expired-refresh-failed' ||
+          this.lastFailoverReasons[bucket] === 'no-token')
+      ) {
+        candidateBucket = bucket;
+        break;
+      }
+    }
+
+    if (candidateBucket !== undefined) {
+      try {
+        logger.debug(
+          `Attempting foreground reauth for bucket: ${candidateBucket}`,
+        );
+        await this.oauthManager.authenticate(this.provider, candidateBucket);
+
+        // Verify token exists after reauth (REQ-1598-FL08)
+        const token = await this.oauthManager.getOAuthToken(
+          this.provider,
+          candidateBucket,
+        );
+        if (token === null) {
+          logger.warn(
+            `Foreground reauth succeeded but token is null for bucket: ${candidateBucket}`,
+          );
+          this.lastFailoverReasons[candidateBucket] = 'reauth-failed';
+          this.triedBucketsThisSession.add(candidateBucket);
+        } else {
+          // Reauth succeeded — switch bucket
+          const bucketIndex = this.buckets.indexOf(candidateBucket);
+          if (bucketIndex >= 0) {
+            this.currentBucketIndex = bucketIndex;
+          }
+          this.triedBucketsThisSession.add(candidateBucket);
+          try {
+            this.oauthManager.setSessionBucket(this.provider, candidateBucket);
+          } catch (setError) {
+            logger.warn(
+              `Failed to set session bucket during pass-3 reauth: ${setError}`,
+            );
+            // Continue anyway
+          }
+          logger.warn(
+            () =>
+              `Bucket failover: switched from ${currentBucket} to ${candidateBucket} after reauth`,
+          );
+          return true;
+        }
+      } catch (reauthError) {
+        logger.warn(
+          `Foreground reauth failed for bucket ${candidateBucket}:`,
+          reauthError,
+        );
+        this.lastFailoverReasons[candidateBucket] = 'reauth-failed';
+        this.triedBucketsThisSession.add(candidateBucket);
+      }
+    }
+
+    // All passes exhausted — failover unsuccessful
     logger.error(
       () =>
         `Bucket failover: all buckets exhausted for provider ${this.provider}`,
@@ -193,5 +420,15 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     logger.debug('Bucket failover handler reset', {
       provider: this.provider,
     });
+  }
+
+  /**
+   * @plan PLAN-20260223-ISSUE1598.P05
+   * @requirement REQ-1598-IC09
+   * Get the failure reasons for buckets that were skipped during last failover
+   * Returns a shallow copy to prevent external mutation
+   */
+  getLastFailoverReasons(): Record<string, BucketFailureReason> {
+    return { ...this.lastFailoverReasons };
   }
 }

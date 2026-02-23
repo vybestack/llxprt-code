@@ -30,7 +30,10 @@ import {
 } from './IProvider.js';
 import type { IModel } from './IModel.js';
 import type { IContent } from '../services/history/IContent.js';
-import type { BucketFailoverHandler } from '../config/config.js';
+import type {
+  BucketFailoverHandler,
+  FailoverContext,
+} from '../config/config.js';
 import {
   getErrorStatus,
   isNetworkTransientError,
@@ -362,7 +365,13 @@ export class RetryOrchestrator implements IProvider {
             () => `Attempting bucket failover after ${failoverReason}`,
           );
 
-          const failoverResult = await bucketFailoverHandler.tryFailover();
+          // Pass FailoverContext with triggeringStatus
+          const failoverContext: FailoverContext = {
+            triggeringStatus: errorStatus,
+          };
+
+          const failoverResult =
+            await bucketFailoverHandler.tryFailover(failoverContext);
 
           if (failoverResult) {
             // Bucket switch succeeded - reset counters and retry immediately
@@ -596,13 +605,19 @@ export class RetryOrchestrator implements IProvider {
   }
 
   /**
-   * Creates an AllBucketsExhaustedError
+   * Creates an AllBucketsExhaustedError with failure reasons
+   * @plan PLAN-20260223-ISSUE1598.P16
+   * @requirement REQ-1598-IC09
    */
   private createAllBucketsExhaustedError(
     handler: BucketFailoverHandler,
     lastError: Error,
   ): AllBucketsExhaustedError {
     const buckets = handler.getBuckets();
-    return new AllBucketsExhaustedError(this.name, buckets, lastError);
+
+    // Get failure reasons if available
+    const reasons = handler.getLastFailoverReasons?.() ?? {};
+
+    return new AllBucketsExhaustedError(this.name, buckets, lastError, reasons);
   }
 }

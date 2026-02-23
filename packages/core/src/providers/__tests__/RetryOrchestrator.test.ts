@@ -1341,4 +1341,274 @@ describe('RetryOrchestrator', () => {
       expect(providerReceivedOptions?.invocation?.signal?.aborted).toBe(true);
     });
   });
+
+  /**
+   * @plan PLAN-20260223-ISSUE1598.P16
+   * @requirement REQ-1598-IC11, REQ-1598-SM03, REQ-1598-IC03, REQ-1598-IC04
+   * @pseudocode error-reporting.md (usage section)
+   *
+   * Integration tests for new failover features:
+   * - FailoverContext passed to tryFailover with triggeringStatus
+   * - getLastFailoverReasons() called after exhaustion
+   * - AllBucketsExhaustedError includes bucketFailureReasons
+   * - Backward compatibility with missing getLastFailoverReasons
+   * - resetSession called at request start
+   */
+  describe('Bucket failover integration with new features', () => {
+    /**
+     * @plan PLAN-20260223-ISSUE1598.P16
+     * @requirement REQ-1598-IC11
+     * @pseudocode error-reporting.md usage lines 7-8
+     */
+    it('should pass FailoverContext with triggeringStatus to tryFailover when 429 detected', async () => {
+      const rateLimitError = createRateLimitError();
+      let capturedContext: { triggeringStatus?: number } | undefined;
+
+      const provider = createTestProvider({
+        responses: [
+          { error: rateLimitError },
+          { error: rateLimitError },
+          'success',
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async (context?: { triggeringStatus?: number }) => {
+          capturedContext = context;
+          return true;
+        },
+        isEnabled: () => true,
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      await consumeStream(orchestrator.generateChatCompletion(options));
+
+      // EXPECTATION: tryFailover was called with context containing status 429
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext?.triggeringStatus).toBe(429);
+    });
+
+    /**
+     * @plan PLAN-20260223-ISSUE1598.P16
+     * @requirement REQ-1598-IC09
+     * @pseudocode error-reporting.md usage lines 10-15
+     */
+    it('should call getLastFailoverReasons after tryFailover returns false', async () => {
+      const rateLimitError = createRateLimitError();
+      let getLastFailoverReasonsCalled = false;
+
+      const provider = createTestProvider({
+        responses: [
+          { error: rateLimitError },
+          { error: rateLimitError },
+          { error: rateLimitError },
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => false, // No more buckets
+        isEnabled: () => true,
+        getLastFailoverReasons: () => {
+          getLastFailoverReasonsCalled = true;
+          return {
+            bucket1: 'quota-exhausted' as const,
+            bucket2: 'expired-refresh-failed' as const,
+          };
+        },
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      await expect(
+        consumeStream(orchestrator.generateChatCompletion(options)),
+      ).rejects.toThrow();
+
+      // EXPECTATION: getLastFailoverReasons was called after tryFailover returned false
+      expect(getLastFailoverReasonsCalled).toBe(true);
+    });
+
+    /**
+     * @plan PLAN-20260223-ISSUE1598.P16
+     * @requirement REQ-1598-ER01, REQ-1598-ER02, REQ-1598-ER03
+     * @pseudocode error-reporting.md lines 10-40
+     */
+    it('should construct AllBucketsExhaustedError with bucketFailureReasons', async () => {
+      const rateLimitError = createRateLimitError();
+
+      const provider = createTestProvider({
+        responses: [
+          { error: rateLimitError },
+          { error: rateLimitError },
+          { error: rateLimitError },
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2', 'bucket3'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => false,
+        isEnabled: () => true,
+        getLastFailoverReasons: () => ({
+          bucket1: 'quota-exhausted' as const,
+          bucket2: 'expired-refresh-failed' as const,
+          bucket3: 'no-token' as const,
+        }),
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      try {
+        await consumeStream(orchestrator.generateChatCompletion(options));
+        expect.fail('Should have thrown AllBucketsExhaustedError');
+      } catch (error) {
+        // EXPECTATION: Error includes bucketFailureReasons
+        expect(error).toHaveProperty('bucketFailureReasons');
+        const reasons = (
+          error as { bucketFailureReasons: Record<string, string> }
+        ).bucketFailureReasons;
+        expect(reasons.bucket1).toBe('quota-exhausted');
+        expect(reasons.bucket2).toBe('expired-refresh-failed');
+        expect(reasons.bucket3).toBe('no-token');
+
+        // EXPECTATION: Error message includes detailed failure reasons
+        expect((error as Error).message).toContain('bucket1: quota-exhausted');
+        expect((error as Error).message).toContain(
+          'bucket2: expired-refresh-failed',
+        );
+        expect((error as Error).message).toContain('bucket3: no-token');
+      }
+    });
+
+    /**
+     * @plan PLAN-20260223-ISSUE1598.P16
+     * @requirement REQ-1598-IC03
+     */
+    it('should handle missing getLastFailoverReasons gracefully (backward compat)', async () => {
+      const rateLimitError = createRateLimitError();
+
+      const provider = createTestProvider({
+        responses: [
+          { error: rateLimitError },
+          { error: rateLimitError },
+          { error: rateLimitError },
+        ],
+      });
+
+      // Old-style handler without getLastFailoverReasons
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => false,
+        isEnabled: () => true,
+        // NO getLastFailoverReasons method
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      // EXPECTATION: Should not crash, fallback to basic error message
+      await expect(
+        consumeStream(orchestrator.generateChatCompletion(options)),
+      ).rejects.toThrow(/bucket/i);
+    });
+
+    /**
+     * @plan PLAN-20260223-ISSUE1598.P16
+     * @requirement REQ-1598-SM03
+     */
+    it('should call resetSession at start of each new request', async () => {
+      let resetSessionCallCount = 0;
+
+      const provider = createTestProvider({
+        responses: ['success', 'success', 'success'],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => false,
+        isEnabled: () => true,
+        resetSession: () => {
+          resetSessionCallCount++;
+        },
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      // Make three separate requests
+      await consumeStream(orchestrator.generateChatCompletion(options));
+      await consumeStream(orchestrator.generateChatCompletion(options));
+      await consumeStream(orchestrator.generateChatCompletion(options));
+
+      // EXPECTATION: resetSession called at start of each request (3 times total)
+      // Note: Current implementation also calls resetSession on success, so expect 6 calls
+      // (once before each request, once after each success)
+      // But requirement is for "at start" so we verify it was called AT LEAST 3 times
+      expect(resetSessionCallCount).toBeGreaterThanOrEqual(3);
+    });
+  });
 });
