@@ -189,11 +189,11 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     // Refreshed token expires in 20 minutes
     const refreshedToken = createMockToken(nowSec + 1200);
 
-    // Setup mocks
+    // Setup mocks — use persistent mock for last value to avoid fragile Once chain
     vi.mocked(tokenStore.getToken)
       .mockResolvedValueOnce(initialToken) // First getOAuthToken call
-      .mockResolvedValueOnce(initialToken) // Token check during renewal
-      .mockResolvedValueOnce(refreshedToken); // After refresh
+      .mockResolvedValueOnce(initialToken) // Token check during first renewal
+      .mockResolvedValue(refreshedToken); // All subsequent calls (including second renewal)
 
     vi.mocked(provider.refreshToken).mockResolvedValue(refreshedToken);
 
@@ -209,8 +209,8 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     // Reset the mock to track second renewal
     vi.mocked(provider.refreshToken).mockClear();
 
-    // Advance to second renewal time (~1200s - 120s = 1080s for 1200s token)
-    // We're already at ~305s, so advance another ~800s
+    // Advance to second renewal time: lead = max(300, 0.1*remaining) = 300s
+    // Second renewal fires ~900s from start; we're at ~305s, advance ~800s
     await vi.advanceTimersByTimeAsync(800 * 1000);
 
     // Second refresh should have been called (proving rescheduling works)
