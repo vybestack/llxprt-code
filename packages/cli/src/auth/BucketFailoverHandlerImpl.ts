@@ -13,8 +13,9 @@
 import {
   BucketFailoverHandler,
   DebugLogger,
-  FailoverContext,
+  type FailoverContext,
   type BucketFailureReason,
+  type OAuthToken,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from './oauth-manager.js';
 
@@ -128,8 +129,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     } else {
       // Check if token exists and its state (expired vs valid)
       // Use getTokenStore() to read raw token state without triggering refresh
-      let storedToken: import('@vybestack/llxprt-code-core').OAuthToken | null =
-        null;
+      let storedToken: OAuthToken | null = null;
       try {
         storedToken = await this.oauthManager
           .getTokenStore()
@@ -215,8 +215,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       }
 
       // Check if token exists in store WITHOUT triggering refresh
-      let storedToken: import('@vybestack/llxprt-code-core').OAuthToken | null =
-        null;
+      let storedToken: OAuthToken | null = null;
       try {
         storedToken = await this.oauthManager
           .getTokenStore()
@@ -271,7 +270,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       }
 
       // Valid token found — use getOAuthToken to ensure it's still valid (might trigger refresh)
-      let token: import('@vybestack/llxprt-code-core').OAuthToken | null = null;
+      let token: OAuthToken | null = null;
       try {
         token = await this.oauthManager.getOAuthToken(this.provider, bucket);
       } catch (error) {

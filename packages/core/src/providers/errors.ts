@@ -325,13 +325,16 @@ export class AllBucketsExhaustedError extends Error {
   ) {
     const reasons = bucketFailureReasons ? { ...bucketFailureReasons } : {};
 
-    // Build enhanced message with per-bucket reasons
-    const bucketDetails = attemptedBuckets
-      .map((b) => {
-        const reason = reasons[b];
-        return reason ? `  - ${b}: ${reason}` : `  - ${b}: unknown`;
-      })
-      .join('\n');
+    // Build enhanced message with per-bucket reasons only when provided
+    let bucketDetails = '';
+    if (bucketFailureReasons) {
+      bucketDetails = attemptedBuckets
+        .map((b) => {
+          const reason = reasons[b];
+          return reason ? `  - ${b}: ${reason}` : `  - ${b}: unknown`;
+        })
+        .join('\n');
+    }
 
     super(
       `All buckets exhausted for provider '${providerName}': ${attemptedBuckets.join(', ')}` +
