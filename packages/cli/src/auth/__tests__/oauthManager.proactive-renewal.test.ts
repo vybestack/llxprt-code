@@ -144,7 +144,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
    * proactive renewal timers. The bug was that `if (remainingSec <= 0)` check
    * was missing, causing negative delays and unpredictable timer behavior.
    */
-  it('should not schedule proactive renewal timer for expired tokens (BUG FIX)', async () => {
+  it('should not schedule proactive renewal timer for short-lived tokens under 5min (BUG FIX)', async () => {
     const tokenStore = createMockTokenStore();
     const manager = new OAuthManager(tokenStore);
     const provider = createMockProvider('test-provider');
@@ -341,7 +341,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
    * @requirement REQ-1598-PR01
    * Tests that configureProactiveRenewalsForProfile handles expired tokens by attempting refresh
    */
-  it('should attempt immediate refresh for expired tokens with refresh_token', async () => {
+  it('should not schedule proactive renewal for expired tokens with refresh_token', async () => {
     const tokenStore = createMockTokenStore();
     const manager = new OAuthManager(tokenStore);
     const provider = createMockProvider('test-provider');

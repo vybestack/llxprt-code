@@ -19,6 +19,9 @@ import {
 
 const logger = new DebugLogger('llxprt:oauth:manager');
 
+/** Maximum consecutive proactive renewal failures before stopping retries. */
+const MAX_PROACTIVE_RENEWAL_FAILURES = 3;
+
 function isAuthOnlyEnabled(value: unknown): boolean {
   if (typeof value === 'boolean') {
     return value;
@@ -1243,9 +1246,8 @@ export class OAuthManager {
 
     // @plan PLAN-20260223-ISSUE1598.P14
     // @requirement REQ-1598-PR05
-    // Stop retrying after 3 consecutive failures
-    const MAX_FAILURES = 3;
-    if (failures >= MAX_FAILURES) {
+    // Stop retrying after MAX_PROACTIVE_RENEWAL_FAILURES consecutive failures
+    if (failures >= MAX_PROACTIVE_RENEWAL_FAILURES) {
       logger.debug(
         () =>
           `[OAUTH] Stopping proactive renewal after ${failures} failures for ${providerName}:${normalizedBucket}`,
@@ -1304,7 +1306,7 @@ export class OAuthManager {
     // @requirement REQ-1598-PR01
     // Fix: Don't schedule proactive renewal for expired or short-lived tokens
     // Clear any stale timer so a prior schedule doesn't fire unexpectedly
-    if (remainingSec <= 0 || remainingSec < 300) {
+    if (remainingSec < 300) {
       this.clearProactiveRenewal(key);
       return;
     }

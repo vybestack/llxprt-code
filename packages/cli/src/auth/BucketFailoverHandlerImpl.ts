@@ -171,15 +171,8 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
           // Refresh failed or returned null
           reason = 'expired-refresh-failed';
         } else {
-          // Token not expired but call failed — fallback classification
-          if (
-            context?.triggeringStatus === 500 ||
-            context?.triggeringStatus === 503
-          ) {
-            reason = 'quota-exhausted';
-          } else {
-            reason = 'no-token';
-          }
+          // Token exists and is not expired — failure isn't credential-related
+          reason = 'skipped';
         }
       } else if (reason === null) {
         // No token in store (REQ-1598-CL03)
