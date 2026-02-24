@@ -170,6 +170,14 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
           }
           // Refresh failed or returned null
           reason = 'expired-refresh-failed';
+        } else if (
+          context?.triggeringStatus === 401 ||
+          context?.triggeringStatus === 403
+        ) {
+          // Token looks valid locally but was rejected server-side (revoked).
+          // getOAuthToken would return this same token, so classify directly
+          // for Pass 3 foreground reauth instead of marking 'skipped'.
+          reason = 'expired-refresh-failed';
         } else {
           // Token exists and is not expired — failure isn't credential-related
           reason = 'skipped';
