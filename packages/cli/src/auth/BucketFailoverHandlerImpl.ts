@@ -307,17 +307,29 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     // @pseudocode failover-handler.md lines 123-170
     // ============================================================
 
-    // Find first bucket classified as expired-refresh-failed or no-token (not tried yet)
+    // Find first bucket classified as expired-refresh-failed or no-token.
+    // Prefer untried buckets first; if none are available, fall back to the
+    // triggering bucket itself — this covers the common single-bucket case
+    // where the only bucket has an expired token whose refresh failed.
     let candidateBucket: string | undefined = undefined;
     for (const bucket of this.buckets) {
-      if (
-        !this.triedBucketsThisSession.has(bucket) &&
-        (this.lastFailoverReasons[bucket] === 'expired-refresh-failed' ||
-          this.lastFailoverReasons[bucket] === 'no-token')
-      ) {
+      const bucketReason = this.lastFailoverReasons[bucket];
+      const reauthEligible =
+        bucketReason === 'expired-refresh-failed' ||
+        bucketReason === 'no-token';
+      if (reauthEligible && !this.triedBucketsThisSession.has(bucket)) {
         candidateBucket = bucket;
         break;
       }
+    }
+    // Fallback: allow the triggering bucket when no untried candidate exists
+    if (
+      candidateBucket === undefined &&
+      currentBucket &&
+      (this.lastFailoverReasons[currentBucket] === 'expired-refresh-failed' ||
+        this.lastFailoverReasons[currentBucket] === 'no-token')
+    ) {
+      candidateBucket = currentBucket;
     }
 
     if (candidateBucket !== undefined) {
