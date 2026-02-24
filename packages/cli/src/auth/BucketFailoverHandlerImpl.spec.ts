@@ -553,18 +553,23 @@ describe('BucketFailoverHandlerImpl', () => {
      * Test that token-store read errors are classified as no-token
      */
     it('should classify token-store error as no-token', async () => {
+      // Save a token so the null-token path won't trigger first
+      await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
       await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
 
       oauthManager.setSessionBucket('anthropic', 'bucket-a');
 
-      // Mock getOAuthToken to throw for bucket-a
-      const originalGetToken = oauthManager.getOAuthToken.bind(oauthManager);
-      oauthManager.getOAuthToken = vi.fn(async (provider, bucket) => {
-        if (bucket === 'bucket-a') {
-          throw new Error('Token store read error');
-        }
-        return originalGetToken(provider, bucket);
-      });
+      // Mock the token store's getToken to throw for bucket-a
+      // This exercises the catch block in Pass 1 (lines 137-143)
+      const originalStoreGetToken = tokenStore.getToken.bind(tokenStore);
+      vi.spyOn(tokenStore, 'getToken').mockImplementation(
+        async (provider, bucket) => {
+          if (bucket === 'bucket-a') {
+            throw new Error('Token store read error');
+          }
+          return originalStoreGetToken(provider, bucket);
+        },
+      );
 
       const handler = new BucketFailoverHandlerImpl(
         ['bucket-a', 'bucket-b'],
@@ -845,11 +850,14 @@ describe('BucketFailoverHandlerImpl', () => {
     it('should classify no-token when getOAuthToken throws', async () => {
       // Arrange: bucket-a current, bucket-b will throw on getOAuthToken, bucket-c valid
       await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+      // bucket-b must have a stored token so Pass 2 reaches the getOAuthToken call
+      await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
       await tokenStore.saveToken('anthropic', makeToken('t3'), 'bucket-c');
 
       oauthManager.setSessionBucket('anthropic', 'bucket-a');
 
       // Mock getOAuthToken to throw for bucket-b
+      // This exercises the catch at lines 277-283 in Pass 2
       const originalGetToken = oauthManager.getOAuthToken.bind(oauthManager);
       oauthManager.getOAuthToken = vi.fn(async (provider, bucket) => {
         if (bucket === 'bucket-b') {
