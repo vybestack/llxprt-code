@@ -93,10 +93,10 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    * @requirement REQ-1598-FL01, CL01, CL02, CL03, CL04, CL07, CL09, FL12
    * @pseudocode failover-handler.md lines 1-58
    *
-   * This method implements Pass 1 of the three-pass algorithm:
+   * This method implements the three-pass failover algorithm:
    * Pass 1: Classify the triggering bucket based on context and token state
-   * Pass 2: Find next candidate with valid/refreshable token (TODO: Phase 06)
-   * Pass 3: Attempt foreground reauth for expired/missing tokens (TODO: Phase 07)
+   * Pass 2: Find next candidate with valid/refreshable token
+   * Pass 3: Attempt foreground reauth for expired/missing tokens
    */
   async tryFailover(context?: FailoverContext): Promise<boolean> {
     // Clear reasons from previous attempt (REQ-1598-CL09)

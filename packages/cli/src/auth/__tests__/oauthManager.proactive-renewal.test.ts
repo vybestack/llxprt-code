@@ -96,14 +96,14 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     // For 600s remaining: lead = max(300, 60) = 300, so renewal at 600 - 300 = 300s
     // With jitter (0-30s), timer should be ~270-300s
 
-    // Advance time by ~270 seconds (before renewal window)
-    await vi.advanceTimersByTimeAsync(270 * 1000);
+    // Advance time to 265s (safely before the earliest jitter boundary of 270s)
+    await vi.advanceTimersByTimeAsync(265 * 1000);
 
     // Provider.refreshToken should not have been called yet
     expect(provider.refreshToken).not.toHaveBeenCalled();
 
-    // Advance time to trigger renewal (add 35s to account for jitter)
-    await vi.advanceTimersByTimeAsync(35 * 1000);
+    // Advance time to trigger renewal (40s covers the remaining 5s + 30s max jitter)
+    await vi.advanceTimersByTimeAsync(40 * 1000);
 
     // Now refreshToken should have been called
     expect(provider.refreshToken).toHaveBeenCalled();
