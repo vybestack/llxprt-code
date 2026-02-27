@@ -5,6 +5,29 @@
 
 ---
 
+## Verification Commands
+
+Use these standardized verification command sets throughout all batches:
+
+- **Quick** = `npm run lint && npm run typecheck`
+- **Full** = `npm run test && npm run lint && npm run typecheck && npm run format --check && npm run build`
+- **Final** = Full + `node scripts/start.js --profile-load synthetic "write me a haiku and nothing else"`
+
+Reference these by name (e.g., "run Quick verification") in batch prompts for consistency.
+
+---
+
+## Test-Driven Development (TDD) Requirement
+
+All REIMPLEMENT batches MUST follow RED-GREEN-REFACTOR TDD:
+1. **RED**: Write/update behavioral tests FIRST. Run them to confirm they FAIL.
+2. **GREEN**: Implement minimal code to make tests PASS.
+3. **REFACTOR**: Only then refactor if valuable.
+
+All batches (PICK and REIMPLEMENT) MUST achieve **100% behavior coverage for changed behaviors**. Every behavioral change must be covered by tests.
+
+---
+
 ## START HERE (If you were told to "DO this plan")
 
 ### Step 1: Check current state
@@ -80,10 +103,13 @@ Per `dev-docs/cherrypicking.md`:
 **Cherrypicker** (executes changes):
 - `subagent_name: "cherrypicker"`
 - `tool_whitelist: ["read_file", "run_shell_command", "search_file_content", "glob", "list_directory", "read_many_files", "read_line_range", "write_file", "replace", "insert_at_line", "delete_line_range", "apply_patch"]`
+- **For REIMPLEMENT batches:** MANDATORY TDD -- Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+- **For ALL batches:** MANDATORY 100% behavior coverage for changed behaviors.
 
 **Deepthinker** (reviews changes -- holistic: mechanical + behavioral):
 - `subagent_name: "deepthinker"`
 - `tool_whitelist: ["read_file", "run_shell_command", "search_file_content", "glob", "list_directory", "read_many_files", "read_line_range"]`
+- **MANDATORY for ALL batches:** Verify 100% behavior coverage for changed behaviors. All behavioral changes must be covered by tests.
 
 ---
 
@@ -109,17 +135,17 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit cc52839f19.
 Update docs/hooks/ to use snake_case tool names (write_file, replace, search_file_content, etc.)
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show cc52839f19
 
 Then read LLxprt's current versions of affected files in docs/hooks/.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
-After changes, run verification:
-npm run lint
-npm run typecheck
+After changes, run Quick verification (see Verification Commands).
 
-DELIVERABLES: Hook docs updated with snake_case tool names. Lint and typecheck pass.
+DELIVERABLES: Hook docs updated with snake_case tool names. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Skip ahead to Batch 2
@@ -134,16 +160,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: updating hook docs to use snake_case tool names
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B1 Commit
@@ -174,9 +199,7 @@ Cherry-pick these 5 commits:
 
 git cherry-pick db643e9166 26c115a4fb 3e9a0a7628 7f2d33458a da85aed5aa
 
-After cherry-pick, run verification:
-npm run lint
-npm run typecheck
+After cherry-pick, run Quick verification (see Verification Commands).
 
 If cherry-pick fails with conflicts:
 1. Run: git cherry-pick --abort
@@ -184,7 +207,7 @@ If cherry-pick fails with conflicts:
 3. Resolve conflicts preserving LLxprt branding (see PLAN.md Branding Substitutions)
 4. Run: git cherry-pick --continue
 
-DELIVERABLES: All 5 commits applied. Lint and typecheck pass.
+DELIVERABLES: All 5 commits applied. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Modify any files beyond what the cherry-pick changes
@@ -200,16 +223,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~5 (or appropriate range for 5 commits)
 2. Verify changes match upstream intent for: theme foreground removal, tips removal, footer debug removal, eslint no-return-await, settings padding fix
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B2 Commit
@@ -239,17 +261,17 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit bb8f181ef1.
 Replace console.error with debugLogger in packages/core/src/tools/ripGrep.ts
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show bb8f181ef1
 
 Then read LLxprt's current version of packages/core/src/tools/ripGrep.ts.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
-After changes, run verification:
-npm run lint
-npm run typecheck
+After changes, run Quick verification (see Verification Commands).
 
-DELIVERABLES: console.error replaced with debugLogger in ripGrep.ts. Lint and typecheck pass.
+DELIVERABLES: console.error replaced with debugLogger in ripGrep.ts. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Skip ahead to Batch 4
@@ -264,16 +286,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: replacing console.error with debugLogger in ripGrep.ts
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B3 Commit
@@ -304,9 +325,7 @@ Cherry-pick these 2 commits:
 
 git cherry-pick 948401a450 3d486ec1bf
 
-After cherry-pick, run verification:
-npm run lint
-npm run typecheck
+After cherry-pick, run Quick verification (see Verification Commands).
 
 If cherry-pick fails with conflicts:
 1. Run: git cherry-pick --abort
@@ -314,7 +333,7 @@ If cherry-pick fails with conflicts:
 3. Resolve conflicts preserving LLxprt branding (see PLAN.md Branding Substitutions)
 4. Run: git cherry-pick --continue
 
-DELIVERABLES: Both commits applied. Lint and typecheck pass.
+DELIVERABLES: Both commits applied. Quick verification passes.
 
 DO NOT:
 - Modify any files beyond what the cherry-pick changes
@@ -330,16 +349,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~2 (or appropriate range for 2 commits)
 2. Verify changes match upstream intent for: a2a-js SDK update, Windows clipboard paste
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B4 Commit
@@ -370,6 +388,8 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit 6ddd5abd7b.
 Fix slash completion to not hide sibling commands on eager match.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 6ddd5abd7b
 
@@ -379,11 +399,9 @@ cat project-plans/gmerge-0.23.0/6ddd5abd-plan.md
 Then read LLxprt's current versions of affected files.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
-After changes, run verification:
-npm run lint
-npm run typecheck
+After changes, run Quick verification (see Verification Commands).
 
-DELIVERABLES: Slash completion fix implemented. Lint and typecheck pass.
+DELIVERABLES: Slash completion fix implemented. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Skip ahead to Batch 6
@@ -398,16 +416,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: fixing slash completion eager match hiding siblings
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B5 Commit
@@ -437,6 +454,8 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit 739c02bd6d.
 Replace magic number 2 with INITIAL_HISTORY_LENGTH in chatCommand.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 739c02bd6d
 
@@ -446,11 +465,9 @@ cat project-plans/gmerge-0.23.0/739c02bd-plan.md
 Then read LLxprt's current versions of affected files.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
-After changes, run verification:
-npm run lint
-npm run typecheck
+After changes, run Quick verification (see Verification Commands).
 
-DELIVERABLES: Magic number replaced with named constant. Lint and typecheck pass.
+DELIVERABLES: Magic number replaced with named constant. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Skip ahead to Batch 7
@@ -465,16 +482,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: replacing magic history length with named constant
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B6 Commit
@@ -505,16 +521,14 @@ Cherry-pick this 1 commit:
 
 git cherry-pick bc168bbae4
 
-After cherry-pick, run verification:
-npm run lint
-npm run typecheck
+After cherry-pick, run Quick verification (see Verification Commands).
 
 If cherry-pick fails with conflicts:
 1. Run: git cherry-pick --abort
 2. Resolve conflicts preserving LLxprt branding (see PLAN.md Branding Substitutions)
 3. Run: git cherry-pick --continue
 
-DELIVERABLES: Commit applied. Lint and typecheck pass.
+DELIVERABLES: Commit applied. Quick verification passes.
 
 DO NOT:
 - Modify any files beyond what the cherry-pick changes
@@ -530,16 +544,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: new shared Table component, model stats layout fix
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B7 Commit
@@ -570,6 +583,8 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit 54466a3ea8.
 Add name and description fields to hook config. Update hook registry, planner, and UI to use them.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 54466a3ea8
 
@@ -579,10 +594,9 @@ cat project-plans/gmerge-0.23.0/54466a3e-plan.md
 Then read LLxprt's current versions of affected files.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
-After changes, run verification:
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+After changes, run Full verification (see Verification Commands).
 
-DELIVERABLES: Hook name/description support implemented. Full verification passes.
+DELIVERABLES: Hook name/description support implemented. 100% behavior coverage for changed behaviors. Full verification passes.
 
 DO NOT:
 - Skip ahead to Batch 9
@@ -597,15 +611,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: adding name and description to hook config
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build
-5. Output: PASS or FAIL with specific issues
+5. Run Full verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B8 Commit
@@ -636,6 +650,8 @@ YOUR TASK: Reimplement upstream commit 322232e514.
 SELECTIVE implementation: add detectTerminalBackgroundColor + getThemeTypeFromBackgroundColor only, wire into theme init.
 Do NOT do the full 28-file refactor from upstream.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 322232e514
 
@@ -646,9 +662,9 @@ Then read LLxprt's current versions of affected files.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
 After changes, run verification:
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+Full verification (see Verification Commands)
 
-DELIVERABLES: Terminal background color detection implemented and wired into theme. Full verification passes.
+DELIVERABLES: Terminal background color detection implemented and wired into theme. 100% behavior coverage for changed behaviors. Full verification passes.
 
 DO NOT:
 - Perform the full 28-file refactor from upstream
@@ -671,8 +687,7 @@ REVIEW TASK:
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-5. Run verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+5. Run Full verification (see Verification Commands)
 6. Output: PASS or FAIL with specific issues
 ```
 
@@ -703,6 +718,8 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit 2515b89e2b.
 Add CI environment variables to shell sanitization whitelist.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 2515b89e2b
 
@@ -712,11 +729,9 @@ cat project-plans/gmerge-0.23.0/2515b89e-plan.md
 Then read LLxprt's current versions of affected files.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
-After changes, run verification:
-npm run lint
-npm run typecheck
+After changes, run Quick verification (see Verification Commands).
 
-DELIVERABLES: CI env vars added to shell allowlist. Lint and typecheck pass.
+DELIVERABLES: CI env vars added to shell allowlist. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Skip ahead to Batch 11
@@ -731,16 +746,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: adding CI environment variables to shell allowlist
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B10 Commit
@@ -771,9 +785,7 @@ Cherry-pick these 2 commits:
 
 git cherry-pick 0c4fb6afd2 1e10492e55
 
-After cherry-pick, run verification:
-npm run lint
-npm run typecheck
+After cherry-pick, run Quick verification (see Verification Commands).
 
 If cherry-pick fails with conflicts:
 1. Run: git cherry-pick --abort
@@ -781,7 +793,7 @@ If cherry-pick fails with conflicts:
 3. Resolve conflicts preserving LLxprt branding (see PLAN.md Branding Substitutions)
 4. Run: git cherry-pick --continue
 
-DELIVERABLES: Both commits applied. Lint and typecheck pass.
+DELIVERABLES: Both commits applied. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Modify any files beyond what the cherry-pick changes
@@ -797,16 +809,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~2 (or appropriate range for 2 commits)
 2. Verify changes match upstream intent for: removing unnecessary deps, fixing prompt infinite loop
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B11 Commit
@@ -837,6 +848,8 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit 70696e364b.
 Show slash command suggestions on perfect match and sort them.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 70696e364b
 
@@ -846,11 +859,9 @@ cat project-plans/gmerge-0.23.0/70696e36-plan.md
 Then read LLxprt's current versions of affected files.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
-After changes, run verification:
-npm run lint
-npm run typecheck
+After changes, run Quick verification (see Verification Commands).
 
-DELIVERABLES: Slash suggestions show on perfect match and are sorted. Lint and typecheck pass.
+DELIVERABLES: Slash suggestions show on perfect match and are sorted. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Skip ahead to Batch 13
@@ -865,16 +876,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: showing slash suggestions on perfect match and sorting
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B12 Commit
@@ -904,6 +914,8 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit 402148dbc4.
 Add coreEvents.emitFeedback for hook failures so users see feedback in the UI.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 402148dbc4
 
@@ -913,11 +925,9 @@ cat project-plans/gmerge-0.23.0/402148db-plan.md
 Then read LLxprt's current versions of affected files.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
-After changes, run verification:
-npm run lint
-npm run typecheck
+After changes, run Quick verification (see Verification Commands).
 
-DELIVERABLES: Hook failure UI feedback implemented. Lint and typecheck pass.
+DELIVERABLES: Hook failure UI feedback implemented. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Skip ahead to Batch 14
@@ -932,16 +942,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: emitting UI feedback on hook failures
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B13 Commit
@@ -972,16 +981,14 @@ Cherry-pick this 1 commit:
 
 git cherry-pick e0f1590850
 
-After cherry-pick, run verification:
-npm run lint
-npm run typecheck
+After cherry-pick, run Quick verification (see Verification Commands).
 
 If cherry-pick fails with conflicts:
 1. Run: git cherry-pick --abort
 2. Resolve conflicts preserving LLxprt branding (see PLAN.md Branding Substitutions)
 3. Run: git cherry-pick --continue
 
-DELIVERABLES: Commit applied. Lint and typecheck pass.
+DELIVERABLES: Commit applied. 100% behavior coverage for changed behaviors. Quick verification passes.
 
 DO NOT:
 - Modify any files beyond what the cherry-pick changes
@@ -997,16 +1004,15 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: simplifying tool confirmation labels
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run lint
-   npm run typecheck
-5. Output: PASS or FAIL with specific issues
+5. Run Quick verification (see Verification Commands)
+6. Output: PASS or FAIL with specific issues
 ```
 
 #### B14 Commit
@@ -1037,6 +1043,8 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit 2e229d3bb6.
 Create ContextManager for lazy .llxprt/LLXPRT.md loading with refresh capability.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 2e229d3bb6
 
@@ -1049,9 +1057,9 @@ Apply the equivalent changes, adapting for LLxprt branding and architecture.
 IMPORTANT: All references to .gemini/GEMINI.md must be .llxprt/LLXPRT.md in LLxprt.
 
 After changes, run verification:
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+Full verification (see Verification Commands)
 
-DELIVERABLES: ContextManager implemented with lazy loading and refresh. Full verification passes.
+DELIVERABLES: ContextManager implemented with lazy loading and refresh. 100% behavior coverage for changed behaviors. Full verification passes.
 
 DO NOT:
 - Skip ahead to Batch 16
@@ -1066,7 +1074,8 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: JIT context memory loading via ContextManager
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
@@ -1075,8 +1084,7 @@ REVIEW TASK:
 4. BRANDING CRITICAL: Verify all context file paths reference .llxprt/LLXPRT.md, NOT .gemini/GEMINI.md:
    grep -rn "GEMINI.md\|\.gemini/" packages/ --include="*.ts" | grep -v node_modules | grep -v dist | grep -v "Copyright"
    Must return ZERO results (excluding existing known references).
-5. Run verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+5. Run Full verification (see Verification Commands)
 6. Output: PASS or FAIL with specific issues
 ```
 
@@ -1108,8 +1116,7 @@ Cherry-pick these 4 commits (security-relevant -- extra care required):
 
 git cherry-pick 419464a8c2 181da07dd9 9383b54d50 db67bb106a
 
-After cherry-pick, run full verification:
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+After cherry-pick, run Full verification (see Verification Commands).
 
 If cherry-pick fails with conflicts:
 1. Run: git cherry-pick --abort
@@ -1117,7 +1124,7 @@ If cherry-pick fails with conflicts:
 3. Resolve conflicts preserving LLxprt branding (see PLAN.md Branding Substitutions)
 4. Run: git cherry-pick --continue
 
-DELIVERABLES: All 4 commits applied. Full verification passes.
+DELIVERABLES: All 4 commits applied. 100% behavior coverage for changed behaviors. Full verification passes.
 
 DO NOT:
 - Modify any files beyond what the cherry-pick changes
@@ -1143,8 +1150,7 @@ REVIEW TASK:
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-5. Run verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+5. Run Full verification (see Verification Commands)
 6. Output: PASS or FAIL with specific issues
 ```
 
@@ -1177,6 +1183,8 @@ YOUR TASK: Reimplement upstream commit 41a1a3eed1.
 CRITICAL SECURITY FIX: Sanitize expandCommand() in hookRunner.ts to prevent shell injection.
 Use LLXPRT_PROJECT_DIR not GEMINI_PROJECT_DIR.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 41a1a3eed1
 
@@ -1189,9 +1197,9 @@ Apply the equivalent changes, adapting for LLxprt branding and architecture.
 CRITICAL BRANDING: All occurrences of GEMINI_PROJECT_DIR must be LLXPRT_PROJECT_DIR.
 
 After changes, run full verification:
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+Full verification (see Verification Commands)
 
-DELIVERABLES: Shell injection prevention implemented. LLXPRT_PROJECT_DIR used everywhere. Full verification passes.
+DELIVERABLES: Shell injection prevention implemented. LLXPRT_PROJECT_DIR used everywhere. 100% behavior coverage for changed behaviors. Full verification passes.
 
 DO NOT:
 - Use GEMINI_PROJECT_DIR anywhere
@@ -1221,7 +1229,7 @@ REVIEW TASK:
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
 6. Run verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+   Full verification (see Verification Commands)
 7. Output: PASS or FAIL with specific issues
 ```
 
@@ -1260,8 +1268,7 @@ smart-edit.ts is removed in LLxprt. If cherry-pick conflicts on smart-edit.ts:
 2. Run: git add <path-to-smart-edit.ts>
 3. Run: git cherry-pick --continue
 
-After all 3, run full verification:
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+After all 3, run Full verification (see Verification Commands).
 
 If cherry-pick fails with other conflicts:
 1. Run: git cherry-pick --abort
@@ -1269,7 +1276,7 @@ If cherry-pick fails with other conflicts:
 3. Resolve conflicts preserving LLxprt branding (see PLAN.md Branding Substitutions)
 4. Run: git cherry-pick --continue
 
-DELIVERABLES: All 3 commits applied (smart-edit.ts changes skipped). Full verification passes.
+DELIVERABLES: All 3 commits applied (smart-edit.ts changes skipped). 100% behavior coverage for changed behaviors. Full verification passes.
 
 DO NOT:
 - Add smart-edit.ts code back to the project
@@ -1294,8 +1301,7 @@ REVIEW TASK:
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-5. Run verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+5. Run Full verification (see Verification Commands)
 6. Output: PASS or FAIL with specific issues
 ```
 
@@ -1328,6 +1334,8 @@ YOUR TASK: Reimplement upstream commit 58fd00a3df.
 Add .llxprtignore support for SearchText/ripgrep tool.
 Upstream uses .geminiignore -- LLxprt must use .llxprtignore instead.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show 58fd00a3df
 
@@ -1340,9 +1348,9 @@ Apply the equivalent changes, adapting for LLxprt branding and architecture.
 CRITICAL BRANDING: All references to .geminiignore must be .llxprtignore.
 
 After changes, run full verification:
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+Full verification (see Verification Commands)
 
-DELIVERABLES: .llxprtignore support implemented for SearchText tool. Full verification passes.
+DELIVERABLES: .llxprtignore support implemented for SearchText tool. 100% behavior coverage for changed behaviors. Full verification passes.
 
 DO NOT:
 - Use .geminiignore anywhere
@@ -1367,8 +1375,7 @@ REVIEW TASK:
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-5. Run verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+5. Run Full verification (see Verification Commands)
 6. Output: PASS or FAIL with specific issues
 ```
 
@@ -1400,15 +1407,14 @@ Cherry-pick this 1 commit:
 
 git cherry-pick 703d2e0dcc
 
-After cherry-pick, run full verification:
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+After cherry-pick, run Full verification (see Verification Commands).
 
 If cherry-pick fails with conflicts:
 1. Run: git cherry-pick --abort
 2. Resolve conflicts preserving LLxprt branding (see PLAN.md Branding Substitutions)
 3. Run: git cherry-pick --continue
 
-DELIVERABLES: Commit applied. Full verification passes.
+DELIVERABLES: Commit applied. 100% behavior coverage for changed behaviors. Full verification passes.
 
 DO NOT:
 - Modify any files beyond what the cherry-pick changes
@@ -1424,14 +1430,14 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: policy persistence, confirmation-bus, shell fixes
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+4. Run Full verification (see Verification Commands)
 5. Output: PASS or FAIL with specific issues
 ```
 
@@ -1463,6 +1469,8 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit b7ad7e1035.
 Make retryDelayMs optional and add exponential backoff for quota retries.
 
+MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+
 REFERENCE: Read the upstream diff first:
 git show b7ad7e1035
 
@@ -1472,10 +1480,9 @@ cat project-plans/gmerge-0.23.0/b7ad7e10-plan.md
 Then read LLxprt's current versions of affected files.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
-After changes, run full verification:
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+After changes, run Full verification (see Verification Commands).
 
-DELIVERABLES: Quota retry with optional delay and exponential backoff. Full verification passes.
+DELIVERABLES: Quota retry with optional delay and exponential backoff. 100% behavior coverage for changed behaviors. Full verification passes.
 
 DO NOT:
 - Skip ahead to Batch 22
@@ -1490,14 +1497,14 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: making retryDelayMs optional and adding exponential backoff
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build
+4. Run Full verification (see Verification Commands)
 5. Output: PASS or FAIL with specific issues
 ```
 
@@ -1529,8 +1536,7 @@ Cherry-pick this 1 commit:
 
 git cherry-pick 17fb758664
 
-After cherry-pick, run FINAL verification (this is the last batch):
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build && node scripts/start.js --profile-load synthetic "write me a haiku and nothing else"
+After cherry-pick, run Final verification (see Verification Commands).
 
 If cherry-pick fails with conflicts:
 1. Run: git cherry-pick --abort
@@ -1552,14 +1558,14 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: token calculation, eslint fixes, client fix
-3. Check Non-Negotiables:
+3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
    - No ClearcutLogger references
    - No GEMINI.md references (must be LLXPRT.md)
    - Copyright headers unchanged
-4. Run FINAL verification:
-   npm run test && npm run lint && npm run typecheck && npm run format && npm run build && node scripts/start.js --profile-load synthetic "write me a haiku and nothing else"
+4. Run Final verification (see Verification Commands)
 5. Output: PASS or FAIL with specific issues
 ```
 
@@ -1702,24 +1708,39 @@ The coordinator should update these files after each batch commit:
 
 After FINAL-audit is complete:
 
-1. Run full verification suite:
-```bash
-npm run test && npm run lint && npm run typecheck && npm run format && npm run build && node scripts/start.js --profile-load synthetic "write me a haiku and nothing else"
-```
+1. Run Final verification (see Verification Commands at top).
 
-2. Push and create PR:
+2. Push and create PR with proper title format:
 ```bash
 git push origin gmerge/0.23.0
 gh pr create --base main --head gmerge/0.23.0 \
-  --title "chore: upstream sync v0.22.0..v0.23.0 (gmerge/0.23.0)" \
+  --title "chore: upstream sync v0.22.0..v0.23.0 (Fixes #<ISSUE_NUMBER>)" \
   --body "See project-plans/gmerge-0.23.0/CHERRIES.md and AUDIT.md for full details."
 ```
+**IMPORTANT:** PR title MUST include the issue number being fixed (e.g., "Fixes #1234").
 
-3. Watch CI:
+3. Watch CI and remediate until all green:
 ```bash
-gh pr checks NUM --watch --interval 300
+gh pr checks <PR_NUMBER> --watch --interval 300
 ```
-Then follow PR rules: review CodeRabbit, loop until green.
+
+Loop until workflows finish, then:
+- Review ALL CodeRabbit comments
+- For each CodeRabbit issue:
+  - Evaluate against actual source code (don't trust blindly)
+  - Ignore severity labels - treat all issues equally
+  - DO NOT dismiss "code quality" issues - DRY and maintainability matter
+  - DO dismiss issues well outside PR scope or factual mistakes
+  - Add comment explaining action taken
+  - Resolve if addressed or provably invalid
+- For any failures or issues to address:
+  - Fix the code
+  - Run Final verification again
+  - Commit and push
+  - Watch workflows again
+  - Loop until all workflows are green AND all CodeRabbit issues resolved
+
+4. Never assume failures are "unrelated to my changes" - verify with evidence via `gh` that same tests fail on main before claiming pre-existing.
 
 ---
 

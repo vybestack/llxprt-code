@@ -3,6 +3,35 @@
 ## Upstream Change
 Creates a ContextManager service for lazy (just-in-time) memory loading with refresh capability, emits MemoryChanged events, and wires into config for conditional loading based on experimental flag.
 
+## ContextManager API Contract
+
+The ContextManager provides lazy-loaded memory management with the following public interface:
+
+```typescript
+class ContextManager {
+  constructor(config: Config);
+  
+  // Refresh all memory (global + environment), emit MemoryChanged event
+  async refresh(): Promise<void>;
+  
+  // Return global memory content (from ~/.llxprt/.LLXPRT_SYSTEM)
+  getGlobalMemory(): string;
+  
+  // Return environment memory content (from workspace .llxprt/LLXPRT.md + MCP)
+  getEnvironmentMemory(): string;
+  
+  // Return set of all loaded file paths
+  getLoadedPaths(): Set<string>;
+}
+```
+
+**Behavior Guarantees:**
+- `refresh()` clears all cached data, reloads from disk, emits MemoryChanged event with fileCount
+- Missing or nonexistent files return empty string, never throw
+- Memory is lazy-loaded: not initialized until `refresh()` is called
+- All methods are synchronous except `refresh()`
+- Thread-safe: loadedPaths is cleared atomically before reload
+
 ## LLxprt Files to Modify
 - packages/core/src/services/contextManager.ts — Implement refresh() method and event emission
 - packages/core/src/config/config.ts — Add JIT check, initialize ContextManager, delegate getters
@@ -15,6 +44,69 @@ Creates a ContextManager service for lazy (just-in-time) memory loading with ref
 - packages/core/src/index.ts — Export ContextManager
 
 ## Steps
+
+### MANDATORY: Test-Driven Development (TDD)
+
+**NO PRODUCTION CODE MAY BE WRITTEN WITHOUT A FAILING TEST FIRST. Follow RED-GREEN-REFACTOR strictly.**
+
+#### Phase 1: Write Behavioral Tests (RED)
+
+Create `packages/core/src/services/contextManager.test.ts` with tests for:
+
+1. **Lazy Loading**:
+   - Constructor does NOT load any files (getLoadedPaths() returns empty Set)
+   - getGlobalMemory() returns empty string before refresh()
+   - getEnvironmentMemory() returns empty string before refresh()
+
+2. **Refresh Behavior**:
+   - refresh() loads global memory from ~/.llxprt/.LLXPRT_SYSTEM
+   - refresh() loads environment memory from workspace .llxprt/LLXPRT.md
+   - refresh() clears previous data before reloading (loadedPaths reset)
+   - refresh() emits MemoryChanged event with correct fileCount
+
+3. **Missing/Nonexistent Files** (CRITICAL):
+   - Missing ~/.llxprt/.LLXPRT_SYSTEM returns empty string, NOT throw
+   - Missing workspace .llxprt/LLXPRT.md returns empty string, NOT throw
+   - Nonexistent workspace directory returns empty string, NOT throw
+
+4. **Getter Methods**:
+   - getGlobalMemory() returns cached content after refresh
+   - getEnvironmentMemory() returns cached content after refresh
+   - getLoadedPaths() returns Set of all loaded file paths
+
+5. **Integration**:
+   - Multiple refresh() calls work correctly
+   - Event emission happens exactly once per refresh
+
+#### Phase 2: Run Tests — Confirm RED
+
+```bash
+cd packages/core && npx vitest run src/services/contextManager.test.ts
+```
+
+**ALL TESTS MUST FAIL.** If any pass, the test is invalid.
+
+#### Phase 3: Implement Minimal Code (GREEN)
+
+Write ONLY enough code to make each failing test pass:
+- Implement one method at a time
+- Run tests after each change
+- Do NOT add features not covered by tests
+
+```bash
+cd packages/core && npx vitest run src/services/contextManager.test.ts
+```
+
+**ALL TESTS MUST PASS.** Do not proceed until GREEN.
+
+#### Phase 4: Refactor (If Valuable)
+
+- Assess: Does refactoring improve clarity or performance measurably?
+- If yes: Refactor while keeping tests GREEN
+- If no: Move to next feature
+- Keep tests passing throughout
+
+### Implementation Steps
 
 1. **Update ContextManager** (packages/core/src/services/contextManager.ts):
 
@@ -69,9 +161,10 @@ Creates a ContextManager service for lazy (just-in-time) memory loading with ref
    **B. Remove reset() method**:
    - Delete the `reset()` method (no longer needed with refresh)
 
-   **C. Update tests**:
-   - Replace individual load tests with refresh test
-   - Add MemoryChanged event emission test
+   **C. Update tests** (already written in TDD phase above):
+   - Verify all behavioral tests pass
+   - Add integration tests with Config if needed
+   - Test edge cases: empty files, malformed content, concurrent refresh calls
 
 2. **Update Config** (packages/core/src/config/config.ts):
 
@@ -248,19 +341,132 @@ Creates a ContextManager service for lazy (just-in-time) memory loading with ref
 9. **Export ContextManager** (packages/core/src/index.ts):
    - Add: `export { ContextManager } from './services/contextManager.js';`
 
-10. **Add tests**:
-    - config.test.ts: Test JIT initialization and delegation
-    - client.test.ts: Test getGlobalMemory vs getUserMemory in system instruction
-    - contextManager.test.ts: Update to test refresh and event emission
-    - memoryCommand.test.ts: Add JIT refresh test
+10. **Add remaining tests** (following TDD for each file):
+    
+    **config.test.ts** (RED → GREEN → REFACTOR):
+    
+    Write tests FIRST:
+    - Test JIT initialization when experimental flag enabled
+    - Test ContextManager.refresh() called during initialize()
+    - Test getUserMemory() delegates to ContextManager when JIT enabled
+    - Test getGlobalMemory() delegates to ContextManager when JIT enabled
+    - Test getEnvironmentMemory() delegates to ContextManager when JIT enabled
+    - Test getGeminiMdFileCount() delegates to ContextManager when JIT enabled
+    - Test getGeminiMdFilePaths() delegates to ContextManager when JIT enabled
+    - Test fallback to userMemory when JIT disabled
+    - Test missing files handled gracefully (no throw)
+    
+    **RED**: `cd packages/core && npx vitest run src/config/config.test.ts` — All tests MUST FAIL
+    
+    **GREEN**: Implement minimal code to pass tests — All tests MUST PASS
+    
+    **REFACTOR**: Improve if valuable, keep tests GREEN
+    
+    ---
+    
+    **client.test.ts** (RED → GREEN → REFACTOR):
+    
+    Write tests FIRST:
+    - Test updateSystemInstruction uses getGlobalMemory() when JIT enabled
+    - Test updateSystemInstruction uses getUserMemory() when JIT disabled
+    - Test initChat uses getGlobalMemory() when JIT enabled
+    - Test initChat uses getUserMemory() when JIT disabled
+    
+    **RED**: `cd packages/core && npx vitest run src/core/client.test.ts` — All tests MUST FAIL
+    
+    **GREEN**: Implement minimal code to pass tests — All tests MUST PASS
+    
+    **REFACTOR**: Improve if valuable, keep tests GREEN
+    
+    ---
+    
+    **memoryCommand.test.ts** (RED → GREEN → REFACTOR):
+    
+    Write tests FIRST:
+    - Test refresh subcommand calls ContextManager.refresh() when JIT enabled
+    - Test refresh subcommand calls refreshServerHierarchicalMemory when JIT disabled
+    - Test refresh subcommand reports correct file count
+    - Test refresh subcommand updates system instruction
+    - Test error handling when refresh fails
+    
+    **RED**: `cd packages/cli && npx vitest run src/ui/commands/memoryCommand.test.ts` — All tests MUST FAIL
+    
+    **GREEN**: Implement minimal code to pass tests — All tests MUST PASS
+    
+    **REFACTOR**: Improve if valuable, keep tests GREEN
 
-## Verification
-- `cd packages/core && npx vitest run src/config/config.test.ts`
-- `cd packages/core && npx vitest run src/core/client.test.ts`
-- `cd packages/core && npx vitest run src/services/contextManager.test.ts`
-- `cd packages/cli && npx vitest run src/ui/commands/memoryCommand.test.ts`
-- `npm run typecheck`
-- `npm run lint`
+## Verification (Full Verification Sequence)
+
+**MUST run all verification steps in order. Do NOT skip any step.**
+
+### Step 1: Unit Tests (from package directories)
+
+```bash
+cd packages/core && npx vitest run src/services/contextManager.test.ts
+cd packages/core && npx vitest run src/config/config.test.ts
+cd packages/core && npx vitest run src/core/client.test.ts
+cd packages/cli && npx vitest run src/ui/commands/memoryCommand.test.ts
+```
+
+**All tests MUST pass. Fix failures before proceeding.**
+
+### Step 2: Full Test Suite (from project root)
+
+```bash
+npm run test
+```
+
+**All tests MUST pass. Zero failures, zero skipped tests.**
+
+### Step 3: Type Safety (from project root)
+
+```bash
+npm run typecheck
+```
+
+**Zero TypeScript errors. Any error is a blocker.**
+
+### Step 4: Code Quality (from project root)
+
+```bash
+npm run lint
+```
+
+**Zero linting warnings. Fix all issues.**
+
+```bash
+npm run format
+```
+
+**Code properly formatted. Commit formatted code.**
+
+### Step 5: Build (from project root)
+
+```bash
+npm run build
+```
+
+**Clean build with no errors or warnings.**
+
+### Step 6: Integration Test (from project root)
+
+```bash
+node scripts/start.js --profile-load synthetic "write me a haiku and nothing else"
+```
+
+**Should execute without errors and produce a haiku.**
+
+### Final Checklist
+
+- [ ] All unit tests pass
+- [ ] Full test suite passes
+- [ ] Zero TypeScript errors
+- [ ] Zero linting warnings
+- [ ] Code is formatted
+- [ ] Build succeeds
+- [ ] Integration test succeeds
+- [ ] All changes committed
+- [ ] Ready for PR
 
 ## Branding Adaptations
 - `.gemini/` → `.llxprt/` in paths

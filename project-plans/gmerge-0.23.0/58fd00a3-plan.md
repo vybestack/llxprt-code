@@ -3,172 +3,304 @@
 ## Upstream Change
 Adds `.geminiignore` support to the ripgrep search tool, allowing users to exclude files from search results using ignore patterns.
 
+## LLxprt Adaptation
+
+**CRITICAL CONTEXT**: LLxprt already has comprehensive .llxprtignore infrastructure via `FileDiscoveryService` and `GitIgnoreParser` with `extraPatterns` support. This infrastructure:
+- Loads `.llxprtignore` patterns from project root
+- Combines with `.gitignore` patterns (with .llxprtignore taking precedence)
+- Supports nested .gitignore files but only root-level .llxprtignore
+- Is used across all file-based tools (ls, read-many-files, glob, etc.)
+
+**Goal**: Extend existing infrastructure to support SearchText (ripGrep) tool, leveraging ripgrep's native `--ignore-file` flag for performance.
+
+**Branding Clarification**: 
+- **Internal classes**: `GitIgnoreParser` remains unchanged (it's a generic parser that handles both .gitignore and .llxprtignore files via `extraPatterns` parameter)
+- **File names**: `.llxprtignore` (LLxprt branding)
+- **Config methods**: `getFileFilteringRespectLlxprtIgnore()` (LLxprt branding)
+- **Service classes**: `FileDiscoveryService` (generic name, handles both ignore types)
+- **Rationale**: The upstream Gemini code uses `GeminiIgnoreParser` which we've already renamed to `GitIgnoreParser` in LLxprt. This parser is generic and handles any ignore file via the `extraPatterns` constructor parameter, making it reusable for both .gitignore and .llxprtignore files.
+
 ## LLxprt Files to Modify
-- packages/core/src/tools/ripGrep.ts — Add .llxprtignore support via GeminiIgnoreParser
-- packages/core/src/utils/geminiIgnoreParser.ts — Add getIgnoreFilePath and hasPatterns methods
-- packages/core/src/utils/geminiIgnoreParser.test.ts — Add tests for new methods
-- integration-tests/ripgrep-real.test.ts — Add mock for getFileFilteringRespectGeminiIgnore
+- packages/core/src/tools/ripGrep.ts — Integrate FileDiscoveryService to provide .llxprtignore path to ripgrep
+- packages/core/src/tools/ripGrep.test.ts — Add behavioral tests for .llxprtignore integration
+- integration-tests/ripgrep-real.test.ts — Add mock for getFileFilteringRespectLlxprtIgnore (note: Llxprt branding)
+
+**NOT REQUIRED**: 
+- NO new GeminiIgnoreParser class (reuse existing GitIgnoreParser)
+- NO geminiIgnoreParser.ts changes (doesn't exist in LLxprt)
+- NO geminiIgnoreParser.test.ts changes (doesn't exist in LLxprt)
+
+## Nested .llxprtignore Scope
+
+**EXPLICIT ARCHITECTURAL LIMITATION**: 
+
+This implementation only supports **root-level `.llxprtignore` files**, matching the current LLxprt architecture as implemented in `FileDiscoveryService`. 
+
+**What IS supported**:
+- Root-level `.llxprtignore` file (e.g., `<projectRoot>/.llxprtignore`)
+- Nested `.gitignore` files (e.g., `<projectRoot>/src/subdir/.gitignore`)
+- Combined rules from root `.llxprtignore` + all nested `.gitignore` files
+
+**What IS NOT supported**:
+- Nested `.llxprtignore` files (e.g., `<projectRoot>/src/subdir/.llxprtignore`)
+- Only the `.llxprtignore` at project root is loaded via `FileDiscoveryService.getLlxprtIgnorePatterns()`
+
+**Rationale**: 
+- Upstream Gemini also only supports root-level `.geminiignore`
+- This is consistent with all other LLxprt tools (ls, read-many-files, glob, etc.)
+- Extending to nested `.llxprtignore` would require significant changes to `GitIgnoreParser` and `FileDiscoveryService`
+- If needed in the future, this can be addressed as a separate enhancement with its own plan
+
+## TDD Mandate
+
+**MANDATORY TEST-FIRST DEVELOPMENT** (per dev-docs/RULES.md):
+
+### RED-GREEN-REFACTOR CYCLE (STRICT):
+
+1. **RED Phase**: Write behavioral tests FIRST for .llxprtignore patterns being respected by SearchText
+   - Run: `cd packages/core && npx vitest run src/tools/ripGrep.test.ts`
+   - **EXPECTED**: Tests FAIL (RED) 
+   - **STOP** if tests pass prematurely — this indicates tests are not testing the right thing
+
+2. **GREEN Phase**: Implement minimal code to make tests pass
+   - Run: `cd packages/core && npx vitest run src/tools/ripGrep.test.ts`
+   - **EXPECTED**: Tests PASS (GREEN) [OK]
+   - **STOP** if tests still fail — debug before refactoring
+
+3. **REFACTOR Phase**: Assess if refactoring adds value
+   - Only refactor if it improves clarity/maintainability
+   - Run tests after each refactor to ensure GREEN
+   - Do NOT add speculative abstractions
+
+4. **COMMIT**: Feature + tests together, refactoring separately
+
+### Test Requirements:
+- Tests must verify **behavior** (search results exclude .llxprtignore patterns), NOT implementation details (method calls, internal structure)
+- No production code may be written without a failing test
+- Tests must use Arrange-Act-Assert pattern
+- Single assertion per test (one behavior per test)
+- Test names must describe behavior in plain English
 
 ## Steps
 
-1. **Update geminiIgnoreParser.ts** (packages/core/src/utils/geminiIgnoreParser.ts):
+### TEST-FIRST: Write Behavioral Tests (RED Phase)
 
-   **A. Add to interface**:
+1. **Add behavioral tests to ripGrep.test.ts** (packages/core/src/tools/ripGrep.test.ts):
+
+   **Test Setup**: Create temporary `.llxprtignore` file with patterns, verify SearchText excludes matching files.
+
+   **A. Test: .llxprtignore enabled and patterns exist**:
    ```typescript
-   export interface GeminiIgnoreFilter {
-     isIgnored(filePath: string): boolean;
-     getPatterns(): string[];
-     getIgnoreFilePath(): string | null;  // ADD THIS
-     hasPatterns(): boolean;  // ADD THIS
-   }
+   it('should exclude files matching .llxprtignore patterns when enabled', async () => {
+     // Arrange: Create .llxprtignore with pattern
+     const llxprtIgnorePath = path.join(tempRootDir, '.llxprtignore');
+     await fs.writeFile(llxprtIgnorePath, 'ignored.log');
+     
+     // Create test file that should be ignored
+     await fs.writeFile(path.join(tempRootDir, 'ignored.log'), 'secret data');
+     await fs.writeFile(path.join(tempRootDir, 'visible.txt'), 'secret data');
+     
+     const configWithLlxprtIgnore = {
+       getTargetDir: () => tempRootDir,
+       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+       getDebugMode: () => false,
+       getFileFilteringRespectLlxprtIgnore: () => true,
+     } as unknown as Config;
+     const tool = new RipGrepTool(configWithLlxprtIgnore);
+
+     // Mock ripgrep to verify --ignore-file flag is passed
+     mockSpawn.mockImplementationOnce(
+       createMockSpawn({
+         outputData:
+           JSON.stringify({
+             type: 'match',
+             data: {
+               path: { text: 'visible.txt' },
+               line_number: 1,
+               lines: { text: 'secret data\n' },
+             },
+           }) + '\n',
+         exitCode: 0,
+       }),
+     );
+
+     // Act: Search for pattern
+     const params: RipGrepToolParams = { pattern: 'secret' };
+     const invocation = tool.build(params);
+     const result = await invocation.execute(abortSignal);
+
+     // Assert: Verify --ignore-file flag was passed to ripgrep
+     expect(mockSpawn).toHaveBeenCalledWith(
+       expect.anything(),
+       expect.arrayContaining(['--ignore-file', llxprtIgnorePath]),
+       expect.anything(),
+     );
+     
+     // Assert: Verify result only includes visible.txt, not ignored.log
+     expect(result.llmContent).toContain('visible.txt');
+     expect(result.llmContent).not.toContain('ignored.log');
+   });
    ```
 
-   **B. Add methods to class**:
+   **B. Test: .llxprtignore disabled**:
    ```typescript
-   /**
-    * Returns the path to .llxprtignore file if it exists and has patterns.
-    * Useful for tools like ripgrep that support --ignore-file flag.
-    */
-   getIgnoreFilePath(): string | null {
-     if (!this.hasPatterns()) {
-       return null;
-     }
-     return path.join(this.projectRoot, '.llxprtignore');
-   }
+   it('should not use .llxprtignore when respectLlxprtIgnore is disabled', async () => {
+     // Arrange: Create .llxprtignore
+     const llxprtIgnorePath = path.join(tempRootDir, '.llxprtignore');
+     await fs.writeFile(llxprtIgnorePath, 'ignored.log');
+     
+     const configWithoutLlxprtIgnore = {
+       getTargetDir: () => tempRootDir,
+       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+       getDebugMode: () => false,
+       getFileFilteringRespectLlxprtIgnore: () => false,
+     } as unknown as Config;
+     const tool = new RipGrepTool(configWithoutLlxprtIgnore);
 
-   /**
-    * Returns true if .llxprtignore exists and has patterns.
-    */
-   hasPatterns(): boolean {
-     if (this.patterns.length === 0) {
-       return false;
-     }
-     const ignoreFilePath = path.join(this.projectRoot, '.llxprtignore');
-     return fs.existsSync(ignoreFilePath);
-   }
-   ```
+     mockSpawn.mockImplementationOnce(
+       createMockSpawn({
+         outputData: '',
+         exitCode: 1,
+       }),
+     );
 
-2. **Update geminiIgnoreParser.test.ts**:
+     // Act
+     const params: RipGrepToolParams = { pattern: 'secret' };
+     const invocation = tool.build(params);
+     await invocation.execute(abortSignal);
 
-   **A. Add test for getIgnoreFilePath when patterns exist**:
-   ```typescript
-   it('should return ignore file path when patterns exist', () => {
-     const parser = new GeminiIgnoreParser(projectRoot);
-     expect(parser.getIgnoreFilePath()).toBe(
-       path.join(projectRoot, '.llxprtignore'),
+     // Assert: --ignore-file should NOT be in args
+     expect(mockSpawn).toHaveBeenCalledWith(
+       expect.anything(),
+       expect.not.arrayContaining(['--ignore-file']),
+       expect.anything(),
      );
    });
    ```
 
-   **B. Add test for hasPatterns**:
+   **C. Test: Empty .llxprtignore**:
    ```typescript
-   it('should return true for hasPatterns when patterns exist', () => {
-     const parser = new GeminiIgnoreParser(projectRoot);
-     expect(parser.hasPatterns()).toBe(true);
-   });
+   it('should not add --ignore-file flag when .llxprtignore is empty', async () => {
+     // Arrange: Create empty .llxprtignore
+     await fs.writeFile(path.join(tempRootDir, '.llxprtignore'), '');
+     
+     const config = {
+       getTargetDir: () => tempRootDir,
+       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+       getDebugMode: () => false,
+       getFileFilteringRespectLlxprtIgnore: () => true,
+     } as unknown as Config;
+     const tool = new RipGrepTool(config);
 
-   it('should return false for hasPatterns when .llxprtignore is deleted', async () => {
-     const parser = new GeminiIgnoreParser(projectRoot);
-     await fs.rm(path.join(projectRoot, '.llxprtignore'));
-     expect(parser.hasPatterns()).toBe(false);
-     expect(parser.getIgnoreFilePath()).toBeNull();
+     mockSpawn.mockImplementationOnce(
+       createMockSpawn({
+         outputData: '',
+         exitCode: 1,
+       }),
+     );
+
+     // Act
+     const params: RipGrepToolParams = { pattern: 'test' };
+     const invocation = tool.build(params);
+     await invocation.execute(abortSignal);
+
+     // Assert: No --ignore-file flag when file is empty
+     expect(mockSpawn).toHaveBeenCalledWith(
+       expect.anything(),
+       expect.not.arrayContaining(['--ignore-file']),
+       expect.anything(),
+     );
    });
    ```
 
-   **C. Add tests for empty/comment-only files**:
+   **D. Test: .llxprtignore with only comments**:
    ```typescript
-   describe('when .llxprtignore is empty', () => {
-     beforeEach(async () => {
-       await createTestFile('.llxprtignore', '');
-     });
+   it('should not add --ignore-file flag when .llxprtignore only has comments', async () => {
+     // Arrange: Create .llxprtignore with only comments
+     await fs.writeFile(
+       path.join(tempRootDir, '.llxprtignore'),
+       '# This is a comment\n# Another comment\n',
+     );
+     
+     const config = {
+       getTargetDir: () => tempRootDir,
+       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+       getDebugMode: () => false,
+       getFileFilteringRespectLlxprtIgnore: () => true,
+     } as unknown as Config;
+     const tool = new RipGrepTool(config);
 
-     it('should return null for getIgnoreFilePath', () => {
-       const parser = new GeminiIgnoreParser(projectRoot);
-       expect(parser.getIgnoreFilePath()).toBeNull();
-     });
+     mockSpawn.mockImplementationOnce(
+       createMockSpawn({
+         outputData: '',
+         exitCode: 1,
+       }),
+     );
 
-     it('should return false for hasPatterns', () => {
-       const parser = new GeminiIgnoreParser(projectRoot);
-       expect(parser.hasPatterns()).toBe(false);
-     });
-   });
+     // Act
+     const params: RipGrepToolParams = { pattern: 'test' };
+     const invocation = tool.build(params);
+     await invocation.execute(abortSignal);
 
-   describe('when .llxprtignore only has comments', () => {
-     beforeEach(async () => {
-       await createTestFile(
-         '.llxprtignore',
-         '# This is a comment\n# Another comment\n',
-       );
-     });
-
-     it('should return null for getIgnoreFilePath', () => {
-       const parser = new GeminiIgnoreParser(projectRoot);
-       expect(parser.getIgnoreFilePath()).toBeNull();
-     });
-
-     it('should return false for hasPatterns', () => {
-       const parser = new GeminiIgnoreParser(projectRoot);
-       expect(parser.hasPatterns()).toBe(false);
-     });
+     // Assert: No --ignore-file flag when only comments
+     expect(mockSpawn).toHaveBeenCalledWith(
+       expect.anything(),
+       expect.not.arrayContaining(['--ignore-file']),
+       expect.anything(),
+     );
    });
    ```
 
-   **D. Update tests for no .llxprtignore**:
-   ```typescript
-   describe('when .llxprtignore does not exist', () => {
-     it('should return null for getIgnoreFilePath when no patterns exist', () => {
-       const parser = new GeminiIgnoreParser(projectRoot);
-       expect(parser.getIgnoreFilePath()).toBeNull();
-     });
+   **RUN TESTS**: `cd packages/core && npx vitest run src/tools/ripGrep.test.ts`
+   **EXPECTED**: All new tests FAIL (RED phase) [OK]
 
-     it('should return false for hasPatterns when no patterns exist', () => {
-       const parser = new GeminiIgnoreParser(projectRoot);
-       expect(parser.hasPatterns()).toBe(false);
-     });
-   });
+### IMPLEMENTATION: Minimal Code to Pass Tests (GREEN Phase)
+
+2. **Update ripGrep.ts** (packages/core/src/tools/ripGrep.ts):
+
+   **A. Add import for FileDiscoveryService**:
+   ```typescript
+   import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
    ```
 
-3. **Update ripGrep.ts** (packages/core/src/tools/ripGrep.ts):
-
-   **A. Add GeminiIgnoreParser field to tool class**:
+   **B. Add FileDiscoveryService field to RipGrepTool class**:
    ```typescript
    export class RipGrepTool extends BaseDeclarativeTool<
      RipGrepToolParams,
      ToolResult
    > {
-     static readonly Name = GREP_TOOL_NAME;
-     private readonly geminiIgnoreParser: GeminiIgnoreParser;  // ADD THIS
+     static readonly Name = 'search_file_content';
+     private readonly fileDiscoveryService: FileDiscoveryService;  // ADD THIS
 
      constructor(
        private readonly config: Config,
-       messageBus?: MessageBus,
+       _messageBus?: MessageBus,
      ) {
        super(
-         GREP_TOOL_NAME,
+         RipGrepTool.Name,
          // ... rest of constructor
        );
-       this.geminiIgnoreParser = new GeminiIgnoreParser(config.getTargetDir());  // ADD THIS
+       this.fileDiscoveryService = new FileDiscoveryService(  // ADD THIS
+         config.getTargetDir(),
+       );
      }
    ```
 
-   **B. Pass parser to invocation**:
+   **C. Pass FileDiscoveryService to invocation**:
    ```typescript
-   build(
+   protected override createInvocation(
      params: RipGrepToolParams,
-     messageBus?: MessageBus,
-     _toolName?: string,
+     _messageBus?: MessageBus,
    ): ToolInvocation<RipGrepToolParams, ToolResult> {
      return new GrepToolInvocation(
        this.config,
-       this.geminiIgnoreParser,  // ADD THIS
+       this.fileDiscoveryService,  // ADD THIS
        params,
-       messageBus,
-       _toolName,
      );
    }
    ```
 
-   **C. Update GrepToolInvocation constructor**:
+   **D. Update GrepToolInvocation constructor**:
    ```typescript
    class GrepToolInvocation extends BaseToolInvocation<
      RipGrepToolParams,
@@ -176,152 +308,174 @@ Adds `.geminiignore` support to the ripgrep search tool, allowing users to exclu
    > {
      constructor(
        private readonly config: Config,
-       private readonly geminiIgnoreParser: GeminiIgnoreParser,  // ADD THIS
+       private readonly fileDiscoveryService: FileDiscoveryService,  // ADD THIS
        params: RipGrepToolParams,
-       messageBus?: MessageBus,
-       _toolName?: string,
      ) {
-       super(params, messageBus, _toolName);
+       super(params);
      }
    ```
 
-   **D. Add .llxprtignore to ripgrep args** (in buildRipgrepArgs, around line 395):
+   **E. Add .llxprtignore to ripgrep args** (in performRipgrepSearch method, after excludes):
    ```typescript
-   // After adding excludes via --glob
+   // After adding excludes via --glob (around line 343)
    excludes.forEach((exclude) => {
      rgArgs.push('--glob', `!${exclude}`);
    });
 
-   if (this.config.getFileFilteringRespectGeminiIgnore()) {
-     // Add .llxprtignore support (ripgrep natively handles .gitignore)
-     const llxprtIgnorePath = this.geminiIgnoreParser.getIgnoreFilePath();
+   // Add .llxprtignore support (ripgrep natively handles .gitignore)
+   if (this.config.getFileFilteringRespectLlxprtIgnore()) {
+     const llxprtIgnorePath = this.getLlxprtIgnorePath();
      if (llxprtIgnorePath) {
        rgArgs.push('--ignore-file', llxprtIgnorePath);
      }
    }
+
+   rgArgs.push('--threads', '4');
    ```
 
-4. **Update ripGrep.test.ts** (packages/core/src/tools/ripGrep.test.ts):
-
-   **A. Add getFileFilteringRespectGeminiIgnore to mock configs**:
+   **F. Add helper method to get .llxprtignore path** (add to GrepToolInvocation class):
    ```typescript
-   const mockConfig = {
-     getTargetDir: () => tempRootDir,
-     getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
-     getDebugMode: () => false,
-     getFileFilteringRespectGeminiIgnore: () => true,  // ADD THIS
-   } as unknown as Config;
+   /**
+    * Returns the path to .llxprtignore file if it exists and has patterns.
+    * Only returns path if patterns are non-empty (excluding comments/blank lines).
+    * 
+    * NOTE: FileDiscoveryService.getLlxprtIgnorePatterns() already filters out
+    * empty lines and comments, so we just check if array is non-empty.
+    */
+   private getLlxprtIgnorePath(): string | null {
+     const patterns = this.fileDiscoveryService.getLlxprtIgnorePatterns();
+     if (patterns.length === 0) {
+       return null;
+     }
+     const ignoreFilePath = path.join(this.config.getTargetDir(), '.llxprtignore');
+     // Check file exists before returning path (defensive check)
+     return fs.existsSync(ignoreFilePath) ? ignoreFilePath : null;
+   }
    ```
 
-   **B. Add test for .llxprtignore enabled**:
-   ```typescript
-   it('should add .llxprtignore when enabled and patterns exist', async () => {
-     const llxprtIgnorePath = path.join(tempRootDir, '.llxprtignore');
-     await fs.writeFile(llxprtIgnorePath, 'ignored.log');
-     const configWithLlxprtIgnore = {
-       getTargetDir: () => tempRootDir,
-       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
-       getDebugMode: () => false,
-       getFileFilteringRespectGeminiIgnore: () => true,
-     } as unknown as Config;
-     const llxprtIgnoreTool = new RipGrepTool(configWithLlxprtIgnore);
+   **Note**: Need to add `import * as fs from 'fs';` at top of file if not already present.
 
-     mockSpawn.mockImplementationOnce(
-       createMockSpawn({
-         outputData:
-           JSON.stringify({
-             type: 'match',
-             data: {
-               path: { text: 'ignored.log' },
-               line_number: 1,
-               lines: { text: 'secret log entry\n' },
-             },
-           }) + '\n',
-         exitCode: 0,
-       }),
-     );
+   **RUN TESTS AGAIN**: `cd packages/core && npx vitest run src/tools/ripGrep.test.ts`
+   **EXPECTED**: All new tests PASS (GREEN phase)
 
-     const params: RipGrepToolParams = { pattern: 'secret' };
-     const invocation = llxprtIgnoreTool.build(params);
-     await invocation.execute(abortSignal);
+### REFACTOR Phase (Optional)
 
-     expect(mockSpawn).toHaveBeenLastCalledWith(
-       expect.anything(),
-       expect.arrayContaining(['--ignore-file', llxprtIgnorePath]),
-       expect.anything(),
-     );
-   });
-   ```
+3. **Review and refactor** only if it adds clear value:
+   - Extract duplicate test setup into helper functions
+   - Simplify getLlxprtIgnorePath() if possible
+   - Add JSDoc comments if behavior is unclear
 
-   **C. Add test for .llxprtignore disabled**:
-   ```typescript
-   it('should skip .llxprtignore when disabled', async () => {
-     const llxprtIgnorePath = path.join(tempRootDir, '.llxprtignore');
-     await fs.writeFile(llxprtIgnorePath, 'ignored.log');
-     const configWithoutLlxprtIgnore = {
-       getTargetDir: () => tempRootDir,
-       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
-       getDebugMode: () => false,
-       getFileFilteringRespectGeminiIgnore: () => false,
-     } as unknown as Config;
-     const llxprtIgnoreTool = new RipGrepTool(configWithoutLlxprtIgnore);
+### INTEGRATION TEST UPDATE
 
-     mockSpawn.mockImplementationOnce(
-       createMockSpawn({
-         outputData:
-           JSON.stringify({
-             type: 'match',
-             data: {
-               path: { text: 'ignored.log' },
-               line_number: 1,
-               lines: { text: 'secret log entry\n' },
-             },
-           }) + '\n',
-         exitCode: 0,
-       }),
-     );
+4. **Update integration test** (integration-tests/ripgrep-real.test.ts):
 
-     const params: RipGrepToolParams = { pattern: 'secret' };
-     const invocation = llxprtIgnoreTool.build(params);
-     await invocation.execute(abortSignal);
-
-     expect(mockSpawn).toHaveBeenLastCalledWith(
-       expect.anything(),
-       expect.not.arrayContaining(['--ignore-file', llxprtIgnorePath]),
-       expect.anything(),
-     );
-   });
-   ```
-
-5. **Update integration test** (integration-tests/ripgrep-real.test.ts):
+   **A. Update MockConfig**:
    ```typescript
    class MockConfig {
      getDebugMode() {
        return true;
      }
 
-     getFileFilteringRespectGeminiIgnore() {  // ADD THIS
+     getFileFilteringRespectLlxprtIgnore() {  // ADD THIS (note: LLxprt branding)
        return true;
      }
    }
    ```
 
-## Verification
-- `cd packages/core && npx vitest run src/utils/geminiIgnoreParser.test.ts`
-- `cd packages/core && npx vitest run src/tools/ripGrep.test.ts`
-- `npx vitest run integration-tests/ripgrep-real.test.ts`
-- `npm run typecheck`
-- `npm run lint`
-- Manual test: Create `.llxprtignore` with pattern `*.log`, verify search excludes .log files
+   **RUN INTEGRATION TESTS**: `npx vitest run integration-tests/ripgrep-real.test.ts`
+   **EXPECTED**: All tests PASS
 
-## Branding Adaptations
-- `.geminiignore` → `.llxprtignore` in file names
-- `GeminiIgnoreParser` → keep class name as-is (internal implementation)
-- `geminiIgnoreParser` → keep variable name as-is (or rename to `llxprtIgnoreParser` for consistency, but not required)
-- Comments: "geminiignore" → "llxprtignore"
-- Test file names: keep as geminiIgnoreParser.test.ts (follows existing pattern)
+## Full Verification Sequence
 
-## Notes
-- The GeminiIgnoreParser class name is kept for consistency with existing codebase
-- The actual file it reads is `.llxprtignore` (branding applied at file level)
-- Config method `getFileFilteringRespectGeminiIgnore()` can be kept as-is or renamed to `getFileFilteringRespectLlxprtIgnore()`
+**MANDATORY BEFORE COMMITTING** (per .llxprt/LLXPRT.md):
+
+Run all commands from project root (`/Users/acoliver/projects/llxprt/branch-1/llxprt-code`):
+
+### 1. Unit Tests (Targeted)
+```bash
+cd packages/core && npx vitest run src/tools/ripGrep.test.ts
+```
+**Expected**: All tests pass, including new .llxprtignore tests
+
+### 2. Integration Tests (Targeted)
+```bash
+npx vitest run integration-tests/ripgrep-real.test.ts
+```
+**Expected**: All tests pass
+
+### 3. Full Test Suite
+```bash
+npm run test
+```
+**Expected**: All tests pass across all packages
+
+### 4. Type Checking
+```bash
+npm run typecheck
+```
+**Expected**: No type errors
+
+### 5. Linting
+```bash
+npm run lint
+```
+**Expected**: No lint errors. If there are auto-fixable issues, they will be fixed automatically.
+
+### 6. Formatting
+```bash
+npm run format
+```
+**Expected**: All files formatted. If changes are made, review and commit them.
+
+### 7. Build
+```bash
+npm run build
+```
+**Expected**: Build succeeds without errors
+
+### 8. Smoke Test (CLI loads successfully)
+```bash
+node scripts/start.js --profile-load synthetic "write me a haiku and nothing else"
+```
+**Expected**: CLI starts, loads profile, generates haiku, exits cleanly
+
+### 9. Manual Verification (Behavioral Test)
+
+Create a temporary test project to verify .llxprtignore behavior:
+
+```bash
+# Create test directory
+mkdir -p /tmp/llxprt-ignore-test
+cd /tmp/llxprt-ignore-test
+
+# Create .llxprtignore with pattern
+echo "*.log" > .llxprtignore
+
+# Create test files
+echo "secret data here" > test.log
+echo "secret data here" > test.txt
+
+# Run SearchText from llxprt-code CLI
+# (adjust path as needed)
+# Expected: Results include test.txt, exclude test.log
+```
+
+Verify:
+- SearchText results include `test.txt` with "secret data here"
+- SearchText results do NOT include `test.log`
+- If `.llxprtignore` is deleted or `*.log` pattern is removed, `test.log` appears in results
+
+### 10. Cleanup
+```bash
+rm -rf /tmp/llxprt-ignore-test
+```
+
+**All steps must pass before committing. Do not skip any step.**
+
+## Implementation Notes
+
+- **Reuses existing infrastructure**: `FileDiscoveryService` already handles `.llxprtignore` loading via `GitIgnoreParser`
+- **No new parser needed**: Unlike upstream which created new `GeminiIgnoreParser`, LLxprt extends existing `GitIgnoreParser` with `extraPatterns`
+- **Branding consistency**: Config method is `getFileFilteringRespectLlxprtIgnore()` (not Gemini)
+- **Scope limitation**: Only root-level `.llxprtignore` supported (matches current architecture)
+- **Performance optimization**: Uses ripgrep's native `--ignore-file` flag instead of filtering results post-search

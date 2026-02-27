@@ -3,11 +3,27 @@
 ## Upstream Change
 Replaces magic number `2` with named constant `INITIAL_HISTORY_LENGTH = 1` in chat command history checks. The initial history contains 1 system setup message, not 2 as previously assumed.
 
+## Scope Notes
+**In scope**: Two magic number `2` usages in chatCommand.ts (lines 160 and 392) for history length checks.
+**Out of scope**: `const minEntries = 2` in restoreHistory function (line 443) — this represents a different semantic concept (minimum entries to keep during restore operation) and is not related to the initial history length. Changing this would alter the restore behavior logic and is beyond the scope of this upstream change.
+
 ## LLxprt Files to Modify
 - packages/core/src/utils/environmentContext.ts — Add and export INITIAL_HISTORY_LENGTH constant
-- packages/core/src/index.ts — Export INITIAL_HISTORY_LENGTH from core module
-- packages/cli/src/ui/commands/chatCommand.ts — Replace magic number 2 with constant
+- packages/core/src/index.ts — Export INITIAL_HISTORY_LENGTH from core module (using named export to match existing pattern)
+- packages/cli/src/ui/commands/chatCommand.ts — Replace magic number 2 with constant in saveCommand and clearCommand
 - packages/cli/src/ui/commands/chatCommand.test.ts — Update test expectations to reflect new constant
+
+## TDD Requirement (MANDATORY)
+**Write a behavior-first failing test** that verifies the save and clear commands correctly identify when no conversation exists:
+1. Add test to `chatCommand.test.ts` that verifies:
+   - saveCommand returns "No conversation found to save" when history has only initial setup
+   - clearCommand returns "No conversation to clear" when history has only initial setup
+   - Both commands work correctly when actual conversation exists (history > initial setup)
+2. **Run test** from `packages/cli`: `npx vitest run src/ui/commands/chatCommand.test.ts`
+3. **Confirm RED** — test fails because it expects different behavior
+4. Implement the changes in Steps 1-3 below
+5. **Run test** again: `npx vitest run src/ui/commands/chatCommand.test.ts`
+6. **Confirm GREEN** — test passes with correct boundary behavior
 
 ## Steps
 
@@ -18,76 +34,93 @@ Replaces magic number `2` with named constant `INITIAL_HISTORY_LENGTH = 1` in ch
      ```
 
 2. **Export from core** in packages/core/src/index.ts:
-   - Find exports from './utils/environmentContext.js'
-   - Add to export list (or add new export if not present):
+   - Find the utilities export section (around line 108+)
+   - packages/core/src/index.ts currently does NOT have any exports from environmentContext.js
+   - Add new named export line to match existing pattern (NOT wildcard export):
      ```typescript
-     export * from './utils/environmentContext.js';
+     export { INITIAL_HISTORY_LENGTH } from './utils/environmentContext.js';
      ```
+   - This follows the established pattern where environmentContext functions are not currently exported
 
 3. **Update chatCommand.ts** in packages/cli/src/ui/commands/chatCommand.ts:
-   - Add import at top:
+   - Add import at top (merge with existing import from core):
      ```typescript
      import {
        decodeTagName,
-       type MessageActionReturn,
+       EmojiFilter,
+       type EmojiFilterMode,
        INITIAL_HISTORY_LENGTH,
      } from '@vybestack/llxprt-code-core';
      ```
    
-   - Find and replace (approximately 3-4 locations):
-     - `history.length > 2` → `history.length > INITIAL_HISTORY_LENGTH`
-     - `history.length <= 2` → `history.length <= INITIAL_HISTORY_LENGTH`
-     - Any other hardcoded `2` comparisons with history.length
+   - **EXACT locations in current LLxprt code** (verified by `grep -n 'history.length' packages/cli/src/ui/commands/chatCommand.ts`):
+     - **Line 160**: `if (history.length > 2)` in saveCommand
+       → Replace `2` with `INITIAL_HISTORY_LENGTH`
+     
+     - **Line 392**: `if (history.length <= 2)` in clearCommand
+       → Replace `2` with `INITIAL_HISTORY_LENGTH`
 
-   - **Specific locations based on upstream diff**:
-     - Line ~135: `if (history.length > 2)` in saveCommand
-     - Line ~210: Loop through conversation starting at index 2 → should slice with `INITIAL_HISTORY_LENGTH`
-     - Line ~346: `if (history.length <= 2)` in shareCommand
+4. **Verify completeness** with grep:
+   ```bash
+   grep -n 'history.length' packages/cli/src/ui/commands/chatCommand.ts
+   ```
+   **Expected output**: Should show lines 160 and 392 with `INITIAL_HISTORY_LENGTH`, no magic number `2`
 
-4. **Update chatCommand.test.ts**:
-   - **Remove one mock response** from test histories to match new constant
-   - Find tests with mock histories like:
+5. **Update chatCommand.test.ts**:
+   - Add behavior-focused test cases that verify boundary conditions:
      ```typescript
-     mockGetHistory.mockReturnValue([
-       { role: 'user', parts: [{ text: 'context for our chat' }] },
-       { role: 'model', parts: [{ text: 'Got it. Thanks for the context!' }] },  // REMOVE THIS
-     ]);
+     describe('history boundary detection', () => {
+       it('should not save when only initial setup exists', async () => {
+         mockGetHistory.mockReturnValue([
+           { role: 'user', parts: [{ text: 'system setup' }] }
+         ]);
+         const result = await saveCommand.action(mockContext, 'test');
+         expect(result).toMatchObject({
+           type: 'message',
+           messageType: 'info',
+           content: expect.stringContaining('No conversation found')
+         });
+       });
+
+       it('should save when conversation beyond initial setup exists', async () => {
+         mockGetHistory.mockReturnValue([
+           { role: 'user', parts: [{ text: 'system setup' }] },
+           { role: 'user', parts: [{ text: 'hello' }] },
+           { role: 'model', parts: [{ text: 'hi' }] }
+         ]);
+         const result = await saveCommand.action(mockContext, 'test');
+         expect(result).toMatchObject({
+           type: 'message',
+           messageType: 'info',
+           content: expect.stringContaining('saved with tag')
+         });
+       });
+     });
      ```
-   - Remove the second item (model response) to match INITIAL_HISTORY_LENGTH = 1
    
-   - **Affected tests** (based on upstream diff):
-     - "should save the conversation if tag is provided"
-     - "should inform if there is no conversation to save"
-     - "should save the conversation if overwrite is confirmed"
-     - "should inform if there is no conversation to share"
-   
-   - **Add initial message** to resume tests:
-     - Tests for resume/block/legacy conversation should have system setup as first item
+   - **Update existing test expectations** where tests check boundary behavior:
+     - Tests that verify "no conversation to save" message
+     - Tests that verify "no conversation to clear" message
+     - Adjust mock history arrays to match INITIAL_HISTORY_LENGTH = 1 semantic
 
-5. **Update resume command logic** (around line 201-213 in upstream):
-   - Change loop to use slice instead of manual index tracking:
-     ```typescript
-     for (const item of conversation.slice(INITIAL_HISTORY_LENGTH)) {
-       const text = item.parts
-         ?.filter((m) => !!m.text)
-         .map((m) => m.text)
-         .join('') || '';
-       if (!text) {
-         continue;
-       }
+## Verification (Full Sequence — MANDATORY)
+```bash
+# Run unit tests for chatCommand
+cd packages/cli && npx vitest run src/ui/commands/chatCommand.test.ts
 
-       uiHistory.push({
-         type: (item.role && rolemap[item.role]) || MessageType.GEMINI,
-         text,
-       } as HistoryItemWithoutId);
-     }
-     ```
+# Return to root and run ALL verification
+cd ../..
+npm run test
+npm run lint
+npm run typecheck
+npm run format
+npm run build
 
-## Verification
-- `cd packages/cli && npx vitest run src/ui/commands/chatCommand.test.ts`
-- `npm run typecheck` in root
-- `npm run lint` in root
-- Verify all chat save/resume/share commands work correctly in interactive mode
+# Smoke test interactive mode
+node scripts/start.js --profile-load synthetic "write me a haiku and nothing else"
+```
+
+**All commands must pass with zero errors before considering implementation complete.**
 
 ## Branding Adaptations
 - Import from `@vybestack/llxprt-code-core` not `@google/gemini-cli-core`
