@@ -154,7 +154,8 @@ describe('ContextManager', () => {
 
       expect(memoryDiscovery.loadJitSubdirectoryMemory).toHaveBeenCalledWith(
         '/app/src',
-        expect.anything(),
+        ['/app'],
+        expect.any(Set),
         false,
       );
       expect(result).toContain('subdir');
