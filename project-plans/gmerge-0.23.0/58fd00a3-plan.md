@@ -1,5 +1,8 @@
 # Reimplement Plan: .llxprtignore support for SearchText (upstream 58fd00a3df)
 
+> **TEST BASELINE: There are ZERO pre-existing test failures (809 test files, 12,824 tests, all passing). Any test failure after implementation is caused by your changes and MUST be fixed before the batch is complete. Do not skip, defer, or assume failures are pre-existing.**
+
+
 ## Upstream Change
 Adds `.geminiignore` support to the ripgrep search tool, allowing users to exclude files from search results using ignore patterns.
 

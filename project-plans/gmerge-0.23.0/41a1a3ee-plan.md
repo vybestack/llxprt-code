@@ -1,5 +1,8 @@
 # Reimplement Plan: Hook command injection fix (upstream 41a1a3eed1) WARNING: CRITICAL SECURITY
 
+> **TEST BASELINE: There are ZERO pre-existing test failures (809 test files, 12,824 tests, all passing). Any test failure after implementation is caused by your changes and MUST be fixed before the batch is complete. Do not skip, defer, or assume failures are pre-existing.**
+
+
 ## Upstream Change
 **CRITICAL SECURITY FIX**: Sanitizes hook command expansion to prevent shell injection via environment variables. When `$GEMINI_PROJECT_DIR` contains shell metacharacters (e.g., `; rm -rf /`), they must be properly escaped.
 

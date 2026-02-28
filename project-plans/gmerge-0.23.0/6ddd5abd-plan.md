@@ -1,5 +1,8 @@
 # Reimplement Plan: Slash completion eager hiding fix (upstream 6ddd5abd7b)
 
+> **TEST BASELINE: There are ZERO pre-existing test failures (809 test files, 12,824 tests, all passing). Any test failure after implementation is caused by your changes and MUST be fixed before the batch is complete. Do not skip, defer, or assume failures are pre-existing.**
+
+
 ## Upstream Change
 Fixes useSlashCompletion to prevent hiding sibling commands when user types an exact match. For example, typing `/memory` should still show `/memory-leak` if it exists.
 

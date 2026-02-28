@@ -1,5 +1,8 @@
 # Reimplement Plan: Hooks docs tool name updates (upstream cc52839f19)
 
+> **TEST BASELINE: There are ZERO pre-existing test failures (809 test files, 12,824 tests, all passing). Any test failure after implementation is caused by your changes and MUST be fixed before the batch is complete. Do not skip, defer, or assume failures are pre-existing.**
+
+
 ## Upstream Change
 Updates hooks documentation files to use snake_case tool names (e.g., `write_file`, `replace`, `search_file_content`) instead of PascalCase (e.g., `WriteFile`, `Edit`, `Grep`). Adds comprehensive tool and event matcher reference section to index.md. Adds `transcript_path` field to base hook input documentation.
 

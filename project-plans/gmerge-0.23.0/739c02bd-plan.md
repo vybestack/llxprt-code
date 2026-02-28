@@ -1,5 +1,8 @@
 # Reimplement Plan: History length constant (upstream 739c02bd6d)
 
+> **TEST BASELINE: There are ZERO pre-existing test failures (809 test files, 12,824 tests, all passing). Any test failure after implementation is caused by your changes and MUST be fixed before the batch is complete. Do not skip, defer, or assume failures are pre-existing.**
+
+
 ## Upstream Change
 Replaces magic number `2` with named constant `INITIAL_HISTORY_LENGTH = 1` in chat command history checks. The initial history contains 1 system setup message, not 2 as previously assumed.
 

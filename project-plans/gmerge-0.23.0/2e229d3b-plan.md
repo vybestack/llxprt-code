@@ -1,5 +1,8 @@
 # Reimplement Plan: JIT context memory loading (upstream 2e229d3bb6)
 
+> **TEST BASELINE: There are ZERO pre-existing test failures (809 test files, 12,824 tests, all passing). Any test failure after implementation is caused by your changes and MUST be fixed before the batch is complete. Do not skip, defer, or assume failures are pre-existing.**
+
+
 ## Upstream Change
 Creates a ContextManager service for lazy (just-in-time) memory loading with refresh capability, emits MemoryChanged events, and wires into config for conditional loading based on experimental flag.
 

@@ -15,6 +15,8 @@ Use these standardized verification command sets throughout all batches:
 
 Reference these by name (e.g., "run Quick verification") in batch prompts for consistency.
 
+**TEST BASELINE: There are ZERO pre-existing test failures (809 test files, 12,824 tests, all passing). Any failure after a batch is caused by that batch and MUST be fixed before proceeding.**
+
 ---
 
 ## Test-Driven Development (TDD) Requirement
@@ -1693,9 +1695,12 @@ Batch 17 (hook injection fix) has elevated consequences and requires extra remed
 **B17 (hook injection fix -- CRITICAL SECURITY):** Before re-review, re-run the GEMINI_PROJECT_DIR branding check and verify all security test cases from the review prompt. If any grep returns non-empty for GEMINI_PROJECT_DIR, the remediation MUST address it before proceeding. Verify shell injection vectors are covered in dedicated tests.
 
 ### Build/test failure
-1. Check if pre-existing: `git stash && npm run test && git stash pop`
-2. If pre-existing, document in NOTES.md and continue
-3. If caused by batch, include in remediation loop
+
+**BASELINE: There are ZERO pre-existing test failures as of gmerge/0.23.0 branch creation (809 test files, 12,824 tests, all passing).** Any test failure after a batch is caused by that batch and MUST be fixed before proceeding. Do not assume failures are pre-existing or unrelated.
+
+1. If tests fail after a batch, the batch caused it -- include in remediation loop
+2. Do not skip, document, or defer failing tests
+3. All verification commands (Quick/Full/Final) must exit cleanly with zero failures
 
 ---
 
@@ -1744,7 +1749,7 @@ Loop until workflows finish, then:
   - Watch workflows again
   - Loop until all workflows are green AND all CodeRabbit issues resolved
 
-4. Never assume failures are "unrelated to my changes" - verify with evidence via `gh` that same tests fail on main before claiming pre-existing.
+4. Never assume failures are "unrelated to my changes." The test baseline is ZERO failures -- every failure is yours to fix.
 
 ---
 
