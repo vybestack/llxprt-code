@@ -9,6 +9,7 @@ import type { GenerateContentResponse } from '@google/genai';
 import { ApiError } from '@google/genai';
 import { DebugLogger } from '../debug/index.js';
 import { delay, createAbortError } from './delay.js';
+import { RetryableQuotaError } from './googleQuotaErrors.js';
 
 export interface HttpError extends Error {
   status?: number;
@@ -247,7 +248,12 @@ export function isRetryableError(
     return true;
   }
 
-  // PRIORITY 2: Generic "fetch failed" messages only retry when explicitly enabled
+  // PRIORITY 2: RetryableQuotaError is always retryable
+  if (error instanceof RetryableQuotaError) {
+    return true;
+  }
+
+  // PRIORITY 3: Generic "fetch failed" messages only retry when explicitly enabled
   if (retryFetchErrors) {
     const { messages } = collectErrorDetails(error);
     if (messages.some((msg) => msg.toLowerCase().includes('fetch failed'))) {
@@ -255,13 +261,13 @@ export function isRetryableError(
     }
   }
 
-  // PRIORITY 3: ApiError with deterministic 400 is NEVER retryable
+  // PRIORITY 4: ApiError with deterministic 400 is NEVER retryable
   if (error instanceof ApiError) {
     if (error.status === 400) return false;
     return error.status === 429 || (error.status >= 500 && error.status < 600);
   }
 
-  // PRIORITY 4: Generic status-based retry (handles non-ApiError shapes)
+  // PRIORITY 5: Generic status-based retry (handles non-ApiError shapes)
   const status = getErrorStatus(error);
   if (status !== undefined) {
     return status === 429 || (status >= 500 && status < 600);
@@ -447,12 +453,47 @@ export async function retryWithBackoff<T>(
         throw error;
       }
 
+      // Classify error for special handling
+      const classifiedError = error;
+      const is500 =
+        errorStatus !== undefined && errorStatus >= 500 && errorStatus < 600;
+
+      // Handle RetryableQuotaError and 500 errors with max attempts check
+      if (classifiedError instanceof RetryableQuotaError || is500) {
+        if (attempt >= maxAttempts && !shouldAttemptRefreshRetry) {
+          const errorMessage =
+            classifiedError instanceof Error ? classifiedError.message : '';
+          logger.warn(
+            () =>
+              `Attempt ${attempt} failed${errorMessage ? `: ${errorMessage}` : ''}. Max attempts reached`,
+          );
+          throw is500 ? error : classifiedError;
+        }
+      }
+
       if (attempt >= maxAttempts && !shouldAttemptRefreshRetry) {
         throw error;
       }
 
       if (attempt >= maxAttempts && shouldAttemptRefreshRetry) {
         attempt--;
+      }
+
+      // Handle RetryableQuotaError with explicit retryDelayMs
+      if (
+        classifiedError instanceof RetryableQuotaError &&
+        classifiedError.retryDelayMs !== undefined
+      ) {
+        logger.warn(
+          () =>
+            `Attempt ${attempt} failed: ${classifiedError.message}. Retrying after ${classifiedError.retryDelayMs}ms...`,
+        );
+        await delay(classifiedError.retryDelayMs, signal);
+        if (options?.trackThrottleWaitTime) {
+          options.trackThrottleWaitTime(classifiedError.retryDelayMs);
+        }
+        currentDelay = initialDelayMs;
+        continue;
       }
 
       const { delayDurationMs, errorStatus: delayErrorStatus } =
