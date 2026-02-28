@@ -434,7 +434,7 @@ interface TomlRule {
   mcpName?: string;
   decision?: string;
   priority?: number;
-  commandPrefix?: string;
+  commandPrefix?: string | string[];
   argsPattern?: string;
   [key: string]: unknown;
 }
@@ -447,34 +447,45 @@ export function createPolicyUpdater(
     MessageBusType.UPDATE_POLICY,
     async (message: UpdatePolicy) => {
       const toolName = message.toolName;
-      let argsPattern: RegExp | undefined;
 
-      if (message.argsPattern) {
-        try {
-          argsPattern = new RegExp(message.argsPattern);
-        } catch {
-          return; // Invalid regex, skip this policy update
-        }
-      }
-
-      // Convert commandPrefix to argsPattern for in-memory rule
       if (message.commandPrefix) {
-        const escapedPrefix = escapeRegex(message.commandPrefix);
-        argsPattern = new RegExp(
-          '"command":"' + escapedPrefix + String.raw`(?:[\s"]|$)`,
-        );
-      }
+        // Convert commandPrefix(es) to argsPatterns for in-memory rules
+        const prefixes = Array.isArray(message.commandPrefix)
+          ? message.commandPrefix
+          : [message.commandPrefix];
 
-      // Add in-memory rule (works for current session)
-      policyEngine.addRule({
-        toolName,
-        decision: PolicyDecision.ALLOW,
-        // User tier (2) + high priority (950/1000) = 2.95
-        // This ensures user "always allow" selections are high priority
-        // but still lose to admin policies (3.xxx) and settings excludes (200)
-        priority: 2.95,
-        argsPattern,
-      });
+        for (const prefix of prefixes) {
+          const escapedPrefix = escapeRegex(prefix);
+          // Use robust regex to match whole words (e.g. "git" but not "github")
+          const argsPattern = new RegExp(
+            `"command":"${escapedPrefix}(?:[\\s"]|$)`,
+          );
+
+          policyEngine.addRule({
+            toolName,
+            decision: PolicyDecision.ALLOW,
+            // User tier (2) + high priority (950/1000) = 2.95
+            // This ensures user "always allow" selections are high priority
+            // but still lose to admin policies (3.xxx) and settings excludes (200)
+            priority: 2.95,
+            argsPattern,
+          });
+        }
+      } else {
+        const argsPattern = message.argsPattern
+          ? new RegExp(message.argsPattern)
+          : undefined;
+
+        policyEngine.addRule({
+          toolName,
+          decision: PolicyDecision.ALLOW,
+          // User tier (2) + high priority (950/1000) = 2.95
+          // This ensures user "always allow" selections are high priority
+          // but still lose to admin policies (3.xxx) and settings excludes (200)
+          priority: 2.95,
+          argsPattern,
+        });
+      }
 
       // PERSISTENCE LOGIC - Save to TOML if persist=true
       if (message.persist) {

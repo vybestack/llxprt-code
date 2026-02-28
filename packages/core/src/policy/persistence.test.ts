@@ -154,7 +154,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       expect(addedRule).toBeDefined();
       expect(addedRule?.priority).toBe(2.95);
       expect(addedRule?.argsPattern).toEqual(
-        new RegExp('"command":"git status' + String.raw`(?:[\s"]|$)`),
+        new RegExp(`"command":"git status(?:[\\s"]|$)`),
       );
 
       // Verify TOML file contains commandPrefix (not argsPattern)

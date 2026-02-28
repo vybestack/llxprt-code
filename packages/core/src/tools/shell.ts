@@ -111,7 +111,7 @@ export interface ShellToolParams {
   timeout_seconds?: number;
 }
 
-class ShellToolInvocation extends BaseToolInvocation<
+export class ShellToolInvocation extends BaseToolInvocation<
   ShellToolParams,
   ToolResult
 > {
@@ -154,7 +154,15 @@ class ShellToolInvocation extends BaseToolInvocation<
   protected override getPolicyUpdateOptions(
     outcome: ToolConfirmationOutcome,
   ): PolicyUpdateOptions | undefined {
-    if (outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave) {
+    if (
+      outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave ||
+      outcome === ToolConfirmationOutcome.ProceedAlways
+    ) {
+      const command = stripShellWrapper(this.params.command);
+      const rootCommands = [...new Set(getCommandRoots(command))];
+      if (rootCommands.length > 0) {
+        return { commandPrefix: rootCommands };
+      }
       return { commandPrefix: this.params.command };
     }
     return undefined;

@@ -83,7 +83,7 @@ export interface ToolInvocation<
  * Options for policy updates that can be customized by tool invocations.
  */
 export interface PolicyUpdateOptions {
-  commandPrefix?: string;
+  commandPrefix?: string | string[];
   mcpName?: string;
 }
 
