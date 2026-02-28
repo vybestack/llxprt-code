@@ -396,6 +396,8 @@ describe('memoryCommand', () => {
           include: [],
         }),
         isTrustedFolder: () => false,
+        isJitContextEnabled: () => false,
+        setCoreMemory: vi.fn(),
       };
 
       mockContext = createMockCommandContext({
@@ -526,6 +528,48 @@ describe('memoryCommand', () => {
       );
 
       expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalled();
+    });
+
+    it('should use ContextManager.refresh() when JIT context is enabled', async () => {
+      if (!refreshCommand.action) throw new Error('Command has no action');
+
+      const mockRefresh = vi.fn().mockResolvedValue(undefined);
+      const jitConfig = {
+        isJitContextEnabled: () => true,
+        getContextManager: () => ({ refresh: mockRefresh }),
+        getUserMemory: () => 'jit memory content',
+        getLlxprtMdFileCount: () => 3,
+        setCoreMemory: vi.fn(),
+        getWorkingDir: () => '/test/dir',
+        updateSystemInstructionIfInitialized: vi
+          .fn()
+          .mockResolvedValue(undefined),
+      };
+
+      const jitContext = createMockCommandContext({
+        services: {
+          config: jitConfig,
+          settings: {
+            merged: {},
+          } as LoadedSettings,
+        },
+        ui: {
+          setGeminiMdFileCount: vi.fn(),
+        },
+      });
+
+      await refreshCommand.action(jitContext, '');
+
+      expect(mockRefresh).toHaveBeenCalledOnce();
+      expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalled();
+      expect(jitContext.ui.setGeminiMdFileCount).toHaveBeenCalledWith(3);
+      expect(jitContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: 'Memory refreshed successfully. Loaded 18 characters from 3 file(s).',
+        },
+        expect.any(Number),
+      );
     });
   });
 

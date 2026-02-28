@@ -1352,6 +1352,16 @@ export const SETTINGS_SCHEMA = {
           'Enables extension loading/unloading within the CLI session.',
         showInDialog: false,
       },
+      jitContext: {
+        type: 'boolean',
+        label: 'JIT Context Loading',
+        category: 'Experimental',
+        requiresRestart: true,
+        default: true,
+        description:
+          'Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.',
+        showInDialog: false,
+      },
     },
   },
 
