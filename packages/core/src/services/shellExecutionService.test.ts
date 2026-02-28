@@ -1683,7 +1683,13 @@ describe('Shell Environment Sanitization', () => {
       // Result should contain exactly the allowlisted vars that exist in env
       // All LLXPRT_* vars are now allowed (changed from LLXPRT_CODE* only)
       expect(Object.keys(sanitized).sort()).toEqual(
-        ['HOME', 'LLXPRT_CODE_TEST_FOO', 'LLXPRT_CUSTOM', 'PATH', 'USER'].sort(),
+        [
+          'HOME',
+          'LLXPRT_CODE_TEST_FOO',
+          'LLXPRT_CUSTOM',
+          'PATH',
+          'USER',
+        ].sort(),
       );
     });
 
@@ -1726,7 +1732,9 @@ describe('Shell Environment Sanitization', () => {
       expect(sanitized.BRANCH_NAME).toBe('main');
       expect(sanitized.DESCRIPTION).toBe('PR description');
       expect(sanitized.EVENT_NAME).toBe('pull_request');
-      expect(sanitized.GITHUB_ENV).toBe('/home/runner/work/_temp/_runner_file_commands/set_env_');
+      expect(sanitized.GITHUB_ENV).toBe(
+        '/home/runner/work/_temp/_runner_file_commands/set_env_',
+      );
       expect(sanitized.IS_PULL_REQUEST).toBe('true');
       expect(sanitized.ISSUES_TO_TRIAGE).toBe('123,456');
       expect(sanitized.ISSUE_BODY).toBe('Issue body text');
@@ -1769,7 +1777,6 @@ describe('Shell Environment Sanitization', () => {
       // Non-LLXPRT vars should not pass through
       expect(sanitized.OTHER_VAR).toBeUndefined();
     });
-
   });
 });
 

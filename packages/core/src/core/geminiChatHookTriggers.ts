@@ -75,7 +75,7 @@ export async function triggerBeforeModelHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block LLM execution
-    debugLogger.warn('BeforeModel hook failed (non-blocking):', error);
+    debugLogger.debug('BeforeModel hook failed (non-blocking):', error);
     return undefined;
   }
 }
@@ -135,7 +135,7 @@ export async function triggerAfterModelHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block LLM execution
-    debugLogger.warn('AfterModel hook failed (non-blocking):', error);
+    debugLogger.debug('AfterModel hook failed (non-blocking):', error);
     return undefined;
   }
 }
@@ -182,7 +182,7 @@ export async function triggerBeforeToolSelectionHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block tool selection
-    debugLogger.warn('BeforeToolSelection hook failed (non-blocking):', error);
+    debugLogger.debug('BeforeToolSelection hook failed (non-blocking):', error);
     return undefined;
   }
 }

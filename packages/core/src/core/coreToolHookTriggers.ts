@@ -68,7 +68,7 @@ export async function triggerBeforeToolHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block tool execution
-    debugLogger.warn(
+    debugLogger.debug(
       `BeforeTool hook failed for tool ${toolName} (non-blocking):`,
       error,
     );
@@ -132,7 +132,7 @@ export async function triggerAfterToolHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block tool execution
-    debugLogger.warn(
+    debugLogger.debug(
       `AfterTool hook failed for tool ${toolName} (non-blocking):`,
       error,
     );
@@ -287,7 +287,7 @@ export async function triggerToolNotificationHook(
       details: serializedDetails,
     };
   } catch (error) {
-    debugLogger.warn(
+    debugLogger.debug(
       `Notification hook failed for ${confirmationDetails.title} (non-blocking):`,
       error,
     );

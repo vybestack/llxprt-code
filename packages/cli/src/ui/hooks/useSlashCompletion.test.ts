@@ -650,8 +650,6 @@ describe('useSlashCompletion', () => {
         });
       });
 
-
-
       it('should not provide suggestions for a fully typed command that has no sub-commands or argument completion', async () => {
         const slashCommands = [
           {

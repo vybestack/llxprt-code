@@ -752,7 +752,6 @@ describe('InputPrompt', () => {
     unmount();
   });
 
-
   it('should submit directly on Enter when a complete leaf command is typed', async () => {
     mockedUseCommandCompletion.mockReturnValue({
       ...mockCommandCompletion,

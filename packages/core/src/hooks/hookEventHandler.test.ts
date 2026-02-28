@@ -18,6 +18,9 @@ import type { HookPlanner } from './hookPlanner.js';
 import type { HookRunner } from './hookRunner.js';
 import type { HookAggregator, AggregatedHookResult } from './hookAggregator.js';
 import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
+import { HookEventName } from './types.js';
+import type { HookExecutionResult } from './types.js';
+import { coreEvents } from '../utils/events.js';
 
 // Mock DebugLogger
 vi.mock('../debug/index.js', () => ({
@@ -28,6 +31,13 @@ vi.mock('../debug/index.js', () => ({
       warn: vi.fn(),
       error: vi.fn(),
     }),
+  },
+}));
+
+// Mock coreEvents
+vi.mock('../utils/events.js', () => ({
+  coreEvents: {
+    emitFeedback: vi.fn(),
   },
 }));
 
@@ -107,6 +117,7 @@ describe('HookEventHandler', () => {
   describe('fireAfterToolEvent', () => {
     it('should return undefined when no hooks match', async () => {
       // @requirement:HOOK-145
+
       const result = await eventHandler.fireAfterToolEvent(
         'read_file',
         { path: '/test.txt' },
@@ -562,6 +573,63 @@ describe('HookEventHandler', () => {
             '/test/target/.llxprt/tmp/chats/session-2025-01-20-test-session-123.jsonl',
           source: 'startup',
         }),
+      );
+    });
+  });
+
+  describe('hook failure feedback', () => {
+    it('should emit user-facing feedback when hooks fail', async () => {
+      // Mock coreEvents.emitFeedback
+      const mockEmitFeedback = vi.fn();
+      vi.mocked(coreEvents.emitFeedback).mockImplementation(mockEmitFeedback);
+
+      const mockPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [
+          {
+            type: 'command' as const,
+            command: './fail.sh',
+          },
+        ],
+        sequential: false,
+      };
+
+      const mockResults: HookExecutionResult[] = [
+        {
+          success: false,
+          duration: 50,
+          hookConfig: mockPlan.hookConfigs[0],
+          eventName: HookEventName.BeforeTool,
+          error: new Error('Failed to execute'),
+          stdout: '',
+          stderr: 'Hook execution failed',
+        },
+      ];
+
+      const mockAggregated: AggregatedHookResult = {
+        success: false,
+        finalOutput: undefined,
+        allOutputs: [],
+        errors: [new Error('Failed to execute')],
+        totalDuration: 50,
+      };
+
+      vi.mocked(mockPlanner.createExecutionPlan).mockReturnValue(mockPlan);
+      vi.mocked(mockRunner.executeHooksParallel).mockResolvedValue(mockResults);
+      vi.mocked(mockAggregator.aggregateResults).mockReturnValue(
+        mockAggregated,
+      );
+
+      await eventHandler.fireBeforeToolEvent('EditTool', {});
+
+      // Verify emitFeedback was called with warning about failed hook
+      expect(mockEmitFeedback).toHaveBeenCalledWith(
+        'warning',
+        expect.stringContaining('./fail.sh'),
+      );
+      expect(mockEmitFeedback).toHaveBeenCalledWith(
+        'warning',
+        expect.stringContaining('F12'),
       );
     });
   });

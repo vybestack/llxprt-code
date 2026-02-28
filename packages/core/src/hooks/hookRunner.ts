@@ -244,7 +244,7 @@ export class HookRunner {
         child.stdin.on('error', (err: NodeJS.ErrnoException) => {
           // Ignore EPIPE errors which happen when the child process closes stdin early
           if (err.code !== 'EPIPE') {
-            debugLogger.warn(`Hook stdin error: ${err}`);
+            debugLogger.debug(`Hook stdin error: ${err}`);
           }
         });
         child.stdin.write(JSON.stringify(input));
