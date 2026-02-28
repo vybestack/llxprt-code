@@ -5,22 +5,40 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs/promises';
-import { spawn } from 'child_process';
+import * as fs from 'fs/promises';
 import { saveClipboardImage } from './clipboardUtils.js';
 
 // Mock dependencies
-vi.mock('node:fs/promises');
-vi.mock('child_process', () => ({
-  spawn: vi.fn(),
-  exec: vi.fn(),
+vi.mock('fs/promises');
+
+const { mockSpawn } = vi.hoisted(() => ({
+  mockSpawn: vi.fn(),
 }));
+
+// Must use a synchronous factory — async factories with importOriginal cause
+// the module under test to capture the real spawn before the mock resolves.
+// We also provide a promisify-compatible exec to keep secure-browser-launcher
+// (imported transitively via @vybestack/llxprt-code-core) from throwing.
+vi.mock('child_process', () => {
+  const execFn = Object.assign(vi.fn(), {
+    [Symbol.for('nodejs.util.promisify.custom')]: vi.fn(),
+  });
+  const mod = {
+    spawn: mockSpawn,
+    exec: execFn,
+    execSync: vi.fn(),
+    execFile: vi.fn(),
+    fork: vi.fn(),
+    spawnSync: vi.fn(),
+  };
+  return { ...mod, default: mod };
+});
 
 describe('saveClipboardImage Windows Path Escaping', () => {
   const originalPlatform = process.platform;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     Object.defineProperty(process, 'platform', {
       value: 'win32',
     });
@@ -61,19 +79,16 @@ describe('saveClipboardImage Windows Path Escaping', () => {
       }),
     };
 
-    vi.mocked(spawn).mockReturnValue(mockProc as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    mockSpawn.mockReturnValue(mockProc);
 
     const targetDir = "C:\\User's Files";
     await saveClipboardImage(targetDir);
 
-    expect(spawn).toHaveBeenCalled();
-    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    expect(mockSpawn).toHaveBeenCalled();
+    const args = mockSpawn.mock.calls[0][1] as string[];
     const script = args[2];
 
-    // The path C:\User's Files\.llxprt-clipboard\clipboard-....png
-    // should be escaped in the script as 'C:\User''s Files\...'
-
-    // Check if the script contains the escaped path
+    // The path should have single quotes escaped for PowerShell ('' instead of ')
     expect(script).toMatch(/'C:\\User''s Files/);
   });
 });

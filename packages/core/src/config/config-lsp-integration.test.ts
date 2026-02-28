@@ -132,6 +132,7 @@ vi.mock('../services/gitService.js', () => ({
 vi.mock('../tools/mcp-client-manager.js', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
+    getMcpInstructions: vi.fn().mockReturnValue(''),
   })),
 }));
 
@@ -220,6 +221,25 @@ vi.mock('../tools/mcp-tool.js', () => ({
       }),
     ),
 }));
+
+vi.mock('../utils/memoryDiscovery.js', () => ({
+  loadGlobalMemory: vi.fn().mockResolvedValue({ files: [] }),
+  loadEnvironmentMemory: vi.fn().mockResolvedValue({ files: [] }),
+  loadJitSubdirectoryMemory: vi.fn().mockResolvedValue({ files: [] }),
+  concatenateInstructions: vi.fn().mockReturnValue(''),
+  getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
+}));
+
+vi.mock('../utils/events.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/events.js')>();
+  return {
+    ...actual,
+    coreEvents: {
+      ...actual.coreEvents,
+      emit: vi.fn(),
+    },
+  };
+});
 
 describe('Config LSP Integration (P33)', () => {
   const mockTargetDir = fileURLToPath(new URL('../../../../', import.meta.url));

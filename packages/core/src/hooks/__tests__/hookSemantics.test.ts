@@ -36,6 +36,7 @@ interface HookResultShape {
 
 interface MockDebugLogger {
   log: (channel: string, record: unknown) => void;
+  warn: (message: string) => void;
   logRecords: Array<{ channel: string; record: unknown }>;
 }
 
@@ -113,6 +114,7 @@ function createMockDebugLogger(): MockDebugLogger {
     log: (channel: string, record: unknown) => {
       logRecords.push({ channel, record });
     },
+    warn: vi.fn(),
     logRecords,
   };
 }

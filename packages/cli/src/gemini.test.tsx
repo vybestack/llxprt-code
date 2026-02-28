@@ -340,8 +340,13 @@ describe('gemini.tsx main function', () => {
     });
 
     const originalIsTTY = process.stdin.isTTY;
+    const originalSetRawMode = process.stdin.setRawMode;
     Object.defineProperty(process.stdin, 'isTTY', {
       value: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: vi.fn(),
       configurable: true,
     });
 
@@ -350,6 +355,10 @@ describe('gemini.tsx main function', () => {
     } finally {
       Object.defineProperty(process.stdin, 'isTTY', {
         value: originalIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdin, 'setRawMode', {
+        value: originalSetRawMode,
         configurable: true,
       });
     }
