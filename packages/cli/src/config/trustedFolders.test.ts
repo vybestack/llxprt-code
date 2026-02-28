@@ -431,11 +431,7 @@ describe('invalid trust levels', () => {
 
   it('should throw a fatal error for invalid trust level', () => {
     const mockSettings: Settings = {
-      security: {
-        folderTrust: {
-          enabled: true,
-        },
-      },
+      folderTrust: true,
     };
     mockRules[mockCwd] = 'INVALID_TRUST_LEVEL' as TrustLevel;
 
