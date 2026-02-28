@@ -54,6 +54,7 @@ against LLxprt's current source files. See `dev-docs/cherrypicking-runbook.md` P
 the complete audit protocol, subagent usage patterns, and common pitfalls.
 
 Key questions for every commit:
+
 - **Does LLxprt already have this?** Read the actual LLxprt file, not just the filename.
 - **Is it compatible?** Check for imports, types, and infrastructure that may not exist in LLxprt.
 - **Is it partial?** Some files in a commit may apply while others reference removed code.

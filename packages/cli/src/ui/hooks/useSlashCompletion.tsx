@@ -245,7 +245,7 @@ export function useSlashCompletion(
 
       // Only process complete parts (parts followed by another part or a space)
       const completeParts = hasTrailingSpace ? rawParts : rawParts.slice(0, -1);
-      
+
       for (const part of completeParts) {
         if (!currentLevel) {
           break;

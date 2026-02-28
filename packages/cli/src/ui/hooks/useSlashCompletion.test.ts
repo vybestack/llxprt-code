@@ -665,7 +665,6 @@ describe('useSlashCompletion', () => {
         });
       });
 
-
       it('should suggest all sub-commands when the query ends with the parent command and a space', async () => {
         const slashCommands = [
           {

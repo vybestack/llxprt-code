@@ -775,7 +775,10 @@ export function SettingsDialog({
   }, [showScopeSelection, focusSection]);
 
   // Scroll logic for settings
-  const visibleItems = items.slice(scrollOffset, scrollOffset + effectiveMaxItemsToShow);
+  const visibleItems = items.slice(
+    scrollOffset,
+    scrollOffset + effectiveMaxItemsToShow,
+  );
   // Always show arrows for consistent UI and to indicate circular navigation
   const showScrollUp = true;
   const showScrollDown = true;
@@ -940,7 +943,9 @@ export function SettingsDialog({
           setActiveSettingIndex(newIndex);
           // Adjust scroll offset for wrap-around
           if (newIndex === items.length - 1) {
-            setScrollOffset(Math.max(0, items.length - effectiveMaxItemsToShow));
+            setScrollOffset(
+              Math.max(0, items.length - effectiveMaxItemsToShow),
+            );
           } else if (newIndex < scrollOffset) {
             setScrollOffset(newIndex);
           }

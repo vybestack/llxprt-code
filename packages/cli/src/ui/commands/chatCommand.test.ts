@@ -324,8 +324,6 @@ describe('chatCommand', () => {
     });
   });
 
-
-
   describe('resume subcommand', () => {
     const goodTag = 'good-tag';
     const badTag = 'bad-tag';
