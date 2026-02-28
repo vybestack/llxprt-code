@@ -1943,9 +1943,9 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
   },
   BooleanOrLspConfig: {
     description:
-      'Set to false to disable LSP entirely, or provide an object to configure LSP servers and diagnostics behavior.',
+      'Set to true to enable LSP with defaults, false to disable, or provide an object to configure LSP servers and diagnostics behavior.',
     anyOf: [
-      { type: 'boolean', const: false },
+      { type: 'boolean' },
       {
         type: 'object',
         properties: {
