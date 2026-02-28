@@ -26,8 +26,10 @@ import {
   resolveTextSearchTarget,
   type ResolvedSearchTarget,
 } from '../utils/resolveTextSearchTarget.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
 const DEFAULT_TOTAL_MAX_MATCHES = 20000;
+const debugLogger = DebugLogger.getLogger('llxprt:ripgrep');
 
 /**
  * Parameters for the GrepTool
@@ -222,7 +224,7 @@ File: ${resolved.basename}
         returnDisplay: displayMessage,
       };
     } catch (error) {
-      console.error(`Error during GrepLogic execution: ${error}`);
+      debugLogger.warn(`Error during GrepLogic execution: ${error}`);
       const errorMessage = getErrorMessage(error);
       return {
         llmContent: `Error during grep search operation: ${errorMessage}`,
@@ -358,7 +360,7 @@ File: ${resolved.basename}
 
       return this.parseRipgrepOutput(output, absolutePath);
     } catch (error: unknown) {
-      console.error(`GrepLogic: ripgrep failed: ${getErrorMessage(error)}`);
+      debugLogger.debug(`GrepLogic: ripgrep failed: ${getErrorMessage(error)}`);
       throw error;
     }
   }

@@ -1222,4 +1222,104 @@ describe('RipGrepTool', () => {
       expect(invocation.getDescription()).toBe("'testPattern' within ./");
     });
   });
+
+  describe('debugLogger usage', () => {
+    it('should use debugLogger.warn instead of console.error for top-level errors', async () => {
+      // Mock DebugLogger to spy on warn calls
+      const { DebugLogger } = await import('../debug/DebugLogger.js');
+      const warnSpy = vi.spyOn(DebugLogger.getLogger('llxprt:ripgrep'), 'warn');
+
+      // Setup specific mock to trigger an error in execute
+      mockSpawn.mockImplementationOnce(() => {
+        const mockProcess = {
+          stdout: {
+            on: vi.fn(),
+            removeListener: vi.fn(),
+          },
+          stderr: {
+            on: vi.fn(),
+            removeListener: vi.fn(),
+          },
+          on: vi.fn(),
+          removeListener: vi.fn(),
+          kill: vi.fn(),
+        };
+
+        setTimeout(() => {
+          const errorHandler = mockProcess.on.mock.calls.find(
+            (call) => call[0] === 'error',
+          )?.[1];
+
+          if (errorHandler) {
+            errorHandler(new Error('Test error during execution'));
+          }
+        }, 0);
+
+        return mockProcess as unknown as ChildProcess;
+      });
+
+      const params: RipGrepToolParams = { pattern: 'test' };
+      const invocation = grepTool.build(params);
+      const result = await invocation.execute(abortSignal);
+
+      // Should have logged to debugLogger.warn, not console.error
+      expect(warnSpy).toHaveBeenCalled();
+      expect(warnSpy.mock.calls[0][0]).toContain(
+        'Error during GrepLogic execution:',
+      );
+      expect(result.llmContent).toContain('Error during grep search operation');
+
+      warnSpy.mockRestore();
+    });
+
+    it('should use debugLogger.debug instead of console.error for ripgrep failures', async () => {
+      // Mock DebugLogger to spy on debug calls
+      const { DebugLogger } = await import('../debug/DebugLogger.js');
+      const debugSpy = vi.spyOn(
+        DebugLogger.getLogger('llxprt:ripgrep'),
+        'debug',
+      );
+
+      // Setup specific mock to trigger a ripgrep failure
+      mockSpawn.mockImplementationOnce(() => {
+        const mockProcess = {
+          stdout: {
+            on: vi.fn(),
+            removeListener: vi.fn(),
+          },
+          stderr: {
+            on: vi.fn(),
+            removeListener: vi.fn(),
+          },
+          on: vi.fn(),
+          removeListener: vi.fn(),
+          kill: vi.fn(),
+        };
+
+        setTimeout(() => {
+          const closeHandler = mockProcess.on.mock.calls.find(
+            (call) => call[0] === 'close',
+          )?.[1];
+
+          if (closeHandler) {
+            // Exit code 2 indicates ripgrep error
+            closeHandler(2);
+          }
+        }, 0);
+
+        return mockProcess as unknown as ChildProcess;
+      });
+
+      const params: RipGrepToolParams = { pattern: 'test' };
+      const invocation = grepTool.build(params);
+      const result = await invocation.execute(abortSignal);
+
+      // Should have logged to debugLogger.debug
+      expect(debugSpy).toHaveBeenCalled();
+      expect(debugSpy.mock.calls[0][0]).toContain('GrepLogic: ripgrep failed:');
+      expect(result.llmContent).toContain('Error during grep search operation');
+
+      debugSpy.mockRestore();
+    });
+  });
 });
