@@ -8,9 +8,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EditTool } from './edit.js';
-import { SmartEditTool } from './smart-edit.js';
 import { WriteFileTool } from './write-file.js';
-import { WebFetchTool } from './web-fetch.js';
+import { GoogleWebFetchTool } from './google-web-fetch.js';
 import { ToolConfirmationOutcome } from './tools.js';
 import { ApprovalMode } from '../policy/types.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
@@ -22,8 +21,6 @@ import os from 'node:os';
 
 // Mock telemetry loggers to avoid failures
 vi.mock('../telemetry/loggers.js', () => ({
-  logSmartEditStrategy: vi.fn(),
-  logSmartEditCorrectionEvent: vi.fn(),
   logFileOperation: vi.fn(),
 }));
 
@@ -50,6 +47,7 @@ describe('Tool Confirmation Policy Updates', () => {
       getTargetDir: () => rootDir,
       getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
       setApprovalMode: vi.fn(),
+      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
       getFileSystemService: () => ({
         readTextFile: vi.fn().mockImplementation((p) => {
           if (fs.existsSync(p)) {
@@ -66,6 +64,7 @@ describe('Tool Confirmation Policy Updates', () => {
       getGeminiClient: () => ({}),
       getBaseLlmClient: () => ({}),
       getIdeMode: () => false,
+      getIdeClient: () => undefined,
       getWorkspaceContext: () => ({
         isPathWithinWorkspace: () => true,
         getDirectories: () => [rootDir],
@@ -84,43 +83,32 @@ describe('Tool Confirmation Policy Updates', () => {
     {
       name: 'EditTool',
       create: (config: Config, bus: MessageBus) => new EditTool(config, bus),
-      params: {
-        file_path: 'test.txt',
+      getParams: () => ({
+        file_path: path.join(rootDir, 'test.txt'),
         old_string: 'existing',
         new_string: 'new',
-      },
-    },
-    {
-      name: 'SmartEditTool',
-      create: (config: Config, bus: MessageBus) =>
-        new SmartEditTool(config, bus),
-      params: {
-        file_path: 'test.txt',
-        instruction: 'change content',
-        old_string: 'existing',
-        new_string: 'new',
-      },
+      }),
     },
     {
       name: 'WriteFileTool',
       create: (config: Config, bus: MessageBus) =>
         new WriteFileTool(config, bus),
-      params: {
+      getParams: () => ({
         file_path: path.join(rootDir, 'test.txt'),
         content: 'new content',
-      },
+      }),
     },
     {
-      name: 'WebFetchTool',
+      name: 'GoogleWebFetchTool',
       create: (config: Config, bus: MessageBus) =>
-        new WebFetchTool(config, bus),
-      params: {
+        new GoogleWebFetchTool(config, bus),
+      getParams: () => ({
         prompt: 'fetch https://example.com',
-      },
+      }),
     },
   ];
 
-  describe.each(tools)('$name policy updates', ({ create, params }) => {
+  describe.each(tools)('$name policy updates', ({ create, getParams }) => {
     it.each([
       {
         outcome: ToolConfirmationOutcome.ProceedAlways,
@@ -136,6 +124,7 @@ describe('Tool Confirmation Policy Updates', () => {
       'should handle $outcome correctly',
       async ({ outcome, shouldPublish, persist, expectedApprovalMode }) => {
         const tool = create(mockConfig, mockMessageBus);
+        const params = getParams();
 
         // For file-based tools, ensure the file exists if needed
         if (params.file_path) {

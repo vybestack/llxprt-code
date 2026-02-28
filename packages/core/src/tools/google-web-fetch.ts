@@ -131,8 +131,10 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     private readonly config: Config,
     params: GoogleWebFetchToolParams,
     messageBus?: MessageBus,
+    toolName?: string,
+    displayName?: string,
   ) {
-    super(params, messageBus);
+    super(params, messageBus, toolName, displayName);
   }
 
   override getToolName(): string {
@@ -520,7 +522,15 @@ export class GoogleWebFetchTool extends BaseDeclarativeTool<
   protected createInvocation(
     params: GoogleWebFetchToolParams,
     messageBus?: MessageBus,
+    toolName?: string,
+    displayName?: string,
   ): ToolInvocation<GoogleWebFetchToolParams, ToolResult> {
-    return new GoogleWebFetchToolInvocation(this.config, params, messageBus);
+    return new GoogleWebFetchToolInvocation(
+      this.config,
+      params,
+      messageBus ?? this.messageBus,
+      toolName ?? this.name,
+      displayName ?? this.displayName,
+    );
   }
 }

@@ -226,8 +226,10 @@ class EditToolInvocation extends BaseToolInvocation<
     private readonly config: Config,
     params: EditToolParams,
     messageBus?: MessageBus,
+    toolName?: string,
+    displayName?: string,
   ) {
-    super(params, messageBus);
+    super(params, messageBus, toolName, displayName);
   }
 
   override getToolName(): string {
@@ -825,13 +827,21 @@ Expectation for required parameters:
   protected createInvocation(
     params: EditToolParams,
     messageBus?: MessageBus,
+    toolName?: string,
+    displayName?: string,
   ): ToolInvocation<EditToolParams, ToolResult> {
     // Normalize parameters: if file_path is provided but not absolute_path, copy it over
     const normalizedParams = { ...params };
     if (!normalizedParams.absolute_path && normalizedParams.file_path) {
       normalizedParams.absolute_path = normalizedParams.file_path;
     }
-    return new EditToolInvocation(this.config, normalizedParams, messageBus);
+    return new EditToolInvocation(
+      this.config,
+      normalizedParams,
+      messageBus ?? this.messageBus,
+      toolName ?? this.name,
+      displayName ?? this.displayName,
+    );
   }
 
   getModifyContext(_: AbortSignal): ModifyContext<EditToolParams> {
