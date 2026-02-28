@@ -9,6 +9,8 @@ import {
   createMockSettings,
 } from '../../../test-utils/render.js';
 import { describe, it, expect, vi } from 'vitest';
+import { render } from 'ink-testing-library';
+import React from 'react';
 import { Text } from 'ink';
 import { ToolGroupMessage } from './ToolGroupMessage.js';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';

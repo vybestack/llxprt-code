@@ -22,7 +22,9 @@ import type {
   Node,
   Query as QueryType,
 } from 'web-tree-sitter';
-import { debugLogger } from './debugLogger.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const debugLogger = new DebugLogger('llxprt:shell-parser');
 
 // Type definitions for tree-sitter query results
 interface QueryCapture {

@@ -6,6 +6,9 @@
 
 import { type MCPOAuthConfig } from './oauth-provider.js';
 import { getErrorMessage } from '../utils/errors.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 
 /**
  * Error thrown when the discovered resource metadata does not match the expected resource.
