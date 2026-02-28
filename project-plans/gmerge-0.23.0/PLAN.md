@@ -1268,11 +1268,11 @@ Cherry-pick these 3 commits:
 
 git cherry-pick 8ed0f8981f 6084708cc2 e64146914a
 
-IMPORTANT for e64146914a: If this commit includes changes to smart-edit.ts, SKIP those changes.
-smart-edit.ts is removed in LLxprt. If cherry-pick conflicts on smart-edit.ts:
-1. Run: git checkout --ours -- <path-to-smart-edit.ts> (or delete the file)
-2. Run: git add <path-to-smart-edit.ts>
+IMPORTANT for e64146914a: This commit touches packages/core/src/tools/smart-edit.ts which does NOT exist in LLxprt (removed feature). The cherry-pick WILL conflict on this file. Handle it as follows:
+1. Run: git rm packages/core/src/tools/smart-edit.ts
+2. Run: git add -A
 3. Run: git cherry-pick --continue
+Do NOT re-create smart-edit.ts. The file must not exist after this batch.
 
 After all 3, run Full verification (see Verification Commands).
 
