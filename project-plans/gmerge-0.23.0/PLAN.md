@@ -24,7 +24,7 @@ All REIMPLEMENT batches MUST follow RED-GREEN-REFACTOR TDD:
 2. **GREEN**: Implement minimal code to make tests PASS.
 3. **REFACTOR**: Only then refactor if valuable.
 
-All batches (PICK and REIMPLEMENT) MUST achieve **100% behavior coverage for changed behaviors**. Every behavioral change must be covered by tests.
+All batches (PICK and REIMPLEMENT) MUST achieve **100% behavior coverage for changed behaviors**. Every behavioral change must be covered by tests. **Exception:** docs-only batches (no production code changes) require deterministic validation (e.g., grep for old patterns) instead of unit tests.
 
 ---
 
@@ -135,7 +135,7 @@ Run: git status                 # Must be clean
 YOUR TASK: Reimplement upstream commit cc52839f19.
 Update docs/hooks/ to use snake_case tool names (write_file, replace, search_file_content, etc.)
 
-MANDATORY TDD: Write/update behavioral tests FIRST. Run them to confirm RED (failing). Then implement minimal code to make them GREEN. Only then refactor if valuable.
+NOTE: This is a docs-only change — no production code is modified. No unit tests required per RULES.md. Use deterministic grep validation instead.
 
 REFERENCE: Read the upstream diff first:
 git show cc52839f19
@@ -143,9 +143,13 @@ git show cc52839f19
 Then read LLxprt's current versions of affected files in docs/hooks/.
 Apply the equivalent changes, adapting for LLxprt branding and architecture.
 
+VALIDATION: After changes, run:
+grep -rn '"ReadFile"\|"WriteFile"\|"Edit"\|"RunShellCommand"\|"SearchText"\|"ListDirectory"' docs/hooks/
+Expected: zero matches (exit code 1). If any matches remain, the change is incomplete.
+
 After changes, run Quick verification (see Verification Commands).
 
-DELIVERABLES: Hook docs updated with snake_case tool names. 100% behavior coverage for changed behaviors. Quick verification passes.
+DELIVERABLES: Hook docs updated with snake_case tool names. Grep validation confirms zero old-pattern matches. Quick verification passes.
 
 DO NOT:
 - Skip ahead to Batch 2
@@ -160,7 +164,7 @@ Branch: gmerge/0.23.0. Working directory: /Users/acoliver/projects/llxprt/branch
 REVIEW TASK:
 1. Run: git diff HEAD~1
 2. Verify changes match upstream intent for: updating hook docs to use snake_case tool names
-3. Verify 100% behavior coverage: All changed behaviors must be covered by tests
+3. Docs-only batch: verify grep validation (zero old PascalCase tool names remain in docs/hooks/)
 4. Check Non-Negotiables:
    - No @google/gemini-cli-core imports (must be @vybestack/llxprt-code-core)
    - No .gemini/ paths (must be .llxprt/)
