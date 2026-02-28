@@ -46,6 +46,19 @@ git log --oneline --reverse v0.9.0..v0.10.0
 git log --oneline --grep="Merge upstream gemini-cli" -n 5
 ```
 
+### 2a. Deep Code Audit (MANDATORY before any decisioning)
+
+**Do NOT categorize commits based on subject lines alone.** Every commit must be audited
+at the code level using `git show <sha>` (the full diff, not just `--name-only`) and compared
+against LLxprt's current source files. See `dev-docs/cherrypicking-runbook.md` Phase 2 for
+the complete audit protocol, subagent usage patterns, and common pitfalls.
+
+Key questions for every commit:
+- **Does LLxprt already have this?** Read the actual LLxprt file, not just the filename.
+- **Is it compatible?** Check for imports, types, and infrastructure that may not exist in LLxprt.
+- **Is it partial?** Some files in a commit may apply while others reference removed code.
+- **Are there hidden dependencies?** A "bug fix" may depend on types added by a prior skipped commit.
+
 ### 3. Cherry-pick Relevant Commits
 
 Cherry-pick commits one by one, starting from the oldest:
