@@ -890,6 +890,13 @@
           "markdownDescription": "Enables extension loading/unloading within the CLI session.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `false`",
           "default": false,
           "type": "boolean"
+        },
+        "jitContext": {
+          "title": "JIT Context Loading",
+          "description": "Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.",
+          "markdownDescription": "Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
+          "type": "boolean"
         }
       },
       "additionalProperties": false

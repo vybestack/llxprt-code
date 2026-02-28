@@ -540,6 +540,10 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+- **`security.enablePermanentToolApproval`** (boolean):
+  - **Description:** Enable the "Allow for all future sessions" option in tool confirmation dialogs.
+  - **Default:** `false`
+
 - **`security.blockGitExtensions`** (boolean):
   - **Description:** Blocks installing and loading extensions from Git.
   - **Default:** `false`
@@ -625,6 +629,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`experimental.extensionReloading`** (boolean):
   - **Description:** Enables extension loading/unloading within the CLI session.
   - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`experimental.jitContext`** (boolean):
+  - **Description:** Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.
+  - **Default:** `true`
   - **Requires restart:** Yes
 
 #### `defaultProfile`
