@@ -42,11 +42,16 @@ const mockDebugLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
-vi.mock('../debug/index.js', () => ({
-  DebugLogger: {
-    getLogger: () => mockDebugLogger,
-  },
-}));
+vi.mock('../debug/index.js', () => {
+  // Create a constructor function that returns the mock
+  const DebugLogger = vi.fn().mockImplementation(() => mockDebugLogger);
+  // Add getLogger as a static method
+  DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
+
+  return {
+    DebugLogger,
+  };
+});
 
 // Mock console methods
 const mockConsole = {
@@ -253,13 +258,13 @@ describe('HookRunner', () => {
       it('should expand environment variables in commands', async () => {
         const configWithEnvVar: HookConfig = {
           type: HookType.Command,
-          command: '$GEMINI_PROJECT_DIR/hooks/test.sh',
+          command: '$LLXPRT_PROJECT_DIR/hooks/test.sh',
         };
 
         mockSpawn.mockProcessOn.mockImplementation(
           (event: string, callback: (code: number) => void) => {
             if (event === 'close') {
-              setTimeout(() => callback(0), 10);
+              setImmediate(() => callback(0));
             }
           },
         );
@@ -270,15 +275,65 @@ describe('HookRunner', () => {
           mockInput,
         );
 
+        // SECURITY: Verify spawn is called with shell executable and expanded path
+        // Note: Safe paths without metacharacters may not be quoted
         expect(spawn).toHaveBeenCalledWith(
-          '/test/project/hooks/test.sh',
+          expect.stringMatching(/bash|powershell/),
+          expect.arrayContaining([
+            expect.stringMatching(/\/test\/project\/hooks\/test\.sh/),
+          ]),
           expect.objectContaining({
-            shell: true,
+            shell: false,
             env: expect.objectContaining({
               LLXPRT_PROJECT_DIR: '/test/project',
-              GEMINI_PROJECT_DIR: '/test/project',
-              CLAUDE_PROJECT_DIR: '/test/project',
             }),
+          }),
+        );
+      });
+
+      /**
+       * SECURITY TEST: Command injection via LLXPRT_PROJECT_DIR
+       * GIVEN: HookInput.cwd contains shell injection payload "; echo pwned"
+       * WHEN: Hook command uses $LLXPRT_PROJECT_DIR variable
+       * THEN: Injection payload must be escaped, not executed
+       * @requirement: Prevent shell injection via environment variable expansion
+       */
+      it('should not allow command injection via LLXPRT_PROJECT_DIR (SECURITY)', async () => {
+        const maliciousCwd = '/test/project; echo "pwned" > /tmp/pwned';
+        const mockMaliciousInput: HookInput = {
+          ...mockInput,
+          cwd: maliciousCwd,
+        };
+
+        const config: HookConfig = {
+          type: HookType.Command,
+          command: 'ls $LLXPRT_PROJECT_DIR',
+        };
+
+        mockSpawn.mockProcessOn.mockImplementation(
+          (event: string, callback: (code: number) => void) => {
+            if (event === 'close') {
+              setImmediate(() => callback(0));
+            }
+          },
+        );
+
+        await hookRunner.executeHook(
+          config,
+          HookEventName.BeforeTool,
+          mockMaliciousInput,
+        );
+
+        // SECURITY: If secure, spawn will be called with escaped command
+        // The malicious "; echo pwned" must appear as LITERAL TEXT, not executed
+        expect(spawn).toHaveBeenCalledWith(
+          expect.stringMatching(/bash|powershell/),
+          expect.arrayContaining([
+            // Command must contain escaped version of malicious path
+            expect.stringMatching(/ls ['"].*echo.*pwned.*/),
+          ]),
+          expect.objectContaining({
+            shell: false, // CRITICAL: shell must be false
           }),
         );
       });
@@ -353,10 +408,13 @@ describe('HookRunner', () => {
       mockSpawn.mockProcessOn.mockImplementation(
         (event: string, callback: (code: number) => void) => {
           if (event === 'close') {
-            const command =
-              vi.mocked(spawn).mock.calls[executionOrder.length][0];
+            // Extract command from shell args instead of command directly
+            const args = vi.mocked(spawn).mock.calls[
+              executionOrder.length
+            ][1] as string[];
+            const command = args[args.length - 1]; // Last arg is the command string
             executionOrder.push(command);
-            setTimeout(() => callback(0), 10);
+            setImmediate(() => callback(0));
           }
         },
       );
