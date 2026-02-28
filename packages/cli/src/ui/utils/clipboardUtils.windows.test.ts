@@ -1,23 +1,20 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
+import { spawn } from 'child_process';
 import { saveClipboardImage } from './clipboardUtils.js';
 
 // Mock dependencies
 vi.mock('node:fs/promises');
-vi.mock('@google/gemini-cli-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@google/gemini-cli-core')>();
-  return {
-    ...actual,
-    spawnAsync: vi.fn(),
-  };
-});
+vi.mock('child_process', () => ({
+  spawn: vi.fn(),
+  exec: vi.fn(),
+}));
 
 describe('saveClipboardImage Windows Path Escaping', () => {
   const originalPlatform = process.platform;
@@ -41,20 +38,39 @@ describe('saveClipboardImage Windows Path Escaping', () => {
   });
 
   it('should escape single quotes in path for PowerShell script', async () => {
-    const { spawnAsync } = await import('@google/gemini-cli-core');
-    vi.mocked(spawnAsync).mockResolvedValue({
-      stdout: 'success',
-      stderr: '',
-    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Mock spawn to simulate successful PowerShell execution
+    const mockStdout = {
+      on: vi.fn((event: string, callback: (data: Buffer) => void) => {
+        if (event === 'data') {
+          setTimeout(() => callback(Buffer.from('success')), 0);
+        }
+      }),
+    };
+
+    const mockStderr = {
+      on: vi.fn(),
+    };
+
+    const mockProc = {
+      stdout: mockStdout,
+      stderr: mockStderr,
+      on: vi.fn((event: string, callback: (code: number) => void) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 0);
+        }
+      }),
+    };
+
+    vi.mocked(spawn).mockReturnValue(mockProc as any); // eslint-disable-line @typescript-eslint/no-explicit-any
 
     const targetDir = "C:\\User's Files";
     await saveClipboardImage(targetDir);
 
-    expect(spawnAsync).toHaveBeenCalled();
-    const args = vi.mocked(spawnAsync).mock.calls[0][1];
+    expect(spawn).toHaveBeenCalled();
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
     const script = args[2];
 
-    // The path C:\User's Files\.gemini-clipboard\clipboard-....png
+    // The path C:\User's Files\.llxprt-clipboard\clipboard-....png
     // should be escaped in the script as 'C:\User''s Files\...'
 
     // Check if the script contains the escaped path

@@ -75,7 +75,7 @@ export async function clipboardHasImage(): Promise<boolean> {
         'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::ContainsImage()',
       ]);
       return stdout.trim() === 'True';
-    } catch (error) {
+    } catch (_error) {
       // Silent fail on Windows clipboard check
       return false;
     }
@@ -91,7 +91,7 @@ export async function clipboardHasImage(): Promise<boolean> {
     const imageRegex =
       /«class PNGf»|TIFF picture|JPEG picture|GIF picture|«class JPEG»|«class TIFF»/;
     return imageRegex.test(stdout);
-  } catch (error) {
+  } catch (_error) {
     // Silent fail on macOS clipboard check
     return false;
   }
