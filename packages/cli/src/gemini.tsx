@@ -100,6 +100,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
+import { detectTerminalBackgroundColor } from './ui/themes/color-utils.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
@@ -279,6 +280,9 @@ export async function startInteractiveUI(
 ) {
   const version = await getCliVersion();
 
+  // Detect terminal background color for theme auto-selection
+  const terminalBackgroundColor = await detectTerminalBackgroundColor();
+
   // Detect and enable Kitty keyboard protocol once at startup
   await detectAndEnableKittyProtocol();
   setWindowTitle(basename(workspaceRoot), settings);
@@ -312,6 +316,7 @@ export async function startInteractiveUI(
             settings={settings}
             startupWarnings={startupWarnings}
             version={version}
+            terminalBackgroundColor={terminalBackgroundColor}
             recordingIntegration={recordingIntegration}
             resumedHistory={resumedHistory}
             initialRecordingService={initialRecordingService}

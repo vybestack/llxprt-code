@@ -34,6 +34,7 @@ interface AppProps {
   startupWarnings?: string[];
   resumedHistory?: IContent[];
   version: string;
+  terminalBackgroundColor?: string;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
   recordingIntegration?: RecordingIntegration;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */

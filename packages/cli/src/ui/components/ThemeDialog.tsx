@@ -8,6 +8,7 @@ import React, { useCallback, useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { themeManager, DEFAULT_THEME } from '../themes/theme-manager.js';
+import { pickDefaultThemeName } from '../themes/theme.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { DiffRenderer } from './messages/DiffRenderer.js';
 import { colorizeCode } from '../utils/CodeColorizer.js';
@@ -17,6 +18,7 @@ import {
   getScopeMessageForSetting,
 } from '../../utils/dialogScopeUtils.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { useUIState } from '../contexts/UIStateContext.js';
 
 interface ThemeDialogProps {
   /** Callback function when a theme is selected */
@@ -37,14 +39,28 @@ export function ThemeDialog({
   availableTerminalHeight,
   terminalWidth,
 }: ThemeDialogProps): React.JSX.Element {
+  const { terminalBackgroundColor } = useUIState();
   const [selectedScope, setSelectedScope] = useState<SettingScope>(
     SettingScope.User,
   );
 
   // Track the currently highlighted theme name
-  const [highlightedThemeName, setHighlightedThemeName] = useState<
-    string | undefined
-  >(settings.merged.ui?.theme || DEFAULT_THEME.name);
+  const [highlightedThemeName, setHighlightedThemeName] = useState<string>(
+    () => {
+      // If a theme is already set, use it.
+      if (settings.merged.ui?.theme) {
+        return settings.merged.ui.theme;
+      }
+
+      // Otherwise, try to pick a theme that matches the terminal background.
+      return pickDefaultThemeName(
+        terminalBackgroundColor,
+        themeManager.getAllThemes(),
+        DEFAULT_THEME.name,
+        'Default Light',
+      );
+    },
+  );
 
   // Generate theme items filtered by selected scope
   const customThemes =

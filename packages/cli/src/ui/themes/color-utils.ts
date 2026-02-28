@@ -250,3 +250,110 @@ export function interpolateColor(
   const color = gradient.rgbAt(factor);
   return color.toHexString();
 }
+
+/**
+ * Calculates relative luminance and returns 'light' or 'dark'
+ * Uses W3C relative luminance formula (WCAG 2.0)
+ * @param bgColor The background color in hex format (e.g., '#1E1E2E' or '1E1E2E')
+ * @returns 'light' if luminance > 0.5, 'dark' if <= 0.5, undefined if invalid input
+ */
+export function getThemeTypeFromBackgroundColor(
+  bgColor: string | undefined,
+): 'light' | 'dark' | undefined {
+  if (!bgColor) return undefined;
+
+  const hex = bgColor.replace('#', '');
+  if (hex.length !== 6) return undefined;
+
+  const r = parseInt(hex.substring(0, 2), 16) / 255;
+  const g = parseInt(hex.substring(2, 4), 16) / 255;
+  const b = parseInt(hex.substring(4, 6), 16) / 255;
+
+  // sRGB to linear RGB (WCAG 2.0 formula)
+  const toLinear = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  const lr = toLinear(r);
+  const lg = toLinear(g);
+  const lb = toLinear(b);
+
+  // Calculate relative luminance (WCAG 2.0)
+  const luminance = 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+
+  return luminance > 0.5 ? 'light' : 'dark';
+}
+
+/**
+ * Detects terminal background color using OSC 11 escape sequence
+ * Returns hex color string like '#1E1E2E' or undefined if detection fails
+ *
+ * ROBUSTNESS FEATURES (ALL TESTED):
+ * 1. Handles split chunks: Response may arrive across multiple 'data' events
+ * 2. Alternate terminators: Supports both ST (ESC \) and BEL (\x07) terminators
+ * 3. Timeout protection: Returns undefined after 100ms if no valid response
+ * 4. Malformed response handling: Ignores garbage data, times out gracefully
+ * 5. Non-TTY detection: Returns undefined immediately if stdin is not a TTY
+ * 6. Proper cleanup: Always removes listeners and restores terminal state
+ */
+/* eslint-disable prefer-const, no-control-regex */
+export function detectTerminalBackgroundColor(): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    if (!stdin.isTTY) {
+      resolve(undefined);
+      return;
+    }
+
+    let timeoutHandle: NodeJS.Timeout;
+    let response = '';
+
+    const cleanup = () => {
+      stdin.setRawMode(false);
+      stdin.removeListener('data', dataHandler);
+      clearTimeout(timeoutHandle);
+    };
+
+    const dataHandler = (data: Buffer) => {
+      // Accumulate response across multiple data events (handles split chunks)
+      response += data.toString();
+
+      // OSC 11 response formats:
+      // ESC ] 11 ; rgb:RRRR/GGGG/BBBB ESC \ (ST terminator - standard)
+      // ESC ] 11 ; rgb:RRRR/GGGG/BBBB BEL   (BEL terminator - legacy terminals)
+      // Match either terminator (case-insensitive hex)
+      const matchST = response.match(
+        /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x1b\\/i,
+      );
+      const matchBEL = response.match(
+        /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x07/i,
+      );
+
+      const match = matchST || matchBEL;
+      if (match) {
+        // Convert 16-bit RGB components to 8-bit hex
+        // Take first 2 hex digits of each 4-digit component (high byte)
+        const r = parseInt(match[1].substring(0, 2), 16);
+        const g = parseInt(match[2].substring(0, 2), 16);
+        const b = parseInt(match[3].substring(0, 2), 16);
+        cleanup();
+        const hexColor =
+          `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
+        resolve(hexColor);
+      }
+      // If no match yet, keep accumulating response (handles split chunks)
+      // Timeout will handle malformed/incomplete responses
+    };
+
+    stdin.on('data', dataHandler);
+    stdin.setRawMode(true);
+
+    // Query background color using OSC 11
+    process.stdout.write('\x1b]11;?\x1b\\');
+
+    // Timeout after 100ms (terminal doesn't support OSC 11 or no response)
+    timeoutHandle = setTimeout(() => {
+      cleanup();
+      resolve(undefined);
+    }, 100);
+  });
+}
+/* eslint-enable prefer-const, no-control-regex */

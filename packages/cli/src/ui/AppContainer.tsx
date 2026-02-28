@@ -157,6 +157,7 @@ interface AppContainerProps {
   startupWarnings?: string[];
   resumedHistory?: IContent[];
   version: string;
+  terminalBackgroundColor?: string;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
@@ -2035,6 +2036,7 @@ export const AppContainer = (props: AppContainerProps) => {
     mainAreaWidth,
     inputWidth,
     suggestionsWidth,
+    terminalBackgroundColor: props.terminalBackgroundColor,
 
     // History and streaming
     history,
