@@ -110,6 +110,7 @@ export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';
 export * from './utils/errorParsing.js';
 export * from './utils/ignorePatterns.js';
+export { INITIAL_HISTORY_LENGTH } from './utils/environmentContext.js';
 export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
 export * from './utils/thoughtUtils.js';
