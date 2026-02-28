@@ -243,7 +243,10 @@ export function useSlashCompletion(
       let currentLevel: readonly SlashCommand[] | undefined = slashCommands;
       let leafCommand: SlashCommand | null = null;
 
-      for (const part of rawParts) {
+      // Only process complete parts (parts followed by another part or a space)
+      const completeParts = hasTrailingSpace ? rawParts : rawParts.slice(0, -1);
+      
+      for (const part of completeParts) {
         if (!currentLevel) {
           break;
         }
@@ -289,13 +292,6 @@ export function useSlashCompletion(
               (cmd.name === candidate || cmd.altNames?.includes(candidate)) &&
               cmd.subCommands,
           );
-
-          if (exactMatchAsParent) {
-            leafCommand = exactMatchAsParent;
-            currentLevel = exactMatchAsParent.subCommands;
-            commandPartial = '';
-            argumentPartial = '';
-          }
         }
       }
 

@@ -13,7 +13,11 @@ import { useSlashCompletion } from './useSlashCompletion.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { CommandContext, SlashCommand } from '../commands/types.js';
+import {
+  CommandContext,
+  SlashCommand,
+  CommandKind,
+} from '../commands/types.js';
 import { Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 
@@ -591,7 +595,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
-            useTextBufferForTest('/memory'), // Note: no trailing space
+            useTextBufferForTest('/memory '), // Note: trailing space indicates wanting subcommands
             testDirs,
             testRootDir,
             slashCommands,
@@ -609,6 +613,58 @@ describe('useSlashCompletion', () => {
         );
         expect(result.current.showSuggestions).toBe(true);
       });
+
+      it('should suggest parent command (and siblings) instead of sub-commands when no trailing space', async () => {
+        const slashCommands = [
+          {
+            name: 'memory',
+            kind: CommandKind.BUILT_IN,
+            description: 'Manage memory',
+            subCommands: [
+              {
+                name: 'show',
+                kind: CommandKind.BUILT_IN,
+                description: 'Show memory',
+              },
+            ],
+          },
+          {
+            name: 'memory-leak',
+            kind: CommandKind.BUILT_IN,
+            description: 'Debug memory leaks',
+          },
+        ] as unknown as SlashCommand[];
+
+        const { result } = renderHook(() =>
+          useSlashCompletion(
+            useTextBufferForTest('/memory'),
+            testDirs,
+            testRootDir,
+            slashCommands,
+            mockCommandContext,
+          ),
+        );
+
+        // Should verify that we see BOTH 'memory' and 'memory-leak'
+        await waitFor(() => {
+          expect(result.current.suggestions).toHaveLength(2);
+          expect(result.current.suggestions).toEqual(
+            expect.arrayContaining([
+              {
+                label: 'memory',
+                value: 'memory',
+                description: 'Manage memory',
+              },
+              {
+                label: 'memory-leak',
+                value: 'memory-leak',
+                description: 'Debug memory leaks',
+              },
+            ]),
+          );
+        });
+      });
+
 
       it('should suggest all sub-commands when the query ends with the parent command and a space', async () => {
         const slashCommands = [
@@ -629,7 +685,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
-            useTextBufferForTest('/memory'),
+            useTextBufferForTest('/memory '),
             testDirs,
             testRootDir,
             slashCommands,
@@ -1295,7 +1351,7 @@ describe('useSlashCompletion', () => {
       ] as unknown as SlashCommand[];
 
       const { result } = renderHook(() => {
-        const textBuffer = useTextBufferForTest('/memory');
+        const textBuffer = useTextBufferForTest('/memory ');
         const completion = useSlashCompletion(
           textBuffer,
           testDirs,
@@ -1319,7 +1375,7 @@ describe('useSlashCompletion', () => {
         result.current.handleAutocomplete(1); // index 1 is 'add'
       });
 
-      expect(result.current.textBuffer.text).toBe('/add ');
+      expect(result.current.textBuffer.text).toBe('/memory add ');
     });
 
     it('should complete a command with an alternative name', () => {
