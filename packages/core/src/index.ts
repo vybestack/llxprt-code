@@ -161,6 +161,7 @@ export * from './services/gitService.js';
 export * from './services/tool-call-tracker-service.js';
 export * from './services/todo-context-tracker.js';
 export * from './services/fileSystemService.js';
+export { ContextManager } from './services/contextManager.js';
 
 // Export IDE specific logic
 export * from './ide/ide-client.js';

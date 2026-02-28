@@ -13,7 +13,10 @@ import type {
   ToolCallConfirmationDetails,
   Config,
 } from '@vybestack/llxprt-code-core';
-import { IdeClient, ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
+import {
+  IdeClient,
+  ToolConfirmationOutcome,
+} from '@vybestack/llxprt-code-core';
 import type { RadioSelectItem } from '../shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';

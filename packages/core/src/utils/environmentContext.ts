@@ -61,12 +61,15 @@ export async function getEnvironmentContext(config: Config): Promise<Part[]> {
   });
   const platform = process.platform;
   const directoryContext = await getDirectoryContextString(config);
+  const environmentMemory = config.getEnvironmentMemory();
 
   const context = `
 This is LLxprt Code. We are setting up the context for our chat.
 Today's date is ${today} (formatted according to the user's locale).
 My operating system is: ${platform}
 ${directoryContext}
+
+${environmentMemory}
         `.trim();
 
   const initialParts: Part[] = [{ text: context }];

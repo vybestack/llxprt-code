@@ -58,6 +58,7 @@ import { HookSystem } from '../hooks/hookSystem.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
+import { ContextManager } from '../services/contextManager.js';
 import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
 // @plan PLAN-20260130-ASYNCTASK.P09
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
@@ -541,6 +542,8 @@ export class Config {
   private llxprtMdFileCount: number;
   private llxprtMdFilePaths: string[];
   private approvalMode: ApprovalMode;
+  private readonly jitContextEnabled?: boolean;
+  private contextManager?: ContextManager;
   private readonly showMemoryUsage: boolean;
   private readonly accessibility: AccessibilitySettings;
   private telemetrySettings: TelemetrySettings;
@@ -713,7 +716,6 @@ export class Config {
    * Lazily-created HookSystem instance, only when enableHooks=true
    */
   private hookSystem: HookSystem | undefined;
-  private jitContextEnabled: boolean;
   private initialized = false;
 
   constructor(params: ConfigParameters) {
@@ -800,6 +802,7 @@ export class Config {
     this.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
     this.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
     this.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
+    this.jitContextEnabled = params.jitContextEnabled;
     this.showMemoryUsage = params.showMemoryUsage ?? false;
     this.accessibility = params.accessibility ?? {};
     this.telemetrySettings = {
@@ -1027,6 +1030,11 @@ export class Config {
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
     this.geminiClient = new GeminiClient(this, this.runtimeState);
+
+    if (this.jitContextEnabled) {
+      this.contextManager = new ContextManager(this);
+      await this.contextManager.refresh();
+    }
 
     // Reserved for future model switching tracking
     void this._modelSwitchedDuringSession;
@@ -1375,7 +1383,29 @@ export class Config {
   }
 
   getUserMemory(): string {
+    if (this.jitContextEnabled && this.contextManager) {
+      return [
+        this.contextManager.getGlobalMemory(),
+        this.contextManager.getEnvironmentMemory(),
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+    }
     return this.userMemory;
+  }
+
+  getGlobalMemory(): string {
+    if (this.jitContextEnabled && this.contextManager) {
+      return this.contextManager.getGlobalMemory();
+    }
+    return this.userMemory;
+  }
+
+  getEnvironmentMemory(): string {
+    if (this.jitContextEnabled && this.contextManager) {
+      return this.contextManager.getEnvironmentMemory();
+    }
+    return '';
   }
 
   getCoreMemory(): string | undefined {
@@ -1398,6 +1428,9 @@ export class Config {
   }
 
   getLlxprtMdFileCount(): number {
+    if (this.jitContextEnabled && this.contextManager) {
+      return this.contextManager.getLoadedPaths().size;
+    }
     return this.llxprtMdFileCount;
   }
 
@@ -1406,6 +1439,9 @@ export class Config {
   }
 
   getLlxprtMdFilePaths(): string[] {
+    if (this.jitContextEnabled && this.contextManager) {
+      return Array.from(this.contextManager.getLoadedPaths());
+    }
     return this.llxprtMdFilePaths;
   }
 
@@ -1424,6 +1460,14 @@ export class Config {
       );
     }
     this.approvalMode = mode;
+  }
+
+  isJitContextEnabled(): boolean {
+    return !!this.jitContextEnabled;
+  }
+
+  getContextManager(): ContextManager | undefined {
+    return this.contextManager;
   }
 
   getMessageBus(): MessageBus {
@@ -2090,7 +2134,7 @@ export class Config {
     if (settingsValue !== undefined) {
       return settingsValue as boolean;
     }
-    return this.jitContextEnabled;
+    return this.jitContextEnabled ?? false;
   }
 
   /**
@@ -2236,9 +2280,7 @@ ${trimmed}
     this.setLlxprtMdFilePaths(filePaths);
 
     coreEvents.emit(CoreEvent.MemoryChanged, {
-      memoryContent,
       fileCount,
-      filePaths,
     });
 
     return { memoryContent, fileCount, filePaths };
