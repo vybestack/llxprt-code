@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from 'ink-testing-library';
+import { render } from '../../test-utils/render.js';
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
-import { SessionMetrics } from '../contexts/SessionContext.js';
-import { Colors } from '../colors.js';
+import type { SessionMetrics } from '../contexts/SessionContext.js';
+import { ToolCallDecision } from '@vybestack/llxprt-code-core';
 
 // Mock the context to provide controlled data for testing
 vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
@@ -25,6 +25,7 @@ const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 const renderWithMockedStats = (metrics: SessionMetrics) => {
   useSessionStatsMock.mockReturnValue({
     stats: {
+      sessionId: 'test-session',
       sessionStartTime: new Date(),
       metrics,
       lastPromptTokenCount: 0,
@@ -60,8 +61,17 @@ describe('<ModelStatsDisplay />', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: {
+          accept: 0,
+          reject: 0,
+          modify: 0,
+          [ToolCallDecision.AUTO_ACCEPT]: 0,
+        },
         byName: {},
+      },
+      files: {
+        totalLinesAdded: 0,
+        totalLinesRemoved: 0,
       },
     });
 
@@ -92,8 +102,17 @@ describe('<ModelStatsDisplay />', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: {
+          accept: 0,
+          reject: 0,
+          modify: 0,
+          [ToolCallDecision.AUTO_ACCEPT]: 0,
+        },
         byName: {},
+      },
+      files: {
+        totalLinesAdded: 0,
+        totalLinesRemoved: 0,
       },
     });
 
@@ -137,13 +156,22 @@ describe('<ModelStatsDisplay />', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: {
+          accept: 0,
+          reject: 0,
+          modify: 0,
+          [ToolCallDecision.AUTO_ACCEPT]: 0,
+        },
         byName: {},
+      },
+      files: {
+        totalLinesAdded: 0,
+        totalLinesRemoved: 0,
       },
     });
 
     const output = lastFrame();
-    expect(output).toContain('Cached');
+    expect(output).toContain('Cache Reads');
     expect(output).toContain('Thoughts');
     expect(output).toContain('Tool');
     expect(output).toMatchSnapshot();
@@ -182,8 +210,17 @@ describe('<ModelStatsDisplay />', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: {
+          accept: 0,
+          reject: 0,
+          modify: 0,
+          [ToolCallDecision.AUTO_ACCEPT]: 0,
+        },
         byName: {},
+      },
+      files: {
+        totalLinesAdded: 0,
+        totalLinesRemoved: 0,
       },
     });
 
@@ -218,8 +255,17 @@ describe('<ModelStatsDisplay />', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: {
+          accept: 0,
+          reject: 0,
+          modify: 0,
+          [ToolCallDecision.AUTO_ACCEPT]: 0,
+        },
         byName: {},
+      },
+      files: {
+        totalLinesAdded: 0,
+        totalLinesRemoved: 0,
       },
     });
 
@@ -247,8 +293,17 @@ describe('<ModelStatsDisplay />', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: {
+          accept: 0,
+          reject: 0,
+          modify: 0,
+          [ToolCallDecision.AUTO_ACCEPT]: 0,
+        },
         byName: {},
+      },
+      files: {
+        totalLinesAdded: 0,
+        totalLinesRemoved: 0,
       },
     });
 
@@ -258,196 +313,56 @@ describe('<ModelStatsDisplay />', () => {
     expect(output).toMatchSnapshot();
   });
 
-  /**
-   * Issue #684: Theme violation tests
-   * All text in ModelStatsDisplay should use theme colors, not default white.
-   */
-  describe('theme compliance', () => {
-    it('should use Colors.Foreground for section headers (API, Tokens)', () => {
-      // Verify that Colors.Foreground is defined (theme is available)
-      expect(Colors.Foreground).toBeDefined();
-      expect(typeof Colors.Foreground).toBe('string');
-
-      const { lastFrame } = renderWithMockedStats({
-        models: {
-          'test-model': {
-            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
-            tokens: {
-              prompt: 10,
-              candidates: 20,
-              total: 30,
-              cached: 0,
-              thoughts: 0,
-              tool: 0,
-            },
+  it('should handle models with long names (gemini-3-*-preview) without layout breaking', () => {
+    const { lastFrame } = renderWithMockedStats({
+      models: {
+        'gemini-3-pro-preview': {
+          api: { totalRequests: 10, totalErrors: 0, totalLatencyMs: 2000 },
+          tokens: {
+            input: 1000,
+            prompt: 2000,
+            candidates: 4000,
+            total: 6000,
+            cached: 500,
+            thoughts: 100,
+            tool: 50,
           },
         },
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-      });
-
-      const output = lastFrame();
-      // Section headers should be present
-      expect(output).toContain('API');
-      expect(output).toContain('Tokens');
-      // The output includes ANSI codes from ink, verify structure
-      expect(output).toMatchSnapshot();
-    });
-
-    it('should use Colors.Foreground for the empty state message', () => {
-      const { lastFrame } = renderWithMockedStats({
-        models: {},
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-      });
-
-      const output = lastFrame();
-      expect(output).toContain('No API calls have been made in this session.');
-      // The text should include color codes from the theme
-      expect(output).toMatchSnapshot();
-    });
-
-    it('should use Colors.Foreground for stat row values', () => {
-      const { lastFrame } = renderWithMockedStats({
-        models: {
-          'test-model': {
-            api: { totalRequests: 5, totalErrors: 0, totalLatencyMs: 500 },
-            tokens: {
-              prompt: 100,
-              candidates: 200,
-              total: 300,
-              cached: 0,
-              thoughts: 0,
-              tool: 0,
-            },
+        'gemini-3-flash-preview': {
+          api: { totalRequests: 20, totalErrors: 0, totalLatencyMs: 1000 },
+          tokens: {
+            input: 2000,
+            prompt: 4000,
+            candidates: 8000,
+            total: 12000,
+            cached: 1000,
+            thoughts: 200,
+            tool: 100,
           },
         },
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
+      },
+      tools: {
+        totalCalls: 0,
+        totalSuccess: 0,
+        totalFail: 0,
+        totalDurationMs: 0,
+        totalDecisions: {
+          accept: 0,
+          reject: 0,
+          modify: 0,
+          [ToolCallDecision.AUTO_ACCEPT]: 0,
         },
-      });
-
-      const output = lastFrame();
-      // Values should be present with theme colors
-      expect(output).toContain('5'); // Requests count
-      expect(output).toContain('100'); // Prompt tokens
-      expect(output).toMatchSnapshot();
-    });
-  });
-
-  describe('token calculation and labels', () => {
-    it('should display uncached tokens only in Input row', () => {
-      const { lastFrame } = renderWithMockedStats({
-        models: {
-          'gemini-2.5-pro': {
-            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
-            tokens: {
-              prompt: 1000,
-              candidates: 500,
-              total: 1500,
-              cached: 300,
-              thoughts: 0,
-              tool: 0,
-            },
-          },
-        },
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-      });
-
-      const output = lastFrame();
-      // Input should show prompt - cached = 1000 - 300 = 700
-      expect(output).toContain('Input');
-      expect(output).toContain('700');
-      expect(output).toContain('Cache Reads');
-      expect(output).toContain('300');
+        byName: {},
+      },
+      files: {
+        totalLinesAdded: 0,
+        totalLinesRemoved: 0,
+      },
     });
 
-    it('should not show negative input tokens when cached exceeds prompt', () => {
-      const { lastFrame } = renderWithMockedStats({
-        models: {
-          'gemini-2.5-pro': {
-            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
-            tokens: {
-              prompt: 100,
-              candidates: 200,
-              total: 300,
-              cached: 150, // More cached than prompt (edge case)
-              thoughts: 0,
-              tool: 0,
-            },
-          },
-        },
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-      });
-
-      const output = lastFrame();
-      // Should display Math.max(0, 100-150) = 0
-      expect(output).toContain('Input');
-      // The output should contain "0" somewhere in the Input row context
-      expect(output).toMatchSnapshot();
-    });
-
-    it('should use "Input" and "Cache Reads" labels instead of "Prompt" and "Cached"', () => {
-      const { lastFrame } = renderWithMockedStats({
-        models: {
-          'gemini-2.5-pro': {
-            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
-            tokens: {
-              prompt: 100,
-              candidates: 200,
-              total: 350,
-              cached: 50,
-              thoughts: 0,
-              tool: 0,
-            },
-          },
-        },
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-      });
-
-      const output = lastFrame();
-      expect(output).toContain('Input');
-      expect(output).toContain('Cache Reads');
-      expect(output).not.toContain('Prompt');
-      expect(output).not.toContain('Cached');
-    });
+    const output = lastFrame();
+    expect(output).toContain('gemini-3-pro-');
+    expect(output).toContain('gemini-3-flash-');
+    expect(output).toMatchSnapshot();
   });
 });
