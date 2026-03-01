@@ -981,6 +981,15 @@ export class Config {
         );
         await this.lspServiceClient.start();
 
+        if (!this.lspServiceClient.isAlive()) {
+          const reason = this.lspServiceClient.getUnavailableReason();
+          if (reason?.includes('not found')) {
+            console.error(
+              'LSP: @vybestack/llxprt-code-lsp package not found. Install with: npm install -g @vybestack/llxprt-code-lsp',
+            );
+          }
+        }
+
         /**
          * @plan PLAN-20250212-LSP.P33
          * @requirement REQ-NAV-055, REQ-CFG-070

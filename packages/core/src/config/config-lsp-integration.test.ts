@@ -719,4 +719,87 @@ describe('Config LSP Integration (P33)', () => {
       expect(lspConfig?.navigationTools).toBeUndefined();
     });
   });
+
+  describe('LSP package not found notification', () => {
+    it('should emit console.error when LSP package is not found', async () => {
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      const startSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+        .mockResolvedValue(undefined);
+      const isAliveSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+        .mockReturnValue(false);
+      const getUnavailableReasonSpy = vi
+        .spyOn(
+          lspServiceClientModule.LspServiceClient.prototype,
+          'getUnavailableReason',
+        )
+        .mockReturnValue('LSP service entry not found');
+
+      try {
+        const params = createBaseConfigParams({
+          lsp: {
+            servers: [],
+          },
+        });
+        const config = new Config(params);
+        await config.initialize();
+
+        const lspClient = config.getLspServiceClient();
+        expect(lspClient?.isAlive()).toBe(false);
+        expect(lspClient?.getUnavailableReason()).toContain('not found');
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringMatching(
+            /LSP.*@vybestack\/llxprt-code-lsp.*not found.*npm install -g @vybestack\/llxprt-code-lsp/i,
+          ),
+        );
+      } finally {
+        consoleErrorSpy.mockRestore();
+        startSpy.mockRestore();
+        isAliveSpy.mockRestore();
+        getUnavailableReasonSpy.mockRestore();
+      }
+    });
+
+    it('should not emit console.error when LSP service starts successfully', async () => {
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      const startSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
+        .mockResolvedValue(undefined);
+      const isAliveSpy = vi
+        .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'isAlive')
+        .mockReturnValue(true);
+
+      try {
+        const params = createBaseConfigParams({
+          lsp: {
+            servers: [],
+          },
+        });
+        const config = new Config(params);
+        await config.initialize();
+
+        const lspClient = config.getLspServiceClient();
+        expect(lspClient?.isAlive()).toBe(true);
+
+        const lspErrorCalls = consoleErrorSpy.mock.calls.filter((call) =>
+          call.some((arg) =>
+            String(arg).includes('@vybestack/llxprt-code-lsp'),
+          ),
+        );
+        expect(lspErrorCalls).toHaveLength(0);
+      } finally {
+        consoleErrorSpy.mockRestore();
+        startSpy.mockRestore();
+        isAliveSpy.mockRestore();
+      }
+    });
+  });
 });
