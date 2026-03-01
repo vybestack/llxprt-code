@@ -1,6 +1,6 @@
 /**
  * @license
- ' * Copyright 2025 Vybestack LLC',
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,7 +12,7 @@ import prettierConfig from 'eslint-config-prettier';
 import importPlugin from 'eslint-plugin-import';
 import vitest from '@vitest/eslint-plugin';
 import globals from 'globals';
-import licenseHeader from 'eslint-plugin-license-header';
+import headers from 'eslint-plugin-headers';
 import reactRenderSafety from './eslint-rules/react-render-safety.js';
 import noInlineDeps from './eslint-rules/no-inline-deps.js';
 import inkTextColorRequired from './eslint-rules/ink-text-color-required.js';
@@ -390,10 +390,10 @@ export default tseslint.config(
   {
     files: ['./**/*.{tsx,ts,js}'],
     plugins: {
-      'license-header': licenseHeader,
+      headers,
     },
     rules: {
-      'license-header/header': 'off',
+      'headers/header-format': 'off',
     },
   },
   // Provider authentication anti-patterns

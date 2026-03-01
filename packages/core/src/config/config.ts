@@ -802,7 +802,6 @@ export class Config {
     this.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
     this.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
     this.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
-    this.jitContextEnabled = params.jitContextEnabled;
     this.showMemoryUsage = params.showMemoryUsage ?? false;
     this.accessibility = params.accessibility ?? {};
     this.telemetrySettings = {
@@ -1031,7 +1030,7 @@ export class Config {
     // This ensures geminiClient is available for providers on startup
     this.geminiClient = new GeminiClient(this, this.runtimeState);
 
-    if (this.jitContextEnabled) {
+    if (this.getJitContextEnabled()) {
       this.contextManager = new ContextManager(this);
       await this.contextManager.refresh();
     }
@@ -1383,7 +1382,7 @@ export class Config {
   }
 
   getUserMemory(): string {
-    if (this.jitContextEnabled && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager) {
       return [
         this.contextManager.getGlobalMemory(),
         this.contextManager.getEnvironmentMemory(),
@@ -1395,14 +1394,14 @@ export class Config {
   }
 
   getGlobalMemory(): string {
-    if (this.jitContextEnabled && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager) {
       return this.contextManager.getGlobalMemory();
     }
     return this.userMemory;
   }
 
   getEnvironmentMemory(): string {
-    if (this.jitContextEnabled && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager) {
       return this.contextManager.getEnvironmentMemory();
     }
     return '';
@@ -1428,7 +1427,7 @@ export class Config {
   }
 
   getLlxprtMdFileCount(): number {
-    if (this.jitContextEnabled && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager) {
       return this.contextManager.getLoadedPaths().size;
     }
     return this.llxprtMdFileCount;
@@ -1439,7 +1438,7 @@ export class Config {
   }
 
   getLlxprtMdFilePaths(): string[] {
-    if (this.jitContextEnabled && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager) {
       return Array.from(this.contextManager.getLoadedPaths());
     }
     return this.llxprtMdFilePaths;
@@ -2263,6 +2262,19 @@ ${trimmed}
     fileCount: number;
     filePaths: string[];
   }> {
+    if (this.getJitContextEnabled() && this.contextManager) {
+      await this.contextManager.refresh();
+      const memoryContent = this.getUserMemory();
+      const fileCount = this.getLlxprtMdFileCount();
+      const filePaths = this.getLlxprtMdFilePaths();
+
+      coreEvents.emit(CoreEvent.MemoryChanged, {
+        fileCount,
+      });
+
+      return { memoryContent, fileCount, filePaths };
+    }
+
     const { memoryContent, fileCount, filePaths } =
       await loadServerHierarchicalMemory(
         this.getWorkingDir(),

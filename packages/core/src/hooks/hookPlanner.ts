@@ -150,7 +150,7 @@ export class HookPlanner {
   private getHookKey(entry: HookRegistryEntry): string {
     const name = entry.config.name || '';
     const command = entry.config.command || '';
-    return `${name}:${command}`;
+    return JSON.stringify([name, command]);
   }
 }
 

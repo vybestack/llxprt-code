@@ -81,8 +81,7 @@ export const ToolConfirmationMessage: React.FC<
         );
       }
     }
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    onConfirm(outcome);
+    await onConfirm(outcome);
   };
 
   const isTrustedFolder = config.isTrustedFolder();
@@ -91,14 +90,15 @@ export const ToolConfirmationMessage: React.FC<
     (key) => {
       if (!isFocused) return;
       if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        handleConfirm(ToolConfirmationOutcome.Cancel);
+        void handleConfirm(ToolConfirmationOutcome.Cancel);
       }
     },
     { isActive: isFocused },
   );
 
-  const handleSelect = (item: ToolConfirmationOutcome) => handleConfirm(item);
+  const handleSelect = (item: ToolConfirmationOutcome) => {
+    void handleConfirm(item);
+  };
 
   const { question, bodyContent, options } = useMemo(() => {
     let bodyContent: React.ReactNode | null = null;

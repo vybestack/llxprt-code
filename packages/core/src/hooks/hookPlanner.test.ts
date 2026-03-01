@@ -392,5 +392,42 @@ describe('HookPlanner', () => {
       // hook1:same.sh (deduped), hook2:same.sh, hook1:different.sh, :no-name.sh (deduped)
       expect(plan!.hookConfigs).toHaveLength(4);
     });
+
+    it('should not collide when name or command contains colons', () => {
+      const mockEntries: HookRegistryEntry[] = [
+        {
+          config: {
+            name: 'a:b',
+            type: HookType.Command,
+            command: 'c',
+          },
+          source: ConfigSource.Project,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        },
+        {
+          config: {
+            name: 'a',
+            type: HookType.Command,
+            command: 'b:c',
+          },
+          source: ConfigSource.User,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        },
+      ];
+
+      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+
+      const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool);
+
+      expect(plan).not.toBeNull();
+      // Both hooks should be distinct (not falsely deduplicated)
+      expect(plan!.hookConfigs).toHaveLength(2);
+      expect(mockDebugLogger.debug).not.toHaveBeenCalledWith(
+        expect.stringContaining('Deduplicated hook'),
+      );
+    });
+
   });
 });
