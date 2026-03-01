@@ -227,13 +227,8 @@ vi.mock('../../utils/memoryDiscovery.js', () => ({
 
 vi.mock('../../utils/events.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/events.js')>();
-  return {
-    ...actual,
-    coreEvents: {
-      ...actual.coreEvents,
-      emit: vi.fn(),
-    },
-  };
+  vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);
+  return actual;
 });
 
 describe('LSP E2E integration (P36)', () => {

@@ -226,13 +226,10 @@ vi.mock('../../utils/memoryDiscovery.js', () => ({
 
 vi.mock('../../utils/events.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/events.js')>();
-  return {
-    ...actual,
-    coreEvents: {
-      ...actual.coreEvents,
-      emit: vi.fn(),
-    },
-  };
+  // Spy on emit rather than replacing the whole object — spreading loses the
+  // EventEmitter prototype chain (on, listenerCount, emitFeedback, etc.)
+  vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);
+  return actual;
 });
 
 describe('LSP system integration (P35)', () => {
