@@ -339,6 +339,11 @@ class EditToolInvocation extends BaseToolInvocation<
           // Restrict search to the specified line only
           const lines = currentContent.split('\n');
           if (replaceLine > lines.length) {
+            error = {
+              display: `Failed to edit: replaceBeginLineNumber is out of range.`,
+              raw: `Failed to edit: replaceBeginLineNumber=${replaceLine} is out of range for ${filePath} (total lines: ${lines.length}). No edits made.`,
+              type: ToolErrorType.INVALID_TOOL_PARAMS,
+            };
             occurrences = 0;
           } else {
             const lineText = lines[replaceLine - 1];
@@ -400,25 +405,31 @@ class EditToolInvocation extends BaseToolInvocation<
 
         if (replaceLine && replaceLine > 0 && currentContent !== null) {
           const lines = currentContent.split('\n');
-          const lineIndex = Math.max(
-            0,
-            Math.min(lines.length - 1, replaceLine - 1),
-          );
-          const startContext = Math.max(0, lineIndex - 2);
-          const endContext = Math.min(lines.length - 1, lineIndex + 2);
 
-          let preview = 'Context around requested line:';
-          for (let i = startContext; i <= endContext; i++) {
-            const lineNumber = i + 1;
-            const prefix = lineNumber === replaceLine ? '->' : '  ';
-            preview += `\n${prefix} ${lineNumber.toString().padStart(4, ' ')} | ${lines[i]}`;
+          if (replaceLine > lines.length) {
+            error = {
+              display: `Failed to edit: replaceBeginLineNumber is out of range.`,
+              raw: `Failed to edit: replaceBeginLineNumber=${replaceLine} is out of range for ${filePath} (total lines: ${lines.length}). No edits made.`,
+              type: ToolErrorType.INVALID_TOOL_PARAMS,
+            };
+          } else {
+            const lineIndex = replaceLine - 1;
+            const startContext = Math.max(0, lineIndex - 2);
+            const endContext = Math.min(lines.length - 1, lineIndex + 2);
+
+            let preview = 'Context around requested line:';
+            for (let i = startContext; i <= endContext; i++) {
+              const lineNumber = i + 1;
+              const prefix = lineNumber === replaceLine ? '->' : '  ';
+              preview += `\n${prefix} ${lineNumber.toString().padStart(4, ' ')} | ${lines[i]}`;
+            }
+
+            error = {
+              display: `Failed to edit: no occurrences of old_string found on the specified line ${replaceLine}.`,
+              raw: `Failed to edit, 0 occurrences found for old_string on line ${replaceLine} in ${filePath}. No edits made. The exact text in old_string was not found on that line.\n\n${preview}`,
+              type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
+            };
           }
-
-          error = {
-            display: `Failed to edit: no occurrences of old_string found on the specified line ${replaceLine}.`,
-            raw: `Failed to edit, 0 occurrences found for old_string on line ${replaceLine} in ${filePath}. No edits made. The exact text in old_string was not found on that line.\n\n${preview}`,
-            type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
-          };
         } else {
           error = {
             display: `Failed to edit, could not find the string to replace.`,
@@ -462,6 +473,11 @@ class EditToolInvocation extends BaseToolInvocation<
       ) {
         const lines = currentContent.split('\n');
         if (replaceLine > lines.length) {
+          error = {
+            display: `Failed to edit: replaceBeginLineNumber is out of range.`,
+            raw: `Failed to edit: replaceBeginLineNumber=${replaceLine} is out of range for ${filePath} (total lines: ${lines.length}). No edits made.`,
+            type: ToolErrorType.INVALID_TOOL_PARAMS,
+          };
           newContent = currentContent;
         } else {
           let offset = 0;
@@ -909,6 +925,17 @@ Expectation for required parameters:
     const expectedReplacements = params.expected_replacements ?? 1;
     if (params.old_string === '' && expectedReplacements > 1) {
       return `Cannot perform multiple replacements with empty old_string (would cause infinite loop)`;
+    }
+
+    const replaceLine = params.replaceBeginLineNumber;
+    if (replaceLine !== undefined) {
+      if (
+        !Number.isFinite(replaceLine) ||
+        !Number.isInteger(replaceLine) ||
+        replaceLine <= 0
+      ) {
+        return `replaceBeginLineNumber must be a positive integer (1-based)`;
+      }
     }
 
     return null;

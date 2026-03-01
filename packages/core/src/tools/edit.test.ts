@@ -582,6 +582,39 @@ describe('EditTool', () => {
       expect(result.llmContent).toMatch(/->\s+2\s+\|/);
     });
 
+    it('should return an explicit out-of-range error when replaceBeginLineNumber exceeds total lines', async () => {
+      fs.writeFileSync(filePath, 'old here\nold here\nold here\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'old',
+        new_string: 'new',
+        replaceBeginLineNumber: 999,
+      };
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(/replaceBeginLineNumber=999/);
+      expect(result.llmContent).toMatch(/total lines: 4/);
+      expect(result.returnDisplay).toMatch(
+        /replaceBeginLineNumber is out of range/,
+      );
+    });
+
+    it('should reject non-integer replaceBeginLineNumber values', async () => {
+      fs.writeFileSync(filePath, 'old here\nold here\nold here\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'old',
+        new_string: 'new',
+        replaceBeginLineNumber: 1.5,
+      };
+
+      expect(() => tool.build(params)).toThrow(
+        /replaceBeginLineNumber must be a positive integer/,
+      );
+    });
+
     it('should return error if expected_replacements does not match actual occurrences', async () => {
       fs.writeFileSync(filePath, 'old text old text', 'utf8');
       const params: EditToolParams = {
