@@ -1,0 +1,42 @@
+/**
+ * Copyright 2025 Vybestack LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { MediaBlock } from '../../services/history/IContent.js';
+
+/**
+ * Normalizes a MediaBlock to a data URI format suitable for API consumption.
+ * Handles both URL-encoded and base64-encoded media.
+ *
+ * @param media - The MediaBlock to normalize
+ * @returns A data URI string (either the original data: URI, a URL, or a constructed base64 data URI)
+ */
+export function normalizeMediaToDataUri(media: MediaBlock): string {
+  // Already a data URI
+  if (media.data.startsWith('data:')) {
+    return media.data;
+  }
+
+  // URL encoding (e.g., https://example.com/image.png)
+  if (media.encoding === 'url') {
+    return media.data;
+  }
+
+  // Base64 encoding - construct data URI
+  const prefix = media.mimeType
+    ? `data:${media.mimeType};base64,`
+    : 'data:image/*;base64,';
+  return `${prefix}${media.data}`;
+}

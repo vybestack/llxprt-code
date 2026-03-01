@@ -14,20 +14,36 @@
  * limitations under the License.
  */
 
-import type { IContent, TextBlock } from '../../services/history/IContent.js';
+import type {
+  IContent,
+  TextBlock,
+  MediaBlock,
+} from '../../services/history/IContent.js';
 import type { Config } from '../../config/config.js';
 import { limitOutputTokens } from '../../utils/toolOutputLimiter.js';
 import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
+import { normalizeMediaToDataUri } from '../utils/mediaUtils.js';
+
+type ResponsesContentPart =
+  | { type: 'input_text'; text: string }
+  | { type: 'input_image'; image_url: string };
 
 export type ResponsesInputItem =
-  | { role: 'user' | 'assistant' | 'system'; content?: string }
+  | {
+      role: 'user' | 'assistant' | 'system';
+      content?: string | ResponsesContentPart[];
+    }
   | {
       type: 'function_call';
       call_id: string;
       name: string;
       arguments: string;
     }
-  | { type: 'function_call_output'; call_id: string; output: string };
+  | {
+      type: 'function_call_output';
+      call_id: string;
+      output: string | ResponsesContentPart[];
+    };
 
 export function buildResponsesInputFromContent(
   content: IContent[],
@@ -45,12 +61,38 @@ export function buildResponsesInputFromContent(
 
   for (const c of content) {
     if (c.speaker === 'human') {
-      const textBlocks = c.blocks.filter(
-        (b): b is TextBlock => b.type === 'text',
+      const hasMedia = c.blocks.some(
+        (b) => b.type === 'media' && b.mimeType.startsWith('image/'),
       );
-      const text = textBlocks.map((b) => b.text).join('\n');
-      if (text) {
-        input.push({ role: 'user', content: text });
+
+      if (hasMedia) {
+        const parts: ResponsesContentPart[] = [];
+
+        for (const block of c.blocks) {
+          if (block.type === 'text' && block.text) {
+            parts.push({ type: 'input_text', text: block.text });
+          } else if (
+            block.type === 'media' &&
+            block.mimeType.startsWith('image/')
+          ) {
+            parts.push({
+              type: 'input_image',
+              image_url: normalizeMediaToDataUri(block),
+            });
+          }
+        }
+
+        if (parts.length > 0) {
+          input.push({ role: 'user', content: parts });
+        }
+      } else {
+        const text = c.blocks
+          .filter((b): b is TextBlock => b.type === 'text')
+          .map((b) => b.text)
+          .join('\n');
+        if (text) {
+          input.push({ role: 'user', content: text });
+        }
       }
     } else if (c.speaker === 'ai') {
       const textBlocks = c.blocks.filter((b) => b.type === 'text');
@@ -77,6 +119,10 @@ export function buildResponsesInputFromContent(
       const toolResponseBlocks = c.blocks.filter(
         (b) => b.type === 'tool_response',
       );
+      const mediaBlocks = c.blocks.filter(
+        (b): b is MediaBlock =>
+          b.type === 'media' && b.mimeType.startsWith('image/'),
+      );
 
       for (const toolResponseBlock of toolResponseBlocks) {
         const rawResult =
@@ -93,12 +139,35 @@ export function buildResponsesInputFromContent(
                 toolResponseBlock.toolName ?? 'tool_response',
               );
 
-        const candidate = limited.content || limited.message || '';
+        const textResult = limited.content || limited.message || '';
+
+        let outputContent: string | ResponsesContentPart[];
+
+        if (mediaBlocks.length > 0) {
+          // Multipart output with images
+          const parts: ResponsesContentPart[] = [];
+
+          if (textResult) {
+            parts.push({ type: 'input_text', text: textResult });
+          }
+
+          for (const media of mediaBlocks) {
+            parts.push({
+              type: 'input_image',
+              image_url: normalizeMediaToDataUri(media),
+            });
+          }
+
+          outputContent = parts;
+        } else {
+          // Text-only output
+          outputContent = textResult;
+        }
 
         input.push({
           type: 'function_call_output',
           call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
-          output: candidate,
+          output: outputContent,
         });
       }
     }

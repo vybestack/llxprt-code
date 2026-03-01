@@ -51,6 +51,7 @@ import {
   thinkingToReasoningField,
   cleanKimiTokensFromThinking,
 } from '../reasoning/reasoningUtils.js';
+import { normalizeMediaToDataUri } from '../utils/mediaUtils.js';
 
 function inferMediaEncoding(imageData: string): {
   encoding: 'base64' | 'url';
@@ -150,7 +151,7 @@ export function convertToVercelMessages(
         for (const media of mediaBlocks) {
           parts.push({
             type: 'image',
-            image: normalizeImageData(media),
+            image: normalizeMediaToDataUri(media),
           });
         }
         if (parts.length > 0) {
@@ -276,6 +277,10 @@ export function convertToVercelMessages(
           },
         );
 
+        // LIMITATION: Vercel AI SDK's ToolResultPart type does not support image content.
+        // MediaBlocks in tool responses are currently dropped. If the SDK adds support for
+        // images in tool results in the future, update this section to handle MediaBlocks
+        // similar to how user messages handle them (see lines 130-161).
         const toolMessage: CoreToolMessage = {
           role: 'tool',
           content: toolContent,
@@ -537,19 +542,4 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
   }
 
   return contents;
-}
-
-function normalizeImageData(media: MediaBlock): string {
-  if (media.data.startsWith('data:')) {
-    return media.data;
-  }
-
-  if (media.encoding === 'url') {
-    return media.data;
-  }
-
-  const prefix = media.mimeType
-    ? `data:${media.mimeType};base64,`
-    : 'data:image/*;base64,';
-  return `${prefix}${media.data}`;
 }
