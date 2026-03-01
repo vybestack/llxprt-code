@@ -520,6 +520,5 @@ describe('<ToolGroupMessage />', () => {
         '✦ Todo list updated (5 tasks).',
       );
     });
-
   });
 });

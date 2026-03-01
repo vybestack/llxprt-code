@@ -428,6 +428,5 @@ describe('HookPlanner', () => {
         expect.stringContaining('Deduplicated hook'),
       );
     });
-
   });
 });
