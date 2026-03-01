@@ -26,6 +26,9 @@ interface EditFileParameterSchema {
     file_path: {
       description: string;
     };
+    replaceBeginLineNumber?: {
+      description: string;
+    };
   };
 }
 
@@ -535,6 +538,48 @@ describe('EditTool', () => {
         user_added_lines: 0,
         user_removed_lines: 0,
       });
+    });
+
+    it('should only replace occurrences on the specified line when replaceBeginLineNumber is provided', async () => {
+      fs.writeFileSync(filePath, 'old here\nold here\nold here\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'old',
+        new_string: 'new',
+        expected_replacements: 1,
+        replaceBeginLineNumber: 2,
+      };
+
+      (mockConfig.getApprovalMode as Mock).mockReturnValueOnce(
+        ApprovalMode.AUTO_EDIT,
+      );
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(/Successfully modified file/);
+      expect(fs.readFileSync(filePath, 'utf8')).toBe(
+        'old here\nnew here\nold here\n',
+      );
+    });
+
+    it('should return a helpful error context when replaceBeginLineNumber is provided and old_string is not on that line', async () => {
+      fs.writeFileSync(filePath, 'old here\nno match\nold here\n', 'utf8');
+      const params: EditToolParams = {
+        file_path: filePath,
+        old_string: 'old',
+        new_string: 'new',
+        replaceBeginLineNumber: 2,
+      };
+
+      const invocation = tool.build(params);
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.llmContent).toMatch(
+        /0 occurrences found for old_string on line 2/,
+      );
+      expect(result.llmContent).toMatch(/Context around requested line:/);
+      expect(result.llmContent).toMatch(/->\s+2\s+\|/);
     });
 
     it('should return error if expected_replacements does not match actual occurrences', async () => {
