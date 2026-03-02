@@ -1,0 +1,1969 @@
+commit 322232e514bae06c7653c183aac40fee87df41b3
+Author: Jacob Richman <jacob314@gmail.com>
+Date:   Thu Dec 18 10:36:48 2025 -0800
+
+    feat: Detect background color (#15132)
+
+diff --git a/packages/cli/src/gemini.test.tsx b/packages/cli/src/gemini.test.tsx
+index 67cac364f..00ef95e12 100644
+--- a/packages/cli/src/gemini.test.tsx
++++ b/packages/cli/src/gemini.test.tsx
+@@ -127,11 +127,19 @@ vi.mock('./config/settings.js', () => ({
+   },
+ }));
+ 
++vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
++  terminalCapabilityManager: {
++    detectCapabilities: vi.fn(),
++    getTerminalBackgroundColor: vi.fn(),
++  },
++}));
++
+ vi.mock('./config/config.js', () => ({
+   loadCliConfig: vi.fn().mockResolvedValue({
+     getSandbox: vi.fn(() => false),
+     getQuestion: vi.fn(() => ''),
+     isInteractive: () => false,
++    setTerminalBackground: vi.fn(),
+   } as unknown as Config),
+   parseArguments: vi.fn().mockResolvedValue({}),
+   isDebugMode: vi.fn(() => false),
+@@ -271,6 +279,7 @@ describe('gemini.tsx main function', () => {
+         getOutputFormat: () => 'text',
+         getExtensions: () => [],
+         getUsageStatisticsEnabled: () => false,
++        setTerminalBackground: vi.fn(),
+       } as unknown as Config;
+     });
+     vi.mocked(loadSettings).mockReturnValue({
+@@ -464,9 +473,9 @@ describe('gemini.tsx main function kitty protocol', () => {
+     vi.restoreAllMocks();
+   });
+ 
+-  it('should call setRawMode and detectAndEnableKittyProtocol when isInteractive is true', async () => {
+-    const { detectAndEnableKittyProtocol } = await import(
+-      './ui/utils/kittyProtocolDetector.js'
++  it('should call setRawMode and detectCapabilities when isInteractive is true', async () => {
++    const { terminalCapabilityManager } = await import(
++      './ui/utils/terminalCapabilityManager.js'
+     );
+     const { loadCliConfig, parseArguments } = await import(
+       './config/config.js'
+@@ -504,6 +513,7 @@ describe('gemini.tsx main function kitty protocol', () => {
+       getOutputFormat: () => 'text',
+       getExtensions: () => [],
+       getUsageStatisticsEnabled: () => false,
++      setTerminalBackground: vi.fn(),
+     } as unknown as Config);
+     vi.mocked(loadSettings).mockReturnValue({
+       errors: [],
+@@ -546,7 +556,9 @@ describe('gemini.tsx main function kitty protocol', () => {
+     });
+ 
+     expect(setRawModeSpy).toHaveBeenCalledWith(true);
+-    expect(detectAndEnableKittyProtocol).toHaveBeenCalledTimes(1);
++    expect(terminalCapabilityManager.detectCapabilities).toHaveBeenCalledTimes(
++      1,
++    );
+   });
+ 
+   it.each([
+@@ -601,6 +613,7 @@ describe('gemini.tsx main function kitty protocol', () => {
+       getScreenReader: () => false,
+       getGeminiMdFileCount: () => 0,
+       getProjectRoot: () => '/',
++      setTerminalBackground: vi.fn(),
+     } as unknown as Config;
+ 
+     vi.mocked(loadCliConfig).mockResolvedValue(mockConfig);
+@@ -683,6 +696,7 @@ describe('gemini.tsx main function kitty protocol', () => {
+       getGeminiMdFileCount: () => 0,
+       getProjectRoot: () => '/',
+       refreshAuth: vi.fn(),
++      setTerminalBackground: vi.fn(),
+     } as unknown as Config;
+ 
+     vi.mocked(loadCliConfig).mockResolvedValue(mockConfig);
+@@ -762,6 +776,7 @@ describe('gemini.tsx main function kitty protocol', () => {
+       getFileFilteringRespectGitIgnore: () => true,
+       getOutputFormat: () => 'text',
+       getUsageStatisticsEnabled: () => false,
++      setTerminalBackground: vi.fn(),
+     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+ 
+     vi.spyOn(themeManager, 'setActiveTheme').mockReturnValue(false);
+@@ -844,6 +859,7 @@ describe('gemini.tsx main function kitty protocol', () => {
+       getFileFilteringRespectGitIgnore: () => true,
+       getOutputFormat: () => 'text',
+       getUsageStatisticsEnabled: () => false,
++      setTerminalBackground: vi.fn(),
+     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+ 
+     try {
+@@ -921,6 +937,7 @@ describe('gemini.tsx main function kitty protocol', () => {
+       getFileFilteringRespectGitIgnore: () => true,
+       getOutputFormat: () => 'text',
+       getUsageStatisticsEnabled: () => false,
++      setTerminalBackground: vi.fn(),
+     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+ 
+     // The mock is already set up at the top of the test
+@@ -993,6 +1010,7 @@ describe('gemini.tsx main function kitty protocol', () => {
+       getFileFilteringRespectGitIgnore: () => true,
+       getOutputFormat: () => 'text',
+       getUsageStatisticsEnabled: () => false,
++      setTerminalBackground: vi.fn(),
+     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+ 
+     vi.mock('./utils/readStdin.js', () => ({
+@@ -1152,6 +1170,7 @@ describe('gemini.tsx main function exit codes', () => {
+       getOutputFormat: () => 'text',
+       getExtensions: () => [],
+       getUsageStatisticsEnabled: () => false,
++      setTerminalBackground: vi.fn(),
+     } as unknown as Config);
+     vi.mocked(loadSettings).mockReturnValue({
+       merged: { security: { auth: {} }, ui: {} },
+@@ -1214,6 +1233,7 @@ describe('gemini.tsx main function exit codes', () => {
+       getOutputFormat: () => 'text',
+       getExtensions: () => [],
+       getUsageStatisticsEnabled: () => false,
++      setTerminalBackground: vi.fn(),
+     } as unknown as Config);
+     vi.mocked(loadSettings).mockReturnValue({
+       merged: { security: { auth: {} }, ui: {} },
+@@ -1295,11 +1315,6 @@ describe('startInteractiveUI', () => {
+     geminiMdFileCount: 0,
+   };
+ 
+-  vi.mock('./ui/utils/kittyProtocolDetector.js', () => ({
+-    detectAndEnableKittyProtocol: vi.fn(() => Promise.resolve(true)),
+-    isKittyProtocolSupported: vi.fn(() => true),
+-    isKittyProtocolEnabled: vi.fn(() => true),
+-  }));
+   vi.mock('./ui/utils/updateCheck.js', () => ({
+     checkForUpdates: vi.fn(() => Promise.resolve(null)),
+   }));
+diff --git a/packages/cli/src/gemini.tsx b/packages/cli/src/gemini.tsx
+index 26439df5c..da5de6f5e 100644
+--- a/packages/cli/src/gemini.tsx
++++ b/packages/cli/src/gemini.tsx
+@@ -21,7 +21,6 @@ import {
+   migrateDeprecatedSettings,
+   SettingScope,
+ } from './config/settings.js';
+-import { themeManager } from './ui/themes/theme-manager.js';
+ import { getStartupWarnings } from './utils/startupWarnings.js';
+ import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
+ import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
+@@ -73,7 +72,6 @@ import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
+ import { runZedIntegration } from './zed-integration/zedIntegration.js';
+ import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
+ import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
+-import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
+ import { checkForUpdates } from './ui/utils/updateCheck.js';
+ import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
+ import { appEvents, AppEvent } from './utils/events.js';
+@@ -98,6 +96,7 @@ import { requestConsentNonInteractive } from './config/extensions/consent.js';
+ import { ScrollProvider } from './ui/contexts/ScrollProvider.js';
+ import { isAlternateBufferEnabled } from './ui/hooks/useAlternateBuffer.js';
+ 
++import { setupTerminalAndTheme } from './utils/terminalTheme.js';
+ import { profiler } from './ui/components/DebugProfiler.js';
+ 
+ const SLOW_RENDER_MS = 200;
+@@ -360,19 +359,6 @@ export async function main() {
+     }
+   }
+ 
+-  // Load custom themes from settings
+-  themeManager.loadCustomThemes(settings.merged.ui?.customThemes);
+-
+-  if (settings.merged.ui?.theme) {
+-    if (!themeManager.setActiveTheme(settings.merged.ui?.theme)) {
+-      // If the theme is not found during initial load, log a warning and continue.
+-      // The useThemeCommand hook in AppContainer.tsx will handle opening the dialog.
+-      debugLogger.warn(
+-        `Warning: Theme "${settings.merged.ui?.theme}" not found.`,
+-      );
+-    }
+-  }
+-
+   // hop into sandbox if we are outside and sandboxing is enabled
+   if (!process.env['SANDBOX']) {
+     const memoryArgs = settings.merged.advanced?.autoConfigureMemory
+@@ -550,11 +536,10 @@ export async function main() {
+       process.on('SIGINT', () => {
+         process.stdin.setRawMode(wasRaw);
+       });
+-
+-      // Detect and enable Kitty keyboard protocol once at startup.
+-      await detectAndEnableKittyProtocol();
+     }
+ 
++    await setupTerminalAndTheme(config, settings);
++
+     setMaxSizedBoxDebugging(isDebugMode);
+     const initAppHandle = startupProfiler.start('initialize_app');
+     const initializationResult = await initializeApp(config, settings);
+diff --git a/packages/cli/src/gemini_cleanup.test.tsx b/packages/cli/src/gemini_cleanup.test.tsx
+index 2d9735973..ffe0b7189 100644
+--- a/packages/cli/src/gemini_cleanup.test.tsx
++++ b/packages/cli/src/gemini_cleanup.test.tsx
+@@ -210,6 +210,7 @@ describe('gemini.tsx main function cleanup', () => {
+       getFileFilteringRespectGitIgnore: vi.fn(() => true),
+       getOutputFormat: vi.fn(() => 'text'),
+       getUsageStatisticsEnabled: vi.fn(() => false),
++      setTerminalBackground: vi.fn(),
+     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+ 
+     try {
+diff --git a/packages/cli/src/test-utils/render.tsx b/packages/cli/src/test-utils/render.tsx
+index 4d9349196..d02b5af8a 100644
+--- a/packages/cli/src/test-utils/render.tsx
++++ b/packages/cli/src/test-utils/render.tsx
+@@ -134,6 +134,7 @@ const baseMockUiState = {
+   mainAreaWidth: 100,
+   terminalWidth: 120,
+   currentModel: 'gemini-pro',
++  terminalBackgroundColor: undefined,
+ };
+ 
+ const mockUIActions: UIActions = {
+diff --git a/packages/cli/src/ui/AppContainer.tsx b/packages/cli/src/ui/AppContainer.tsx
+index 8b304c234..44f083928 100644
+--- a/packages/cli/src/ui/AppContainer.tsx
++++ b/packages/cli/src/ui/AppContainer.tsx
+@@ -121,7 +121,7 @@ import { useIncludeDirsTrust } from './hooks/useIncludeDirsTrust.js';
+ import { isWorkspaceTrusted } from '../config/trustedFolders.js';
+ import { useAlternateBuffer } from './hooks/useAlternateBuffer.js';
+ import { useSettings } from './contexts/SettingsContext.js';
+-import { enableSupportedProtocol } from './utils/kittyProtocolDetector.js';
++import { terminalCapabilityManager } from './utils/terminalCapabilityManager.js';
+ import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
+ import { enableBracketedPaste } from './utils/bracketedPaste.js';
+ import { useBanner } from './hooks/useBanner.js';
+@@ -398,7 +398,7 @@ export const AppContainer = (props: AppContainerProps) => {
+       app.rerender();
+     }
+     enableBracketedPaste();
+-    enableSupportedProtocol();
++    terminalCapabilityManager.enableKittyProtocol();
+     refreshStatic();
+   }, [refreshStatic, isAlternateBuffer, app, config]);
+ 
+@@ -1529,6 +1529,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
+       warningMessage,
+       bannerData,
+       bannerVisible,
++      terminalBackgroundColor: config.getTerminalBackground(),
+     }),
+     [
+       isThemeDialogOpen,
+@@ -1620,6 +1621,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
+       warningMessage,
+       bannerData,
+       bannerVisible,
++      config,
+     ],
+   );
+ 
+diff --git a/packages/cli/src/ui/commands/bugCommand.test.ts b/packages/cli/src/ui/commands/bugCommand.test.ts
+index c071368c8..9031e918f 100644
+--- a/packages/cli/src/ui/commands/bugCommand.test.ts
++++ b/packages/cli/src/ui/commands/bugCommand.test.ts
+@@ -39,6 +39,14 @@ vi.mock('node:process', () => ({
+   },
+ }));
+ 
++vi.mock('../utils/terminalCapabilityManager.js', () => ({
++  terminalCapabilityManager: {
++    getTerminalName: vi.fn().mockReturnValue('Test Terminal'),
++    getTerminalBackgroundColor: vi.fn().mockReturnValue('#000000'),
++    isKittyProtocolEnabled: vi.fn().mockReturnValue(true),
++  },
++}));
++
+ describe('bugCommand', () => {
+   beforeEach(() => {
+     vi.mocked(getVersion).mockResolvedValue('0.1.0');
+@@ -73,6 +81,9 @@ describe('bugCommand', () => {
+ * **Sandbox Environment:** test
+ * **Model Version:** gemini-pro
+ * **Memory Usage:** 100 MB
++* **Terminal Name:** Test Terminal
++* **Terminal Background:** #000000
++* **Kitty Keyboard Protocol:** Supported
+ * **IDE Client:** VSCode
+ `;
+     const expectedUrl =
+@@ -106,6 +117,9 @@ describe('bugCommand', () => {
+ * **Sandbox Environment:** test
+ * **Model Version:** gemini-pro
+ * **Memory Usage:** 100 MB
++* **Terminal Name:** Test Terminal
++* **Terminal Background:** #000000
++* **Kitty Keyboard Protocol:** Supported
+ * **IDE Client:** VSCode
+ `;
+     const expectedUrl = customTemplate
+diff --git a/packages/cli/src/ui/commands/bugCommand.ts b/packages/cli/src/ui/commands/bugCommand.ts
+index 106c1169d..21df2028c 100644
+--- a/packages/cli/src/ui/commands/bugCommand.ts
++++ b/packages/cli/src/ui/commands/bugCommand.ts
+@@ -15,6 +15,7 @@ import { MessageType } from '../types.js';
+ import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
+ import { formatMemoryUsage } from '../utils/formatters.js';
+ import { IdeClient, sessionId, getVersion } from '@google/gemini-cli-core';
++import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
+ 
+ export const bugCommand: SlashCommand = {
+   name: 'bug',
+@@ -38,6 +39,13 @@ export const bugCommand: SlashCommand = {
+     const cliVersion = await getVersion();
+     const memoryUsage = formatMemoryUsage(process.memoryUsage().rss);
+     const ideClient = await getIdeClientName(context);
++    const terminalName =
++      terminalCapabilityManager.getTerminalName() || 'Unknown';
++    const terminalBgColor =
++      terminalCapabilityManager.getTerminalBackgroundColor() || 'Unknown';
++    const kittyProtocol = terminalCapabilityManager.isKittyProtocolEnabled()
++      ? 'Supported'
++      : 'Unsupported';
+ 
+     let info = `
+ * **CLI Version:** ${cliVersion}
+@@ -47,6 +55,9 @@ export const bugCommand: SlashCommand = {
+ * **Sandbox Environment:** ${sandboxEnv}
+ * **Model Version:** ${modelVersion}
+ * **Memory Usage:** ${memoryUsage}
++* **Terminal Name:** ${terminalName}
++* **Terminal Background:** ${terminalBgColor}
++* **Kitty Keyboard Protocol:** ${kittyProtocol}
+ `;
+     if (ideClient) {
+       info += `* **IDE Client:** ${ideClient}\n`;
+diff --git a/packages/cli/src/ui/components/ThemeDialog.test.tsx b/packages/cli/src/ui/components/ThemeDialog.test.tsx
+index 46b514c05..ef2306c12 100644
+--- a/packages/cli/src/ui/components/ThemeDialog.test.tsx
++++ b/packages/cli/src/ui/components/ThemeDialog.test.tsx
+@@ -143,3 +143,96 @@ describe('ThemeDialog Snapshots', () => {
+     });
+   });
+ });
++
++describe('Initial Theme Selection', () => {
++  const baseProps = {
++    onSelect: vi.fn(),
++    onCancel: vi.fn(),
++    onHighlight: vi.fn(),
++    availableTerminalHeight: 40,
++    terminalWidth: 120,
++  };
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('should default to a light theme when terminal background is light and no theme is set', () => {
++    const settings = createMockSettings(); // No theme set
++    const { lastFrame } = renderWithProviders(
++      <ThemeDialog {...baseProps} settings={settings} />,
++      {
++        settings,
++        uiState: { terminalBackgroundColor: '#FFFFFF' }, // Light background
++      },
++    );
++
++    // The snapshot will show which theme is highlighted.
++    // We expect 'DefaultLight' to be the one with the '>' indicator.
++    expect(lastFrame()).toMatchSnapshot();
++  });
++
++  it('should default to a dark theme when terminal background is dark and no theme is set', () => {
++    const settings = createMockSettings(); // No theme set
++    const { lastFrame } = renderWithProviders(
++      <ThemeDialog {...baseProps} settings={settings} />,
++      {
++        settings,
++        uiState: { terminalBackgroundColor: '#000000' }, // Dark background
++      },
++    );
++
++    // We expect 'DefaultDark' to be highlighted.
++    expect(lastFrame()).toMatchSnapshot();
++  });
++
++  it('should use the theme from settings even if terminal background suggests a different theme type', () => {
++    const settings = createMockSettings({ ui: { theme: 'DefaultLight' } }); // Light theme set
++    const { lastFrame } = renderWithProviders(
++      <ThemeDialog {...baseProps} settings={settings} />,
++      {
++        settings,
++        uiState: { terminalBackgroundColor: '#000000' }, // Dark background
++      },
++    );
++
++    // We expect 'DefaultLight' to be highlighted, respecting the settings.
++    expect(lastFrame()).toMatchSnapshot();
++  });
++});
++
++describe('Hint Visibility', () => {
++  const baseProps = {
++    onSelect: vi.fn(),
++    onCancel: vi.fn(),
++    onHighlight: vi.fn(),
++    availableTerminalHeight: 40,
++    terminalWidth: 120,
++  };
++
++  it('should show hint when theme background matches terminal background', () => {
++    const settings = createMockSettings({ ui: { theme: 'Default' } });
++    const { lastFrame } = renderWithProviders(
++      <ThemeDialog {...baseProps} settings={settings} />,
++      {
++        settings,
++        uiState: { terminalBackgroundColor: '#1E1E2E' },
++      },
++    );
++
++    expect(lastFrame()).toContain('(Matches terminal)');
++  });
++
++  it('should not show hint when theme background does not match terminal background', () => {
++    const settings = createMockSettings({ ui: { theme: 'Default' } });
++    const { lastFrame } = renderWithProviders(
++      <ThemeDialog {...baseProps} settings={settings} />,
++      {
++        settings,
++        uiState: { terminalBackgroundColor: '#FFFFFF' },
++      },
++    );
++
++    expect(lastFrame()).not.toContain('(Matches terminal)');
++  });
++});
+diff --git a/packages/cli/src/ui/components/ThemeDialog.tsx b/packages/cli/src/ui/components/ThemeDialog.tsx
+index 514873f64..60dfc7208 100644
+--- a/packages/cli/src/ui/components/ThemeDialog.tsx
++++ b/packages/cli/src/ui/components/ThemeDialog.tsx
+@@ -9,6 +9,7 @@ import { useCallback, useState } from 'react';
+ import { Box, Text } from 'ink';
+ import { theme } from '../semantic-colors.js';
+ import { themeManager, DEFAULT_THEME } from '../themes/theme-manager.js';
++import { pickDefaultThemeName } from '../themes/theme.js';
+ import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
+ import { DiffRenderer } from './messages/DiffRenderer.js';
+ import { colorizeCode } from '../utils/CodeColorizer.js';
+@@ -22,6 +23,7 @@ import { useKeypress } from '../hooks/useKeypress.js';
+ import { useAlternateBuffer } from '../hooks/useAlternateBuffer.js';
+ import { ScopeSelector } from './shared/ScopeSelector.js';
+ import { useUIActions } from '../contexts/UIActionsContext.js';
++import { useUIState } from '../contexts/UIStateContext.js';
+ 
+ interface ThemeDialogProps {
+   /** Callback function when a theme is selected */
+@@ -38,6 +40,42 @@ interface ThemeDialogProps {
+   terminalWidth: number;
+ }
+ 
++import {
++  getThemeTypeFromBackgroundColor,
++  resolveColor,
++} from '../themes/color-utils.js';
++
++function generateThemeItem(
++  name: string,
++  typeDisplay: string,
++  themeType: string,
++  themeBackground: string | undefined,
++  terminalBackgroundColor: string | undefined,
++  terminalThemeType: 'light' | 'dark' | undefined,
++) {
++  const isCompatible =
++    themeType === 'custom' ||
++    terminalThemeType === undefined ||
++    themeType === 'ansi' ||
++    themeType === terminalThemeType;
++
++  const isBackgroundMatch =
++    terminalBackgroundColor &&
++    themeBackground &&
++    terminalBackgroundColor.toLowerCase() === themeBackground.toLowerCase();
++
++  return {
++    label: name,
++    value: name,
++    themeNameDisplay: name,
++    themeTypeDisplay: typeDisplay,
++    themeWarning: isCompatible ? '' : ' (Incompatible)',
++    themeMatch: isBackgroundMatch ? ' (Matches terminal)' : '',
++    key: name,
++    isCompatible,
++  };
++}
++
+ export function ThemeDialog({
+   onSelect,
+   onCancel,
+@@ -48,13 +86,27 @@ export function ThemeDialog({
+ }: ThemeDialogProps): React.JSX.Element {
+   const isAlternateBuffer = useAlternateBuffer();
+   const { refreshStatic } = useUIActions();
++  const { terminalBackgroundColor } = useUIState();
+   const [selectedScope, setSelectedScope] = useState<LoadableSettingScope>(
+     SettingScope.User,
+   );
+ 
+   // Track the currently highlighted theme name
+   const [highlightedThemeName, setHighlightedThemeName] = useState<string>(
+-    settings.merged.ui?.theme || DEFAULT_THEME.name,
++    () => {
++      // If a theme is already set, use it.
++      if (settings.merged.ui?.theme) {
++        return settings.merged.ui.theme;
++      }
++
++      // Otherwise, try to pick a theme that matches the terminal background.
++      return pickDefaultThemeName(
++        terminalBackgroundColor,
++        themeManager.getAllThemes(),
++        DEFAULT_THEME.name,
++        'Default Light',
++      );
++    },
+   );
+ 
+   // Generate theme items filtered by selected scope
+@@ -67,23 +119,49 @@ export function ThemeDialog({
+     .filter((theme) => theme.type !== 'custom');
+   const customThemeNames = Object.keys(customThemes);
+   const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
++
++  const terminalThemeType = getThemeTypeFromBackgroundColor(
++    terminalBackgroundColor,
++  );
++
+   // Generate theme items
+   const themeItems = [
+-    ...builtInThemes.map((theme) => ({
+-      label: theme.name,
+-      value: theme.name,
+-      themeNameDisplay: theme.name,
+-      themeTypeDisplay: capitalize(theme.type),
+-      key: theme.name,
+-    })),
+-    ...customThemeNames.map((name) => ({
+-      label: name,
+-      value: name,
+-      themeNameDisplay: name,
+-      themeTypeDisplay: 'Custom',
+-      key: name,
+-    })),
+-  ];
++    ...builtInThemes.map((theme) => {
++      const fullTheme = themeManager.getTheme(theme.name);
++      const themeBackground = fullTheme
++        ? resolveColor(fullTheme.colors.Background)
++        : undefined;
++
++      return generateThemeItem(
++        theme.name,
++        capitalize(theme.type),
++        theme.type,
++        themeBackground,
++        terminalBackgroundColor,
++        terminalThemeType,
++      );
++    }),
++    ...customThemeNames.map((name) => {
++      const themeConfig = customThemes[name];
++      const bg = themeConfig.background?.primary ?? themeConfig.Background;
++      const themeBackground = bg ? resolveColor(bg) : undefined;
++
++      return generateThemeItem(
++        name,
++        'Custom',
++        'custom',
++        themeBackground,
++        terminalBackgroundColor,
++        terminalThemeType,
++      );
++    }),
++  ].sort((a, b) => {
++    // Show compatible themes first
++    if (a.isCompatible && !b.isCompatible) return -1;
++    if (!a.isCompatible && b.isCompatible) return 1;
++    // Then sort by name
++    return a.label.localeCompare(b.label);
++  });
+ 
+   // Find the index of the selected theme, but only if it exists in the list
+   const initialThemeIndex = themeItems.findIndex(
+@@ -225,6 +303,40 @@ export function ThemeDialog({
+               maxItemsToShow={12}
+               showScrollArrows={true}
+               showNumbers={mode === 'theme'}
++              renderItem={(item, { titleColor }) => {
++                // We know item has themeWarning because we put it there, but we need to cast or access safely
++                const itemWithExtras = item as typeof item & {
++                  themeWarning?: string;
++                  themeMatch?: string;
++                };
++
++                if (item.themeNameDisplay && item.themeTypeDisplay) {
++                  return (
++                    <Text color={titleColor} wrap="truncate" key={item.key}>
++                      {item.themeNameDisplay}{' '}
++                      <Text color={theme.text.secondary}>
++                        {item.themeTypeDisplay}
++                      </Text>
++                      {itemWithExtras.themeMatch && (
++                        <Text color={theme.status.success}>
++                          {itemWithExtras.themeMatch}
++                        </Text>
++                      )}
++                      {itemWithExtras.themeWarning && (
++                        <Text color={theme.status.warning}>
++                          {itemWithExtras.themeWarning}
++                        </Text>
++                      )}
++                    </Text>
++                  );
++                }
++                // Regular label display
++                return (
++                  <Text color={titleColor} wrap="truncate">
++                    {item.label}
++                  </Text>
++                );
++              }}
+             />
+           </Box>
+ 
+@@ -239,6 +351,7 @@ export function ThemeDialog({
+                 themeManager.getTheme(
+                   highlightedThemeName || DEFAULT_THEME.name,
+                 ) || DEFAULT_THEME;
++
+               return (
+                 <Box
+                   borderStyle="single"
+diff --git a/packages/cli/src/ui/components/__snapshots__/ThemeDialog.test.tsx.snap b/packages/cli/src/ui/components/__snapshots__/ThemeDialog.test.tsx.snap
+index 08fd207cb..86eb35c24 100644
+--- a/packages/cli/src/ui/components/__snapshots__/ThemeDialog.test.tsx.snap
++++ b/packages/cli/src/ui/components/__snapshots__/ThemeDialog.test.tsx.snap
+@@ -1,5 +1,77 @@
+ // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+ 
++exports[`Initial Theme Selection > should default to a dark theme when terminal background is dark and no theme is set 1`] = `
++"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
++│                                                                                                                      │
++│ > Select Theme                                        Preview                                                        │
++│ ▲                                                     ┌────────────────────────────────────────────────────────────┐ │
++│    1. ANSI Dark                                       │                                                            │ │
++│    2. Atom One Dark                                   │ 1 # function                                               │ │
++│    3. Ayu Dark                                        │ 2 def fibonacci(n):                                        │ │
++│ ●  4. Default Dark                                    │ 3     a, b = 0, 1                                          │ │
++│    5. Dracula Dark                                    │ 4     for _ in range(n):                                   │ │
++│    6. GitHub Dark                                     │ 5         a, b = b, a + b                                  │ │
++│    7. Holiday Dark                                    │ 6     return a                                             │ │
++│    8. Shades Of Purple Dark                           │                                                            │ │
++│    9. ANSI Light Light (Incompatible)                 │ 1 - print("Hello, " + name)                                │ │
++│   10. Ayu Light Light (Incompatible)                  │ 1 + print(f"Hello, {name}!")                               │ │
++│   11. Default Light Light (Incompatible)              │                                                            │ │
++│   12. GitHub Light Light (Incompatible)               └────────────────────────────────────────────────────────────┘ │
++│ ▼                                                                                                                    │
++│                                                                                                                      │
++│ (Use Enter to select, Tab to configure scope, Esc to close)                                                          │
++│                                                                                                                      │
++╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
++`;
++
++exports[`Initial Theme Selection > should default to a light theme when terminal background is light and no theme is set 1`] = `
++"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
++│                                                                                                                      │
++│ > Select Theme                                        Preview                                                        │
++│ ▲                                                     ┌────────────────────────────────────────────────────────────┐ │
++│    1. ANSI Light Light                                │                                                            │ │
++│    2. Ayu Light Light                                 │ 1 # function                                               │ │
++│ ●  3. Default Light Light                             │ 2 def fibonacci(n):                                        │ │
++│    4. GitHub Light Light                              │ 3     a, b = 0, 1                                          │ │
++│    5. Google Code Light                               │ 4     for _ in range(n):                                   │ │
++│    6. Xcode Light                                     │ 5         a, b = b, a + b                                  │ │
++│    7. ANSI Dark (Incompatible)                        │ 6     return a                                             │ │
++│    8. Atom One Dark (Incompatible)                    │                                                            │ │
++│    9. Ayu Dark (Incompatible)                         │ 1 - print("Hello, " + name)                                │ │
++│   10. Default Dark (Incompatible)                     │ 1 + print(f"Hello, {name}!")                               │ │
++│   11. Dracula Dark (Incompatible)                     │                                                            │ │
++│   12. GitHub Dark (Incompatible)                      └────────────────────────────────────────────────────────────┘ │
++│ ▼                                                                                                                    │
++│                                                                                                                      │
++│ (Use Enter to select, Tab to configure scope, Esc to close)                                                          │
++│                                                                                                                      │
++╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
++`;
++
++exports[`Initial Theme Selection > should use the theme from settings even if terminal background suggests a different theme type 1`] = `
++"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
++│                                                                                                                      │
++│ > Select Theme                                        Preview                                                        │
++│ ▲                                                     ┌────────────────────────────────────────────────────────────┐ │
++│ ●  1. ANSI Dark                                       │                                                            │ │
++│    2. Atom One Dark                                   │ 1 # function                                               │ │
++│    3. Ayu Dark                                        │ 2 def fibonacci(n):                                        │ │
++│    4. Default Dark                                    │ 3     a, b = 0, 1                                          │ │
++│    5. Dracula Dark                                    │ 4     for _ in range(n):                                   │ │
++│    6. GitHub Dark                                     │ 5         a, b = b, a + b                                  │ │
++│    7. Holiday Dark                                    │ 6     return a                                             │ │
++│    8. Shades Of Purple Dark                           │                                                            │ │
++│    9. ANSI Light Light (Incompatible)                 │ 1 - print("Hello, " + name)                                │ │
++│   10. Ayu Light Light (Incompatible)                  │ 1 + print(f"Hello, {name}!")                               │ │
++│   11. Default Light Light (Incompatible)              │                                                            │ │
++│   12. GitHub Light Light (Incompatible)               └────────────────────────────────────────────────────────────┘ │
++│ ▼                                                                                                                    │
++│                                                                                                                      │
++│ (Use Enter to select, Tab to configure scope, Esc to close)                                                          │
++│                                                                                                                      │
++╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
++`;
++
+ exports[`ThemeDialog Snapshots > should render correctly in scope selector mode 1`] = `
+ "╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │                                                                                                                      │
+@@ -19,17 +91,17 @@ exports[`ThemeDialog Snapshots > should render correctly in theme selection mode
+ │ > Select Theme                                        Preview                                                        │
+ │ ▲                                                     ┌────────────────────────────────────────────────────────────┐ │
+ │    1. ANSI Dark                                       │                                                            │ │
+-│    2. Atom One Dark                                   │ 1 # function                                               │ │
+-│    3. Ayu Dark                                        │ 2 def fibonacci(n):                                        │ │
+-│ ●  4. Default Dark                                    │ 3     a, b = 0, 1                                          │ │
+-│    5. Dracula Dark                                    │ 4     for _ in range(n):                                   │ │
+-│    6. GitHub Dark                                     │ 5         a, b = b, a + b                                  │ │
+-│    7. Holiday Dark                                    │ 6     return a                                             │ │
+-│    8. Shades Of Purple Dark                           │                                                            │ │
+-│    9. ANSI Light Light                                │ 1 - print("Hello, " + name)                                │ │
+-│   10. Ayu Light Light                                 │ 1 + print(f"Hello, {name}!")                               │ │
+-│   11. Default Light Light                             │                                                            │ │
+-│   12. GitHub Light Light                              └────────────────────────────────────────────────────────────┘ │
++│    2. ANSI Light Light                                │ 1 # function                                               │ │
++│    3. Atom One Dark                                   │ 2 def fibonacci(n):                                        │ │
++│    4. Ayu Dark                                        │ 3     a, b = 0, 1                                          │ │
++│    5. Ayu Light Light                                 │ 4     for _ in range(n):                                   │ │
++│ ●  6. Default Dark                                    │ 5         a, b = b, a + b                                  │ │
++│    7. Default Light Light                             │ 6     return a                                             │ │
++│    8. Dracula Dark                                    │                                                            │ │
++│    9. GitHub Dark                                     │ 1 - print("Hello, " + name)                                │ │
++│   10. GitHub Light Light                              │ 1 + print(f"Hello, {name}!")                               │ │
++│   11. Google Code Light                               │                                                            │ │
++│   12. Holiday Dark                                    └────────────────────────────────────────────────────────────┘ │
+ │ ▼                                                                                                                    │
+ │                                                                                                                      │
+ │ (Use Enter to select, Tab to configure scope, Esc to close)                                                          │
+diff --git a/packages/cli/src/ui/components/shared/RadioButtonSelect.tsx b/packages/cli/src/ui/components/shared/RadioButtonSelect.tsx
+index 02fc85228..e7e48e517 100644
+--- a/packages/cli/src/ui/components/shared/RadioButtonSelect.tsx
++++ b/packages/cli/src/ui/components/shared/RadioButtonSelect.tsx
+@@ -7,7 +7,10 @@
+ import type React from 'react';
+ import { Text } from 'ink';
+ import { theme } from '../../semantic-colors.js';
+-import { BaseSelectionList } from './BaseSelectionList.js';
++import {
++  BaseSelectionList,
++  type RenderItemContext,
++} from './BaseSelectionList.js';
+ import type { SelectionListItem } from '../../hooks/useSelectionList.js';
+ 
+ /**
+@@ -41,6 +44,11 @@ export interface RadioButtonSelectProps<T> {
+   maxItemsToShow?: number;
+   /** Whether to show numbers next to items. */
+   showNumbers?: boolean;
++  /** Optional custom renderer for items. */
++  renderItem?: (
++    item: RadioSelectItem<T>,
++    context: RenderItemContext,
++  ) => React.ReactNode;
+ }
+ 
+ /**
+@@ -58,6 +66,7 @@ export function RadioButtonSelect<T>({
+   showScrollArrows = false,
+   maxItemsToShow = 10,
+   showNumbers = true,
++  renderItem,
+ }: RadioButtonSelectProps<T>): React.JSX.Element {
+   return (
+     <BaseSelectionList<T, RadioSelectItem<T>>
+@@ -69,23 +78,28 @@ export function RadioButtonSelect<T>({
+       showNumbers={showNumbers}
+       showScrollArrows={showScrollArrows}
+       maxItemsToShow={maxItemsToShow}
+-      renderItem={(item, { titleColor }) => {
+-        // Handle special theme display case for ThemeDialog compatibility
+-        if (item.themeNameDisplay && item.themeTypeDisplay) {
++      renderItem={
++        renderItem ||
++        ((item, { titleColor }) => {
++          // Handle special theme display case for ThemeDialog compatibility
++          if (item.themeNameDisplay && item.themeTypeDisplay) {
++            return (
++              <Text color={titleColor} wrap="truncate" key={item.key}>
++                {item.themeNameDisplay}{' '}
++                <Text color={theme.text.secondary}>
++                  {item.themeTypeDisplay}
++                </Text>
++              </Text>
++            );
++          }
++          // Regular label display
+           return (
+-            <Text color={titleColor} wrap="truncate" key={item.key}>
+-              {item.themeNameDisplay}{' '}
+-              <Text color={theme.text.secondary}>{item.themeTypeDisplay}</Text>
++            <Text color={titleColor} wrap="truncate">
++              {item.label}
+             </Text>
+           );
+-        }
+-        // Regular label display
+-        return (
+-          <Text color={titleColor} wrap="truncate">
+-            {item.label}
+-          </Text>
+-        );
+-      }}
++        })
++      }
+     />
+   );
+ }
+diff --git a/packages/cli/src/ui/components/shared/text-buffer.ts b/packages/cli/src/ui/components/shared/text-buffer.ts
+index 99cfc7e7d..3c897d535 100644
+--- a/packages/cli/src/ui/components/shared/text-buffer.ts
++++ b/packages/cli/src/ui/components/shared/text-buffer.ts
+@@ -21,7 +21,6 @@ import { parsePastedPaths } from '../../utils/clipboardUtils.js';
+ import type { Key } from '../../contexts/KeypressContext.js';
+ import type { VimAction } from './vim-buffer-actions.js';
+ import { handleVimAction } from './vim-buffer-actions.js';
+-import { enableSupportedProtocol } from '../../utils/kittyProtocolDetector.js';
+ 
+ export type Direction =
+   | 'left'
+@@ -1914,7 +1913,6 @@ export function useTextBuffer({
+       } catch (err) {
+         console.error('[useTextBuffer] external editor error', err);
+       } finally {
+-        enableSupportedProtocol();
+         coreEvents.emit(CoreEvent.ExternalEditorClosed);
+         if (wasRaw) setRawMode?.(true);
+         try {
+diff --git a/packages/cli/src/ui/contexts/UIStateContext.tsx b/packages/cli/src/ui/contexts/UIStateContext.tsx
+index 34e6262f3..c0f0eb0c2 100644
+--- a/packages/cli/src/ui/contexts/UIStateContext.tsx
++++ b/packages/cli/src/ui/contexts/UIStateContext.tsx
+@@ -40,6 +40,7 @@ export interface ProQuotaDialogRequest {
+ 
+ import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+ import { type RestartReason } from '../hooks/useIdeTrustListener.js';
++import type { TerminalBackgroundColor } from '../utils/terminalCapabilityManager.js';
+ 
+ export interface UIState {
+   history: HistoryItem[];
+@@ -136,6 +137,7 @@ export interface UIState {
+   };
+   bannerVisible: boolean;
+   customDialog: React.ReactNode | null;
++  terminalBackgroundColor: TerminalBackgroundColor;
+ }
+ 
+ export const UIStateContext = createContext<UIState | null>(null);
+diff --git a/packages/cli/src/ui/hooks/useKittyKeyboardProtocol.ts b/packages/cli/src/ui/hooks/useKittyKeyboardProtocol.ts
+index 4a89b165b..93dcce59f 100644
+--- a/packages/cli/src/ui/hooks/useKittyKeyboardProtocol.ts
++++ b/packages/cli/src/ui/hooks/useKittyKeyboardProtocol.ts
+@@ -5,7 +5,7 @@
+  */
+ 
+ import { useState } from 'react';
+-import { isKittyProtocolEnabled } from '../utils/kittyProtocolDetector.js';
++import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
+ 
+ export interface KittyProtocolStatus {
+   enabled: boolean;
+@@ -18,7 +18,7 @@ export interface KittyProtocolStatus {
+  */
+ export function useKittyKeyboardProtocol(): KittyProtocolStatus {
+   const [status] = useState<KittyProtocolStatus>({
+-    enabled: isKittyProtocolEnabled(),
++    enabled: terminalCapabilityManager.isKittyProtocolEnabled(),
+     checking: false,
+   });
+ 
+diff --git a/packages/cli/src/ui/themes/color-utils.test.ts b/packages/cli/src/ui/themes/color-utils.test.ts
+index d35fcb183..89a158af6 100644
+--- a/packages/cli/src/ui/themes/color-utils.test.ts
++++ b/packages/cli/src/ui/themes/color-utils.test.ts
+@@ -11,6 +11,7 @@ import {
+   interpolateColor,
+   CSS_NAME_TO_HEX_MAP,
+   INK_SUPPORTED_NAMES,
++  getThemeTypeFromBackgroundColor,
+ } from './color-utils.js';
+ 
+ describe('Color Utils', () => {
+@@ -255,4 +256,27 @@ describe('Color Utils', () => {
+       expect(interpolateColor('#ffffff', '', 1)).toBe('');
+     });
+   });
++
++  describe('getThemeTypeFromBackgroundColor', () => {
++    it('should return light for light backgrounds', () => {
++      expect(getThemeTypeFromBackgroundColor('#ffffff')).toBe('light');
++      expect(getThemeTypeFromBackgroundColor('#f0f0f0')).toBe('light');
++      expect(getThemeTypeFromBackgroundColor('#cccccc')).toBe('light');
++    });
++
++    it('should return dark for dark backgrounds', () => {
++      expect(getThemeTypeFromBackgroundColor('#000000')).toBe('dark');
++      expect(getThemeTypeFromBackgroundColor('#1a1a1a')).toBe('dark');
++      expect(getThemeTypeFromBackgroundColor('#333333')).toBe('dark');
++    });
++
++    it('should return undefined for undefined background', () => {
++      expect(getThemeTypeFromBackgroundColor(undefined)).toBeUndefined();
++    });
++
++    it('should handle colors without # prefix', () => {
++      expect(getThemeTypeFromBackgroundColor('ffffff')).toBe('light');
++      expect(getThemeTypeFromBackgroundColor('000000')).toBe('dark');
++    });
++  });
+ });
+diff --git a/packages/cli/src/ui/themes/color-utils.ts b/packages/cli/src/ui/themes/color-utils.ts
+index 7f0054c3a..b9b438de9 100644
+--- a/packages/cli/src/ui/themes/color-utils.ts
++++ b/packages/cli/src/ui/themes/color-utils.ts
+@@ -251,3 +251,22 @@ export function interpolateColor(
+   const color = gradient.rgbAt(factor);
+   return color.toHexString();
+ }
++
++export function getThemeTypeFromBackgroundColor(
++  backgroundColor: string | undefined,
++): 'light' | 'dark' | undefined {
++  if (!backgroundColor) {
++    return undefined;
++  }
++
++  // Parse hex color
++  const hex = backgroundColor.replace(/^#/, '');
++  const r = parseInt(hex.substring(0, 2), 16);
++  const g = parseInt(hex.substring(2, 4), 16);
++  const b = parseInt(hex.substring(4, 6), 16);
++
++  // Calculate luminance
++  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
++
++  return luminance > 128 ? 'light' : 'dark';
++}
+diff --git a/packages/cli/src/ui/themes/shades-of-purple.ts b/packages/cli/src/ui/themes/shades-of-purple.ts
+index 7fc513a61..6e11aaec8 100644
+--- a/packages/cli/src/ui/themes/shades-of-purple.ts
++++ b/packages/cli/src/ui/themes/shades-of-purple.ts
+@@ -14,7 +14,7 @@ import { interpolateColor } from './color-utils.js';
+ const shadesOfPurpleColors: ColorsTheme = {
+   type: 'dark',
+   // Required colors for ColorsTheme interface
+-  Background: '#2d2b57', // Main background
++  Background: '#1e1e3f', // Main background in the VSCode terminal.
+   Foreground: '#e3dfff', // Default text color (hljs, hljs-subst)
+   LightBlue: '#847ace', // Light blue/purple accent
+   AccentBlue: '#a599e9', // Borders, secondary blue
+diff --git a/packages/cli/src/ui/themes/theme-manager.ts b/packages/cli/src/ui/themes/theme-manager.ts
+index 68db10827..9a1e6af7d 100644
+--- a/packages/cli/src/ui/themes/theme-manager.ts
++++ b/packages/cli/src/ui/themes/theme-manager.ts
+@@ -228,6 +228,14 @@ class ThemeManager {
+     return this.findThemeByName(themeName);
+   }
+ 
++  /**
++   * Gets all available themes.
++   * @returns A list of all available themes.
++   */
++  getAllThemes(): Theme[] {
++    return [...this.availableThemes, ...Array.from(this.customThemes.values())];
++  }
++
+   private isPath(themeName: string): boolean {
+     return (
+       themeName.endsWith('.json') ||
+diff --git a/packages/cli/src/ui/themes/theme.test.ts b/packages/cli/src/ui/themes/theme.test.ts
+index 8a56dd9ba..b69989376 100644
+--- a/packages/cli/src/ui/themes/theme.test.ts
++++ b/packages/cli/src/ui/themes/theme.test.ts
+@@ -168,3 +168,42 @@ describe('themeManager.loadCustomThemes', () => {
+     expect(result.name).toBe(legacyTheme.name);
+   });
+ });
++
++describe('pickDefaultThemeName', () => {
++  const { pickDefaultThemeName } = themeModule;
++  const mockThemes = [
++    { name: 'Dark Theme', type: 'dark', colors: { Background: '#000000' } },
++    { name: 'Light Theme', type: 'light', colors: { Background: '#ffffff' } },
++    { name: 'Blue Theme', type: 'dark', colors: { Background: '#0000ff' } },
++  ] as unknown as themeModule.Theme[];
++
++  it('should return exact match if found', () => {
++    expect(
++      pickDefaultThemeName('#0000ff', mockThemes, 'Dark Theme', 'Light Theme'),
++    ).toBe('Blue Theme');
++  });
++
++  it('should return exact match (case insensitive)', () => {
++    expect(
++      pickDefaultThemeName('#FFFFFF', mockThemes, 'Dark Theme', 'Light Theme'),
++    ).toBe('Light Theme');
++  });
++
++  it('should return default light theme for light background if no match', () => {
++    expect(
++      pickDefaultThemeName('#eeeeee', mockThemes, 'Dark Theme', 'Light Theme'),
++    ).toBe('Light Theme');
++  });
++
++  it('should return default dark theme for dark background if no match', () => {
++    expect(
++      pickDefaultThemeName('#111111', mockThemes, 'Dark Theme', 'Light Theme'),
++    ).toBe('Dark Theme');
++  });
++
++  it('should return default dark theme if background is undefined', () => {
++    expect(
++      pickDefaultThemeName(undefined, mockThemes, 'Dark Theme', 'Light Theme'),
++    ).toBe('Dark Theme');
++  });
++});
+diff --git a/packages/cli/src/ui/themes/theme.ts b/packages/cli/src/ui/themes/theme.ts
+index 6ef58aae8..5ba11cb32 100644
+--- a/packages/cli/src/ui/themes/theme.ts
++++ b/packages/cli/src/ui/themes/theme.ts
+@@ -6,7 +6,11 @@
+ 
+ import type { CSSProperties } from 'react';
+ import type { SemanticColors } from './semantic-tokens.js';
+-import { resolveColor, interpolateColor } from './color-utils.js';
++import {
++  resolveColor,
++  interpolateColor,
++  getThemeTypeFromBackgroundColor,
++} from './color-utils.js';
+ 
+ export type ThemeType = 'light' | 'dark' | 'ansi' | 'custom';
+ 
+@@ -499,3 +503,40 @@ function isValidThemeName(name: string): boolean {
+   // Theme name should be non-empty and not contain invalid characters
+   return name.trim().length > 0 && name.trim().length <= 50;
+ }
++
++/**
++ * Picks a default theme name based on terminal background color.
++ * It first tries to find a theme with an exact background color match.
++ * If no match is found, it falls back to a light or dark theme based on the
++ * luminance of the background color.
++ * @param terminalBackground The hex color string of the terminal background.
++ * @param availableThemes A list of available themes to search through.
++ * @param defaultDarkThemeName The name of the fallback dark theme.
++ * @param defaultLightThemeName The name of the fallback light theme.
++ * @returns The name of the chosen theme.
++ */
++export function pickDefaultThemeName(
++  terminalBackground: string | undefined,
++  availableThemes: readonly Theme[],
++  defaultDarkThemeName: string,
++  defaultLightThemeName: string,
++): string {
++  if (terminalBackground) {
++    const lowerTerminalBackground = terminalBackground.toLowerCase();
++    for (const theme of availableThemes) {
++      if (!theme.colors.Background) continue;
++      // resolveColor can return undefined
++      const themeBg = resolveColor(theme.colors.Background)?.toLowerCase();
++      if (themeBg === lowerTerminalBackground) {
++        return theme.name;
++      }
++    }
++  }
++
++  const themeType = getThemeTypeFromBackgroundColor(terminalBackground);
++  if (themeType === 'light') {
++    return defaultLightThemeName;
++  }
++
++  return defaultDarkThemeName;
++}
+diff --git a/packages/cli/src/ui/utils/kittyProtocolDetector.test.ts b/packages/cli/src/ui/utils/kittyProtocolDetector.test.ts
+deleted file mode 100644
+index 9bc28b44d..000000000
+--- a/packages/cli/src/ui/utils/kittyProtocolDetector.test.ts
++++ /dev/null
+@@ -1,145 +0,0 @@
+-/**
+- * @license
+- * Copyright 2025 Google LLC
+- * SPDX-License-Identifier: Apache-2.0
+- */
+-
+-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+-
+-// Mock dependencies
+-const mocks = vi.hoisted(() => ({
+-  writeSync: vi.fn(),
+-  enableKittyKeyboardProtocol: vi.fn(),
+-  disableKittyKeyboardProtocol: vi.fn(),
+-}));
+-
+-vi.mock('node:fs', () => ({
+-  writeSync: mocks.writeSync,
+-}));
+-
+-vi.mock('@google/gemini-cli-core', () => ({
+-  enableKittyKeyboardProtocol: mocks.enableKittyKeyboardProtocol,
+-  disableKittyKeyboardProtocol: mocks.disableKittyKeyboardProtocol,
+-}));
+-
+-describe('kittyProtocolDetector', () => {
+-  let originalStdin: NodeJS.ReadStream & { fd?: number };
+-  let originalStdout: NodeJS.WriteStream & { fd?: number };
+-  let stdinListeners: Record<string, (data: Buffer) => void> = {};
+-
+-  // Module functions
+-  let detectAndEnableKittyProtocol: typeof import('./kittyProtocolDetector.js').detectAndEnableKittyProtocol;
+-  let isKittyProtocolEnabled: typeof import('./kittyProtocolDetector.js').isKittyProtocolEnabled;
+-  let enableSupportedProtocol: typeof import('./kittyProtocolDetector.js').enableSupportedProtocol;
+-
+-  beforeEach(async () => {
+-    vi.resetModules();
+-    vi.resetAllMocks();
+-    vi.useFakeTimers();
+-
+-    const mod = await import('./kittyProtocolDetector.js');
+-    detectAndEnableKittyProtocol = mod.detectAndEnableKittyProtocol;
+-    isKittyProtocolEnabled = mod.isKittyProtocolEnabled;
+-    enableSupportedProtocol = mod.enableSupportedProtocol;
+-
+-    // Mock process.stdin and stdout
+-    originalStdin = process.stdin;
+-    originalStdout = process.stdout;
+-
+-    stdinListeners = {};
+-
+-    Object.defineProperty(process, 'stdin', {
+-      value: {
+-        isTTY: true,
+-        isRaw: false,
+-        setRawMode: vi.fn(),
+-        on: vi.fn((event, handler) => {
+-          stdinListeners[event] = handler;
+-        }),
+-        removeListener: vi.fn(),
+-      },
+-      configurable: true,
+-    });
+-
+-    Object.defineProperty(process, 'stdout', {
+-      value: {
+-        isTTY: true,
+-        fd: 1,
+-      },
+-      configurable: true,
+-    });
+-  });
+-
+-  afterEach(() => {
+-    Object.defineProperty(process, 'stdin', { value: originalStdin });
+-    Object.defineProperty(process, 'stdout', { value: originalStdout });
+-    vi.useRealTimers();
+-  });
+-
+-  it('should resolve immediately if not TTY', async () => {
+-    Object.defineProperty(process.stdin, 'isTTY', { value: false });
+-    await detectAndEnableKittyProtocol();
+-    expect(mocks.writeSync).not.toHaveBeenCalled();
+-  });
+-
+-  it('should enable protocol if response indicates support', async () => {
+-    const promise = detectAndEnableKittyProtocol();
+-
+-    // Simulate response
+-    expect(stdinListeners['data']).toBeDefined();
+-
+-    // Send progressive enhancement response
+-    stdinListeners['data'](Buffer.from('\x1b[?u'));
+-
+-    // Send device attributes response
+-    stdinListeners['data'](Buffer.from('\x1b[?c'));
+-
+-    await promise;
+-
+-    expect(mocks.enableKittyKeyboardProtocol).toHaveBeenCalled();
+-    expect(isKittyProtocolEnabled()).toBe(true);
+-  });
+-
+-  it('should not enable protocol if timeout occurs', async () => {
+-    const promise = detectAndEnableKittyProtocol();
+-
+-    // Fast forward time past timeout
+-    vi.advanceTimersByTime(300);
+-
+-    await promise;
+-
+-    expect(mocks.enableKittyKeyboardProtocol).not.toHaveBeenCalled();
+-  });
+-
+-  it('should wait longer if progressive enhancement received but not attributes', async () => {
+-    const promise = detectAndEnableKittyProtocol();
+-
+-    // Send progressive enhancement response
+-    stdinListeners['data'](Buffer.from('\x1b[?u'));
+-
+-    // Should not resolve yet
+-    vi.advanceTimersByTime(300); // Original timeout passed
+-
+-    // Send device attributes response late
+-    stdinListeners['data'](Buffer.from('\x1b[?c'));
+-
+-    await promise;
+-
+-    expect(mocks.enableKittyKeyboardProtocol).toHaveBeenCalled();
+-  });
+-
+-  it('should handle re-enabling protocol', async () => {
+-    // First, simulate successful detection to set kittySupported = true
+-    const promise = detectAndEnableKittyProtocol();
+-    stdinListeners['data'](Buffer.from('\x1b[?u'));
+-    stdinListeners['data'](Buffer.from('\x1b[?c'));
+-    await promise;
+-
+-    // Reset mocks to clear previous calls
+-    mocks.enableKittyKeyboardProtocol.mockClear();
+-
+-    // Now test re-enabling
+-    enableSupportedProtocol();
+-    expect(mocks.enableKittyKeyboardProtocol).toHaveBeenCalled();
+-  });
+-});
+diff --git a/packages/cli/src/ui/utils/kittyProtocolDetector.ts b/packages/cli/src/ui/utils/kittyProtocolDetector.ts
+deleted file mode 100644
+index a590eedef..000000000
+--- a/packages/cli/src/ui/utils/kittyProtocolDetector.ts
++++ /dev/null
+@@ -1,133 +0,0 @@
+-/**
+- * @license
+- * Copyright 2025 Google LLC
+- * SPDX-License-Identifier: Apache-2.0
+- */
+-
+-import * as fs from 'node:fs';
+-
+-let detectionComplete = false;
+-
+-let kittySupported = false;
+-
+-let kittyEnabled = false;
+-
+-/**
+- * Detects Kitty keyboard protocol support.
+- * Definitive document about this protocol lives at https://sw.kovidgoyal.net/kitty/keyboard-protocol/
+- * This function should be called once at app startup.
+- */
+-export async function detectAndEnableKittyProtocol(): Promise<void> {
+-  if (detectionComplete) {
+-    return;
+-  }
+-
+-  return new Promise((resolve) => {
+-    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+-      detectionComplete = true;
+-      resolve();
+-      return;
+-    }
+-
+-    const originalRawMode = process.stdin.isRaw;
+-    if (!originalRawMode) {
+-      process.stdin.setRawMode(true);
+-    }
+-
+-    let responseBuffer = '';
+-    let progressiveEnhancementReceived = false;
+-    let timeoutId: NodeJS.Timeout | undefined;
+-
+-    const finish = () => {
+-      if (timeoutId !== undefined) {
+-        clearTimeout(timeoutId);
+-        timeoutId = undefined;
+-      }
+-      process.stdin.removeListener('data', handleData);
+-      if (!originalRawMode) {
+-        process.stdin.setRawMode(false);
+-      }
+-
+-      if (kittySupported) {
+-        enableSupportedProtocol();
+-        process.on('exit', disableAllProtocols);
+-        process.on('SIGTERM', disableAllProtocols);
+-      }
+-
+-      detectionComplete = true;
+-      resolve();
+-    };
+-
+-    const handleData = (data: Buffer) => {
+-      if (timeoutId === undefined) {
+-        // Race condition. We have already timed out.
+-        return;
+-      }
+-      responseBuffer += data.toString();
+-
+-      // Check for progressive enhancement response (CSI ? <flags> u)
+-      if (responseBuffer.includes('\x1b[?') && responseBuffer.includes('u')) {
+-        progressiveEnhancementReceived = true;
+-        // Give more time to get the full set of kitty responses if we have an
+-        // indication the terminal probably supports kitty and we just need to
+-        // wait a bit longer for a response.
+-        clearTimeout(timeoutId);
+-        timeoutId = setTimeout(finish, 1000);
+-      }
+-
+-      // Check for device attributes response (CSI ? <attrs> c)
+-      if (responseBuffer.includes('\x1b[?') && responseBuffer.includes('c')) {
+-        if (progressiveEnhancementReceived) {
+-          kittySupported = true;
+-        }
+-
+-        finish();
+-      }
+-    };
+-
+-    process.stdin.on('data', handleData);
+-
+-    // Query progressive enhancement and device attributes
+-    fs.writeSync(process.stdout.fd, '\x1b[?u\x1b[c');
+-
+-    // Timeout after 200ms
+-    // When a iterm2 terminal does not have focus this can take over 90s on a
+-    // fast macbook so we need a somewhat longer threshold than would be ideal.
+-    timeoutId = setTimeout(finish, 200);
+-  });
+-}
+-
+-import {
+-  enableKittyKeyboardProtocol,
+-  disableKittyKeyboardProtocol,
+-} from '@google/gemini-cli-core';
+-
+-export function isKittyProtocolEnabled(): boolean {
+-  return kittyEnabled;
+-}
+-
+-function disableAllProtocols() {
+-  try {
+-    if (kittyEnabled) {
+-      disableKittyKeyboardProtocol();
+-      kittyEnabled = false;
+-    }
+-  } catch {
+-    // Ignore
+-  }
+-}
+-
+-/**
+- * This is exported so we can reenable this after exiting an editor which might
+- * change the mode.
+- */
+-export function enableSupportedProtocol(): void {
+-  try {
+-    if (kittySupported) {
+-      enableKittyKeyboardProtocol();
+-      kittyEnabled = true;
+-    }
+-  } catch {
+-    // Ignore
+-  }
+-}
+diff --git a/packages/cli/src/ui/utils/terminalCapabilityManager.test.ts b/packages/cli/src/ui/utils/terminalCapabilityManager.test.ts
+new file mode 100644
+index 000000000..8d28f632c
+--- /dev/null
++++ b/packages/cli/src/ui/utils/terminalCapabilityManager.test.ts
+@@ -0,0 +1,177 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { TerminalCapabilityManager } from './terminalCapabilityManager.js';
++import { EventEmitter } from 'node:events';
++
++// Mock fs
++vi.mock('node:fs', () => ({
++  writeSync: vi.fn(),
++}));
++
++// Mock core
++vi.mock('@google/gemini-cli-core', () => ({
++  debugLogger: {
++    log: vi.fn(),
++    warn: vi.fn(),
++  },
++  enableKittyKeyboardProtocol: vi.fn(),
++  disableKittyKeyboardProtocol: vi.fn(),
++}));
++
++describe('TerminalCapabilityManager', () => {
++  let stdin: EventEmitter & {
++    isTTY?: boolean;
++    isRaw?: boolean;
++    setRawMode?: (mode: boolean) => void;
++    removeListener?: (
++      event: string,
++      listener: (...args: unknown[]) => void,
++    ) => void;
++  };
++  let stdout: { isTTY?: boolean; fd?: number };
++  // Save original process properties
++  const originalStdin = process.stdin;
++  const originalStdout = process.stdout;
++
++  beforeEach(() => {
++    vi.resetAllMocks();
++
++    // Reset singleton
++    TerminalCapabilityManager.resetInstanceForTesting();
++
++    // Setup process mocks
++    stdin = new EventEmitter();
++    stdin.isTTY = true;
++    stdin.isRaw = false;
++    stdin.setRawMode = vi.fn();
++    stdin.removeListener = vi.fn();
++
++    stdout = { isTTY: true, fd: 1 };
++
++    // Use defineProperty to mock process.stdin/stdout
++    Object.defineProperty(process, 'stdin', {
++      value: stdin,
++      configurable: true,
++    });
++    Object.defineProperty(process, 'stdout', {
++      value: stdout,
++      configurable: true,
++    });
++
++    vi.useFakeTimers();
++  });
++
++  afterEach(() => {
++    vi.useRealTimers();
++    // Restore original process properties
++    Object.defineProperty(process, 'stdin', {
++      value: originalStdin,
++      configurable: true,
++    });
++    Object.defineProperty(process, 'stdout', {
++      value: originalStdout,
++      configurable: true,
++    });
++  });
++
++  it('should detect Kitty support when u response is received', async () => {
++    const manager = TerminalCapabilityManager.getInstance();
++    const promise = manager.detectCapabilities();
++
++    // Simulate Kitty response: \x1b[?1u
++    stdin.emit('data', Buffer.from('\x1b[?1u'));
++    // Complete detection with DA1
++    stdin.emit('data', Buffer.from('\x1b[?62c'));
++
++    await promise;
++    expect(manager.isKittyProtocolEnabled()).toBe(true);
++  });
++
++  it('should detect Background Color', async () => {
++    const manager = TerminalCapabilityManager.getInstance();
++    const promise = manager.detectCapabilities();
++
++    // Simulate OSC 11 response
++    // \x1b]11;rgb:0000/ff00/0000\x1b\
++    // RGB: 0, 255, 0 -> #00ff00
++    stdin.emit('data', Buffer.from('\x1b]11;rgb:0000/ffff/0000\x1b\\'));
++    // Complete detection with DA1
++    stdin.emit('data', Buffer.from('\x1b[?62c'));
++
++    await promise;
++    expect(manager.getTerminalBackgroundColor()).toBe('#00ff00');
++  });
++
++  it('should detect Terminal Name', async () => {
++    const manager = TerminalCapabilityManager.getInstance();
++    const promise = manager.detectCapabilities();
++
++    // Simulate Terminal Name response
++    stdin.emit('data', Buffer.from('\x1bP>|WezTerm 20240203\x1b\\'));
++    // Complete detection with DA1
++    stdin.emit('data', Buffer.from('\x1b[?62c'));
++
++    await promise;
++    expect(manager.getTerminalName()).toBe('WezTerm 20240203');
++  });
++
++  it('should complete early if sentinel (DA1) is found', async () => {
++    const manager = TerminalCapabilityManager.getInstance();
++    const promise = manager.detectCapabilities();
++
++    stdin.emit('data', Buffer.from('\x1b[?1u'));
++    stdin.emit('data', Buffer.from('\x1b]11;rgb:0000/0000/0000\x1b\\'));
++    // Sentinel
++    stdin.emit('data', Buffer.from('\x1b[?62c'));
++
++    // Should resolve without waiting for timeout
++    await promise;
++
++    expect(manager.isKittyProtocolEnabled()).toBe(true);
++    expect(manager.getTerminalBackgroundColor()).toBe('#000000');
++  });
++
++  it('should timeout if no DA1 (c) is received', async () => {
++    const manager = TerminalCapabilityManager.getInstance();
++    const promise = manager.detectCapabilities();
++
++    // Simulate only Kitty response
++    stdin.emit('data', Buffer.from('\x1b[?1u'));
++
++    // Advance to timeout
++    vi.advanceTimersByTime(1000);
++
++    await promise;
++    expect(manager.isKittyProtocolEnabled()).toBe(true);
++  });
++
++  it('should not detect Kitty if only DA1 (c) is received', async () => {
++    const manager = TerminalCapabilityManager.getInstance();
++    const promise = manager.detectCapabilities();
++
++    // Simulate DA1 response only: \x1b[?62;c
++    stdin.emit('data', Buffer.from('\x1b[?62c'));
++
++    await promise;
++    expect(manager.isKittyProtocolEnabled()).toBe(false);
++  });
++
++  it('should handle split chunks', async () => {
++    const manager = TerminalCapabilityManager.getInstance();
++    const promise = manager.detectCapabilities();
++
++    // Split response: \x1b[? 1u
++    stdin.emit('data', Buffer.from('\x1b[?'));
++    stdin.emit('data', Buffer.from('1u'));
++    // Complete with DA1
++    stdin.emit('data', Buffer.from('\x1b[?62c'));
++
++    await promise;
++    expect(manager.isKittyProtocolEnabled()).toBe(true);
++  });
++});
+diff --git a/packages/cli/src/ui/utils/terminalCapabilityManager.ts b/packages/cli/src/ui/utils/terminalCapabilityManager.ts
+new file mode 100644
+index 000000000..e7782883c
+--- /dev/null
++++ b/packages/cli/src/ui/utils/terminalCapabilityManager.ts
+@@ -0,0 +1,237 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import * as fs from 'node:fs';
++import {
++  debugLogger,
++  enableKittyKeyboardProtocol,
++  disableKittyKeyboardProtocol,
++} from '@google/gemini-cli-core';
++
++export type TerminalBackgroundColor = string | undefined;
++
++export class TerminalCapabilityManager {
++  private static instance: TerminalCapabilityManager | undefined;
++
++  private static readonly KITTY_QUERY = '\x1b[?u';
++  private static readonly OSC_11_QUERY = '\x1b]11;?\x1b\\';
++  private static readonly TERMINAL_NAME_QUERY = '\x1b[>q';
++  private static readonly DEVICE_ATTRIBUTES_QUERY = '\x1b[c';
++
++  // Kitty keyboard flags: CSI ? flags u
++  // eslint-disable-next-line no-control-regex
++  private static readonly KITTY_REGEX = /\x1b\[\?(\d+)u/;
++  // Terminal Name/Version response: DCS > | text ST (or BEL)
++  // eslint-disable-next-line no-control-regex
++  private static readonly TERMINAL_NAME_REGEX = /\x1bP>\|(.+?)(\x1b\\|\x07)/;
++  // Primary Device Attributes: CSI ? ID ; ... c
++  // eslint-disable-next-line no-control-regex
++  private static readonly DEVICE_ATTRIBUTES_REGEX = /\x1b\[\?(\d+)(;\d+)*c/;
++  // OSC 11 response: OSC 11 ; rgb:rrrr/gggg/bbbb ST (or BEL)
++  private static readonly OSC_11_REGEX =
++    // eslint-disable-next-line no-control-regex
++    /\x1b\]11;rgb:([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})(\x1b\\|\x07)?/;
++
++  private terminalBackgroundColor: TerminalBackgroundColor;
++  private kittySupported = false;
++  private kittyEnabled = false;
++  private detectionComplete = false;
++  private terminalName: string | undefined;
++
++  private constructor() {}
++
++  static getInstance(): TerminalCapabilityManager {
++    if (!this.instance) {
++      this.instance = new TerminalCapabilityManager();
++    }
++    return this.instance;
++  }
++
++  static resetInstanceForTesting(): void {
++    this.instance = undefined;
++  }
++
++  /**
++   * Detects terminal capabilities (Kitty protocol support, terminal name,
++   * background color).
++   * This should be called once at app startup.
++   */
++  async detectCapabilities(): Promise<void> {
++    if (this.detectionComplete) return;
++
++    if (!process.stdin.isTTY || !process.stdout.isTTY) {
++      this.detectionComplete = true;
++      return;
++    }
++
++    return new Promise((resolve) => {
++      const originalRawMode = process.stdin.isRaw;
++      if (!originalRawMode) {
++        process.stdin.setRawMode(true);
++      }
++
++      let buffer = '';
++      let kittyKeyboardReceived = false;
++      let terminalNameReceived = false;
++      let deviceAttributesReceived = false;
++      let bgReceived = false;
++      // eslint-disable-next-line prefer-const
++      let timeoutId: NodeJS.Timeout;
++
++      const cleanup = () => {
++        if (timeoutId) {
++          clearTimeout(timeoutId);
++        }
++        process.stdin.removeListener('data', onData);
++        if (!originalRawMode) {
++          process.stdin.setRawMode(false);
++        }
++        this.detectionComplete = true;
++
++        // Auto-enable kitty if supported
++        if (this.kittySupported) {
++          this.enableKittyProtocol();
++          process.on('exit', () => this.disableKittyProtocol());
++          process.on('SIGTERM', () => this.disableKittyProtocol());
++        }
++
++        resolve();
++      };
++
++      const onTimeout = () => {
++        cleanup();
++      };
++
++      // A somewhat long timeout is acceptable as all terminals should respond
++      // to the device attributes query used as a sentinel.
++      timeoutId = setTimeout(onTimeout, 1000);
++
++      const onData = (data: Buffer) => {
++        buffer += data.toString();
++
++        // Check OSC 11
++        if (!bgReceived) {
++          const match = buffer.match(TerminalCapabilityManager.OSC_11_REGEX);
++          if (match) {
++            bgReceived = true;
++            this.terminalBackgroundColor = this.parseColor(
++              match[1],
++              match[2],
++              match[3],
++            );
++            debugLogger.log(
++              `Detected terminal background color: ${this.terminalBackgroundColor}`,
++            );
++          }
++        }
++
++        if (
++          !kittyKeyboardReceived &&
++          TerminalCapabilityManager.KITTY_REGEX.test(buffer)
++        ) {
++          kittyKeyboardReceived = true;
++          this.kittySupported = true;
++        }
++
++        // Check for Terminal Name/Version response.
++        if (!terminalNameReceived) {
++          const match = buffer.match(
++            TerminalCapabilityManager.TERMINAL_NAME_REGEX,
++          );
++          if (match) {
++            terminalNameReceived = true;
++            this.terminalName = match[1];
++
++            debugLogger.log(`Detected terminal name: ${this.terminalName}`);
++          }
++        }
++
++        // We use the Primary Device Attributes response as a sentinel to know
++        // that the terminal has processed all our queries. Since we send it
++        // last, receiving it means we can stop waiting.
++        if (!deviceAttributesReceived) {
++          const match = buffer.match(
++            TerminalCapabilityManager.DEVICE_ATTRIBUTES_REGEX,
++          );
++          if (match) {
++            deviceAttributesReceived = true;
++            cleanup();
++          }
++        }
++      };
++
++      process.stdin.on('data', onData);
++
++      try {
++        fs.writeSync(
++          process.stdout.fd,
++          TerminalCapabilityManager.KITTY_QUERY +
++            TerminalCapabilityManager.OSC_11_QUERY +
++            TerminalCapabilityManager.TERMINAL_NAME_QUERY +
++            TerminalCapabilityManager.DEVICE_ATTRIBUTES_QUERY,
++        );
++      } catch (e) {
++        debugLogger.warn('Failed to write terminal capability queries:', e);
++        cleanup();
++      }
++    });
++  }
++
++  getTerminalBackgroundColor(): TerminalBackgroundColor {
++    return this.terminalBackgroundColor;
++  }
++
++  getTerminalName(): string | undefined {
++    return this.terminalName;
++  }
++
++  isKittyProtocolEnabled(): boolean {
++    return this.kittyEnabled;
++  }
++
++  enableKittyProtocol(): void {
++    try {
++      if (this.kittySupported) {
++        enableKittyKeyboardProtocol();
++        this.kittyEnabled = true;
++      }
++    } catch (e) {
++      debugLogger.warn('Failed to enable Kitty protocol:', e);
++    }
++  }
++
++  disableKittyProtocol(): void {
++    try {
++      if (this.kittyEnabled) {
++        disableKittyKeyboardProtocol();
++        this.kittyEnabled = false;
++      }
++    } catch (e) {
++      debugLogger.warn('Failed to disable Kitty protocol:', e);
++    }
++  }
++
++  private parseColor(rHex: string, gHex: string, bHex: string): string {
++    const parseComponent = (hex: string) => {
++      const val = parseInt(hex, 16);
++      if (hex.length === 1) return (val / 15) * 255;
++      if (hex.length === 2) return val;
++      if (hex.length === 3) return (val / 4095) * 255;
++      if (hex.length === 4) return (val / 65535) * 255;
++      return val;
++    };
++
++    const r = parseComponent(rHex);
++    const g = parseComponent(gHex);
++    const b = parseComponent(bHex);
++
++    const toHex = (c: number) => Math.round(c).toString(16).padStart(2, '0');
++    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
++  }
++}
++
++export const terminalCapabilityManager =
++  TerminalCapabilityManager.getInstance();
+diff --git a/packages/cli/src/ui/utils/terminalSetup.test.ts b/packages/cli/src/ui/utils/terminalSetup.test.ts
+index 5e15b9f6e..6a4c3d85e 100644
+--- a/packages/cli/src/ui/utils/terminalSetup.test.ts
++++ b/packages/cli/src/ui/utils/terminalSetup.test.ts
+@@ -42,8 +42,10 @@ vi.mock('node:os', () => ({
+   platform: mocks.platform,
+ }));
+ 
+-vi.mock('./kittyProtocolDetector.js', () => ({
+-  isKittyProtocolEnabled: vi.fn().mockReturnValue(false),
++vi.mock('./terminalCapabilityManager.js', () => ({
++  terminalCapabilityManager: {
++    isKittyProtocolEnabled: vi.fn().mockReturnValue(false),
++  },
+ }));
+ 
+ describe('terminalSetup', () => {
+diff --git a/packages/cli/src/ui/utils/terminalSetup.ts b/packages/cli/src/ui/utils/terminalSetup.ts
+index 2d8a540ab..a66b6a19f 100644
+--- a/packages/cli/src/ui/utils/terminalSetup.ts
++++ b/packages/cli/src/ui/utils/terminalSetup.ts
+@@ -28,7 +28,7 @@ import * as os from 'node:os';
+ import * as path from 'node:path';
+ import { exec } from 'node:child_process';
+ import { promisify } from 'node:util';
+-import { isKittyProtocolEnabled } from './kittyProtocolDetector.js';
++import { terminalCapabilityManager } from './terminalCapabilityManager.js';
+ 
+ import { debugLogger } from '@google/gemini-cli-core';
+ 
+@@ -323,7 +323,7 @@ async function configureWindsurf(): Promise<TerminalSetupResult> {
+  */
+ export async function terminalSetup(): Promise<TerminalSetupResult> {
+   // Check if terminal already has optimal keyboard support
+-  if (isKittyProtocolEnabled()) {
++  if (terminalCapabilityManager.isKittyProtocolEnabled()) {
+     return {
+       success: true,
+       message:
+diff --git a/packages/cli/src/utils/terminalTheme.ts b/packages/cli/src/utils/terminalTheme.ts
+new file mode 100644
+index 000000000..024e79e23
+--- /dev/null
++++ b/packages/cli/src/utils/terminalTheme.ts
+@@ -0,0 +1,73 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import {
++  type TerminalBackgroundColor,
++  terminalCapabilityManager,
++} from '../ui/utils/terminalCapabilityManager.js';
++import { themeManager, DEFAULT_THEME } from '../ui/themes/theme-manager.js';
++import { pickDefaultThemeName } from '../ui/themes/theme.js';
++import { getThemeTypeFromBackgroundColor } from '../ui/themes/color-utils.js';
++import type { LoadedSettings } from '../config/settings.js';
++import { type Config, coreEvents, debugLogger } from '@google/gemini-cli-core';
++
++/**
++ * Detects terminal capabilities, loads themes, and sets the active theme.
++ * @param config The application config.
++ * @param settings The loaded settings.
++ * @returns The detected terminal background color.
++ */
++export async function setupTerminalAndTheme(
++  config: Config,
++  settings: LoadedSettings,
++): Promise<TerminalBackgroundColor> {
++  let terminalBackground: TerminalBackgroundColor = undefined;
++  if (config.isInteractive() && process.stdin.isTTY) {
++    // Detect terminal capabilities (Kitty protocol, background color) in parallel.
++    await terminalCapabilityManager.detectCapabilities();
++    terminalBackground = terminalCapabilityManager.getTerminalBackgroundColor();
++  }
++
++  // Load custom themes from settings
++  themeManager.loadCustomThemes(settings.merged.ui?.customThemes);
++
++  if (settings.merged.ui?.theme) {
++    if (!themeManager.setActiveTheme(settings.merged.ui?.theme)) {
++      // If the theme is not found during initial load, log a warning and continue.
++      // The useThemeCommand hook in AppContainer.tsx will handle opening the dialog.
++      debugLogger.warn(
++        `Warning: Theme "${settings.merged.ui?.theme}" not found.`,
++      );
++    }
++  } else {
++    // If no theme is set, check terminal background color
++    const themeName = pickDefaultThemeName(
++      terminalBackground,
++      themeManager.getAllThemes(),
++      DEFAULT_THEME.name,
++      'Default Light',
++    );
++    themeManager.setActiveTheme(themeName);
++  }
++
++  config.setTerminalBackground(terminalBackground);
++
++  if (terminalBackground !== undefined) {
++    const currentTheme = themeManager.getActiveTheme();
++    if (currentTheme.type !== 'ansi' && currentTheme.type !== 'custom') {
++      const backgroundType =
++        getThemeTypeFromBackgroundColor(terminalBackground);
++      if (backgroundType && currentTheme.type !== backgroundType) {
++        coreEvents.emitFeedback(
++          'warning',
++          `Theme '${currentTheme.name}' (${currentTheme.type}) might look incorrect on your ${backgroundType} terminal background. Type /theme to change theme.`,
++        );
++      }
++    }
++  }
++
++  return terminalBackground;
++}
+diff --git a/packages/core/src/config/config.ts b/packages/core/src/config/config.ts
+index 934d8b88c..a62eaac84 100644
+--- a/packages/core/src/config/config.ts
++++ b/packages/core/src/config/config.ts
+@@ -450,6 +450,7 @@ export class Config {
+ 
+   private readonly experimentalJitContext: boolean;
+   private contextManager?: ContextManager;
++  private terminalBackground: string | undefined = undefined;
+ 
+   constructor(params: ConfigParameters) {
+     this.sessionId = params.sessionId;
+@@ -820,6 +821,14 @@ export class Config {
+     this.sessionId = sessionId;
+   }
+ 
++  setTerminalBackground(terminalBackground: string | undefined): void {
++    this.terminalBackground = terminalBackground;
++  }
++
++  getTerminalBackground(): string | undefined {
++    return this.terminalBackground;
++  }
++
+   shouldLoadMemoryFromIncludeDirectories(): boolean {
+     return this.loadMemoryFromIncludeDirectories;
+   }
