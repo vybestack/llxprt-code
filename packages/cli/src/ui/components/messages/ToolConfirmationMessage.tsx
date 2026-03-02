@@ -50,7 +50,9 @@ export const ToolConfirmationMessage: React.FC<
     settings.merged.security?.enablePermanentToolApproval ?? false;
 
   const [ideClient, setIdeClient] = useState<IdeClient | null>(null);
-  const [isDiffingEnabled, setIsDiffingEnabled] = useState(false);
+  const [isDiffingEnabled, setIsDiffingEnabled] = useState<boolean | null>(
+    config.getIdeMode() ? null : false,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -127,7 +129,7 @@ export const ToolConfirmationMessage: React.FC<
             });
           }
         }
-        if (!config.getIdeMode() || !isDiffingEnabled) {
+        if (!config.getIdeMode() || isDiffingEnabled === false) {
           options.push({
             label: 'Modify with external editor',
             value: ToolConfirmationOutcome.ModifyWithEditor,
