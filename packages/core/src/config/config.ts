@@ -544,6 +544,7 @@ export class Config {
   private approvalMode: ApprovalMode;
   private readonly jitContextEnabled?: boolean;
   private contextManager?: ContextManager;
+  private terminalBackground: string | undefined = undefined;
   private readonly showMemoryUsage: boolean;
   private readonly accessibility: AccessibilitySettings;
   private telemetrySettings: TelemetrySettings;
@@ -1197,6 +1198,14 @@ export class Config {
 
   shouldLoadMemoryFromIncludeDirectories(): boolean {
     return this.loadMemoryFromIncludeDirectories;
+  }
+
+  setTerminalBackground(terminalBackground: string | undefined): void {
+    this.terminalBackground = terminalBackground;
+  }
+
+  getTerminalBackground(): string | undefined {
+    return this.terminalBackground;
   }
 
   getContentGeneratorConfig(): ContentGeneratorConfig | undefined {
