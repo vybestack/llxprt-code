@@ -11,7 +11,7 @@ import {
   DISABLE_FOCUS_TRACKING,
   SHOW_CURSOR,
 } from './terminalSequences.js';
-import { disableDetectedTerminalProtocolsSync } from './kittyProtocolDetector.js';
+import { terminalCapabilityManager } from './terminalCapabilityManager.js';
 
 const DISABLE_EXTRA_MOUSE_MODES = '\x1b[?1003l\x1b[?1000l';
 
@@ -32,7 +32,7 @@ export function restoreTerminalProtocolsSync(): void {
   }
 
   try {
-    disableDetectedTerminalProtocolsSync();
+    terminalCapabilityManager.disableKittyProtocol();
     fs.writeSync(process.stdout.fd, TERMINAL_PROTOCOL_RESTORE_SEQUENCES);
   } catch (_err) {
     // Ignore failures during shutdown; terminal may already be closed.

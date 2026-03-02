@@ -80,8 +80,15 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-vi.mock('./ui/utils/kittyProtocolDetector.js', () => ({
-  detectAndEnableKittyProtocol: vi.fn(() => Promise.resolve()),
+vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
+  terminalCapabilityManager: {
+    detectCapabilities: vi.fn(() => Promise.resolve()),
+    isKittyProtocolEnabled: vi.fn(() => false),
+    enableKittyProtocol: vi.fn(),
+    disableKittyProtocol: vi.fn(),
+    getTerminalName: vi.fn(() => undefined),
+    getTerminalBackgroundColor: vi.fn(() => undefined),
+  },
 }));
 
 vi.mock('./ui/utils/terminalContract.js', () => ({

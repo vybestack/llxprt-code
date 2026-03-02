@@ -23,8 +23,15 @@ vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
 }));
 
-vi.mock('./ui/utils/kittyProtocolDetector.js', () => ({
-  detectAndEnableKittyProtocol: vi.fn(() => Promise.resolve()),
+vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
+  terminalCapabilityManager: {
+    detectCapabilities: vi.fn(() => Promise.resolve()),
+    isKittyProtocolEnabled: vi.fn(() => false),
+    enableKittyProtocol: vi.fn(),
+    disableKittyProtocol: vi.fn(),
+    getTerminalName: vi.fn(() => undefined),
+    getTerminalBackgroundColor: vi.fn(() => undefined),
+  },
 }));
 
 vi.mock('./ui/utils/updateCheck.js', () => ({

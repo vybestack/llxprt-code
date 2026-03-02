@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import * as kittyProtocolDetector from './kittyProtocolDetector.js';
+import { terminalCapabilityManager } from './terminalCapabilityManager.js';
 import {
   restoreTerminalProtocolsSync,
   TERMINAL_PROTOCOL_RESTORE_SEQUENCES,
@@ -54,7 +54,7 @@ describe('terminalProtocolCleanup', () => {
     });
 
     const disableKittySpy = vi
-      .spyOn(kittyProtocolDetector, 'disableDetectedTerminalProtocolsSync')
+      .spyOn(terminalCapabilityManager, 'disableKittyProtocol')
       .mockImplementation(() => {});
 
     restoreTerminalProtocolsSync();
@@ -73,8 +73,8 @@ describe('terminalProtocolCleanup', () => {
     });
 
     const disableKittySpy = vi.spyOn(
-      kittyProtocolDetector,
-      'disableDetectedTerminalProtocolsSync',
+      terminalCapabilityManager,
+      'disableKittyProtocol',
     );
 
     restoreTerminalProtocolsSync();
