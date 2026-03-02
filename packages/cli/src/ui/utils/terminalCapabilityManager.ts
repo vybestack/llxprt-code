@@ -93,8 +93,7 @@ export class TerminalCapabilityManager {
         // Auto-enable kitty if supported
         if (this.kittySupported) {
           this.enableKittyProtocol();
-          process.on('exit', () => this.disableKittyProtocol());
-          process.on('SIGTERM', () => this.disableKittyProtocol());
+          process.once('exit', () => this.disableKittyProtocol());
         }
 
         resolve();

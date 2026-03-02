@@ -80,13 +80,23 @@ describe('setupTerminalAndTheme', () => {
   });
 
   describe('Interactive TTY', () => {
+    let originalIsTTY: boolean | undefined;
+
     beforeEach(() => {
       // Mock interactive TTY
       vi.spyOn(config, 'isInteractive').mockReturnValue(true);
+      originalIsTTY = process.stdin.isTTY;
       // Set isTTY directly on process.stdin
       Object.defineProperty(process.stdin, 'isTTY', {
         value: true,
         writable: true,
+        configurable: true,
+      });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: originalIsTTY,
         configurable: true,
       });
     });
