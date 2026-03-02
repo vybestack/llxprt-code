@@ -19,6 +19,7 @@ import {
   ContentValidation,
   type ToolCallBlock,
   type ToolResponseBlock,
+  type MediaBlock,
 } from './IContent.js';
 import { EventEmitter } from 'events';
 import { type ITokenizer } from '../../providers/tokenizers/ITokenizer.js';
@@ -1319,6 +1320,7 @@ export class HistoryService
     }
 
     const responsesByToolCallIndex = new Map<number, ToolResponseBlock[]>();
+    const mediaBlocksByToolCallIndex = new Map<number, MediaBlock[]>();
     const keptResponseByCallId = new Map<
       string,
       {
@@ -1346,6 +1348,14 @@ export class HistoryService
       if (toolResponseBlocks.length === 0) {
         return content;
       }
+
+      // Collect media blocks alongside tool_response blocks — associate once
+      // with the first resolved tool call index to avoid duplicating media
+      // when a single tool message has responses for multiple call IDs.
+      const mediaBlocks = content.blocks.filter(
+        (b): b is MediaBlock => b.type === 'media',
+      );
+      let mediaAssignedToIndex: number | undefined;
 
       for (const toolResponse of toolResponseBlocks) {
         const callId = toolResponse.callId;
@@ -1388,10 +1398,21 @@ export class HistoryService
           responseIndex: list.length - 1,
           response: toolResponse,
         });
+
+        // Associate media blocks with the first resolved tool call index only
+        if (mediaBlocks.length > 0 && mediaAssignedToIndex === undefined) {
+          mediaAssignedToIndex = toolCallIndex;
+          const existingMedia =
+            mediaBlocksByToolCallIndex.get(toolCallIndex) ?? [];
+          mediaBlocksByToolCallIndex.set(toolCallIndex, [
+            ...existingMedia,
+            ...mediaBlocks,
+          ]);
+        }
       }
 
       const remainingBlocks = content.blocks.filter(
-        (b) => b.type !== 'tool_response',
+        (b) => b.type !== 'tool_response' && b.type !== 'media',
       );
 
       // After stripping, drop tool-speaker messages entirely; providers will
@@ -1420,9 +1441,10 @@ export class HistoryService
 
       const responses = responsesByToolCallIndex.get(i);
       if (responses && responses.length > 0) {
+        const mediaForThisIndex = mediaBlocksByToolCallIndex.get(i) ?? [];
         result.push({
           speaker: 'tool',
-          blocks: responses,
+          blocks: [...responses, ...mediaForThisIndex],
           metadata: {
             synthetic: true,
             reason: 'reordered_tool_responses',

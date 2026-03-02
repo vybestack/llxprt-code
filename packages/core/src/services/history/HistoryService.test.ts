@@ -1331,6 +1331,252 @@ describe('HistoryService - Behavioral Tests', () => {
         );
         expect(toolResponses).toHaveLength(1);
       });
+
+      it('should preserve MediaBlocks alongside tool_response in getCuratedForProvider', () => {
+        service.add(createUserMessage('Take a screenshot'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_screenshot',
+              name: 'take_screenshot',
+              parameters: { filename: 'test.png' },
+            },
+          ],
+        });
+        service.add({
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_screenshot',
+              toolName: 'take_screenshot',
+              result: { success: true },
+              isComplete: true,
+            },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+              encoding: 'base64' as const,
+              filename: 'test.png',
+            },
+          ],
+        });
+
+        const curated = service.getCuratedForProvider();
+
+        // Find the tool result message after the tool_call
+        const toolCallIndex = curated.findIndex(
+          (c) =>
+            c.speaker === 'ai' &&
+            c.blocks.some(
+              (b) => b.type === 'tool_call' && b.id === 'call_screenshot',
+            ),
+        );
+        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+
+        const toolResultMessage = curated[toolCallIndex + 1];
+        expect(toolResultMessage).toBeDefined();
+        expect(toolResultMessage.speaker).toBe('tool');
+
+        // Assert both tool_response AND media blocks are present
+        const toolResponseBlocks = toolResultMessage.blocks.filter(
+          (b) => b.type === 'tool_response',
+        );
+        const mediaBlocks = toolResultMessage.blocks.filter(
+          (b) => b.type === 'media',
+        );
+
+        expect(toolResponseBlocks).toHaveLength(1);
+        expect(mediaBlocks).toHaveLength(1);
+        expect(mediaBlocks[0]).toMatchObject({
+          type: 'media',
+          mimeType: 'image/png',
+          encoding: 'base64',
+          filename: 'test.png',
+        });
+      });
+
+      it('should preserve multiple MediaBlocks from tool response', () => {
+        service.add(createUserMessage('Generate report'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_report',
+              name: 'generate_report',
+              parameters: { format: 'multi' },
+            },
+          ],
+        });
+        service.add({
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_report',
+              toolName: 'generate_report',
+              result: { success: true },
+              isComplete: true,
+            },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'base64_chart_data',
+              encoding: 'base64' as const,
+              filename: 'chart.png',
+            },
+            {
+              type: 'media',
+              mimeType: 'application/pdf',
+              data: 'base64_pdf_data',
+              encoding: 'base64' as const,
+              filename: 'report.pdf',
+            },
+          ],
+        });
+
+        const curated = service.getCuratedForProvider();
+
+        const toolCallIndex = curated.findIndex(
+          (c) =>
+            c.speaker === 'ai' &&
+            c.blocks.some(
+              (b) => b.type === 'tool_call' && b.id === 'call_report',
+            ),
+        );
+        const toolResultMessage = curated[toolCallIndex + 1];
+
+        // Assert both media blocks are present
+        const mediaBlocks = toolResultMessage.blocks.filter(
+          (b) => b.type === 'media',
+        );
+        expect(mediaBlocks).toHaveLength(2);
+        expect(mediaBlocks[0]?.mimeType).toBe('image/png');
+        expect(mediaBlocks[1]?.mimeType).toBe('application/pdf');
+      });
+
+      it('should preserve MediaBlocks even when tool responses are reordered', () => {
+        service.add(createUserMessage('Take screenshot'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_reorder',
+              name: 'take_screenshot',
+              parameters: {},
+            },
+          ],
+        });
+        // Add an intervening AI message (out of order)
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'text',
+              text: 'Processing...',
+            },
+          ],
+        });
+        // Tool response comes after intervening message
+        service.add({
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_reorder',
+              toolName: 'take_screenshot',
+              result: { success: true },
+              isComplete: true,
+            },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'base64_screenshot_data',
+              encoding: 'base64' as const,
+            },
+          ],
+        });
+
+        const curated = service.getCuratedForProvider();
+
+        // After curation, media blocks should still be present next to tool_response
+        const toolMessages = curated.filter((c) => c.speaker === 'tool');
+        expect(toolMessages.length).toBeGreaterThan(0);
+
+        const toolMessageWithMedia = toolMessages.find((msg) =>
+          msg.blocks.some((b) => b.type === 'media'),
+        );
+        expect(toolMessageWithMedia).toBeDefined();
+
+        const mediaBlocks = toolMessageWithMedia!.blocks.filter(
+          (b) => b.type === 'media',
+        );
+        expect(mediaBlocks).toHaveLength(1);
+        expect(mediaBlocks[0]?.mimeType).toBe('image/png');
+      });
+
+      it('should not duplicate MediaBlocks when tool message has responses for multiple call IDs', () => {
+        service.add(createUserMessage('Do two things'));
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_a',
+              name: 'read_file',
+              parameters: { path: 'a.png' },
+            },
+            {
+              type: 'tool_call',
+              id: 'call_b',
+              name: 'read_file',
+              parameters: { path: 'b.txt' },
+            },
+          ],
+        });
+        service.add({
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_a',
+              toolName: 'read_file',
+              result: { success: true },
+              isComplete: true,
+            },
+            {
+              type: 'tool_response',
+              callId: 'call_b',
+              toolName: 'read_file',
+              result: { content: 'hello' },
+              isComplete: true,
+            },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'base64imagedata',
+              encoding: 'base64' as const,
+              filename: 'a.png',
+            },
+          ],
+        });
+
+        const curated = service.getCuratedForProvider();
+
+        // Count total media blocks across all curated messages
+        const allMediaBlocks = curated.flatMap((c) =>
+          c.blocks.filter((b) => b.type === 'media'),
+        );
+
+        // Media should appear exactly once, not duplicated across call indices
+        expect(allMediaBlocks).toHaveLength(1);
+        expect(allMediaBlocks[0]?.mimeType).toBe('image/png');
+      });
     });
   });
 });
