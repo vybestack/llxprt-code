@@ -22,11 +22,16 @@ import type {
 import type { Config } from '../../config/config.js';
 import { limitOutputTokens } from '../../utils/toolOutputLimiter.js';
 import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
-import { normalizeMediaToDataUri } from '../utils/mediaUtils.js';
+import {
+  normalizeMediaToDataUri,
+  classifyMediaBlock,
+  buildUnsupportedMediaPlaceholder,
+} from '../utils/mediaUtils.js';
 
 type ResponsesContentPart =
   | { type: 'input_text'; text: string }
-  | { type: 'input_image'; image_url: string };
+  | { type: 'input_image'; image_url: string }
+  | { type: 'input_file'; file_data: string; filename?: string };
 
 export type ResponsesInputItem =
   | {
@@ -61,9 +66,7 @@ export function buildResponsesInputFromContent(
 
   for (const c of content) {
     if (c.speaker === 'human') {
-      const hasMedia = c.blocks.some(
-        (b) => b.type === 'media' && b.mimeType.startsWith('image/'),
-      );
+      const hasMedia = c.blocks.some((b) => b.type === 'media');
 
       if (hasMedia) {
         const parts: ResponsesContentPart[] = [];
@@ -71,14 +74,28 @@ export function buildResponsesInputFromContent(
         for (const block of c.blocks) {
           if (block.type === 'text' && block.text) {
             parts.push({ type: 'input_text', text: block.text });
-          } else if (
-            block.type === 'media' &&
-            block.mimeType.startsWith('image/')
-          ) {
-            parts.push({
-              type: 'input_image',
-              image_url: normalizeMediaToDataUri(block),
-            });
+          } else if (block.type === 'media') {
+            const category = classifyMediaBlock(block);
+            if (category === 'image') {
+              parts.push({
+                type: 'input_image',
+                image_url: normalizeMediaToDataUri(block),
+              });
+            } else if (category === 'pdf') {
+              parts.push({
+                type: 'input_file',
+                file_data: normalizeMediaToDataUri(block),
+                ...(block.filename ? { filename: block.filename } : {}),
+              });
+            } else {
+              parts.push({
+                type: 'input_text',
+                text: buildUnsupportedMediaPlaceholder(
+                  block,
+                  'OpenAI Responses',
+                ),
+              });
+            }
           }
         }
 
@@ -120,8 +137,7 @@ export function buildResponsesInputFromContent(
         (b) => b.type === 'tool_response',
       );
       const mediaBlocks = c.blocks.filter(
-        (b): b is MediaBlock =>
-          b.type === 'media' && b.mimeType.startsWith('image/'),
+        (b): b is MediaBlock => b.type === 'media',
       );
 
       for (const toolResponseBlock of toolResponseBlocks) {
@@ -144,7 +160,6 @@ export function buildResponsesInputFromContent(
         let outputContent: string | ResponsesContentPart[];
 
         if (mediaBlocks.length > 0) {
-          // Multipart output with images
           const parts: ResponsesContentPart[] = [];
 
           if (textResult) {
@@ -152,15 +167,31 @@ export function buildResponsesInputFromContent(
           }
 
           for (const media of mediaBlocks) {
-            parts.push({
-              type: 'input_image',
-              image_url: normalizeMediaToDataUri(media),
-            });
+            const category = classifyMediaBlock(media);
+            if (category === 'image') {
+              parts.push({
+                type: 'input_image',
+                image_url: normalizeMediaToDataUri(media),
+              });
+            } else if (category === 'pdf') {
+              parts.push({
+                type: 'input_file',
+                file_data: normalizeMediaToDataUri(media),
+                ...(media.filename ? { filename: media.filename } : {}),
+              });
+            } else {
+              parts.push({
+                type: 'input_text',
+                text: buildUnsupportedMediaPlaceholder(
+                  media,
+                  'OpenAI Responses',
+                ),
+              });
+            }
           }
 
           outputContent = parts;
         } else {
-          // Text-only output
           outputContent = textResult;
         }
 

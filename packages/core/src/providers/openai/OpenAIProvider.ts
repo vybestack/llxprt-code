@@ -45,6 +45,7 @@ import {
   type TextBlock,
   type ToolResponseBlock,
   type ThinkingBlock,
+  type MediaBlock,
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { type IModel } from '../IModel.js';
@@ -84,7 +85,11 @@ import {
   normalizeToOpenAIToolId,
   normalizeToHistoryToolId,
 } from '../utils/toolIdNormalization.js';
-import { normalizeMediaToDataUri } from '../utils/mediaUtils.js';
+import {
+  normalizeMediaToDataUri,
+  classifyMediaBlock,
+  buildUnsupportedMediaPlaceholder,
+} from '../utils/mediaUtils.js';
 
 const TOOL_ARGS_PREVIEW_LENGTH = 500;
 
@@ -943,29 +948,44 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     for (const content of filteredContents) {
       if (content.speaker === 'human') {
         // Convert human messages to user messages, preserving block order
-        const hasMedia = content.blocks.some(
-          (b) => b.type === 'media' && b.mimeType.startsWith('image/'),
-        );
+        const hasMedia = content.blocks.some((b) => b.type === 'media');
 
         if (hasMedia) {
           const parts: Array<
             | { type: 'text'; text: string }
             | { type: 'image_url'; image_url: { url: string } }
+            | {
+                type: 'file';
+                file: { filename: string; file_data: string };
+              }
           > = [];
 
           for (const block of content.blocks) {
             if (block.type === 'text' && block.text) {
               parts.push({ type: 'text', text: block.text });
-            } else if (
-              block.type === 'media' &&
-              block.mimeType.startsWith('image/')
-            ) {
-              parts.push({
-                type: 'image_url',
-                image_url: {
-                  url: normalizeMediaToDataUri(block),
-                },
-              });
+            } else if (block.type === 'media') {
+              const category = classifyMediaBlock(block);
+              if (category === 'image') {
+                parts.push({
+                  type: 'image_url',
+                  image_url: {
+                    url: normalizeMediaToDataUri(block),
+                  },
+                });
+              } else if (category === 'pdf') {
+                parts.push({
+                  type: 'file',
+                  file: {
+                    filename: block.filename ?? 'document.pdf',
+                    file_data: normalizeMediaToDataUri(block),
+                  },
+                });
+              } else {
+                parts.push({
+                  type: 'text',
+                  text: buildUnsupportedMediaPlaceholder(block, 'OpenAI'),
+                });
+              }
             }
           }
 
@@ -1063,12 +1083,24 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         const toolResponses = content.blocks.filter(
           (b) => b.type === 'tool_response',
         );
+        const mediaBlocks = content.blocks.filter(
+          (b): b is MediaBlock => b.type === 'media',
+        );
+        const mediaFallback = mediaBlocks
+          .map((mb) =>
+            buildUnsupportedMediaPlaceholder(mb, 'OpenAI Chat Completions'),
+          )
+          .join('\n');
 
         for (const tr of toolResponses) {
-          // OpenAI Chat Completions tool messages only support text content
+          let toolContent = this.buildToolResponseContent(tr, options.config);
+          if (mediaFallback) {
+            toolContent = toolContent + '\n' + mediaFallback;
+          }
+
           const toolMessage: Record<string, unknown> = {
             role: 'tool',
-            content: this.buildToolResponseContent(tr, options.config),
+            content: toolContent,
             tool_call_id: resolveToolResponseId(tr),
           };
 

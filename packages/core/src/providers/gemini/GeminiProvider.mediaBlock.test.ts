@@ -367,4 +367,114 @@ describe('GeminiProvider - MediaBlock support', () => {
       },
     });
   });
+
+  it('converts PDF MediaBlock to inlineData (Gemini handles all media generically)', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'PDF content analyzed' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+    process.env.GEMINI_API_KEY = 'test-key';
+
+    const provider = new GeminiProvider('test-key');
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Summarize this document' },
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'JVBERi0xLjQ=',
+            encoding: 'base64',
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents,
+      }),
+    );
+
+    for await (const _chunk of generator) {
+      /* drain */
+    }
+
+    expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+    const callArgs = generateContentStreamMock.mock.calls[0][0];
+    expect(callArgs.contents[0].parts).toHaveLength(2);
+    expect(callArgs.contents[0].parts[1]).toEqual({
+      inlineData: {
+        mimeType: 'application/pdf',
+        data: 'JVBERi0xLjQ=',
+      },
+    });
+  });
+
+  it('handles audio and video media generically (no silent drops)', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Media received' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+    process.env.GEMINI_API_KEY = 'test-key';
+
+    const provider = new GeminiProvider('test-key');
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Analyze this' },
+          {
+            type: 'media',
+            mimeType: 'audio/mpeg',
+            data: 'audiodata',
+            encoding: 'base64',
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents,
+      }),
+    );
+
+    for await (const _chunk of generator) {
+      /* drain */
+    }
+
+    expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
+    const callArgs = generateContentStreamMock.mock.calls[0][0];
+    expect(callArgs.contents[0].parts).toHaveLength(2);
+    expect(callArgs.contents[0].parts[1]).toEqual({
+      inlineData: {
+        mimeType: 'audio/mpeg',
+        data: 'audiodata',
+      },
+    });
+  });
 });

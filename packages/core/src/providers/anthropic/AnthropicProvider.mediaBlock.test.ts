@@ -24,6 +24,12 @@ type AnthropicImageBlock = {
     | { type: 'url'; url: string };
 };
 
+type AnthropicDocumentBlock = {
+  type: 'document';
+  source: { type: 'base64'; media_type: string; data: string };
+  title?: string;
+};
+
 type AnthropicContentBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
@@ -32,10 +38,15 @@ type AnthropicContentBlock =
       tool_use_id: string;
       content:
         | string
-        | Array<{ type: 'text'; text: string } | AnthropicImageBlock>;
+        | Array<
+            | { type: 'text'; text: string }
+            | AnthropicImageBlock
+            | AnthropicDocumentBlock
+          >;
       is_error?: boolean;
     }
-  | AnthropicImageBlock;
+  | AnthropicImageBlock
+  | AnthropicDocumentBlock;
 
 interface AnthropicMessage {
   role: 'user' | 'assistant';
@@ -379,7 +390,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     });
   });
 
-  it('should not add image blocks for non-image MIME types', async () => {
+  it('should convert PDF MediaBlock to Anthropic document block in user messages', async () => {
     mockMessagesCreate.mockResolvedValue(createMockStream('OK'));
 
     const messages: IContent[] = [
@@ -391,6 +402,184 @@ describe('AnthropicProvider MediaBlock support', () => {
             type: 'media',
             mimeType: 'application/pdf',
             data: 'JVBERi0xLjQ=',
+            encoding: 'base64' as const,
+            filename: 'report.pdf',
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+    for await (const _chunk of generator) {
+      // consume
+    }
+
+    const request = mockMessagesCreate.mock.calls[0][0];
+    const anthropicMessages = request.messages as AnthropicMessage[];
+    const userMsg = anthropicMessages.find((m) => m.role === 'user');
+    expect(Array.isArray(userMsg!.content)).toBe(true);
+
+    const contentArray = userMsg!.content as AnthropicContentBlock[];
+    const docBlock = contentArray.find(
+      (b) => b.type === 'document',
+    ) as AnthropicDocumentBlock;
+    expect(docBlock).toBeDefined();
+    expect(docBlock.source).toEqual({
+      type: 'base64',
+      media_type: 'application/pdf',
+      data: 'JVBERi0xLjQ=',
+    });
+    expect(docBlock.title).toBe('report.pdf');
+  });
+
+  it('should convert PDF MediaBlock in tool responses to document block', async () => {
+    mockMessagesCreate.mockResolvedValue(createMockStream('OK'));
+
+    const toolCallId = 'hist_tool_readfile_789';
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Read this file' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: toolCallId,
+            name: 'read_file',
+            parameters: { path: 'doc.pdf' },
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: toolCallId,
+            toolName: 'read_file',
+            result: { output: 'Binary content provided (1 item(s)).' },
+          },
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'JVBERi0xLjQ=',
+            encoding: 'base64' as const,
+            filename: 'doc.pdf',
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+    for await (const _chunk of generator) {
+      // consume
+    }
+
+    const request = mockMessagesCreate.mock.calls[0][0];
+    const anthropicMessages = request.messages as AnthropicMessage[];
+
+    const toolResultMsg = anthropicMessages.find(
+      (msg) =>
+        msg.role === 'user' &&
+        Array.isArray(msg.content) &&
+        msg.content.some((b) => b.type === 'tool_result'),
+    );
+    expect(toolResultMsg).toBeDefined();
+
+    const toolResultBlock = (
+      toolResultMsg!.content as AnthropicContentBlock[]
+    ).find((b) => b.type === 'tool_result') as AnthropicContentBlock & {
+      type: 'tool_result';
+    };
+    expect(Array.isArray(toolResultBlock.content)).toBe(true);
+
+    const contentParts = toolResultBlock.content as Array<
+      | { type: 'text'; text: string }
+      | AnthropicImageBlock
+      | AnthropicDocumentBlock
+    >;
+    const docPart = contentParts.find(
+      (p) => p.type === 'document',
+    ) as AnthropicDocumentBlock;
+    expect(docPart).toBeDefined();
+    expect(docPart.source).toEqual({
+      type: 'base64',
+      media_type: 'application/pdf',
+      data: 'JVBERi0xLjQ=',
+    });
+  });
+
+  it('should produce text placeholder for unsupported media in user messages', async () => {
+    mockMessagesCreate.mockResolvedValue(createMockStream('OK'));
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Play this audio' },
+          {
+            type: 'media',
+            mimeType: 'audio/mpeg',
+            data: 'audiodata',
+            encoding: 'base64' as const,
+            filename: 'song.mp3',
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      buildCallOptions(messages),
+    );
+    for await (const _chunk of generator) {
+      // consume
+    }
+
+    const request = mockMessagesCreate.mock.calls[0][0];
+    const anthropicMessages = request.messages as AnthropicMessage[];
+    const userMsg = anthropicMessages.find((m) => m.role === 'user');
+    expect(Array.isArray(userMsg!.content)).toBe(true);
+
+    const contentArray = userMsg!.content as AnthropicContentBlock[];
+    const placeholder = contentArray.find(
+      (b) => b.type === 'text' && b.text.includes('Unsupported'),
+    ) as { type: 'text'; text: string };
+    expect(placeholder).toBeDefined();
+    expect(placeholder.text).toContain('audio/mpeg');
+    expect(placeholder.text).toContain('song.mp3');
+    expect(placeholder.text).toContain('Anthropic');
+  });
+
+  it('should never silently drop media - each MediaBlock produces output', async () => {
+    mockMessagesCreate.mockResolvedValue(createMockStream('OK'));
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Mixed media' },
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            data: 'imgdata',
+            encoding: 'base64' as const,
+          },
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'pdfdata',
+            encoding: 'base64' as const,
+          },
+          {
+            type: 'media',
+            mimeType: 'video/mp4',
+            data: 'viddata',
             encoding: 'base64' as const,
           },
         ],
@@ -407,7 +596,12 @@ describe('AnthropicProvider MediaBlock support', () => {
     const request = mockMessagesCreate.mock.calls[0][0];
     const anthropicMessages = request.messages as AnthropicMessage[];
     const userMsg = anthropicMessages.find((m) => m.role === 'user');
+    const contentArray = userMsg!.content as AnthropicContentBlock[];
 
-    expect(typeof userMsg!.content).toBe('string');
+    expect(contentArray).toHaveLength(4);
+    const types = contentArray.map((b) => b.type);
+    expect(types).toContain('image');
+    expect(types).toContain('document');
+    expect(types.filter((t) => t === 'text')).toHaveLength(2);
   });
 });

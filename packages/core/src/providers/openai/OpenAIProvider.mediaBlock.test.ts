@@ -206,6 +206,8 @@ describe('OpenAIProvider - MediaBlock support', () => {
     expect(toolMessage).toBeDefined();
     expect(typeof toolMessage.content).toBe('string');
     expect(toolMessage.content).toContain('Screenshot taken');
+    expect(toolMessage.content).toContain('Unsupported');
+    expect(toolMessage.content).toContain('image/png');
   });
 
   it('handles user message with only MediaBlocks (no text)', async () => {
@@ -321,5 +323,157 @@ describe('OpenAIProvider - MediaBlock support', () => {
         url: 'https://example.com/image.png',
       },
     });
+  });
+
+  it('converts PDF MediaBlock in user message to file content part', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [{ delta: { content: 'PDF received' } }],
+        };
+      },
+    };
+    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+    process.env.OPENAI_API_KEY = 'test-key';
+
+    const provider = new OpenAIProvider('test-key');
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Summarize this document' },
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'JVBERi0xLjQ=',
+            encoding: 'base64',
+            filename: 'report.pdf',
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({ providerName: provider.name, contents }),
+    );
+    for await (const _chunk of generator) {
+      /* drain */
+    }
+
+    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+    const userMessage = callArgs.messages.find(
+      (m: { role: string }) => m.role === 'user',
+    );
+    expect(userMessage.content).toHaveLength(2);
+    expect(userMessage.content[1]).toEqual({
+      type: 'file',
+      file: {
+        filename: 'report.pdf',
+        file_data: 'data:application/pdf;base64,JVBERi0xLjQ=',
+      },
+    });
+  });
+
+  it('produces text placeholder for unsupported media in user message', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [{ delta: { content: 'ok' } }],
+        };
+      },
+    };
+    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+    process.env.OPENAI_API_KEY = 'test-key';
+
+    const provider = new OpenAIProvider('test-key');
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Listen' },
+          {
+            type: 'media',
+            mimeType: 'audio/mpeg',
+            data: 'audiodata',
+            encoding: 'base64',
+            filename: 'song.mp3',
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({ providerName: provider.name, contents }),
+    );
+    for await (const _chunk of generator) {
+      /* drain */
+    }
+
+    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+    const userMessage = callArgs.messages.find(
+      (m: { role: string }) => m.role === 'user',
+    );
+    expect(userMessage.content).toHaveLength(2);
+    const placeholder = userMessage.content[1];
+    expect(placeholder.type).toBe('text');
+    expect(placeholder.text).toContain('audio/mpeg');
+    expect(placeholder.text).toContain('song.mp3');
+  });
+
+  it('never silently drops media - each MediaBlock produces output', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [{ delta: { content: 'ok' } }],
+        };
+      },
+    };
+    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+    process.env.OPENAI_API_KEY = 'test-key';
+
+    const provider = new OpenAIProvider('test-key');
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Mixed' },
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            data: 'img',
+            encoding: 'base64',
+          },
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'pdf',
+            encoding: 'base64',
+          },
+          {
+            type: 'media',
+            mimeType: 'video/mp4',
+            data: 'vid',
+            encoding: 'base64',
+          },
+        ],
+      },
+    ];
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({ providerName: provider.name, contents }),
+    );
+    for await (const _chunk of generator) {
+      /* drain */
+    }
+
+    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+    const userMessage = callArgs.messages.find(
+      (m: { role: string }) => m.role === 'user',
+    );
+    expect(userMessage.content).toHaveLength(4);
+    expect(userMessage.content[1].type).toBe('image_url');
+    expect(userMessage.content[2].type).toBe('file');
+    expect(userMessage.content[3].type).toBe('text');
+    expect(userMessage.content[3].text).toContain('video/mp4');
   });
 });

@@ -15,7 +15,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { normalizeMediaToDataUri } from './mediaUtils.js';
+import {
+  normalizeMediaToDataUri,
+  classifyMediaBlock,
+  buildUnsupportedMediaPlaceholder,
+} from './mediaUtils.js';
 import type { MediaBlock } from '../../services/history/IContent.js';
 
 describe('normalizeMediaToDataUri', () => {
@@ -88,5 +92,132 @@ describe('normalizeMediaToDataUri', () => {
     expect(result).toBe(
       'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDMgM10+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmCjAwMDAwMDAwMTAgMDAwMDAgbgowMDAwMDAwMDUzIDAwMDAwIG4KMDAwMDAwMDEwMiAwMDAwMCBuCnRyYWlsZXIKPDwvU2l6ZSA0L1Jvb3QgMSAwIFI+PgpzdGFydHhyZWYKMTQ5CiUlRU9G',
     );
+  });
+});
+
+describe('classifyMediaBlock', () => {
+  it('classifies image MIME types', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'image/png',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    expect(classifyMediaBlock(media)).toBe('image');
+  });
+
+  it('classifies image/jpeg', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'image/jpeg',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    expect(classifyMediaBlock(media)).toBe('image');
+  });
+
+  it('classifies application/pdf as pdf', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/pdf',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    expect(classifyMediaBlock(media)).toBe('pdf');
+  });
+
+  it('classifies audio MIME types', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'audio/mpeg',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    expect(classifyMediaBlock(media)).toBe('audio');
+  });
+
+  it('classifies video MIME types', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'video/mp4',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    expect(classifyMediaBlock(media)).toBe('video');
+  });
+
+  it('returns unknown for unrecognized MIME types', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/json',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    expect(classifyMediaBlock(media)).toBe('unknown');
+  });
+
+  it('returns unknown for empty mimeType', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: '',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    expect(classifyMediaBlock(media)).toBe('unknown');
+  });
+});
+
+describe('buildUnsupportedMediaPlaceholder', () => {
+  it('produces placeholder with filename', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'audio/mpeg',
+      data: 'abc',
+      encoding: 'base64',
+      filename: 'song.mp3',
+    };
+    const result = buildUnsupportedMediaPlaceholder(media, 'OpenAI');
+    expect(result).toContain('audio/mpeg');
+    expect(result).toContain('(song.mp3)');
+    expect(result).toContain('OpenAI');
+    expect(result).toContain('audio');
+  });
+
+  it('produces placeholder without filename', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'video/mp4',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    const result = buildUnsupportedMediaPlaceholder(media, 'Anthropic');
+    expect(result).toContain('video/mp4');
+    expect(result).not.toContain('(');
+    expect(result).toContain('Anthropic');
+  });
+
+  it('uses PDF label for application/pdf', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/pdf',
+      data: 'abc',
+      encoding: 'base64',
+      filename: 'doc.pdf',
+    };
+    const result = buildUnsupportedMediaPlaceholder(media, 'OpenAI Vercel');
+    expect(result).toContain('PDF');
+    expect(result).toContain('OpenAI Vercel');
+  });
+
+  it('uses media label for unknown MIME types', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/octet-stream',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    const result = buildUnsupportedMediaPlaceholder(media, 'Test');
+    expect(result).toContain('media');
+    expect(result).toContain('application/octet-stream');
   });
 });

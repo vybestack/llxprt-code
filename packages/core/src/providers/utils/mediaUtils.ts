@@ -16,12 +16,32 @@
 
 import type { MediaBlock } from '../../services/history/IContent.js';
 
+export type MediaCategory = 'image' | 'pdf' | 'audio' | 'video' | 'unknown';
+
+export function classifyMediaBlock(media: MediaBlock): MediaCategory {
+  const mime = (media.mimeType ?? '').toLowerCase();
+  if (mime.startsWith('image/')) return 'image';
+  if (mime === 'application/pdf') return 'pdf';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (mime.startsWith('video/')) return 'video';
+  return 'unknown';
+}
+
+export function buildUnsupportedMediaPlaceholder(
+  media: MediaBlock,
+  providerName: string,
+): string {
+  const mime = media.mimeType || 'unknown';
+  const filePart = media.filename ? ` (${media.filename})` : '';
+  const category = classifyMediaBlock(media);
+  const label =
+    category === 'pdf' ? 'PDF' : category === 'unknown' ? 'media' : category;
+  return `[Unsupported ${label}: ${mime}${filePart} — ${providerName} does not support ${label} input]`;
+}
+
 /**
  * Normalizes a MediaBlock to a data URI format suitable for API consumption.
  * Handles both URL-encoded and base64-encoded media.
- *
- * @param media - The MediaBlock to normalize
- * @returns A data URI string (either the original data: URI, a URL, or a constructed base64 data URI)
  */
 export function normalizeMediaToDataUri(media: MediaBlock): string {
   // Already a data URI

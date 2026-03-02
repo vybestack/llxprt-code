@@ -51,7 +51,11 @@ import {
   thinkingToReasoningField,
   cleanKimiTokensFromThinking,
 } from '../reasoning/reasoningUtils.js';
-import { normalizeMediaToDataUri } from '../utils/mediaUtils.js';
+import {
+  normalizeMediaToDataUri,
+  classifyMediaBlock,
+  buildUnsupportedMediaPlaceholder,
+} from '../utils/mediaUtils.js';
 
 function inferMediaEncoding(imageData: string): {
   encoding: 'base64' | 'url';
@@ -149,10 +153,18 @@ export function convertToVercelMessages(
           parts.push({ type: 'text', text });
         }
         for (const media of mediaBlocks) {
-          parts.push({
-            type: 'image',
-            image: normalizeMediaToDataUri(media),
-          });
+          const category = classifyMediaBlock(media);
+          if (category === 'image') {
+            parts.push({
+              type: 'image',
+              image: normalizeMediaToDataUri(media),
+            });
+          } else {
+            parts.push({
+              type: 'text',
+              text: buildUnsupportedMediaPlaceholder(media, 'OpenAI Vercel'),
+            });
+          }
         }
         if (parts.length > 0) {
           messages.push({

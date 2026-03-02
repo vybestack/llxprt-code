@@ -310,4 +310,152 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
       },
     ]);
   });
+
+  it('converts PDF MediaBlock in user message to input_file', () => {
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Summarize this document' },
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'JVBERi0xLjQ=',
+            encoding: 'base64',
+            filename: 'report.pdf',
+          },
+        ],
+      },
+    ];
+
+    const result = buildResponsesInputFromContent(contents);
+
+    expect(result).toHaveLength(1);
+    const userMsg = result[0] as { role: string; content: unknown[] };
+    expect(userMsg.role).toBe('user');
+    expect(userMsg.content).toHaveLength(2);
+    expect(userMsg.content[0]).toEqual({
+      type: 'input_text',
+      text: 'Summarize this document',
+    });
+    expect(userMsg.content[1]).toEqual({
+      type: 'input_file',
+      file_data: 'data:application/pdf;base64,JVBERi0xLjQ=',
+      filename: 'report.pdf',
+    });
+  });
+
+  it('converts PDF MediaBlock in tool response to input_file', () => {
+    const contents: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call_pdf1',
+            name: 'read_file',
+            parameters: { path: 'doc.pdf' },
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_pdf1',
+            toolName: 'read_file',
+            result: 'PDF content',
+          },
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'JVBERi0xLjQ=',
+            encoding: 'base64',
+            filename: 'doc.pdf',
+          },
+        ],
+      },
+    ];
+
+    const result = buildResponsesInputFromContent(contents);
+
+    const toolOutput = result[1] as {
+      type: string;
+      output: unknown[];
+    };
+    expect(toolOutput.type).toBe('function_call_output');
+    expect(toolOutput.output).toHaveLength(2);
+    expect(toolOutput.output[1]).toEqual({
+      type: 'input_file',
+      file_data: 'data:application/pdf;base64,JVBERi0xLjQ=',
+      filename: 'doc.pdf',
+    });
+  });
+
+  it('produces text placeholder for unsupported media in user message', () => {
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Listen to this' },
+          {
+            type: 'media',
+            mimeType: 'audio/mpeg',
+            data: 'audiodata',
+            encoding: 'base64',
+            filename: 'song.mp3',
+          },
+        ],
+      },
+    ];
+
+    const result = buildResponsesInputFromContent(contents);
+
+    expect(result).toHaveLength(1);
+    const userMsg = result[0] as { role: string; content: unknown[] };
+    expect(userMsg.content).toHaveLength(2);
+    const placeholder = userMsg.content[1] as { type: string; text: string };
+    expect(placeholder.type).toBe('input_text');
+    expect(placeholder.text).toContain('audio/mpeg');
+    expect(placeholder.text).toContain('song.mp3');
+    expect(placeholder.text).toContain('OpenAI Responses');
+  });
+
+  it('never silently drops media - each MediaBlock produces output', () => {
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Mixed media' },
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            data: 'imgdata',
+            encoding: 'base64',
+          },
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'pdfdata',
+            encoding: 'base64',
+          },
+          {
+            type: 'media',
+            mimeType: 'video/mp4',
+            data: 'viddata',
+            encoding: 'base64',
+          },
+        ],
+      },
+    ];
+
+    const result = buildResponsesInputFromContent(contents);
+
+    const userMsg = result[0] as { role: string; content: unknown[] };
+    expect(userMsg.content).toHaveLength(4);
+    expect((userMsg.content[1] as { type: string }).type).toBe('input_image');
+    expect((userMsg.content[2] as { type: string }).type).toBe('input_file');
+    expect((userMsg.content[3] as { type: string }).type).toBe('input_text');
+  });
 });

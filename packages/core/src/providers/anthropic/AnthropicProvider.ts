@@ -43,6 +43,10 @@ import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-de
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
+import {
+  classifyMediaBlock,
+  buildUnsupportedMediaPlaceholder,
+} from '../utils/mediaUtils.js';
 import { isNetworkTransientError } from '../../utils/retry.js';
 import { delay } from '../../utils/delay.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
@@ -59,9 +63,19 @@ type AnthropicImageBlock = {
     | { type: 'url'; url: string };
 };
 
+type AnthropicDocumentBlock = {
+  type: 'document';
+  source: { type: 'base64'; media_type: string; data: string };
+  title?: string;
+};
+
 type AnthropicToolResultContent =
   | string
-  | Array<{ type: 'text'; text: string } | AnthropicImageBlock>;
+  | Array<
+      | { type: 'text'; text: string }
+      | AnthropicImageBlock
+      | AnthropicDocumentBlock
+    >;
 
 type AnthropicMessageBlock =
   | { type: 'text'; text: string }
@@ -73,6 +87,7 @@ type AnthropicMessageBlock =
       is_error?: boolean;
     }
   | AnthropicImageBlock
+  | AnthropicDocumentBlock
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'redacted_thinking'; data: string };
 
@@ -103,6 +118,25 @@ function mediaBlockToAnthropicImage(media: MediaBlock): AnthropicImageBlock {
       media_type: media.mimeType || 'image/png',
       data: rawData,
     },
+  };
+}
+
+function mediaBlockToAnthropicDocument(
+  media: MediaBlock,
+): AnthropicDocumentBlock {
+  const rawData =
+    media.data.startsWith('data:') && media.data.includes(';base64,')
+      ? media.data.split(';base64,')[1]
+      : media.data;
+
+  return {
+    type: 'document',
+    source: {
+      type: 'base64',
+      media_type: media.mimeType || 'application/pdf',
+      data: rawData,
+    },
+    ...(media.filename ? { title: media.filename } : {}),
   };
 }
 
@@ -1216,8 +1250,7 @@ export class AnthropicProvider extends BaseProvider {
 
       if (toolResponseBlocks.length > 0) {
         const mediaBlocks = c.blocks.filter(
-          (b): b is MediaBlock =>
-            b.type === 'media' && b.mimeType.startsWith('image/'),
+          (b): b is MediaBlock => b.type === 'media',
         );
 
         for (const toolResponseBlock of toolResponseBlocks) {
@@ -1243,7 +1276,19 @@ export class AnthropicProvider extends BaseProvider {
             mediaBlocks.length > 0
               ? [
                   { type: 'text' as const, text: contentPayload },
-                  ...mediaBlocks.map((mb) => mediaBlockToAnthropicImage(mb)),
+                  ...mediaBlocks.map((mb) => {
+                    const category = classifyMediaBlock(mb);
+                    if (category === 'image') {
+                      return mediaBlockToAnthropicImage(mb);
+                    }
+                    if (category === 'pdf') {
+                      return mediaBlockToAnthropicDocument(mb);
+                    }
+                    return {
+                      type: 'text' as const,
+                      text: buildUnsupportedMediaPlaceholder(mb, 'Anthropic'),
+                    };
+                  }),
                 ]
               : contentPayload;
 
@@ -1278,13 +1323,13 @@ export class AnthropicProvider extends BaseProvider {
           continue;
         }
 
-        const hasMedia = c.blocks.some(
-          (b) => b.type === 'media' && b.mimeType.startsWith('image/'),
-        );
+        const hasMedia = c.blocks.some((b) => b.type === 'media');
 
         if (hasMedia) {
           const parts: Array<
-            { type: 'text'; text: string } | AnthropicImageBlock
+            | { type: 'text'; text: string }
+            | AnthropicImageBlock
+            | AnthropicDocumentBlock
           > = [];
 
           for (const block of c.blocks) {
@@ -1301,11 +1346,18 @@ ${block.code}
 \u0060\u0060\u0060
 `,
               });
-            } else if (
-              block.type === 'media' &&
-              block.mimeType.startsWith('image/')
-            ) {
-              parts.push(mediaBlockToAnthropicImage(block));
+            } else if (block.type === 'media') {
+              const category = classifyMediaBlock(block);
+              if (category === 'image') {
+                parts.push(mediaBlockToAnthropicImage(block));
+              } else if (category === 'pdf') {
+                parts.push(mediaBlockToAnthropicDocument(block));
+              } else {
+                parts.push({
+                  type: 'text',
+                  text: buildUnsupportedMediaPlaceholder(block, 'Anthropic'),
+                });
+              }
             }
           }
 
