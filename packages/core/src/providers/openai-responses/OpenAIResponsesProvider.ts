@@ -29,12 +29,18 @@ import { type IModel } from '../IModel.js';
 import {
   type IContent,
   type TextBlock,
+  type MediaBlock,
 } from '../../services/history/IContent.js';
 import {
   limitOutputTokens,
   type ToolOutputSettingsProvider,
 } from '../../utils/toolOutputLimiter.js';
 import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
+import {
+  normalizeMediaToDataUri,
+  classifyMediaBlock,
+  buildUnsupportedMediaPlaceholder,
+} from '../utils/mediaUtils.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
@@ -59,6 +65,10 @@ import { CodexOAuthTokenSchema } from '../../auth/types.js';
 import type { OAuthManager } from '../../auth/precedence.js';
 import { getErrorStatus, isNetworkTransientError } from '../../utils/retry.js';
 import { delay } from '../../utils/delay.js';
+
+type ResponsesContentPart =
+  | { type: 'input_text'; text: string }
+  | { type: 'input_image'; image_url: string };
 
 export class OpenAIResponsesProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -337,14 +347,21 @@ export class OpenAIResponsesProvider extends BaseProvider {
    */
   private injectSyntheticConfigFileRead(
     requestInput: Array<
-      | { role: 'user' | 'assistant' | 'system'; content?: string }
+      | {
+          role: 'user' | 'assistant' | 'system';
+          content?: string | ResponsesContentPart[];
+        }
       | {
           type: 'function_call';
           call_id: string;
           name: string;
           arguments: string;
         }
-      | { type: 'function_call_output'; call_id: string; output: string }
+      | {
+          type: 'function_call_output';
+          call_id: string;
+          output: string | ResponsesContentPart[];
+        }
       | {
           type: 'reasoning';
           id: string;
@@ -531,14 +548,21 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     // Responses API input types: messages, function_call, function_call_output, reasoning
     type ResponsesInputItem =
-      | { role: 'user' | 'assistant'; content?: string }
+      | {
+          role: 'user' | 'assistant';
+          content?: string | ResponsesContentPart[];
+        }
       | {
           type: 'function_call';
           call_id: string;
           name: string;
           arguments: string;
         }
-      | { type: 'function_call_output'; call_id: string; output: string }
+      | {
+          type: 'function_call_output';
+          call_id: string;
+          output: string | ResponsesContentPart[];
+        }
       | {
           type: 'reasoning';
           id: string;
@@ -567,8 +591,37 @@ export class OpenAIResponsesProvider extends BaseProvider {
         const textBlocks = c.blocks.filter(
           (b): b is TextBlock => b.type === 'text',
         );
+        const mediaBlocks = c.blocks.filter(
+          (b): b is MediaBlock => b.type === 'media',
+        );
         const text = textBlocks.map((b) => b.text).join('\n');
-        if (text) {
+
+        if (mediaBlocks.length > 0) {
+          const parts: ResponsesContentPart[] = [];
+          if (text) {
+            parts.push({ type: 'input_text', text });
+          }
+          for (const media of mediaBlocks) {
+            const category = classifyMediaBlock(media);
+            if (category === 'image') {
+              parts.push({
+                type: 'input_image',
+                image_url: normalizeMediaToDataUri(media),
+              });
+            } else {
+              parts.push({
+                type: 'input_text',
+                text: buildUnsupportedMediaPlaceholder(
+                  media,
+                  'OpenAI Responses',
+                ),
+              });
+            }
+          }
+          if (parts.length > 0) {
+            input.push({ role: 'user', content: parts });
+          }
+        } else if (text) {
           input.push({ role: 'user', content: text });
         }
       } else if (c.speaker === 'ai') {
@@ -617,6 +670,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
         // Convert tool responses to function_call_output format (Responses API)
         const toolResponseBlocks = c.blocks.filter(
           (b) => b.type === 'tool_response',
+        );
+        const mediaBlocks = c.blocks.filter(
+          (b): b is MediaBlock => b.type === 'media',
         );
 
         // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
@@ -668,10 +724,39 @@ export class OpenAIResponsesProvider extends BaseProvider {
             continue;
           }
 
+          let outputContent: string | ResponsesContentPart[];
+
+          if (mediaBlocks.length > 0) {
+            const parts: ResponsesContentPart[] = [];
+            if (candidate) {
+              parts.push({ type: 'input_text', text: candidate });
+            }
+            for (const media of mediaBlocks) {
+              const category = classifyMediaBlock(media);
+              if (category === 'image') {
+                parts.push({
+                  type: 'input_image',
+                  image_url: normalizeMediaToDataUri(media),
+                });
+              } else {
+                parts.push({
+                  type: 'input_text',
+                  text: buildUnsupportedMediaPlaceholder(
+                    media,
+                    'OpenAI Responses',
+                  ),
+                });
+              }
+            }
+            outputContent = parts.length > 0 ? parts : candidate;
+          } else {
+            outputContent = candidate;
+          }
+
           input.push({
             type: 'function_call_output',
             call_id: outputCallId,
-            output: candidate,
+            output: outputContent,
           });
         }
       }
