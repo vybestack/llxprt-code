@@ -27,10 +27,14 @@ export interface RadioSelectItem<T> extends SelectionListItem<T> {
 /**
  * Props for the RadioButtonSelect component.
  * @template T The type of the value associated with each radio item.
+ * @template TItem The type of the item, extending RadioSelectItem<T>.
  */
-export interface RadioButtonSelectProps<T> {
+export interface RadioButtonSelectProps<
+  T,
+  TItem extends RadioSelectItem<T> = RadioSelectItem<T>,
+> {
   /** An array of items to display as radio options. */
-  items: Array<RadioSelectItem<T>>;
+  items: TItem[];
   /** The initial index selected */
   initialIndex?: number;
   /** Function called when an item is selected. Receives the `value` of the selected item. */
@@ -45,6 +49,8 @@ export interface RadioButtonSelectProps<T> {
   maxItemsToShow?: number;
   /** Whether to show numbers next to items. */
   showNumbers?: boolean;
+  /** Optional custom render function for items. If not provided, uses default rendering. */
+  renderItem?: (item: TItem, context: RenderItemContext) => React.ReactNode;
 }
 
 /**
@@ -52,8 +58,12 @@ export interface RadioButtonSelectProps<T> {
  * supporting scrolling and keyboard navigation.
  *
  * @template T The type of the value associated with each radio item.
+ * @template TItem The type of the item, extending RadioSelectItem<T>.
  */
-export function RadioButtonSelect<T>({
+export function RadioButtonSelect<
+  T,
+  TItem extends RadioSelectItem<T> = RadioSelectItem<T>,
+>({
   items,
   initialIndex = 0,
   onSelect,
@@ -62,9 +72,10 @@ export function RadioButtonSelect<T>({
   showScrollArrows = false,
   maxItemsToShow = 10,
   showNumbers = true,
-}: RadioButtonSelectProps<T>): React.JSX.Element {
-  const renderItem = useCallback(
-    (item: RadioSelectItem<T>, { titleColor }: RenderItemContext) => {
+  renderItem: customRenderItem,
+}: RadioButtonSelectProps<T, TItem>): React.JSX.Element {
+  const defaultRenderItem = useCallback(
+    (item: TItem, { titleColor }: RenderItemContext) => {
       // Handle special theme display case for ThemeDialog compatibility
       if (item.themeNameDisplay && item.themeTypeDisplay) {
         return (
@@ -84,8 +95,10 @@ export function RadioButtonSelect<T>({
     [],
   );
 
+  const renderItem = customRenderItem ?? defaultRenderItem;
+
   return (
-    <BaseSelectionList<T, RadioSelectItem<T>>
+    <BaseSelectionList<T, TItem>
       items={items}
       initialIndex={initialIndex}
       onSelect={onSelect}

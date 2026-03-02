@@ -169,7 +169,7 @@ describe('setupTerminalAndTheme', () => {
           Gray: '#97a0b0',
           DarkGray: '#5c6370',
         },
-      } as any);
+      } as unknown as ReturnType<typeof themeManager.getActiveTheme>);
       
       await setupTerminalAndTheme(config, mockSettings);
       
