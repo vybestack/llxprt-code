@@ -312,6 +312,9 @@ export function useSlashCompletion(
                 | readonly SlashCommand[]
                 | undefined;
               commandPartial = '';
+            } else {
+              // Reset exactMatchAsParent when descent is skipped due to other matches
+              exactMatchAsParent = undefined;
             }
           }
         }

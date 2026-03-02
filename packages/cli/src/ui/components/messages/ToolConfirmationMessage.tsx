@@ -243,7 +243,7 @@ export const ToolConfirmationMessage: React.FC<
 
       // Calculate the vertical space (in lines) consumed by UI elements
       // surrounding the main body content.
-      const PADDING_OUTER_Y = 2; // Main container has `padding={1}` (top & bottom).
+      const PADDING_OUTER_Y = 1; // Main container has `paddingTop={0} paddingBottom={1}`.
       const MARGIN_BODY_BOTTOM = 1; // margin on the body container.
       const HEIGHT_QUESTION = 1; // The question text is one line.
       const MARGIN_QUESTION_BOTTOM = 1; // Margin on the question container.
@@ -273,7 +273,8 @@ export const ToolConfirmationMessage: React.FC<
       const executionProps = confirmationDetails;
       let bodyContentHeight = availableBodyContentHeight();
       if (bodyContentHeight !== undefined) {
-        bodyContentHeight -= 2; // Account for padding;
+        // Account for padding, clamped to avoid negative values on very short terminals
+        bodyContentHeight = Math.max(bodyContentHeight - 2, 1);
       }
 
       const commandBox = (
