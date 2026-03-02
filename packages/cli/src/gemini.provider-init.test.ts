@@ -211,6 +211,7 @@ describe('gemini main provider initialization', () => {
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
       })),
+      setTerminalBackground: vi.fn(),
     } as unknown as Config;
 
     const { loadCliConfig, parseArguments } = await import(
@@ -259,7 +260,7 @@ describe('gemini main provider initialization', () => {
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
       getServerToolsProvider: vi.fn().mockReturnValue(null),
       hasActiveProvider: vi.fn().mockReturnValue(true),
-      setActiveProvider: vi.fn().mockResolvedValue(undefined),
+      setActiveProvider: vi.fn().mockReturnValue(undefined),
     };
 
     const restoreHistory = vi
@@ -300,6 +301,7 @@ describe('gemini main provider initialization', () => {
       })),
       getScreenReader: vi.fn(() => false),
       getGeminiClient,
+      setTerminalBackground: vi.fn(),
     } as unknown as Config;
 
     const coreModule = await import('@vybestack/llxprt-code-core');

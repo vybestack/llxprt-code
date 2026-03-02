@@ -98,7 +98,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         },
       });
 
-      mockStreamText.mockRejectedValue(rateLimitError);
+      mockStreamText.mockImplementation(() => {
+        throw rateLimitError;
+      });
 
       const content: IContent[] = [
         {
@@ -138,7 +140,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
           'x-ratelimit-remaining-requests': '0',
         },
       });
-      mockStreamText.mockRejectedValue(rateLimitError);
+      mockStreamText.mockImplementation(() => {
+        throw rateLimitError;
+      });
 
       const content: IContent[] = [
         {
@@ -172,7 +176,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         name: 'AI_APICallError',
         statusCode: 401,
       });
-      mockStreamText.mockRejectedValue(authError);
+      mockStreamText.mockImplementation(() => {
+        throw authError;
+      });
 
       const content: IContent[] = [
         {
@@ -209,7 +215,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         name: 'AI_APICallError',
         statusCode: 401,
       });
-      mockStreamText.mockRejectedValue(authError);
+      mockStreamText.mockImplementation(() => {
+        throw authError;
+      });
 
       const content: IContent[] = [
         {
@@ -254,7 +262,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
           },
         },
       });
-      mockStreamText.mockRejectedValue(modelError);
+      mockStreamText.mockImplementation(() => {
+        throw modelError;
+      });
 
       const content: IContent[] = [
         {
@@ -291,7 +301,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         name: 'AI_APICallError',
         statusCode: 500,
       });
-      mockStreamText.mockRejectedValue(serverError);
+      mockStreamText.mockImplementation(() => {
+        throw serverError;
+      });
 
       const content: IContent[] = [
         {
@@ -324,7 +336,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         name: 'AI_APICallError',
         statusCode: 502,
       });
-      mockStreamText.mockRejectedValue(badGatewayError);
+      mockStreamText.mockImplementation(() => {
+        throw badGatewayError;
+      });
 
       const content: IContent[] = [
         {
@@ -359,7 +373,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
           'retry-after': '30',
         },
       });
-      mockStreamText.mockRejectedValue(unavailableError);
+      mockStreamText.mockImplementation(() => {
+        throw unavailableError;
+      });
 
       const content: IContent[] = [
         {
@@ -395,7 +411,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         name: 'AI_APICallError',
         code: 'ETIMEDOUT',
       });
-      mockStreamText.mockRejectedValue(timeoutError);
+      mockStreamText.mockImplementation(() => {
+        throw timeoutError;
+      });
 
       const content: IContent[] = [
         {
@@ -428,7 +446,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         name: 'AI_APICallError',
         code: 'ECONNREFUSED',
       });
-      mockStreamText.mockRejectedValue(connectionError);
+      mockStreamText.mockImplementation(() => {
+        throw connectionError;
+      });
 
       const content: IContent[] = [
         {
@@ -461,7 +481,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         name: 'AI_APICallError',
         code: 'ENOTFOUND',
       });
-      mockStreamText.mockRejectedValue(dnsError);
+      mockStreamText.mockImplementation(() => {
+        throw dnsError;
+      });
 
       const content: IContent[] = [
         {
@@ -502,7 +524,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
           },
         },
       });
-      mockStreamText.mockRejectedValue(invalidParamError);
+      mockStreamText.mockImplementation(() => {
+        throw invalidParamError;
+      });
 
       const content: IContent[] = [
         {
@@ -544,7 +568,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
           },
         },
       });
-      mockStreamText.mockRejectedValue(contextError);
+      mockStreamText.mockImplementation(() => {
+        throw contextError;
+      });
 
       const content: IContent[] = [
         {
@@ -584,7 +610,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
           },
         },
       });
-      mockStreamText.mockRejectedValue(toolError);
+      mockStreamText.mockImplementation(() => {
+        throw toolError;
+      });
 
       const content: IContent[] = [
         {
@@ -620,7 +648,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         name: 'AI_APICallError',
         statusCode: 500,
       });
-      mockStreamText.mockRejectedValue(streamError);
+      mockStreamText.mockImplementation(() => {
+        throw streamError;
+      });
 
       const content: IContent[] = [
         {
@@ -672,7 +702,7 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         experimental_providerMetadata: Promise.resolve({}),
       };
 
-      mockStreamText.mockResolvedValue(mockResult);
+      mockStreamText.mockReturnValue(mockResult);
 
       const content: IContent[] = [
         {
@@ -709,7 +739,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
   describe('Error Wrapping', () => {
     it('should wrap unknown errors with ProviderError', async () => {
       const unknownError = new Error('Unknown error');
-      mockStreamText.mockRejectedValue(unknownError);
+      mockStreamText.mockImplementation(() => {
+        throw unknownError;
+      });
 
       const content: IContent[] = [
         {
@@ -735,7 +767,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         code: 'CUSTOM_CODE',
         details: { field: 'value' },
       });
-      mockStreamText.mockRejectedValue(originalError);
+      mockStreamText.mockImplementation(() => {
+        throw originalError;
+      });
 
       const content: IContent[] = [
         {
@@ -786,7 +820,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
           },
         },
       });
-      mockStreamText.mockRejectedValue(apiError);
+      mockStreamText.mockImplementation(() => {
+        throw apiError;
+      });
 
       const content: IContent[] = [
         {
@@ -819,7 +855,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
           'x-ratelimit-remaining-requests': '0',
         },
       });
-      mockStreamText.mockRejectedValue(rateLimitError);
+      mockStreamText.mockImplementation(() => {
+        throw rateLimitError;
+      });
 
       const content: IContent[] = [
         {

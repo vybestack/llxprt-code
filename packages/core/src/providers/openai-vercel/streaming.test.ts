@@ -130,7 +130,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
       const mockStream = createMockStream(['Hello', ' world', '!']);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -177,7 +177,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
       const mockStream = createMockStream(['1', '2', '3', '4', '5']);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -218,7 +218,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
       const mockStream = createMockStream(['Response']);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -252,7 +252,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
       const mockStream = createMockStream([]);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -297,7 +297,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       ];
 
       const mockStream = createMockStreamWithToolCalls(mockToolCalls);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -358,7 +358,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       ];
 
       const mockStream = createMockStreamWithToolCalls(mockToolCalls);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -409,7 +409,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
 
       const error = new Error('Stream error occurred');
       const mockStream = createMockStreamWithError(error);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -441,7 +441,9 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const { streamText } = await import('ai');
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
-      mockStreamText.mockRejectedValue(new Error('Network error'));
+      mockStreamText.mockImplementation(() => {
+        throw new Error('Network error');
+      });
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -477,7 +479,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
         promptTokens: 10,
         completionTokens: 5,
       });
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -514,7 +516,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
       const mockStream = createMockStream(['Response']);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -550,7 +552,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
       const mockStream = createMockStream(['Let me ', 'help with that']);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -587,7 +589,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
       const mockStream = createMockStream(['Response']);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -623,7 +625,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
       const mockStream = createMockStream(['Response']);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
@@ -663,7 +665,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
       const mockStream = createMockStream(['Response']);
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
         settingsService,
