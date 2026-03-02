@@ -68,7 +68,8 @@ import { delay } from '../../utils/delay.js';
 
 type ResponsesContentPart =
   | { type: 'input_text'; text: string }
-  | { type: 'input_image'; image_url: string };
+  | { type: 'input_image'; image_url: string }
+  | { type: 'input_file'; file_data: string; filename?: string };
 
 export class OpenAIResponsesProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -608,6 +609,12 @@ export class OpenAIResponsesProvider extends BaseProvider {
                 type: 'input_image',
                 image_url: normalizeMediaToDataUri(media),
               });
+            } else if (category === 'pdf') {
+              parts.push({
+                type: 'input_file',
+                file_data: normalizeMediaToDataUri(media),
+                ...(media.filename ? { filename: media.filename } : {}),
+              });
             } else {
               parts.push({
                 type: 'input_text',
@@ -737,6 +744,12 @@ export class OpenAIResponsesProvider extends BaseProvider {
                 parts.push({
                   type: 'input_image',
                   image_url: normalizeMediaToDataUri(media),
+                });
+              } else if (category === 'pdf') {
+                parts.push({
+                  type: 'input_file',
+                  file_data: normalizeMediaToDataUri(media),
+                  ...(media.filename ? { filename: media.filename } : {}),
                 });
               } else {
                 parts.push({
