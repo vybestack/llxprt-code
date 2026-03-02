@@ -60,7 +60,7 @@ describe('createPolicyUpdater', () => {
   it('should add multiple rules when commandPrefix is an array', async () => {
     createPolicyUpdater(policyEngine, messageBus);
 
-    await messageBus.publish({
+    messageBus.publish({
       type: MessageBusType.UPDATE_POLICY,
       toolName: 'run_shell_command',
       commandPrefix: ['echo', 'ls'],
@@ -87,7 +87,7 @@ describe('createPolicyUpdater', () => {
   it('should add a single rule when commandPrefix is a string', async () => {
     createPolicyUpdater(policyEngine, messageBus);
 
-    await messageBus.publish({
+    messageBus.publish({
       type: MessageBusType.UPDATE_POLICY,
       toolName: 'run_shell_command',
       commandPrefix: 'git',
@@ -110,7 +110,7 @@ describe('createPolicyUpdater', () => {
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
     vi.mocked(fs.rename).mockResolvedValue(undefined);
 
-    await messageBus.publish({
+    messageBus.publish({
       type: MessageBusType.UPDATE_POLICY,
       toolName: 'run_shell_command',
       commandPrefix: ['echo', 'ls'],

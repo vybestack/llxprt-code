@@ -227,7 +227,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
       setEphemeralSetting: (key: string, value: unknown) => void;
     };
   }> {
-    const handle = await contextFactoryMod.createIsolatedRuntimeContext({
+    const handle = contextFactoryMod.createIsolatedRuntimeContext({
       runtimeId: 'auth-key-test',
       workspaceDir: tempDir,
       prepare: async ({ providerManager }) => {
@@ -499,7 +499,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
         getProviderSettings: (providerName: string) => Record<string, unknown>;
       };
     }> {
-      const handle = await contextFactoryMod.createIsolatedRuntimeContext({
+      const handle = contextFactoryMod.createIsolatedRuntimeContext({
         runtimeId: 'auth-key-clear-test',
         workspaceDir: tempDir,
         prepare: async ({ providerManager }) => {

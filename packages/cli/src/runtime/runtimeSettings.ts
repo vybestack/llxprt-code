@@ -1668,7 +1668,7 @@ export async function switchActiveProvider(
     Object.keys(config.getEphemeralSettings()),
   );
 
-  await providerManager.setActiveProvider(name);
+  providerManager.setActiveProvider(name);
 
   config.setProviderManager(providerManager);
   config.setProvider(name);

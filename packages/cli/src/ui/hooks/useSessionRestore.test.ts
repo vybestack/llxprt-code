@@ -65,7 +65,7 @@ describe('Session Restore Chat Initialization', () => {
 
       const geminiClient = mockConfig.getGeminiClient();
 
-      await expect(async () => {
+      expect(async () => {
         if (geminiClient) {
           await geminiClient.resetChat().catch(() => {});
         }

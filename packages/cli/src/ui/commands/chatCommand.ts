@@ -399,7 +399,7 @@ const clearCommand: SlashCommand = {
     }
 
     // Clear both the chat history and the UI display
-    await chat.clearHistory();
+    chat.clearHistory();
     context.ui.updateHistoryTokenCount(0);
     context.ui.clear();
     // Note: context.ui.clear() clears the screen, so we don't return a message

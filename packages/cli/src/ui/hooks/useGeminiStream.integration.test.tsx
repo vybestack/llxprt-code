@@ -665,7 +665,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
     });
 
     // Verify tool registry includes todo_pause
-    const toolRegistry = await mockConfig.getToolRegistry();
+    const toolRegistry = mockConfig.getToolRegistry();
     const toolSchemas = toolRegistry.getFunctionDeclarations();
     const todoPauseTool = toolSchemas.find(
       (tool: any) => tool.name === 'todo_pause',
@@ -1004,7 +1004,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
     renderTestHook([], activeTodos);
 
     // Verify tool registry includes todo_pause
-    const toolRegistry = await mockConfig.getToolRegistry();
+    const toolRegistry = mockConfig.getToolRegistry();
     const toolSchemas = toolRegistry.getFunctionDeclarations();
     const todoPauseTool = toolSchemas.find(
       (tool: any) => tool.name === 'todo_pause',

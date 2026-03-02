@@ -1064,7 +1064,7 @@ export async function main() {
       try {
         // Set the active provider if not already set
         if (!providerManagerForAcp.hasActiveProvider()) {
-          await providerManagerForAcp.setActiveProvider(configProvider);
+          providerManagerForAcp.setActiveProvider(configProvider);
         }
       } catch (_e) {
         // Non-fatal - continue without provider

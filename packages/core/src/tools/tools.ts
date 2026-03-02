@@ -138,7 +138,7 @@ export abstract class BaseToolInvocation<
     ) {
       if (this.messageBus && this._toolName) {
         const options = this.getPolicyUpdateOptions(outcome);
-        await this.messageBus.publish({
+        this.messageBus.publish({
           type: MessageBusType.UPDATE_POLICY,
           toolName: this._toolName,
           persist: outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave,

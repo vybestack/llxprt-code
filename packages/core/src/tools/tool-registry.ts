@@ -339,7 +339,7 @@ export class ToolRegistry {
     await this.withDiscoveryLock(async () => {
       const newTools = this.buildCoreToolsMap();
 
-      await this.config.getPromptRegistry().clear();
+      this.config.getPromptRegistry().clear();
 
       await this.discoverAndRegisterToolsFromCommand(newTools);
 

@@ -2271,7 +2271,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      await fc.assert(
+      fc.assert(
         fc.property(
           fc.array(
             fc.oneof(
@@ -2321,7 +2321,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      await fc.assert(
+      fc.assert(
         fc.property(
           fc.array(
             fc.oneof(
@@ -2368,7 +2368,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      await fc.assert(
+      fc.assert(
         fc.property(fc.string({ minLength: 0, maxLength: 10 }), (searchStr) => {
           // Type the search string
           for (const char of searchStr) {
@@ -2413,7 +2413,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       // Switch to nav mode for sort cycling
       result.current.handleKeypress('\t', makeKey('tab'));
 
-      await fc.assert(
+      fc.assert(
         fc.property(
           fc.array(
             fc.oneof(fc.constant('s'), fc.constant('a'), fc.constant('tab')),
@@ -2564,7 +2564,7 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         deleteConfirmIndex: result.current.deleteConfirmIndex,
       };
 
-      await fc.assert(
+      fc.assert(
         fc.property(
           fc.oneof(
             fc.constant('return'),

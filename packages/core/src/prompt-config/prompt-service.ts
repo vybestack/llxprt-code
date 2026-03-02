@@ -163,9 +163,7 @@ export class PromptService {
     }
 
     // Detect environment
-    this._detectedEnvironment = await this.loader.detectEnvironment(
-      process.cwd(),
-    );
+    this._detectedEnvironment = this.loader.detectEnvironment(process.cwd());
 
     this.initialized = true;
   }
@@ -225,10 +223,7 @@ export class PromptService {
 
     // Resolve files
     const startTime = Date.now();
-    const resolvedFiles = await this.resolver.resolveAllFiles(
-      this.baseDir,
-      context,
-    );
+    const resolvedFiles = this.resolver.resolveAllFiles(this.baseDir, context);
     if (this.config.debugMode) {
       this.logger.debug(
         () =>

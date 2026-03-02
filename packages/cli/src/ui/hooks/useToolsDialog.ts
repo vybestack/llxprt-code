@@ -36,7 +36,7 @@ export const useToolsDialog = ({
   const openDialog = useCallback(
     async (dialogAction: 'enable' | 'disable') => {
       try {
-        const toolRegistry = await config.getToolRegistry();
+        const toolRegistry = config.getToolRegistry();
         if (!toolRegistry) {
           addMessage({
             type: MessageType.ERROR,

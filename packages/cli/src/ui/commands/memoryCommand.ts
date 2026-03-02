@@ -215,14 +215,17 @@ export const memoryCommand: SlashCommand = {
         );
 
         try {
-          const config = await context.services.config;
+          const config = context.services.config;
           const settings = context.services.settings;
           if (config) {
             let memoryContent = '';
             let fileCount = 0;
 
             if (config.isJitContextEnabled()) {
-              await config.getContextManager()?.refresh();
+              const contextManager = config.getContextManager();
+              if (contextManager) {
+                await contextManager.refresh();
+              }
               memoryContent = config.getUserMemory();
               fileCount = config.getLlxprtMdFileCount();
             } else {

@@ -18,9 +18,9 @@ interface EnableArgs {
 export async function handleEnable(args: EnableArgs) {
   try {
     if (args.scope?.toLowerCase() === 'workspace') {
-      await enableExtension(args.name, SettingScope.Workspace);
+      enableExtension(args.name, SettingScope.Workspace);
     } else {
-      await enableExtension(args.name, SettingScope.User);
+      enableExtension(args.name, SettingScope.User);
     }
     if (args.scope) {
       console.log(

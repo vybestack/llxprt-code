@@ -806,7 +806,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
       let result;
       try {
-        result = await streamText(
+        result = streamText(
           streamOptions as Parameters<typeof streamText>[0],
         );
       } catch (error) {
@@ -1403,7 +1403,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
       // Typed tool calls from AI SDK; execution is not automatic because we did not provide execute().
       const toolCalls: Array<TypedToolCall<VercelTools>> =
-        'toolCalls' in result && result.toolCalls ? await result.toolCalls : [];
+        'toolCalls' in result && result.toolCalls
+          ? await Promise.resolve(result.toolCalls)
+          : [];
 
       for (const call of toolCalls) {
         const toolName: string = call.toolName ?? 'unknown_tool';

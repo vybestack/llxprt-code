@@ -58,7 +58,7 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
     case IDEConnectionStatus.Connected: {
       let content = `[CONNECTED] Connected to ${ideClient.getDetectedIdeDisplayName()}`;
       try {
-        const context = await ideContext.getIdeContext();
+        const context = ideContext.getIdeContext();
         const openFiles = context?.workspaceState?.openFiles;
 
         if (openFiles && openFiles.length > 0) {
