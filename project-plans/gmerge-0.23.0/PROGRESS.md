@@ -27,6 +27,21 @@
 | B21 | REIMPLEMENT b7ad7e10 | [OK] PASS | `8c4607197` |
 | B22 | PICK x1 17fb7586 (FINAL) | [OK] PASS | `7bab0fd0d` |
 
+## Post-Batch Work
+
+| Task | Status | Commit(s) |
+|------|--------|-----------|
+| B2 deferred: `@typescript-eslint/await-thenable` rule (7f2d33458a) | [OK] DONE | `3ae2ffe6a` |
+| Test mock fix-ups (await-thenable caused 77 test failures) | [OK] DONE | `5c596e8d4` |
+| tokenCalculation.ts deleted (dead code, filed #1648) | [OK] DONE | `c4ed38442` |
+| isDiffingEnabled race condition fix | [OK] DONE | `abac6636d` |
+| Raw mode state restoration in color detection | [OK] DONE | `72649ef78` |
+| B9 full parity: TerminalCapabilityManager (6 phases) | [OK] DONE | `ef00d1255`..`9f35a087a` |
+| CodeRabbit review issues from B9 parity | [OK] DONE | `4096c057b` |
+| Formatting fixes from CI | [OK] DONE | `9f305d660`, `925679198` |
+| CI test stabilization (retries, timing) | [OK] DONE | `4094a2903`, `09283b187`, `635865cbb`, `b0c15967e` |
+| Audit fix: shades-of-purple background, useAlternateBuffer stub, render.tsx mock | [OK] DONE | (pending commit) |
+
 ## Final Verification
 
 - [OK] All tests pass (809+ test files, 12,824+ tests)

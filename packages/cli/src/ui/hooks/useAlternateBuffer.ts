@@ -4,12 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useSettings } from '../contexts/SettingsContext.js';
+
 /**
  * Hook to detect if the terminal is using alternate buffer mode.
- * Currently returns false as a stub - full implementation pending.
+ * Reads the user's `ui.useAlternateBuffer` setting, which is the same
+ * source of truth used by inkRenderOptions, AppContainer, and
+ * DefaultAppLayout to decide whether Ink renders in alternate buffer.
  */
 export function useAlternateBuffer(): boolean {
-  // TODO: Implement actual alternate buffer detection
-  // For now, return false to maintain existing behavior
-  return false;
+  const settings = useSettings();
+  return settings.merged.ui?.useAlternateBuffer === true;
 }

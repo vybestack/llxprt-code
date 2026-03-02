@@ -1,5 +1,37 @@
 # gmerge/0.23.0 Notes
 
+## Post-Batch Work
+
+### B2 deferred: `@typescript-eslint/await-thenable` eslint rule (7f2d33458a)
+- Originally skipped in B2 due to 37-file conflict across the entire codebase.
+- Applied post-batch in `3ae2ffe6a`: added rule to eslint.config.js and fixed all 59 violations across 29 files.
+- The await-thenable fixes changed production code from `await syncFn()` to `syncFn()`, but test mocks still used `mockResolvedValue` (returning Promises). This caused 77 test failures caught in CI.
+- Fixed in `5c596e8d4`: changed `mockResolvedValue` → `mockReturnValue` and `mockRejectedValue` → `mockImplementation(() => { throw error })` across 8 test files.
+
+### B9 full parity: 322232e514 (TerminalCapabilityManager)
+- Original B9 batch was SELECTIVE: only color-utils detection functions + theme-manager wiring (`3da1b20a8`).
+- Full parity implemented post-batch in 6 phases (`ef00d1255`..`9f35a087a`):
+  1. TerminalCapabilityManager (replaces kittyProtocolDetector)
+  2. Config terminalBackground + setupTerminalAndTheme utility
+  3. RadioButtonSelect renderItem + ThemeDialog compatibility labels/sorting
+  4. Integration wiring (gemini.tsx, AppContainer.tsx)
+  5. Bug command terminal diagnostics
+  6. Delete kittyProtocolDetector + migrate all imports
+- Additional fixes: raw mode state restoration (`72649ef78`), isDiffingEnabled race (`abac6636d`), CodeRabbit issues (`4096c057b`).
+
+### tokenCalculation.ts deleted
+- Upstream's B22 improved token estimation for images (flat 3000-token estimate).
+- LLxprt deleted the file as dead code — nothing imported it. Multi-provider architecture doesn't use Gemini's token counting.
+- Filed issue #1648 for provider-aware image token estimation.
+
+### Audit fixes
+- `useAlternateBuffer.ts` was a stub returning `false` with a TODO comment. Fixed to read `settings.merged.ui?.useAlternateBuffer` (matching the pattern used by AppContainer, DefaultAppLayout, and inkRenderOptions).
+- `shades-of-purple.ts` Background color was not updated: `#2d2b57` → `#1e1e3f` (upstream fix for VSCode terminal).
+- `test-utils/render.tsx` missing `terminalBackgroundColor: undefined` in baseMockUiState.
+
+### Pre-existing test failure
+- `ToolConfirmationMessage > 'for mcp confirmations' > should show "allow always" when folder is trusted` — fails both before and after this PR. Not introduced by gmerge/0.23.0.
+
 ## Skipped Upstream Commits
 
 ### B2: `26c115a4fb` (tips removal)
