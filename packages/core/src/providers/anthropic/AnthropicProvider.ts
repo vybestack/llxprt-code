@@ -31,6 +31,7 @@ import {
   type TextBlock,
   type ThinkingBlock,
   type CodeBlock,
+  type MediaBlock,
 } from '../../services/history/IContent.js';
 import {
   processToolParameters,
@@ -42,6 +43,10 @@ import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-de
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
+import {
+  classifyMediaBlock,
+  buildUnsupportedMediaPlaceholder,
+} from '../utils/mediaUtils.js';
 import { isNetworkTransientError } from '../../utils/retry.js';
 import { delay } from '../../utils/delay.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
@@ -51,15 +56,38 @@ import {
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
+type AnthropicImageBlock = {
+  type: 'image';
+  source:
+    | { type: 'base64'; media_type: string; data: string }
+    | { type: 'url'; url: string };
+};
+
+type AnthropicDocumentBlock = {
+  type: 'document';
+  source: { type: 'base64'; media_type: string; data: string };
+  title?: string;
+};
+
+type AnthropicToolResultContent =
+  | string
+  | Array<
+      | { type: 'text'; text: string }
+      | AnthropicImageBlock
+      | AnthropicDocumentBlock
+    >;
+
 type AnthropicMessageBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | {
       type: 'tool_result';
       tool_use_id: string;
-      content: string;
+      content: AnthropicToolResultContent;
       is_error?: boolean;
     }
+  | AnthropicImageBlock
+  | AnthropicDocumentBlock
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'redacted_thinking'; data: string };
 
@@ -69,6 +97,48 @@ type AnthropicMessage = {
   role: 'user' | 'assistant';
   content: AnthropicMessageContent;
 };
+
+function mediaBlockToAnthropicImage(media: MediaBlock): AnthropicImageBlock {
+  if (media.encoding === 'url') {
+    return {
+      type: 'image',
+      source: { type: 'url', url: media.data },
+    };
+  }
+
+  const rawData =
+    media.data.startsWith('data:') && media.data.includes(';base64,')
+      ? media.data.split(';base64,')[1]
+      : media.data;
+
+  return {
+    type: 'image',
+    source: {
+      type: 'base64',
+      media_type: media.mimeType || 'image/png',
+      data: rawData,
+    },
+  };
+}
+
+function mediaBlockToAnthropicDocument(
+  media: MediaBlock,
+): AnthropicDocumentBlock {
+  const rawData =
+    media.data.startsWith('data:') && media.data.includes(';base64,')
+      ? media.data.split(';base64,')[1]
+      : media.data;
+
+  return {
+    type: 'document',
+    source: {
+      type: 'base64',
+      media_type: media.mimeType || 'application/pdf',
+      data: rawData,
+    },
+    ...(media.filename ? { title: media.filename } : {}),
+  };
+}
 
 /**
  * Rate limit information from Anthropic API response headers
@@ -95,9 +165,10 @@ export type CacheableAnthropicBlock =
   | {
       type: 'tool_result';
       tool_use_id: string;
-      content: string;
+      content: AnthropicToolResultContent;
       is_error?: boolean;
     }
+  | AnthropicImageBlock
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'redacted_thinking'; data: string };
 
@@ -160,6 +231,12 @@ export function sanitizeBlockForCacheControl(
       return {
         type: 'redacted_thinking',
         data: block.data,
+        cache_control: cacheControl,
+      };
+    case 'image':
+      return {
+        type: 'image',
+        source: block.source,
         cache_control: cacheControl,
       };
     default: {
@@ -1074,7 +1151,7 @@ export class AnthropicProvider extends BaseProvider {
     let pendingToolResults: Array<{
       type: 'tool_result';
       tool_use_id: string;
-      content: string;
+      content: AnthropicToolResultContent;
       is_error?: boolean;
     }> = [];
 
@@ -1172,6 +1249,10 @@ export class AnthropicProvider extends BaseProvider {
         );
 
       if (toolResponseBlocks.length > 0) {
+        const mediaBlocks = c.blocks.filter(
+          (b): b is MediaBlock => b.type === 'media',
+        );
+
         for (const toolResponseBlock of toolResponseBlocks) {
           const payload = buildToolResponsePayload(
             toolResponseBlock,
@@ -1191,17 +1272,37 @@ export class AnthropicProvider extends BaseProvider {
             contentPayload = '[empty tool result]';
           }
 
+          const toolResultContent: AnthropicToolResultContent =
+            mediaBlocks.length > 0
+              ? [
+                  { type: 'text' as const, text: contentPayload },
+                  ...mediaBlocks.map((mb) => {
+                    const category = classifyMediaBlock(mb);
+                    if (category === 'image') {
+                      return mediaBlockToAnthropicImage(mb);
+                    }
+                    if (category === 'pdf') {
+                      return mediaBlockToAnthropicDocument(mb);
+                    }
+                    return {
+                      type: 'text' as const,
+                      text: buildUnsupportedMediaPlaceholder(mb, 'Anthropic'),
+                    };
+                  }),
+                ]
+              : contentPayload;
+
           const toolResult: {
             type: 'tool_result';
             tool_use_id: string;
-            content: string;
+            content: AnthropicToolResultContent;
             is_error?: boolean;
           } = {
             type: 'tool_result',
             tool_use_id: this.normalizeToAnthropicToolId(
               toolResponseBlock.callId,
             ),
-            content: contentPayload,
+            content: toolResultContent,
           };
 
           if (payload.status === 'error') {
@@ -1222,13 +1323,57 @@ export class AnthropicProvider extends BaseProvider {
           continue;
         }
 
-        const textBlock = c.blocks.find((b) => b.type === 'text');
+        const hasMedia = c.blocks.some((b) => b.type === 'media');
 
-        // Add text block as user message
-        anthropicMessages.push({
-          role: 'user',
-          content: textBlock?.text || '',
-        });
+        if (hasMedia) {
+          const parts: Array<
+            | { type: 'text'; text: string }
+            | AnthropicImageBlock
+            | AnthropicDocumentBlock
+          > = [];
+
+          for (const block of c.blocks) {
+            if (block.type === 'text' && block.text) {
+              parts.push({ type: 'text', text: block.text });
+            } else if (block.type === 'code') {
+              const language = block.language ? block.language : '';
+              parts.push({
+                type: 'text',
+                text: `
+
+\u0060\u0060\u0060${language}
+${block.code}
+\u0060\u0060\u0060
+`,
+              });
+            } else if (block.type === 'media') {
+              const category = classifyMediaBlock(block);
+              if (category === 'image') {
+                parts.push(mediaBlockToAnthropicImage(block));
+              } else if (category === 'pdf') {
+                parts.push(mediaBlockToAnthropicDocument(block));
+              } else {
+                parts.push({
+                  type: 'text',
+                  text: buildUnsupportedMediaPlaceholder(block, 'Anthropic'),
+                });
+              }
+            }
+          }
+
+          if (parts.length > 0) {
+            anthropicMessages.push({
+              role: 'user',
+              content: parts,
+            });
+          }
+        } else {
+          const textBlock = c.blocks.find((b) => b.type === 'text');
+          anthropicMessages.push({
+            role: 'user',
+            content: textBlock?.text || '',
+          });
+        }
       } else if (c.speaker === 'ai') {
         // Flush any pending tool results before adding an AI message
         flushToolResults();
@@ -1471,7 +1616,7 @@ ${block.code}
               const collectedResults: Array<{
                 type: 'tool_result';
                 tool_use_id: string;
-                content: string;
+                content: AnthropicToolResultContent;
                 is_error?: boolean;
               }> = [];
 
@@ -1484,7 +1629,7 @@ ${block.code}
                 let foundResult: {
                   type: 'tool_result';
                   tool_use_id: string;
-                  content: string;
+                  content: AnthropicToolResultContent;
                   is_error?: boolean;
                 } | null = null;
 
@@ -1509,7 +1654,7 @@ ${block.code}
                       foundResult = laterMsg.content[resultIdx] as {
                         type: 'tool_result';
                         tool_use_id: string;
-                        content: string;
+                        content: AnthropicToolResultContent;
                         is_error?: boolean;
                       };
                       pendingRemovals.push({
@@ -1942,10 +2087,13 @@ ${block.code}
             | {
                 type: 'tool_result';
                 tool_use_id: string;
-                content: string;
+                content: AnthropicToolResultContent;
                 is_error?: boolean;
                 cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
               }
+            | (AnthropicImageBlock & {
+                cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+              })
           >;
           cacheLogger.debug(
             () =>
@@ -1969,10 +2117,13 @@ ${block.code}
           | {
               type: 'tool_result';
               tool_use_id: string;
-              content: string;
+              content: AnthropicToolResultContent;
               is_error?: boolean;
               cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
             }
+          | (AnthropicImageBlock & {
+              cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+            })
           | {
               type: 'thinking';
               thinking: string;
@@ -1996,7 +2147,11 @@ ${block.code}
             }
 
             // Skip tool_result blocks with empty content
-            if (block.type === 'tool_result' && block.content.trim() === '') {
+            if (
+              block.type === 'tool_result' &&
+              typeof block.content === 'string' &&
+              block.content.trim() === ''
+            ) {
               continue;
             }
 

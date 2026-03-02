@@ -4333,7 +4333,7 @@ describe('AnthropicProvider', () => {
 
     it('should handle unknown block types fail-safe without spreading keys', () => {
       const block = {
-        type: 'image' as never,
+        type: 'unknown_future_type' as never,
         url: 'https://example.com/img.png',
         secretKey: 'should-not-appear',
       };

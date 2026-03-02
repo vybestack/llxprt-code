@@ -1055,6 +1055,29 @@ export class GeminiProvider extends BaseProvider {
         for (const block of c.blocks) {
           if (block.type === 'text') {
             parts.push({ text: block.text });
+          } else if (block.type === 'media') {
+            if (block.encoding === 'url') {
+              parts.push({
+                fileData: {
+                  mimeType: block.mimeType,
+                  fileUri: block.data,
+                },
+              } as Part);
+            } else {
+              let imageData = block.data;
+              if (imageData.startsWith('data:')) {
+                const base64Index = imageData.indexOf('base64,');
+                if (base64Index !== -1) {
+                  imageData = imageData.substring(base64Index + 7);
+                }
+              }
+              parts.push({
+                inlineData: {
+                  mimeType: block.mimeType,
+                  data: imageData,
+                },
+              } as Part);
+            }
           }
         }
 

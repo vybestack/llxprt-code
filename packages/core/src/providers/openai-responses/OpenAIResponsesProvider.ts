@@ -29,12 +29,18 @@ import { type IModel } from '../IModel.js';
 import {
   type IContent,
   type TextBlock,
+  type MediaBlock,
 } from '../../services/history/IContent.js';
 import {
   limitOutputTokens,
   type ToolOutputSettingsProvider,
 } from '../../utils/toolOutputLimiter.js';
 import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
+import {
+  normalizeMediaToDataUri,
+  classifyMediaBlock,
+  buildUnsupportedMediaPlaceholder,
+} from '../utils/mediaUtils.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
@@ -59,6 +65,11 @@ import { CodexOAuthTokenSchema } from '../../auth/types.js';
 import type { OAuthManager } from '../../auth/precedence.js';
 import { getErrorStatus, isNetworkTransientError } from '../../utils/retry.js';
 import { delay } from '../../utils/delay.js';
+
+type ResponsesContentPart =
+  | { type: 'input_text'; text: string }
+  | { type: 'input_image'; image_url: string }
+  | { type: 'input_file'; file_data: string; filename?: string };
 
 export class OpenAIResponsesProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -337,14 +348,21 @@ export class OpenAIResponsesProvider extends BaseProvider {
    */
   private injectSyntheticConfigFileRead(
     requestInput: Array<
-      | { role: 'user' | 'assistant' | 'system'; content?: string }
+      | {
+          role: 'user' | 'assistant' | 'system';
+          content?: string | ResponsesContentPart[];
+        }
       | {
           type: 'function_call';
           call_id: string;
           name: string;
           arguments: string;
         }
-      | { type: 'function_call_output'; call_id: string; output: string }
+      | {
+          type: 'function_call_output';
+          call_id: string;
+          output: string | ResponsesContentPart[];
+        }
       | {
           type: 'reasoning';
           id: string;
@@ -531,14 +549,21 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     // Responses API input types: messages, function_call, function_call_output, reasoning
     type ResponsesInputItem =
-      | { role: 'user' | 'assistant'; content?: string }
+      | {
+          role: 'user' | 'assistant';
+          content?: string | ResponsesContentPart[];
+        }
       | {
           type: 'function_call';
           call_id: string;
           name: string;
           arguments: string;
         }
-      | { type: 'function_call_output'; call_id: string; output: string }
+      | {
+          type: 'function_call_output';
+          call_id: string;
+          output: string | ResponsesContentPart[];
+        }
       | {
           type: 'reasoning';
           id: string;
@@ -564,12 +589,48 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     for (const c of patchedContent) {
       if (c.speaker === 'human') {
-        const textBlocks = c.blocks.filter(
-          (b): b is TextBlock => b.type === 'text',
-        );
-        const text = textBlocks.map((b) => b.text).join('\n');
-        if (text) {
-          input.push({ role: 'user', content: text });
+        const hasMedia = c.blocks.some((b) => b.type === 'media');
+
+        if (hasMedia) {
+          const parts: ResponsesContentPart[] = [];
+          for (const block of c.blocks) {
+            if (block.type === 'text' && block.text) {
+              parts.push({ type: 'input_text', text: block.text });
+            } else if (block.type === 'media') {
+              const category = classifyMediaBlock(block);
+              if (category === 'image') {
+                parts.push({
+                  type: 'input_image',
+                  image_url: normalizeMediaToDataUri(block),
+                });
+              } else if (category === 'pdf') {
+                parts.push({
+                  type: 'input_file',
+                  file_data: normalizeMediaToDataUri(block),
+                  ...(block.filename ? { filename: block.filename } : {}),
+                });
+              } else {
+                parts.push({
+                  type: 'input_text',
+                  text: buildUnsupportedMediaPlaceholder(
+                    block,
+                    'OpenAI Responses',
+                  ),
+                });
+              }
+            }
+          }
+          if (parts.length > 0) {
+            input.push({ role: 'user', content: parts });
+          }
+        } else {
+          const text = c.blocks
+            .filter((b): b is TextBlock => b.type === 'text')
+            .map((b) => b.text)
+            .join('\n');
+          if (text) {
+            input.push({ role: 'user', content: text });
+          }
         }
       } else if (c.speaker === 'ai') {
         const textBlocks = c.blocks.filter((b) => b.type === 'text');
@@ -617,6 +678,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
         // Convert tool responses to function_call_output format (Responses API)
         const toolResponseBlocks = c.blocks.filter(
           (b) => b.type === 'tool_response',
+        );
+        const mediaBlocks = c.blocks.filter(
+          (b): b is MediaBlock => b.type === 'media',
         );
 
         // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
@@ -668,10 +732,45 @@ export class OpenAIResponsesProvider extends BaseProvider {
             continue;
           }
 
+          let outputContent: string | ResponsesContentPart[];
+
+          if (mediaBlocks.length > 0) {
+            const parts: ResponsesContentPart[] = [];
+            if (candidate) {
+              parts.push({ type: 'input_text', text: candidate });
+            }
+            for (const media of mediaBlocks) {
+              const category = classifyMediaBlock(media);
+              if (category === 'image') {
+                parts.push({
+                  type: 'input_image',
+                  image_url: normalizeMediaToDataUri(media),
+                });
+              } else if (category === 'pdf') {
+                parts.push({
+                  type: 'input_file',
+                  file_data: normalizeMediaToDataUri(media),
+                  ...(media.filename ? { filename: media.filename } : {}),
+                });
+              } else {
+                parts.push({
+                  type: 'input_text',
+                  text: buildUnsupportedMediaPlaceholder(
+                    media,
+                    'OpenAI Responses',
+                  ),
+                });
+              }
+            }
+            outputContent = parts.length > 0 ? parts : candidate;
+          } else {
+            outputContent = candidate;
+          }
+
           input.push({
             type: 'function_call_output',
             call_id: outputCallId,
-            output: candidate,
+            output: outputContent,
           });
         }
       }
