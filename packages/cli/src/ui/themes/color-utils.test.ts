@@ -509,5 +509,24 @@ describe('Color Utils', () => {
       expect(mockStdin.setRawMode).toHaveBeenCalledWith(false);
       vi.useRealTimers();
     });
+
+    it('should restore raw mode to true when stdin was already in raw mode', async () => {
+      // Simulate stdin already being in raw mode (e.g., Ink is running)
+      (mockStdin as Record<string, unknown>).isRaw = true;
+
+      const promise = detectTerminalBackgroundColor();
+
+      const dataCall = mockStdin.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'data',
+      );
+      expect(dataCall).toBeDefined();
+      const dataHandler = dataCall![1];
+      dataHandler(Buffer.from('\x1b]11;rgb:1e1e/1e1e/2e2e\x1b\\'));
+
+      await promise;
+
+      // Should restore to true, not force false
+      expect(mockStdin.setRawMode).toHaveBeenLastCalledWith(true);
+    });
   });
 });

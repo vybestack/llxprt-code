@@ -303,11 +303,12 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
       return;
     }
 
+    const wasRaw = stdin.isRaw === true;
     let timeoutHandle: NodeJS.Timeout;
     let response = '';
 
     const cleanup = () => {
-      stdin.setRawMode(false);
+      stdin.setRawMode(wasRaw);
       stdin.removeListener('data', dataHandler);
       clearTimeout(timeoutHandle);
     };
