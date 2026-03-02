@@ -806,9 +806,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
       let result;
       try {
-        result = streamText(
-          streamOptions as Parameters<typeof streamText>[0],
-        );
+        result = streamText(streamOptions as Parameters<typeof streamText>[0]);
       } catch (error) {
         logger.error(
           () =>

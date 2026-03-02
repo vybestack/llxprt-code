@@ -5,7 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { Config, SettingsService, coreEvents, DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  SettingsService,
+  coreEvents,
+  DebugLogger,
+} from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../config/settings.js';
 import { setupTerminalAndTheme } from './terminalTheme.js';
 import { terminalCapabilityManager } from '../ui/utils/terminalCapabilityManager.js';
@@ -31,7 +36,11 @@ vi.mock('../ui/themes/theme-manager.js', () => ({
     }),
     getAllThemes: vi.fn().mockReturnValue([
       { name: 'Green Screen', type: 'dark', colors: { Background: '#000000' } },
-      { name: 'Default Light', type: 'light', colors: { Background: '#FFFFFF' } },
+      {
+        name: 'Default Light',
+        type: 'light',
+        colors: { Background: '#FFFFFF' },
+      },
     ]),
   },
   DEFAULT_THEME: { name: 'Green Screen' },
@@ -44,7 +53,7 @@ describe('setupTerminalAndTheme', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    
+
     settingsService = new SettingsService();
     config = new Config({
       cwd: '/tmp',
@@ -88,9 +97,9 @@ describe('setupTerminalAndTheme', () => {
     });
 
     it('should load custom themes from settings', async () => {
-      const customThemes = { 
-        myTheme: { 
-          name: 'My Theme', 
+      const customThemes = {
+        myTheme: {
+          name: 'My Theme',
           type: 'custom' as const,
           Background: '#000000',
           Foreground: '#FFFFFF',
@@ -103,50 +112,58 @@ describe('setupTerminalAndTheme', () => {
           AccentRed: '#DD4C4C',
           Comment: '#008000',
           Gray: '#97a0b0',
-        } 
+        },
       };
       mockSettings.merged.ui = { customThemes };
-      
+
       await setupTerminalAndTheme(config, mockSettings);
       expect(themeManager.loadCustomThemes).toHaveBeenCalledWith(customThemes);
     });
 
     it('should use theme from settings if specified', async () => {
       mockSettings.merged.ui = { theme: 'Green Screen' };
-      
+
       await setupTerminalAndTheme(config, mockSettings);
       expect(themeManager.setActiveTheme).toHaveBeenCalledWith('Green Screen');
     });
 
     it('should pick default theme based on background color if no theme set', async () => {
-      vi.mocked(terminalCapabilityManager.getTerminalBackgroundColor).mockReturnValue('#1E1E2E');
-      
+      vi.mocked(
+        terminalCapabilityManager.getTerminalBackgroundColor,
+      ).mockReturnValue('#1E1E2E');
+
       await setupTerminalAndTheme(config, mockSettings);
       expect(themeManager.setActiveTheme).toHaveBeenCalled();
     });
 
     it('should store background color in config', async () => {
       const bgColor = '#1E1E2E';
-      vi.mocked(terminalCapabilityManager.getTerminalBackgroundColor).mockReturnValue(bgColor);
-      
+      vi.mocked(
+        terminalCapabilityManager.getTerminalBackgroundColor,
+      ).mockReturnValue(bgColor);
+
       await setupTerminalAndTheme(config, mockSettings);
       expect(config.getTerminalBackground()).toBe(bgColor);
     });
 
     it('should return the detected background color', async () => {
       const bgColor = '#1E1E2E';
-      vi.mocked(terminalCapabilityManager.getTerminalBackgroundColor).mockReturnValue(bgColor);
-      
+      vi.mocked(
+        terminalCapabilityManager.getTerminalBackgroundColor,
+      ).mockReturnValue(bgColor);
+
       const result = await setupTerminalAndTheme(config, mockSettings);
       expect(result).toBe(bgColor);
     });
 
     it('should emit warning when active theme is incompatible with detected background', async () => {
       const feedbackSpy = vi.spyOn(coreEvents, 'emitFeedback');
-      
+
       // Set a light background color
-      vi.mocked(terminalCapabilityManager.getTerminalBackgroundColor).mockReturnValue('#FFFFFF');
-      
+      vi.mocked(
+        terminalCapabilityManager.getTerminalBackgroundColor,
+      ).mockReturnValue('#FFFFFF');
+
       // Set a dark theme (return value must match Theme class structure)
       vi.mocked(themeManager.getActiveTheme).mockReturnValue({
         name: 'Green Screen',
@@ -170,34 +187,40 @@ describe('setupTerminalAndTheme', () => {
           DarkGray: '#5c6370',
         },
       } as unknown as ReturnType<typeof themeManager.getActiveTheme>);
-      
+
       await setupTerminalAndTheme(config, mockSettings);
-      
+
       expect(feedbackSpy).toHaveBeenCalledWith(
         'warning',
-        expect.stringContaining("Theme 'Green Screen' (dark) might look incorrect on your light terminal background"),
+        expect.stringContaining(
+          "Theme 'Green Screen' (dark) might look incorrect on your light terminal background",
+        ),
       );
-      
+
       feedbackSpy.mockRestore();
     });
 
     it('should emit warning log when configured theme is not found', async () => {
       const nonExistentTheme = 'NonExistentTheme';
       mockSettings.merged.ui = { theme: nonExistentTheme };
-      
+
       // Make setActiveTheme return false to indicate theme not found
       vi.mocked(themeManager.setActiveTheme).mockReturnValue(false);
-      
+
       // Spy on DebugLogger.warn to capture the warning log
       const debugLoggerWarnSpy = vi.spyOn(DebugLogger.prototype, 'warn');
-      
+
       await setupTerminalAndTheme(config, mockSettings);
-      
-      expect(themeManager.setActiveTheme).toHaveBeenCalledWith(nonExistentTheme);
-      expect(debugLoggerWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`Warning: Theme "${nonExistentTheme}" not found`),
+
+      expect(themeManager.setActiveTheme).toHaveBeenCalledWith(
+        nonExistentTheme,
       );
-      
+      expect(debugLoggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `Warning: Theme "${nonExistentTheme}" not found`,
+        ),
+      );
+
       debugLoggerWarnSpy.mockRestore();
     });
   });
@@ -209,13 +232,15 @@ describe('setupTerminalAndTheme', () => {
 
     it('should skip detectCapabilities for non-interactive', async () => {
       await setupTerminalAndTheme(config, mockSettings);
-      expect(terminalCapabilityManager.detectCapabilities).not.toHaveBeenCalled();
+      expect(
+        terminalCapabilityManager.detectCapabilities,
+      ).not.toHaveBeenCalled();
     });
 
     it('should still load custom themes', async () => {
-      const customThemes = { 
-        myTheme: { 
-          name: 'My Theme', 
+      const customThemes = {
+        myTheme: {
+          name: 'My Theme',
           type: 'custom' as const,
           Background: '#000000',
           Foreground: '#FFFFFF',
@@ -228,10 +253,10 @@ describe('setupTerminalAndTheme', () => {
           AccentRed: '#DD4C4C',
           Comment: '#008000',
           Gray: '#97a0b0',
-        } 
+        },
       };
       mockSettings.merged.ui = { customThemes };
-      
+
       await setupTerminalAndTheme(config, mockSettings);
       expect(themeManager.loadCustomThemes).toHaveBeenCalledWith(customThemes);
     });

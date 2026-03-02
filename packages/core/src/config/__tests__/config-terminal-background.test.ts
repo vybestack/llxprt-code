@@ -41,7 +41,7 @@ describe('Config - Terminal Background', () => {
     it('should set to undefined', () => {
       config.setTerminalBackground('#1E1E2E');
       expect(config.getTerminalBackground()).toBe('#1E1E2E');
-      
+
       config.setTerminalBackground(undefined);
       expect(config.getTerminalBackground()).toBeUndefined();
     });
@@ -49,7 +49,7 @@ describe('Config - Terminal Background', () => {
     it('should handle multiple sets', () => {
       config.setTerminalBackground('#000000');
       expect(config.getTerminalBackground()).toBe('#000000');
-      
+
       config.setTerminalBackground('#FFFFFF');
       expect(config.getTerminalBackground()).toBe('#FFFFFF');
     });

@@ -174,9 +174,9 @@ describe('TerminalCapabilityManager', () => {
   it('should not attempt detection in non-TTY mode', async () => {
     stdin.isTTY = false;
     const manager = TerminalCapabilityManager.getInstance();
-    
+
     await manager.detectCapabilities();
-    
+
     expect(manager.isKittyProtocolEnabled()).toBe(false);
     expect(manager.getTerminalBackgroundColor()).toBeUndefined();
     expect(manager.getTerminalName()).toBeUndefined();
@@ -198,7 +198,9 @@ describe('TerminalCapabilityManager', () => {
   });
 
   it('should enable Kitty protocol when supported', async () => {
-    const { enableKittyKeyboardProtocol } = await import('@vybestack/llxprt-code-core');
+    const { enableKittyKeyboardProtocol } = await import(
+      '@vybestack/llxprt-code-core'
+    );
     const manager = TerminalCapabilityManager.getInstance();
     const promise = manager.detectCapabilities();
 
@@ -206,14 +208,16 @@ describe('TerminalCapabilityManager', () => {
     stdin.emit('data', Buffer.from('\x1b[?62c'));
 
     await promise;
-    
+
     // Detection should auto-enable
     expect(manager.isKittyProtocolEnabled()).toBe(true);
     expect(enableKittyKeyboardProtocol).toHaveBeenCalled();
   });
 
   it('should disable Kitty protocol', async () => {
-    const { disableKittyKeyboardProtocol } = await import('@vybestack/llxprt-code-core');
+    const { disableKittyKeyboardProtocol } = await import(
+      '@vybestack/llxprt-code-core'
+    );
     const manager = TerminalCapabilityManager.getInstance();
     const promise = manager.detectCapabilities();
 
@@ -229,7 +233,9 @@ describe('TerminalCapabilityManager', () => {
   });
 
   it('should re-enable Kitty protocol after disable', async () => {
-    const { enableKittyKeyboardProtocol } = await import('@vybestack/llxprt-code-core');
+    const { enableKittyKeyboardProtocol } = await import(
+      '@vybestack/llxprt-code-core'
+    );
     const manager = TerminalCapabilityManager.getInstance();
     const promise = manager.detectCapabilities();
 
@@ -237,19 +243,19 @@ describe('TerminalCapabilityManager', () => {
     stdin.emit('data', Buffer.from('\x1b[?62c'));
 
     await promise;
-    
+
     vi.mocked(enableKittyKeyboardProtocol).mockClear();
-    
+
     manager.disableKittyProtocol();
     manager.enableKittyProtocol();
-    
+
     expect(manager.isKittyProtocolEnabled()).toBe(true);
     expect(enableKittyKeyboardProtocol).toHaveBeenCalled();
   });
 
   it('should handle detection already complete', async () => {
     const manager = TerminalCapabilityManager.getInstance();
-    
+
     // First detection
     const promise1 = manager.detectCapabilities();
     stdin.emit('data', Buffer.from('\x1b[?62c'));

@@ -12,7 +12,11 @@ import { themeManager, DEFAULT_THEME } from '../ui/themes/theme-manager.js';
 import { pickDefaultThemeName } from '../ui/themes/theme.js';
 import { getThemeTypeFromBackgroundColor } from '../ui/themes/color-utils.js';
 import type { LoadedSettings } from '../config/settings.js';
-import { type Config, coreEvents, DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  type Config,
+  coreEvents,
+  DebugLogger,
+} from '@vybestack/llxprt-code-core';
 
 /**
  * Detects terminal capabilities, loads themes, and sets the active theme.
@@ -39,9 +43,7 @@ export async function setupTerminalAndTheme(
       // If the theme is not found during initial load, log a warning and continue.
       // The useThemeCommand hook in AppContainer.tsx will handle opening the dialog.
       const logger = new DebugLogger('llxprt:terminalTheme');
-      logger.warn(
-        `Warning: Theme "${settings.merged.ui?.theme}" not found.`,
-      );
+      logger.warn(`Warning: Theme "${settings.merged.ui?.theme}" not found.`);
     }
   } else {
     // If no theme is set, check terminal background color
