@@ -165,6 +165,26 @@ describe('classifyMediaBlock', () => {
     };
     expect(classifyMediaBlock(media)).toBe('unknown');
   });
+
+  it('handles mixed-case image MIME types', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'Image/PNG',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    expect(classifyMediaBlock(media)).toBe('image');
+  });
+
+  it('handles uppercase MIME types', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'APPLICATION/PDF',
+      data: 'abc',
+      encoding: 'base64',
+    };
+    expect(classifyMediaBlock(media)).toBe('pdf');
+  });
 });
 
 describe('buildUnsupportedMediaPlaceholder', () => {
