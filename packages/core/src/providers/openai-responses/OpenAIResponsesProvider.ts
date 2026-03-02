@@ -589,47 +589,48 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     for (const c of patchedContent) {
       if (c.speaker === 'human') {
-        const textBlocks = c.blocks.filter(
-          (b): b is TextBlock => b.type === 'text',
-        );
-        const mediaBlocks = c.blocks.filter(
-          (b): b is MediaBlock => b.type === 'media',
-        );
-        const text = textBlocks.map((b) => b.text).join('\n');
+        const hasMedia = c.blocks.some((b) => b.type === 'media');
 
-        if (mediaBlocks.length > 0) {
+        if (hasMedia) {
           const parts: ResponsesContentPart[] = [];
-          if (text) {
-            parts.push({ type: 'input_text', text });
-          }
-          for (const media of mediaBlocks) {
-            const category = classifyMediaBlock(media);
-            if (category === 'image') {
-              parts.push({
-                type: 'input_image',
-                image_url: normalizeMediaToDataUri(media),
-              });
-            } else if (category === 'pdf') {
-              parts.push({
-                type: 'input_file',
-                file_data: normalizeMediaToDataUri(media),
-                ...(media.filename ? { filename: media.filename } : {}),
-              });
-            } else {
-              parts.push({
-                type: 'input_text',
-                text: buildUnsupportedMediaPlaceholder(
-                  media,
-                  'OpenAI Responses',
-                ),
-              });
+          for (const block of c.blocks) {
+            if (block.type === 'text' && block.text) {
+              parts.push({ type: 'input_text', text: block.text });
+            } else if (block.type === 'media') {
+              const category = classifyMediaBlock(block);
+              if (category === 'image') {
+                parts.push({
+                  type: 'input_image',
+                  image_url: normalizeMediaToDataUri(block),
+                });
+              } else if (category === 'pdf') {
+                parts.push({
+                  type: 'input_file',
+                  file_data: normalizeMediaToDataUri(block),
+                  ...(block.filename ? { filename: block.filename } : {}),
+                });
+              } else {
+                parts.push({
+                  type: 'input_text',
+                  text: buildUnsupportedMediaPlaceholder(
+                    block,
+                    'OpenAI Responses',
+                  ),
+                });
+              }
             }
           }
           if (parts.length > 0) {
             input.push({ role: 'user', content: parts });
           }
-        } else if (text) {
-          input.push({ role: 'user', content: text });
+        } else {
+          const text = c.blocks
+            .filter((b): b is TextBlock => b.type === 'text')
+            .map((b) => b.text)
+            .join('\n');
+          if (text) {
+            input.push({ role: 'user', content: text });
+          }
         }
       } else if (c.speaker === 'ai') {
         const textBlocks = c.blocks.filter((b) => b.type === 'text');
