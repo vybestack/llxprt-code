@@ -25,6 +25,14 @@ vi.mock('node:process', () => ({
   },
 }));
 
+vi.mock('../utils/terminalCapabilityManager.js', () => ({
+  terminalCapabilityManager: {
+    getTerminalName: vi.fn().mockReturnValue('Test Terminal'),
+    getTerminalBackgroundColor: vi.fn().mockReturnValue('#000000'),
+    isKittyProtocolEnabled: vi.fn().mockReturnValue(true),
+  },
+}));
+
 describe('bugCommand', () => {
   beforeEach(() => {
     vi.mocked(getCliVersion).mockResolvedValue('0.1.0');
@@ -61,6 +69,9 @@ describe('bugCommand', () => {
 * **Sandbox Environment:** test
 * **Model Version:** gemini-pro
 * **Memory Usage:** 100 MB
+* **Terminal Name:** Test Terminal
+* **Terminal Background:** #000000
+* **Kitty Keyboard Protocol:** Supported
 * **IDE Client:** VSCode
 `;
     const expectedUrl =
@@ -95,6 +106,9 @@ describe('bugCommand', () => {
 * **Sandbox Environment:** test
 * **Model Version:** gemini-pro
 * **Memory Usage:** 100 MB
+* **Terminal Name:** Test Terminal
+* **Terminal Background:** #000000
+* **Kitty Keyboard Protocol:** Supported
 * **IDE Client:** VSCode
 `;
     const expectedUrl = customTemplate
