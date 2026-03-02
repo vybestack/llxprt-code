@@ -136,7 +136,7 @@ import {
   disableBracketedPaste,
   enableBracketedPaste,
 } from './utils/bracketedPaste.js';
-import { enableSupportedProtocol } from './utils/kittyProtocolDetector.js';
+import { terminalCapabilityManager } from './utils/terminalCapabilityManager.js';
 import { restoreTerminalProtocolsSync } from './utils/terminalProtocolCleanup.js';
 import {
   ENABLE_FOCUS_TRACKING,
@@ -559,7 +559,7 @@ export const AppContainer = (props: AppContainerProps) => {
       restoreTerminalStateAfterEditor();
 
       enableBracketedPaste();
-      enableSupportedProtocol();
+      terminalCapabilityManager.enableKittyProtocol();
       stdout.write(ENABLE_FOCUS_TRACKING);
       stdout.write(SHOW_CURSOR);
       return;
@@ -574,7 +574,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Re-send terminal control sequences
     enableBracketedPaste();
-    enableSupportedProtocol();
+    terminalCapabilityManager.enableKittyProtocol();
     stdout.write(ENABLE_FOCUS_TRACKING);
     stdout.write(SHOW_CURSOR);
   }, [
@@ -2036,7 +2036,7 @@ export const AppContainer = (props: AppContainerProps) => {
     mainAreaWidth,
     inputWidth,
     suggestionsWidth,
-    terminalBackgroundColor: props.terminalBackgroundColor,
+    terminalBackgroundColor: config.getTerminalBackground(),
 
     // History and streaming
     history,
