@@ -348,7 +348,9 @@ private static sessionState = new Map<string, { contextId?: string; taskId?: str
 | A2A utilities (text/ID extraction) | MUST | ~100 |
 | Async AgentRegistry | MUST | ~50 |
 | Auth provider abstraction | MUST | ~300 |
-| TOML loader | SHOULD (post-MVP) | ~300 |
+| GoogleADCAuthProvider | MUST | ~50 |
+| Vertex AI dialect adapter (createAdapterFetch) | MUST | ~120 |
+| TOML loader (remote agent support) | MUST | ~150 |
 
 ### 4.3 Incompatibilities with Upstream
 
@@ -489,7 +491,7 @@ class AgentRegistry {
   
   async initialize(): Promise<void> {
     this.loadBuiltInAgents();
-    // Future: Load from TOML (post-MVP)
+    // Also loads from TOML (see §8.1 — in MVP scope)
   }
   
   // NOW ASYNC
@@ -544,7 +546,7 @@ class AgentRegistry {
 **Impacted call sites (ALL must be updated to await):**
 1. `AgentRegistry.loadBuiltInAgents()` — Currently calls `registerAgent` synchronously; must become async and await each registration
 2. Any test files that call `registerAgent` directly — Must add `await`
-3. Future TOML loader (post-MVP) — Will call `registerAgent` asynchronously
+3. TOML loader (MVP — see §8.1) — Will call `registerAgent` asynchronously
 4. Any user-defined agent registration code (if exposed via API)
 
 **Migration pattern:**
@@ -830,30 +832,55 @@ export class NoAuthProvider implements RemoteAgentAuthProvider {
 }
 ```
 
-#### GoogleADCAuthProvider (Post-MVP)
+#### GoogleADCAuthProvider (MVP)
+Upstream ships this as `ADCHandler` hardcoded in `remote-invocation.ts`. We pull it out into a proper `RemoteAgentAuthProvider` implementation so it's swappable.
 ```typescript
 export class GoogleADCAuthProvider implements RemoteAgentAuthProvider {
-  async getAuthHandler(agentCardUrl: string): Promise<AuthenticationHandler> {
-    const { ADCHandler } = await import('@a2a-js/sdk/client');
-    return new ADCHandler({ audience: agentCardUrl });
+  async getAuthHandler(_agentCardUrl: string): Promise<AuthenticationHandler> {
+    // Uses google-auth-library (same dep upstream uses)
+    const auth = new GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+    });
+    return {
+      async headers(): Promise<Record<string, string>> {
+        const client = await auth.getClient();
+        const token = await client.getAccessToken();
+        if (!token.token) throw new Error('Failed to retrieve ADC access token');
+        return { Authorization: `Bearer ${token.token}` };
+      },
+      async shouldRetryWithHeaders(): Promise<Record<string, string> | undefined> {
+        return this.headers();  // Re-fetch token on retry
+      },
+    };
   }
 }
 ```
 
 #### BearerTokenAuthProvider (Post-MVP)
+Covers the most common non-Google case — static API keys, tokens from external identity providers.
 ```typescript
 export class BearerTokenAuthProvider implements RemoteAgentAuthProvider {
   constructor(private readonly token: string) {}
   
   async getAuthHandler(): Promise<AuthenticationHandler> {
     return {
-      getAuthHeader: async () => `Bearer ${this.token}`
+      async headers() { return { Authorization: `Bearer ${this.token}` }; },
+      async shouldRetryWithHeaders() { return undefined; },  // Static token, no refresh
     };
   }
 }
 ```
 
+#### Cloud-Provider Auth Extensibility (Post-MVP)
+The `RemoteAgentAuthProvider` interface is deliberately simple so cloud-specific providers can be added without changing the core:
+- **Oracle OCI:** `OciAuthProvider` — use `oci-common` SDK credential chain (instance principal, resource principal, `~/.oci/config`)
+- **AWS:** `AwsSigV4AuthProvider` — use `@aws-sdk/credential-providers` default chain, sign requests with SigV4
+- **Azure:** `AzureDefaultCredentialAuthProvider` — use `@azure/identity` `DefaultAzureCredential`
+
+Each is ~50 LoC wrapping the respective cloud SDK's credential chain into our `RemoteAgentAuthProvider` interface. No core changes needed.
+
 #### MultiProviderAuthProvider (Post-MVP)
+Routes different agent URLs to different auth providers via pattern matching.
 ```typescript
 export class MultiProviderAuthProvider implements RemoteAgentAuthProvider {
   private readonly rules: Array<{ pattern: RegExp; provider: RemoteAgentAuthProvider }> = [];
@@ -862,18 +889,16 @@ export class MultiProviderAuthProvider implements RemoteAgentAuthProvider {
   addRule(pattern: RegExp, provider: RemoteAgentAuthProvider): this;
   
   async getAuthHandler(agentCardUrl: string): Promise<AuthenticationHandler | undefined> {
-    // Match URL against patterns (first match wins)
     for (const rule of this.rules) {
       if (rule.pattern.test(agentCardUrl)) {
         return rule.provider.getAuthHandler(agentCardUrl);
       }
     }
-    
-    // Fall back to default
     return this.defaultProvider?.getAuthHandler(agentCardUrl);
   }
 }
 ```
+This enables mixed-cloud deployments: Google agents use ADC, Oracle agents use OCI credentials, self-hosted agents use bearer tokens — all coexisting via URL pattern rules.
 
 **Resolution order:**
 1. Per-agent config (future: agent-specific auth override)
@@ -1263,10 +1288,10 @@ These features are **explicitly excluded from MVP** to reduce scope and risk:
 - **MVP approach:** Single global auth provider
 - **Post-MVP:** Add `auth` field to `RemoteAgentDefinition`
 
-### 8.6 Dialect Adapters
-- **Rationale:** Upstream added for Vertex AI quirks; unproven need
-- **MVP approach:** Standard A2A protocol only
-- **Post-MVP:** Add adapter if compatibility issues arise
+### 8.6 ~~Dialect Adapters~~ → **IN SCOPE (MVP)**
+- **Moved to MVP:** Upstream `96b9be3ec` includes `createAdapterFetch()` (~120 LoC) that translates between the A2A SDK's JSON format and Vertex AI Agent Engine's proto-JSON dialect (different enum casing, JSON-RPC unwrapping, `parts`→`content` mapping, `kind` restoration). Without this, agents hosted on Vertex AI Agent Engine won't work.
+- **Scope:** Port `createAdapterFetch()` and `mapTaskState()` from upstream. Applied as a fetch wrapper in `A2AClientManager.loadAgent()`.
+- **Note:** Upstream marks this `TODO: Remove this when a2a-js fixes compatibility`. We carry it for now; can remove when SDK stabilizes.
 
 ### 8.7 Agent Introspection/Discovery UI
 - **Rationale:** UI for browsing available agents, skills
@@ -1334,7 +1359,7 @@ This design provides a **complete blueprint** for adding A2A remote agent suppor
 [OK] **Multi-provider** — Auth abstraction (not Google-only)  
 [OK] **Safe execution** — Session-scoped state, graceful error handling  
 [OK] **Minimal breaking changes** — Async registry only  
-[OK] **Well-scoped MVP** — TOML, advanced features deferred  
+[OK] **Well-scoped MVP** — Full feature parity with upstream 0.24.5 (TOML + ADC + dialect adapter included); advanced features (streaming, multi-agent orchestration, per-agent auth overrides) deferred  
 [OK] **Testable** — All components accept injected dependencies  
 [OK] **Observable** — Debug logging, telemetry hooks  
 [OK] **Secure** — HTTPS enforcement, no token leakage  
@@ -1350,3 +1375,4 @@ This design provides a **complete blueprint** for adding A2A remote agent suppor
 | 1.0 | 2026-03-02 | Initial draft |
 | 2.0 | 2026-03-02 | Round-2 review remediation: Made description optional on BaseAgentDefinition, removed singleton from A2AClientManager (inject auth per-config), clarified breaking changes explicitly, added abort semantics, added session state keying details, updated confirmation security classification, added SSRF/timeout/retry/credential redaction requirements, added input-required state handling, specified polling strategy (synchronous MVP), clarified dispatch point (registry factory vs tool), added [NEW]/[MODIFIED]/[BASELINE] notation, updated all "proposed" file references to distinguish from existing baseline, added Config method signatures for auth provider |
 | 3.0 | 2026-03-02 | Round-3 review remediation: Resolved polling/blocking contradiction (MVP uses SDK blocking mode, not manual polling), made AgentRegistry.createInvocation() the single canonical dispatch point, clarified A2AClientManager is session-scoped (not per-invocation), normalized registration to Promise.allSettled for concurrency, made SSRF protection configurable via allowPrivateNetworks policy for enterprise deployments, tightened terminal-state ToolResult semantics for failed/canceled tasks |
+| 3.1 | 2026-03-02 | Scope correction: Promoted GoogleADCAuthProvider to MVP (upstream ships as only auth path), promoted TOML config to MVP (upstream `848e8485c`), added Vertex AI dialect adapter `createAdapterFetch()` to MVP (upstream `96b9be3ec`). Auth interface stays pluggable for OCI/AWS/Azure post-MVP. Added cloud-provider extensibility section. |

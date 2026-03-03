@@ -225,15 +225,15 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 ---
 
 ### A2A-REG-006
-**Statement:** Where TOML configuration is enabled, the system shall load remote agent definitions from TOML files.
+**Statement:** The system shall load remote agent definitions from TOML files with `kind = "remote"` and `agent_card_url` fields.
 
-**Priority:** SHOULD (post-MVP)
+**Priority:** MUST
 
-**Rationale:** TOML provides declarative agent configuration for non-developers.
+**Rationale:** Upstream `848e8485c` ships TOML loading in v0.24.5. Without it, users must write code to register remote agents — not feature-parity with gemini-cli and not usable for non-developers.
 
 **Traceability:** 
-- Upstream: 848e8485 (TOML loader)
-- LLxprt: Future TOML loader implementation
+- Upstream: 848e8485 (TOML loader with remote agent schema + Zod validation)
+- LLxprt: `packages/core/src/agents/toml-loader.ts` (extend existing)
 
 **Acceptance Criteria:**
 - Given a TOML file with `[[remote_agents]]` entries
@@ -482,6 +482,30 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 
 ---
 
+### A2A-EXEC-012
+**Statement:** The A2AClientManager shall wrap fetch with a Vertex AI Agent Engine dialect adapter.
+
+**Priority:** MUST
+
+**Rationale:** Upstream `96b9be3ec` includes `createAdapterFetch()` (~120 LoC) that translates between the A2A SDK's JSON format and Vertex AI Agent Engine's proto-JSON dialect. Without it, agents hosted on Vertex AI Agent Engine (the most common A2A deployment target) return incompatible responses. Upstream marks this `TODO: Remove when a2a-js fixes compatibility`.
+
+**Traceability:** 
+- Upstream: 96b9be3e (`createAdapterFetch`, `mapTaskState` in a2a-client-manager.ts)
+- LLxprt: `packages/core/src/agents/a2a-client-manager.ts` (proposed)
+
+**Acceptance Criteria:**
+- When `A2AClientManager.loadAgent()` sets up a client
+- Then it shall wrap the fetch implementation with `createAdapterFetch()`
+- And the adapter shall:
+  - Normalize `TASK_STATE_WORKING` → `working` (proto-JSON enum casing)
+  - Unwrap JSON-RPC 2.0 envelopes to extract params
+  - Map `parts` → `content` and strip SDK `kind` fields in requests
+  - Restore `kind` on response parts and top-level result (task/message)
+- Given a Vertex AI Agent Engine returns `{ "task": { "status": { "state": "TASK_STATE_COMPLETED" } } }`
+- Then the adapter shall normalize to `{ "kind": "task", "status": { "state": "completed" } }`
+
+---
+
 ## 4. Authentication
 
 ### A2A-AUTH-001
@@ -524,13 +548,13 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 ### A2A-AUTH-003
 **Statement:** The system shall provide a GoogleADCAuthProvider for Google Cloud agents.
 
-**Priority:** SHOULD
+**Priority:** MUST
 
-**Rationale:** Enables integration with Vertex AI Agent Engine and other Google-hosted agents.
+**Rationale:** Upstream ships ADCHandler as the only auth path in 0.24.5 (`96b9be3ec`). Without it, Vertex AI Agent Engine integration doesn't work. LLxprt wraps this in the pluggable `RemoteAgentAuthProvider` interface so it's swappable for other cloud providers (OCI, AWS, Azure).
 
 **Traceability:** 
-- Upstream: 96b9be3e (ADCHandler usage)
-- LLxprt: `GoogleADCAuthProvider` class (proposed, post-MVP)
+- Upstream: 96b9be3e (ADCHandler hardcoded in remote-invocation.ts)
+- LLxprt: `GoogleADCAuthProvider` class (proposed, MVP)
 
 **Acceptance Criteria:**
 - Given a GoogleADCAuthProvider is configured
@@ -637,15 +661,15 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 ---
 
 ### A2A-CFG-003
-**Statement:** Where TOML configuration is enabled, the system shall parse remote agent definitions from TOML.
+**Statement:** The system shall parse remote agent definitions from TOML with Zod schema validation.
 
-**Priority:** SHOULD (post-MVP)
+**Priority:** MUST
 
-**Rationale:** Declarative configuration is user-friendly.
+**Rationale:** Upstream ships TOML parsing with Zod schemas in 0.24.5 (`848e8485c`). Required for feature parity.
 
 **Traceability:** 
-- Upstream: 848e8485 (TOML schemas)
-- LLxprt: Future TOML loader (post-MVP)
+- Upstream: 848e8485 (TOML schemas with `remoteAgentSchema` Zod validation)
+- LLxprt: `packages/core/src/agents/toml-loader.ts` (extend existing)
 
 **Acceptance Criteria:**
 - Given a TOML file with:
@@ -663,13 +687,13 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 ### A2A-CFG-004
 **Statement:** The system shall infer `kind = 'remote'` if `agent_card_url` is present in TOML without explicit kind.
 
-**Priority:** SHOULD (post-MVP)
+**Priority:** MUST
 
-**Rationale:** Improves user experience by reducing boilerplate.
+**Rationale:** Upstream infers kind from presence of `agent_card_url`. Reduces boilerplate and matches upstream behavior.
 
 **Traceability:** 
-- Upstream: 848e8485 (kind inference)
-- LLxprt: Future TOML loader (post-MVP)
+- Upstream: 848e8485 (kind inference in TOML schema)
+- LLxprt: `packages/core/src/agents/toml-loader.ts` (extend existing)
 
 **Acceptance Criteria:**
 - Given a TOML entry with agent_card_url but no kind field
@@ -681,13 +705,13 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 ### A2A-CFG-005
 **Statement:** The system shall validate that TOML remote agent entries include a valid agent_card_url (URL format).
 
-**Priority:** SHOULD (post-MVP)
+**Priority:** MUST
 
-**Rationale:** Prevents invalid configurations from being registered.
+**Rationale:** Prevents invalid configurations from being registered. Upstream validates via Zod.
 
 **Traceability:** 
-- Upstream: 848e8485 (Zod validation)
-- LLxprt: Future TOML loader (post-MVP)
+- Upstream: 848e8485 (Zod URL validation in `remoteAgentSchema`)
+- LLxprt: `packages/core/src/agents/toml-loader.ts` (extend existing)
 
 **Acceptance Criteria:**
 - Given a TOML entry with agent_card_url="not-a-url"
@@ -1391,3 +1415,4 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 | 2.0 | 2026-03-02 | Round-2 review remediation: Fixed auth singleton, added SSRF/timeout/retry/credential redaction requirements, clarified input-required handling, added polling strategy, improved session state keying, updated confirmation security classification, distinguished baseline vs proposed components |
 | 2.0 | 2026-03-02 | **Remediation of review findings:**<br>- Renamed A2A-CONF-* to A2A-CFG-* to avoid collision with Confirmation<br>- Completed truncated Observability and Security sections<br>- Fixed EARS syntax inconsistencies<br>- Added traceability to LLxprt components (not just upstream hashes)<br>- Reworded A2A-REG-003 to behavior (not implementation)<br>- Added explicit task state behavior in A2A-EXEC-003<br>- Clarified confirmation integration point (A2A-APPR-001)<br>- Enhanced security requirements (A2A-SEC-002 through A2A-SEC-008)<br>- Added auth failure semantics (A2A-AUTH-006, A2A-ERR-006)<br>- Aligned error structures to ToolResult (A2A-ERR-001) |
 | 3.0 | 2026-03-02 | Round-3 review remediation: Aligned EXEC-010 to SDK blocking mode (no manual polling in MVP), made SSRF configurable via allowPrivateNetworks, tightened terminal-state ToolResult semantics for failed/canceled, canonical dispatch point in EXEC-011, updated timeout references from polling to blocking |
+| 3.1 | 2026-03-02 | Scope correction: Promoted GoogleADCAuthProvider (A2A-AUTH-003) to MUST — upstream ships it as only auth path. Promoted TOML config (A2A-REG-006, A2A-CFG-003/004/005) to MUST — upstream ships in 0.24.5. Added A2A-EXEC-012 for Vertex AI dialect adapter (createAdapterFetch). Auth interface remains pluggable for OCI/AWS/Azure post-MVP providers. |
