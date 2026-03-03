@@ -513,6 +513,19 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
 
       await oauthManager.authenticate('anthropic', 'default');
 
+      // Refresh lock should have been acquired and released
+      expect(tokenStore.acquireRefreshLock).toHaveBeenCalledWith(
+        'anthropic',
+        expect.objectContaining({
+          waitMs: 10000,
+          staleMs: 30000,
+          bucket: 'default',
+        }),
+      );
+      expect(tokenStore.releaseRefreshLock).toHaveBeenCalledWith(
+        'anthropic',
+        'default',
+      );
       // Refresh should have been called with the expired disk token
       expect(provider.refreshToken).toHaveBeenCalledWith(expiredToken);
       // initiateAuth should NOT have been called
@@ -564,6 +577,15 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
 
       await oauthManager.authenticate('anthropic', 'default');
 
+      // Refresh lock acquired and released even on failure
+      expect(tokenStore.acquireRefreshLock).toHaveBeenCalledWith(
+        'anthropic',
+        expect.objectContaining({ bucket: 'default' }),
+      );
+      expect(tokenStore.releaseRefreshLock).toHaveBeenCalledWith(
+        'anthropic',
+        'default',
+      );
       // Refresh was attempted but failed
       expect(provider.refreshToken).toHaveBeenCalled();
       // Falls through to browser auth

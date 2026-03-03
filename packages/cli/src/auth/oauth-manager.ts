@@ -394,33 +394,67 @@ export class OAuthManager {
       // @fix issue1652: Try token refresh before opening browser.
       // If the disk token is expired but has a valid refresh_token,
       // refreshing is cheaper and non-interactive — no browser needed.
+      // Uses acquireRefreshLock to coordinate with getOAuthToken() refreshes
+      // across processes — prevents replaying single-use refresh tokens.
       if (
         diskToken &&
         typeof diskToken.refresh_token === 'string' &&
         diskToken.refresh_token !== ''
       ) {
-        try {
-          const refreshedToken = await provider.refreshToken(diskToken);
-          if (refreshedToken) {
-            const mergedToken = mergeRefreshedToken(
-              diskToken as OAuthTokenWithExtras,
-              refreshedToken as OAuthTokenWithExtras,
-            );
-            await this.tokenStore.saveToken(providerName, mergedToken, bucket);
-            if (!this.isOAuthEnabled(providerName)) {
-              this.setOAuthEnabledState(providerName, true);
+        const refreshLockAcquired = await this.tokenStore.acquireRefreshLock(
+          providerName,
+          {
+            waitMs: 10000,
+            staleMs: 30000,
+            bucket,
+          },
+        );
+        if (refreshLockAcquired) {
+          try {
+            // Re-read token under lock — another process may have refreshed it
+            const latestToken =
+              (await this.tokenStore.getToken(providerName, bucket)) ??
+              diskToken;
+            const nowCheck = Math.floor(Date.now() / 1000);
+            if (latestToken.expiry > nowCheck + 30) {
+              if (!this.isOAuthEnabled(providerName)) {
+                this.setOAuthEnabledState(providerName, true);
+              }
+              logger.debug(
+                () =>
+                  `[FLOW] Another process refreshed token for ${providerName}/${bucket ?? 'default'}, skipping browser auth`,
+              );
+              return;
             }
+
+            const refreshedToken = await provider.refreshToken(latestToken);
+            if (refreshedToken) {
+              const mergedToken = mergeRefreshedToken(
+                latestToken as OAuthTokenWithExtras,
+                refreshedToken as OAuthTokenWithExtras,
+              );
+              await this.tokenStore.saveToken(
+                providerName,
+                mergedToken,
+                bucket,
+              );
+              if (!this.isOAuthEnabled(providerName)) {
+                this.setOAuthEnabledState(providerName, true);
+              }
+              logger.debug(
+                () =>
+                  `[FLOW] Refreshed expired token for ${providerName}/${bucket ?? 'default'}, skipping browser auth`,
+              );
+              return;
+            }
+          } catch (refreshError) {
             logger.debug(
               () =>
-                `[FLOW] Refreshed expired token for ${providerName}/${bucket ?? 'default'}, skipping browser auth`,
+                `[FLOW] Token refresh failed for ${providerName}/${bucket ?? 'default'}, falling through to browser auth: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
             );
-            return;
+          } finally {
+            await this.tokenStore.releaseRefreshLock(providerName, bucket);
           }
-        } catch (refreshError) {
-          logger.debug(
-            () =>
-              `[FLOW] Token refresh failed for ${providerName}/${bucket ?? 'default'}, falling through to browser auth: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
-          );
         }
       }
 

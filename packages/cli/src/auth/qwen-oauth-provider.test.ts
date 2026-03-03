@@ -170,10 +170,8 @@ describe('Qwen Provider Refactor Tests (Issue #1652 Phase 3)', () => {
 
   describe('Test 3.9: initiateAuth returns token', () => {
     it('GIVEN device flow completes, WHEN initiateAuth() called, THEN returns OAuthToken AND saveToken NOT called by provider', async () => {
-      // This will FAIL until Phase 4 changes initiateAuth return type
       const result = await provider.initiateAuth();
 
-      // After Phase 4
       expect(result).toBeDefined();
       expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
     });
