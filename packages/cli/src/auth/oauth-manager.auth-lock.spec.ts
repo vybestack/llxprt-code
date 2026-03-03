@@ -646,6 +646,68 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
       // Straight to browser auth
       expect(provider.initiateAuth).toHaveBeenCalled();
     });
+
+    /**
+     * Test: Lock timeout → re-read disk before browser auth
+     * GIVEN authenticate() is called for a bucket
+     * AND the disk has an expired token with a refresh_token
+     * AND acquireRefreshLock returns false (another process holds it)
+     * AND another process completes refresh while we wait
+     * WHEN authenticate() checks disk after lock timeout
+     * THEN it finds the fresh token and skips browser auth
+     */
+    it('should re-read disk after refresh-lock timeout and skip browser auth if another process refreshed', async () => {
+      const expiredToken: OAuthToken = {
+        access_token: 'expired-access',
+        refresh_token: 'refresh-token',
+        expiry: Math.floor(Date.now() / 1000) - 60,
+        token_type: 'Bearer' as const,
+        scope: '',
+      };
+      const crossProcessToken = makeToken('cross-process-refreshed', 3600);
+
+      let getTokenCallCount = 0;
+      const tokenStore: TokenStore = {
+        saveToken: vi.fn(),
+        getToken: vi.fn(async () => {
+          getTokenCallCount++;
+          // First call (auth lock path): return expired token
+          // Second call (after refresh-lock timeout): return fresh token from other process
+          if (getTokenCallCount <= 1) return expiredToken;
+          return crossProcessToken;
+        }),
+        removeToken: vi.fn(),
+        listProviders: vi.fn(async () => []),
+        listBuckets: vi.fn(async () => []),
+        getBucketStats: vi.fn(async () => null),
+        acquireRefreshLock: vi.fn(async () => false), // Lock timeout!
+        releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
+      };
+
+      const oauthManager = new OAuthManager(tokenStore);
+
+      const provider: OAuthProvider = {
+        name: 'anthropic',
+        initiateAuth: vi.fn(async () => {
+          throw new Error('initiateAuth should NOT be called');
+        }),
+        getToken: vi.fn(async () => null),
+        refreshToken: vi.fn(async () => null),
+      };
+      oauthManager.registerProvider(provider);
+
+      await oauthManager.authenticate('anthropic', 'default');
+
+      // Refresh lock was attempted but not acquired
+      expect(tokenStore.acquireRefreshLock).toHaveBeenCalled();
+      expect(tokenStore.releaseRefreshLock).not.toHaveBeenCalled();
+      // No refresh attempted (lock not acquired)
+      expect(provider.refreshToken).not.toHaveBeenCalled();
+      // No browser auth (cross-process token found)
+      expect(provider.initiateAuth).not.toHaveBeenCalled();
+    });
   });
 
   describe('Edge cases', () => {

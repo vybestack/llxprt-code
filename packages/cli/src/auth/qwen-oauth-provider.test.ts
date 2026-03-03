@@ -173,12 +173,18 @@ describe('Qwen Provider Refactor Tests (Issue #1652 Phase 3)', () => {
       const result = await provider.initiateAuth();
 
       expect(result).toBeDefined();
+      expect(result).toHaveProperty('access_token');
+      expect(result).toHaveProperty('token_type');
+      expect(result).toHaveProperty('expiry');
+      expect(typeof result?.access_token).toBe('string');
+      expect(typeof result?.token_type).toBe('string');
+      expect(typeof result?.expiry).toBe('number');
       expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
     });
   });
 
   describe('Test 3.10: getToken is read-only with expired token', () => {
-    it('GIVEN expired token, WHEN getToken() called, THEN NO writes AND NO HTTP requests', async () => {
+    it('GIVEN expired token, WHEN getToken() called, THEN NO writes AND NO device-flow activity', async () => {
       const expiredToken = {
         access_token: 'expired-qwen-token',
         refresh_token: 'qwen-refresh',

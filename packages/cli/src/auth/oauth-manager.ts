@@ -455,6 +455,22 @@ export class OAuthManager {
           } finally {
             await this.tokenStore.releaseRefreshLock(providerName, bucket);
           }
+        } else {
+          // Lock timeout — another process is likely refreshing right now.
+          // Re-read disk to see if they completed before opening browser.
+          const postLockToken =
+            (await this.tokenStore.getToken(providerName, bucket)) ?? diskToken;
+          const nowPostLock = Math.floor(Date.now() / 1000);
+          if (postLockToken.expiry > nowPostLock + 30) {
+            if (!this.isOAuthEnabled(providerName)) {
+              this.setOAuthEnabledState(providerName, true);
+            }
+            logger.debug(
+              () =>
+                `[FLOW] Another process refreshed token for ${providerName}/${bucket ?? 'default'} (detected after lock timeout), skipping browser auth`,
+            );
+            return;
+          }
         }
       }
 
