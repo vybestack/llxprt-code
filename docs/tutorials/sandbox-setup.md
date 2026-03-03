@@ -56,13 +56,13 @@ podman machine ls
 **Check VM memory:** On macOS, Podman runs inside a Linux VM. If you plan to use sandbox profiles with custom memory limits (e.g., `"memory": "8g"`), the VM must have more memory than the container limit. Otherwise the process gets OOM-killed (exit code 137).
 
 ```bash
-# Check current VM memory (in MB)
+# Check current VM memory (in MiB, e.g., 8192 = 8 GiB)
 podman machine inspect --format '{{.Resources.Memory}}'
 
 # Find your machine name
 podman machine ls
 
-# Resize if needed (stop first, value in MB)
+# Resize if needed (stop first, value in MiB)
 podman machine stop <machine-name>
 podman machine set --memory 16384 <machine-name>
 podman machine start <machine-name>
@@ -296,13 +296,13 @@ The Podman VM memory is lower than the container memory limit. On macOS, Podman 
 Fix:
 
 ```bash
-# Check VM memory
+# Check VM memory (in MiB, e.g., 8192 = 8 GiB)
 podman machine inspect --format '{{.Resources.Memory}}'
 
 # Find your machine name
 podman machine ls
 
-# Resize (value in MB — e.g., 16384 = 16 GB)
+# Resize (value in MiB — e.g., 16384 = 16 GiB)
 podman machine stop <machine-name>
 podman machine set --memory 16384 <machine-name>
 podman machine start <machine-name>

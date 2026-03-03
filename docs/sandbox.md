@@ -210,12 +210,12 @@ export LLXPRT_SANDBOX_IMAGE=my-registry/my-sandbox:latest
 On macOS, Podman runs containers inside a Linux VM. There are three separate memory limits, and all three must be sized correctly:
 
 1. **Podman machine VM memory** — the total memory allocated to the Podman VM. This is the hard ceiling for everything running inside the VM.
-2. **Container memory limit** (`--memory` / `resources.memory` in a sandbox profile) — the per-container limit passed to the container runtime. This cannot exceed the VM memory.
+2. **Container memory limit** (`--memory` / `resources.memory` in a sandbox profile) — the per-container cgroup limit passed to the container runtime. You can set this higher than the VM memory, but the process will be OOM-killed when the VM runs out of memory first.
 3. **Node.js heap limit** (`--max-old-space-size`) — automatically derived from the container memory limit when `ui.autoConfigureMaxOldSpaceSize` is enabled (the default).
 
 If you set the container memory higher than the Podman VM memory, the container starts but the process gets OOM-killed (exit code 137) as soon as it tries to use more memory than the VM has available. LLxprt container flags do **not** resize the Podman machine VM.
 
-**Check current VM memory:**
+**Check current VM memory** (output is in MiB, e.g., 8192 = 8 GiB):
 
 ```bash
 podman machine inspect --format '{{.Resources.Memory}}'
