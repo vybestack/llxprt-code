@@ -1,9 +1,19 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { isContainerSandbox } from './containerSandbox.js';
 
 describe('isContainerSandbox', () => {
+  let originalSandboxEnv: string | undefined;
+
+  beforeEach(() => {
+    originalSandboxEnv = process.env.SANDBOX;
+  });
+
   afterEach(() => {
-    delete process.env.SANDBOX;
+    if (originalSandboxEnv === undefined) {
+      delete process.env.SANDBOX;
+    } else {
+      process.env.SANDBOX = originalSandboxEnv;
+    }
   });
 
   it('returns false when SANDBOX is not set', () => {
