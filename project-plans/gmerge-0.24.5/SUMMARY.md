@@ -12,10 +12,9 @@ Syncing LLxprt Code from upstream gemini-cli v0.23.0 → v0.24.5 (121 commits).
 | Decision | Count | % |
 |----------|------:|--:|
 | PICK | 34 | 28% |
-| SKIP | 39 | 32% |
-| REIMPLEMENT | 35 | 29% |
-| NO_OP | 10 | 8% |
-| SKIP (deferred) | 3 | 2% |
+| SKIP | 42 | 35% |
+| REIMPLEMENT | 34 | 28% |
+| NO_OP | 11 | 9% |
 | **Total** | **121** | |
 
 ## What Changed From Initial Audit

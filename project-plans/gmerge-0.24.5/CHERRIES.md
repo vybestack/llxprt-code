@@ -1,7 +1,7 @@
 # Cherry-Pick Decisions: v0.23.0 → v0.24.5
 
 **Total commits in range:** 121  
-**Decision counts:** PICK 34 (28%) · SKIP 39 (32%) · REIMPLEMENT 35 (29%) · NO_OP 10 (8%) · SKIP (deferred) 3 (2%)
+**Decision counts:** PICK 34 (28%) · SKIP 42 (35%) · REIMPLEMENT 34 (28%) · NO_OP 11 (9%)
 
 ---
 
@@ -145,7 +145,7 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 
 ---
 
-## REIMPLEMENT Table (25 commits, chronological)
+## REIMPLEMENT Table (34 commits, chronological)
 
 | # | Upstream SHA | Date | Areas | Rationale | Subject |
 |---|-------------|------|-------|-----------|---------|
@@ -177,6 +177,12 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 | 26 | `eec5d5ebf839` | 2026-01-04 | core | **MessageBus Phase 1: Restore Optionality.** Adopt DI pattern instead of service locator (`config.getMessageBus()`). Make MessageBus optional constructor param on ToolRegistry, tools, MockTool. | feat(core): restore MessageBus optionality (Phase 1) (#15774) |
 | 27 | `90be9c35876d` | 2026-01-04 | core, agents | **MessageBus Phase 2: Standardize Constructors.** Add MessageBus fallback to all tool `createInvocation()` methods, agent invocation constructors. | feat(core): Standardize Tool and Agent Invocation constructors (Phase 2) (#15775) |
 | 28 | `12c7c9cc426b` | 2026-01-04 | core, cli | **MessageBus Phase 3: Mandatory Injection.** Make MessageBus required everywhere. Remove `setMessageBus()` shims. ~57 files. | feat(core,cli): enforce mandatory MessageBus injection (Phase 3) (#15776) |
+| 29 | `dd84c2fb837a` | 2026-01-04 | hooks | Granular stop/block for agent hooks. New event types in streaming protocol. LLxprt hooks reimplemented. | feat(hooks): implement granular stop and block behavior for agent hooks (#15824) |
+| 30 | `6d1e27633a32` | 2026-01-05 | hooks | Context injection via SessionStart hook. Needs sessionHookTriggers.ts adapted to LLxprt hook infra. | Support context injection via SessionStart hook. (#15746) |
+| 31 | `61dbab03e0d5` | 2026-01-06 | hooks, ui | Visual indicators for hook execution. LLxprt hooks architecture exists. Adapt to our hook system. | feat(ui): add visual indicators for hook execution (#15408) |
+| 32 | `56092bd78205` | 2026-01-06 | hooks, settings | Add `hooks.enabled` setting. Settings structure exists, reorganize from `tools.enableHooks`. | feat(hooks): Add a hooks.enabled setting. (#15933) |
+| 33 | `9172e2831542` | 2026-01-06 | settings, ui | Add descriptions for each settings item. Adapt to LLxprt's SettingsDialog. | Add description for each settings item in /settings (#15936) |
+| 34 | `2fe45834dde6` | 2026-01-06 | settings, security | Remote admin settings + secureModeEnabled/mcpEnabled. Enterprise feature, adapt to LLxprt config. | feat(admin): Introduce remote admin settings & implement secureModeEnabled/mcpEnabled (#15935) |
 
 ### REIMPLEMENT Notes — Needs Separate PLANs:
 - **Remote Agents (#17-20)**: Need a multi-phase PLAN per `dev-docs/PLAN-TEMPLATE.md`. ~1500-2000 LoC.
@@ -187,7 +193,7 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 
 ---
 
-## NO_OP Table (10 commits, chronological)
+## NO_OP Table (11 commits, chronological)
 
 | # | Upstream SHA | Date | Areas | Rationale | Subject |
 |---|-------------|------|-------|-----------|---------|
@@ -200,7 +206,8 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 | 7 | `e5d183031acf` | 2026-01-05 | cli, ui | LLxprt already handles model persistence. | Opt-in to persist model from /model (#15820) |
 | 8 | `cbd2eee9c467` | 2026-01-05 | ui | LLxprt footer already differs. | remove manual string when displaying manual model in the footer (#15967) |
 | 9 | `9a3ff6510ffe` | 2026-01-06 | policy | **Already have this.** LLxprt's toml-loader has NO tier-based restriction on `modes`. | feat(policy): allow 'modes' in user and admin policies (#15977) |
-| 10 | `def09778db93` | 2026-01-19 | cli | **Already removed.** LLxprt already removed bracketedPaste detection/bufferFastReturn logic. | fix(patch): terminal capability fix (#16783) |
+| 10 | `7d4f97de7a16` | 2026-01-06 | core | LLxprt uses `interactionMode` parameter approach, not `config.isInteractiveShellEnabled()`. Bug doesn't apply. | fix(core): use correct interactive check for system prompt (#15020) |
+| 11 | `def09778db93` | 2026-01-19 | cli | **Already removed.** LLxprt already removed bracketedPaste detection/bufferFastReturn logic. | fix(patch): terminal capability fix (#16783) |
 
 ### NO_OP Notes:
 - `334b813d8102` (settings refactor) is also NO_OP for the bulk migration deletion (already done), BUT has a 1-line `yolo.toml` change (`allow_redirection = true`) that should be manually added.
