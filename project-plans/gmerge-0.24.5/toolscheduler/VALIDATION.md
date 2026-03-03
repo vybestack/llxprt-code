@@ -22,26 +22,24 @@
 - [x] **Appendix B: Upstream Commit Analysis** — Detailed breakdown of changes
 - [x] **Appendix C: References** — Links to commits and issues
 
-### Requirements Document (requirements.md) - 564 lines
+### Requirements Document (requirements.md)
 
-- [x] **73 Total Requirements** — All in EARS format
-  - [x] 49 MUST requirements
-  - [x] 23 SHOULD requirements
-  - [x] 1 MAY requirement
-- [x] **11 Categories:**
-  - [x] Type Extraction (5 requirements)
-  - [x] Tool Execution (13 requirements)
-  - [x] Tool Validation (6 requirements)
-  - [x] Completion Tracking (3 requirements)
-  - [x] Utility Extraction (11 requirements)
-  - [x] Backward Compatibility (4 requirements)
-  - [x] Parallel Batching (8 requirements)
-  - [x] Testing (9 requirements)
-  - [x] Integration (7 requirements)
-  - [x] Documentation (3 requirements)
-  - [x] Non-Functional (4 requirements)
+- [x] **39 Total Requirements** — All in EARS format
+- [x] **10 Categories:**
+  - [x] Type Extraction (TS-TYPE-001 through TS-TYPE-004)
+  - [x] Tool Execution (TS-EXEC-001 through TS-EXEC-007)
+  - [x] Parallel Batching (TS-BATCH-001 through TS-BATCH-005)
+  - [x] Response Formatting (TS-RESP-001, TS-RESP-002)
+  - [x] Utility Functions (TS-UTIL-001, TS-UTIL-002)
+  - [x] Backward Compatibility (TS-COMPAT-001, TS-COMPAT-002)
+  - [x] State Management (TS-STATE-001 through TS-STATE-003)
+  - [x] Confirmation Flow (TS-CONFIRM-001 through TS-CONFIRM-003)
+  - [x] Lifecycle & Cleanup (TS-LIFE-001 through TS-LIFE-003)
+  - [x] Non-Functional (TS-NFR-001 through TS-NFR-003)
 - [x] **Traceability Matrix** — Maps requirements to design sections and tests
 - [x] **EARS Pattern Reference** — Examples of each pattern used
+
+**Note:** Tool Validation and Completion Tracking are NOT separate categories — these remain in CoreToolScheduler per design.md §7.5–7.6.
 
 ### README (README.md) - 202 lines
 
@@ -67,7 +65,8 @@
 - [x] Every function cataloged (by responsibility group)
 - [x] All type definitions listed
 - [x] All dependencies mapped
-- [x] All extraction targets specified with exact signatures
+- [x] Extraction targets (types, ToolExecutor, utilities) specified with exact signatures
+- [x] Non-extraction decisions documented with rationale (validation §7.5, completion §7.6)
 - [x] Backward compatibility strategy defined
 
 ### Accuracy
@@ -110,15 +109,16 @@
 
 ### Coverage
 
-- [x] Type extraction requirements (5) — Cover all type modules
-- [x] Execution requirements (13) — Cover ToolExecutor comprehensively
-- [x] Validation requirements (6) — Cover ToolValidator
-- [x] Completion requirements (3) — Cover CompletionTracker
-- [x] Utility requirements (11) — Cover all utility functions
-- [x] Compatibility requirements (4) — Ensure no breaking changes
-- [x] **Parallel batching requirements (8) — Explicit preservation**
-- [x] Testing requirements (9) — Unit + integration coverage
-- [x] Integration requirements (7) — How modules connect
+- [x] Type extraction requirements (4) — Cover all type modules
+- [x] Execution requirements (7) — Cover ToolExecutor comprehensively
+- [x] **Parallel batching requirements (5) — Explicit preservation with observable acceptance criteria**
+- [x] Response formatting requirements (2) — Cover response conversion
+- [x] Utility requirements (2) — Cover tool suggestion and error responses
+- [x] Compatibility requirements (2) — Ensure no breaking changes
+- [x] State management requirements (3) — State machine preservation
+- [x] Confirmation flow requirements (3) — Message bus integration
+- [x] Lifecycle requirements (3) — Cleanup, cancellation, abort
+- [x] Non-functional requirements (3) — Performance, coverage, documentation
 
 ### Traceability
 
@@ -185,18 +185,18 @@
 
 ### Incremental Approach
 
-- [x] 5 phases defined with clear milestones
+- [x] 3 phases defined with clear milestones (types/utils, execution, cleanup)
 - [x] Each phase has testable outcomes
-- [x] Phases ordered by dependency (types first, executor last)
+- [x] Phases ordered by dependency (types first, executor second)
 - [x] Rollback strategy implicit (small PRs are easy to revert)
 
 ### Success Criteria Measurable
 
-- [x] Line count target: ~1,329 lines (38% reduction)
+- [x] Line count target: measurable reduction via type + executor + utility extraction
 - [x] Test pass rate: 100% (all existing tests pass)
 - [x] Breaking changes: 0 (re-exports maintain compatibility)
-- [x] Performance regression: <5% (measurable via benchmarks)
-- [x] Code coverage: >=90% (measurable via coverage tool)
+- [x] Performance regression: no measurable regression
+- [x] Code coverage: >=90% for extracted modules (measurable via coverage tool)
 
 ---
 

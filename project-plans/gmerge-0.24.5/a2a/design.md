@@ -455,10 +455,11 @@ export class A2AClientManager {
 }
 ```
 
-**Auth provider injection:**
+**Lifetime & injection:**
 - **NOT a singleton** — Auth provider is injected per-instance via constructor
-- Singleton pattern removed to support multi-provider scenarios and session-scoped auth
-- `AgentRegistry` and `RemoteAgentInvocation` will receive auth provider from `Config` and pass to manager instances
+- **Session-scoped** — `AgentRegistry` creates one `A2AClientManager` per initialization and holds it for the session lifetime. `RemoteAgentInvocation` receives the manager via the registry factory method, NOT by instantiating a new one
+- This ensures agent card caching and SDK client reuse work correctly across invocations within the same session
+- `AgentRegistry` receives auth provider from `Config` and passes to the manager at construction time
 
 **Key responsibilities:**
 - Manage A2A SDK clients (one per agent name)
@@ -507,10 +508,9 @@ class AgentRegistry {
   }
   
   private async registerRemoteAgent(definition: RemoteAgentDefinition): Promise<void> {
-    const clientManager = new A2AClientManager(this.config);
-    
+    // Uses session-scoped clientManager (created once in initialize(), NOT per registration)
     try {
-      const agentCard = await clientManager.loadAgent(
+      const agentCard = await this.clientManager.loadAgent(
         definition.name,
         definition.agentCardUrl
       );
@@ -551,12 +551,21 @@ class AgentRegistry {
 ```typescript
 // BEFORE (synchronous)
 private loadBuiltInAgents(): void {
-  this.registerAgent(agentDef);
+  this.registerAgent(agentDef1);
+  this.registerAgent(agentDef2);
 }
 
-// AFTER (async)
+// AFTER (async, concurrent via Promise.allSettled)
 private async loadBuiltInAgents(): Promise<void> {
-  await this.registerAgent(agentDef);
+  const results = await Promise.allSettled(
+    definitions.map(def => this.registerAgent(def))
+  );
+  // Log any rejected results (don't throw)
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      this.logger.error(`Failed to register agent '${definitions[i].name}': ${r.reason}`);
+    }
+  });
 }
 ```
 
@@ -696,14 +705,13 @@ WARNING:  This will send your query and context to an external service.`,
 - If task is terminal (`completed`/`failed`/`canceled`), clear `taskId`
 - Next invocation starts fresh task with same `contextId`
 
-**Polling strategy (MVP decision):**
-For MVP, **synchronous wait** — `sendMessage` blocks until terminal state or timeout:
-- If response is `Message`, return immediately (synchronous)
-- If response is `Task` with non-terminal state (`working`, `submitted`), poll via `getTask()` with:
-  - Poll interval: 2 seconds
-  - Max poll duration: 5 minutes (configurable)
-  - Exponential backoff NOT implemented in MVP (constant 2s interval)
-- Post-MVP: Consider async task submission with callback/webhook for long-running tasks
+**Task completion strategy (MVP decision):**
+For MVP, use **SDK blocking mode** — pass `blocking: true` to `sendMessage`, letting the A2A SDK handle waiting internally:
+- If response is `Message`, return immediately (synchronous response)
+- If response is `Task` with terminal state (`completed`/`failed`/`canceled`), return result
+- The SDK handles internal wait/retry logic; LLxprt does NOT implement its own polling loop for MVP
+- Enforce overall timeout (default: 5 minutes, configurable) via `AbortSignal.timeout()` wrapping the SDK call
+- Post-MVP: Add explicit polling with backoff for `working` state, `input-required` handling, async task submission
 
 ### 5.5 A2A Utilities (Target)
 
@@ -743,45 +751,9 @@ export function extractIdsFromResponse(result: Message | Task): { contextId?: st
 
 **Problem:** No existing dispatch mechanism for local vs remote execution.
 
-**Solution:** Add dispatch logic in **delegate-to-agent tool builder** (or equivalent agent invocation factory).
+**Solution:** Add a factory method on `AgentRegistry` as the **single canonical dispatch point**.
 
-**Pattern:**
-```typescript
-class DelegateToAgentTool {
-  build(params: { agent_name: string; query: string }): BaseToolInvocation {
-    const definition = this.registry.getDefinition(params.agent_name);
-    
-    if (!definition) {
-      throw new Error(`Agent '${params.agent_name}' not found`);
-    }
-    
-    if (definition.kind === 'remote') {
-      return new RemoteAgentInvocation(
-        { query: params.query },
-        definition,
-        this.sessionState,  // Injected session-scoped map
-        this.messageBus
-      );
-    }
-    
-    // Local agent
-    return new SubagentInvocation(
-      { query: params.query },
-      definition,
-      this.config,
-      this.messageBus
-    );
-  }
-}
-```
-
-**Current dispatch point:**
-The actual dispatch currently happens where `SubagentInvocation` instances are created. In the current codebase, this is in:
-- `packages/core/src/agents/invocation.ts` — `SubagentInvocation` constructor
-- Any code that directly instantiates `SubagentInvocation` must be updated to dispatch based on `definition.kind`
-
-**Proposed approach:**
-Create a factory function or class method on `AgentRegistry` that dispatches invocation creation:
+**Canonical dispatch point:** `AgentRegistry.createInvocation()` — all agent invocation creation routes through this factory. Callers that currently instantiate `SubagentInvocation` directly must switch to this factory method. This ensures type-safe dispatch via discriminated union narrowing in one location.
 
 ```typescript
 class AgentRegistry {
@@ -982,16 +954,20 @@ export class MultiProviderAuthProvider implements RemoteAgentAuthProvider {
    }
    ```
 
-2. **SSRF protection (MUST):** Reject localhost, private IPs, link-local addresses
+2. **SSRF protection (MUST):** By default, reject localhost, private IPs, link-local addresses. Configurable via policy for enterprise/private deployments.
    ```typescript
    const url = new URL(agentCardUrl);
-   if (url.hostname === 'localhost' || 
-       url.hostname === '127.0.0.1' ||
-       url.hostname.startsWith('192.168.') ||
-       url.hostname.startsWith('10.') ||
-       url.hostname.startsWith('172.16.') ||
-       url.hostname.startsWith('169.254.')) {
-     throw new Error('Agent card URL targets restricted network (localhost/private IP)');
+   const policy = config.getRemoteAgentPolicy();
+   // Default: block private networks unless policy.allowPrivateNetworks is true
+   if (!policy?.allowPrivateNetworks) {
+     if (url.hostname === 'localhost' || 
+         url.hostname === '127.0.0.1' ||
+         url.hostname.startsWith('192.168.') ||
+         url.hostname.startsWith('10.') ||
+         url.hostname.startsWith('172.16.') ||
+         url.hostname.startsWith('169.254.')) {
+       throw new Error('Agent card URL targets restricted network (localhost/private IP). Set allowPrivateNetworks in policy to override.');
+     }
    }
    ```
 
@@ -1010,7 +986,7 @@ export class MultiProviderAuthProvider implements RemoteAgentAuthProvider {
 5. **Timeout requirements (MUST):**
    - Agent card fetch: 30 seconds
    - Message send: 60 seconds (or configurable per agent)
-   - Task polling: 5 minutes total (or configurable)
+   - Task completion (blocking SDK call): 5 minutes total (or configurable via AbortSignal.timeout())
 
 6. **Retry/backoff strategy (SHOULD):**
    - Transient network errors: retry up to 3 times with exponential backoff (1s, 2s, 4s)
@@ -1374,3 +1350,4 @@ This design provides a **complete blueprint** for adding A2A remote agent suppor
 |---------|------|---------|
 | 1.0 | 2026-03-02 | Initial draft |
 | 2.0 | 2026-03-02 | Round-2 review remediation: Made description optional on BaseAgentDefinition, removed singleton from A2AClientManager (inject auth per-config), clarified breaking changes explicitly, added abort semantics, added session state keying details, updated confirmation security classification, added SSRF/timeout/retry/credential redaction requirements, added input-required state handling, specified polling strategy (synchronous MVP), clarified dispatch point (registry factory vs tool), added [NEW]/[MODIFIED]/[BASELINE] notation, updated all "proposed" file references to distinguish from existing baseline, added Config method signatures for auth provider |
+| 3.0 | 2026-03-02 | Round-3 review remediation: Resolved polling/blocking contradiction (MVP uses SDK blocking mode, not manual polling), made AgentRegistry.createInvocation() the single canonical dispatch point, clarified A2AClientManager is session-scoped (not per-invocation), normalized registration to Promise.allSettled for concurrency, made SSRF protection configurable via allowPrivateNetworks policy for enterprise deployments, tightened terminal-state ToolResult semantics for failed/canceled tasks |

@@ -1,15 +1,16 @@
 # CoreToolScheduler Refactoring Project
 
 **Status:** Design Phase  
-**Target:** Reduce CoreToolScheduler from 2,139 lines to ~1,329 lines through modular extraction  
-**Approach:** Incremental refactoring based on upstream patterns, preserving LLxprt's parallel batching
+**Target:** Reduce CoreToolScheduler from 2,139 lines through modular extraction  
+**Approach:** Incremental refactoring based on upstream patterns, preserving LLxprt's parallel batching  
+**Scope:** Extract types, ToolExecutor, and utilities. Validation and completion tracking remain in scheduler (see design.md §7.5–7.6).
 
 ---
 
 ## Quick Links
 
 - **[Design Specification](./design.md)** — Complete technical design with architecture analysis
-- **[Requirements (EARS)](./requirements.md)** — 73 formal requirements in EARS format
+- **[Requirements (EARS)](./requirements.md)** — 39 formal requirements in EARS format
 - **Upstream Reference Commits:**
   - `5566292cc83f` — Extract static concerns
   - `b4b49e7029d3` — Extract ToolExecutor
@@ -35,18 +36,22 @@ Extract cohesive modules while **preserving parallel batching** (LLxprt's compet
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `scheduler/types.ts` | 130 | All ToolCall state types, handler types, request/response types |
-| `scheduler/tool-executor.ts` | 300 | Single-tool execution with hooks, PID, truncation, error handling |
-| `scheduler/tool-validator.ts` | 80 | Tool lookup, validation, invocation building |
-| `scheduler/completion-tracker.ts` | 30 | Batch completion detection |
-| `utils/generateContentResponseUtilities.ts` | +150 | Response formatting, metadata extraction |
-| `utils/fileUtils.ts` | +70 | Output truncation and file saving |
-| `utils/tool-utils.ts` | +50 | Tool suggestions, error responses |
+| `scheduler/types.ts` | ~130 | All ToolCall state types, handler types, request/response types |
+| `scheduler/tool-executor.ts` | ~300 | Single-tool execution with hooks, PID, truncation, error handling |
+| `utils/generateContentResponseUtilities.ts` | ~150 | Response formatting, metadata extraction |
+| `utils/fileUtils.ts` | ~70 | Output truncation and file saving |
+| `utils/tool-utils.ts` | ~50 | Tool suggestions, error responses |
 
-### What Stays in CoreToolScheduler (~1,329 lines)
+**Not extracted** (per design.md §7.5–7.6):
+- Tool validation — tightly coupled to scheduler state machine transitions
+- Completion tracking — ~30 lines, not worth the indirection
+
+### What Stays in CoreToolScheduler
 
 - **Scheduling & queueing** — request queue management
 - **State machine** — setStatusInternal, setArgsInternal, setPidInternal
+- **Tool validation** — tool lookup, invocation building (coupled to state machine)
+- **Completion tracking** — batch completion detection (~30 lines)
 - **Confirmation orchestration** — handleConfirmationResponse, message bus integration
 - **Policy evaluation** — policy engine integration
 - **Parallel batch orchestration (LLxprt-specific):**
@@ -64,8 +69,9 @@ Extract cohesive modules while **preserving parallel batching** (LLxprt's compet
 1. **Types First** — Zero dependencies, safe to extract first (upstream did this)
 2. **ToolExecutor as Stateless Worker** — Scheduler controls parallelism, executor doesn't know about batches
 3. **Keep Parallel Batching in Scheduler** — Stateful orchestration with high coupling to scheduler state
-4. **Backward Compatibility via Re-exports** — All moved types re-exported from coreToolScheduler.ts
-5. **Incremental Implementation** — Multiple small PRs instead of one big bang
+4. **Keep Validation & Completion in Scheduler** — Too tightly coupled to state machine to extract cleanly
+5. **Backward Compatibility via Re-exports** — All moved types re-exported from coreToolScheduler.ts
+6. **Incremental Implementation** — Multiple small PRs instead of one big bang
 
 ---
 
@@ -101,25 +107,14 @@ Extract cohesive modules while **preserving parallel batching** (LLxprt's compet
 - [ ] Update imports, add re-exports
 - [ ] Run tests (should pass unchanged)
 
-### Phase 2: Validation (Medium Risk)
-- [ ] Create `scheduler/tool-validator.ts`
-- [ ] Move `buildInvocation()` and tool lookup logic
-- [ ] Update scheduler to use `ToolValidator`
-- [ ] Run tests
-
-### Phase 3: Execution (Medium-High Risk)
+### Phase 2: Execution (Medium-High Risk)
 - [ ] Create `scheduler/tool-executor.ts`
 - [ ] Extract execution logic from `launchToolExecution()`
 - [ ] Update scheduler to use `ToolExecutor.execute()`
 - [ ] **Test parallel batching extensively**
 - [ ] Run full integration tests
 
-### Phase 4: Completion (Low Risk)
-- [ ] Create `scheduler/completion-tracker.ts`
-- [ ] Update `checkAndNotifyCompletion()` to use tracker
-- [ ] Run tests
-
-### Phase 5: Cleanup & Documentation
+### Phase 3: Cleanup & Documentation
 - [ ] Update nonInteractiveToolExecutor to use ToolExecutor
 - [ ] Add README to `packages/core/src/scheduler/`
 - [ ] Update JSDoc comments
@@ -129,12 +124,12 @@ Extract cohesive modules while **preserving parallel batching** (LLxprt's compet
 
 ## Success Criteria
 
-- CoreToolScheduler: ~1,329 lines (38% reduction from 2,139)
+- Measurable reduction in CoreToolScheduler line count (types + executor + utilities extracted)
 - All existing tests pass without modification (except moved tests)
 - No breaking changes for consumers (GeminiChat, CLI, etc.)
 - Parallel batching preserves exact ordering behavior
 - TypeScript compilation time maintained or improved
-- Runtime performance within 5% of baseline
+- No measurable runtime performance regression
 - Code coverage >= 90% for all extracted modules
 
 ---
@@ -155,8 +150,6 @@ Extract cohesive modules while **preserving parallel batching** (LLxprt's compet
 
 ### Unit Tests (New Files)
 - `scheduler/tool-executor.test.ts` — Single-tool execution edge cases
-- `scheduler/tool-validator.test.ts` — Validation errors, tool suggestions
-- `scheduler/completion-tracker.test.ts` — Completion detection
 - `utils/generateContentResponseUtilities.test.ts` — Multimodal formatting
 - `utils/fileUtils.test.ts` — Truncation logic
 - `utils/tool-utils.test.ts` — Tool suggestions

@@ -65,16 +65,16 @@ This document specifies the functional and technical requirements for refactorin
 - Execution completes even if signal is aborted (returns `CancelledToolCall`)
 
 ### TS-EXEC-002
-**Requirement:** When a tool execution produces a PID, the system shall notify the scheduler via a dedicated PID callback within 100ms of PID availability.  
+**Requirement:** When a tool execution produces a PID, the system shall notify the scheduler via a dedicated PID callback promptly after PID availability.  
 **Priority:** MUST  
 **Rationale:** PID tracking enables cancellation of shell tools and UI display of process information.  
-**Verification:** Integration tests verify PID updates appear in ToolCall state; timing tests confirm latency.
+**Verification:** Integration tests verify PID updates appear in ToolCall state.
 
 **Observable Behavior:**
 - Shell tools receive `onPid(callId, pid)` callback exactly once when PID is available
 - Non-shell tools do NOT invoke PID callback
 - PID value matches actual system process ID
-- Scheduler state reflects PID within 100ms
+- Scheduler state reflects PID after callback
 
 ### TS-EXEC-003
 **Requirement:** When a tool execution produces live output, the system shall stream output chunks to the scheduler via a dedicated output callback without buffering more than 1KB between notifications.  
@@ -86,7 +86,6 @@ This document specifies the functional and technical requirements for refactorin
 - Tools with streaming output receive `onLiveOutput(callId, chunk)` callback for each chunk
 - Chunks delivered in chronological order
 - Total output reconstructable from chunks
-- Maximum latency: 100ms per chunk
 
 ### TS-EXEC-004
 **Requirement:** When a shell tool produces output exceeding the configured truncation threshold, the system shall save the full output to a temporary file and return truncated content with file path instructions.  
@@ -116,7 +115,7 @@ This document specifies the functional and technical requirements for refactorin
 **Requirement:** When a tool execution is aborted via signal, the system shall return a `CancelledToolCall` within 1 second of abort signal firing.  
 **Priority:** MUST  
 **Rationale:** Cancellation must be responsive to user action.  
-**Verification:** Integration tests verify cancellation timing; stress tests confirm no hung executions.
+**Verification:** Integration tests verify cancellation behavior; stress tests confirm no hung executions.
 
 **Observable Behavior:**
 - Abort signal triggers cancellation
@@ -150,7 +149,7 @@ This document specifies the functional and technical requirements for refactorin
 - Input: Schedule tools [A, B, C, D, E] with indices [0, 1, 2, 3, 4]
 - Execution: Tools complete in order [E, C, A, D, B] (shuffled)
 - Output: Results published in order [A, B, C, D, E] (original)
-- Timing: All executions start within 100ms of each other (parallel)
+- All executions start concurrently (within same event loop tick via Promise.all)
 
 **Test Scenario:**
 ```typescript
@@ -315,7 +314,7 @@ controller.abort();
 ## 5. Utility Function Requirements
 
 ### TS-UTIL-001
-**Requirement:** When a tool name is not found in the registry, the system shall suggest up to 3 similar tool names using Levenshtein distance within 100ms.  
+**Requirement:** When a tool name is not found in the registry, the system shall suggest up to 3 similar tool names using Levenshtein distance.  
 **Priority:** SHOULD  
 **Rationale:** User experience is improved when typos are detected and corrected.  
 **Verification:** Unit tests verify suggestion accuracy and performance.
@@ -323,7 +322,7 @@ controller.abort();
 **Observable Behavior:**
 - Unknown tool: "read_flie" → suggests "read_file"
 - Unknown tool: "xyz" → no suggestions (distance too high)
-- Response time < 100ms for 100-tool registry
+- Synchronous computation (no async overhead)
 
 ### TS-UTIL-002
 **Requirement:** When tool execution errors occur, the system shall create error responses with consistent structure including callId, error message, errorType, and agentId.  
@@ -407,16 +406,16 @@ controller.abort();
 ## 8. Confirmation Flow Requirements
 
 ### TS-CONFIRM-001
-**Requirement:** When a tool requires confirmation, the system shall publish a confirmation request to the message bus and transition the tool to `awaiting_approval` status within 50ms.  
+**Requirement:** When a tool requires confirmation, the system shall publish a confirmation request to the message bus and transition the tool to `awaiting_approval` status synchronously.  
 **Priority:** MUST  
 **Rationale:** Confirmation flow must be responsive to enable interactive policy enforcement.  
-**Verification:** Integration tests verify message bus publication and state transition timing.
+**Verification:** Integration tests verify message bus publication and state transition.
 
 **Observable Behavior:**
 - Tool requires confirmation → state becomes `awaiting_approval`
 - Message bus receives TOOL_CONFIRMATION_REQUEST
 - Correlation ID stored in `pendingConfirmations` map
-- Timing: < 50ms from shouldConfirmExecute to awaiting_approval
+- State transition from shouldConfirmExecute to awaiting_approval is synchronous
 
 ### TS-CONFIRM-002
 **Requirement:** When a confirmation response arrives via message bus, the system shall process the response exactly once even if duplicate messages arrive.  
@@ -465,7 +464,7 @@ controller.abort();
 **Requirement:** When `cancelAll()` is called, the system shall cancel all queued requests, reset batch state, and transition all active tools to `cancelled` status within 1 second.  
 **Priority:** MUST  
 **Rationale:** User cancellation must be immediate and comprehensive.  
-**Verification:** Integration tests verify all tools cancelled; stress tests confirm timing.
+**Verification:** Integration tests verify all tools cancelled; stress tests confirm cleanup.
 
 **Observable Behavior:**
 - All queued requests rejected with error
@@ -481,17 +480,17 @@ controller.abort();
 - Cleanup completes within 1 second
 
 ### TS-LIFE-003
-**Requirement:** When `schedule()` receives an aborted signal, the system shall remove the request from the queue and reject the promise with a cancellation error within 100ms.  
+**Requirement:** When `schedule()` receives an aborted signal, the system shall remove the request from the queue and reject the promise with a cancellation error promptly.  
 **Priority:** MUST  
 **Rationale:** Queue abort must be responsive to enable immediate cancellation.  
-**Verification:** Integration tests verify abort handler cleanup and timing.
+**Verification:** Integration tests verify abort handler cleanup.
 
 **Observable Behavior:**
 - Request queued with abort signal
 - Signal aborted while in queue
 - Request removed from queue
 - Promise rejected with "Tool call cancelled while in queue."
-- Cleanup completes within 100ms
+- Cleanup completes synchronously (no lingering timers or callbacks)
 
 ---
 
@@ -556,24 +555,20 @@ const results = await Promise.all(
 ## 11. Non-Functional Requirements
 
 ### TS-NFR-001
-**Requirement:** Tool execution latency shall not increase by more than 5% after refactoring (measured as p50, p95, p99 latency).  
+**Requirement:** Tool execution latency shall not measurably regress after refactoring.  
 **Priority:** SHOULD  
-**Rationale:** Refactoring should not degrade performance.  
-**Verification:** Benchmark before/after with 100-tool batch; compare latency distributions.
+**Rationale:** Refactoring should not degrade performance. The extraction adds at most one function call of indirection.  
+**Verification:** Run existing test suite before/after; spot-check with multi-tool batch if regression suspected.
 
-**Performance Targets:**
-- p50 latency change: < 5%
-- p95 latency change: < 5%
-- p99 latency change: < 10%
+**Acceptance Criteria:**
+- No new async boundaries introduced in the hot path (ToolExecutor.execute is already async)
+- No unnecessary object copies or allocations in extracted code
 
 ### TS-NFR-002
-**Requirement:** TypeScript compilation time for the scheduler module shall not increase by more than 10% after refactoring.  
+**Requirement:** TypeScript compilation time shall not measurably regress after refactoring.  
 **Priority:** SHOULD  
-**Rationale:** Developer experience depends on fast iteration cycles.  
-**Verification:** Measure `tsc` time before/after; compare clean build times.
-
-**Build Time Targets:**
-- Clean build time change: < 10%
+**Rationale:** Developer experience depends on fast iteration cycles. More files but smaller files should be neutral or positive.  
+**Verification:** Run `npm run typecheck` before/after; no significant regression.
 - Incremental build time change: < 5%
 
 ### TS-NFR-003
@@ -637,7 +632,7 @@ const results = await Promise.all(
 **Verification:**
 1. Capture `publishResult` invocations with timestamps
 2. Assert: `publishResult` call order matches [0, 1, 2, 3, 4]
-3. Assert: All tools executed concurrently (start times within 100ms)
+3. Assert: All tools executed concurrently (launched via Promise.all in same tick)
 4. Assert: Completion order != publish order (shuffled)
 
 ### Scenario 2: Reentrancy Guard Under Concurrent Completion

@@ -329,7 +329,11 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 - Given a remote agent returns a Task with artifacts
 - When the system processes the response
 - Then ToolResult.llmContent shall include formatted task summary and artifact content
-- And the format shall include task ID, state, status message, and artifact content (implementation may vary)
+- And the format shall include: task state, status message (if present), and concatenated text from all artifact parts
+- Given a remote agent Task reaches `failed` state
+- Then ToolResult shall include error with type `ToolErrorType.EXECUTION_FAILED` and the failure message from the task status
+- Given a remote agent Task reaches `canceled` state
+- Then ToolResult shall include error with type `ToolErrorType.EXECUTION_FAILED` and message indicating cancellation
 
 ---
 
@@ -435,23 +439,24 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 ---
 
 ### A2A-EXEC-010
-**Statement:** The system shall implement synchronous polling for task completion in MVP.
+**Statement:** The system shall use SDK blocking mode for task completion in MVP.
 
 **Priority:** MUST
 
-**Rationale:** MVP needs a simple blocking execution model; async task submission is post-MVP.
+**Rationale:** MVP needs a simple blocking execution model; the A2A SDK handles internal wait logic. Explicit polling with backoff is post-MVP.
 
 **Traceability:** 
-- LLxprt: `RemoteAgentInvocation.execute()` polling logic (proposed)
+- LLxprt: `RemoteAgentInvocation.execute()` blocking call (proposed)
 
 **Acceptance Criteria:**
-- When RemoteAgentInvocation receives a Task with state='working' or state='submitted'
-- Then it shall poll via A2AClientManager.getTask() every 2 seconds
-- And shall continue polling until state becomes terminal (completed/failed/canceled) or timeout
-- And polling timeout shall default to 5 minutes (configurable)
+- When RemoteAgentInvocation sends a message to a remote agent
+- Then it shall pass `blocking: true` to the A2A SDK sendMessage call
+- And the SDK shall handle internal wait/retry logic
+- And LLxprt shall NOT implement its own polling loop for MVP
+- And the overall call shall be wrapped with AbortSignal.timeout() defaulting to 5 minutes (configurable)
 - When timeout is exceeded
-- Then it shall attempt task cancellation and return timeout error
-- (Post-MVP) The system may support async task submission with callback/webhook
+- Then it shall abort the SDK call and return timeout error
+- (Post-MVP) The system may add explicit polling with backoff for `working` state, `input-required` handling
 
 ---
 
@@ -464,16 +469,16 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 
 **Traceability:** 
 - LLxprt: `packages/core/src/agents/invocation.ts` (current SubagentInvocation creation site)
-- LLxprt: Proposed `AgentRegistry.createInvocation()` factory method (new)
+- LLxprt: `AgentRegistry.createInvocation()` factory method (proposed, canonical dispatch point)
 
 **Acceptance Criteria:**
-- Given code that creates an agent invocation for agent "local-agent" with kind='local'
-- When the dispatch logic evaluates the agent definition
-- Then it shall instantiate a SubagentInvocation
-- Given code that creates an agent invocation for agent "remote-agent" with kind='remote'
-- When the dispatch logic evaluates the agent definition
-- Then it shall instantiate a RemoteAgentInvocation
-- And the dispatch shall use type narrowing to ensure type safety
+- The system shall have exactly one canonical dispatch point: `AgentRegistry.createInvocation()`
+- All callers that currently instantiate `SubagentInvocation` directly shall migrate to this factory
+- Given a call to `AgentRegistry.createInvocation()` for agent "local-agent" with kind='local'
+- Then it shall return a SubagentInvocation instance
+- Given a call to `AgentRegistry.createInvocation()` for agent "remote-agent" with kind='remote'
+- Then it shall return a RemoteAgentInvocation instance (passing the session-scoped A2AClientManager)
+- And the dispatch shall use TypeScript discriminated union narrowing on `definition.kind` for type safety
 
 ---
 
@@ -1116,13 +1121,16 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 
 **Acceptance Criteria:**
 - Given an agent card URL "http://localhost:8080/admin"
-- When the system validates the URL
+- When the system validates the URL with default policy
 - Then it shall reject URLs pointing to:
   - localhost, 127.0.0.1
   - Private IP ranges (10.x.x.x, 192.168.x.x, 172.16-31.x.x)
   - Link-local addresses (169.254.x.x)
 - And shall reject non-HTTPS URLs
-- And shall optionally support allowlist/denylist configuration for domains
+- And shall support allowlist/denylist configuration for domains
+- Given a remote agent policy with `allowPrivateNetworks: true`
+- When the system validates a URL pointing to a private IP
+- Then it shall allow the connection (for enterprise/internal A2A endpoints)
 
 ---
 
@@ -1159,8 +1167,8 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 - Then it shall enforce a timeout (default: 30 seconds)
 - When the system sends a message to a remote agent
 - Then it shall enforce a timeout (default: 60 seconds, configurable per agent)
-- When the system polls for task completion
-- Then it shall enforce a total polling timeout (default: 5 minutes, configurable)
+- When the system awaits task completion via SDK blocking mode
+- Then it shall enforce a total timeout via AbortSignal.timeout() (default: 5 minutes, configurable)
 - When any timeout is exceeded
 - Then it shall cancel the request and return a timeout error
 
@@ -1269,14 +1277,14 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 - Remote invocation with session persistence (scoped by agent+session)
 - Abort signal wiring and cleanup
 - Input-required state handling
-- Synchronous polling for task completion
+- SDK blocking mode for task completion (no manual polling in MVP)
 - NoAuthProvider (unauthenticated agents)
 - Configurable confirmation with data exfiltration warning
 - Error handling with ToolResult
 - Debug logging with credential redaction
 - HTTPS enforcement
 - SSRF protection (localhost/private IP blocking)
-- Timeout enforcement (card fetch, message send, polling)
+- Timeout enforcement (card fetch, message send, task completion)
 - Redirect constraints
 - Credential redaction in errors/logs
 - Session state keying with agent+session ID
@@ -1320,7 +1328,7 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 | A2A-EXEC-007 | 96b9be3e | `RemoteAgentInvocation.execute()` |
 | A2A-EXEC-008 | 96b9be3e | `a2a-utils.ts` extractMessageText |
 | A2A-EXEC-009 | - | `RemoteAgentInvocation.execute()` state handling |
-| A2A-EXEC-010 | - | `RemoteAgentInvocation.execute()` polling logic |
+| A2A-EXEC-010 | - | `RemoteAgentInvocation.execute()` blocking call + timeout |
 | A2A-EXEC-011 | - | `AgentRegistry.createInvocation()` or equivalent |
 | A2A-AUTH-001-006 | - | `packages/core/src/agents/auth-providers.ts` |
 | A2A-CFG-001-002 | - | `packages/core/src/config/config.ts` |
@@ -1382,3 +1390,4 @@ This document specifies **functional requirements** for adding Remote Agent (A2A
 | 1.0 | 2026-03-02 | Initial draft |
 | 2.0 | 2026-03-02 | Round-2 review remediation: Fixed auth singleton, added SSRF/timeout/retry/credential redaction requirements, clarified input-required handling, added polling strategy, improved session state keying, updated confirmation security classification, distinguished baseline vs proposed components |
 | 2.0 | 2026-03-02 | **Remediation of review findings:**<br>- Renamed A2A-CONF-* to A2A-CFG-* to avoid collision with Confirmation<br>- Completed truncated Observability and Security sections<br>- Fixed EARS syntax inconsistencies<br>- Added traceability to LLxprt components (not just upstream hashes)<br>- Reworded A2A-REG-003 to behavior (not implementation)<br>- Added explicit task state behavior in A2A-EXEC-003<br>- Clarified confirmation integration point (A2A-APPR-001)<br>- Enhanced security requirements (A2A-SEC-002 through A2A-SEC-008)<br>- Added auth failure semantics (A2A-AUTH-006, A2A-ERR-006)<br>- Aligned error structures to ToolResult (A2A-ERR-001) |
+| 3.0 | 2026-03-02 | Round-3 review remediation: Aligned EXEC-010 to SDK blocking mode (no manual polling in MVP), made SSRF configurable via allowPrivateNetworks, tightened terminal-state ToolResult semantics for failed/canceled, canonical dispatch point in EXEC-011, updated timeout references from polling to blocking |
