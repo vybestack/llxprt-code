@@ -617,6 +617,7 @@ describe('providerAliases sandbox field validation', () => {
       'sandbox-base-url': 'http://host.docker.internal:1234',
     });
     const entry = entries.find((e) => e.alias === 'sandbox-valid');
+    expect(entry).toBeDefined();
     expect(entry?.config['sandbox-base-url']).toBe(
       'http://host.docker.internal:1234',
     );
@@ -629,6 +630,7 @@ describe('providerAliases sandbox field validation', () => {
       'sandbox-base-url': 12345,
     });
     const entry = entries.find((e) => e.alias === 'sandbox-bad-url');
+    expect(entry).toBeDefined();
     expect(entry?.config['sandbox-base-url']).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('non-string sandbox-base-url'),
@@ -642,6 +644,7 @@ describe('providerAliases sandbox field validation', () => {
       'requires-auth': false,
     });
     const entry = entries.find((e) => e.alias === 'auth-valid');
+    expect(entry).toBeDefined();
     expect(entry?.config['requires-auth']).toBe(false);
   });
 
@@ -652,6 +655,7 @@ describe('providerAliases sandbox field validation', () => {
       'requires-auth': 'yes',
     });
     const entry = entries.find((e) => e.alias === 'auth-bad');
+    expect(entry).toBeDefined();
     expect(entry?.config['requires-auth']).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('non-boolean requires-auth'),
