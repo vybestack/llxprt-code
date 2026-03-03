@@ -1791,6 +1791,23 @@ export async function switchActiveProvider(
     settingsService.setProviderSetting(name, 'base-url', undefined);
   }
 
+  // Propagate sandbox-base-url and requires-auth from alias config into the
+  // settings service so ProviderManager and provider auth checks can read them.
+  if (aliasConfig?.['sandbox-base-url']) {
+    settingsService.setProviderSetting(
+      name,
+      'sandbox-base-url',
+      aliasConfig['sandbox-base-url'],
+    );
+  }
+  if (aliasConfig?.['requires-auth'] !== undefined) {
+    settingsService.setProviderSetting(
+      name,
+      'requires-auth',
+      aliasConfig['requires-auth'],
+    );
+  }
+
   const aliasDefaultModel = normalizeSetting(aliasConfig?.defaultModel);
   const defaultModel =
     aliasDefaultModel ?? normalizeSetting(activeProvider.getDefaultModel?.());

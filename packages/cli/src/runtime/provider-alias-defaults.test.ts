@@ -1037,4 +1037,108 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('low');
     });
   });
+
+  // --- sandbox-base-url and requires-auth propagation ---
+
+  describe('sandbox-base-url and requires-auth propagation from alias config', () => {
+    it('propagates sandbox-base-url from alias config to settings service', async () => {
+      aliasEntries.push({
+        alias: 'openrouter',
+        source: 'builtin',
+        filePath: '/fake/openrouter.config',
+        config: {
+          baseProvider: 'openai',
+          defaultModel: 'gpt-4o',
+          'sandbox-base-url': 'http://host.docker.internal:1234/v1/',
+        },
+      });
+
+      await switchActiveProvider('openrouter');
+
+      expect(
+        stubSettingsService.getProviderSettings('openrouter')[
+          'sandbox-base-url'
+        ],
+      ).toBe('http://host.docker.internal:1234/v1/');
+    });
+
+    it('propagates requires-auth false from alias config to settings service', async () => {
+      aliasEntries.push({
+        alias: 'openrouter',
+        source: 'builtin',
+        filePath: '/fake/openrouter.config',
+        config: {
+          baseProvider: 'openai',
+          defaultModel: 'gpt-4o',
+          'requires-auth': false,
+        },
+      });
+
+      await switchActiveProvider('openrouter');
+
+      expect(
+        stubSettingsService.getProviderSettings('openrouter')['requires-auth'],
+      ).toBe(false);
+    });
+
+    it('propagates both sandbox-base-url and requires-auth together', async () => {
+      aliasEntries.push({
+        alias: 'openrouter',
+        source: 'builtin',
+        filePath: '/fake/openrouter.config',
+        config: {
+          baseProvider: 'openai',
+          defaultModel: 'gpt-4o',
+          'sandbox-base-url': 'http://host.docker.internal:8080/v1/',
+          'requires-auth': false,
+        },
+      });
+
+      await switchActiveProvider('openrouter');
+
+      const settings = stubSettingsService.getProviderSettings('openrouter');
+      expect(settings['sandbox-base-url']).toBe(
+        'http://host.docker.internal:8080/v1/',
+      );
+      expect(settings['requires-auth']).toBe(false);
+    });
+
+    it('does not set sandbox-base-url when alias config omits it', async () => {
+      aliasEntries.push({
+        alias: 'openrouter',
+        source: 'builtin',
+        filePath: '/fake/openrouter.config',
+        config: {
+          baseProvider: 'openai',
+          defaultModel: 'gpt-4o',
+        },
+      });
+
+      await switchActiveProvider('openrouter');
+
+      expect(
+        stubSettingsService.getProviderSettings('openrouter')[
+          'sandbox-base-url'
+        ],
+      ).toBeUndefined();
+    });
+
+    it('does not set requires-auth when alias config omits it', async () => {
+      aliasEntries.push({
+        alias: 'openrouter',
+        source: 'builtin',
+        filePath: '/fake/openrouter.config',
+        config: {
+          baseProvider: 'openai',
+          defaultModel: 'gpt-4o',
+        },
+      });
+
+      await switchActiveProvider('openrouter');
+
+      expect(
+        stubSettingsService.getProviderSettings('openrouter')['requires-auth'],
+      ).toBeUndefined();
+    });
+  });
 });
