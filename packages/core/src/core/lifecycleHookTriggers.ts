@@ -70,7 +70,7 @@ export async function triggerSessionStartHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block session start
-    debugLogger.warn('SessionStart hook failed (non-blocking):', error);
+    debugLogger.debug('SessionStart hook failed (non-blocking):', error);
     return undefined;
   }
 }
@@ -115,7 +115,7 @@ export async function triggerSessionEndHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block session end
-    debugLogger.warn('SessionEnd hook failed (non-blocking):', error);
+    debugLogger.debug('SessionEnd hook failed (non-blocking):', error);
     return undefined;
   }
 }
@@ -160,7 +160,7 @@ export async function triggerBeforeAgentHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block agent execution
-    debugLogger.warn('BeforeAgent hook failed (non-blocking):', error);
+    debugLogger.debug('BeforeAgent hook failed (non-blocking):', error);
     return undefined;
   }
 }
@@ -213,7 +213,7 @@ export async function triggerAfterAgentHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block agent execution
-    debugLogger.warn('AfterAgent hook failed (non-blocking):', error);
+    debugLogger.debug('AfterAgent hook failed (non-blocking):', error);
     return undefined;
   }
 }
@@ -261,7 +261,7 @@ export async function triggerPreCompressHook(
     return undefined;
   } catch (error) {
     // Hook failures must NOT block compression
-    debugLogger.warn('PreCompress hook failed (non-blocking):', error);
+    debugLogger.debug('PreCompress hook failed (non-blocking):', error);
     return undefined;
   }
 }

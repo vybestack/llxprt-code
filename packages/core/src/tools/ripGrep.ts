@@ -5,6 +5,7 @@
  */
 
 import fsPromises from 'fs/promises';
+import * as fs from 'fs';
 import path from 'path';
 import { EOL } from 'os';
 import { spawn } from 'child_process';
@@ -26,8 +27,11 @@ import {
   resolveTextSearchTarget,
   type ResolvedSearchTarget,
 } from '../utils/resolveTextSearchTarget.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 
 const DEFAULT_TOTAL_MAX_MATCHES = 20000;
+const debugLogger = DebugLogger.getLogger('llxprt:ripgrep');
 
 /**
  * Parameters for the GrepTool
@@ -64,6 +68,7 @@ class GrepToolInvocation extends BaseToolInvocation<
 > {
   constructor(
     private readonly config: Config,
+    private readonly fileDiscoveryService: FileDiscoveryService,
     params: RipGrepToolParams,
   ) {
     super(params);
@@ -222,7 +227,7 @@ File: ${resolved.basename}
         returnDisplay: displayMessage,
       };
     } catch (error) {
-      console.error(`Error during GrepLogic execution: ${error}`);
+      debugLogger.warn(`Error during GrepLogic execution: ${error}`);
       const errorMessage = getErrorMessage(error);
       return {
         llmContent: `Error during grep search operation: ${errorMessage}`,
@@ -269,6 +274,22 @@ File: ${resolved.basename}
     return results;
   }
 
+  /**
+   * Returns the path to .llxprtignore file if it exists and has patterns.
+   * Only returns path if patterns are non-empty (excluding comments/blank lines).
+   */
+  private getLlxprtIgnorePath(): string | null {
+    const patterns = this.fileDiscoveryService.getLlxprtIgnorePatterns();
+    if (patterns.length === 0) {
+      return null;
+    }
+    const ignoreFilePath = path.join(
+      this.config.getTargetDir(),
+      '.llxprtignore',
+    );
+    return fs.existsSync(ignoreFilePath) ? ignoreFilePath : null;
+  }
+
   private async performRipgrepSearch(options: {
     pattern: string;
     path: string;
@@ -303,6 +324,14 @@ File: ${resolved.basename}
     excludes.forEach((exclude) => {
       rgArgs.push('--glob', `!${exclude}`);
     });
+
+    // Add .llxprtignore support (ripgrep natively handles .gitignore)
+    if (this.config.getFileFilteringRespectLlxprtIgnore()) {
+      const llxprtIgnorePath = this.getLlxprtIgnorePath();
+      if (llxprtIgnorePath) {
+        rgArgs.push('--ignore-file', llxprtIgnorePath);
+      }
+    }
 
     rgArgs.push('--threads', '4');
     rgArgs.push(absolutePath);
@@ -358,7 +387,7 @@ File: ${resolved.basename}
 
       return this.parseRipgrepOutput(output, absolutePath);
     } catch (error: unknown) {
-      console.error(`GrepLogic: ripgrep failed: ${getErrorMessage(error)}`);
+      debugLogger.debug(`GrepLogic: ripgrep failed: ${getErrorMessage(error)}`);
       throw error;
     }
   }
@@ -450,6 +479,7 @@ export class RipGrepTool extends BaseDeclarativeTool<
   ToolResult
 > {
   static readonly Name = 'search_file_content';
+  private readonly fileDiscoveryService: FileDiscoveryService;
 
   constructor(
     private readonly config: Config,
@@ -482,6 +512,7 @@ export class RipGrepTool extends BaseDeclarativeTool<
         type: 'object',
       },
     );
+    this.fileDiscoveryService = new FileDiscoveryService(config.getTargetDir());
   }
 
   override validateToolParams(params: RipGrepToolParams): string | null {
@@ -512,6 +543,10 @@ export class RipGrepTool extends BaseDeclarativeTool<
     params: RipGrepToolParams,
     _messageBus?: MessageBus,
   ): ToolInvocation<RipGrepToolParams, ToolResult> {
-    return new GrepToolInvocation(this.config, params);
+    return new GrepToolInvocation(
+      this.config,
+      this.fileDiscoveryService,
+      params,
+    );
   }
 }

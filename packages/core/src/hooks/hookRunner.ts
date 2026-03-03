@@ -23,6 +23,11 @@ import type {
 } from './types.js';
 import type { LLMRequest } from './hookTranslator.js';
 import { DebugLogger } from '../debug/index.js';
+import {
+  escapeShellArg,
+  getShellConfiguration,
+  type ShellType,
+} from '../utils/shell-utils.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:runner');
 
@@ -63,8 +68,8 @@ export class HookRunner {
       );
     } catch (error) {
       const duration = Date.now() - startTime;
-      const hookSource = hookConfig.command || 'unknown';
-      const errorMessage = `Hook execution failed for event '${eventName}' (source: ${hookSource}): ${error}`;
+      const hookId = hookConfig.name || hookConfig.command || 'unknown';
+      const errorMessage = `Hook execution failed for event '${eventName}' (hook: ${hookId}): ${error}`;
       debugLogger.warn(`Hook execution error (non-fatal): ${errorMessage}`);
 
       return {
@@ -209,22 +214,35 @@ export class HookRunner {
       let stdout = '';
       let stderr = '';
       let timedOut = false;
-      const command = this.expandCommand(hookConfig.command, input);
+
+      // SECURITY: Get platform-specific shell configuration
+      const shellConfig = getShellConfiguration();
+
+      // SECURITY: Expand command with escaped variables
+      const command = this.expandCommand(
+        hookConfig.command,
+        input,
+        shellConfig.shell,
+      );
 
       // Set up environment variables
       const env = {
         ...process.env,
         LLXPRT_PROJECT_DIR: input.cwd,
-        GEMINI_PROJECT_DIR: input.cwd, // For compatibility
-        CLAUDE_PROJECT_DIR: input.cwd, // For compatibility
       };
 
-      const child = spawn(command, {
-        env,
-        cwd: input.cwd,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true,
-      });
+      // SECURITY: Use explicit shell executable with shell: false
+      // This prevents Node's shell interpretation layer
+      const child = spawn(
+        shellConfig.executable,
+        [...shellConfig.argsPrefix, command],
+        {
+          env,
+          cwd: input.cwd,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          shell: false, // CRITICAL: must be false to prevent injection
+        },
+      );
 
       // Set up timeout
       const timeoutHandle = setTimeout(() => {
@@ -244,7 +262,7 @@ export class HookRunner {
         child.stdin.on('error', (err: NodeJS.ErrnoException) => {
           // Ignore EPIPE errors which happen when the child process closes stdin early
           if (err.code !== 'EPIPE') {
-            debugLogger.warn(`Hook stdin error: ${err}`);
+            debugLogger.debug(`Hook stdin error: ${err}`);
           }
         });
         child.stdin.write(JSON.stringify(input));
@@ -336,12 +354,20 @@ export class HookRunner {
 
   /**
    * Expand command with environment variables and input context
+   *
+   * SECURITY: All variable values are escaped before substitution to prevent injection
    */
-  private expandCommand(command: string, input: HookInput): string {
-    return command
-      .replace(/\$LLXPRT_PROJECT_DIR/g, input.cwd)
-      .replace(/\$GEMINI_PROJECT_DIR/g, input.cwd) // For compatibility
-      .replace(/\$CLAUDE_PROJECT_DIR/g, input.cwd); // For compatibility
+  private expandCommand(
+    command: string,
+    input: HookInput,
+    shellType: ShellType,
+  ): string {
+    debugLogger.debug(`Expanding hook command: ${command} (cwd: ${input.cwd})`);
+
+    // SECURITY: Escape the cwd value to prevent shell injection
+    const escapedCwd = escapeShellArg(input.cwd, shellType);
+
+    return command.replace(/\$LLXPRT_PROJECT_DIR/g, () => escapedCwd);
   }
 
   /**

@@ -55,7 +55,7 @@ export const VimModeProvider = ({
     if (newValue) {
       setVimMode('NORMAL');
     }
-    await settings.setValue(SettingScope.User, 'ui.vimMode', newValue);
+    settings.setValue(SettingScope.User, 'ui.vimMode', newValue);
     return newValue;
   }, [vimEnabled, settings]);
 

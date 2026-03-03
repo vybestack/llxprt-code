@@ -46,6 +46,20 @@ git log --oneline --reverse v0.9.0..v0.10.0
 git log --oneline --grep="Merge upstream gemini-cli" -n 5
 ```
 
+### 2a. Deep Code Audit (MANDATORY before any decisioning)
+
+**Do NOT categorize commits based on subject lines alone.** Every commit must be audited
+at the code level using `git show <sha>` (the full diff, not just `--name-only`) and compared
+against LLxprt's current source files. See `dev-docs/cherrypicking-runbook.md` Phase 2 for
+the complete audit protocol, subagent usage patterns, and common pitfalls.
+
+Key questions for every commit:
+
+- **Does LLxprt already have this?** Read the actual LLxprt file, not just the filename.
+- **Is it compatible?** Check for imports, types, and infrastructure that may not exist in LLxprt.
+- **Is it partial?** Some files in a commit may apply while others reference removed code.
+- **Are there hidden dependencies?** A "bug fix" may depend on types added by a prior skipped commit.
+
 ### 3. Cherry-pick Relevant Commits
 
 Cherry-pick commits one by one, starting from the oldest:
@@ -86,6 +100,7 @@ These upstream features have been reimplemented in llxprt with our own approach:
 - **Tool Scheduler Request Queue (commit `69322e12`)** - llxprt has superior parallel batching that queues and processes multiple requests in parallel for better multi-provider performance, while upstream processes serially
 - **History Compression** - LLxprt completely rewrote the compression system using a strategy pattern (`packages/core/src/core/compression/`). Upstream compression commits (e.g., `hasFailedCompressionAttempt` fixes like `2d1c1ac5672e`) will NOT apply. When encountering compression-related commits, evaluate if the conceptual fix is useful for LLxprt's architecture, but expect to skip or reimplement rather than cherry-pick.
 - **Restore Command** - LLxprt uses `/continue` instead of `/restore` for session restoration. Commits moving restore logic (e.g., `b27cf0b0a8dd`) should be reimplemented adapting for `/continue`.
+- **Resume vs Continue** - Upstream has `/chat resume` for loading checkpoints by tag. LLxprt retains `/chat resume` (checkpoints) but also has a separate `/continue` command (session browser) and `--continue` CLI flag. These are distinct features. Upstream commits modifying `resumeCommand` logic may not need porting if they only affect checkpoint-loading behavior that LLxprt already handles differently.
 
 #### Features Completely Removed (Don't Cherry-pick):
 
@@ -292,6 +307,20 @@ LLxprt may use different error structures:
   errorType: ToolErrorType; // Separate type field
 }
 ```
+
+## CodeRabbit Review Policy
+
+When CodeRabbit reviews a cherry-pick / gmerge PR, **evaluate every issue on its own merits against the actual source code.** Do NOT dismiss findings just because "upstream did it this way." Upstream can have bugs, RULES.md violations, and suboptimal patterns too.
+
+For each CodeRabbit comment:
+
+1. **Ask: "Is CodeRabbit right?"** — Read the code it references. Does the issue actually exist? Will it cause the problem described?
+2. **Ask: "Is it wrong regardless of upstream?"** — If upstream shipped a bug and we cherry-picked it, that's still our bug now. Fix it.
+3. **Test violations** — If CodeRabbit identifies tests that mock away the behavior they claim to test (mock theater), write real behavioral tests per `dev-docs/RULES.md`. Do not keep rules-violating tests just because upstream had them.
+4. **Scope judgment** — Dismiss issues that are genuinely outside PR scope, would require major architectural changes, or are factually incorrect. But small improvements (DRY, safety, correctness) should be addressed.
+5. **Always explain** — For every CodeRabbit comment, respond with what action was taken and why. Resolve if addressed or provably invalid. Leave unresolved only when user judgment is needed.
+
+**Never respond to a CodeRabbit finding with "upstream did it this way" as the sole justification.** That is not a valid reason to keep a bug, a test violation, or a code quality issue.
 
 ## Important Notes
 

@@ -327,5 +327,106 @@ describe('HookPlanner', () => {
       expect(resumePlan!.hookConfigs).toHaveLength(1);
       expect(resumePlan!.hookConfigs[0].command).toBe('./resume_hook.sh');
     });
+
+    it('should deduplicate based on both name and command', () => {
+      const mockEntries: HookRegistryEntry[] = [
+        {
+          config: {
+            name: 'hook1',
+            type: HookType.Command,
+            command: './same.sh',
+          },
+          source: ConfigSource.Project,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        },
+        {
+          config: {
+            name: 'hook1',
+            type: HookType.Command,
+            command: './same.sh',
+          },
+          source: ConfigSource.User,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        }, // Same name, same command -> deduplicate
+        {
+          config: {
+            name: 'hook2',
+            type: HookType.Command,
+            command: './same.sh',
+          },
+          source: ConfigSource.Project,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        }, // Different name, same command -> distinct
+        {
+          config: {
+            name: 'hook1',
+            type: HookType.Command,
+            command: './different.sh',
+          },
+          source: ConfigSource.Project,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        }, // Same name, different command -> distinct
+        {
+          config: { type: HookType.Command, command: './no-name.sh' },
+          source: ConfigSource.Project,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        },
+        {
+          config: { type: HookType.Command, command: './no-name.sh' },
+          source: ConfigSource.User,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        }, // No name, same command -> deduplicate
+      ];
+
+      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+
+      const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool);
+
+      expect(plan).not.toBeNull();
+      // hook1:same.sh (deduped), hook2:same.sh, hook1:different.sh, :no-name.sh (deduped)
+      expect(plan!.hookConfigs).toHaveLength(4);
+    });
+
+    it('should not collide when name or command contains colons', () => {
+      const mockEntries: HookRegistryEntry[] = [
+        {
+          config: {
+            name: 'a:b',
+            type: HookType.Command,
+            command: 'c',
+          },
+          source: ConfigSource.Project,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        },
+        {
+          config: {
+            name: 'a',
+            type: HookType.Command,
+            command: 'b:c',
+          },
+          source: ConfigSource.User,
+          eventName: HookEventName.BeforeTool,
+          enabled: true,
+        },
+      ];
+
+      vi.mocked(mockHookRegistry.getHooksForEvent).mockReturnValue(mockEntries);
+
+      const plan = hookPlanner.createExecutionPlan(HookEventName.BeforeTool);
+
+      expect(plan).not.toBeNull();
+      // Both hooks should be distinct (not falsely deduplicated)
+      expect(plan!.hookConfigs).toHaveLength(2);
+      expect(mockDebugLogger.debug).not.toHaveBeenCalledWith(
+        expect.stringContaining('Deduplicated hook'),
+      );
+    });
   });
 });

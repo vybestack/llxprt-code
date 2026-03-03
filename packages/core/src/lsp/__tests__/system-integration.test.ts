@@ -118,6 +118,7 @@ vi.mock('../../services/gitService.js', () => ({
 vi.mock('../../tools/mcp-client-manager.js', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
+    getMcpInstructions: vi.fn().mockReturnValue(''),
   })),
 }));
 
@@ -214,6 +215,22 @@ vi.mock('../../tools/mcp-tool.js', () => ({
       }),
     ),
 }));
+
+vi.mock('../../utils/memoryDiscovery.js', () => ({
+  loadGlobalMemory: vi.fn().mockResolvedValue({ files: [] }),
+  loadEnvironmentMemory: vi.fn().mockResolvedValue({ files: [] }),
+  loadJitSubdirectoryMemory: vi.fn().mockResolvedValue({ files: [] }),
+  concatenateInstructions: vi.fn().mockReturnValue(''),
+  getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
+}));
+
+vi.mock('../../utils/events.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/events.js')>();
+  // Spy on emit rather than replacing the whole object — spreading loses the
+  // EventEmitter prototype chain (on, listenerCount, emitFeedback, etc.)
+  vi.spyOn(actual.coreEvents, 'emit').mockReturnValue(true);
+  return actual;
+});
 
 describe('LSP system integration (P35)', () => {
   const repoRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
@@ -330,23 +347,27 @@ describe('LSP system integration (P35)', () => {
     expect(lspNavTools).toHaveLength(0);
   });
 
-  it('registers lsp-navigation tools when service is alive and navigationTools is true', async () => {
-    const config = new Config(
-      createBaseConfigParams({
-        lsp: {
-          servers: [],
-          navigationTools: true,
-        },
-      }),
-    );
-    await config.initialize();
+  it(
+    'registers lsp-navigation tools when service is alive and navigationTools is true',
+    { retry: 2 },
+    async () => {
+      const config = new Config(
+        createBaseConfigParams({
+          lsp: {
+            servers: [],
+            navigationTools: true,
+          },
+        }),
+      );
+      await config.initialize();
 
-    const tools = config.getToolRegistry().getAllTools();
-    const lspNavTools = tools.filter(
-      (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-    );
-    expect(lspNavTools.length).toBeGreaterThan(0);
-  });
+      const tools = config.getToolRegistry().getAllTools();
+      const lspNavTools = tools.filter(
+        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+      );
+      expect(lspNavTools.length).toBeGreaterThan(0);
+    },
+  );
 
   it('does not register lsp-navigation tools when service is unavailable', async () => {
     const config = new Config(

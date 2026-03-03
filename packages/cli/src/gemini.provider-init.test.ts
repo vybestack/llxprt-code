@@ -80,8 +80,15 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-vi.mock('./ui/utils/kittyProtocolDetector.js', () => ({
-  detectAndEnableKittyProtocol: vi.fn(() => Promise.resolve()),
+vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
+  terminalCapabilityManager: {
+    detectCapabilities: vi.fn(() => Promise.resolve()),
+    isKittyProtocolEnabled: vi.fn(() => false),
+    enableKittyProtocol: vi.fn(),
+    disableKittyProtocol: vi.fn(),
+    getTerminalName: vi.fn(() => undefined),
+    getTerminalBackgroundColor: vi.fn(() => undefined),
+  },
 }));
 
 vi.mock('./ui/utils/terminalContract.js', () => ({
@@ -204,6 +211,7 @@ describe('gemini main provider initialization', () => {
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
       })),
+      setTerminalBackground: vi.fn(),
     } as unknown as Config;
 
     const { loadCliConfig, parseArguments } = await import(
@@ -252,7 +260,7 @@ describe('gemini main provider initialization', () => {
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
       getServerToolsProvider: vi.fn().mockReturnValue(null),
       hasActiveProvider: vi.fn().mockReturnValue(true),
-      setActiveProvider: vi.fn().mockResolvedValue(undefined),
+      setActiveProvider: vi.fn().mockReturnValue(undefined),
     };
 
     const restoreHistory = vi
@@ -293,6 +301,7 @@ describe('gemini main provider initialization', () => {
       })),
       getScreenReader: vi.fn(() => false),
       getGeminiClient,
+      setTerminalBackground: vi.fn(),
     } as unknown as Config;
 
     const coreModule = await import('@vybestack/llxprt-code-core');

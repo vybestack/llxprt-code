@@ -344,10 +344,6 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.
   - **Default:** `undefined`
 
-- **`ui.jitContextEnabled`** (boolean):
-  - **Description:** Enable Just-In-Time (JIT) loading of subdirectory-specific context (LLXPRT.md files) on demand when tools access files. When enabled, the system automatically loads context from subdirectories as needed.
-  - **Default:** `true`
-
 - **`ui.contextFileName`** (string | string[]):
   - **Description:** The name of the context file or files to load into memory. Accepts either a single string or an array of strings.
   - **Default:** `undefined`
@@ -540,6 +536,10 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+- **`security.enablePermanentToolApproval`** (boolean):
+  - **Description:** Enable the "Allow for all future sessions" option in tool confirmation dialogs.
+  - **Default:** `false`
+
 - **`security.blockGitExtensions`** (boolean):
   - **Description:** Blocks installing and loading extensions from Git.
   - **Default:** `false`
@@ -625,6 +625,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`experimental.extensionReloading`** (boolean):
   - **Description:** Enables extension loading/unloading within the CLI session.
   - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`experimental.jitContext`** (boolean):
+  - **Description:** Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.
+  - **Default:** `true`
   - **Requires restart:** Yes
 
 #### `defaultProfile`

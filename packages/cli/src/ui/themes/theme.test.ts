@@ -220,3 +220,69 @@ describe('themeManager.loadCustomThemes', () => {
     expect(result.name).toBe(legacyTheme.name);
   });
 });
+
+describe('pickDefaultThemeName', () => {
+  const { pickDefaultThemeName } = themeModule;
+  const mockThemes = [
+    { name: 'Ayu', type: 'dark' as const, colors: { Background: '#0a0e14' } },
+    {
+      name: 'Ayu Light',
+      type: 'light' as const,
+      colors: { Background: '#fafafa' },
+    },
+    {
+      name: 'Dracula',
+      type: 'dark' as const,
+      colors: { Background: '#282a36' },
+    },
+    {
+      name: 'Default Light',
+      type: 'light' as const,
+      colors: { Background: '#ffffff' },
+    },
+    {
+      name: 'Green Screen',
+      type: 'ansi' as const,
+      colors: { Background: 'black' },
+    },
+  ] as const;
+
+  it('should pick dark theme for dark terminal background', () => {
+    expect(
+      pickDefaultThemeName('#000000', mockThemes, 'Ayu', 'Default Light'),
+    ).toBe('Ayu');
+  });
+
+  it('should pick light theme for light terminal background', () => {
+    expect(
+      pickDefaultThemeName('#FFFFFF', mockThemes, 'Ayu', 'Default Light'),
+    ).toBe('Ayu Light');
+  });
+
+  it('should return fallback when terminalBackgroundColor is undefined', () => {
+    expect(
+      pickDefaultThemeName(undefined, mockThemes, 'Ayu', 'Default Light'),
+    ).toBe('Ayu');
+  });
+
+  it('should return fallback when no matching theme type found', () => {
+    const onlyDarkThemes = [
+      { name: 'Ayu', type: 'dark' as const, colors: { Background: '#0a0e14' } },
+    ];
+    expect(
+      pickDefaultThemeName('#FFFFFF', onlyDarkThemes, 'Ayu', 'Default Light'),
+    ).toBe('Default Light');
+  });
+
+  it('should return fallback when detection fails (malformed color)', () => {
+    expect(
+      pickDefaultThemeName('#FFF', mockThemes, 'Ayu', 'Default Light'),
+    ).toBe('Ayu');
+  });
+
+  it('should pick first matching theme when multiple exist', () => {
+    expect(
+      pickDefaultThemeName('#000000', mockThemes, 'Ayu', 'Default Light'),
+    ).toBe('Ayu'); // First dark theme
+  });
+});

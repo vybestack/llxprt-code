@@ -69,6 +69,7 @@ const baseMockUiState: Partial<UIState> = {
   streamingState: StreamingState.Idle,
   mainAreaWidth: 100,
   terminalWidth: 120,
+  terminalBackgroundColor: undefined,
 };
 
 // Mock RuntimeApi for tests - provides stub implementations of runtime functions

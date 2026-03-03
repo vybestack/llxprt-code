@@ -19,6 +19,7 @@ import {
   decodeTagName,
   EmojiFilter,
   type EmojiFilterMode,
+  INITIAL_HISTORY_LENGTH,
 } from '@vybestack/llxprt-code-core';
 import path from 'path';
 import type {
@@ -157,7 +158,7 @@ const saveCommand: SlashCommand = {
 
     const chat = client.getChat();
     const history = chat.getHistory();
-    if (history.length > 2) {
+    if (history.length > INITIAL_HISTORY_LENGTH) {
       await logger.saveCheckpoint(history, tag);
       return {
         type: 'message',
@@ -389,7 +390,7 @@ const clearCommand: SlashCommand = {
 
     const chat = client.getChat();
     const history = chat.getHistory();
-    if (history.length <= 2) {
+    if (history.length <= INITIAL_HISTORY_LENGTH) {
       return {
         type: 'message',
         messageType: 'info',
@@ -398,7 +399,7 @@ const clearCommand: SlashCommand = {
     }
 
     // Clear both the chat history and the UI display
-    await chat.clearHistory();
+    chat.clearHistory();
     context.ui.updateHistoryTokenCount(0);
     context.ui.clear();
     // Note: context.ui.clear() clears the screen, so we don't return a message

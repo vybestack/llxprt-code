@@ -215,11 +215,21 @@ export const memoryCommand: SlashCommand = {
         );
 
         try {
-          const config = await context.services.config;
+          const config = context.services.config;
           const settings = context.services.settings;
           if (config) {
-            const { memoryContent, fileCount, filePaths } =
-              await loadHierarchicalLlxprtMemory(
+            let memoryContent = '';
+            let fileCount = 0;
+
+            if (config.isJitContextEnabled()) {
+              const contextManager = config.getContextManager();
+              if (contextManager) {
+                await contextManager.refresh();
+              }
+              memoryContent = config.getUserMemory();
+              fileCount = config.getLlxprtMdFileCount();
+            } else {
+              const result = await loadHierarchicalLlxprtMemory(
                 config.getWorkingDir(),
                 config.shouldLoadMemoryFromIncludeDirectories()
                   ? config.getWorkspaceContext().getDirectories()
@@ -233,7 +243,12 @@ export const memoryCommand: SlashCommand = {
                   'tree', // Use setting or default to 'tree'
                 config.getFileFilteringOptions(),
               );
-            config.setUserMemory(memoryContent);
+              memoryContent = result.memoryContent;
+              fileCount = result.fileCount;
+              config.setUserMemory(memoryContent);
+              config.setLlxprtMdFileCount(fileCount);
+              config.setLlxprtMdFilePaths(result.filePaths);
+            }
 
             // Refresh core (system) memory from .LLXPRT_SYSTEM files
             try {
@@ -251,8 +266,6 @@ export const memoryCommand: SlashCommand = {
               // Best-effort: memory is already stored; instruction update
               // can fail before the chat is initialized.
             }
-            config.setLlxprtMdFileCount(fileCount);
-            config.setLlxprtMdFilePaths(filePaths);
             context.ui.setGeminiMdFileCount(fileCount);
 
             const successMessage =

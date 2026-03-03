@@ -184,6 +184,7 @@ describe('Settings Loading and Merging', () => {
         folderTrust: { enabled: false },
         auth: {},
         blockGitExtensions: false,
+        enablePermanentToolApproval: false,
       });
       expect(settings.merged.tools).toMatchObject({
         autoAccept: false,

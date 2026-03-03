@@ -28,7 +28,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { isKittyProtocolEnabled } from './kittyProtocolDetector.js';
+import { terminalCapabilityManager } from './terminalCapabilityManager.js';
 import { VSCODE_SHIFT_ENTER_SEQUENCE } from './platformConstants.js';
 
 const execAsync = promisify(exec);
@@ -306,7 +306,7 @@ async function configureWindsurf(): Promise<TerminalSetupResult> {
  */
 export async function terminalSetup(): Promise<TerminalSetupResult> {
   // Check if terminal already has optimal keyboard support
-  if (isKittyProtocolEnabled()) {
+  if (terminalCapabilityManager.isKittyProtocolEnabled()) {
     return {
       success: true,
       message:

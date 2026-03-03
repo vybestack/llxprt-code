@@ -119,6 +119,52 @@ For every upstream commit in the range, choose exactly one:
 - **PICK**: cherry-pick as-is (or with trivial conflict resolution)
 - **REIMPLEMENT**: too divergent to cherry-pick cleanly, but desired behavior should be recreated in LLxprt
 - **SKIP**: not relevant, conflicts with LLxprt goals, too high churn for value, Google-only, etc.
+- **NO_OP**: LLxprt already has this change (or equivalent) — no action needed
+
+### Deep Code Audit (MANDATORY — Do NOT skip this)
+
+**Categorizing commits by subject line alone is insufficient and produces bad decisions.**
+Every commit must be audited at the code level before assigning a decision. This means:
+
+1. **Read the actual diff** — run `git show <sha>` for every commit, not just `git show --name-only`.
+2. **Compare with LLxprt's current code** — for each file touched, read the corresponding LLxprt file and compare. Ask:
+   - Does LLxprt already have this change? (NO_OP)
+   - Has LLxprt's version of this file diverged so much that the patch won't apply? (REIMPLEMENT)
+   - Does the change depend on infrastructure LLxprt doesn't have (e.g., model availability service, ClearcutLogger)? (SKIP)
+   - Is the change in shared code that LLxprt uses as-is? (PICK)
+3. **Check for hidden dependencies** — a commit may look like "just a bug fix" but depend on types, imports, or infrastructure from a prior skipped commit.
+4. **Check for partial applicability** — a commit may touch 5 files where 4 apply cleanly and 1 references removed code (e.g., `smart-edit.ts`). Note this explicitly.
+
+#### Using Subagents for Deep Audit
+
+For ranges with more than ~15 non-trivial commits, use subagents (e.g., `codeanalyzer`) to
+parallelize the audit. Group commits into batches of ~5 and dispatch one subagent per batch.
+Each subagent must:
+
+- Run `git show <sha>` to read the actual diff
+- Read the corresponding LLxprt files to compare current state
+- Produce a per-commit structured assessment:
+
+```
+## <sha> — <subject>
+**Verdict:** PICK / REIMPLEMENT / SKIP / NO_OP
+**Confidence:** HIGH / MEDIUM / LOW
+**Evidence:** <specific files/lines compared, what matches, what diverges>
+**Rationale:** <detailed explanation of why this verdict>
+**Conflicts expected:** YES/NO — and specifically what will conflict
+**Partial applicability:** If some files apply but others don't, list which
+```
+
+Collect all subagent results, then synthesize into `CHERRIES.md`. The subagent audit
+results should be saved as `project-plans/gmerge-VERSION/AUDIT-DETAILS.md` for traceability.
+
+#### Common Audit Pitfalls to Avoid
+
+- **"It's docs, auto-PICK"** — Docs may reference features/configs we don't have (e.g., `GEMINI_SYSTEM_MD`). Always check.
+- **"Subject says telemetry, auto-SKIP"** — The commit may include non-telemetry changes mixed in. Read the diff.
+- **"Small change, auto-PICK"** — Even a 3-line change can reference a type or import that doesn't exist in LLxprt.
+- **"Theme change, auto-PICK"** — Theme files may have diverged (e.g., LLxprt removed holiday themes). Check compatibility.
+- **"Bug fix, auto-PICK"** — The bug may not exist in LLxprt (we may have already fixed it differently), or the fix may depend on code we don't have.
 
 ### Required table order
 
@@ -136,13 +182,15 @@ Each row must include:
 Notes:
 
 - **Chronological order** means ascending by upstream commit date (oldest first).
-- “Areas” should be a short comma-separated summary like `core`, `cli`, `integration-tests`, `docs`, `a2a-server`, `policy`, etc.
-- If a commit is “docs only”, that does _not_ automatically mean SKIP; decide based on relevance and whether it documents features we have/want.
+- "Areas" should be a short comma-separated summary like `core`, `cli`, `integration-tests`, `docs`, `a2a-server`, `policy`, etc.
+- If a commit is "docs only", that does _not_ automatically mean SKIP; decide based on relevance and whether it documents features we have/want.
+- **Rationale must cite evidence from the code audit** — not just the commit subject. For example: "SKIP — diff adds `ClearcutLogger.logHookEvent()` calls; LLxprt removed ClearcutLogger" rather than just "SKIP — telemetry".
 
 Also write:
 
-- Counts (PICK/SKIP/REIMPLEMENT) at the top of `CHERRIES.md`
-- A short “decision notes” section for recurring themes (A2A privateness, tool renames, test deflaking, formatting churn)
+- Counts (PICK/SKIP/REIMPLEMENT/NO_OP) at the top of `CHERRIES.md`
+- A short "decision notes" section for recurring themes (A2A privateness, tool renames, test deflaking, formatting churn)
+- An "audit methodology" note confirming that code-level audit was performed (with subagent details if used)
 
 ### Stop point (human review)
 

@@ -87,6 +87,7 @@ describe('RipGrepTool', () => {
     getTargetDir: () => tempRootDir,
     getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
     getDebugMode: () => false,
+    getFileFilteringRespectLlxprtIgnore: () => true,
   } as unknown as Config;
 
   beforeEach(async () => {
@@ -456,6 +457,7 @@ describe('RipGrepTool', () => {
         getWorkspaceContext: () =>
           createMockWorkspaceContext(tempRootDir, [secondDir]),
         getDebugMode: () => false,
+        getFileFilteringRespectLlxprtIgnore: () => true,
       } as unknown as Config;
 
       // Setup specific mock for this test - multi-directory search for 'world'
@@ -561,6 +563,7 @@ describe('RipGrepTool', () => {
         getWorkspaceContext: () =>
           createMockWorkspaceContext(tempRootDir, [secondDir]),
         getDebugMode: () => false,
+        getFileFilteringRespectLlxprtIgnore: () => true,
       } as unknown as Config;
 
       // Setup specific mock for this test - searching in 'sub' should only return matches from that directory
@@ -1184,13 +1187,19 @@ describe('RipGrepTool', () => {
       expect(invocation.getDescription()).toContain(path.join('src', 'app'));
     });
 
-    it('should indicate searching across all workspace directories when no path specified', () => {
+    it('should indicate searching across all workspace directories when no path specified', async () => {
+      // Create an additional directory for multi-directory workspace
+      const secondDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'grep-tool-second-'),
+      );
+
       // Create a mock config with multiple directories
       const multiDirConfig = {
         getTargetDir: () => tempRootDir,
         getWorkspaceContext: () =>
-          createMockWorkspaceContext(tempRootDir, ['/another/dir']),
+          createMockWorkspaceContext(tempRootDir, [secondDir]),
         getDebugMode: () => false,
+        getFileFilteringRespectLlxprtIgnore: () => true,
       } as unknown as Config;
 
       const multiDirGrepTool = new RipGrepTool(multiDirConfig);
@@ -1199,6 +1208,9 @@ describe('RipGrepTool', () => {
       expect(invocation.getDescription()).toBe(
         "'testPattern' across all workspace directories",
       );
+
+      // Cleanup
+      await fs.rm(secondDir, { recursive: true, force: true });
     });
 
     it('should generate correct description with pattern, include, and path', async () => {
@@ -1220,6 +1232,271 @@ describe('RipGrepTool', () => {
       const params: RipGrepToolParams = { pattern: 'testPattern', path: '.' };
       const invocation = grepTool.build(params);
       expect(invocation.getDescription()).toBe("'testPattern' within ./");
+    });
+  });
+
+  describe('.llxprtignore support', () => {
+    it('should add --ignore-file flag when .llxprtignore exists with patterns', async () => {
+      // Arrange: Create .llxprtignore with pattern
+      const llxprtIgnorePath = path.join(tempRootDir, '.llxprtignore');
+      await fs.writeFile(llxprtIgnorePath, 'ignored.log');
+
+      const configWithLlxprtIgnore = {
+        getTargetDir: () => tempRootDir,
+        getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+        getDebugMode: () => false,
+        getFileFilteringRespectLlxprtIgnore: () => true,
+      } as unknown as Config;
+      const tool = new RipGrepTool(configWithLlxprtIgnore);
+
+      mockSpawn.mockImplementationOnce(
+        createMockSpawn({
+          outputData: 'visible.txt:1:secret data\n',
+          exitCode: 0,
+        }),
+      );
+
+      // Act: Search for pattern
+      const params: RipGrepToolParams = { pattern: 'secret' };
+      const invocation = tool.build(params);
+      await invocation.execute(abortSignal);
+
+      // Assert: Verify --ignore-file flag was passed to ripgrep
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.arrayContaining(['--ignore-file', llxprtIgnorePath]),
+        expect.anything(),
+      );
+    });
+
+    it('should not add --ignore-file flag when respectLlxprtIgnore is disabled', async () => {
+      // Arrange: Create .llxprtignore
+      const llxprtIgnorePath = path.join(tempRootDir, '.llxprtignore');
+      await fs.writeFile(llxprtIgnorePath, 'ignored.log');
+
+      const configWithoutLlxprtIgnore = {
+        getTargetDir: () => tempRootDir,
+        getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+        getDebugMode: () => false,
+        getFileFilteringRespectLlxprtIgnore: () => false,
+      } as unknown as Config;
+      const tool = new RipGrepTool(configWithoutLlxprtIgnore);
+
+      mockSpawn.mockImplementationOnce(
+        createMockSpawn({
+          outputData: '',
+          exitCode: 1,
+        }),
+      );
+
+      // Act
+      const params: RipGrepToolParams = { pattern: 'secret' };
+      const invocation = tool.build(params);
+      await invocation.execute(abortSignal);
+
+      // Assert: --ignore-file should NOT be in args
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.not.arrayContaining(['--ignore-file']),
+        expect.anything(),
+      );
+    });
+
+    it('should not add --ignore-file flag when .llxprtignore is empty', async () => {
+      // Arrange: Create empty .llxprtignore
+      await fs.writeFile(path.join(tempRootDir, '.llxprtignore'), '');
+
+      const config = {
+        getTargetDir: () => tempRootDir,
+        getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+        getDebugMode: () => false,
+        getFileFilteringRespectLlxprtIgnore: () => true,
+      } as unknown as Config;
+      const tool = new RipGrepTool(config);
+
+      mockSpawn.mockImplementationOnce(
+        createMockSpawn({
+          outputData: '',
+          exitCode: 1,
+        }),
+      );
+
+      // Act
+      const params: RipGrepToolParams = { pattern: 'test' };
+      const invocation = tool.build(params);
+      await invocation.execute(abortSignal);
+
+      // Assert: No --ignore-file flag when file is empty
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.not.arrayContaining(['--ignore-file']),
+        expect.anything(),
+      );
+    });
+
+    it('should not add --ignore-file flag when .llxprtignore only has comments', async () => {
+      // Arrange: Create .llxprtignore with only comments
+      await fs.writeFile(
+        path.join(tempRootDir, '.llxprtignore'),
+        '# This is a comment\n# Another comment\n',
+      );
+
+      const config = {
+        getTargetDir: () => tempRootDir,
+        getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+        getDebugMode: () => false,
+        getFileFilteringRespectLlxprtIgnore: () => true,
+      } as unknown as Config;
+      const tool = new RipGrepTool(config);
+
+      mockSpawn.mockImplementationOnce(
+        createMockSpawn({
+          outputData: '',
+          exitCode: 1,
+        }),
+      );
+
+      // Act
+      const params: RipGrepToolParams = { pattern: 'test' };
+      const invocation = tool.build(params);
+      await invocation.execute(abortSignal);
+
+      // Assert: No --ignore-file flag when only comments
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.not.arrayContaining(['--ignore-file']),
+        expect.anything(),
+      );
+    });
+
+    it('should not add --ignore-file flag when .llxprtignore does not exist', async () => {
+      // Arrange: No .llxprtignore file
+      const config = {
+        getTargetDir: () => tempRootDir,
+        getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+        getDebugMode: () => false,
+        getFileFilteringRespectLlxprtIgnore: () => true,
+      } as unknown as Config;
+      const tool = new RipGrepTool(config);
+
+      mockSpawn.mockImplementationOnce(
+        createMockSpawn({
+          outputData: '',
+          exitCode: 1,
+        }),
+      );
+
+      // Act
+      const params: RipGrepToolParams = { pattern: 'test' };
+      const invocation = tool.build(params);
+      await invocation.execute(abortSignal);
+
+      // Assert: No --ignore-file flag when file doesn't exist
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.not.arrayContaining(['--ignore-file']),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('debugLogger usage', () => {
+    it('should use debugLogger.warn instead of console.error for top-level errors', async () => {
+      // Mock DebugLogger to spy on warn calls
+      const { DebugLogger } = await import('../debug/DebugLogger.js');
+      const warnSpy = vi.spyOn(DebugLogger.getLogger('llxprt:ripgrep'), 'warn');
+
+      // Setup specific mock to trigger an error in execute
+      mockSpawn.mockImplementationOnce(() => {
+        const mockProcess = {
+          stdout: {
+            on: vi.fn(),
+            removeListener: vi.fn(),
+          },
+          stderr: {
+            on: vi.fn(),
+            removeListener: vi.fn(),
+          },
+          on: vi.fn(),
+          removeListener: vi.fn(),
+          kill: vi.fn(),
+        };
+
+        setTimeout(() => {
+          const errorHandler = mockProcess.on.mock.calls.find(
+            (call) => call[0] === 'error',
+          )?.[1];
+
+          if (errorHandler) {
+            errorHandler(new Error('Test error during execution'));
+          }
+        }, 0);
+
+        return mockProcess as unknown as ChildProcess;
+      });
+
+      const params: RipGrepToolParams = { pattern: 'test' };
+      const invocation = grepTool.build(params);
+      const result = await invocation.execute(abortSignal);
+
+      // Should have logged to debugLogger.warn, not console.error
+      expect(warnSpy).toHaveBeenCalled();
+      expect(warnSpy.mock.calls[0][0]).toContain(
+        'Error during GrepLogic execution:',
+      );
+      expect(result.llmContent).toContain('Error during grep search operation');
+
+      warnSpy.mockRestore();
+    });
+
+    it('should use debugLogger.debug instead of console.error for ripgrep failures', async () => {
+      // Mock DebugLogger to spy on debug calls
+      const { DebugLogger } = await import('../debug/DebugLogger.js');
+      const debugSpy = vi.spyOn(
+        DebugLogger.getLogger('llxprt:ripgrep'),
+        'debug',
+      );
+
+      // Setup specific mock to trigger a ripgrep failure
+      mockSpawn.mockImplementationOnce(() => {
+        const mockProcess = {
+          stdout: {
+            on: vi.fn(),
+            removeListener: vi.fn(),
+          },
+          stderr: {
+            on: vi.fn(),
+            removeListener: vi.fn(),
+          },
+          on: vi.fn(),
+          removeListener: vi.fn(),
+          kill: vi.fn(),
+        };
+
+        setTimeout(() => {
+          const closeHandler = mockProcess.on.mock.calls.find(
+            (call) => call[0] === 'close',
+          )?.[1];
+
+          if (closeHandler) {
+            // Exit code 2 indicates ripgrep error
+            closeHandler(2);
+          }
+        }, 0);
+
+        return mockProcess as unknown as ChildProcess;
+      });
+
+      const params: RipGrepToolParams = { pattern: 'test' };
+      const invocation = grepTool.build(params);
+      const result = await invocation.execute(abortSignal);
+
+      // Should have logged to debugLogger.debug
+      expect(debugSpy).toHaveBeenCalled();
+      expect(debugSpy.mock.calls[0][0]).toContain('GrepLogic: ripgrep failed:');
+      expect(result.llmContent).toContain('Error during grep search operation');
+
+      debugSpy.mockRestore();
     });
   });
 });

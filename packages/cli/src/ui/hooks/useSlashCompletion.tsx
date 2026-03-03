@@ -157,7 +157,8 @@ export function useSlashCompletion(
     if (cursorRow === 0 && isSlashCommand(currentLine.trim())) {
       const index = currentLine.indexOf('/');
       debugLogger.debug(() => `Slash command detected at index ${index}`);
-      return index;
+      // Only activate slash commands at index 0
+      return index === 0 ? index : -1;
     }
 
     // For other completions like '@', we search backwards from the cursor.
@@ -243,7 +244,10 @@ export function useSlashCompletion(
       let currentLevel: readonly SlashCommand[] | undefined = slashCommands;
       let leafCommand: SlashCommand | null = null;
 
-      for (const part of rawParts) {
+      // Only process complete parts (parts followed by another part or a space)
+      const completeParts = hasTrailingSpace ? rawParts : rawParts.slice(0, -1);
+
+      for (const part of completeParts) {
         if (!currentLevel) {
           break;
         }
@@ -291,10 +295,27 @@ export function useSlashCompletion(
           );
 
           if (exactMatchAsParent) {
-            leafCommand = exactMatchAsParent;
-            currentLevel = exactMatchAsParent.subCommands;
-            commandPartial = '';
-            argumentPartial = '';
+            // Only descend if there are NO other matches for the partial at this level.
+            // This ensures that typing "/memory" still shows "/memory-leak" if it exists.
+            const otherMatches = currentLevel.filter(
+              (cmd) =>
+                cmd !== exactMatchAsParent &&
+                (cmd.name.toLowerCase().startsWith(candidate.toLowerCase()) ||
+                  cmd.altNames?.some((alt) =>
+                    alt.toLowerCase().startsWith(candidate.toLowerCase()),
+                  )),
+            );
+
+            if (otherMatches.length === 0) {
+              leafCommand = exactMatchAsParent;
+              currentLevel = exactMatchAsParent.subCommands as
+                | readonly SlashCommand[]
+                | undefined;
+              commandPartial = '';
+            } else {
+              // Reset exactMatchAsParent when descent is skipped due to other matches
+              exactMatchAsParent = undefined;
+            }
           }
         }
       }
@@ -441,7 +462,7 @@ export function useSlashCompletion(
       );
       debugLogger.debug(() => `slashCommands at root: ${slashCommands.length}`);
       if (commandsToSearch.length > 0) {
-        let potentialSuggestions = commandsToSearch.filter((cmd) => {
+        const potentialSuggestions = commandsToSearch.filter((cmd) => {
           // Filter extension commands: must have extensionName AND be enabled
           if (cmd.kind === 'extension') {
             // Extension commands without extensionName are treated as invalid/disabled
@@ -466,19 +487,18 @@ export function useSlashCompletion(
           () => `Found ${potentialSuggestions.length} potential suggestions`,
         );
 
-        // If a user's input is an exact match and it is a leaf command,
-        // enter should submit immediately.
-        if (potentialSuggestions.length > 0 && !hasTrailingSpace) {
-          const perfectMatch = potentialSuggestions.find(
-            (s) =>
-              s.name === commandPartial || s.altNames?.includes(commandPartial),
-          );
-          if (perfectMatch && perfectMatch.action) {
-            potentialSuggestions = [];
-          }
-        }
+        // Sort potentialSuggestions so that exact match (by name or altName) comes first
+        const sortedSuggestions = [...potentialSuggestions].sort((a, b) => {
+          const aIsExact =
+            a.name === commandPartial || a.altNames?.includes(commandPartial);
+          const bIsExact =
+            b.name === commandPartial || b.altNames?.includes(commandPartial);
+          if (aIsExact && !bIsExact) return -1;
+          if (!aIsExact && bIsExact) return 1;
+          return 0;
+        });
 
-        const finalSuggestions = potentialSuggestions.map((cmd) => ({
+        const finalSuggestions = sortedSuggestions.map((cmd) => ({
           label: cmd.name,
           value: cmd.name,
           description: cmd.description,

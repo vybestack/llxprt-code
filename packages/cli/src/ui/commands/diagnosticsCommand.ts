@@ -296,7 +296,7 @@ export const diagnosticsCommand: SlashCommand = {
 
       diagnostics.push('\n## Tools');
       try {
-        const toolRegistry = await config.getToolRegistry();
+        const toolRegistry = config.getToolRegistry();
         if (toolRegistry) {
           const tools = toolRegistry.getAllTools();
           diagnostics.push(`- Available Tools: ${tools.length}`);

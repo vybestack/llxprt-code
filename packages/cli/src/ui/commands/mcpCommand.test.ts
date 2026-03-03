@@ -107,7 +107,7 @@ describe('mcpCommand', () => {
       }),
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
-      getPromptRegistry: vi.fn().mockResolvedValue({
+      getPromptRegistry: vi.fn().mockReturnValue({
         getAllPrompts: vi.fn().mockReturnValue([]),
         getPromptsByServer: vi.fn().mockReturnValue([]),
       }),
@@ -1155,7 +1155,7 @@ describe('mcpCommand', () => {
             getToolRegistry: vi.fn().mockReturnValue({}),
             getMcpClientManager: vi.fn().mockReturnValue(mockMcpClientManager),
             getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
-            getPromptRegistry: vi.fn().mockResolvedValue({
+            getPromptRegistry: vi.fn().mockReturnValue({
               removePromptsByServer: vi.fn(),
             }),
           },
@@ -1263,7 +1263,7 @@ describe('mcpCommand', () => {
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
             getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
             getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
-            getPromptRegistry: vi.fn().mockResolvedValue({
+            getPromptRegistry: vi.fn().mockReturnValue({
               getPromptsByServer: vi.fn().mockReturnValue([]),
             }),
           },

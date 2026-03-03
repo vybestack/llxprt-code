@@ -20,7 +20,11 @@ import type {
   Language,
   Tree,
   Node,
+  Query as QueryType,
 } from 'web-tree-sitter';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const debugLogger = new DebugLogger('llxprt:shell-parser');
 
 // Type definitions for tree-sitter query results
 interface QueryCapture {
@@ -305,6 +309,30 @@ export function parseCommandDetails(
       tree.rootNode.hasError ||
       details.length === 0 ||
       hasPromptCommandTransform(tree.rootNode);
+
+    if (hasError) {
+      let query: QueryType | null = null;
+      try {
+        query = bashLanguage.query('(ERROR) @error (MISSING) @missing');
+        const captures = query.captures(tree.rootNode) as QueryCapture[];
+        const syntaxErrors = captures.map((capture) => {
+          const { node, name } = capture;
+          const type = name === 'missing' ? 'Missing' : 'Error';
+          return `${type} node: "${node.text}" at ${node.startPosition.row}:${node.startPosition.column}`;
+        });
+
+        debugLogger.log(
+          'Bash command parsing error detected for command:',
+          command,
+          'Syntax Errors:',
+          syntaxErrors,
+        );
+      } catch (_e) {
+        // Ignore query errors
+      } finally {
+        query?.delete();
+      }
+    }
 
     return { details, hasError };
   } catch {

@@ -74,16 +74,22 @@ class FakeMessageBus {
 // Mock for DebugLogger module (avoids file system access)
 // ---------------------------------------------------------------------------
 
-vi.mock('../../debug/index.js', () => ({
-  DebugLogger: {
-    getLogger: vi.fn(() => ({
-      log: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    })),
-  },
-}));
+vi.mock('../../debug/index.js', () => {
+  const mockLogger = {
+    log: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
+  // Create a constructor function that returns the mock
+  const DebugLogger = vi.fn().mockImplementation(() => mockLogger);
+  // Add getLogger as a static method
+  DebugLogger.getLogger = vi.fn().mockReturnValue(mockLogger);
+
+  return {
+    DebugLogger,
+  };
+});
 
 vi.mock('fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),

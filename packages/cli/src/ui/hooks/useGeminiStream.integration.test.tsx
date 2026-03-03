@@ -255,8 +255,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       showMemoryUsage: false,
       contextFileName: undefined,
       getToolRegistry: vi.fn(
-        () =>
-          Promise.resolve({ getFunctionDeclarations: vi.fn(() => []) }) as any,
+        () => ({ getFunctionDeclarations: vi.fn(() => []) }) as any,
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
@@ -644,9 +643,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       ]),
     };
 
-    (mockConfig.getToolRegistry as Mock).mockReturnValue(
-      Promise.resolve(mockToolRegistry),
-    );
+    (mockConfig.getToolRegistry as Mock).mockReturnValue(mockToolRegistry);
 
     mockSendMessageStream.mockReturnValue(
       (async function* () {
@@ -665,7 +662,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
     });
 
     // Verify tool registry includes todo_pause
-    const toolRegistry = await mockConfig.getToolRegistry();
+    const toolRegistry = mockConfig.getToolRegistry();
     const toolSchemas = toolRegistry.getFunctionDeclarations();
     const todoPauseTool = toolSchemas.find(
       (tool: any) => tool.name === 'todo_pause',
@@ -996,15 +993,13 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       ]),
     };
 
-    (mockConfig.getToolRegistry as Mock).mockReturnValue(
-      Promise.resolve(mockToolRegistry),
-    );
+    (mockConfig.getToolRegistry as Mock).mockReturnValue(mockToolRegistry);
 
     const activeTodos = createActiveTodos();
     renderTestHook([], activeTodos);
 
     // Verify tool registry includes todo_pause
-    const toolRegistry = await mockConfig.getToolRegistry();
+    const toolRegistry = mockConfig.getToolRegistry();
     const toolSchemas = toolRegistry.getFunctionDeclarations();
     const todoPauseTool = toolSchemas.find(
       (tool: any) => tool.name === 'todo_pause',

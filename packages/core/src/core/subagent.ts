@@ -737,7 +737,7 @@ export class SubAgentScope {
 
     const schedulerDispose = options?.schedulerFactory
       ? typeof scheduler.dispose === 'function'
-        ? scheduler.dispose.bind(scheduler)
+        ? async () => scheduler.dispose?.()
         : async () => {}
       : async () =>
           schedulerConfig.disposeScheduler(schedulerConfig.getSessionId());

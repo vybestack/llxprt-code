@@ -199,7 +199,7 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
       const { streamText } = await import('ai');
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
-      mockStreamText.mockResolvedValue({
+      mockStreamText.mockReturnValue({
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Hello' };
           yield {
@@ -272,7 +272,7 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
       const { streamText } = await import('ai');
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
-      mockStreamText.mockResolvedValue({
+      mockStreamText.mockReturnValue({
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Hello' };
           yield {

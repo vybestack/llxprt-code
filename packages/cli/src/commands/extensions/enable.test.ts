@@ -122,7 +122,9 @@ describe('handleEnable', () => {
   );
 
   it('should wrap enableExtension errors in FatalConfigError', async () => {
-    mockEnableExtension.mockRejectedValue(new Error('Configuration error'));
+    mockEnableExtension.mockImplementation(() => {
+      throw new Error('Configuration error');
+    });
 
     await expect(handleEnable({ name: 'test-ext' })).rejects.toThrow(
       FatalConfigError,
@@ -133,7 +135,10 @@ describe('handleEnable', () => {
   });
 
   it('should handle non-Error exceptions', async () => {
-    mockEnableExtension.mockRejectedValue('String error');
+    mockEnableExtension.mockImplementation(() => {
+      // eslint-disable-next-line no-restricted-syntax
+      throw 'String error';
+    });
 
     await expect(handleEnable({ name: 'test-ext' })).rejects.toThrow(
       FatalConfigError,

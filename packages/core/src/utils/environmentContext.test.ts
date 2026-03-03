@@ -35,6 +35,7 @@ describe('getDirectoryContextString', () => {
         getDirectories: vi.fn().mockReturnValue(['/test/dir']),
       }),
       getFileService: vi.fn(),
+      getEnvironmentMemory: vi.fn().mockReturnValue(''),
     };
     vi.mocked(getFolderStructure).mockResolvedValue('Mock Folder Structure');
   });
@@ -88,7 +89,7 @@ describe('getEnvironmentContext', () => {
         getDirectories: vi.fn().mockReturnValue(['/test/dir']),
       }),
       getFileService: vi.fn(),
-
+      getEnvironmentMemory: vi.fn().mockReturnValue(''),
       getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
     };
 

@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { render } from 'ink-testing-library';
 import { describe, it, expect, vi } from 'vitest';
+import { render } from 'ink-testing-library';
+import React from 'react';
 import { Text } from 'ink';
 import { ToolGroupMessage } from './ToolGroupMessage.js';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';

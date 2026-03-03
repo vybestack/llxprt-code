@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   isValidColor,
   resolveColor,
   interpolateColor,
   CSS_NAME_TO_HEX_MAP,
   INK_SUPPORTED_NAMES,
+  getThemeTypeFromBackgroundColor,
+  detectTerminalBackgroundColor,
 } from './color-utils.js';
 
 describe('Color Utils', () => {
@@ -253,6 +255,278 @@ describe('Color Utils', () => {
       expect(interpolateColor('', '', 0.5)).toBe('');
       expect(interpolateColor('', '#ffffff', 0)).toBe('');
       expect(interpolateColor('#ffffff', '', 1)).toBe('');
+    });
+  });
+
+  describe('getThemeTypeFromBackgroundColor', () => {
+    describe('luminance calculation', () => {
+      it('should return "dark" for pure black (#000000)', () => {
+        expect(getThemeTypeFromBackgroundColor('#000000')).toBe('dark');
+      });
+
+      it('should return "light" for pure white (#FFFFFF)', () => {
+        expect(getThemeTypeFromBackgroundColor('#FFFFFF')).toBe('light');
+      });
+
+      it('should return "dark" for dark gray (#1E1E2E)', () => {
+        expect(getThemeTypeFromBackgroundColor('#1E1E2E')).toBe('dark');
+      });
+
+      it('should return "light" for light gray (#E0E0E0)', () => {
+        expect(getThemeTypeFromBackgroundColor('#E0E0E0')).toBe('light');
+      });
+
+      it('should handle lowercase hex colors', () => {
+        expect(getThemeTypeFromBackgroundColor('#ffffff')).toBe('light');
+        expect(getThemeTypeFromBackgroundColor('#000000')).toBe('dark');
+      });
+
+      it('should return undefined for undefined input', () => {
+        expect(getThemeTypeFromBackgroundColor(undefined)).toBeUndefined();
+      });
+
+      it('should return undefined for invalid hex (wrong length)', () => {
+        expect(getThemeTypeFromBackgroundColor('#FFF')).toBeUndefined();
+        expect(getThemeTypeFromBackgroundColor('#FFFFFFF')).toBeUndefined();
+      });
+
+      it('should return undefined for non-hex color', () => {
+        expect(
+          getThemeTypeFromBackgroundColor('rgb(255,255,255)'),
+        ).toBeUndefined();
+      });
+
+      it('should handle colors without # prefix', () => {
+        expect(getThemeTypeFromBackgroundColor('000000')).toBe('dark');
+        expect(getThemeTypeFromBackgroundColor('FFFFFF')).toBe('light');
+      });
+    });
+
+    describe('sRGB to linear conversion', () => {
+      it('should correctly handle mid-range gray (#808080)', () => {
+        // #808080 has luminance ~0.22, should be dark
+        expect(getThemeTypeFromBackgroundColor('#808080')).toBe('dark');
+      });
+
+      it('should correctly handle near-threshold colors', () => {
+        // Luminance threshold is 0.5
+        // #BCBCBC has luminance ~0.506, should be light
+        expect(getThemeTypeFromBackgroundColor('#BCBCBC')).toBe('light');
+        // #BABABA has luminance ~0.495, should be dark
+        expect(getThemeTypeFromBackgroundColor('#BABABA')).toBe('dark');
+      });
+    });
+  });
+
+  describe('detectTerminalBackgroundColor', () => {
+    let mockStdin: {
+      isTTY: boolean;
+      setRawMode: ReturnType<typeof vi.fn>;
+      on: ReturnType<typeof vi.fn>;
+      removeListener: ReturnType<typeof vi.fn>;
+    };
+    let mockStdout: {
+      write: ReturnType<typeof vi.fn>;
+      isTTY: boolean;
+    };
+    let originalStdin: typeof process.stdin;
+    let originalStdout: typeof process.stdout;
+
+    beforeEach(() => {
+      // Save original process.stdin/stdout
+      originalStdin = process.stdin;
+      originalStdout = process.stdout;
+
+      // Create mock stdin
+      mockStdin = {
+        isTTY: true,
+        setRawMode: vi.fn(),
+        on: vi.fn(),
+        removeListener: vi.fn(),
+      };
+
+      // Create mock stdout
+      mockStdout = {
+        write: vi.fn(),
+        isTTY: true,
+      };
+
+      // Replace process.stdin/stdout with mocks
+      Object.defineProperty(process, 'stdin', {
+        value: mockStdin,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(process, 'stdout', {
+        value: mockStdout,
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    afterEach(() => {
+      // Restore original process.stdin/stdout
+      Object.defineProperty(process, 'stdin', {
+        value: originalStdin,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(process, 'stdout', {
+        value: originalStdout,
+        writable: true,
+        configurable: true,
+      });
+      vi.clearAllTimers();
+    });
+
+    it('should return undefined when stdin is not a TTY', async () => {
+      mockStdin.isTTY = false;
+      const result = await detectTerminalBackgroundColor();
+      expect(result).toBeUndefined();
+    });
+
+    it('should return undefined on timeout (no response from terminal)', async () => {
+      vi.useFakeTimers();
+      const promise = detectTerminalBackgroundColor();
+
+      // Fast-forward past the 100ms timeout
+      vi.advanceTimersByTime(100);
+
+      const result = await promise;
+      expect(result).toBeUndefined();
+      vi.useRealTimers();
+    });
+
+    it('should parse OSC 11 response with ST terminator (ESC backslash)', async () => {
+      const promise = detectTerminalBackgroundColor();
+
+      // Simulate OSC 11 response with ST terminator
+      const dataCall = mockStdin.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'data',
+      );
+      expect(dataCall).toBeDefined();
+      const dataHandler = dataCall![1];
+      dataHandler(Buffer.from('\x1b]11;rgb:1e1e/1e1e/2e2e\x1b\\'));
+
+      const result = await promise;
+      expect(result).toBe('#1E1E2E');
+    });
+
+    it('should parse OSC 11 response with BEL terminator', async () => {
+      const promise = detectTerminalBackgroundColor();
+
+      // Simulate OSC 11 response with BEL terminator
+      const dataCall = mockStdin.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'data',
+      );
+      expect(dataCall).toBeDefined();
+      const dataHandler = dataCall![1];
+      dataHandler(Buffer.from('\x1b]11;rgb:ffff/ffff/ffff\x07'));
+
+      const result = await promise;
+      expect(result).toBe('#FFFFFF');
+    });
+
+    it('should handle split chunks (data arrives in multiple events)', async () => {
+      const promise = detectTerminalBackgroundColor();
+
+      const dataCall = mockStdin.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'data',
+      );
+      expect(dataCall).toBeDefined();
+      const dataHandler = dataCall![1];
+
+      // Send response in 3 chunks
+      dataHandler(Buffer.from('\x1b]11;rgb:'));
+      dataHandler(Buffer.from('0000/0000/'));
+      dataHandler(Buffer.from('0000\x1b\\'));
+
+      const result = await promise;
+      expect(result).toBe('#000000');
+    });
+
+    it('should handle malformed response (invalid format)', async () => {
+      vi.useFakeTimers();
+      const promise = detectTerminalBackgroundColor();
+
+      const dataCall = mockStdin.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'data',
+      );
+      expect(dataCall).toBeDefined();
+      const dataHandler = dataCall![1];
+      dataHandler(Buffer.from('garbage data'));
+
+      // Timeout since we never got valid response
+      vi.advanceTimersByTime(100);
+
+      const result = await promise;
+      expect(result).toBeUndefined();
+      vi.useRealTimers();
+    });
+
+    it('should send OSC 11 query to stdout', async () => {
+      const promise = detectTerminalBackgroundColor();
+
+      // Provide a valid response to complete the promise
+      const dataCall = mockStdin.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'data',
+      );
+      expect(dataCall).toBeDefined();
+      const dataHandler = dataCall![1];
+      dataHandler(Buffer.from('\x1b]11;rgb:1e1e/1e1e/2e2e\x1b\\'));
+
+      await promise;
+
+      expect(mockStdout.write).toHaveBeenCalledWith('\x1b]11;?\x1b\\');
+    });
+
+    it('should cleanup stdin listeners after successful detection', async () => {
+      const promise = detectTerminalBackgroundColor();
+
+      const dataCall = mockStdin.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'data',
+      );
+      expect(dataCall).toBeDefined();
+      const dataHandler = dataCall![1];
+      dataHandler(Buffer.from('\x1b]11;rgb:1e1e/1e1e/2e2e\x1b\\'));
+
+      await promise;
+
+      expect(mockStdin.setRawMode).toHaveBeenCalledWith(false);
+      expect(mockStdin.removeListener).toHaveBeenCalledWith(
+        'data',
+        dataHandler,
+      );
+    });
+
+    it('should cleanup stdin listeners after timeout', async () => {
+      vi.useFakeTimers();
+      const promise = detectTerminalBackgroundColor();
+
+      vi.advanceTimersByTime(100);
+      await promise;
+
+      expect(mockStdin.setRawMode).toHaveBeenCalledWith(false);
+      vi.useRealTimers();
+    });
+
+    it('should restore raw mode to true when stdin was already in raw mode', async () => {
+      // Simulate stdin already being in raw mode (e.g., Ink is running)
+      (mockStdin as Record<string, unknown>).isRaw = true;
+
+      const promise = detectTerminalBackgroundColor();
+
+      const dataCall = mockStdin.on.mock.calls.find(
+        (call: unknown[]) => call[0] === 'data',
+      );
+      expect(dataCall).toBeDefined();
+      const dataHandler = dataCall![1];
+      dataHandler(Buffer.from('\x1b]11;rgb:1e1e/1e1e/2e2e\x1b\\'));
+
+      await promise;
+
+      // Should restore to true, not force false
+      expect(mockStdin.setRawMode).toHaveBeenLastCalledWith(true);
     });
   });
 });

@@ -105,10 +105,10 @@ export class HookRegistry {
   }
 
   /**
-   * Get hook name for display purposes (public for external use)
+   * Get hook name for identification and display purposes (public for external use)
    */
-  getHookName(entry: HookRegistryEntry): string {
-    return entry.config.command || 'unknown-command';
+  getHookName(entry: HookRegistryEntry | { config: HookConfig }): string {
+    return entry.config.name || entry.config.command || 'unknown-command';
   }
 
   /**

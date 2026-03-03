@@ -288,7 +288,7 @@ export const useWelcomeOnboarding = (
 
         // Set as default profile so it loads on startup
         debug.log(`[saveProfile] Setting as default profile...`);
-        await runtime.setDefaultProfileName(name);
+        runtime.setDefaultProfileName(name);
         debug.log(`[saveProfile] Set default profile: ${name}`);
 
         // Load the profile immediately in current session

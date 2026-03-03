@@ -2390,7 +2390,10 @@ ${block.code}
         ).withResponse();
       }
       // Fallback if withResponse is not available
-      return { data: await promise, response: undefined };
+      return {
+        data: await Promise.resolve(promise),
+        response: undefined,
+      };
     };
 
     try {

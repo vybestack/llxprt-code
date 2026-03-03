@@ -1168,7 +1168,11 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
 
   it('should pass extension context file paths to loadServerHierarchicalMemory', async () => {
     process.argv = ['node', 'script.js'];
-    const settings: Settings = {};
+    const settings: Settings = {
+      experimental: {
+        jitContext: false,
+      },
+    };
     const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',

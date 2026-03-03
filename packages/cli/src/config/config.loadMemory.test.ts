@@ -282,6 +282,9 @@ describe('loadCliConfig memory discovery', () => {
         contextFileName,
         memoryDiscoveryMaxDirs: 200,
       },
+      experimental: {
+        jitContext: false,
+      },
     } as unknown as Settings;
 
     const argv: CliArgs = {

@@ -38,6 +38,7 @@ import {
   validateBeforeToolSelectionInput,
   validateNotificationInput,
 } from './hookValidators.js';
+import { coreEvents } from '../utils/events.js';
 
 const moduleDebugLogger = DebugLogger.getLogger(
   'llxprt:core:hooks:eventHandler',
@@ -601,6 +602,14 @@ export class HookEventHandler {
   }
 
   /**
+   * Get hook name from execution result for telemetry and user feedback
+   */
+  private getHookNameFromResult(result: HookExecutionResult): string {
+    const config = result.hookConfig as { command?: string; type: string };
+    return config.command || 'unknown-hook';
+  }
+
+  /**
    * Emit per-hook log records via DebugLogger.
    *
    * @plan PLAN-20250218-HOOKSYSTEM.P12, PLAN-20250218-HOOKSYSTEM.P14
@@ -662,6 +671,25 @@ export class HookEventHandler {
       failureCount,
       totalDurationMs,
     });
+
+    // Emit user-facing feedback when hooks fail
+    if (failureCount > 0) {
+      const failedHooks = hookResults.filter((r) => !r.success);
+      const failedNames = failedHooks
+        .map((r) => this.getHookNameFromResult(r))
+        .join(', ');
+
+      this.debugLogger.warn(
+        `Hook execution for ${eventName}: ${successCount} succeeded, ${failureCount} failed (${failedNames}), ` +
+          `total duration: ${totalDurationMs}ms`,
+      );
+
+      coreEvents.emitFeedback(
+        'warning',
+        `Hook(s) [${failedNames}] failed for event ${eventName}. Press F12 to see the debug drawer for more details.
+`,
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------

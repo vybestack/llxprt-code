@@ -4,7 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { isValidColor, resolveColor, interpolateColor } from './color-utils.js';
+import {
+  isValidColor,
+  resolveColor,
+  interpolateColor,
+  getThemeTypeFromBackgroundColor,
+} from './color-utils.js';
 
 // Type for syntax highlighter theme styles
 // These come from react-syntax-highlighter and include additional properties
@@ -139,7 +144,7 @@ export interface CustomTheme {
 export const lightTheme: ColorsTheme = {
   type: 'light',
   Background: '#FAFAFA',
-  Foreground: '#383A42',
+  Foreground: '',
   LightBlue: '#89BDCD',
   AccentBlue: '#3B82F6',
   AccentPurple: '#8B5CF6',
@@ -159,7 +164,7 @@ export const lightTheme: ColorsTheme = {
 export const darkTheme: ColorsTheme = {
   type: 'dark',
   Background: '#1E1E2E',
-  Foreground: '#CDD6F4',
+  Foreground: '',
   LightBlue: '#ADD8E6',
   AccentBlue: '#89B4FA',
   AccentPurple: '#CBA6F7',
@@ -179,7 +184,7 @@ export const darkTheme: ColorsTheme = {
 export const ansiTheme: ColorsTheme = {
   type: 'ansi',
   Background: 'black',
-  Foreground: 'white',
+  Foreground: '',
   LightBlue: 'blue',
   AccentBlue: 'blue',
   AccentPurple: 'magenta',
@@ -629,4 +634,47 @@ export function validateCustomTheme(customTheme: Partial<CustomTheme>): {
 function isValidThemeName(name: string): boolean {
   // Theme name should be non-empty and not contain invalid characters
   return name.trim().length > 0 && name.trim().length <= 50;
+}
+
+/**
+ * Picks a default theme name based on terminal background color
+ * Falls back to fallbackTheme if no match found
+ * @param terminalBackgroundColor The hex color string of the terminal background
+ * @param availableThemes A list of available themes to search through
+ * @param fallbackTheme The name of the fallback dark theme
+ * @param fallbackLightTheme The name of the fallback light theme
+ * @returns The name of the chosen theme
+ */
+export function pickDefaultThemeName(
+  terminalBackgroundColor: string | undefined,
+  availableThemes: ReadonlyArray<{
+    name: string;
+    type: string;
+    colors?: { Background?: string };
+  }>,
+  fallbackTheme: string,
+  fallbackLightTheme?: string,
+): string {
+  const terminalThemeType = getThemeTypeFromBackgroundColor(
+    terminalBackgroundColor,
+  );
+
+  if (!terminalThemeType) {
+    return fallbackTheme;
+  }
+
+  // Find first theme matching terminal type
+  const matchingTheme = availableThemes.find(
+    (t) => t.type === terminalThemeType,
+  );
+  if (matchingTheme) {
+    return matchingTheme.name;
+  }
+
+  // Fallback to light theme if terminal is light
+  if (terminalThemeType === 'light' && fallbackLightTheme) {
+    return fallbackLightTheme;
+  }
+
+  return fallbackTheme;
 }

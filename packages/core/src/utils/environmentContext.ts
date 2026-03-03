@@ -8,6 +8,8 @@ import { type Part } from '@google/genai';
 import { Config } from '../config/config.js';
 import { getFolderStructure } from './getFolderStructure.js';
 
+export const INITIAL_HISTORY_LENGTH = 1;
+
 /**
  * Generates a string describing the current workspace directories and their structures.
  * @param {Config} config - The runtime configuration and services.
@@ -59,12 +61,15 @@ export async function getEnvironmentContext(config: Config): Promise<Part[]> {
   });
   const platform = process.platform;
   const directoryContext = await getDirectoryContextString(config);
+  const environmentMemory = config.getEnvironmentMemory();
 
   const context = `
 This is LLxprt Code. We are setting up the context for our chat.
 Today's date is ${today} (formatted according to the user's locale).
 My operating system is: ${platform}
 ${directoryContext}
+
+${environmentMemory}
         `.trim();
 
   const initialParts: Part[] = [{ text: context }];

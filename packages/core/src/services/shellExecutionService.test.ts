@@ -1503,7 +1503,7 @@ describe('Shell Environment Sanitization', () => {
       expect(sanitized.EDITOR).toBeUndefined();
     });
 
-    it('should forward LLXPRT_CODE_TEST_* vars but not other LLXPRT vars', () => {
+    it('should forward all LLXPRT_* prefixed variables (legacy test - updated)', () => {
       const testEnv = {
         PATH: '/usr/bin',
         LLXPRT_CODE_TEST_MODE: 'true',
@@ -1518,14 +1518,12 @@ describe('Shell Environment Sanitization', () => {
         true,
       );
 
-      // LLXPRT_CODE* vars should be preserved (product env vars)
+      // All LLXPRT_* vars should be preserved (changed from LLXPRT_CODE*)
       expect(sanitized.LLXPRT_CODE_TEST_MODE).toBe('true');
       expect(sanitized.LLXPRT_CODE_TEST_TIMEOUT).toBe('5000');
       expect(sanitized.LLXPRT_CODE).toBe('1');
-
-      // Other LLXPRT_* vars (non-product) should NOT be preserved
-      expect(sanitized.LLXPRT_DEBUG).toBeUndefined();
-      expect(sanitized.LLXPRT_CONFIG_PATH).toBeUndefined();
+      expect(sanitized.LLXPRT_DEBUG).toBe('1');
+      expect(sanitized.LLXPRT_CONFIG_PATH).toBe('/path/to/config');
     });
 
     it('should forward all built-in Unix safe vars', () => {
@@ -1672,6 +1670,7 @@ describe('Shell Environment Sanitization', () => {
         HOME: '/home/user',
         USER: 'testuser',
         LLXPRT_CODE_TEST_FOO: 'bar',
+        LLXPRT_CUSTOM: 'custom-value',
         RANDOM_VAR: 'should-not-appear',
         ANOTHER_SECRET: 'nope',
       };
@@ -1682,9 +1681,101 @@ describe('Shell Environment Sanitization', () => {
       );
 
       // Result should contain exactly the allowlisted vars that exist in env
+      // All LLXPRT_* vars are now allowed (changed from LLXPRT_CODE* only)
       expect(Object.keys(sanitized).sort()).toEqual(
-        ['HOME', 'LLXPRT_CODE_TEST_FOO', 'PATH', 'USER'].sort(),
+        [
+          'HOME',
+          'LLXPRT_CODE_TEST_FOO',
+          'LLXPRT_CUSTOM',
+          'PATH',
+          'USER',
+        ].sort(),
       );
+    });
+
+    it('should forward GitHub Actions environment variables in sandbox/CI mode', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        HOME: '/home/user',
+        // GitHub Actions-related variables
+        ADDITIONAL_CONTEXT: 'some context',
+        AVAILABLE_LABELS: 'bug,enhancement',
+        BRANCH_NAME: 'main',
+        DESCRIPTION: 'PR description',
+        EVENT_NAME: 'pull_request',
+        GITHUB_ENV: '/home/runner/work/_temp/_runner_file_commands/set_env_',
+        IS_PULL_REQUEST: 'true',
+        ISSUES_TO_TRIAGE: '123,456',
+        ISSUE_BODY: 'Issue body text',
+        ISSUE_NUMBER: '789',
+        ISSUE_TITLE: 'Issue title',
+        PULL_REQUEST_NUMBER: '101',
+        REPOSITORY: 'owner/repo',
+        TITLE: 'PR title',
+        TRIGGERING_ACTOR: 'username',
+        // Non-allowlisted var
+        SECRET_TOKEN: 'should-not-pass',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // Built-in safe vars should be preserved
+      expect(sanitized.PATH).toBe('/usr/bin');
+      expect(sanitized.HOME).toBe('/home/user');
+
+      // GitHub Actions variables should be preserved
+      expect(sanitized.ADDITIONAL_CONTEXT).toBe('some context');
+      expect(sanitized.AVAILABLE_LABELS).toBe('bug,enhancement');
+      expect(sanitized.BRANCH_NAME).toBe('main');
+      expect(sanitized.DESCRIPTION).toBe('PR description');
+      expect(sanitized.EVENT_NAME).toBe('pull_request');
+      expect(sanitized.GITHUB_ENV).toBe(
+        '/home/runner/work/_temp/_runner_file_commands/set_env_',
+      );
+      expect(sanitized.IS_PULL_REQUEST).toBe('true');
+      expect(sanitized.ISSUES_TO_TRIAGE).toBe('123,456');
+      expect(sanitized.ISSUE_BODY).toBe('Issue body text');
+      expect(sanitized.ISSUE_NUMBER).toBe('789');
+      expect(sanitized.ISSUE_TITLE).toBe('Issue title');
+      expect(sanitized.PULL_REQUEST_NUMBER).toBe('101');
+      expect(sanitized.REPOSITORY).toBe('owner/repo');
+      expect(sanitized.TITLE).toBe('PR title');
+      expect(sanitized.TRIGGERING_ACTOR).toBe('username');
+
+      // Secret tokens should not pass through
+      expect(sanitized.SECRET_TOKEN).toBeUndefined();
+    });
+
+    it('should forward all LLXPRT_* prefixed variables in sandbox/CI mode', () => {
+      const testEnv = {
+        PATH: '/usr/bin',
+        LLXPRT_CODE: '1',
+        LLXPRT_CODE_TEST_MODE: 'true',
+        LLXPRT_DEBUG: '1',
+        LLXPRT_CONFIG_PATH: '/path/to/config',
+        LLXPRT_SECRET_KEY: 'secret-value',
+        LLXPRT_API_TOKEN: 'api-token',
+        OTHER_VAR: 'should-not-pass',
+      };
+
+      const sanitized = ShellExecutionService.sanitizeEnvironment(
+        testEnv,
+        true,
+      );
+
+      // All LLXPRT_* vars should be preserved (broadened from LLXPRT_CODE*)
+      expect(sanitized.LLXPRT_CODE).toBe('1');
+      expect(sanitized.LLXPRT_CODE_TEST_MODE).toBe('true');
+      expect(sanitized.LLXPRT_DEBUG).toBe('1');
+      expect(sanitized.LLXPRT_CONFIG_PATH).toBe('/path/to/config');
+      expect(sanitized.LLXPRT_SECRET_KEY).toBe('secret-value');
+      expect(sanitized.LLXPRT_API_TOKEN).toBe('api-token');
+
+      // Non-LLXPRT vars should not pass through
+      expect(sanitized.OTHER_VAR).toBeUndefined();
     });
   });
 });

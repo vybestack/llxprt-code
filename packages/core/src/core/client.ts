@@ -634,7 +634,9 @@ export class GeminiClient {
     enabledToolNames: string[],
     envParts?: Array<{ text?: string }>,
   ): Promise<string> {
-    let userMemory = this.config.getUserMemory();
+    let userMemory = this.config.isJitContextEnabled()
+      ? this.config.getGlobalMemory()
+      : this.config.getUserMemory();
     const coreMemory = this.config.getCoreMemory();
 
     // Load JIT subdirectory context for the current working directory

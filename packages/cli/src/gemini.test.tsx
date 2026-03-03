@@ -54,6 +54,13 @@ vi.mock('./config/settings.js', () => ({
   },
 }));
 
+vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
+  terminalCapabilityManager: {
+    detectCapabilities: vi.fn(),
+    getTerminalBackgroundColor: vi.fn(),
+  },
+}));
+
 vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn().mockResolvedValue({
     getSandbox: vi.fn(() => false),
@@ -280,6 +287,8 @@ describe('gemini.tsx main function', () => {
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
       })),
+      setTerminalBackground: vi.fn(),
+      getTerminalBackground: vi.fn(() => undefined),
     } as unknown as Config;
 
     const loadSettingsMock = vi.mocked(loadSettings);
@@ -340,8 +349,13 @@ describe('gemini.tsx main function', () => {
     });
 
     const originalIsTTY = process.stdin.isTTY;
+    const originalSetRawMode = process.stdin.setRawMode;
     Object.defineProperty(process.stdin, 'isTTY', {
       value: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: vi.fn(),
       configurable: true,
     });
 
@@ -350,6 +364,10 @@ describe('gemini.tsx main function', () => {
     } finally {
       Object.defineProperty(process.stdin, 'isTTY', {
         value: originalIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdin, 'setRawMode', {
+        value: originalSetRawMode,
         configurable: true,
       });
     }
@@ -370,6 +388,140 @@ describe('gemini.tsx main function', () => {
 
     expect(formatNonInteractiveError(error)).toContain('Request failed');
     expect(formatNonInteractiveError(error)).not.toContain('[object Object]');
+  });
+
+  it('should call setupTerminalAndTheme when isInteractive is true', async () => {
+    const { setupTerminalAndTheme } = await import('./utils/terminalTheme.js');
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
+      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+      getServerToolsProvider: vi.fn().mockReturnValue(null),
+    };
+    const mockConfig = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      refreshAuth: vi.fn().mockResolvedValue(undefined),
+      getProvider: vi.fn(() => undefined),
+      getProviderManager: vi.fn(() => providerManager),
+      getConversationLoggingEnabled: vi.fn(() => false),
+      getMcpServers: vi.fn(() => ({})),
+      getDebugMode: vi.fn(() => false),
+      getIdeMode: vi.fn(() => false),
+      getIdeClient: vi.fn(() => null),
+      getListExtensions: vi.fn(() => false),
+      getOutputFormat: vi.fn(() => OutputFormat.TEXT),
+      getToolRegistryInfo: vi.fn(() => ({
+        registered: [],
+        unregistered: [],
+      })),
+      getSandbox: vi.fn(() => false),
+      getModel: vi.fn(() => 'gemini-2.5-pro'),
+      getProjectRoot: vi.fn(() => '/tmp/project'),
+      isInteractive: vi.fn(() => true),
+      getSessionId: vi.fn(() => 'session-1'),
+      getQuestion: vi.fn(() => ''),
+      isContinueSession: vi.fn(() => false),
+      getExperimentalZedIntegration: vi.fn(() => false),
+      getZedIntegrationEnabled: vi.fn(() => false),
+      getTrustedFolder: vi.fn(() => true),
+      getScreenReader: vi.fn(() => false),
+      storage: {},
+      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getContinueSessionRef: vi.fn(() => null),
+      getWorkspaceContext: vi.fn(() => ({
+        getDirectories: () => ['/tmp/project'],
+      })),
+      setTerminalBackground: vi.fn(),
+      getTerminalBackground: vi.fn(() => undefined),
+    } as unknown as Config;
+
+    const loadSettingsMock = vi.mocked(loadSettings);
+    loadSettingsMock.mockReturnValue({
+      merged: {
+        ui: { autoConfigureMaxOldSpaceSize: false },
+      },
+      setValue: vi.fn(),
+      forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
+      errors: [],
+    } as unknown as LoadedSettings);
+
+    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
+    vi.mocked(parseArguments).mockResolvedValueOnce({
+      model: undefined,
+      sandbox: undefined,
+      sandboxImage: undefined,
+      sandboxEngine: undefined,
+      sandboxProfileLoad: undefined,
+      debug: undefined,
+      prompt: undefined,
+      promptInteractive: undefined,
+      outputFormat: undefined,
+      showMemoryUsage: undefined,
+      yolo: undefined,
+      approvalMode: undefined,
+      telemetry: undefined,
+      checkpointing: undefined,
+      telemetryTarget: undefined,
+      telemetryOtlpEndpoint: undefined,
+      telemetryLogPrompts: undefined,
+      telemetryOutfile: undefined,
+      allowedMcpServerNames: undefined,
+      allowedTools: undefined,
+      experimentalAcp: false,
+      experimentalUi: false,
+      extensions: undefined,
+      listExtensions: undefined,
+      provider: undefined,
+      key: undefined,
+      keyfile: undefined,
+      baseurl: undefined,
+      proxy: undefined,
+      includeDirectories: undefined,
+      profileLoad: undefined,
+      loadMemoryFromIncludeDirectories: undefined,
+      ideMode: undefined,
+      screenReader: undefined,
+      sessionSummary: undefined,
+      dumponerror: undefined,
+      promptWords: [],
+      query: undefined,
+      set: undefined,
+      continue: undefined,
+      nobrowser: undefined,
+      listSessions: undefined,
+      deleteSession: undefined,
+    });
+
+    const originalIsTTY = process.stdin.isTTY;
+    const originalSetRawMode = process.stdin.setRawMode;
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: vi.fn(),
+      configurable: true,
+    });
+
+    try {
+      await main();
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: originalIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdin, 'setRawMode', {
+        value: originalSetRawMode,
+        configurable: true,
+      });
+    }
+
+    expect(setupTerminalAndTheme).toHaveBeenCalledTimes(1);
+    expect(setupTerminalAndTheme).toHaveBeenCalledWith(
+      mockConfig,
+      expect.objectContaining({ merged: expect.anything() }),
+    );
+
+    processExitSpy.mockRestore();
   });
 });
 
@@ -562,6 +714,7 @@ describe('startInteractiveUI', () => {
     getSessionId: () => 'session-1',
     storage: {},
     getDebugMode: () => false,
+    getTerminalBackground: () => undefined,
   } as Config;
   const mockSettings = {
     merged: {
@@ -577,8 +730,8 @@ describe('startInteractiveUI', () => {
     getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
   }));
 
-  vi.mock('./ui/utils/kittyProtocolDetector.js', () => ({
-    detectAndEnableKittyProtocol: vi.fn(() => Promise.resolve()),
+  vi.mock('./utils/terminalTheme.js', () => ({
+    setupTerminalAndTheme: vi.fn(() => Promise.resolve(undefined)),
   }));
 
   vi.mock('./ui/utils/updateCheck.js', () => ({
@@ -628,9 +781,6 @@ describe('startInteractiveUI', () => {
 
   it('should perform all startup tasks in correct order', async () => {
     const { getCliVersion } = await import('./utils/version.js');
-    const { detectAndEnableKittyProtocol } = await import(
-      './ui/utils/kittyProtocolDetector.js'
-    );
     const { checkForUpdates } = await import('./ui/utils/updateCheck.js');
     const { registerCleanup } = await import('./utils/cleanup.js');
 
@@ -643,7 +793,6 @@ describe('startInteractiveUI', () => {
 
     // Verify all startup tasks were called
     expect(getCliVersion).toHaveBeenCalledTimes(1);
-    expect(detectAndEnableKittyProtocol).toHaveBeenCalledTimes(1);
     expect(registerCleanup).toHaveBeenCalledTimes(1);
 
     // Verify cleanup handler is registered with unmount function

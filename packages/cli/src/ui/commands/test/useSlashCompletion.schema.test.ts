@@ -109,8 +109,11 @@ describe('useSlashCompletion schema gating', () => {
     );
 
     await waitFor(() => {
-      expect(result.current.suggestions).toEqual([]);
-      expect(result.current.showSuggestions).toBe(false);
+      // B12 change: exact match shows the command as a suggestion
+      expect(result.current.suggestions.length).toBe(1);
+      expect(result.current.suggestions[0].label).toBe('set');
+      expect(result.current.showSuggestions).toBe(true);
+      // But schema handler should NOT be called until there's a trailing space
       expect(createHandlerMock).not.toHaveBeenCalled();
     });
 

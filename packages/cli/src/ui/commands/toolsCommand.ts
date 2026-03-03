@@ -194,7 +194,7 @@ export const toolsCommand: SlashCommand = {
   schema: toolsSchema,
   action: async (context: CommandContext, args = ''): Promise<void> => {
     const config = context.services.config;
-    const toolRegistry = await config?.getToolRegistry();
+    const toolRegistry = config?.getToolRegistry();
 
     if (!toolRegistry) {
       context.ui.addItem(

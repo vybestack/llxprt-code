@@ -110,6 +110,7 @@ export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';
 export * from './utils/errorParsing.js';
 export * from './utils/ignorePatterns.js';
+export { INITIAL_HISTORY_LENGTH } from './utils/environmentContext.js';
 export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
 export * from './utils/thoughtUtils.js';
@@ -160,6 +161,7 @@ export * from './services/gitService.js';
 export * from './services/tool-call-tracker-service.js';
 export * from './services/todo-context-tracker.js';
 export * from './services/fileSystemService.js';
+export { ContextManager } from './services/contextManager.js';
 
 // Export IDE specific logic
 export * from './ide/ide-client.js';

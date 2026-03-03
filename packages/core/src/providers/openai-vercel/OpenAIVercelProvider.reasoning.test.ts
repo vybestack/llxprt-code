@@ -143,7 +143,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
         }),
       };
 
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       const options = createMockOptions(
         {
@@ -193,7 +193,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
         }),
       };
 
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       const options = createMockOptions(
         {
@@ -409,7 +409,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
         }),
       };
 
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       const options = createMockOptions(
         {
@@ -496,7 +496,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
         }),
       };
 
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       const options = createMockOptions(
         {
@@ -540,7 +540,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
         }),
       };
 
-      mockStreamText.mockResolvedValue(mockStream);
+      mockStreamText.mockReturnValue(mockStream);
 
       const options = createMockOptions(
         {

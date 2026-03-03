@@ -91,10 +91,10 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 ## External Tools
 
-| Action                                                          | Keys       |
-| --------------------------------------------------------------- | ---------- |
-| Open the current prompt in an external editor.                  | `Ctrl + X` |
-| Paste from the clipboard (image preferred, falls back to text). | `Ctrl + V` |
+| Action                                                          | Keys                      |
+| --------------------------------------------------------------- | ------------------------- |
+| Open the current prompt in an external editor.                  | `Ctrl + X`                |
+| Paste from the clipboard (image preferred, falls back to text). | `Ctrl + V`<br />`Cmd + V` |
 
 ## App Controls
 

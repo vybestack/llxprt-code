@@ -24,11 +24,16 @@ const mockDebugLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
-vi.mock('../debug/index.js', () => ({
-  DebugLogger: {
-    getLogger: vi.fn(() => mockDebugLogger),
-  },
-}));
+vi.mock('../debug/index.js', () => {
+  // Create a constructor function that returns the mock
+  const DebugLogger = vi.fn().mockImplementation(() => mockDebugLogger);
+  // Add getLogger as a static method
+  DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
+
+  return {
+    DebugLogger,
+  };
+});
 
 // Mock fs for HookRegistry
 vi.mock('fs', () => ({

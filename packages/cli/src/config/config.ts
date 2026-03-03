@@ -1093,9 +1093,15 @@ export async function loadCliConfig(
     resolvedLoadMemoryFromIncludeDirectories = true;
   }
 
-  // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
-  const { memoryContent, fileCount, filePaths } =
-    await loadHierarchicalLlxprtMemory(
+  const jitContextEnabled = effectiveSettings.experimental?.jitContext ?? true;
+
+  let memoryContent = '';
+  let fileCount = 0;
+  let filePaths: string[] = [];
+
+  if (!jitContextEnabled) {
+    // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
+    const result = await loadHierarchicalLlxprtMemory(
       cwd,
       resolvedLoadMemoryFromIncludeDirectories ? includeDirectories : [],
       debugMode,
@@ -1106,6 +1112,10 @@ export async function loadCliConfig(
       memoryImportFormat,
       memoryFileFiltering,
     );
+    memoryContent = result.memoryContent;
+    fileCount = result.fileCount;
+    filePaths = result.filePaths;
+  }
 
   let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
   const question =
@@ -1450,6 +1460,7 @@ export async function loadCliConfig(
         ? true
         : argv.continue || false,
     // TODO: loading of hooks based on workspace trust
+    jitContextEnabled,
     enableHooks: effectiveSettings.tools?.enableHooks ?? false,
     hooks: (() => {
       const hooksConfig = effectiveSettings.hooks || {};

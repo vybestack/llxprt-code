@@ -37,9 +37,7 @@ export interface UserFeedbackPayload {
  * Payload for the 'memory-changed' event.
  */
 export interface MemoryChangedPayload {
-  memoryContent: string;
   fileCount: number;
-  filePaths: string[];
 }
 
 export interface ConsoleLogPayload {

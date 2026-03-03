@@ -767,16 +767,6 @@ export const SETTINGS_SCHEMA = {
           'Maximum directory depth for downward LLXPRT.md search from the current working directory. Does not affect upward traversal or global memory. When unset, searches all depths.',
         showInDialog: true,
       },
-      jitContextEnabled: {
-        type: 'boolean',
-        label: 'JIT Context Enabled',
-        category: 'UI',
-        requiresRestart: false,
-        default: true,
-        description:
-          'Enable Just-In-Time (JIT) loading of subdirectory-specific context (LLXPRT.md files) on demand when tools access files. When enabled, the system automatically loads context from subdirectories as needed.',
-        showInDialog: true,
-      },
       contextFileName: {
         type: 'string',
         label: 'Context File Name',
@@ -1189,6 +1179,16 @@ export const SETTINGS_SCHEMA = {
         description: 'Disable YOLO mode, even if enabled by a flag.',
         showInDialog: true,
       },
+      enablePermanentToolApproval: {
+        type: 'boolean',
+        label: 'Allow Permanent Tool Approval',
+        category: 'Security',
+        requiresRestart: false,
+        default: false,
+        description:
+          'Enable the "Allow for all future sessions" option in tool confirmation dialogs.',
+        showInDialog: true,
+      },
       blockGitExtensions: {
         type: 'boolean',
         label: 'Blocks extensions from Git',
@@ -1350,6 +1350,16 @@ export const SETTINGS_SCHEMA = {
         default: false,
         description:
           'Enables extension loading/unloading within the CLI session.',
+        showInDialog: false,
+      },
+      jitContext: {
+        type: 'boolean',
+        label: 'JIT Context Loading',
+        category: 'Experimental',
+        requiresRestart: true,
+        default: true,
+        description:
+          'Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.',
         showInDialog: false,
       },
     },

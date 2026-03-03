@@ -52,7 +52,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       (fs.rename as unknown as Mock).mockResolvedValue(undefined);
 
       const toolName = 'test_tool';
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName,
         persist: true,
@@ -82,7 +82,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
     it('should not persist policy when persist flag is false or undefined', async () => {
       createPolicyUpdater(policyEngine, messageBus);
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'test_tool',
       });
@@ -105,7 +105,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
       (fs.rename as unknown as Mock).mockResolvedValue(undefined);
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'test_tool',
         persist: true,
@@ -139,7 +139,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       const toolName = 'run_shell_command';
       const commandPrefix = 'git status';
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName,
         persist: true,
@@ -154,7 +154,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       expect(addedRule).toBeDefined();
       expect(addedRule?.priority).toBe(2.95);
       expect(addedRule?.argsPattern).toEqual(
-        new RegExp('"command":"git status' + String.raw`(?:[\s"]|$)`),
+        new RegExp(`"command":"git status(?:[\\s"]|$)`),
       );
 
       // Verify TOML file contains commandPrefix (not argsPattern)
@@ -179,7 +179,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       const commandPrefix = 'git log --oneline';
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'run_shell_command',
         persist: true,
@@ -228,7 +228,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       const simpleToolName = 'search';
       const toolName = `${mcpName}__${simpleToolName}`;
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName,
         persist: true,
@@ -261,7 +261,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       const mcpName = 'my-server';
       const toolName = 'simple-tool'; // No __ separator
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName,
         persist: true,
@@ -292,7 +292,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
         new Error('Disk full'),
       );
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'test_tool',
         persist: true,
@@ -327,7 +327,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
         .spyOn(console, 'warn')
         .mockImplementation(() => {});
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'test_tool',
         persist: true,
@@ -363,7 +363,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
       (fs.rename as unknown as Mock).mockResolvedValue(undefined);
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'test_tool',
         persist: true,
@@ -395,7 +395,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
       (fs.rename as unknown as Mock).mockResolvedValue(undefined);
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'edit',
         persist: true,
@@ -423,7 +423,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
       (fs.rename as unknown as Mock).mockResolvedValue(undefined);
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'edit',
         persist: true,
@@ -449,7 +449,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
       (fs.rename as unknown as Mock).mockResolvedValue(undefined);
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'jira__search',
         persist: true,
@@ -484,7 +484,7 @@ priority = 100
       (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
       (fs.rename as unknown as Mock).mockResolvedValue(undefined);
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'run_shell_command',
         persist: true,
@@ -516,7 +516,7 @@ priority = 100
         new Error('Permission denied'),
       );
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'test_tool',
         persist: true,
@@ -544,7 +544,7 @@ priority = 100
       (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
       (fs.rename as unknown as Mock).mockResolvedValue(undefined);
 
-      await messageBus.publish({
+      messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'test_tool',
         persist: true,

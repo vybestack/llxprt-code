@@ -168,7 +168,11 @@ vi.mock('../ide/ide-client.js', () => ({
 const mockLoadJitSubdirectoryMemory = vi.hoisted(() => vi.fn());
 
 vi.mock('../utils/memoryDiscovery.js', () => ({
+  loadGlobalMemory: vi.fn().mockResolvedValue({ files: [] }),
+  loadEnvironmentMemory: vi.fn().mockResolvedValue({ files: [] }),
   loadJitSubdirectoryMemory: mockLoadJitSubdirectoryMemory,
+  concatenateInstructions: vi.fn().mockReturnValue(''),
+  getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
   loadServerHierarchicalMemory: vi.fn().mockResolvedValue({
     memoryContent: '',
     fileCount: 0,
@@ -184,9 +188,16 @@ const mockCoreEvents = vi.hoisted(() => ({
 
 const mockSetGlobalProxy = vi.hoisted(() => vi.fn());
 
-vi.mock('../utils/events.js', () => ({
-  coreEvents: mockCoreEvents,
-}));
+vi.mock('../utils/events.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/events.js')>();
+  return {
+    ...actual,
+    coreEvents: {
+      ...mockCoreEvents,
+      emit: vi.fn(),
+    },
+  };
+});
 
 vi.mock('../utils/fetch.js', () => ({
   setGlobalProxy: mockSetGlobalProxy,

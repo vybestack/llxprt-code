@@ -1282,6 +1282,22 @@ export class ShellExecutionService {
       // Terminal
       'TERM',
       'PAGER',
+      // GitHub Actions-related variables
+      'ADDITIONAL_CONTEXT',
+      'AVAILABLE_LABELS',
+      'BRANCH_NAME',
+      'DESCRIPTION',
+      'EVENT_NAME',
+      'GITHUB_ENV',
+      'IS_PULL_REQUEST',
+      'ISSUES_TO_TRIAGE',
+      'ISSUE_BODY',
+      'ISSUE_NUMBER',
+      'ISSUE_TITLE',
+      'PULL_REQUEST_NUMBER',
+      'REPOSITORY',
+      'TITLE',
+      'TRIGGERING_ACTOR',
     ]);
 
     if (allowlist) {
@@ -1293,7 +1309,8 @@ export class ShellExecutionService {
     const result: NodeJS.ProcessEnv = {};
 
     for (const [key, value] of Object.entries(env)) {
-      if (SAFE_VARS.has(key) || /^LLXPRT_CODE/.test(key)) {
+      // Allow all LLxprt-related environment variables and secrets (LLXPRT_*)
+      if (SAFE_VARS.has(key) || /^LLXPRT_/.test(key)) {
         result[key] = value;
       }
     }

@@ -1,6 +1,6 @@
 /**
  * @license
- ' * Copyright 2025 Vybestack LLC',
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,11 +12,11 @@ import prettierConfig from 'eslint-config-prettier';
 import importPlugin from 'eslint-plugin-import';
 import vitest from '@vitest/eslint-plugin';
 import globals from 'globals';
-import licenseHeader from 'eslint-plugin-license-header';
+import headers from 'eslint-plugin-headers';
 import reactRenderSafety from './eslint-rules/react-render-safety.js';
 import noInlineDeps from './eslint-rules/no-inline-deps.js';
 import inkTextColorRequired from './eslint-rules/ink-text-color-required.js';
-import path from 'node:path'; // Use node: prefix for built-ins
+import path from 'node:path';
 import url from 'node:url';
 
 // --- ESM way to get __dirname ---
@@ -187,6 +187,7 @@ export default tseslint.config(
       'prefer-const': ['error', { destructuring: 'all' }],
       radix: 'error',
       'default-case': 'error',
+      '@typescript-eslint/await-thenable': ['error'],
       '@typescript-eslint/no-floating-promises': ['error'],
       '@typescript-eslint/no-unnecessary-type-assertion': ['error'],
 
@@ -390,10 +391,10 @@ export default tseslint.config(
   {
     files: ['./**/*.{tsx,ts,js}'],
     plugins: {
-      'license-header': licenseHeader,
+      headers,
     },
     rules: {
-      'license-header/header': 'off',
+      'headers/header-format': 'off',
     },
   },
   // Provider authentication anti-patterns

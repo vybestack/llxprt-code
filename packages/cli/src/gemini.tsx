@@ -98,7 +98,6 @@ import {
   SessionStartSource,
   SessionEndReason,
 } from '@vybestack/llxprt-code-core';
-import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
@@ -117,7 +116,7 @@ import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
-import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
+import { setupTerminalAndTheme } from './utils/terminalTheme.js';
 import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
 import { drainStdinBuffer } from './ui/utils/terminalContract.js';
 import { restoreTerminalProtocolsSync } from './ui/utils/terminalProtocolCleanup.js';
@@ -279,8 +278,6 @@ export async function startInteractiveUI(
 ) {
   const version = await getCliVersion();
 
-  // Detect and enable Kitty keyboard protocol once at startup
-  await detectAndEnableKittyProtocol();
   setWindowTitle(basename(workspaceRoot), settings);
 
   const renderOptions = inkRenderOptions(config, settings);
@@ -312,6 +309,7 @@ export async function startInteractiveUI(
             settings={settings}
             startupWarnings={startupWarnings}
             version={version}
+            terminalBackgroundColor={config.getTerminalBackground()}
             recordingIntegration={recordingIntegration}
             resumedHistory={resumedHistory}
             initialRecordingService={initialRecordingService}
@@ -511,11 +509,10 @@ export async function main() {
     registerCleanup(() => {
       stdinManager.disable(true);
     });
-
-    // Detect and enable Kitty keyboard protocol once at startup.
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    detectAndEnableKittyProtocol();
   }
+
+  await setupTerminalAndTheme(config, settings);
+
   if (argv.sessionSummary) {
     registerCleanup(() => {
       const metrics = uiTelemetryService.getMetrics();
@@ -655,9 +652,6 @@ export async function main() {
     }
   }
 
-  // Load custom themes from settings
-  themeManager.loadCustomThemes(settings.merged.ui?.customThemes || {});
-
   // If a provider is specified, activate it after initialization
   const configProvider = config.getProvider();
   if (configProvider) {
@@ -758,26 +752,6 @@ export async function main() {
         () => `Default provider activation skipped: ${(e as Error).message}`,
       );
     }
-  }
-
-  if (settings.merged.ui?.theme) {
-    if (!themeManager.setActiveTheme(settings.merged.ui.theme)) {
-      // If the theme is not found during initial load, log a warning and continue.
-      // The useThemeCommand hook in App.tsx will handle opening the dialog.
-      console.warn(`Warning: Theme "${settings.merged.ui.theme}" not found.`);
-    }
-  }
-
-  // Verify theme colors at startup for debugging
-  if (process.env.DEBUG_THEME) {
-    const activeTheme = themeManager.getActiveTheme();
-    console.log('Active theme:', activeTheme.name);
-    console.log('Theme colors:', {
-      AccentCyan: activeTheme.colors.AccentCyan,
-      AccentBlue: activeTheme.colors.AccentBlue,
-      AccentGreen: activeTheme.colors.AccentGreen,
-      Gray: activeTheme.colors.Gray,
-    });
   }
 
   // hop into sandbox if we are outside and sandboxing is enabled
@@ -1059,7 +1033,7 @@ export async function main() {
       try {
         // Set the active provider if not already set
         if (!providerManagerForAcp.hasActiveProvider()) {
-          await providerManagerForAcp.setActiveProvider(configProvider);
+          providerManagerForAcp.setActiveProvider(configProvider);
         }
       } catch (_e) {
         // Non-fatal - continue without provider

@@ -122,7 +122,7 @@ const getMcpStatus = async (
   message += 'Configured MCP servers:\n\n';
 
   const allTools = toolRegistry.getAllTools();
-  const promptRegistry = await config.getPromptRegistry();
+  const promptRegistry = config.getPromptRegistry();
   const allResources =
     (
       config as Config & {

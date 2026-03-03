@@ -318,7 +318,7 @@ async function readGeminiMdFiles(
   return results;
 }
 
-function concatenateInstructions(
+export function concatenateInstructions(
   instructionContents: GeminiFileContent[],
   // CWD is needed to resolve relative paths for display markers
   currentWorkingDirectoryForDisplay: string,

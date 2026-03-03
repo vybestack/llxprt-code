@@ -87,7 +87,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
       { role: ContentGeneratorRole.USER, content: 'Say hello' },
     ];
 
-    const result = await provider.generateChatCompletion(messages);
+    const result = provider.generateChatCompletion(messages);
     const collectedMessages: IMessage[] = [];
 
     for await (const message of result) {
@@ -136,7 +136,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
     ).callResponsesEndpoint.bind(provider);
 
     // First call - should hit the API
-    const result1 = await callResponsesEndpoint(messages, undefined, options);
+    const result1 = callResponsesEndpoint(messages, undefined, options);
     const collected1: IMessage[] = [];
     for await (const message of result1) {
       collected1.push(message);
@@ -145,7 +145,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
 
     // Second call with same IDs - should use cache
-    const result2 = await callResponsesEndpoint(messages, undefined, options);
+    const result2 = callResponsesEndpoint(messages, undefined, options);
     const collected2: IMessage[] = [];
     for await (const message of result2) {
       collected2.push(message);
@@ -190,7 +190,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
       },
     ];
 
-    const result = await provider.generateChatCompletion(messages, tools);
+    const result = provider.generateChatCompletion(messages, tools);
     const collectedMessages: IMessage[] = [];
 
     for await (const message of result) {
@@ -268,7 +268,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
       provider as unknown as OpenAIProviderPrivate
     ).callResponsesEndpoint.bind(provider);
 
-    const result = await callResponsesEndpoint(messages, undefined, {
+    const result = callResponsesEndpoint(messages, undefined, {
       stream: false,
     });
     const collectedMessages: IMessage[] = [];

@@ -38,7 +38,9 @@ export const HooksList: React.FC<HooksListProps> = ({ hooks }) => {
           <Box flexDirection="column" paddingLeft={2}>
             {entries.map((entry, index) => {
               const commandName =
-                entry.config.command || `${entry.config.type} hook`;
+                entry.config.name ||
+                entry.config.command ||
+                `${entry.config.type} hook`;
               const statusColor = entry.enabled
                 ? Colors.AccentGreen
                 : Colors.DimComment;
@@ -46,6 +48,10 @@ export const HooksList: React.FC<HooksListProps> = ({ hooks }) => {
 
               const details: string[] = [];
               details.push(entry.source);
+              // Show command separately when name exists
+              if (entry.config.name && entry.config.command) {
+                details.push(`command: ${entry.config.command}`);
+              }
               if (entry.matcher) {
                 details.push(`matcher: ${entry.matcher}`);
               }
@@ -62,6 +68,11 @@ export const HooksList: React.FC<HooksListProps> = ({ hooks }) => {
                     <Text color={Colors.AccentYellow}>{commandName}</Text>
                     <Text color={statusColor}> [{statusText}]</Text>
                   </Box>
+                  {entry.config.description && (
+                    <Text color={Colors.DimComment} italic>
+                      {entry.config.description}
+                    </Text>
+                  )}
                   <Text color={Colors.DimComment}>{details.join(' • ')}</Text>
                 </Box>
               );

@@ -4,74 +4,42 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import type React from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../colors.js';
+import { theme } from '../semantic-colors.js';
 import { formatDuration } from '../utils/formatters.js';
 import {
   calculateAverageLatency,
   calculateCacheHitRate,
   calculateErrorRate,
 } from '../utils/computeStats.js';
-import { useSessionStats, ModelMetrics } from '../contexts/SessionContext.js';
+import { useSessionStats } from '../contexts/SessionContext.js';
+import { Table, type Column } from './Table.js';
 
-const METRIC_COL_WIDTH = 28;
-const MODEL_COL_WIDTH = 22;
-
-interface StatRowProps {
-  title: string;
-  values: Array<string | React.ReactElement>;
-  isSubtle?: boolean;
+interface StatRowData {
+  metric: string;
   isSection?: boolean;
+  isSubtle?: boolean;
+  // Dynamic keys for model values
+  [key: string]: string | React.ReactNode | boolean | undefined;
 }
-
-/**
- * StatRow component for displaying a labeled row of values.
- * Issue #684: Fixed theme violations - all text now uses theme colors.
- */
-const StatRow: React.FC<StatRowProps> = ({
-  title,
-  values,
-  isSubtle = false,
-  isSection = false,
-}) => (
-  <Box>
-    <Box width={METRIC_COL_WIDTH}>
-      <Text
-        bold={isSection}
-        color={isSection ? Colors.Foreground : Colors.LightBlue}
-      >
-        {isSubtle ? `  ↳ ${title}` : title}
-      </Text>
-    </Box>
-    {values.map((value, index) => (
-      <Box width={MODEL_COL_WIDTH} key={index}>
-        {React.isValidElement(value) ? (
-          value
-        ) : (
-          <Text color={Colors.Foreground}>{value}</Text>
-        )}
-      </Box>
-    ))}
-  </Box>
-);
 
 export const ModelStatsDisplay: React.FC = () => {
   const { stats } = useSessionStats();
   const { models } = stats.metrics;
   const activeModels = Object.entries(models).filter(
-    ([, metrics]: [string, ModelMetrics]) => metrics.api.totalRequests > 0,
+    ([, metrics]) => metrics.api.totalRequests > 0,
   );
 
   if (activeModels.length === 0) {
     return (
       <Box
         borderStyle="round"
-        borderColor={Colors.Gray}
+        borderColor={theme.border.default}
         paddingY={1}
         paddingX={2}
       >
-        <Text color={Colors.Foreground}>
+        <Text color={theme.text.primary}>
           No API calls have been made in this session.
         </Text>
       </Box>
@@ -80,153 +48,173 @@ export const ModelStatsDisplay: React.FC = () => {
 
   const modelNames = activeModels.map(([name]) => name);
 
-  const getModelValues = (
-    getter: (metrics: ModelMetrics) => string | React.ReactElement,
-  ) =>
-    activeModels.map(([, metrics]: [string, ModelMetrics]) => getter(metrics));
-
   const hasThoughts = activeModels.some(
-    ([, metrics]: [string, ModelMetrics]) => metrics.tokens.thoughts > 0,
+    ([, metrics]) => metrics.tokens.thoughts > 0,
   );
-  const hasTool = activeModels.some(
-    ([, metrics]: [string, ModelMetrics]) => metrics.tokens.tool > 0,
-  );
+  const hasTool = activeModels.some(([, metrics]) => metrics.tokens.tool > 0);
   const hasCached = activeModels.some(
-    ([, metrics]: [string, ModelMetrics]) => metrics.tokens.cached > 0,
+    ([, metrics]) => metrics.tokens.cached > 0,
   );
+
+  // Helper to create a row with values for each model
+  const createRow = (
+    metric: string,
+    getValue: (
+      metrics: (typeof activeModels)[0][1],
+    ) => string | React.ReactNode,
+    options: { isSection?: boolean; isSubtle?: boolean } = {},
+  ): StatRowData => {
+    const row: StatRowData = {
+      metric,
+      isSection: options.isSection,
+      isSubtle: options.isSubtle,
+    };
+    activeModels.forEach(([name, metrics]) => {
+      row[name] = getValue(metrics);
+    });
+    return row;
+  };
+
+  const rows: StatRowData[] = [
+    // API Section
+    { metric: 'API', isSection: true },
+    createRow('Requests', (m) => m.api.totalRequests.toLocaleString()),
+    createRow('Errors', (m) => {
+      const errorRate = calculateErrorRate(m);
+      return (
+        <Text
+          color={
+            m.api.totalErrors > 0 ? theme.status.error : theme.text.primary
+          }
+        >
+          {m.api.totalErrors.toLocaleString()} ({errorRate.toFixed(1)}%)
+        </Text>
+      );
+    }),
+    createRow('Avg Latency', (m) => formatDuration(calculateAverageLatency(m))),
+
+    // Spacer
+    { metric: '' },
+
+    // Tokens Section
+    { metric: 'Tokens', isSection: true },
+    createRow('Total', (m) => (
+      <Text color={theme.text.secondary}>
+        {m.tokens.total.toLocaleString()}
+      </Text>
+    )),
+    createRow(
+      'Input',
+      (m) => (
+        <Text color={theme.text.primary}>
+          {m.tokens.input.toLocaleString()}
+        </Text>
+      ),
+      { isSubtle: true },
+    ),
+  ];
+
+  if (hasCached) {
+    rows.push(
+      createRow(
+        'Cache Reads',
+        (m) => {
+          const cacheHitRate = calculateCacheHitRate(m);
+          return (
+            <Text color={theme.text.secondary}>
+              {m.tokens.cached.toLocaleString()} ({cacheHitRate.toFixed(1)}%)
+            </Text>
+          );
+        },
+        { isSubtle: true },
+      ),
+    );
+  }
+
+  if (hasThoughts) {
+    rows.push(
+      createRow(
+        'Thoughts',
+        (m) => (
+          <Text color={theme.text.primary}>
+            {m.tokens.thoughts.toLocaleString()}
+          </Text>
+        ),
+        { isSubtle: true },
+      ),
+    );
+  }
+
+  if (hasTool) {
+    rows.push(
+      createRow(
+        'Tool',
+        (m) => (
+          <Text color={theme.text.primary}>
+            {m.tokens.tool.toLocaleString()}
+          </Text>
+        ),
+        { isSubtle: true },
+      ),
+    );
+  }
+
+  rows.push(
+    createRow(
+      'Output',
+      (m) => (
+        <Text color={theme.text.primary}>
+          {m.tokens.candidates.toLocaleString()}
+        </Text>
+      ),
+      { isSubtle: true },
+    ),
+  );
+
+  const columns: Array<Column<StatRowData>> = [
+    {
+      key: 'metric',
+      header: 'Metric',
+      width: 28,
+      renderCell: (row) => (
+        <Text
+          bold={row.isSection}
+          color={row.isSection ? theme.text.primary : theme.text.link}
+        >
+          {row.isSubtle ? `  ↳ ${row.metric}` : row.metric}
+        </Text>
+      ),
+    },
+    ...modelNames.map((name) => ({
+      key: name,
+      header: name,
+      flexGrow: 1,
+      renderCell: (row: StatRowData) => {
+        // Don't render anything for section headers in model columns
+        if (row.isSection) return null;
+        const val = row[name];
+        if (val === undefined || val === null) return null;
+        if (typeof val === 'string' || typeof val === 'number') {
+          return <Text color={theme.text.primary}>{val}</Text>;
+        }
+        return val as React.ReactNode;
+      },
+    })),
+  ];
 
   return (
     <Box
       borderStyle="round"
-      borderColor={Colors.Gray}
+      borderColor={theme.border.default}
       flexDirection="column"
       paddingY={1}
       paddingX={2}
     >
-      <Text bold color={Colors.AccentPurple}>
-        Model Stats
+      <Text bold color={theme.text.accent}>
+        Model Stats For Nerds
       </Text>
       <Box height={1} />
-
-      {/* Header */}
-      <Box>
-        <Box width={METRIC_COL_WIDTH}>
-          <Text bold color={Colors.Foreground}>
-            Metric
-          </Text>
-        </Box>
-        {modelNames.map((name) => (
-          <Box width={MODEL_COL_WIDTH} key={name}>
-            <Text bold color={Colors.Foreground}>
-              {name}
-            </Text>
-          </Box>
-        ))}
-      </Box>
-
-      {/* Divider */}
-      <Box
-        borderStyle="single"
-        borderBottom={true}
-        borderTop={false}
-        borderLeft={false}
-        borderRight={false}
-        borderColor={Colors.Gray}
-      />
-
-      {/* API Section */}
-      <StatRow title="API" values={[]} isSection />
-      <StatRow
-        title="Requests"
-        values={getModelValues((m) => m.api.totalRequests.toLocaleString())}
-      />
-      <StatRow
-        title="Errors"
-        values={getModelValues((m) => {
-          const errorRate = calculateErrorRate(m);
-          return (
-            <Text
-              color={
-                m.api.totalErrors > 0 ? Colors.AccentRed : Colors.Foreground
-              }
-            >
-              {m.api.totalErrors.toLocaleString()} ({errorRate.toFixed(1)}%)
-            </Text>
-          );
-        })}
-      />
-      <StatRow
-        title="Avg Latency"
-        values={getModelValues((m) => {
-          const avgLatency = calculateAverageLatency(m);
-          return formatDuration(avgLatency);
-        })}
-      />
-
-      <Box height={1} />
-
-      {/* Tokens Section */}
-      <StatRow title="Tokens" values={[]} isSection />
-      <StatRow
-        title="Total"
-        values={getModelValues((m) => (
-          <Text color={Colors.Gray}>{m.tokens.total.toLocaleString()}</Text>
-        ))}
-      />
-      <StatRow
-        title="Input"
-        isSubtle
-        values={getModelValues((m) => (
-          <Text color={Colors.Foreground}>
-            {m.tokens.input.toLocaleString()}
-          </Text>
-        ))}
-      />
-      {hasCached && (
-        <StatRow
-          title="Cache Reads"
-          isSubtle
-          values={getModelValues((m) => {
-            const cacheHitRate = calculateCacheHitRate(m);
-            return (
-              <Text color={Colors.Gray}>
-                {m.tokens.cached.toLocaleString()} ({cacheHitRate.toFixed(1)}%)
-              </Text>
-            );
-          })}
-        />
-      )}
-      {hasThoughts && (
-        <StatRow
-          title="Thoughts"
-          isSubtle
-          values={getModelValues((m) => (
-            <Text color={Colors.Foreground}>
-              {m.tokens.thoughts.toLocaleString()}
-            </Text>
-          ))}
-        />
-      )}
-      {hasTool && (
-        <StatRow
-          title="Tool"
-          isSubtle
-          values={getModelValues((m) => (
-            <Text color={Colors.Foreground}>
-              {m.tokens.tool.toLocaleString()}
-            </Text>
-          ))}
-        />
-      )}
-      <StatRow
-        title="Output"
-        isSubtle
-        values={getModelValues((m) => (
-          <Text color={Colors.Foreground}>
-            {m.tokens.candidates.toLocaleString()}
-          </Text>
-        ))}
-      />
+      <Table data={rows} columns={columns} />
     </Box>
   );
 };

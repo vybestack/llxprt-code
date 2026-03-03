@@ -13,7 +13,11 @@ import { useSlashCompletion } from './useSlashCompletion.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { CommandContext, SlashCommand } from '../commands/types.js';
+import {
+  CommandContext,
+  SlashCommand,
+  CommandKind,
+} from '../commands/types.js';
 import { Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 
@@ -101,7 +105,7 @@ describe('useSlashCompletion', () => {
         expect(result.current.isLoadingSuggestions).toBe(false);
       });
 
-      it('should reset state when isActive becomes false', () => {
+      it('should not show suggestions for non-command text', () => {
         const slashCommands = [
           {
             name: 'help',
@@ -109,26 +113,25 @@ describe('useSlashCompletion', () => {
             description: 'Show help',
             action: vi.fn(),
           },
+          {
+            name: 'history',
+            description: 'Show history',
+            action: vi.fn(),
+          },
         ] as unknown as SlashCommand[];
 
-        const { result, rerender } = renderHook(
-          ({ text }) => {
-            const textBuffer = useTextBufferForTest(text);
-            return useSlashCompletion(
-              textBuffer,
-              testDirs,
-              testRootDir,
-              slashCommands,
-              mockCommandContext,
-              false,
-              mockConfig,
-            );
-          },
-          { initialProps: { text: '/help' } },
+        // Test with regular text (not a command)
+        const { result } = renderHook(() =>
+          useSlashCompletion(
+            useTextBufferForTest('hello world'),
+            testDirs,
+            testRootDir,
+            slashCommands,
+            mockCommandContext,
+            false,
+            mockConfig,
+          ),
         );
-
-        // Inactive because of the leading space
-        rerender({ text: ' /help' });
 
         expect(result.current.suggestions).toEqual([]);
         expect(result.current.activeSuggestionIndex).toBe(-1);
@@ -472,7 +475,7 @@ describe('useSlashCompletion', () => {
         ]);
       });
 
-      it('should NOT provide suggestions for a perfectly typed command that is a leaf node', async () => {
+      it('should provide suggestions even for a perfectly typed command that is a leaf node', async () => {
         const slashCommands = [
           {
             name: 'clear',
@@ -490,12 +493,15 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        expect(result.current.suggestions).toHaveLength(0);
-        expect(result.current.showSuggestions).toBe(false);
+        await waitFor(() => {
+          expect(result.current.suggestions).toHaveLength(1);
+          expect(result.current.suggestions[0].label).toBe('clear');
+          expect(result.current.isPerfectMatch).toBe(true);
+        });
       });
 
       it.each([['/?'], ['/usage']])(
-        'should not suggest commands when altNames is fully typed',
+        'should suggest commands even when altNames is fully typed',
         async (query) => {
           const mockSlashCommands = [
             {
@@ -523,9 +529,126 @@ describe('useSlashCompletion', () => {
             ),
           );
 
-          expect(result.current.suggestions).toHaveLength(0);
+          await waitFor(() => {
+            expect(result.current.suggestions).toHaveLength(1);
+            expect(result.current.isPerfectMatch).toBe(true);
+          });
         },
       );
+
+      it('should show all matching suggestions even when one is a perfect match', async () => {
+        const slashCommands = [
+          {
+            name: 'review',
+            description: 'Review code',
+            action: vi.fn(),
+          },
+          {
+            name: 'review-frontend',
+            description: 'Review frontend code',
+            action: vi.fn(),
+          },
+          {
+            name: 'review-backend',
+            description: 'Review backend code',
+            action: vi.fn(),
+          },
+        ] as unknown as SlashCommand[];
+
+        const { result } = renderHook(() =>
+          useSlashCompletion(
+            useTextBufferForTest('/review'),
+            testDirs,
+            testRootDir,
+            slashCommands,
+            mockCommandContext,
+          ),
+        );
+
+        await waitFor(() => {
+          // All three should match 'review' as prefix/exact
+          expect(result.current.suggestions.length).toBe(3);
+          // 'review' should be first because it is an exact match
+          expect(result.current.suggestions[0].label).toBe('review');
+
+          const labels = result.current.suggestions.map((s) => s.label);
+          expect(labels).toContain('review');
+          expect(labels).toContain('review-frontend');
+          expect(labels).toContain('review-backend');
+          expect(result.current.isPerfectMatch).toBe(true);
+        });
+      });
+
+      it('should sort exact altName matches to the top', async () => {
+        const slashCommands = [
+          {
+            name: 'help',
+            altNames: ['?'],
+            description: 'Show help',
+            action: vi.fn(),
+          },
+          {
+            name: 'question-mark',
+            description: 'Alternative name for help',
+            action: vi.fn(),
+          },
+        ] as unknown as SlashCommand[];
+
+        const { result } = renderHook(() =>
+          useSlashCompletion(
+            useTextBufferForTest('/?'),
+            testDirs,
+            testRootDir,
+            slashCommands,
+            mockCommandContext,
+          ),
+        );
+
+        await waitFor(() => {
+          // 'help' should be first because '?' is an exact altName match
+          expect(result.current.suggestions[0].label).toBe('help');
+          expect(result.current.isPerfectMatch).toBe(true);
+        });
+      });
+
+      it('should suggest subcommands when a parent command is fully typed without a trailing space', async () => {
+        const slashCommands = [
+          {
+            name: 'chat',
+            description: 'Manage chat history',
+            subCommands: [
+              {
+                name: 'list',
+                description: 'List chats',
+                action: vi.fn(),
+              },
+              {
+                name: 'save',
+                description: 'Save chat',
+                action: vi.fn(),
+              },
+            ],
+          },
+        ] as unknown as SlashCommand[];
+
+        const { result } = renderHook(() =>
+          useSlashCompletion(
+            useTextBufferForTest('/chat'),
+            testDirs,
+            testRootDir,
+            slashCommands,
+            mockCommandContext,
+          ),
+        );
+
+        await waitFor(() => {
+          // Should show subcommands of 'chat'
+          expect(result.current.suggestions).toHaveLength(2);
+          expect(result.current.suggestions.map((s) => s.label)).toEqual(
+            expect.arrayContaining(['list', 'save']),
+          );
+        });
+      });
 
       it('should not provide suggestions for a fully typed command that has no sub-commands or argument completion', async () => {
         const slashCommands = [
@@ -591,7 +714,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
-            useTextBufferForTest('/memory'), // Note: no trailing space
+            useTextBufferForTest('/memory '), // Note: trailing space indicates wanting subcommands
             testDirs,
             testRootDir,
             slashCommands,
@@ -608,6 +731,57 @@ describe('useSlashCompletion', () => {
           ]),
         );
         expect(result.current.showSuggestions).toBe(true);
+      });
+
+      it('should suggest parent command (and siblings) instead of sub-commands when no trailing space', async () => {
+        const slashCommands = [
+          {
+            name: 'memory',
+            kind: CommandKind.BUILT_IN,
+            description: 'Manage memory',
+            subCommands: [
+              {
+                name: 'show',
+                kind: CommandKind.BUILT_IN,
+                description: 'Show memory',
+              },
+            ],
+          },
+          {
+            name: 'memory-leak',
+            kind: CommandKind.BUILT_IN,
+            description: 'Debug memory leaks',
+          },
+        ] as unknown as SlashCommand[];
+
+        const { result } = renderHook(() =>
+          useSlashCompletion(
+            useTextBufferForTest('/memory'),
+            testDirs,
+            testRootDir,
+            slashCommands,
+            mockCommandContext,
+          ),
+        );
+
+        // Should verify that we see BOTH 'memory' and 'memory-leak'
+        await waitFor(() => {
+          expect(result.current.suggestions).toHaveLength(2);
+          expect(result.current.suggestions).toEqual(
+            expect.arrayContaining([
+              {
+                label: 'memory',
+                value: 'memory',
+                description: 'Manage memory',
+              },
+              {
+                label: 'memory-leak',
+                value: 'memory-leak',
+                description: 'Debug memory leaks',
+              },
+            ]),
+          );
+        });
       });
 
       it('should suggest all sub-commands when the query ends with the parent command and a space', async () => {
@@ -629,7 +803,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
-            useTextBufferForTest('/memory'),
+            useTextBufferForTest('/memory '),
             testDirs,
             testRootDir,
             slashCommands,
@@ -1295,7 +1469,7 @@ describe('useSlashCompletion', () => {
       ] as unknown as SlashCommand[];
 
       const { result } = renderHook(() => {
-        const textBuffer = useTextBufferForTest('/memory');
+        const textBuffer = useTextBufferForTest('/memory ');
         const completion = useSlashCompletion(
           textBuffer,
           testDirs,
@@ -1319,7 +1493,7 @@ describe('useSlashCompletion', () => {
         result.current.handleAutocomplete(1); // index 1 is 'add'
       });
 
-      expect(result.current.textBuffer.text).toBe('/add ');
+      expect(result.current.textBuffer.text).toBe('/memory add ');
     });
 
     it('should complete a command with an alternative name', () => {

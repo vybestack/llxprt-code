@@ -185,7 +185,6 @@ describe('chatCommand', () => {
 
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: 'context for our chat' }] },
-        { role: 'model', parts: [{ text: 'Got it. Thanks for the context!' }] },
       ]);
       result = await saveCommand?.action?.(mockContext, tag);
       expect(result).toEqual({
@@ -196,8 +195,8 @@ describe('chatCommand', () => {
 
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: 'context for our chat' }] },
-        { role: 'model', parts: [{ text: 'Got it. Thanks for the context!' }] },
         { role: 'user', parts: [{ text: 'Hello, how are you?' }] },
+        { role: 'model', parts: [{ text: 'I am doing well!' }] },
       ]);
       result = await saveCommand?.action?.(mockContext, tag);
       expect(result).toEqual({
@@ -230,7 +229,6 @@ describe('chatCommand', () => {
     it('should save the conversation if overwrite is confirmed', async () => {
       const history: Content[] = [
         { role: 'user', parts: [{ text: 'context for our chat' }] },
-        { role: 'model', parts: [{ text: 'Got it. Thanks for the context!' }] },
         { role: 'user', parts: [{ text: 'hello' }] },
         { role: 'model', parts: [{ text: 'Hi there!' }] },
       ];
@@ -246,6 +244,83 @@ describe('chatCommand', () => {
         messageType: 'info',
         content: `Conversation checkpoint saved with tag: ${tag}.`,
       });
+    });
+  });
+  describe('history boundary detection with INITIAL_HISTORY_LENGTH', () => {
+    let saveCommand: SlashCommand;
+    let clearCommand: SlashCommand;
+    const tag = 'test-tag';
+
+    beforeEach(() => {
+      saveCommand = getSubCommand('save');
+      clearCommand = getSubCommand('clear');
+      mockContext.services.logger.checkpointExists = vi
+        .fn()
+        .mockResolvedValue(false);
+    });
+
+    it('should not save when only initial setup exists (1 message)', async () => {
+      mockGetHistory.mockReturnValue([
+        { role: 'user', parts: [{ text: 'system setup' }] },
+      ]);
+      const result = await saveCommand?.action?.(mockContext, tag);
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'info',
+        content: expect.stringContaining('No conversation found'),
+      });
+    });
+
+    it('should save when conversation beyond initial setup exists (>1 message)', async () => {
+      mockGetHistory.mockReturnValue([
+        { role: 'user', parts: [{ text: 'system setup' }] },
+        { role: 'user', parts: [{ text: 'hello' }] },
+        { role: 'model', parts: [{ text: 'hi' }] },
+      ]);
+      mockContext.services.logger.checkpointExists = vi
+        .fn()
+        .mockResolvedValue(false);
+      const result = await saveCommand?.action?.(mockContext, tag);
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'info',
+        content: expect.stringContaining('saved with tag'),
+      });
+    });
+
+    it('should not clear when only initial setup exists (1 message)', async () => {
+      mockGetHistory.mockReturnValue([
+        { role: 'user', parts: [{ text: 'system setup' }] },
+      ]);
+      const result = await clearCommand?.action?.(mockContext, '');
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'info',
+        content: expect.stringContaining('No conversation to clear'),
+      });
+    });
+
+    it('should clear when conversation beyond initial setup exists (>1 message)', async () => {
+      const mockClearHistory = vi.fn();
+      const mockClear = vi.fn();
+      const mockUpdateHistoryTokenCount = vi.fn();
+      mockGetChat.mockReturnValue({
+        getHistory: mockGetHistory,
+        clearHistory: mockClearHistory,
+      });
+      mockContext.ui = {
+        ...mockContext.ui,
+        clear: mockClear,
+        updateHistoryTokenCount: mockUpdateHistoryTokenCount,
+      };
+      mockGetHistory.mockReturnValue([
+        { role: 'user', parts: [{ text: 'system setup' }] },
+        { role: 'user', parts: [{ text: 'hello' }] },
+        { role: 'model', parts: [{ text: 'hi' }] },
+      ]);
+      await clearCommand?.action?.(mockContext, '');
+      expect(mockClearHistory).toHaveBeenCalled();
+      expect(mockClear).toHaveBeenCalled();
     });
   });
 

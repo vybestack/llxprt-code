@@ -45,6 +45,7 @@ export interface UIState {
   mainAreaWidth: number;
   inputWidth: number;
   suggestionsWidth: number;
+  terminalBackgroundColor?: string;
 
   // History and streaming
   history: HistoryItem[];

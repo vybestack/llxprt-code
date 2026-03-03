@@ -5,9 +5,8 @@
  */
 
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../../colors.js';
 import { DiffRenderer } from './DiffRenderer.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
 import type {
@@ -23,7 +22,8 @@ import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { theme } from '../../semantic-colors.js';
-import { TextInput } from '../ProfileCreateWizard/TextInput.js';
+import { useAlternateBuffer } from '../../hooks/useAlternateBuffer.js';
+import { useSettings } from '../../contexts/SettingsContext.js';
 
 export interface ToolConfirmationMessageProps {
   confirmationDetails: ToolCallConfirmationDetails;
@@ -43,12 +43,16 @@ export const ToolConfirmationMessage: React.FC<
   terminalWidth,
 }) => {
   const { onConfirm } = confirmationDetails;
-  const childWidth = terminalWidth - 2; // 2 for padding
+
+  const isAlternateBuffer = useAlternateBuffer();
+  const settings = useSettings();
+  const allowPermanentApproval =
+    settings.merged.security?.enablePermanentToolApproval ?? false;
 
   const [ideClient, setIdeClient] = useState<IdeClient | null>(null);
-  const [isDiffingEnabled, setIsDiffingEnabled] = useState(false);
-  const [isEditingCommand, setIsEditingCommand] = useState(false);
-  const [editedCommand, setEditedCommand] = useState('');
+  const [isDiffingEnabled, setIsDiffingEnabled] = useState<boolean | null>(
+    config.getIdeMode() ? null : false,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -68,49 +72,19 @@ export const ToolConfirmationMessage: React.FC<
     };
   }, [config]);
 
-  const handleConfirm = useCallback(
-    async (outcome: ToolConfirmationOutcome) => {
-      if (confirmationDetails.type === 'edit') {
-        if (config.getIdeMode() && isDiffingEnabled) {
-          const cliOutcome =
-            outcome === ToolConfirmationOutcome.Cancel
-              ? 'rejected'
-              : 'accepted';
-          await ideClient?.resolveDiffFromCli(
-            confirmationDetails.filePath,
-            cliOutcome,
-          );
-        }
+  const handleConfirm = async (outcome: ToolConfirmationOutcome) => {
+    if (confirmationDetails.type === 'edit') {
+      if (config.getIdeMode() && isDiffingEnabled) {
+        const cliOutcome =
+          outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
+        await ideClient?.resolveDiffFromCli(
+          confirmationDetails.filePath,
+          cliOutcome,
+        );
       }
-
-      if (outcome === ToolConfirmationOutcome.SuggestEdit) {
-        if (confirmationDetails.type === 'exec') {
-          setEditedCommand(confirmationDetails.command);
-          setIsEditingCommand(true);
-          return;
-        }
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      onConfirm(outcome);
-    },
-    [confirmationDetails, config, isDiffingEnabled, ideClient, onConfirm],
-  );
-
-  const handleEditSubmit = useCallback(() => {
-    const trimmed = editedCommand.trim();
-    if (trimmed.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      onConfirm(ToolConfirmationOutcome.SuggestEdit, {
-        editedCommand: trimmed,
-      });
     }
-    setIsEditingCommand(false);
-  }, [editedCommand, onConfirm]);
-
-  const handleEditCancel = useCallback(() => {
-    setIsEditingCommand(false);
-  }, []);
+    await onConfirm(outcome);
+  };
 
   const isTrustedFolder = config.isTrustedFolder();
 
@@ -118,58 +92,261 @@ export const ToolConfirmationMessage: React.FC<
     (key) => {
       if (!isFocused) return;
       if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
-        if (isEditingCommand) {
-          handleEditCancel();
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
-          handleConfirm(ToolConfirmationOutcome.Cancel);
-        }
+        void handleConfirm(ToolConfirmationOutcome.Cancel);
       }
     },
     { isActive: isFocused },
   );
 
-  const handleSelect = useCallback(
-    (item: ToolConfirmationOutcome) => handleConfirm(item),
-    [handleConfirm],
-  );
+  const handleSelect = (item: ToolConfirmationOutcome) => {
+    void handleConfirm(item);
+  };
 
-  let bodyContent: React.ReactNode | null = null; // Removed contextDisplay here
-  let question: string;
+  const { question, bodyContent, options } = useMemo(() => {
+    let bodyContent: React.ReactNode | null = null;
+    let question = '';
+    const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = [];
 
-  const options: Array<RadioSelectItem<ToolConfirmationOutcome>> = new Array<
-    RadioSelectItem<ToolConfirmationOutcome>
-  >();
+    if (confirmationDetails.type === 'edit') {
+      if (!confirmationDetails.isModifying) {
+        question = `Apply this change?`;
+        options.push({
+          label: 'Allow once',
+          value: ToolConfirmationOutcome.ProceedOnce,
+          key: 'Allow once',
+        });
+        if (isTrustedFolder) {
+          options.push({
+            label: 'Allow for this session',
+            value: ToolConfirmationOutcome.ProceedAlways,
+            key: 'Allow for this session',
+          });
+          if (allowPermanentApproval) {
+            options.push({
+              label: 'Allow for all future sessions',
+              value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
+              key: 'Allow for all future sessions',
+            });
+          }
+        }
+        if (!config.getIdeMode() || isDiffingEnabled === false) {
+          options.push({
+            label: 'Modify with external editor',
+            value: ToolConfirmationOutcome.ModifyWithEditor,
+            key: 'Modify with external editor',
+          });
+        }
 
-  // Body content is now the DiffRenderer, passing filename to it
-  // The bordered box is removed from here and handled within DiffRenderer
+        options.push({
+          label: 'No, suggest changes (esc)',
+          value: ToolConfirmationOutcome.Cancel,
+          key: 'No, suggest changes (esc)',
+        });
+      }
+    } else if (confirmationDetails.type === 'exec') {
+      const executionProps = confirmationDetails;
 
-  function availableBodyContentHeight() {
-    if (options.length === 0) {
-      // This should not happen in practice as options are always added before this is called.
-      throw new Error('Options not provided for confirmation message');
+      question = `Allow execution of: '${executionProps.rootCommand}'?`;
+      options.push({
+        label: 'Allow once',
+        value: ToolConfirmationOutcome.ProceedOnce,
+        key: 'Allow once',
+      });
+      if (isTrustedFolder) {
+        options.push({
+          label: `Allow for this session`,
+          value: ToolConfirmationOutcome.ProceedAlways,
+          key: `Allow for this session`,
+        });
+        if (allowPermanentApproval) {
+          options.push({
+            label: `Allow for all future sessions`,
+            value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
+            key: `Allow for all future sessions`,
+          });
+        }
+      }
+      options.push({
+        label: 'No, suggest changes (esc)',
+        value: ToolConfirmationOutcome.Cancel,
+        key: 'No, suggest changes (esc)',
+      });
+    } else if (confirmationDetails.type === 'info') {
+      question = `Do you want to proceed?`;
+      options.push({
+        label: 'Allow once',
+        value: ToolConfirmationOutcome.ProceedOnce,
+        key: 'Allow once',
+      });
+      if (isTrustedFolder) {
+        options.push({
+          label: 'Allow for this session',
+          value: ToolConfirmationOutcome.ProceedAlways,
+          key: 'Allow for this session',
+        });
+        if (allowPermanentApproval) {
+          options.push({
+            label: 'Allow for all future sessions',
+            value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
+            key: 'Allow for all future sessions',
+          });
+        }
+      }
+      options.push({
+        label: 'No, suggest changes (esc)',
+        value: ToolConfirmationOutcome.Cancel,
+        key: 'No, suggest changes (esc)',
+      });
+    } else {
+      // mcp tool confirmation
+      const mcpProps = confirmationDetails;
+      question = `Allow execution of MCP tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"?`;
+      options.push({
+        label: 'Allow once',
+        value: ToolConfirmationOutcome.ProceedOnce,
+        key: 'Allow once',
+      });
+      if (isTrustedFolder) {
+        options.push({
+          label: 'Allow tool for this session',
+          value: ToolConfirmationOutcome.ProceedAlwaysTool,
+          key: 'Allow tool for this session',
+        });
+        options.push({
+          label: 'Allow all server tools for this session',
+          value: ToolConfirmationOutcome.ProceedAlwaysServer,
+          key: 'Allow all server tools for this session',
+        });
+        if (allowPermanentApproval) {
+          options.push({
+            label: 'Allow tool for all future sessions',
+            value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
+            key: 'Allow tool for all future sessions',
+          });
+        }
+      }
+      options.push({
+        label: 'No, suggest changes (esc)',
+        value: ToolConfirmationOutcome.Cancel,
+        key: 'No, suggest changes (esc)',
+      });
     }
 
-    if (availableTerminalHeight === undefined) {
-      return undefined;
+    function availableBodyContentHeight() {
+      if (options.length === 0) {
+        // Should not happen if we populated options correctly above for all types
+        // except when isModifying is true, but in that case we don't call this because we don't enter the if block for it.
+        return undefined;
+      }
+
+      if (availableTerminalHeight === undefined) {
+        return undefined;
+      }
+
+      // Calculate the vertical space (in lines) consumed by UI elements
+      // surrounding the main body content.
+      const PADDING_OUTER_Y = 1; // Main container has `paddingTop={0} paddingBottom={1}`.
+      const MARGIN_BODY_BOTTOM = 1; // margin on the body container.
+      const HEIGHT_QUESTION = 1; // The question text is one line.
+      const MARGIN_QUESTION_BOTTOM = 1; // Margin on the question container.
+      const HEIGHT_OPTIONS = options.length; // Each option in the radio select takes one line.
+
+      const surroundingElementsHeight =
+        PADDING_OUTER_Y +
+        MARGIN_BODY_BOTTOM +
+        HEIGHT_QUESTION +
+        MARGIN_QUESTION_BOTTOM +
+        HEIGHT_OPTIONS;
+      return Math.max(availableTerminalHeight - surroundingElementsHeight, 1);
     }
 
-    // Calculate the vertical space (in lines) consumed by UI elements
-    // surrounding the main body content.
-    const PADDING_OUTER_Y = 2; // Main container has `padding={1}` (top & bottom).
-    const MARGIN_BODY_BOTTOM = 1; // margin on the body container.
-    const HEIGHT_QUESTION = 1; // The question text is one line.
-    const MARGIN_QUESTION_BOTTOM = 1; // Margin on the question container.
-    const HEIGHT_OPTIONS = options.length; // Each option in the radio select takes one line.
+    if (confirmationDetails.type === 'edit') {
+      if (!confirmationDetails.isModifying) {
+        bodyContent = (
+          <DiffRenderer
+            diffContent={confirmationDetails.fileDiff}
+            filename={confirmationDetails.fileName}
+            availableTerminalHeight={availableBodyContentHeight()}
+            terminalWidth={terminalWidth}
+          />
+        );
+      }
+    } else if (confirmationDetails.type === 'exec') {
+      const executionProps = confirmationDetails;
+      let bodyContentHeight = availableBodyContentHeight();
+      if (bodyContentHeight !== undefined) {
+        // Account for padding, clamped to avoid negative values on very short terminals
+        bodyContentHeight = Math.max(bodyContentHeight - 2, 1);
+      }
 
-    const surroundingElementsHeight =
-      PADDING_OUTER_Y +
-      MARGIN_BODY_BOTTOM +
-      HEIGHT_QUESTION +
-      MARGIN_QUESTION_BOTTOM +
-      HEIGHT_OPTIONS;
-    return Math.max(availableTerminalHeight - surroundingElementsHeight, 1);
-  }
+      const commandBox = (
+        <Box>
+          <Text color={theme.text.link}>{executionProps.command}</Text>
+        </Box>
+      );
+
+      bodyContent = isAlternateBuffer ? (
+        commandBox
+      ) : (
+        <MaxSizedBox
+          maxHeight={bodyContentHeight}
+          maxWidth={Math.max(terminalWidth, 1)}
+        >
+          {commandBox}
+        </MaxSizedBox>
+      );
+    } else if (confirmationDetails.type === 'info') {
+      const infoProps = confirmationDetails;
+      const displayUrls =
+        infoProps.urls &&
+        !(
+          infoProps.urls.length === 1 && infoProps.urls[0] === infoProps.prompt
+        );
+
+      bodyContent = (
+        <Box flexDirection="column">
+          <Text color={theme.text.link}>
+            <RenderInline
+              text={infoProps.prompt}
+              defaultColor={theme.text.link}
+            />
+          </Text>
+          {displayUrls && infoProps.urls && infoProps.urls.length > 0 && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text color={theme.text.primary}>URLs to fetch:</Text>
+              {infoProps.urls.map((url) => (
+                <Text key={url} color={theme.text.primary}>
+                  {' '}
+                  - <RenderInline text={url} />
+                </Text>
+              ))}
+            </Box>
+          )}
+        </Box>
+      );
+    } else {
+      // mcp tool confirmation
+      const mcpProps = confirmationDetails;
+
+      bodyContent = (
+        <Box flexDirection="column">
+          <Text color={theme.text.link}>MCP Server: {mcpProps.serverName}</Text>
+          <Text color={theme.text.link}>Tool: {mcpProps.toolName}</Text>
+        </Box>
+      );
+    }
+
+    return { question, bodyContent, options };
+  }, [
+    confirmationDetails,
+    isTrustedFolder,
+    config,
+    isDiffingEnabled,
+    availableTerminalHeight,
+    terminalWidth,
+    isAlternateBuffer,
+    allowPermanentApproval,
+  ]);
 
   if (confirmationDetails.type === 'edit') {
     if (confirmationDetails.isModifying) {
@@ -179,7 +356,8 @@ export const ToolConfirmationMessage: React.FC<
           borderStyle="round"
           borderColor={theme.border.default}
           justifyContent="space-around"
-          padding={1}
+          paddingTop={1}
+          paddingBottom={1}
           overflow="hidden"
         >
           <Text color={theme.text.primary}>Modify in progress: </Text>
@@ -189,236 +367,10 @@ export const ToolConfirmationMessage: React.FC<
         </Box>
       );
     }
-
-    question = `Apply this change?`;
-    options.push({
-      label: 'Yes, allow once',
-      value: ToolConfirmationOutcome.ProceedOnce,
-      key: 'Yes, allow once',
-    });
-    if (isTrustedFolder) {
-      options.push({
-        label: 'Yes, allow always',
-        value: ToolConfirmationOutcome.ProceedAlways,
-        key: 'Yes, allow always',
-      });
-      options.push({
-        label: 'Yes, allow always and save to policy',
-        value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
-        key: 'Yes, allow always and save to policy',
-      });
-    }
-    if (!config.getIdeMode() || !isDiffingEnabled) {
-      options.push({
-        label: 'Modify with external editor',
-        value: ToolConfirmationOutcome.ModifyWithEditor,
-        key: 'Modify with external editor',
-      });
-    }
-    const editDetails = confirmationDetails;
-    const metadata = editDetails.metadata;
-    const astValidation = metadata?.astValidation as
-      | { valid: boolean; errors: string[] }
-      | undefined;
-
-    options.push({
-      label: 'No, suggest changes (esc)',
-      value: ToolConfirmationOutcome.Cancel,
-      key: 'No, suggest changes (esc)',
-    });
-
-    bodyContent = (
-      <Box flexDirection="column">
-        <Box marginBottom={1} paddingX={1} flexDirection="column">
-          {astValidation && (
-            <Box>
-              {astValidation.valid ? (
-                <Text color={Colors.AccentGreen}>✦ AST Validation Passed</Text>
-              ) : (
-                <Box flexDirection="column">
-                  <Text color={Colors.AccentRed} bold>
-                    ⚠ AST Validation Failed
-                  </Text>
-                  {astValidation.errors.map((err: string, i: number) => (
-                    <Text key={i} color={Colors.AccentRed}>
-                      - {err}
-                    </Text>
-                  ))}
-                </Box>
-              )}
-            </Box>
-          )}
-          {Boolean(metadata?.fileFreshness) && (
-            <Box>
-              <Text color={Colors.AccentGreen}>✦ File Freshness Verified</Text>
-            </Box>
-          )}
-        </Box>
-        <DiffRenderer
-          diffContent={confirmationDetails.fileDiff}
-          filename={confirmationDetails.fileName}
-          availableTerminalHeight={availableBodyContentHeight()}
-          terminalWidth={childWidth}
-        />
-      </Box>
-    );
-  } else if (confirmationDetails.type === 'exec') {
-    const executionProps = confirmationDetails;
-
-    question = `Allow execution of: '${executionProps.rootCommand}'?`;
-    options.push({
-      label: 'Yes, allow once',
-      value: ToolConfirmationOutcome.ProceedOnce,
-      key: 'Yes, allow once',
-    });
-    if (isTrustedFolder) {
-      options.push({
-        label: 'Yes, allow always',
-        value: ToolConfirmationOutcome.ProceedAlways,
-        key: 'Yes, allow always',
-      });
-      options.push({
-        label: 'Yes, allow always and save to policy',
-        value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
-        key: 'Yes, allow always and save to policy',
-      });
-    }
-    options.push({
-      label: 'No, suggest changes',
-      value: ToolConfirmationOutcome.SuggestEdit,
-      key: 'No, suggest changes',
-    });
-    options.push({
-      label: 'No, cancel (esc)',
-      value: ToolConfirmationOutcome.Cancel,
-      key: 'No, cancel (esc)',
-    });
-
-    let bodyContentHeight = availableBodyContentHeight();
-    if (bodyContentHeight !== undefined) {
-      bodyContentHeight -= 2; // Account for padding;
-    }
-    bodyContent = (
-      <Box flexDirection="column">
-        <Box paddingX={1} marginLeft={1}>
-          <MaxSizedBox
-            maxHeight={bodyContentHeight}
-            maxWidth={Math.max(childWidth - 4, 1)}
-          >
-            <Box>
-              <Text color={theme.text.link}>{executionProps.command}</Text>
-            </Box>
-          </MaxSizedBox>
-        </Box>
-      </Box>
-    );
-  } else if (confirmationDetails.type === 'info') {
-    const infoProps = confirmationDetails;
-    const displayUrls =
-      infoProps.urls &&
-      !(infoProps.urls.length === 1 && infoProps.urls[0] === infoProps.prompt);
-
-    question = `Do you want to proceed?`;
-    options.push({
-      label: 'Yes, allow once',
-      value: ToolConfirmationOutcome.ProceedOnce,
-      key: 'Yes, allow once',
-    });
-    if (isTrustedFolder) {
-      options.push({
-        label: 'Yes, allow always',
-        value: ToolConfirmationOutcome.ProceedAlways,
-        key: 'Yes, allow always',
-      });
-      options.push({
-        label: 'Yes, allow always and save to policy',
-        value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
-        key: 'Yes, allow always and save to policy',
-      });
-    }
-    options.push({
-      label: 'No, suggest changes (esc)',
-      value: ToolConfirmationOutcome.Cancel,
-      key: 'No, suggest changes (esc)',
-    });
-
-    bodyContent = (
-      <Box flexDirection="column" paddingX={1} marginLeft={1}>
-        <RenderInline text={infoProps.prompt} defaultColor={theme.text.link} />
-        {displayUrls && infoProps.urls && infoProps.urls.length > 0 && (
-          <Box flexDirection="column" marginTop={1}>
-            <Text color={theme.text.primary}>URLs to fetch:</Text>
-            {infoProps.urls.map((url: string) => (
-              <Text key={url} color={theme.text.primary}>
-                {' '}
-                - <RenderInline text={url} />
-              </Text>
-            ))}
-          </Box>
-        )}
-      </Box>
-    );
-  } else {
-    // mcp tool confirmation
-    const mcpProps = confirmationDetails;
-
-    bodyContent = (
-      <Box flexDirection="column" paddingX={1} marginLeft={1}>
-        <Text color={theme.text.link}>MCP Server: {mcpProps.serverName}</Text>
-        <Text color={theme.text.link}>Tool: {mcpProps.toolName}</Text>
-      </Box>
-    );
-
-    question = `Allow execution of MCP tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"?`;
-    options.push({
-      label: 'Yes, allow once',
-      value: ToolConfirmationOutcome.ProceedOnce,
-      key: 'Yes, allow once',
-    });
-    if (isTrustedFolder) {
-      options.push({
-        label: `Yes, always allow tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"`,
-        value: ToolConfirmationOutcome.ProceedAlwaysTool, // Cast until types are updated
-        key: `Yes, always allow tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"`,
-      });
-      options.push({
-        label: `Yes, always allow all tools from server "${mcpProps.serverName}"`,
-        value: ToolConfirmationOutcome.ProceedAlwaysServer,
-        key: `Yes, always allow all tools from server "${mcpProps.serverName}"`,
-      });
-      options.push({
-        label: `Yes, allow always tool "${mcpProps.toolName}" and save to policy`,
-        value: ToolConfirmationOutcome.ProceedAlwaysAndSave,
-        key: `Yes, allow always tool "${mcpProps.toolName}" and save to policy`,
-      });
-    }
-    options.push({
-      label: 'No, suggest changes (esc)',
-      value: ToolConfirmationOutcome.Cancel,
-      key: 'No, suggest changes (esc)',
-    });
-  }
-
-  if (isEditingCommand) {
-    return (
-      <Box flexDirection="column" padding={1} width={childWidth}>
-        <Box marginBottom={1}>
-          <Text color={theme.text.primary}>
-            Edit command (Enter to submit, Esc to cancel):
-          </Text>
-        </Box>
-        <TextInput
-          value={editedCommand}
-          onChange={setEditedCommand}
-          onSubmit={handleEditSubmit}
-          isFocused={isFocused}
-        />
-      </Box>
-    );
   }
 
   return (
-    <Box flexDirection="column" padding={1} width={childWidth}>
+    <Box flexDirection="column" paddingTop={0} paddingBottom={1}>
       {/* Body Content (Diff Renderer or Command Info) */}
       {/* No separate context display here anymore for edits */}
       <Box flexGrow={1} flexShrink={1} overflow="hidden" marginBottom={1}>
@@ -427,15 +379,14 @@ export const ToolConfirmationMessage: React.FC<
 
       {/* Confirmation Question */}
       <Box marginBottom={1} flexShrink={0}>
-        <Text color={theme.text.primary} wrap="truncate">
-          {question}
-        </Text>
+        <Text color={theme.text.primary}>{question}</Text>
       </Box>
 
       {/* Select Input for Options */}
       <Box flexShrink={0}>
         <RadioButtonSelect
           items={options}
+          // eslint-disable-next-line react/jsx-no-bind
           onSelect={handleSelect}
           isFocused={isFocused}
         />

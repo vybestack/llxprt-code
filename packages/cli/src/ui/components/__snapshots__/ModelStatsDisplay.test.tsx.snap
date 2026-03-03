@@ -1,200 +1,138 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`<ModelStatsDisplay /> > should display a single model correctly 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Model Stats For Nerds                                                                           │
+│                                                                                                  │
+│  Metric                      gemini-2.5-pro                                                      │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
+│  API                                                                                             │
+│  Requests                    1                                                                   │
+│  Errors                      0 (0.0%)                                                            │
+│  Avg Latency                 100ms                                                               │
+│  Tokens                                                                                          │
+│  Total                       30                                                                  │
+│    ↳ Input                   5                                                                   │
+│    ↳ Cache Reads             5 (50.0%)                                                           │
+│    ↳ Thoughts                2                                                                   │
+│    ↳ Tool                    1                                                                   │
+│    ↳ Output                  20                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`<ModelStatsDisplay /> > should display conditional rows if at least one model has data 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Model Stats For Nerds                                                                           │
+│                                                                                                  │
+│  Metric                      gemini-2.5-pro                   gemini-2.5-flash                   │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
+│  API                                                                                             │
+│  Requests                    1                                1                                  │
+│  Errors                      0 (0.0%)                         0 (0.0%)                           │
+│  Avg Latency                 100ms                            50ms                               │
+│  Tokens                                                                                          │
+│  Total                       30                               15                                 │
+│    ↳ Input                   5                                5                                  │
+│    ↳ Cache Reads             5 (50.0%)                        0 (0.0%)                           │
+│    ↳ Thoughts                2                                0                                  │
+│    ↳ Tool                    0                                3                                  │
+│    ↳ Output                  20                               10                                 │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`<ModelStatsDisplay /> > should display stats for multiple models correctly 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Model Stats For Nerds                                                                           │
+│                                                                                                  │
+│  Metric                      gemini-2.5-pro                   gemini-2.5-flash                   │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
+│  API                                                                                             │
+│  Requests                    10                               20                                 │
+│  Errors                      1 (10.0%)                        2 (10.0%)                          │
+│  Avg Latency                 100ms                            25ms                               │
+│  Tokens                                                                                          │
+│  Total                       300                              600                                │
+│    ↳ Input                   50                               100                                │
+│    ↳ Cache Reads             50 (50.0%)                       100 (50.0%)                        │
+│    ↳ Thoughts                10                               20                                 │
+│    ↳ Tool                    5                                10                                 │
+│    ↳ Output                  200                              400                                │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
 exports[`<ModelStatsDisplay /> > should handle large values without wrapping or overlapping 1`] = `
-"
-  ERROR  Text string "Model Stats" must be rendered inside <Text> component
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Model Stats For Nerds                                                                           │
+│                                                                                                  │
+│  Metric                      gemini-2.5-pro                                                      │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
+│  API                                                                                             │
+│  Requests                    999,999,999                                                         │
+│  Errors                      123,456,789 (12.3%)                                                 │
+│  Avg Latency                 0ms                                                                 │
+│  Tokens                                                                                          │
+│  Total                       999,999,999                                                         │
+│    ↳ Input                   864,197,532                                                         │
+│    ↳ Cache Reads             123,456,789 (12.5%)                                                 │
+│    ↳ Thoughts                111,111,111                                                         │
+│    ↳ Tool                    222,222,222                                                         │
+│    ↳ Output                  123,456,789                                                         │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
 
- file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/reconciler.ts:230
- :10
-
- -createTextInsta
-  ce             (file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/
-                 reconciler.ts:230:10)
- -completeWor
-             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
-             s/react-reconciler.development.js:9082:42)
- -runWithFiberIn
-  EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:1738:13)
- -completeUnitOfW
-  rk             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconcile
-                 r/cjs/react-reconciler.development.js:12962:19)
- -performUnitOfW
-  rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:12843:11)
- -workLoopSyn
-             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
-             s/react-reconciler.development.js:12644:41)
- -renderRootSy
-  c           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/c
-              js/react-reconciler.development.js:12624:11)
- -performWorkOnR
-  ot            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:12135:44)
- -performSyncWorkOn
-  oot              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconci
-                   ler/cjs/react-reconciler.development.js:2446:7)
- -flushSyncWorkAcrossRoo
-  s_impl                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-re
-                        conciler/cjs/react-reconciler.development.js:2294:21)
-"
+exports[`<ModelStatsDisplay /> > should handle models with long names (gemini-3-*-preview) without layout breaking 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│  Model Stats For Nerds                                                       │
+│                                                                              │
+│  Metric                      gemini-3-pro-preview   gemini-3-flash-preview   │
+│  ──────────────────────────────────────────────────────────────────────────  │
+│  API                                                                         │
+│  Requests                    10                     20                       │
+│  Errors                      0 (0.0%)               0 (0.0%)                 │
+│  Avg Latency                 200ms                  50ms                     │
+│  Tokens                                                                      │
+│  Total                       6,000                  12,000                   │
+│    ↳ Input                   1,000                  2,000                    │
+│    ↳ Cache Reads             500 (25.0%)            1,000 (25.0%)            │
+│    ↳ Thoughts                100                    200                      │
+│    ↳ Tool                    50                     100                      │
+│    ↳ Output                  4,000                  8,000                    │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯"
 `;
 
 exports[`<ModelStatsDisplay /> > should not display conditional rows if no model has data for them 1`] = `
-"
-  ERROR  Text string "Model Stats" must be rendered inside <Text> component
-
- file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/reconciler.ts:230
- :10
-
- -createTextInsta
-  ce             (file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/
-                 reconciler.ts:230:10)
- -completeWor
-             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
-             s/react-reconciler.development.js:9082:42)
- -runWithFiberIn
-  EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:1738:13)
- -completeUnitOfW
-  rk             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconcile
-                 r/cjs/react-reconciler.development.js:12962:19)
- -performUnitOfW
-  rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:12843:11)
- -workLoopSyn
-             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
-             s/react-reconciler.development.js:12644:41)
- -renderRootSy
-  c           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/c
-              js/react-reconciler.development.js:12624:11)
- -performWorkOnR
-  ot            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:12135:44)
- -performSyncWorkOn
-  oot              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconci
-                   ler/cjs/react-reconciler.development.js:2446:7)
- -flushSyncWorkAcrossRoo
-  s_impl                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-re
-                        conciler/cjs/react-reconciler.development.js:2294:21)
-"
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Model Stats For Nerds                                                                           │
+│                                                                                                  │
+│  Metric                      gemini-2.5-pro                                                      │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────  │
+│  API                                                                                             │
+│  Requests                    1                                                                   │
+│  Errors                      0 (0.0%)                                                            │
+│  Avg Latency                 100ms                                                               │
+│  Tokens                                                                                          │
+│  Total                       30                                                                  │
+│    ↳ Input                   10                                                                  │
+│    ↳ Output                  20                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
 exports[`<ModelStatsDisplay /> > should render "no API calls" message when there are no active models 1`] = `
-"
-  ERROR  Text string "No API calls have been made in this session." must be rendered inside <Text>
-        component
-
- file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/reconciler.ts:230
- :10
-
- -createTextInsta
-  ce             (file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/
-                 reconciler.ts:230:10)
- -completeWor
-             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
-             s/react-reconciler.development.js:9082:42)
- -runWithFiberIn
-  EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:1738:13)
- -completeUnitOfW
-  rk             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconcile
-                 r/cjs/react-reconciler.development.js:12962:19)
- -performUnitOfW
-  rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:12843:11)
- -workLoopSyn
-             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
-             s/react-reconciler.development.js:12644:41)
- -renderRootSy
-  c           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/c
-              js/react-reconciler.development.js:12624:11)
- -performWorkOnR
-  ot            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:12135:44)
- -performSyncWorkOn
-  oot              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconci
-                   ler/cjs/react-reconciler.development.js:2446:7)
- -flushSyncWorkAcrossRoo
-  s_impl                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-re
-                        conciler/cjs/react-reconciler.development.js:2294:21)
-"
-`;
-
-exports[`<ModelStatsDisplay /> > theme compliance > should use Colors.Foreground for the empty state message 1`] = `
-"
-  ERROR  Text string "No API calls have been made in this session." must be rendered inside <Text>
-        component
-
- file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/reconciler.ts:230
- :10
-
- -createTextInsta
-  ce             (file:///Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/ink/src/
-                 reconciler.ts:230:10)
- -completeWor
-             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
-             s/react-reconciler.development.js:9082:42)
- -runWithFiberIn
-  EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:1738:13)
- -completeUnitOfW
-  rk             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconcile
-                 r/cjs/react-reconciler.development.js:12962:19)
- -performUnitOfW
-  rk            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:12843:11)
- -workLoopSyn
-             (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cj
-             s/react-reconciler.development.js:12644:41)
- -renderRootSy
-  c           (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/c
-              js/react-reconciler.development.js:12624:11)
- -performWorkOnR
-  ot            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:12135:44)
- -performSyncWorkOn
-  oot              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconci
-                   ler/cjs/react-reconciler.development.js:2446:7)
- -flushSyncWorkAcrossRoo
-  s_impl                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-re
-                        conciler/cjs/react-reconciler.development.js:2294:21)
-"
-`;
-
-exports[`<ModelStatsDisplay /> > token calculation and labels > should not show negative input tokens when cached exceeds prompt 1`] = `
-"
-  ERROR  theme is not defined
-
- src/ui/components/ModelStatsDisplay.tsx:180:24
-
- 177:         title="Input"
- 178:         isSubtle
- 179:         values={getModelValues((m) => (
- 180:           <Text color={theme.text.primary}>
- 181:             {m.tokens.input.toLocaleString()}
- 182:           </Text>
- 183:         ))}
-
- -  (src/ui/components/ModelStatsDisplay.tsx:180:24)
- -  (src/ui/components/ModelStatsDisplay.tsx:86:63)
- -     at Array.map (<anonymous>)\\t
- - getModelValues (src/ui/components/ModelStatsDisplay.tsx:86:18)
- - ModelStatsDisplay (src/ui/components/ModelStatsDisplay.tsx:179:17)
- -Object.react-stack-bott
-  m-frame                (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-r
-                         econciler/cjs/react-reconciler.development.js:15859:20)
- -renderWithHoo
-  s            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/
-               cjs/react-reconciler.development.js:3221:22)
- -updateFunctionComp
-  nent              (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconc
-                    iler/cjs/react-reconciler.development.js:6475:19)
- -beginWor
-          (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler/cjs/r
-          eact-reconciler.development.js:8009:18)
- -runWithFiberIn
-  EV            (/Users/acoliver/projects/llxprt/branch-1/llxprt-code/node_modules/react-reconciler
-                /cjs/react-reconciler.development.js:1738:13)
-"
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  No API calls have been made in this session.                                                    │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
