@@ -246,7 +246,8 @@ class TaskToolInvocation extends BaseToolInvocation<
     const registry = this.deps.getToolRegistry?.();
     let effectiveWhitelist = toolWhitelist;
     const hasExplicitWhitelist =
-      Array.isArray(toolWhitelist) && toolWhitelist.length > 0;
+      Array.isArray(this.params.tool_whitelist) ||
+      Array.isArray(this.params.toolWhitelist);
 
     if (registry) {
       if (effectiveWhitelist && effectiveWhitelist.length > 0) {
