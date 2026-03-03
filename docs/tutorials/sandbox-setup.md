@@ -53,6 +53,18 @@ podman machine start
 podman machine ls
 ```
 
+**Check VM memory:** On macOS, Podman runs inside a Linux VM. If you plan to use sandbox profiles with custom memory limits (e.g., `"memory": "8g"`), the VM must have more memory than the container limit. Otherwise the process gets OOM-killed (exit code 137).
+
+```bash
+# Check current VM memory (in MB)
+podman machine inspect --format '{{.Resources.Memory}}'
+
+# Resize if needed (stop first, value in MB)
+podman machine stop podman-machine-default
+podman machine set --memory 16384 podman-machine-default
+podman machine start podman-machine-default
+```
+
 ## Step 2: run your first sandboxed command
 
 ```bash
@@ -267,6 +279,30 @@ podman machine rm
 podman machine init
 podman machine start
 ```
+
+### Podman macOS: OOM-killed (exit code 137) with high memory profiles
+
+Symptom:
+
+Sandbox starts, then process exits with code 137 even though your profile memory looks correct.
+
+Cause:
+
+The Podman VM memory is lower than the container memory limit. On macOS, Podman containers run inside a VM, and the VM memory is the hard ceiling.
+
+Fix:
+
+```bash
+# Check VM memory
+podman machine inspect --format '{{.Resources.Memory}}'
+
+# Resize (value in MB — e.g., 16384 = 16 GB)
+podman machine stop podman-machine-default
+podman machine set --memory 16384 podman-machine-default
+podman machine start podman-machine-default
+```
+
+Set VM memory above your container limit to leave headroom for VM overhead. See [Sandbox troubleshooting](../sandbox.md#podman-macos-oom-killed-with-exit-code-137) for the full explanation.
 
 ## Recommended daily pattern
 
