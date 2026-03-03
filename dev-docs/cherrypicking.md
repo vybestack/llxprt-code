@@ -73,6 +73,7 @@ git cherry-pick <commit-hash>
 - Bug fixes
 - Performance improvements
 - New features that don't conflict with multi-provider support
+- **New upstream feature systems** — when upstream adds an entirely new system (e.g., Agent Skills, Remote Agents), evaluate it for cherry-pick or reimplementation. Do NOT skip entire new feature systems just because "LLxprt doesn't have this yet." If the feature is valuable, bring it in via cherry-pick (with branding changes) or create a PLAN for reimplementation. Only skip if the feature conflicts with LLxprt's architecture or goals.
 - Tool improvements
 - UI/UX enhancements
 - **IDE integration features** - llxprt has full IDE support, always cherry-pick IDE improvements
