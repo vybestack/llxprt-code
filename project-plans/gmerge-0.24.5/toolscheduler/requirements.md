@@ -612,7 +612,6 @@ const results = await Promise.all(
 | TS-COMPAT-001 to TS-COMPAT-002 | Re-Export Strategy (design.md §7.7) | Compilation + existing tests | All existing test files |
 | TS-STATE-001 to TS-STATE-003 | What Stays in CoreToolScheduler (design.md §4.8) | Integration tests | coreToolScheduler.test.ts (state tests) |
 | TS-CONFIRM-001 to TS-CONFIRM-003 | What Stays in CoreToolScheduler (design.md §4.8) | Integration tests | coreToolScheduler.test.ts (confirmation tests) |
-| TS-QUEUE-001 to TS-QUEUE-002 | Missing Test Scenarios (requirements.md §9) | Integration tests | coreToolScheduler.test.ts (queue tests) |
 | TS-LIFE-001 to TS-LIFE-003 | What Stays in CoreToolScheduler (design.md §4.8) | Integration tests | coreToolScheduler.test.ts (lifecycle tests) |
 | TS-TEST-001 to TS-TEST-004 | Test Strategy (design.md §7.8) | Coverage report + CI | All test files |
 | TS-NFR-003 to TS-NFR-004 | Expected Outcome (design.md §9) | Line count + build analysis | CI tooling |
