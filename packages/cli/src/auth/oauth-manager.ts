@@ -359,6 +359,9 @@ export class OAuthManager {
       const thirtySecondsFromNow = nowInSeconds + 30;
 
       if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+        if (!this.isOAuthEnabled(providerName)) {
+          this.setOAuthEnabledState(providerName, true);
+        }
         logger.debug(
           () =>
             `[FLOW] Lock timeout but found valid token on disk for ${providerName}, using it`,
@@ -378,6 +381,9 @@ export class OAuthManager {
       const thirtySecondsFromNow = nowInSeconds + 30;
 
       if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+        if (!this.isOAuthEnabled(providerName)) {
+          this.setOAuthEnabledState(providerName, true);
+        }
         logger.debug(
           () =>
             `[FLOW] Found valid token on disk after acquiring lock for ${providerName}, skipping auth`,
@@ -2230,13 +2236,20 @@ export class OAuthManager {
       // Defense-in-depth: re-check token right before auth (TOCTOU fix, issue 1652)
       // Primary protection is the auth lock in authenticate(), but this catches
       // cross-process tokens written between upfront check and onAuthBucket execution
-      const existingToken = await this.tokenStore.getToken(provider, bucket);
-      const now = Math.floor(Date.now() / 1000);
-      if (existingToken && existingToken.expiry > now + 30) {
+      try {
+        const existingToken = await this.tokenStore.getToken(provider, bucket);
+        const now = Math.floor(Date.now() / 1000);
+        if (existingToken && existingToken.expiry > now + 30) {
+          logger.debug(
+            `Bucket ${bucket} already authenticated (cross-process), skipping`,
+          );
+          return;
+        }
+      } catch (peekError) {
         logger.debug(
-          `Bucket ${bucket} already authenticated (cross-process), skipping`,
+          `TOCTOU peek failed for ${provider}/${bucket}, proceeding with auth:`,
+          peekError,
         );
-        return;
       }
 
       // Show visible console output for user

@@ -1251,7 +1251,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     it('Test 1.4: Stale lock broken', async () => {
       const lockDirPath = path.join(tempDir, 'locks');
       await fs.mkdir(lockDirPath, { recursive: true, mode: 0o700 });
-      const lockFile = path.join(lockDirPath, 'anthropic-default-auth.lock');
+      const lockFile = path.join(lockDirPath, 'anthropic-auth.lock');
       const staleLockInfo = {
         pid: 99999,
         timestamp: Date.now() - 400_000, // Older than 360000ms

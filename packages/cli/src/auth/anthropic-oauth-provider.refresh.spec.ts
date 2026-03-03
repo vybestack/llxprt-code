@@ -38,7 +38,7 @@ describe('AnthropicOAuthProvider refreshIfNeeded', () => {
 
   // Phase 4: refreshIfNeeded() is now a no-op deprecation shell
   // Token refresh is handled by OAuthManager.authenticate()
-  it('refreshes an expired token and persists the result', async () => {
+  it('returns null without persistence when refreshIfNeeded is deprecated no-op', async () => {
     const provider = new AnthropicOAuthProvider(tokenStore);
 
     // refreshIfNeeded is now a no-op that returns null
@@ -51,7 +51,7 @@ describe('AnthropicOAuthProvider refreshIfNeeded', () => {
   });
 
   // Phase 4: refreshIfNeeded() is now a no-op deprecation shell
-  it('removes the token and returns null when refresh fails', async () => {
+  it('returns null without token removal when refreshIfNeeded is deprecated no-op', async () => {
     const provider = new AnthropicOAuthProvider(tokenStore);
 
     // refreshIfNeeded is now a no-op that returns null
