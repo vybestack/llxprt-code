@@ -131,6 +131,8 @@ You can provide your own image if it includes required utilities (`git`, `bash`,
 - `memory`: memory limit
 - `pids`: process count limit
 
+> **Podman on macOS:** The `memory` value must not exceed the Podman machine VM memory. On macOS, Podman runs containers inside a Linux VM, and the VM memory is the hard ceiling. If `memory` exceeds VM memory, the container starts but gets OOM-killed (exit code 137). See [Sandbox troubleshooting](../sandbox.md#podman-macos-oom-killed-with-exit-code-137) for how to inspect and resize VM memory.
+
 ### `network`
 
 Type: `"on" | "off" | "proxied"`
@@ -198,6 +200,7 @@ Podman runs in a VM on macOS, so there are extra constraints:
 - launchd SSH socket paths are often unusable in VM bridge paths
 - SSH and credential proxy bridges require `--network=host`
 - conflicting `--network` values can disable bridge setup
+- VM memory must exceed the container `resources.memory` limit, or the process gets OOM-killed (exit code 137). See [Sandbox troubleshooting](../sandbox.md#podman-macos-oom-killed-with-exit-code-137).
 
 If SSH forwarding is unreliable, use a dedicated socket path:
 
