@@ -12,21 +12,19 @@ Syncing LLxprt Code from upstream gemini-cli v0.23.0 → v0.24.5 (121 commits).
 | Decision | Count | % |
 |----------|------:|--:|
 | PICK | 34 | 28% |
-| SKIP | 42 | 35% |
-| REIMPLEMENT | 25 | 21% |
+| SKIP | 39 | 32% |
+| REIMPLEMENT | 35 | 29% |
 | NO_OP | 10 | 8% |
-| Deferred (need PLANs) | 10 | 8% |
+| SKIP (deferred) | 3 | 2% |
 | **Total** | **121** | |
 
 ## What Changed From Initial Audit
 
-The initial audit incorrectly skipped Agent Skills (11 commits), MessageBus (3), Remote Agents (4), and Tool Scheduler refactors (2) — treating new upstream systems as "not our problem." Corrected per user feedback and deep subagent analysis:
-
-1. **Agent Skills → PICK** (11 commits). Subagent analysis confirmed they are remarkably self-contained — zero deps on removed infrastructure, all needed LLxprt infra exists. Cherry-pick with branding changes.
-2. **MessageBus → SKIP** (confirmed). LLxprt already solved this via `config.getMessageBus()` — different pattern but same effect.
-3. **Remote Agents → REIMPLEMENT** (4 commits). Incompatible agent architecture. Needs a PLAN (~1500-2000 LoC).
-4. **Tool Scheduler → REIMPLEMENT our own way** (2 commits). Concepts valuable, code too diverged. Needs a PLAN (~800-1200 LoC moved).
-5. Many commits previously marked PICK now correctly REIMPLEMENT (hooks, extensions are reimplemented systems).
+1. **Agent Skills → PICK** (11 commits). Cherry-pickable with branding changes.
+2. **MessageBus → REIMPLEMENT** (3 commits). DI migration: service locator → constructor injection. ~57 files, mechanical refactoring. Design + plan in `messagebus/`.
+3. **Remote Agents → REIMPLEMENT** (4 commits). Incompatible agent architecture. Design + plan in `a2a/`.
+4. **Tool Scheduler → REIMPLEMENT our own way** (2 commits). Extract-not-rewrite. Design + plan in `toolscheduler/`.
+5. **Deferred items resolved**: 7 items previously "deferred" reclassified to REIMPLEMENT (hooks, settings, coreEvents migration). 2 minor items subsumed or trivial.
 
 ## High-Value PICKs
 

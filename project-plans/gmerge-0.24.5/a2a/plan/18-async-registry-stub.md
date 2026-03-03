@@ -104,13 +104,16 @@ All modified methods MUST include:
 - `loadBuiltInAgents()` must become async
 - Currently, only `loadBuiltInAgents()` calls `registerAgent`, so breakage is contained to registry.ts
 
-**Call sites to fix in later phases (P30):**
-- `registry.ts` line 31: `await this.loadBuiltInAgents()` (already fixed in this phase)
-- Any test files calling `registerAgent` directly (will be fixed in P30-31)
+**Call site analysis (verified against codebase):**
+- `registerAgent` is `protected` — only called from within `registry.ts` itself
+- `loadBuiltInAgents()` is the sole caller — fixed in this phase (step 4)
+- `initialize()` is already async — no change needed for its callers
+- No test files call `registerAgent` directly (verified via grep)
+- **Result: NO compile gap.** After this phase, all callers are updated. TypeScript compiles clean.
 
-**Expected behavior after P18**: 
-- TypeScript compilation succeeds (all call sites in registry.ts are async)
-- Tests may need updates in P30-31 to await registerAgent calls
+**Phase 30 scope clarified:** Phase 30 handles the *type narrowing* migration
+(AgentDefinition → LocalAgentDefinition in executor/invocation), NOT async migration.
+The async change is fully self-contained in this phase.
 
 ## Subagent Prompt
 

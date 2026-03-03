@@ -1,7 +1,7 @@
 # Cherry-Pick Decisions: v0.23.0 → v0.24.5
 
 **Total commits in range:** 121  
-**Decision counts:** PICK 34 (28%) · SKIP 39 (32%) · REIMPLEMENT 28 (23%) · NO_OP 10 (8%) · Deferred 10 (8%)
+**Decision counts:** PICK 34 (28%) · SKIP 39 (32%) · REIMPLEMENT 35 (29%) · NO_OP 10 (8%) · SKIP (deferred) 3 (2%)
 
 ---
 
@@ -210,15 +210,22 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 
 ## Additional Items
 
-### Deferred to Future PRs (need separate PLANs):
-- **Hooks Visual Indicators** (`61dbab03`) — Needs LLxprt hooks architecture, lifecycle events in CoreEventEmitter
-- **hooks.enabled setting** (`56092bd7`) — Reorganize from `tools.enableHooks` to `hooks.enabled`
-- **Granular stop/block for agent hooks** (`dd84c2fb`) — Needs new event types in streaming protocol
-- **Context injection via SessionStart hook** (`6d1e2763`) — Needs sessionHookTriggers.ts (doesn't exist)
-- **Settings item descriptions** (`9172e283`) — SettingsDialog UI diverged
-- **Remote admin settings** (`2fe45834`) — Enterprise feature, config diverged
-- **Console → coreEvents migration** (`10ae8486`) — 66-file migration, biggest REIMPLEMENT
+### Resolved Deferred Items
+
+Items previously marked "deferred" have been reclassified:
+
+**Moved to REIMPLEMENT (included in this sync):**
+- **Hooks Visual Indicators** (`61dbab03`) → REIMPLEMENT. LLxprt hooks architecture exists (hookRegistry, hookRunner, hookEventHandler, hookPlanner). Adapt upstream visual indicators to our hook system.
+- **hooks.enabled setting** (`56092bd7`) → REIMPLEMENT. Settings structure exists, reorganize from `tools.enableHooks` to `hooks.enabled`.
+- **Granular stop/block for agent hooks** (`dd84c2fb`) → REIMPLEMENT. Add new event types to existing hook streaming protocol.
+- **Context injection via SessionStart hook** (`6d1e2763`) → REIMPLEMENT. Create sessionHookTriggers.ts adapted to LLxprt hook infrastructure.
+- **Settings item descriptions** (`9172e283`) → REIMPLEMENT. Adapt to LLxprt's SettingsDialog.
+- **Remote admin settings** (`2fe45834`) → REIMPLEMENT. Adapt enterprise settings to LLxprt config.
+- **Console → coreEvents migration** (`10ae8486`) → REIMPLEMENT. Biggest single item (~66 files), adopt upstream event-driven architecture pattern.
+
+**SKIP (out of scope for this sync, tracked for future):**
+- **yolo.toml `allow_redirection = true`** (from `334b813d`) → Actually trivial, moved to Minor Manual Adds below
+- **Remove dead `setMessageBus()` stubs** → Subsumed by MessageBus REIMPLEMENT (DI refactor removes these naturally)
 
 ### Minor Manual Adds:
-- Add `allow_redirection = true` to `yolo.toml` (from 334b813d)
-- Remove dead `setMessageBus()` stubs from ToolRegistry and DeclarativeTool (~10 LoC cleanup)
+- Add `allow_redirection = true` to `yolo.toml` (from `334b813d`) — 1-line change, do during cherry-pick execution
