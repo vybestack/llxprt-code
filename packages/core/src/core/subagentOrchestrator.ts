@@ -39,6 +39,7 @@ import { SettingsService } from '../settings/SettingsService.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
+import { canonicalizeToolName } from './toolGovernance.js';
 
 type RuntimeLoader = (
   options: AgentRuntimeLoaderOptions,
@@ -51,6 +52,11 @@ const createAbortError = (message: string): Error => {
   error.name = 'AbortError';
   return error;
 };
+
+const DEFAULT_DISABLED_TOOLS = ['google_web_fetch'] as const;
+
+const normalizeDefaultToolSet = (tools: readonly string[]): Set<string> =>
+  new Set(tools.map((tool) => canonicalizeToolName(tool)).filter(Boolean));
 
 export interface SubagentLaunchRequest {
   name: string;
@@ -90,6 +96,9 @@ export class SubagentOrchestrator {
   private readonly runtimeLoader: RuntimeLoader;
   private readonly scopeFactory: ScopeFactory;
   private readonly idFactory: () => string;
+  private readonly defaultDisabledTools = normalizeDefaultToolSet(
+    DEFAULT_DISABLED_TOOLS,
+  );
 
   constructor(private readonly options: SubagentOrchestratorOptions) {
     this.runtimeLoader = options.runtimeLoader ?? loadAgentRuntime;
@@ -337,10 +346,13 @@ export class SubagentOrchestrator {
       'tools.allowed',
       'tools_allowed',
     ]);
-    const disabled = this.getStringArraySetting(profile.ephemeralSettings, [
-      'tools.disabled',
-      'disabled-tools',
-    ]);
+    const disabled = this.mergeDefaultDisabledTools(
+      this.getStringArraySetting(profile.ephemeralSettings, [
+        'tools.disabled',
+        'disabled-tools',
+      ]),
+      allowed,
+    );
 
     return {
       compressionThreshold: this.getNumberSetting(profile.ephemeralSettings, [
@@ -459,10 +471,13 @@ export class SubagentOrchestrator {
       service.set('tools.allowed', allowed);
     }
 
-    const disabled = this.getStringArraySetting(profile.ephemeralSettings, [
-      'tools.disabled',
-      'disabled-tools',
-    ]);
+    const disabled = this.mergeDefaultDisabledTools(
+      this.getStringArraySetting(profile.ephemeralSettings, [
+        'tools.disabled',
+        'disabled-tools',
+      ]),
+      allowed,
+    );
     if (disabled) {
       service.set('tools.disabled', disabled);
     }
@@ -525,6 +540,39 @@ export class SubagentOrchestrator {
     key: string,
   ): unknown {
     return (settings as Record<string, unknown>)[key];
+  }
+
+  private mergeDefaultDisabledTools(
+    disabled: string[] | undefined,
+    allowed: string[] | undefined,
+  ): string[] | undefined {
+    const disabledSource = Array.isArray(disabled) ? disabled : [];
+    const allowedSet = new Set(
+      (allowed ?? [])
+        .map((tool) => canonicalizeToolName(tool))
+        .filter((tool) => tool.length > 0),
+    );
+
+    const merged: string[] = [];
+    const seen = new Set<string>();
+    const addTool = (toolName: string) => {
+      const canonical = canonicalizeToolName(toolName);
+      if (!canonical || seen.has(canonical) || allowedSet.has(canonical)) {
+        return;
+      }
+      seen.add(canonical);
+      merged.push(canonical);
+    };
+
+    for (const tool of disabledSource) {
+      addTool(tool);
+    }
+
+    for (const tool of this.defaultDisabledTools) {
+      addTool(tool);
+    }
+
+    return merged.length > 0 ? merged : undefined;
   }
 
   private createRuntimeState(

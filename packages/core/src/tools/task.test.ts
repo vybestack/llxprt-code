@@ -115,6 +115,70 @@ describe('TaskTool', () => {
     expect(result.error).toBeUndefined();
   });
 
+  it('filters explicit tool_whitelist against enabled registry tools', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const scope = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn().mockResolvedValue(undefined),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-allowlist',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const configWithRegistry = {
+      ...config,
+      getEphemeralSettings: () => ({
+        'tools.disabled': ['google_web_fetch'],
+      }),
+      getExcludeTools: () => [],
+      getToolRegistry: () => ({
+        getEnabledTools: () => [
+          { name: 'read_file' },
+          { name: 'write_file' },
+          { name: 'google_web_fetch' },
+          { name: 'task' },
+          { name: 'list_subagents' },
+        ],
+      }),
+    } as unknown as Config;
+
+    const tool = new TaskTool(configWithRegistry, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+    });
+
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship the feature',
+      tool_whitelist: [
+        'google_web_fetch',
+        'ReadFileTool',
+        'task',
+        'list_subagents',
+      ],
+    });
+
+    await invocation.execute(new AbortController().signal, undefined);
+
+    expect(launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolConfig: { tools: ['read_file'] },
+      }),
+      expect.any(AbortSignal),
+    );
+  });
+
   it('backfills sessionId from config when context does not provide one', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
     const scope: {
