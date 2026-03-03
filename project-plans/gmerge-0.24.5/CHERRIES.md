@@ -1,7 +1,7 @@
 # Cherry-Pick Decisions: v0.23.0 → v0.24.5
 
 **Total commits in range:** 121  
-**Decision counts:** PICK 44 (36%) · SKIP 42 (35%) · REIMPLEMENT 25 (21%) · NO_OP 10 (8%)
+**Decision counts:** PICK 34 (28%) · SKIP 39 (32%) · REIMPLEMENT 28 (23%) · NO_OP 10 (8%) · Deferred 10 (8%)
 
 ---
 
@@ -24,8 +24,8 @@ Upstream added a complete Agent Skills system. **Deep analysis confirms this can
 
 One verification needed: `config.getAgentRegistry().getDirectoryContext()` in prompts.ts — confirm LLxprt's AgentRegistry has this or create a shim.
 
-### 2. MessageBus Phase 1-3 (3 commits → SKIP)
-Deep analysis shows LLxprt already solved this differently via `config.getMessageBus()` — tools access MessageBus through Config, not constructor injection. Upstream's 3-phase migration (optionality → standardize → mandatory) touches 50+ files to achieve what LLxprt already has. Only cleanup: remove dead `setMessageBus()` no-op stubs (~10 LoC).
+### 2. MessageBus Phase 1-3 (3 commits → REIMPLEMENT)
+LLxprt currently uses a service locator pattern (`config.getMessageBus()`) which hides the dependency. Upstream's 3-phase migration makes MessageBus an explicit constructor parameter — proper dependency injection. This is better practice: more testable, more honest about coupling, standard DI. LLxprt should adopt the DI pattern, adapted to our codebase. Touches 50+ files but the pattern is mechanical. Needs a design spec and requirements.
 
 ### 3. Remote Agents / A2A (4 commits → REIMPLEMENT)
 Incompatible agent architecture. LLxprt has SubagentOrchestrator, not upstream's agent framework. The A2A protocol support is valuable. Needs a phased PLAN: Phase 1 types+client (~500 LoC), Phase 2 registry (~300 LoC), Phase 3 execution (~700 LoC). Total ~1500-2000 LoC new.
@@ -115,9 +115,9 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 | 14 | `c29a8c12b3d9` | 2026-01-01 | build | Year-specific linter fix. Build infra specific to upstream. | Fix build issues caused by year-specific linter rule (#15780) |
 | 15 | `788bb04f5c5e` | 2026-01-02 | core | Touches useQuotaAndFallback.ts (removed) and flashFallback.test.ts. | log fallback mode (#15817) |
 | 16 | `c0ccb22460516` | 2026-01-02 | core | Cleanup old smart edit settings. Touches clearcut-logger. LLxprt already removed both. | chore: cleanup old smart edit settings (#15832) |
-| 17 | `eec5d5ebf839` | 2026-01-04 | core | **MessageBus Phase 1.** SKIP — LLxprt already has MessageBus via `config.getMessageBus()`. | feat(core): restore MessageBus optionality (Phase 1) (#15774) |
-| 18 | `90be9c35876d` | 2026-01-04 | core, agents | **MessageBus Phase 2.** SKIP — same reason. Also touches agent files that don't exist. | feat(core): Standardize Tool and Agent Invocation constructors (Phase 2) (#15775) |
-| 19 | `12c7c9cc426b` | 2026-01-04 | core, cli | **MessageBus Phase 3.** SKIP — same reason. 57 files, all incompatible. | feat(core,cli): enforce mandatory MessageBus injection (Phase 3) (#15776) |
+| 17 | `eec5d5ebf839` | 2026-01-04 | core | **MessageBus Phase 1.** Reclassified — see REIMPLEMENT table. | feat(core): restore MessageBus optionality (Phase 1) (#15774) |
+| 18 | `90be9c35876d` | 2026-01-04 | core, agents | **MessageBus Phase 2.** Reclassified — see REIMPLEMENT table. | feat(core): Standardize Tool and Agent Invocation constructors (Phase 2) (#15775) |
+| 19 | `12c7c9cc426b` | 2026-01-04 | core, cli | **MessageBus Phase 3.** Reclassified — see REIMPLEMENT table. | feat(core,cli): enforce mandatory MessageBus injection (Phase 3) (#15776) |
 | 20 | `f3625aab1396` | 2026-01-04 | core | Consolidates EditTool and SmartEditTool. LLxprt already removed SmartEdit. | refactor: consolidate EditTool and SmartEditTool (#15857) |
 | 21 | `b13c6b57ae99` | 2026-01-05 | core | Rename smart-edit to edit. Touches clearcut-logger. SmartEdit removed. | chore: rename smart-edit to edit (#15923) |
 | 22 | `cce4574143a2` | 2026-01-07 | core | Google-specific OnboardUser polling. | Use GetOperation to poll for OnboardUser completion (#15827) |
@@ -174,6 +174,9 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 | 23 | `6f4b2ad0b95a` | 2026-01-05 | config, security | Default folder trust to untrusted. Both cli and core config diverged. Security improvement. | fix: default folder trust to untrusted for enhanced security (#15943) |
 | 24 | `881b026f2454` | 2026-01-15 | core | Circular dependency tsconfig paths. Trivial 1-line reimpl: add `@vybestack/llxprt-code-core` path. | fix(core): resolve circular dependency via tsconfig paths (#16730) |
 | 25 | `006de1dd318d` | 2026-01-02 | docs | Security docs for hooks. Gemini branding/paths throughout — needs LLxprt rewrite. Content themes valuable. | Add security docs (#15739) |
+| 26 | `eec5d5ebf839` | 2026-01-04 | core | **MessageBus Phase 1: Restore Optionality.** Adopt DI pattern instead of service locator (`config.getMessageBus()`). Make MessageBus optional constructor param on ToolRegistry, tools, MockTool. | feat(core): restore MessageBus optionality (Phase 1) (#15774) |
+| 27 | `90be9c35876d` | 2026-01-04 | core, agents | **MessageBus Phase 2: Standardize Constructors.** Add MessageBus fallback to all tool `createInvocation()` methods, agent invocation constructors. | feat(core): Standardize Tool and Agent Invocation constructors (Phase 2) (#15775) |
+| 28 | `12c7c9cc426b` | 2026-01-04 | core, cli | **MessageBus Phase 3: Mandatory Injection.** Make MessageBus required everywhere. Remove `setMessageBus()` shims. ~57 files. | feat(core,cli): enforce mandatory MessageBus injection (Phase 3) (#15776) |
 
 ### REIMPLEMENT Notes — Needs Separate PLANs:
 - **Remote Agents (#17-20)**: Need a multi-phase PLAN per `dev-docs/PLAN-TEMPLATE.md`. ~1500-2000 LoC.
