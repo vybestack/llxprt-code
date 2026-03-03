@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { isContainerSandbox } from './containerSandbox.js';
 
 describe('isContainerSandbox', () => {
