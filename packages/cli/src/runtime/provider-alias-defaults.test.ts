@@ -1096,8 +1096,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       await switchActiveProvider('openrouter');
 
-      const settings =
-        stubSettingsService.getProviderSettings('openrouter');
+      const settings = stubSettingsService.getProviderSettings('openrouter');
       expect(settings['sandbox-base-url']).toBe(
         'http://host.docker.internal:8080/v1/',
       );
