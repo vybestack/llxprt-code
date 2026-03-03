@@ -152,7 +152,16 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private buildExcludedToolNames(): Set<string> {
-    return new Set(['task', 'Task', 'list_subagents', 'ListSubagents']);
+    return new Set(
+      ['task', 'list_subagents']
+        .map((name) => normalizeToolNameForPolicy(name))
+        .filter((name) => name.length > 0),
+    );
+  }
+
+  private isExcludedToolName(name: string, excluded: Set<string>): boolean {
+    const canonical = normalizeToolNameForPolicy(name);
+    return canonical.length > 0 && excluded.has(canonical);
   }
 
   private buildGovernedToolWhitelist(
@@ -168,7 +177,10 @@ class TaskToolInvocation extends BaseToolInvocation<
     const allowedRegistryTools = registry
       .getEnabledTools()
       .map((tool) => tool.name)
-      .filter((name): name is string => !!name && !excluded.has(name));
+      .filter(
+        (name): name is string =>
+          !!name && !this.isExcludedToolName(name, excluded),
+      );
 
     const allowedByCanonical = new Map<string, string>();
     for (const toolName of allowedRegistryTools) {
@@ -179,7 +191,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     const filteredTools = candidateTools.map((name) => {
-      if (!name || excluded.has(name)) {
+      if (!name || this.isExcludedToolName(name, excluded)) {
         return undefined;
       }
 
