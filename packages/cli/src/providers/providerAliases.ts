@@ -125,6 +125,26 @@ function readAliasFile(
       return null;
     }
 
+    if (
+      Object.prototype.hasOwnProperty.call(parsed, 'sandbox-base-url') &&
+      typeof parsed['sandbox-base-url'] !== 'string'
+    ) {
+      console.warn(
+        `[ProviderAliases] Ignoring non-string sandbox-base-url in ${filePath}`,
+      );
+      parsed['sandbox-base-url'] = undefined;
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(parsed, 'requires-auth') &&
+      typeof parsed['requires-auth'] !== 'boolean'
+    ) {
+      console.warn(
+        `[ProviderAliases] Ignoring non-boolean requires-auth in ${filePath}`,
+      );
+      parsed['requires-auth'] = undefined;
+    }
+
     // Validate modelDefaults if present
     if ('modelDefaults' in parsed) {
       if (!Array.isArray(parsed.modelDefaults)) {
