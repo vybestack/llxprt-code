@@ -24,7 +24,7 @@ describe('isContainerSandbox', () => {
     expect(isContainerSandbox()).toBe(false);
   });
 
-  it('returns true when SANDBOX is set to an empty string', () => {
+  it('returns false when SANDBOX is set to an empty string', () => {
     process.env.SANDBOX = '';
 
     expect(isContainerSandbox()).toBe(false);

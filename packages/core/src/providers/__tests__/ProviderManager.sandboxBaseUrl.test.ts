@@ -49,8 +49,10 @@ function createMinimalOptions(
 describe('ProviderManager sandbox-base-url resolution', () => {
   let manager: ProviderManager;
   let settingsService: SettingsService;
+  let originalSandboxEnv: string | undefined;
 
   beforeEach(() => {
+    originalSandboxEnv = process.env.SANDBOX;
     resetSettingsService();
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     settingsService = new SettingsService();
@@ -62,7 +64,11 @@ describe('ProviderManager sandbox-base-url resolution', () => {
 
   afterEach(() => {
     clearActiveProviderRuntimeContext();
-    delete process.env.SANDBOX;
+    if (originalSandboxEnv === undefined) {
+      delete process.env.SANDBOX;
+    } else {
+      process.env.SANDBOX = originalSandboxEnv;
+    }
   });
 
   it('uses sandbox-base-url when in container sandbox and setting is defined', () => {
@@ -158,5 +164,27 @@ describe('ProviderManager sandbox-base-url resolution', () => {
       (normalized as never as { resolved: { baseURL: string } }).resolved
         .baseURL,
     ).toBe('http://127.0.0.1:1234/v1/');
+  });
+
+  it('does not override explicit call-scoped baseURL with sandbox-base-url', () => {
+    process.env.SANDBOX = 'sandbox-0.9.0';
+    settingsService.setProviderSetting(
+      'test-provider',
+      'sandbox-base-url',
+      'http://host.docker.internal:1234/v1/',
+    );
+
+    const options = createMinimalOptions(settingsService);
+    (options.resolved as Record<string, unknown>).baseURL =
+      'http://custom-override:9999/v1/';
+    const normalized = manager.normalizeRuntimeInputs(
+      options as never,
+      'test-provider',
+    );
+
+    expect(
+      (normalized as never as { resolved: { baseURL: string } }).resolved
+        .baseURL,
+    ).toBe('http://custom-override:9999/v1/');
   });
 });

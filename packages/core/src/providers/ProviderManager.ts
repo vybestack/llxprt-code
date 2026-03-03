@@ -548,7 +548,10 @@ export class ProviderManager implements IProviderManager {
       }
     }
 
-    if (isContainerSandbox()) {
+    const hasExplicitCallBaseUrl =
+      typeof rawOptions.resolved?.baseURL === 'string' &&
+      rawOptions.resolved.baseURL.trim() !== '';
+    if (isContainerSandbox() && !hasExplicitCallBaseUrl) {
       const sandboxBaseUrl = providerSettings['sandbox-base-url'] as
         | string
         | undefined;
