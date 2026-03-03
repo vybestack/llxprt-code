@@ -1239,10 +1239,9 @@ agentRegistry.registerAgent({
 
 These features are **explicitly excluded from MVP** to reduce scope and risk:
 
-### 8.1 TOML Configuration
-- **Rationale:** Complex validation, directory scanning, file watching
-- **MVP approach:** Programmatic registration only
-- **Post-MVP:** Implement full TOML loader with Zod schemas
+### 8.1 ~~TOML Configuration~~ → **IN SCOPE (MVP)**
+- **Moved to MVP:** Upstream commit `848e8485c` adds TOML loading for remote agents in the v0.23.0→v0.24.5 range. This is required for feature parity — without it, users cannot configure remote agents without writing code.
+- **Scope:** Extend LLxprt's existing TOML agent loader to support `kind: 'remote'` + `agent_card_url` field, with Zod validation. Directory scanning and file watching remain post-MVP.
 
 ### 8.2 Multi-Agent Orchestration
 - **Rationale:** Requires orchestration primitives, parallel execution, result aggregation
