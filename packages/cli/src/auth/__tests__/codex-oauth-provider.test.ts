@@ -150,7 +150,9 @@ describe('CodexOAuthProvider', () => {
       expect(result).toBeNull();
     });
 
-    it('should return current token if not expired', async () => {
+    it('should return null (deprecated no-op, issue #1652)', async () => {
+      // refreshIfNeeded is now a no-op deprecation shell — refresh is handled
+      // by OAuthManager. It always returns null regardless of token state.
       const validToken = {
         access_token: 'test-access-token',
         token_type: 'Bearer' as const,
@@ -162,8 +164,7 @@ describe('CodexOAuthProvider', () => {
       await tokenStore.saveToken('codex', validToken);
 
       const result = await provider.refreshIfNeeded();
-      expect(result).not.toBeNull();
-      expect(result?.access_token).toBe('test-access-token');
+      expect(result).toBeNull();
     });
 
     it('should refresh expired token automatically', async () => {

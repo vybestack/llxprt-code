@@ -54,6 +54,8 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       getBucketStats: vi.fn<TokenStore['getBucketStats']>(async () => null),
       acquireRefreshLock: vi.fn(async () => true),
       releaseRefreshLock: vi.fn(async () => undefined),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     } satisfies TokenStore;
 
     provider = new AnthropicOAuthProvider(tokenStore);
@@ -217,16 +219,19 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
         shutdown,
       });
 
-      await provider.initiateAuth();
+      // Phase 4: initiateAuth now returns the token
+      const token = await provider.initiateAuth();
 
       // After successful callback, __oauth_needs_code should be cleared
       expect(
         (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,
       ).toBeFalsy();
 
-      // Token should be saved
-      expect(tokenStore.saveToken).toHaveBeenCalledWith(
-        'anthropic',
+      // Phase 4: Provider no longer calls saveToken - OAuthManager handles persistence
+      expect(tokenStore.saveToken).not.toHaveBeenCalled();
+
+      // Verify initiateAuth returned the token
+      expect(token).toEqual(
         expect.objectContaining({ access_token: 'local-token' }),
       );
     });
@@ -254,10 +259,13 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
 
       // Complete via manual code entry
       provider.submitAuthCode('manual-code#manual-state');
-      await authPromise;
+      const token = await authPromise;
 
-      // Auth should have completed without throwing
-      expect(tokenStore.saveToken).toHaveBeenCalled();
+      // Phase 4: Provider no longer calls saveToken - OAuthManager handles persistence
+      expect(tokenStore.saveToken).not.toHaveBeenCalled();
+
+      // Verify initiateAuth returned the token
+      expect(token).toBeDefined();
     });
   });
 

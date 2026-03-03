@@ -43,13 +43,22 @@ function createMockTokenStore(): TokenStore {
     ),
     acquireRefreshLock: vi.fn(async (): Promise<boolean> => true),
     releaseRefreshLock: vi.fn(async (): Promise<void> => {}),
+    acquireAuthLock: vi.fn(async () => true),
+    releaseAuthLock: vi.fn(async () => undefined),
   };
 }
 
 function createMockProvider(name: string): OAuthProvider {
   return {
     name,
-    initiateAuth: vi.fn(async (): Promise<void> => {}),
+    initiateAuth: vi.fn(
+      async (): Promise<OAuthToken> => ({
+        access_token: 'mock-token-from-initiate',
+        refresh_token: 'mock-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      }),
+    ),
     getToken: vi.fn(
       async (): Promise<OAuthToken> => ({
         access_token: 'mock-token',

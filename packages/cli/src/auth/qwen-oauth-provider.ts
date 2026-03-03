@@ -183,7 +183,7 @@ export class QwenOAuthProvider implements OAuthProvider {
    * @requirement REQ-001.1
    * @pseudocode lines 32-57
    */
-  async initiateAuth(): Promise<void> {
+  async initiateAuth(): Promise<OAuthToken> {
     await this.ensureInitialized();
 
     return this.errorHandler.wrapMethod(
@@ -293,21 +293,6 @@ export class QwenOAuthProvider implements OAuthProvider {
           deviceCodeResponse.device_code,
         );
 
-        // Line 55: AWAIT this.tokenStore.saveToken('qwen', token)
-        if (this.tokenStore) {
-          try {
-            await this.tokenStore.saveToken('qwen', token);
-          } catch (saveError) {
-            throw OAuthErrorFactory.storageError(
-              this.name,
-              saveError instanceof Error ? saveError : undefined,
-              {
-                operation: 'saveToken',
-              },
-            );
-          }
-        }
-
         // Line 56: PRINT
         if (addItem) {
           addItem(
@@ -317,6 +302,8 @@ export class QwenOAuthProvider implements OAuthProvider {
         } else {
           console.log('Authentication successful!');
         }
+
+        return token;
       },
       this.name,
       'initiateAuth',
@@ -348,13 +335,8 @@ export class QwenOAuthProvider implements OAuthProvider {
     return this.errorHandler.handleGracefully(
       async () => {
         // Line 59: RETURN AWAIT this.tokenStore.getToken('qwen')
+        // Read-only - OAuthManager owns all refresh operations
         const token = (await this.tokenStore?.getToken('qwen')) || null;
-
-        // If token exists and is expired/near expiry, try to refresh it
-        if (token && this.isTokenExpired(token)) {
-          return this.refreshIfNeeded();
-        }
-
         return token;
       },
       null, // Return null on error
@@ -369,93 +351,11 @@ export class QwenOAuthProvider implements OAuthProvider {
    * @pseudocode lines 61-85
    */
   async refreshIfNeeded(): Promise<OAuthToken | null> {
-    await this.ensureInitialized();
-    // Line 62: SET currentToken = AWAIT this.tokenStore.getToken('qwen')
-    const currentToken = await this.tokenStore?.getToken('qwen');
-
-    // Lines 64-66: IF NOT currentToken
-    if (!currentToken) {
-      // Line 65: RETURN null
-      return null;
-    }
-
-    // Line 68: IF this.isTokenExpired(currentToken)
-    if (this.isTokenExpired(currentToken)) {
-      // Line 69: IF currentToken.refresh_token
-      if (currentToken.refresh_token) {
-        // Line 70: TRY
-        try {
-          // Skip actual refresh in test environment to avoid network calls
-          if (process.env.NODE_ENV === 'test') {
-            // In test environment, simulate refresh failure
-            throw new Error('Simulated refresh failure in test environment');
-          }
-
-          // Line 71: SET refreshedToken = AWAIT this.deviceFlow.refreshToken
-          const refreshedToken = await this.deviceFlow.refreshToken(
-            currentToken.refresh_token,
-          );
-
-          // Line 72: AWAIT this.tokenStore.saveToken('qwen', refreshedToken)
-          if (this.tokenStore) {
-            try {
-              await this.tokenStore.saveToken('qwen', refreshedToken);
-            } catch (saveError) {
-              throw OAuthErrorFactory.storageError(
-                this.name,
-                saveError instanceof Error ? saveError : undefined,
-                {
-                  operation: 'saveRefreshedToken',
-                },
-              );
-            }
-          }
-
-          // Line 73: RETURN refreshedToken
-          return refreshedToken;
-        } catch (error) {
-          // Line 75: LOG "Failed to refresh Qwen token: " + error
-          const refreshError =
-            error instanceof OAuthError
-              ? error
-              : OAuthErrorFactory.authorizationExpired(this.name, {
-                  originalError:
-                    error instanceof Error ? error.message : String(error),
-                  operation: 'refreshToken',
-                });
-
-          this.logger.debug(
-            () =>
-              `Token refresh failed: ${JSON.stringify(refreshError.toLogEntry())}`,
-          );
-
-          // Line 76: AWAIT this.tokenStore.removeToken('qwen')
-          try {
-            await this.tokenStore?.removeToken('qwen');
-          } catch (removeError) {
-            this.logger.debug(
-              () =>
-                `Failed to remove invalid token: ${
-                  removeError instanceof Error
-                    ? removeError.message
-                    : String(removeError)
-                }`,
-            );
-          }
-
-          // Line 77: RETURN null
-          return null;
-        }
-      } else {
-        // Line 80: AWAIT this.tokenStore.removeToken('qwen')
-        await this.tokenStore?.removeToken('qwen');
-        // Line 81: RETURN null
-        return null;
-      }
-    }
-
-    // Line 85: RETURN currentToken
-    return currentToken;
+    this.logger.debug(
+      () =>
+        'refreshIfNeeded() is deprecated — refresh is handled by OAuthManager',
+    );
+    return null;
   }
 
   async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {

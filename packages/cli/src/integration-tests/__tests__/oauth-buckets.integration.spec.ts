@@ -84,8 +84,8 @@ function createMockToken(bucket: string, expiresIn: number = 3600): OAuthToken {
 function createMockProvider(name: string): OAuthProvider {
   return {
     name,
-    async initiateAuth(): Promise<void> {
-      // Mock implementation
+    async initiateAuth(): Promise<OAuthToken> {
+      return createMockToken('default');
     },
     async getToken(): Promise<OAuthToken | null> {
       return createMockToken('default');

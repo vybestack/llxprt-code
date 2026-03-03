@@ -83,4 +83,25 @@ export interface TokenStore {
    * @param bucket - Optional bucket name for multi-account support
    */
   releaseRefreshLock(provider: string, bucket?: string): Promise<void>;
+
+  /**
+   * Acquire an auth lock for a provider to prevent concurrent interactive authentication
+   * @param provider - The provider name
+   * @param options - Optional configuration for lock behavior
+   *   - waitMs: Maximum time to wait for lock (default: 60000ms)
+   *   - staleMs: Threshold for considering a lock stale (default: 360000ms)
+   *   - bucket: Optional bucket name for multi-account support
+   * @returns true if lock was acquired, false otherwise
+   */
+  acquireAuthLock(
+    provider: string,
+    options?: { waitMs?: number; staleMs?: number; bucket?: string },
+  ): Promise<boolean>;
+
+  /**
+   * Release the auth lock for a provider
+   * @param provider - The provider name
+   * @param bucket - Optional bucket name for multi-account support
+   */
+  releaseAuthLock(provider: string, bucket?: string): Promise<void>;
 }

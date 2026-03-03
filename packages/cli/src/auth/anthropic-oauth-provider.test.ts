@@ -68,6 +68,8 @@ describe('AnthropicOAuthProvider', () => {
       getBucketStats: vi.fn().mockResolvedValue(null),
       acquireRefreshLock: vi.fn().mockResolvedValue(true),
       releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn().mockResolvedValue(true),
+      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
     mockAddItem = vi.fn();
@@ -280,6 +282,8 @@ describe('AnthropicOAuthProvider getUsageInfo', () => {
       getBucketStats: vi.fn().mockResolvedValue(null),
       acquireRefreshLock: vi.fn().mockResolvedValue(true),
       releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn().mockResolvedValue(true),
+      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
     provider = new AnthropicOAuthProvider(mockTokenStore);

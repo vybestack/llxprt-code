@@ -100,6 +100,17 @@ export class ProxyTokenStore implements TokenStore {
     // No-op: refresh coordination happens on host
   }
 
+  async acquireAuthLock(
+    _provider: string,
+    _options?: { waitMs?: number; staleMs?: number; bucket?: string },
+  ): Promise<boolean> {
+    return true;
+  }
+
+  async releaseAuthLock(_provider: string, _bucket?: string): Promise<void> {
+    // No-op: auth coordination happens on host
+  }
+
   getClient(): ProxySocketClient {
     return this.client;
   }

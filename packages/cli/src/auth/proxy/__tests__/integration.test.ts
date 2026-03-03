@@ -91,6 +91,17 @@ class InMemoryTokenStore implements TokenStore {
   async releaseRefreshLock(_provider: string, _bucket?: string): Promise<void> {
     // no-op for integration test storage
   }
+
+  async acquireAuthLock(
+    _provider: string,
+    _options?: { waitMs?: number; staleMs?: number; bucket?: string },
+  ): Promise<boolean> {
+    return true;
+  }
+
+  async releaseAuthLock(_provider: string, _bucket?: string): Promise<void> {
+    // no-op for integration test storage
+  }
 }
 
 class InMemoryProviderKeyStorage {

@@ -88,6 +88,14 @@ class InMemoryTokenStore {
   async releaseRefreshLock(): Promise<void> {
     // no-op
   }
+
+  async acquireAuthLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseAuthLock(): Promise<void> {
+    // no-op
+  }
 }
 
 class InMemoryProviderKeyStorage {

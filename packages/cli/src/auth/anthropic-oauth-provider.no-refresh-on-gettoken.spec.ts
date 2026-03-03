@@ -44,6 +44,8 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
       getBucketStats: vi.fn(async () => null),
       acquireRefreshLock: vi.fn(async () => true),
       releaseRefreshLock: vi.fn(async () => undefined),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     } satisfies TokenStore;
   });
 

@@ -72,6 +72,8 @@ describe('OAuthManager.logout runtime cache handling', () => {
       getBucketStats: vi.fn().mockResolvedValue(null),
       acquireRefreshLock: vi.fn().mockResolvedValue(true),
       releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn().mockResolvedValue(true),
+      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
     const manager = new OAuthManager(tokenStore);
@@ -82,7 +84,12 @@ describe('OAuthManager.logout runtime cache handling', () => {
       clearAuthCache?: () => void;
     } = {
       name: 'qwen',
-      initiateAuth: vi.fn(async () => undefined),
+      initiateAuth: vi.fn(async () => ({
+        access_token: 'mock-token',
+        refresh_token: 'mock-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      })),
       getToken: vi.fn(async () => null),
       refreshToken: vi.fn(async () => null),
       logout: vi.fn().mockResolvedValue(undefined),
@@ -113,13 +120,20 @@ describe('OAuthManager.logout runtime cache handling', () => {
       getBucketStats: vi.fn().mockResolvedValue(null),
       acquireRefreshLock: vi.fn().mockResolvedValue(true),
       releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn().mockResolvedValue(true),
+      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
     const manager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
       name: 'qwen',
-      initiateAuth: vi.fn(async () => undefined),
+      initiateAuth: vi.fn(async () => ({
+        access_token: 'mock-token',
+        refresh_token: 'mock-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      })),
       getToken: vi.fn(async () => null),
       refreshToken: vi.fn(async () => null),
       logout: vi.fn().mockResolvedValue(undefined),
@@ -147,13 +161,20 @@ describe('OAuthManager.logout runtime cache handling', () => {
       getBucketStats: vi.fn().mockResolvedValue(null),
       acquireRefreshLock: vi.fn().mockResolvedValue(true),
       releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn().mockResolvedValue(true),
+      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
     const manager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
       name: 'qwen',
-      initiateAuth: vi.fn(async () => undefined),
+      initiateAuth: vi.fn(async () => ({
+        access_token: 'mock-token',
+        refresh_token: 'mock-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      })),
       getToken: vi.fn(async () => null),
       refreshToken: vi.fn(async () => null),
       logout: vi.fn().mockResolvedValue(undefined),

@@ -186,7 +186,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     }
   }
 
-  async initiateAuth(): Promise<void> {
+  async initiateAuth(): Promise<OAuthToken> {
     return this.errorHandler.wrapMethod(
       async () => {
         // Cancel any previous auth attempt's pending dialog
@@ -332,9 +332,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
             ).__oauth_browser_auth_complete = true;
 
             if (this.currentAuthAttemptId === attemptId) {
-              await this.completeAuth(authCode);
+              return await this.completeAuth(authCode);
             }
-            return;
+            throw new Error('Auth attempt cancelled');
           } catch (error) {
             // Suppress unhandled rejection from the losing branch
             callbackPromise.catch(() => {});
@@ -355,9 +355,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
               // Dialog is still open, wait for manual code entry
               const authCode = await this.pendingAuthPromise;
               if (this.currentAuthAttemptId === attemptId) {
-                await this.completeAuth(authCode);
+                return this.completeAuth(authCode);
               }
-              return;
+              throw new Error('Auth attempt cancelled');
             }
             throw error;
           }
@@ -368,8 +368,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         const authCode = await this.pendingAuthPromise;
 
         if (this.currentAuthAttemptId === attemptId) {
-          await this.completeAuth(authCode);
+          return this.completeAuth(authCode);
         }
+        throw new Error('Auth attempt cancelled');
       },
       this.name,
       'initiateAuth',
@@ -378,9 +379,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
   /**
    * Complete authentication with the authorization code
-   * @pseudocode lines 60-62: Save token after successful auth
+   * Returns the token for OAuthManager to persist with correct bucket
    */
-  async completeAuth(authCode: string): Promise<void> {
+  async completeAuth(authCode: string): Promise<OAuthToken> {
     if (!authCode) {
       throw OAuthErrorFactory.fromUnknown(
         this.name,
@@ -394,22 +395,6 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         // Exchange the authorization code for tokens
         const token = await this.deviceFlow.exchangeCodeForToken(authCode);
 
-        // @pseudocode line 61: Save token to store
-        if (this._tokenStore) {
-          try {
-            await this._tokenStore.saveToken('anthropic', token);
-          } catch (error) {
-            throw OAuthErrorFactory.storageError(
-              this.name,
-              error instanceof Error ? error : undefined,
-              {
-                operation: 'saveToken',
-                provider: 'anthropic',
-              },
-            );
-          }
-        }
-
         // Clear the dialog flag on successful auth
         (
           global as unknown as { __oauth_needs_code: boolean }
@@ -418,6 +403,8 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         this.logger.debug(
           () => 'Successfully authenticated with Anthropic Claude!',
         );
+
+        return token;
       },
       this.name,
       'completeAuth',
@@ -481,144 +468,11 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * 4. If lock not acquired, wait and re-check disk
    */
   async refreshIfNeeded(): Promise<OAuthToken | null> {
-    // Issue #1378: OAuthManager should handle all refresh operations
     this.logger.debug(
       () =>
-        'refreshIfNeeded() called directly on provider (deprecated: OAuthManager should handle refresh)',
+        'refreshIfNeeded() is deprecated — refresh is handled by OAuthManager',
     );
-    await this.ensureInitialized();
-    if (!this._tokenStore) {
-      return null;
-    }
-
-    // @pseudocode line 75: Get current token from store
-    const currentToken = await this._tokenStore.getToken('anthropic');
-
-    // @pseudocode lines 77-79: Return null if no token
-    if (!currentToken) {
-      return null;
-    }
-
-    // @pseudocode line 81: Check if token is expired
-    if (this.isTokenExpired(currentToken)) {
-      // Issue #1159: Check disk for updated token before attempting refresh
-      const diskToken = await this._tokenStore.getToken('anthropic');
-      if (
-        diskToken &&
-        !this.isTokenExpired(diskToken) &&
-        diskToken.access_token !== currentToken.access_token
-      ) {
-        // Token was already refreshed by another client
-        this.logger.debug(
-          () =>
-            'Token was already refreshed by another process, using updated version from disk',
-        );
-        return diskToken;
-      }
-
-      // @pseudocode line 82: Check if refresh token exists and is valid
-      if (this.hasValidRefreshToken(currentToken)) {
-        // Issue #1159: Try to acquire lock to prevent concurrent refreshes
-        const lockAcquired = await this._tokenStore.acquireRefreshLock(
-          'anthropic',
-          {
-            waitMs: 10000, // Wait up to 10 seconds
-            staleMs: 30000, // Break locks older than 30 seconds
-          },
-        );
-
-        if (!lockAcquired) {
-          // Failed to acquire lock, check disk again for updated token
-          this.logger.debug(
-            () =>
-              'Failed to acquire refresh lock, checking disk for updated token',
-          );
-          const updatedToken = await this._tokenStore.getToken('anthropic');
-          if (updatedToken && !this.isTokenExpired(updatedToken)) {
-            return updatedToken;
-          }
-          // Still expired, return null to trigger re-auth
-          return null;
-        }
-
-        try {
-          // Re-check disk after acquiring lock (double-check pattern)
-          const recheckToken = await this._tokenStore.getToken('anthropic');
-          if (
-            recheckToken &&
-            !this.isTokenExpired(recheckToken) &&
-            recheckToken.access_token !== currentToken.access_token
-          ) {
-            // Another process refreshed while we were waiting for lock
-            this.logger.debug(
-              () =>
-                'Token was refreshed while waiting for lock, using updated version',
-            );
-            return recheckToken;
-          }
-
-          // @pseudocode lines 84-86: Refresh the token
-          const refreshedToken = await this.deviceFlow.refreshToken(
-            currentToken.refresh_token,
-          );
-
-          try {
-            await this._tokenStore.saveToken('anthropic', refreshedToken);
-          } catch (saveError) {
-            throw OAuthErrorFactory.storageError(
-              this.name,
-              saveError instanceof Error ? saveError : undefined,
-              {
-                operation: 'saveRefreshedToken',
-              },
-            );
-          }
-
-          return refreshedToken;
-        } catch (error) {
-          // @pseudocode lines 88-90: Remove invalid token on refresh failure
-          const refreshError =
-            error instanceof OAuthError
-              ? error
-              : OAuthErrorFactory.authorizationExpired(this.name, {
-                  originalError:
-                    error instanceof Error ? error.message : String(error),
-                  operation: 'refreshToken',
-                });
-
-          this.logger.debug(
-            () =>
-              `Token refresh failed: ${JSON.stringify(refreshError.toLogEntry())}`,
-          );
-
-          try {
-            await this._tokenStore.removeToken('anthropic');
-          } catch (removeError) {
-            this.logger.debug(
-              () => `Failed to remove invalid token: ${removeError}`,
-            );
-          }
-
-          return null;
-        } finally {
-          // Always release the lock
-          await this._tokenStore
-            .releaseRefreshLock('anthropic')
-            .catch((releaseError) => {
-              this.logger.debug(
-                () => `Failed to release refresh lock: ${releaseError}`,
-              );
-            });
-        }
-      } else {
-        // @pseudocode lines 93-95: Remove token without refresh capability
-        await this._tokenStore.removeToken('anthropic');
-        return null;
-      }
-    }
-
-    // @pseudocode line 98: Return current valid token
-    return currentToken;
+    return null;
   }
 
   async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
