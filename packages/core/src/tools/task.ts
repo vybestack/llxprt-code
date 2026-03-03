@@ -29,12 +29,20 @@ import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import type { ToolRegistry } from './tool-registry.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
+import {
+  canonicalizeToolName,
+  buildToolGovernance,
+  isToolBlocked,
+} from '../core/toolGovernance.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
 // Tool timeout settings (Issue #1049)
 const DEFAULT_TASK_TIMEOUT_SECONDS = 900;
 const MAX_TASK_TIMEOUT_SECONDS = 1800;
+
+const normalizeToolNameForPolicy = (name: string): string =>
+  canonicalizeToolName(name);
 
 export interface TaskToolParams {
   subagent_name?: string;
@@ -143,6 +151,80 @@ class TaskToolInvocation extends BaseToolInvocation<
     return `Run subagent '${this.normalized.subagentName}' to accomplish: ${this.normalized.goalPrompt}`;
   }
 
+  private buildExcludedToolNames(): Set<string> {
+    return new Set(
+      ['task', 'list_subagents']
+        .map((name) => normalizeToolNameForPolicy(name))
+        .filter((name) => name.length > 0),
+    );
+  }
+
+  private isExcludedToolName(name: string, excluded: Set<string>): boolean {
+    const canonical = normalizeToolNameForPolicy(name);
+    return canonical.length > 0 && excluded.has(canonical);
+  }
+
+  private buildGovernedToolWhitelist(
+    candidateTools: string[] | undefined,
+    registry: ToolRegistry,
+  ): string[] | undefined {
+    if (!candidateTools || candidateTools.length === 0) {
+      return undefined;
+    }
+
+    const excluded = this.buildExcludedToolNames();
+    const governance = buildToolGovernance(this.config);
+    const allowedRegistryTools = registry
+      .getEnabledTools()
+      .map((tool) => tool.name)
+      .filter(
+        (name): name is string =>
+          !!name && !this.isExcludedToolName(name, excluded),
+      );
+
+    const allowedByCanonical = new Map<string, string>();
+    for (const toolName of allowedRegistryTools) {
+      const canonical = normalizeToolNameForPolicy(toolName);
+      if (canonical && !allowedByCanonical.has(canonical)) {
+        allowedByCanonical.set(canonical, toolName);
+      }
+    }
+
+    const filteredTools = candidateTools.map((name) => {
+      if (!name || this.isExcludedToolName(name, excluded)) {
+        return undefined;
+      }
+
+      const canonical = normalizeToolNameForPolicy(name);
+      if (!canonical || isToolBlocked(canonical, governance)) {
+        return undefined;
+      }
+
+      return allowedByCanonical.get(canonical);
+    });
+
+    const validTools = filteredTools.filter(
+      (name): name is string => typeof name === 'string' && name.length > 0,
+    );
+
+    if (validTools.length === 0) {
+      return undefined;
+    }
+
+    const uniqueByCanonical = new Set<string>();
+    const deduped: string[] = [];
+    for (const tool of validTools) {
+      const canonical = normalizeToolNameForPolicy(tool);
+      if (!canonical || uniqueByCanonical.has(canonical)) {
+        continue;
+      }
+      uniqueByCanonical.add(canonical);
+      deduped.push(tool);
+    }
+
+    return deduped.length > 0 ? deduped : undefined;
+  }
+
   private createLaunchRequest(timeoutMs?: number): SubagentLaunchRequest {
     const { subagentName, behaviourPrompts, toolWhitelist, outputSpec } =
       this.normalized;
@@ -161,21 +243,28 @@ class TaskToolInvocation extends BaseToolInvocation<
       launchRequest.behaviourPrompts = behaviourPrompts;
     }
 
+    const registry = this.deps.getToolRegistry?.();
     let effectiveWhitelist = toolWhitelist;
-    if (!effectiveWhitelist || effectiveWhitelist.length === 0) {
-      const registry = this.deps.getToolRegistry?.();
-      if (registry) {
-        const excluded = new Set([
-          'task',
-          'Task',
-          'list_subagents',
-          'ListSubagents',
-        ]);
-        effectiveWhitelist = registry
-          .getEnabledTools()
-          .map((tool) => tool.name)
-          .filter((name) => !!name && !excluded.has(name))
-          .filter((name, index, array) => array.indexOf(name) === index);
+    const hasExplicitWhitelist =
+      Array.isArray(this.params.tool_whitelist) ||
+      Array.isArray(this.params.toolWhitelist);
+
+    if (registry) {
+      if (effectiveWhitelist && effectiveWhitelist.length > 0) {
+        effectiveWhitelist = this.buildGovernedToolWhitelist(
+          effectiveWhitelist,
+          registry,
+        );
+      }
+
+      if (
+        !hasExplicitWhitelist &&
+        (!effectiveWhitelist || effectiveWhitelist.length === 0)
+      ) {
+        effectiveWhitelist = this.buildGovernedToolWhitelist(
+          registry.getEnabledTools().map((tool) => tool.name),
+          registry,
+        );
       }
     }
 
