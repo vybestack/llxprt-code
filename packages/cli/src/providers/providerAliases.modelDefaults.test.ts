@@ -575,7 +575,6 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   });
 });
 
-
 describe('providerAliases sandbox field validation', () => {
   let tmpDir: string;
   let warnSpy: ReturnType<typeof vi.spyOn>;
