@@ -504,6 +504,49 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     ]);
   });
 
+  it('preserves profile disabled tools even when they are present in tools.allowed', async () => {
+    const profileWithAllowedDisabledOverlap: Profile = {
+      ...profile,
+      ephemeralSettings: {
+        'auth-key': 'test-api-key',
+        'tools.allowed': ['read_file', 'write_file', 'google_web_fetch'],
+        'tools.disabled': ['write_file'],
+      },
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const loadProfile = vi
+      .fn()
+      .mockResolvedValue(profileWithAllowedDisabledOverlap);
+
+    const runtimeBundle = createRuntimeBundle('plan-overlap');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'planner-overlap',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({
+      name: subagentConfig.name,
+      runConfig,
+    });
+
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    expect(loaderArgs.profile.settings.tools?.disabled).toEqual(['write_file']);
+  });
+
   it('copies base-url into provider settings for subagent runtimes', async () => {
     const qwenBaseUrl = 'https://portal.qwen.ai/v1';
     const qwenProfile: Profile = {

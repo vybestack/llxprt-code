@@ -233,6 +233,9 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     const registry = this.deps.getToolRegistry?.();
     let effectiveWhitelist = toolWhitelist;
+    const hasExplicitWhitelist =
+      Array.isArray(toolWhitelist) && toolWhitelist.length > 0;
+
     if (registry) {
       if (effectiveWhitelist && effectiveWhitelist.length > 0) {
         effectiveWhitelist = this.buildGovernedToolWhitelist(
@@ -241,7 +244,10 @@ class TaskToolInvocation extends BaseToolInvocation<
         );
       }
 
-      if (!effectiveWhitelist || effectiveWhitelist.length === 0) {
+      if (
+        !hasExplicitWhitelist &&
+        (!effectiveWhitelist || effectiveWhitelist.length === 0)
+      ) {
         effectiveWhitelist = this.buildGovernedToolWhitelist(
           registry.getEnabledTools().map((tool) => tool.name),
           registry,

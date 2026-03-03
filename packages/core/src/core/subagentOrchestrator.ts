@@ -555,9 +555,13 @@ export class SubagentOrchestrator {
 
     const merged: string[] = [];
     const seen = new Set<string>();
-    const addTool = (toolName: string) => {
+    const addTool = (toolName: string, respectAllowed: boolean) => {
       const canonical = canonicalizeToolName(toolName);
-      if (!canonical || seen.has(canonical) || allowedSet.has(canonical)) {
+      if (
+        !canonical ||
+        seen.has(canonical) ||
+        (respectAllowed && allowedSet.has(canonical))
+      ) {
         return;
       }
       seen.add(canonical);
@@ -565,11 +569,11 @@ export class SubagentOrchestrator {
     };
 
     for (const tool of disabledSource) {
-      addTool(tool);
+      addTool(tool, false);
     }
 
     for (const tool of this.defaultDisabledTools) {
-      addTool(tool);
+      addTool(tool, true);
     }
 
     return merged.length > 0 ? merged : undefined;
