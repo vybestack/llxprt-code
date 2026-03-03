@@ -221,12 +221,13 @@ If you set the container memory higher than the Podman VM memory, the container 
 podman machine inspect --format '{{.Resources.Memory}}'
 ```
 
-**Resize VM memory:**
+**Resize VM memory** (use `podman machine ls` to find your machine name):
 
 ```bash
-podman machine stop podman-machine-default
-podman machine set --memory 16384 podman-machine-default
-podman machine start podman-machine-default
+podman machine ls
+podman machine stop <machine-name>
+podman machine set --memory 16384 <machine-name>
+podman machine start <machine-name>
 ```
 
 **Sizing guidance:** Set VM memory higher than your container memory limit to leave headroom for Podman VM overhead and any other processes running inside the VM. For example, if your sandbox profile uses `"memory": "8g"`, set VM memory to at least 10–12 GB.

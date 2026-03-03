@@ -59,10 +59,13 @@ podman machine ls
 # Check current VM memory (in MB)
 podman machine inspect --format '{{.Resources.Memory}}'
 
+# Find your machine name
+podman machine ls
+
 # Resize if needed (stop first, value in MB)
-podman machine stop podman-machine-default
-podman machine set --memory 16384 podman-machine-default
-podman machine start podman-machine-default
+podman machine stop <machine-name>
+podman machine set --memory 16384 <machine-name>
+podman machine start <machine-name>
 ```
 
 ## Step 2: run your first sandboxed command
@@ -296,10 +299,13 @@ Fix:
 # Check VM memory
 podman machine inspect --format '{{.Resources.Memory}}'
 
+# Find your machine name
+podman machine ls
+
 # Resize (value in MB — e.g., 16384 = 16 GB)
-podman machine stop podman-machine-default
-podman machine set --memory 16384 podman-machine-default
-podman machine start podman-machine-default
+podman machine stop <machine-name>
+podman machine set --memory 16384 <machine-name>
+podman machine start <machine-name>
 ```
 
 Set VM memory above your container limit to leave headroom for VM overhead. See [Sandbox troubleshooting](../sandbox.md#podman-macos-oom-killed-with-exit-code-137) for the full explanation.
