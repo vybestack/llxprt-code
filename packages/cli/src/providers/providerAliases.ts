@@ -43,6 +43,10 @@ export interface ProviderAliasConfig {
   baseProvider: string;
   /** Base URL for the provider API (consistent with profile ephemeral settings) */
   'base-url'?: string;
+  /** Overrides base-url when running in a container sandbox (Docker/Podman) */
+  'sandbox-base-url'?: string;
+  /** When false, bypasses API key validation for providers that don't need auth */
+  'requires-auth'?: boolean;
   defaultModel?: string;
   ephemeralSettings?: Record<string, unknown>;
   description?: string;
