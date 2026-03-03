@@ -79,7 +79,12 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
     // Create mock provider
     mockProvider = {
       name: 'test-provider',
-      initiateAuth: vi.fn().mockResolvedValue(undefined),
+      initiateAuth: vi.fn().mockResolvedValue({
+        access_token: 'mock-token',
+        refresh_token: 'mock-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      }),
       getToken: vi.fn().mockResolvedValue(createToken('initial-token')),
       refreshToken: vi.fn().mockImplementation(async (_token: OAuthToken) => {
         refreshCallCount++;
@@ -299,7 +304,12 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
 
       const anthropicProvider: OAuthProvider = {
         name: 'anthropic',
-        initiateAuth: vi.fn().mockResolvedValue(undefined),
+        initiateAuth: vi.fn().mockResolvedValue({
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        }),
         // Simulates the FIXED getToken() - just returns stored token, no refresh
         getToken: vi
           .fn()

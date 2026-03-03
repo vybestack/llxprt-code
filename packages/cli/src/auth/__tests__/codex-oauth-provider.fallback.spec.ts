@@ -41,6 +41,8 @@ describe('CodexOAuthProvider fallback behavior', () => {
       getBucketStats: vi.fn().mockResolvedValue(null),
       acquireRefreshLock: vi.fn().mockResolvedValue(true),
       releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     };
 
     provider = new CodexOAuthProvider(mockTokenStore);

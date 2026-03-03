@@ -68,6 +68,8 @@ describe('QwenOAuthProvider', () => {
       getBucketStats: vi.fn().mockResolvedValue(null),
       acquireRefreshLock: vi.fn().mockResolvedValue(true),
       releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn().mockResolvedValue(true),
+      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     } as unknown as import('vitest').MockedObject<TokenStore>;
 
     mockAddItem = vi.fn();
@@ -140,5 +142,72 @@ describe('QwenOAuthProvider', () => {
       }),
       expect.any(Number),
     );
+  });
+});
+
+describe('Qwen Provider Refactor Tests (Issue #1652 Phase 3)', () => {
+  let provider: QwenOAuthProvider;
+  let mockTokenStore: import('vitest').MockedObject<TokenStore>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockTokenStore = {
+      getToken: vi.fn().mockResolvedValue(null),
+      saveToken: vi.fn().mockResolvedValue(undefined),
+      removeToken: vi.fn().mockResolvedValue(undefined),
+      listProviders: vi.fn().mockResolvedValue([]),
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getBucketStats: vi.fn().mockResolvedValue(null),
+      acquireRefreshLock: vi.fn().mockResolvedValue(true),
+      releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn().mockResolvedValue(true),
+      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
+    } as unknown as import('vitest').MockedObject<TokenStore>;
+
+    provider = new QwenOAuthProvider(mockTokenStore);
+  });
+
+  describe('Test 3.9: initiateAuth returns token', () => {
+    it('GIVEN device flow completes, WHEN initiateAuth() called, THEN returns OAuthToken AND saveToken NOT called by provider', async () => {
+      const result = await provider.initiateAuth();
+
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('access_token');
+      expect(result).toHaveProperty('token_type');
+      expect(result).toHaveProperty('expiry');
+      expect(typeof result?.access_token).toBe('string');
+      expect(typeof result?.token_type).toBe('string');
+      expect(typeof result?.expiry).toBe('number');
+      expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Test 3.10: getToken is read-only with expired token', () => {
+    it('GIVEN expired token, WHEN getToken() called, THEN NO writes AND NO device-flow activity', async () => {
+      const expiredToken = {
+        access_token: 'expired-qwen-token',
+        refresh_token: 'qwen-refresh',
+        expiry: Math.floor(Date.now() / 1000) - 100,
+        token_type: 'Bearer' as const,
+      };
+      mockTokenStore.getToken.mockResolvedValue(expiredToken);
+
+      const result = await provider.getToken();
+
+      // Should return expired token as-is (read-only, no refresh attempt)
+      expect(result).toEqual(expiredToken);
+      expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
+      expect(mockTokenStore.removeToken).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Test 3.11: refreshIfNeeded does not write', () => {
+    it('GIVEN refreshIfNeeded() called, THEN saveToken and removeToken NOT called', async () => {
+      await provider.refreshIfNeeded();
+
+      expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
+      expect(mockTokenStore.removeToken).not.toHaveBeenCalled();
+    });
   });
 });

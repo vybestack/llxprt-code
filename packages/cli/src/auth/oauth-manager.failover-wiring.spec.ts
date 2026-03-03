@@ -8,7 +8,7 @@ import type { TokenStore, OAuthToken } from './types.js';
 
 interface OAuthProvider {
   name: string;
-  initiateAuth(): Promise<void>;
+  initiateAuth(): Promise<OAuthToken>;
   getToken(): Promise<OAuthToken | null>;
   refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null>;
   logout?(token?: OAuthToken): Promise<void>;
@@ -46,6 +46,8 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
       listBuckets: vi.fn(),
       acquireRefreshLock: vi.fn(),
       releaseRefreshLock: vi.fn(),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     } as unknown as TokenStore;
 
     // Create mock provider
@@ -201,6 +203,8 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
       listBuckets: vi.fn(),
       acquireRefreshLock: vi.fn(),
       releaseRefreshLock: vi.fn(),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     } as unknown as TokenStore;
 
     const mockProviderNoConfig: OAuthProvider = {

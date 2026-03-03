@@ -116,6 +116,14 @@ class MockTokenStore implements TokenStore {
     // no-op
   }
 
+  async acquireAuthLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseAuthLock(): Promise<void> {
+    // no-op
+  }
+
   clear(): void {
     this.tokens.clear();
   }

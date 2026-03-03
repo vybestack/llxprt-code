@@ -58,6 +58,14 @@ class MemoryTokenStore implements TokenStore {
   async releaseRefreshLock(): Promise<void> {
     // No-op
   }
+
+  async acquireAuthLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseAuthLock(): Promise<void> {
+    // No-op
+  }
 }
 
 function makeToken(accessToken: string): OAuthToken {
@@ -80,7 +88,12 @@ describe('BucketFailoverHandlerImpl', () => {
 
     const provider: OAuthProvider = {
       name: 'anthropic',
-      initiateAuth: vi.fn(async () => undefined),
+      initiateAuth: vi.fn(async () => ({
+        access_token: 'mock-token',
+        refresh_token: 'mock-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      })),
       getToken: vi.fn(async () => null),
       refreshToken: vi.fn(async () => null),
     };
@@ -141,6 +154,16 @@ describe('BucketFailoverHandlerImpl', () => {
     await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
     oauthManager.setSessionBucket('anthropic', 'bucket-a');
 
+    // Phase 4: Mock authenticate to fail - no token available for bucket-b
+    // Pass 3 foreground reauth will attempt authenticate for bucket-b (no-token)
+    // The mock must be set BEFORE creating the handler
+    const authenticateSpy = vi
+      .spyOn(oauthManager, 'authenticate')
+      .mockImplementation(async () => {
+        // Simulate user canceling auth or auth failure - do not save token
+        throw new Error('Authentication failed');
+      });
+
     const handler = new BucketFailoverHandlerImpl(
       ['bucket-a', 'bucket-b'],
       'anthropic',
@@ -152,6 +175,8 @@ describe('BucketFailoverHandlerImpl', () => {
     expect(result).toBe(false);
     expect(handler.getCurrentBucket()).toBe('bucket-a');
     expect(oauthManager.getSessionBucket('anthropic')).toBe('bucket-a');
+    // Verify authenticate was called (tried to reauth bucket-b)
+    expect(authenticateSpy).toHaveBeenCalled();
   });
 
   it('wraps around to earlier buckets when later buckets are exhausted', async () => {
@@ -179,6 +204,16 @@ describe('BucketFailoverHandlerImpl', () => {
     await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
     oauthManager.setSessionBucket('anthropic', 'bucket-b');
 
+    // Phase 4: Mock authenticate to fail - no tokens available for bucket-a or bucket-c
+    // Pass 3 foreground reauth will attempt authenticate but should fail
+    // The mock must be set BEFORE creating the handler
+    const authenticateSpy = vi
+      .spyOn(oauthManager, 'authenticate')
+      .mockImplementation(async () => {
+        // Simulate user canceling auth or auth failure - do not save token
+        throw new Error('Authentication failed');
+      });
+
     const handler = new BucketFailoverHandlerImpl(
       ['bucket-a', 'bucket-b', 'bucket-c'],
       'anthropic',
@@ -190,6 +225,8 @@ describe('BucketFailoverHandlerImpl', () => {
     expect(result).toBe(false);
     // Should remain on the current bucket since all others failed
     expect(handler.getCurrentBucket()).toBe('bucket-b');
+    // Verify authenticate was called (tried to reauth bucket-a or bucket-c)
+    expect(authenticateSpy).toHaveBeenCalled();
   });
 
   describe('resetSession()', () => {

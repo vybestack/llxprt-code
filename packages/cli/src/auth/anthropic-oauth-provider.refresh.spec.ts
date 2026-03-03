@@ -31,59 +31,34 @@ describe('AnthropicOAuthProvider refreshIfNeeded', () => {
       getBucketStats: vi.fn(async () => null),
       acquireRefreshLock: vi.fn(async () => true), // Issue #1159: Mock lock acquisition
       releaseRefreshLock: vi.fn(async () => undefined), // Issue #1159: Mock lock release
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     } satisfies TokenStore;
   });
 
-  it('refreshes an expired token and persists the result', async () => {
+  // Phase 4: refreshIfNeeded() is now a no-op deprecation shell
+  // Token refresh is handled by OAuthManager.authenticate()
+  it('returns null without persistence when refreshIfNeeded is deprecated no-op', async () => {
     const provider = new AnthropicOAuthProvider(tokenStore);
-    const deviceFlow = (
-      provider as unknown as {
-        deviceFlow: {
-          refreshToken: (refreshToken: string) => Promise<OAuthToken>;
-        };
-      }
-    ).deviceFlow;
 
-    const refreshedToken: OAuthToken = {
-      access_token: 'refreshed-access-token',
-      refresh_token: 'refreshed-refresh-token',
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-      token_type: 'Bearer',
-      scope: null,
-    };
-
-    deviceFlow.refreshToken = vi.fn(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      return refreshedToken;
-    });
-
-    const result = await provider.refreshIfNeeded();
-
-    expect(result).toEqual(refreshedToken);
-    expect(tokenStore.saveToken).toHaveBeenCalledWith(
-      'anthropic',
-      refreshedToken,
-    );
-    expect(tokenStore.removeToken).not.toHaveBeenCalled();
-  });
-
-  it('removes the token and returns null when refresh fails', async () => {
-    const provider = new AnthropicOAuthProvider(tokenStore);
-    const deviceFlow = (
-      provider as unknown as {
-        deviceFlow: {
-          refreshToken: (refreshToken: string) => Promise<OAuthToken>;
-        };
-      }
-    ).deviceFlow;
-
-    deviceFlow.refreshToken = vi.fn(async () => {
-      throw new Error('refresh failed');
-    });
-
+    // refreshIfNeeded is now a no-op that returns null
     const result = await provider.refreshIfNeeded();
 
     expect(result).toBeNull();
-    expect(tokenStore.removeToken).toHaveBeenCalledWith('anthropic');
+    // Provider no longer calls saveToken - OAuthManager handles persistence
+    expect(tokenStore.saveToken).not.toHaveBeenCalled();
+    expect(tokenStore.removeToken).not.toHaveBeenCalled();
+  });
+
+  // Phase 4: refreshIfNeeded() is now a no-op deprecation shell
+  it('returns null without token removal when refreshIfNeeded is deprecated no-op', async () => {
+    const provider = new AnthropicOAuthProvider(tokenStore);
+
+    // refreshIfNeeded is now a no-op that returns null
+    const result = await provider.refreshIfNeeded();
+
+    expect(result).toBeNull();
+    // Provider no longer calls removeToken - OAuthManager handles auth failures
+    expect(tokenStore.removeToken).not.toHaveBeenCalled();
   });
 });

@@ -22,6 +22,8 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       getBucketStats: vi.fn().mockResolvedValue(null),
       acquireRefreshLock: vi.fn().mockResolvedValue(true),
       releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     };
 
     provider = new CodexOAuthProvider(mockTokenStore);
@@ -224,6 +226,73 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
         testRedirectUri,
         testState,
       );
+    });
+  });
+
+  describe('Provider Refactor Tests (Issue #1652 Phase 3)', () => {
+    describe('Test 3.5: initiateAuth returns token (interactive callback)', () => {
+      it('GIVEN interactive mode with callback, WHEN initiateAuth() completes, THEN returns OAuthToken AND saveToken NOT called by provider', async () => {
+        // Phase 4: Mock performAuth to return a token (simulates successful interactive auth)
+        const mockToken = {
+          access_token: 'test-access-token',
+          refresh_token: 'test-refresh-token',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        };
+
+        vi.spyOn(
+          provider as unknown as {
+            performAuth: () => Promise<typeof mockToken>;
+          },
+          'performAuth',
+        ).mockResolvedValue(mockToken);
+
+        const result = await provider.initiateAuth();
+
+        // After Phase 4, initiateAuth returns the token
+        expect(result).toBeDefined();
+        expect(result).toEqual(mockToken);
+        // Provider no longer calls saveToken - OAuthManager handles persistence
+        expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('Test 3.6: initiateAuth returns token (device auth fallback)', () => {
+      it('GIVEN callback fails, WHEN device auth completes, THEN returns OAuthToken AND saveToken NOT called', async () => {
+        // Mock performAuth to simulate device auth fallback
+        vi.spyOn(
+          provider as unknown as { performAuth: () => Promise<void> },
+          'performAuth',
+        ).mockResolvedValue(undefined);
+
+        await provider.initiateAuth();
+
+        // After Phase 4, this should return a token
+        expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('Test 3.7: concurrent initiateAuth deduplication', () => {
+      it('GIVEN concurrent calls, WHEN both resolve, THEN return same token AND saveToken NOT called by provider', async () => {
+        vi.spyOn(
+          provider as unknown as { performAuth: () => Promise<void> },
+          'performAuth',
+        ).mockResolvedValue(undefined);
+
+        await Promise.all([provider.initiateAuth(), provider.initiateAuth()]);
+
+        // After Phase 4, both should return the same token
+        expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('Test 3.8: refreshIfNeeded does not write', () => {
+      it('GIVEN refreshIfNeeded() called, THEN saveToken and removeToken NOT called', async () => {
+        await provider.refreshIfNeeded();
+
+        expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
+        expect(mockTokenStore.removeToken).not.toHaveBeenCalled();
+      });
     });
   });
 });

@@ -197,7 +197,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
     );
   }
 
-  async initiateAuth(): Promise<void> {
+  async initiateAuth(): Promise<OAuthToken> {
     await this.ensureInitialized();
 
     return this.errorHandler.wrapMethod(
@@ -303,34 +303,30 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
           const credentials = client.credentials;
           if (credentials && credentials.access_token) {
             const token = this.credentialsToOAuthToken(credentials);
-            if (token && this.tokenStore) {
-              try {
-                await this.tokenStore.saveToken('gemini', token);
-                this.currentToken = token;
-
-                // Display success message
-                const addItem = this.addItem || globalOAuthUI.getAddItem();
-                if (addItem) {
-                  addItem(
-                    {
-                      type: 'info',
-                      text: 'Successfully authenticated with Google Gemini!',
-                    },
-                    Date.now(),
-                  );
-                } else {
-                  console.log('Successfully authenticated with Google Gemini!');
-                }
-              } catch (saveError) {
-                throw OAuthErrorFactory.storageError(
-                  this.name,
-                  saveError instanceof Error ? saveError : undefined,
-                  {
-                    operation: 'saveToken',
-                  },
-                );
-              }
+            if (!token) {
+              throw OAuthErrorFactory.authenticationRequired(this.name, {
+                reason: 'Failed to convert credentials to OAuthToken',
+              });
             }
+
+            // Preserve in-memory cache
+            this.currentToken = token;
+
+            // Display success message
+            const addItem = this.addItem || globalOAuthUI.getAddItem();
+            if (addItem) {
+              addItem(
+                {
+                  type: 'info',
+                  text: 'Successfully authenticated with Google Gemini!',
+                },
+                Date.now(),
+              );
+            } else {
+              console.log('Successfully authenticated with Google Gemini!');
+            }
+
+            return token;
           } else {
             throw OAuthErrorFactory.authenticationRequired(this.name, {
               reason: 'No valid credentials received from Google OAuth',
@@ -350,25 +346,18 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
 
     return this.errorHandler.handleGracefully(
       async () => {
-        // Try to get from memory first
-        let token = await this.refreshIfNeeded();
+        // Read-only - no refresh, no migration writes
+        // Try to get from current token first
+        if (this.currentToken) {
+          return this.currentToken;
+        }
 
-        if (!token) {
-          // Try to get from existing Google OAuth infrastructure
-          token = await this.getTokenFromGoogleOAuth();
+        // Try to get from existing Google OAuth infrastructure
+        const token = await this.getTokenFromGoogleOAuth();
 
-          // Cache it if found
-          if (token && this.tokenStore) {
-            try {
-              await this.tokenStore.saveToken('gemini', token);
-              this.currentToken = token;
-            } catch (error) {
-              // Non-critical - we can still return the token
-              this.logger.debug(
-                () => `Failed to cache token from Google OAuth: ${error}`,
-              );
-            }
-          }
+        // Update in-memory cache (but DO NOT persist)
+        if (token) {
+          this.currentToken = token;
         }
 
         return token;
@@ -380,44 +369,11 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
   }
 
   async refreshIfNeeded(): Promise<OAuthToken | null> {
-    await this.ensureInitialized();
-    if (!this.currentToken) {
-      return null;
-    }
-
-    return this.errorHandler.handleGracefully(
-      async () => {
-        // Check if token needs refresh (30 second buffer)
-        const now = Date.now() / 1000;
-        const expiresAt = this.currentToken!.expiry;
-
-        if (expiresAt && expiresAt <= now + 30) {
-          // Token is expired or expires soon
-          // Since actual Gemini OAuth refresh is handled by the GeminiProvider itself,
-          // we clear the expired token and return null to signal re-authentication is needed
-          this.currentToken = null;
-          if (this.tokenStore) {
-            try {
-              await this.tokenStore.removeToken('gemini');
-            } catch (error) {
-              throw OAuthErrorFactory.storageError(
-                this.name,
-                error instanceof Error ? error : undefined,
-                {
-                  operation: 'removeExpiredToken',
-                },
-              );
-            }
-          }
-          return null;
-        }
-
-        return this.currentToken;
-      },
-      null, // Return null on error
-      this.name,
-      'refreshIfNeeded',
+    this.logger.debug(
+      () =>
+        'refreshIfNeeded() is deprecated — refresh is handled by OAuthManager',
     );
+    return null;
   }
 
   async refreshToken(_currentToken: OAuthToken): Promise<OAuthToken | null> {
@@ -512,26 +468,14 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
         // Try to get token from existing Google OAuth
         const token = await this.getTokenFromGoogleOAuth();
 
-        if (token && this.tokenStore) {
-          try {
-            // Save to new location
-            await this.tokenStore.saveToken('gemini', token);
-            this.logger.debug(
-              () => 'Successfully migrated Gemini token from legacy location',
-            );
-            return token;
-          } catch (error) {
-            throw OAuthErrorFactory.storageError(
-              this.name,
-              error instanceof Error ? error : undefined,
-              {
-                operation: 'migrateToken',
-              },
-            );
-          }
+        if (token) {
+          this.logger.debug(
+            () => 'Found Gemini token in legacy location (read-only)',
+          );
+          return token;
         }
 
-        return token;
+        return null;
       },
       null, // Return null if migration fails
       this.name,

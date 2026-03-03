@@ -97,6 +97,23 @@ class InMemoryTokenStore implements TokenStore {
     const k = `${this.key(provider, bucket)}:lock`;
     this.locks.delete(k);
   }
+
+  async acquireAuthLock(
+    provider: string,
+    options?: { waitMs?: number; staleMs?: number; bucket?: string },
+  ): Promise<boolean> {
+    const k = `${this.key(provider, options?.bucket)}:auth-lock`;
+    if (this.locks.get(k)) {
+      return false;
+    }
+    this.locks.set(k, true);
+    return true;
+  }
+
+  async releaseAuthLock(provider: string, bucket?: string): Promise<void> {
+    const k = `${this.key(provider, bucket)}:auth-lock`;
+    this.locks.delete(k);
+  }
 }
 
 // ─── Controllable Test Provider (NOT a mock) ─────────────────────────────────

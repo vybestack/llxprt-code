@@ -41,13 +41,20 @@ describe('OAuthManager concurrency', () => {
       getBucketStats: vi.fn(async () => null),
       acquireRefreshLock: vi.fn(async () => true),
       releaseRefreshLock: vi.fn(async () => undefined),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     };
 
     const oauthManager = new OAuthManager(tokenStore);
 
     const provider: OAuthProvider = {
       name: 'anthropic',
-      initiateAuth: vi.fn(async () => undefined),
+      initiateAuth: vi.fn(async () => ({
+        access_token: 'mock-token',
+        refresh_token: 'mock-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      })),
       getToken: vi.fn(async () => null),
       refreshToken: vi.fn(async () => null),
     };
@@ -104,13 +111,20 @@ describe('OAuthManager concurrency', () => {
         getBucketStats: vi.fn(async () => null),
         acquireRefreshLock: vi.fn(async () => true),
         releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
       };
 
       const oauthManager = new OAuthManager(tokenStore);
 
       const provider: OAuthProvider = {
         name: 'anthropic',
-        initiateAuth: vi.fn(async () => undefined),
+        initiateAuth: vi.fn(async () => ({
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        })),
         getToken: vi.fn(async () => null),
         refreshToken: vi.fn(async () => refreshedToken),
       };
@@ -156,13 +170,20 @@ describe('OAuthManager concurrency', () => {
         getBucketStats: vi.fn(async () => null),
         acquireRefreshLock: vi.fn(async () => true),
         releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
       };
 
       const oauthManager = new OAuthManager(tokenStore);
 
       const provider: OAuthProvider = {
         name: 'anthropic',
-        initiateAuth: vi.fn(async () => undefined),
+        initiateAuth: vi.fn(async () => ({
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        })),
         getToken: vi.fn(async () => null),
         refreshToken: vi.fn(async () => {
           throw new Error('refreshToken should not be called');
@@ -201,13 +222,20 @@ describe('OAuthManager concurrency', () => {
         getBucketStats: vi.fn(async () => null),
         acquireRefreshLock: vi.fn(async () => true),
         releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
       };
 
       const oauthManager = new OAuthManager(tokenStore);
 
       const provider: OAuthProvider = {
         name: 'anthropic',
-        initiateAuth: vi.fn(async () => undefined),
+        initiateAuth: vi.fn(async () => ({
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        })),
         getToken: vi.fn(async () => null),
         refreshToken: vi.fn(async () => {
           throw new Error('refreshToken should not be called');
@@ -236,13 +264,20 @@ describe('OAuthManager concurrency', () => {
         getBucketStats: vi.fn(async () => null),
         acquireRefreshLock: vi.fn(async () => true),
         releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
       };
 
       const oauthManager = new OAuthManager(tokenStore);
 
       const provider: OAuthProvider = {
         name: 'anthropic',
-        initiateAuth: vi.fn(async () => undefined),
+        initiateAuth: vi.fn(async () => ({
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        })),
         getToken: vi.fn(async () => null),
         refreshToken: vi.fn(async () => {
           throw new Error('Refresh failed');
@@ -285,13 +320,20 @@ describe('OAuthManager concurrency', () => {
         getBucketStats: vi.fn(async () => null),
         acquireRefreshLock: vi.fn(async () => false), // Lock timeout
         releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
       };
 
       const oauthManager = new OAuthManager(tokenStore);
 
       const provider: OAuthProvider = {
         name: 'anthropic',
-        initiateAuth: vi.fn(async () => undefined),
+        initiateAuth: vi.fn(async () => ({
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        })),
         getToken: vi.fn(async () => null),
         refreshToken: vi.fn(async () => {
           throw new Error('refreshToken should not be called');
@@ -323,13 +365,20 @@ describe('OAuthManager concurrency', () => {
         getBucketStats: vi.fn(async () => null),
         acquireRefreshLock: vi.fn(async () => false), // Lock timeout
         releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
       };
 
       const oauthManager = new OAuthManager(tokenStore);
 
       const provider: OAuthProvider = {
         name: 'anthropic',
-        initiateAuth: vi.fn(async () => undefined),
+        initiateAuth: vi.fn(async () => ({
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        })),
         getToken: vi.fn(async () => null),
         refreshToken: vi.fn(async () => {
           throw new Error('refreshToken should not be called');
@@ -359,13 +408,20 @@ describe('OAuthManager concurrency', () => {
         getBucketStats: vi.fn(async () => null),
         acquireRefreshLock: vi.fn(async () => true),
         releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
       };
 
       const oauthManager = new OAuthManager(tokenStore);
 
       const provider: OAuthProvider = {
         name: 'anthropic',
-        initiateAuth: vi.fn(async () => undefined),
+        initiateAuth: vi.fn(async () => ({
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        })),
         getToken: vi.fn(async () => null),
         refreshToken: vi.fn(async () => refreshedToken),
       };

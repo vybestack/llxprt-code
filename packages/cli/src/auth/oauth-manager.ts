@@ -173,8 +173,9 @@ export interface OAuthProvider {
   /**
    * Initiate OAuth authentication flow
    * This starts the device flow or opens browser for auth
+   * @returns The OAuth token obtained from the authentication flow
    */
-  initiateAuth(): Promise<void>;
+  initiateAuth(): Promise<OAuthToken>;
 
   /**
    * Get current OAuth token for this provider
@@ -344,42 +345,159 @@ export class OAuthManager {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
+    // Acquire auth lock to prevent concurrent authentication for same provider+bucket
+    const lockAcquired = await this.tokenStore.acquireAuthLock(providerName, {
+      waitMs: 60000, // Wait up to 60 seconds
+      staleMs: 360000, // Break locks older than 6 minutes
+      bucket,
+    });
+
+    if (!lockAcquired) {
+      // Lock timeout - check if another process completed auth
+      const diskToken = await this.tokenStore.getToken(providerName, bucket);
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const thirtySecondsFromNow = nowInSeconds + 30;
+
+      if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+        if (!this.isOAuthEnabled(providerName)) {
+          this.setOAuthEnabledState(providerName, true);
+        }
+        logger.debug(
+          () =>
+            `[FLOW] Lock timeout but found valid token on disk for ${providerName}, using it`,
+        );
+        return;
+      }
+
+      throw new Error(
+        `Failed to acquire auth lock for ${providerName}${bucket ? `/${bucket}` : ''} and no valid token on disk`,
+      );
+    }
+
     try {
-      // 1. Initiate authentication with the provider
+      // Double-check disk for token written by another process while we waited
+      const diskToken = await this.tokenStore.getToken(providerName, bucket);
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const thirtySecondsFromNow = nowInSeconds + 30;
+
+      if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+        if (!this.isOAuthEnabled(providerName)) {
+          this.setOAuthEnabledState(providerName, true);
+        }
+        logger.debug(
+          () =>
+            `[FLOW] Found valid token on disk after acquiring lock for ${providerName}, skipping auth`,
+        );
+        return;
+      }
+
+      // @fix issue1652: Try token refresh before opening browser.
+      // If the disk token is expired but has a valid refresh_token,
+      // refreshing is cheaper and non-interactive — no browser needed.
+      // Uses acquireRefreshLock to coordinate with getOAuthToken() refreshes
+      // across processes — prevents replaying single-use refresh tokens.
+      if (
+        diskToken &&
+        typeof diskToken.refresh_token === 'string' &&
+        diskToken.refresh_token !== ''
+      ) {
+        const refreshLockAcquired = await this.tokenStore.acquireRefreshLock(
+          providerName,
+          {
+            waitMs: 10000,
+            staleMs: 30000,
+            bucket,
+          },
+        );
+        if (refreshLockAcquired) {
+          try {
+            // Re-read token under lock — another process may have refreshed it
+            const latestToken =
+              (await this.tokenStore.getToken(providerName, bucket)) ??
+              diskToken;
+            const nowCheck = Math.floor(Date.now() / 1000);
+            if (latestToken.expiry > nowCheck + 30) {
+              if (!this.isOAuthEnabled(providerName)) {
+                this.setOAuthEnabledState(providerName, true);
+              }
+              logger.debug(
+                () =>
+                  `[FLOW] Another process refreshed token for ${providerName}/${bucket ?? 'default'}, skipping browser auth`,
+              );
+              return;
+            }
+
+            const refreshedToken = await provider.refreshToken(latestToken);
+            if (refreshedToken) {
+              const mergedToken = mergeRefreshedToken(
+                latestToken as OAuthTokenWithExtras,
+                refreshedToken as OAuthTokenWithExtras,
+              );
+              await this.tokenStore.saveToken(
+                providerName,
+                mergedToken,
+                bucket,
+              );
+              if (!this.isOAuthEnabled(providerName)) {
+                this.setOAuthEnabledState(providerName, true);
+              }
+              logger.debug(
+                () =>
+                  `[FLOW] Refreshed expired token for ${providerName}/${bucket ?? 'default'}, skipping browser auth`,
+              );
+              return;
+            }
+          } catch (refreshError) {
+            logger.debug(
+              () =>
+                `[FLOW] Token refresh failed for ${providerName}/${bucket ?? 'default'}, falling through to browser auth: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
+            );
+          } finally {
+            await this.tokenStore.releaseRefreshLock(providerName, bucket);
+          }
+        } else {
+          // Lock timeout — another process is likely refreshing right now.
+          // Re-read disk to see if they completed before opening browser.
+          const postLockToken =
+            (await this.tokenStore.getToken(providerName, bucket)) ?? diskToken;
+          const nowPostLock = Math.floor(Date.now() / 1000);
+          if (postLockToken.expiry > nowPostLock + 30) {
+            if (!this.isOAuthEnabled(providerName)) {
+              this.setOAuthEnabledState(providerName, true);
+            }
+            logger.debug(
+              () =>
+                `[FLOW] Another process refreshed token for ${providerName}/${bucket ?? 'default'} (detected after lock timeout), skipping browser auth`,
+            );
+            return;
+          }
+        }
+      }
+
+      // Initiate authentication and get token directly
       logger.debug(
         () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,
       );
-      await provider.initiateAuth();
-      logger.debug(
-        () => `[FLOW] provider.initiateAuth() completed for ${providerName}`,
-      );
-
-      // 2. Get token from provider after successful auth
-      logger.debug(
-        () => `[FLOW] Calling provider.getToken() for ${providerName}...`,
-      );
-      const providerToken = await provider.getToken();
-      if (!providerToken) {
-        logger.debug(
-          () => `[FLOW] provider.getToken() returned null for ${providerName}!`,
-        );
-        throw new Error('Authentication completed but no token was returned');
-      }
+      const token = await provider.initiateAuth();
       logger.debug(
         () =>
-          `[FLOW] provider.getToken() returned token for ${providerName}: access_token=${String(providerToken.access_token).substring(0, 10)}...`,
+          `[FLOW] provider.initiateAuth() returned token for ${providerName}`,
       );
 
-      // 3. Store token using tokenStore with bucket parameter
+      if (!token) {
+        throw new Error('Authentication completed but no token was returned');
+      }
+
+      // Persist token with correct bucket
       logger.debug(
         () => `[FLOW] Saving token to tokenStore for ${providerName}...`,
       );
-      await this.tokenStore.saveToken(providerName, providerToken, bucket);
+      await this.tokenStore.saveToken(providerName, token, bucket);
       logger.debug(
         () => `[FLOW] Token saved to tokenStore for ${providerName}`,
       );
 
-      // 4. Ensure provider marked as OAuth enabled after successful auth
+      // Ensure provider marked as OAuth enabled after successful auth
       if (!this.isOAuthEnabled(providerName)) {
         logger.debug(() => `[FLOW] Enabling OAuth for ${providerName}`);
         this.setOAuthEnabledState(providerName, true);
@@ -400,6 +518,10 @@ export class OAuthManager {
       throw new Error(
         `Authentication failed for provider ${providerName}: ${String(error)}`,
       );
+    } finally {
+      // Always release the lock
+      await this.tokenStore.releaseAuthLock(providerName, bucket);
+      logger.debug(() => `[FLOW] Released auth lock for ${providerName}`);
     }
   }
 
@@ -2194,6 +2316,25 @@ export class OAuthManager {
       index: number,
       total: number,
     ): Promise<void> => {
+      // Defense-in-depth: re-check token right before auth (TOCTOU fix, issue 1652)
+      // Primary protection is the auth lock in authenticate(), but this catches
+      // cross-process tokens written between upfront check and onAuthBucket execution
+      try {
+        const existingToken = await this.tokenStore.getToken(provider, bucket);
+        const now = Math.floor(Date.now() / 1000);
+        if (existingToken && existingToken.expiry > now + 30) {
+          logger.debug(
+            `Bucket ${bucket} already authenticated (cross-process), skipping`,
+          );
+          return;
+        }
+      } catch (peekError) {
+        logger.debug(
+          `TOCTOU peek failed for ${provider}/${bucket}, proceeding with auth:`,
+          peekError,
+        );
+      }
+
       // Show visible console output for user
       console.log(`\n=== Bucket ${index} of ${total}: ${bucket} ===\n`);
 

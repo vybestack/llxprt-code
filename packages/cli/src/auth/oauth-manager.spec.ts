@@ -35,7 +35,7 @@ class MockOAuthProvider implements OAuthProvider {
     this.token = this._initialToken || null;
   }
 
-  async initiateAuth(): Promise<void> {
+  async initiateAuth(): Promise<OAuthToken> {
     this.authInitiated = true;
     // Simulate successful auth flow
     if (!this.token) {
@@ -47,6 +47,7 @@ class MockOAuthProvider implements OAuthProvider {
         scope: 'read write',
       };
     }
+    return this.token;
   }
 
   async getToken(): Promise<OAuthToken | null> {
@@ -130,6 +131,14 @@ class MockTokenStore implements TokenStore {
   }
 
   async releaseRefreshLock(): Promise<void> {
+    // No-op
+  }
+
+  async acquireAuthLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseAuthLock(): Promise<void> {
     // No-op
   }
 

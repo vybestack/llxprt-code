@@ -122,12 +122,103 @@ export class KeyringTokenStore implements TokenStore {
     return join(this.lockDir, `${provider}-${resolved}-refresh.lock`);
   }
 
+  private authLockFilePath(provider: string, bucket?: string): string {
+    const resolved = bucket ?? DEFAULT_BUCKET;
+    if (resolved === DEFAULT_BUCKET) {
+      return join(this.lockDir, `${provider}-auth.lock`);
+    }
+    return join(this.lockDir, `${provider}-${resolved}-auth.lock`);
+  }
+
   /**
    * Ensures the lock directory exists.
    * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06
    */
   private async ensureLockDir(): Promise<void> {
     await fs.mkdir(this.lockDir, { recursive: true, mode: 0o700 });
+  }
+
+  /**
+   * Shared lock acquisition logic used by both refresh and auth locks.
+   * @plan project-plans/issue1652/plan.md Phase 2
+   */
+  private async acquireLock(
+    lockPath: string,
+    waitMs: number,
+    staleMs: number,
+  ): Promise<boolean> {
+    const startTime = Date.now();
+
+    await this.ensureLockDir();
+
+    this.logger.debug(
+      () =>
+        `[acquireLock] wait=${waitMs} stale=${staleMs} poll=${LOCK_POLL_INTERVAL_MS}`,
+    );
+
+    while (Date.now() - startTime < waitMs) {
+      try {
+        const lockInfo = { pid: process.pid, timestamp: Date.now() };
+        await fs.writeFile(lockPath, JSON.stringify(lockInfo), {
+          flag: 'wx',
+          mode: 0o600,
+        });
+        return true;
+      } catch (writeError) {
+        const err = writeError as NodeJS.ErrnoException;
+        if (err.code !== 'EEXIST') {
+          throw writeError;
+        }
+      }
+
+      // Lock file exists — read and check staleness
+      try {
+        const content = await fs.readFile(lockPath, 'utf8');
+        const existing = JSON.parse(content) as {
+          pid: number;
+          timestamp: number;
+        };
+        const lockAge = Date.now() - existing.timestamp;
+
+        if (lockAge > staleMs) {
+          // Stale lock — break it
+          try {
+            await fs.unlink(lockPath);
+          } catch {
+            // Ignore ENOENT — another process may have broken it
+          }
+          continue;
+        }
+      } catch {
+        // Lock file unreadable or corrupt — break it
+        try {
+          await fs.unlink(lockPath);
+        } catch {
+          // Ignore ENOENT
+        }
+        continue;
+      }
+
+      // Lock is fresh — wait and retry
+      await sleep(LOCK_POLL_INTERVAL_MS);
+    }
+
+    return false;
+  }
+
+  /**
+   * Shared lock release logic used by both refresh and auth locks.
+   * @plan project-plans/issue1652/plan.md Phase 2
+   */
+  private async releaseLock(lockPath: string): Promise<void> {
+    try {
+      await fs.unlink(lockPath);
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw error;
+      }
+    }
   }
 
   /**
@@ -307,63 +398,8 @@ export class KeyringTokenStore implements TokenStore {
     const lockPath = this.lockFilePath(provider, options?.bucket);
     const waitMs = options?.waitMs ?? DEFAULT_LOCK_WAIT_MS;
     const staleMs = options?.staleMs ?? DEFAULT_STALE_THRESHOLD_MS;
-    const startTime = Date.now();
 
-    await this.ensureLockDir();
-
-    this.logger.debug(
-      () =>
-        `[acquireRefreshLock] wait=${waitMs} stale=${staleMs} poll=${LOCK_POLL_INTERVAL_MS}`,
-    );
-
-    while (Date.now() - startTime < waitMs) {
-      try {
-        const lockInfo = { pid: process.pid, timestamp: Date.now() };
-        await fs.writeFile(lockPath, JSON.stringify(lockInfo), {
-          flag: 'wx',
-          mode: 0o600,
-        });
-        return true;
-      } catch (writeError) {
-        const err = writeError as NodeJS.ErrnoException;
-        if (err.code !== 'EEXIST') {
-          throw writeError;
-        }
-      }
-
-      // Lock file exists — read and check staleness
-      try {
-        const content = await fs.readFile(lockPath, 'utf8');
-        const existing = JSON.parse(content) as {
-          pid: number;
-          timestamp: number;
-        };
-        const lockAge = Date.now() - existing.timestamp;
-
-        if (lockAge > staleMs) {
-          // Stale lock — break it
-          try {
-            await fs.unlink(lockPath);
-          } catch {
-            // Ignore ENOENT — another process may have broken it
-          }
-          continue;
-        }
-      } catch {
-        // Lock file unreadable or corrupt — break it
-        try {
-          await fs.unlink(lockPath);
-        } catch {
-          // Ignore ENOENT
-        }
-        continue;
-      }
-
-      // Lock is fresh — wait and retry
-      await sleep(LOCK_POLL_INTERVAL_MS);
-    }
-
-    return false;
+    return this.acquireLock(lockPath, waitMs, staleMs);
   }
 
   /**
@@ -374,13 +410,35 @@ export class KeyringTokenStore implements TokenStore {
     this.validateName(provider, 'provider');
     if (bucket) this.validateName(bucket, 'bucket');
     const lockPath = this.lockFilePath(provider, bucket);
-    try {
-      await fs.unlink(lockPath);
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code !== 'ENOENT') {
-        throw error;
-      }
-    }
+    return this.releaseLock(lockPath);
+  }
+
+  /**
+   * Acquires a filesystem-based advisory lock for interactive authentication.
+   * @plan project-plans/issue1652/plan.md Phase 2
+   */
+  async acquireAuthLock(
+    provider: string,
+    options?: { waitMs?: number; staleMs?: number; bucket?: string },
+  ): Promise<boolean> {
+    this.validateName(provider, 'provider');
+    if (options?.bucket) this.validateName(options.bucket, 'bucket');
+
+    const lockPath = this.authLockFilePath(provider, options?.bucket);
+    const waitMs = options?.waitMs ?? 60_000;
+    const staleMs = options?.staleMs ?? 360_000;
+
+    return this.acquireLock(lockPath, waitMs, staleMs);
+  }
+
+  /**
+   * Releases the auth lock for a provider. Idempotent.
+   * @plan project-plans/issue1652/plan.md Phase 2
+   */
+  async releaseAuthLock(provider: string, bucket?: string): Promise<void> {
+    this.validateName(provider, 'provider');
+    if (bucket) this.validateName(bucket, 'bucket');
+    const lockPath = this.authLockFilePath(provider, bucket);
+    return this.releaseLock(lockPath);
   }
 }
