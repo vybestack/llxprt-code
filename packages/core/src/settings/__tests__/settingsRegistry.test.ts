@@ -502,7 +502,6 @@ describe('compression settings', () => {
   });
 });
 
-
 describe('sandbox-base-url setting', () => {
   it('returns spec with type string', () => {
     const spec = getSettingSpec('sandbox-base-url');

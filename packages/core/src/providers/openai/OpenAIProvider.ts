@@ -554,10 +554,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
     const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
 
-    const requiresAuth =
-      options.settings.getProviderSettings(this.name)['requires-auth'];
-    const authExempt =
-      requiresAuth === false || isLocalEndpoint(baseURL);
+    const requiresAuth = options.settings.getProviderSettings(this.name)[
+      'requires-auth'
+    ];
+    const authExempt = requiresAuth === false || isLocalEndpoint(baseURL);
     if (!authToken && !authExempt) {
       throw new Error(
         `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
