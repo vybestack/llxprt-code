@@ -341,8 +341,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const shouldForceSystemRole =
       Boolean(providerConfig?.forceQwenOAuth) || isQwenBaseURL(baseURL);
 
-    // Allow local endpoints without authentication
-    if (!authToken && !isLocalEndpoint(baseURL)) {
+    const requiresAuth =
+      options.settings.getProviderSettings(this.name)['requires-auth'];
+    const authExempt =
+      requiresAuth === false || isLocalEndpoint(baseURL);
+    if (!authToken && !authExempt) {
       throw new AuthenticationError(
         `Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).`,
         this.name,

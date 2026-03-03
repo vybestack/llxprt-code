@@ -103,6 +103,22 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'sandbox-base-url',
+    category: 'provider-config',
+    description:
+      'Base URL override used when running inside a container sandbox (Docker/Podman)',
+    type: 'string',
+    persistToProfile: true,
+  },
+  {
+    key: 'requires-auth',
+    category: 'provider-config',
+    description:
+      'Whether the provider requires API key authentication (set to false for local providers)',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
     key: 'model',
     category: 'provider-config',
     description: 'Default model name',

@@ -501,3 +501,86 @@ describe('compression settings', () => {
     });
   });
 });
+
+
+describe('sandbox-base-url setting', () => {
+  it('returns spec with type string', () => {
+    const spec = getSettingSpec('sandbox-base-url');
+
+    expect(spec?.type).toBe('string');
+  });
+
+  it('returns spec with category provider-config', () => {
+    const spec = getSettingSpec('sandbox-base-url');
+
+    expect(spec?.category).toBe('provider-config');
+  });
+
+  it('returns spec with persistToProfile true', () => {
+    const spec = getSettingSpec('sandbox-base-url');
+
+    expect(spec?.persistToProfile).toBe(true);
+  });
+
+  it('is included in provider config keys', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).toContain('sandbox-base-url');
+  });
+
+  it('is included in profile persistable keys', () => {
+    const keys = getProfilePersistableKeys();
+
+    expect(keys).toContain('sandbox-base-url');
+  });
+});
+
+describe('requires-auth setting', () => {
+  it('returns spec with type boolean', () => {
+    const spec = getSettingSpec('requires-auth');
+
+    expect(spec?.type).toBe('boolean');
+  });
+
+  it('returns spec with category provider-config', () => {
+    const spec = getSettingSpec('requires-auth');
+
+    expect(spec?.category).toBe('provider-config');
+  });
+
+  it('returns spec with persistToProfile true', () => {
+    const spec = getSettingSpec('requires-auth');
+
+    expect(spec?.persistToProfile).toBe(true);
+  });
+
+  it('is included in provider config keys', () => {
+    const keys = getProviderConfigKeys();
+
+    expect(keys).toContain('requires-auth');
+  });
+
+  it('is included in profile persistable keys', () => {
+    const keys = getProfilePersistableKeys();
+
+    expect(keys).toContain('requires-auth');
+  });
+
+  it('validates true as valid boolean', () => {
+    const result = validateSetting('requires-auth', true);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('validates false as valid boolean', () => {
+    const result = validateSetting('requires-auth', false);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects non-boolean value', () => {
+    const result = validateSetting('requires-auth', 'yes');
+
+    expect(result.success).toBe(false);
+  });
+});

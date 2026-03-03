@@ -8,6 +8,7 @@
 import { type IProvider, type GenerateChatOptions } from './IProvider.js';
 import { type IProviderManager } from './IProviderManager.js';
 import { Config } from '../config/config.js';
+import { isContainerSandbox } from './utils/containerSandbox.js';
 import {
   hydrateModelsWithRegistry,
   getModelsDevProviderIds,
@@ -544,6 +545,18 @@ export class ProviderManager implements IProviderManager {
       const providerBaseUrl = this.getBaseUrlFromProvider(providerInstance);
       if (providerBaseUrl) {
         resolved.baseURL = providerBaseUrl;
+      }
+    }
+
+    if (isContainerSandbox()) {
+      const sandboxBaseUrl = providerSettings['sandbox-base-url'] as
+        | string
+        | undefined;
+      if (sandboxBaseUrl && typeof sandboxBaseUrl === 'string') {
+        const trimmed = sandboxBaseUrl.trim();
+        if (trimmed) {
+          resolved.baseURL = trimmed;
+        }
       }
     }
 
