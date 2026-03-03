@@ -391,6 +391,39 @@ export class OAuthManager {
         return;
       }
 
+      // @fix issue1652: Try token refresh before opening browser.
+      // If the disk token is expired but has a valid refresh_token,
+      // refreshing is cheaper and non-interactive — no browser needed.
+      if (
+        diskToken &&
+        typeof diskToken.refresh_token === 'string' &&
+        diskToken.refresh_token !== ''
+      ) {
+        try {
+          const refreshedToken = await provider.refreshToken(diskToken);
+          if (refreshedToken) {
+            const mergedToken = mergeRefreshedToken(
+              diskToken as OAuthTokenWithExtras,
+              refreshedToken as OAuthTokenWithExtras,
+            );
+            await this.tokenStore.saveToken(providerName, mergedToken, bucket);
+            if (!this.isOAuthEnabled(providerName)) {
+              this.setOAuthEnabledState(providerName, true);
+            }
+            logger.debug(
+              () =>
+                `[FLOW] Refreshed expired token for ${providerName}/${bucket ?? 'default'}, skipping browser auth`,
+            );
+            return;
+          }
+        } catch (refreshError) {
+          logger.debug(
+            () =>
+              `[FLOW] Token refresh failed for ${providerName}/${bucket ?? 'default'}, falling through to browser auth: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
+          );
+        }
+      }
+
       // Initiate authentication and get token directly
       logger.debug(
         () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,

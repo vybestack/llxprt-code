@@ -470,6 +470,162 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
     });
   });
 
+  describe('Phase 5: Refresh before browser auth in authenticate()', () => {
+    /**
+     * Test: authenticate() refreshes expired token instead of opening browser
+     * GIVEN authenticate() is called for a bucket
+     * AND the disk has an expired token with a valid refresh_token
+     * AND provider.refreshToken() succeeds
+     * WHEN authenticate() runs
+     * THEN provider.refreshToken() is called (not initiateAuth)
+     * AND the refreshed token is saved to the store
+     */
+    it('should refresh expired token instead of opening browser', async () => {
+      const expiredToken = makeToken('expired-access', -60);
+      const refreshedToken = makeToken('refreshed-access', 3600);
+
+      const tokenStore: TokenStore = {
+        saveToken: vi.fn(),
+        getToken: vi.fn(async () => expiredToken),
+        removeToken: vi.fn(),
+        listProviders: vi.fn(async () => []),
+        listBuckets: vi.fn(async () => []),
+        getBucketStats: vi.fn(async () => null),
+        acquireRefreshLock: vi.fn(async () => true),
+        releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
+      };
+
+      const oauthManager = new OAuthManager(tokenStore);
+
+      const provider: OAuthProvider = {
+        name: 'anthropic',
+        initiateAuth: vi.fn(async () => {
+          throw new Error(
+            'initiateAuth should NOT be called — refresh should suffice',
+          );
+        }),
+        getToken: vi.fn(async () => null),
+        refreshToken: vi.fn(async () => refreshedToken),
+      };
+      oauthManager.registerProvider(provider);
+
+      await oauthManager.authenticate('anthropic', 'default');
+
+      // Refresh should have been called with the expired disk token
+      expect(provider.refreshToken).toHaveBeenCalledWith(expiredToken);
+      // initiateAuth should NOT have been called
+      expect(provider.initiateAuth).not.toHaveBeenCalled();
+      // The refreshed token should be saved
+      expect(tokenStore.saveToken).toHaveBeenCalledWith(
+        'anthropic',
+        expect.objectContaining({ access_token: 'refreshed-access' }),
+        'default',
+      );
+    });
+
+    /**
+     * Test: authenticate() falls through to browser when refresh fails
+     * GIVEN authenticate() is called for a bucket
+     * AND the disk has an expired token with a refresh_token
+     * AND provider.refreshToken() throws
+     * WHEN authenticate() runs
+     * THEN initiateAuth() IS called (browser fallback)
+     */
+    it('should fall through to browser auth when refresh fails', async () => {
+      const expiredToken = makeToken('expired-access', -60);
+      const freshToken = makeToken('browser-auth-token', 3600);
+
+      const tokenStore: TokenStore = {
+        saveToken: vi.fn(),
+        getToken: vi.fn(async () => expiredToken),
+        removeToken: vi.fn(),
+        listProviders: vi.fn(async () => []),
+        listBuckets: vi.fn(async () => []),
+        getBucketStats: vi.fn(async () => null),
+        acquireRefreshLock: vi.fn(async () => true),
+        releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
+      };
+
+      const oauthManager = new OAuthManager(tokenStore);
+
+      const provider: OAuthProvider = {
+        name: 'anthropic',
+        initiateAuth: vi.fn(async () => freshToken),
+        getToken: vi.fn(async () => null),
+        refreshToken: vi.fn(async () => {
+          throw new Error('Refresh token revoked');
+        }),
+      };
+      oauthManager.registerProvider(provider);
+
+      await oauthManager.authenticate('anthropic', 'default');
+
+      // Refresh was attempted but failed
+      expect(provider.refreshToken).toHaveBeenCalled();
+      // Falls through to browser auth
+      expect(provider.initiateAuth).toHaveBeenCalled();
+      // Browser token saved
+      expect(tokenStore.saveToken).toHaveBeenCalledWith(
+        'anthropic',
+        expect.objectContaining({ access_token: 'browser-auth-token' }),
+        'default',
+      );
+    });
+
+    /**
+     * Test: authenticate() skips refresh when no refresh_token
+     * GIVEN authenticate() is called for a bucket
+     * AND the disk has an expired token WITHOUT a refresh_token
+     * WHEN authenticate() runs
+     * THEN provider.refreshToken() is NOT called
+     * AND initiateAuth() IS called
+     */
+    it('should skip refresh when disk token has no refresh_token', async () => {
+      const expiredTokenNoRefresh: OAuthToken = {
+        access_token: 'expired-access',
+        refresh_token: '',
+        expiry: Math.floor(Date.now() / 1000) - 60,
+        token_type: 'Bearer' as const,
+        scope: '',
+      };
+      const freshToken = makeToken('browser-auth-token', 3600);
+
+      const tokenStore: TokenStore = {
+        saveToken: vi.fn(),
+        getToken: vi.fn(async () => expiredTokenNoRefresh),
+        removeToken: vi.fn(),
+        listProviders: vi.fn(async () => []),
+        listBuckets: vi.fn(async () => []),
+        getBucketStats: vi.fn(async () => null),
+        acquireRefreshLock: vi.fn(async () => true),
+        releaseRefreshLock: vi.fn(async () => undefined),
+        acquireAuthLock: vi.fn(async () => true),
+        releaseAuthLock: vi.fn(async () => undefined),
+      };
+
+      const oauthManager = new OAuthManager(tokenStore);
+
+      const provider: OAuthProvider = {
+        name: 'anthropic',
+        initiateAuth: vi.fn(async () => freshToken),
+        getToken: vi.fn(async () => null),
+        refreshToken: vi.fn(async () => null),
+      };
+      oauthManager.registerProvider(provider);
+
+      await oauthManager.authenticate('anthropic', 'default');
+
+      // No refresh attempted (no refresh_token)
+      expect(provider.refreshToken).not.toHaveBeenCalled();
+      // Straight to browser auth
+      expect(provider.initiateAuth).toHaveBeenCalled();
+    });
+  });
+
   describe('Edge cases', () => {
     /**
      * Test: Empty bucket list
