@@ -12,9 +12,9 @@ Syncing LLxprt Code from upstream gemini-cli v0.23.0 → v0.24.5 (121 commits).
 | Decision | Count | % |
 |----------|------:|--:|
 | PICK | 34 | 28% |
-| SKIP | 42 | 35% |
+| SKIP | 41 | 34% |
 | REIMPLEMENT | 34 | 28% |
-| NO_OP | 11 | 9% |
+| NO_OP | 12 | 10% |
 | **Total** | **121** | |
 
 ## What Changed From Initial Audit
@@ -61,15 +61,14 @@ Complete Agent Skills system: SkillManager, activate_skill tool, system prompt i
 | Secrets sanitization | 1 | ~200 LoC new + integrations | High (security) |
 | Folder trust default | 1 | ~50 LoC | High (security) |
 
-## Deferred Items (need separate PLANs or follow-up PRs)
+## Deferred Items
 
-These 10 commits are in the "Deferred" section — they depend on reimplemented systems and should be done after the base cherry-picks:
-- Hooks visual indicators, hooks.enabled setting, granular stop/block, context injection
-- Settings descriptions, remote admin settings
-- Console migration (biggest single REIMPLEMENT)
+All previously deferred items have been resolved:
+- 7 items reclassified to REIMPLEMENT (hooks, settings, coreEvents migration) — now in REIMPLEMENT table rows 29-34 + row 28.
+- 2 minor items resolved: yolo.toml `allow_redirection = true` (manual add during execution), dead `setMessageBus()` stubs (subsumed by MessageBus DI refactor).
 
 ## Risk Areas
 
 1. **Skills cherry-pick** — 11 commits, linear chain. Verify `getAgentRegistry().getDirectoryContext()` exists.
 2. **Race condition fix** — Touches useGeminiStream.ts which is a hot file. Minor conflicts expected.
-3. **REIMPLEMENT volume** — 25 commits total. Some need full PLANs.
+3. **REIMPLEMENT volume** — 34 commits across A2A, ToolScheduler, MessageBus, hooks, settings, and coreEvents. Full PLANs created for A2A, ToolScheduler, and MessageBus.

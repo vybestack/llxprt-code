@@ -54,11 +54,11 @@ grep -A 3 "export.*inferAgentKind" packages/core/src/agents/agent-toml-loader.ts
 
 ```bash
 # Plan markers
-grep -c "@plan:PLAN-20260302-A2A.P27" packages/core/src/agents/agent-toml-loader.ts
+grep -c "@plan PLAN-20260302-A2A.P27" packages/core/src/agents/agent-toml-loader.ts
 # Expected: 6+
 
 # Requirement markers
-grep "@requirement:" packages/core/src/agents/agent-toml-loader.ts
+grep "@requirement " packages/core/src/agents/agent-toml-loader.ts
 # Expected: A2A-REG-006, A2A-CFG-003, A2A-CFG-004
 ```
 

@@ -23,11 +23,11 @@ ls packages/core/src/agents/a2a-utils.ts
 # Expected: File exists
 
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P06" packages/core/src/agents/a2a-utils.ts
+grep -c "@plan PLAN-20260302-A2A.P06" packages/core/src/agents/a2a-utils.ts
 # Expected: 3 (extractMessageText, extractTaskText, extractIdsFromResponse)
 
 # Check requirement markers
-grep -c "@requirement:A2A-EXEC" packages/core/src/agents/a2a-utils.ts
+grep -c "@requirement A2A-EXEC" packages/core/src/agents/a2a-utils.ts
 # Expected: 4+ (A2A-EXEC-003, A2A-EXEC-004 appears twice, A2A-EXEC-008)
 
 # Verify exports

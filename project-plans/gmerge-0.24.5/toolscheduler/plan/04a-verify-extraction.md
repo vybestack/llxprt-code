@@ -22,7 +22,7 @@ test -f packages/core/src/scheduler/tool-executor.ts || {
 }
 
 # Check plan markers
-grep "@plan:PLAN-20260302-TOOLSCHEDULER.P04" packages/core/src/scheduler/tool-executor.ts || {
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P04" packages/core/src/scheduler/tool-executor.ts || {
   echo "FAIL: Plan markers missing"
   exit 1
 }
@@ -161,6 +161,27 @@ fi
 echo "[OK] No circular dependencies"
 ```
 
+## Semantic Verification Checklist
+
+**Go beyond markers. Actually verify the behavior exists.**
+
+#### Behavioral Verification Questions
+
+1. **Was code EXTRACTED, not rewritten?**
+   - [ ] I compared tool-executor.ts with original launchToolExecution
+   - [ ] Code structure is nearly identical (cut/paste with adaptation)
+   - [ ] No logic changes, only boundary adaptations
+
+2. **Do all tests still pass?**
+   - [ ] All 7 existing test suites pass
+   - [ ] Characterization tests pass (behavior preserved)
+   - [ ] No tests needed modification
+
+3. **Is delegation working correctly?**
+   - [ ] launchToolExecution calls ToolExecutor.execute()
+   - [ ] Callbacks wired (onLiveOutput, onPid)
+   - [ ] Results converted back to buffered format
+
 ## Success Criteria
 
 - [ ] tool-executor.ts exists with extracted code
@@ -173,17 +194,44 @@ echo "[OK] No circular dependencies"
 - [ ] No test files modified
 - [ ] No circular dependencies
 
+## Failure Recovery
+
+If this phase fails:
+
+1. **Delegation broken:** Check launchToolExecution wiring
+2. **Tests fail:** Compare behavior before/after extraction
+3. **Compilation errors:** Verify imports and types
+4. Return to Phase 04 and fix issues
+
 ## Pass/Fail Decision
 
 **PASS** if all verification commands exit 0 and all checkboxes checked.
 
 **FAIL** if any verification command fails. If FAIL, return to Phase 04 for remediation.
 
+## Phase Completion Marker
+
+If PASS, create: `project-plans/gmerge-0.24.5/toolscheduler/.completed/P04a.md`
+
+Contents:
+```markdown
+Phase: P04a
+Completed: [TIMESTAMP]
+Verification Results:
+  - Extraction: PASS (tool-executor.ts created)
+  - Delegation: PASS (launchToolExecution wired)
+  - All tests: PASS (7 suites + characterization)
+  - File size reduction: [N] lines
+  - Behavior preserved: YES
+Next Phase: 05 (Extract response formatting)
+```
+
 ## Phase Completion
 
 If PASS:
-1. Update execution-tracker.md: Mark P04 and P04a complete
-2. Proceed to Phase 05
+1. Create completion marker above
+2. Update execution-tracker.md: Mark P04 and P04a complete
+3. Proceed to Phase 05
 
 If FAIL:
 1. Document failures in execution-tracker.md

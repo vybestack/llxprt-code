@@ -164,11 +164,11 @@ grep "export class GoogleADCAuthProvider" packages/core/src/agents/auth-provider
 # Expected: 1 occurrence
 
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P12" packages/core/src/agents/auth-providers.ts
+grep -c "@plan PLAN-20260302-A2A.P12" packages/core/src/agents/auth-providers.ts
 # Expected: 1 occurrence
 
 # Check requirements
-grep "@requirement:A2A-AUTH-003" packages/core/src/agents/auth-providers.ts
+grep "@requirement A2A-AUTH-003" packages/core/src/agents/auth-providers.ts
 # Expected: 1 occurrence
 
 # Check import
@@ -184,7 +184,7 @@ npx tsc --noEmit packages/core/src/agents/auth-providers.ts 2>&1 | grep "Cannot 
 
 ```bash
 # Check for TODO in class body (NOTE at file top OK)
-grep "@plan:PLAN-20260302-A2A.P12" packages/core/src/agents/auth-providers.ts -A 20 | grep -E "(TODO|FIXME|HACK|STUB)" | grep -v "STUB:"
+grep "@plan PLAN-20260302-A2A.P12" packages/core/src/agents/auth-providers.ts -A 20 | grep -E "(TODO|FIXME|HACK|STUB)" | grep -v "STUB:"
 # Expected: No matches (STUB: comment in stub return OK)
 ```
 

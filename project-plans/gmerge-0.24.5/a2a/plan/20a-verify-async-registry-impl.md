@@ -17,7 +17,7 @@
 # Run registry tests
 npm test -- packages/core/src/agents/__tests__/registry.test.ts
 
-# Expected: All 12+ tests PASS
+# Expected: All 11 tests PASS
 ```
 
 ### Structural Checks
@@ -41,7 +41,7 @@ npm run typecheck
 
 ### Verification Checklist
 
-- [ ] All 12+ tests PASS
+- [ ] All 11 tests PASS
 - [ ] A2AClientManager instance field added
 - [ ] initialize() creates manager
 - [ ] Auth provider retrieved from Config

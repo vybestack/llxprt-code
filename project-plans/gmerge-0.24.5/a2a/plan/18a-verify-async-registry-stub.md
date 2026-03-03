@@ -29,7 +29,7 @@ grep "await this.loadBuiltInAgents" packages/core/src/agents/registry.ts
 grep "registerRemoteAgent" packages/core/src/agents/registry.ts
 
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P18" packages/core/src/agents/registry.ts
+grep -c "@plan PLAN-20260302-A2A.P18" packages/core/src/agents/registry.ts
 
 # Type check
 npm run typecheck

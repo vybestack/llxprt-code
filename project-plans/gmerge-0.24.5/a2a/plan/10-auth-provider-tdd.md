@@ -116,7 +116,6 @@ describe('Auth Provider System', () => {
       // TypeScript type check: NoAuthProvider is assignable to interface
       const interfaceProvider: RemoteAgentAuthProvider = provider;
       
-      expect(interfaceProvider).toBeDefined();
       expect(typeof interfaceProvider.getAuthHandler).toBe('function');
     });
     
@@ -212,7 +211,7 @@ CONTEXT: You are implementing Phase 10 of 27 for A2A Remote Agent support.
 PREREQUISITE CHECK:
 Verify Phase 09 completed by checking:
 - `ls packages/core/src/agents/auth-providers.ts` file exists
-- `grep -c "@plan:PLAN-20260302-A2A.P09" packages/core/src/agents/auth-providers.ts` returns 2
+- `grep -c "@plan PLAN-20260302-A2A.P09" packages/core/src/agents/auth-providers.ts` returns 2
 - File `project-plans/gmerge-0.24.5/a2a/plan/.verified/P09a-report.md` exists
 
 YOUR TASK:
@@ -269,11 +268,11 @@ DO NOT:
 
 ```bash
 # Check plan markers exist
-grep -c "@plan:PLAN-20260302-A2A.P10" packages/core/src/agents/__tests__/auth-providers.test.ts
+grep -c "@plan PLAN-20260302-A2A.P10" packages/core/src/agents/__tests__/auth-providers.test.ts
 # Expected: 10+ occurrences (one per test)
 
 # Check requirements covered
-grep -c "@requirement:A2A-AUTH\|@requirement:A2A-CFG" packages/core/src/agents/__tests__/auth-providers.test.ts
+grep -c "@requirement A2A-AUTH\|@requirement A2A-CFG" packages/core/src/agents/__tests__/auth-providers.test.ts
 # Expected: 10+ occurrences
 
 # Run tests (they should ALL PASS against stubs)

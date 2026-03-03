@@ -27,11 +27,11 @@ ls -la packages/core/src/agents/a2a-utils.ts
 # Expected: File size > 2KB (full implementation, not stubs)
 
 # Check plan markers updated to P08
-grep -c "@plan:PLAN-20260302-A2A.P08" packages/core/src/agents/a2a-utils.ts
+grep -c "@plan PLAN-20260302-A2A.P08" packages/core/src/agents/a2a-utils.ts
 # Expected: 3 (all functions updated from P06 to P08)
 
 # Check requirement markers still present
-grep -c "@requirement:A2A-EXEC" packages/core/src/agents/a2a-utils.ts
+grep -c "@requirement A2A-EXEC" packages/core/src/agents/a2a-utils.ts
 # Expected: 4+ (unchanged from stubs)
 
 # Run ALL tests (MUST PASS)

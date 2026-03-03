@@ -18,11 +18,11 @@ Run ALL checks from Phase 10 "Verification Commands" section:
 
 ```bash
 # Plan markers
-grep -c "@plan:PLAN-20260302-A2A.P10" packages/core/src/agents/__tests__/auth-providers.test.ts
+grep -c "@plan PLAN-20260302-A2A.P10" packages/core/src/agents/__tests__/auth-providers.test.ts
 # MUST return: 10+
 
 # Requirements
-grep -c "@requirement:A2A-AUTH\|@requirement:A2A-CFG" packages/core/src/agents/__tests__/auth-providers.test.ts
+grep -c "@requirement A2A-AUTH\|@requirement A2A-CFG" packages/core/src/agents/__tests__/auth-providers.test.ts
 # MUST return: 10+
 
 # No mocks

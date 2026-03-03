@@ -231,19 +231,19 @@ ls packages/core/src/agents/auth-providers.ts
 # Expected: File exists
 
 # Check plan markers in auth-providers.ts
-grep -c "@plan:PLAN-20260302-A2A.P09" packages/core/src/agents/auth-providers.ts
+grep -c "@plan PLAN-20260302-A2A.P09" packages/core/src/agents/auth-providers.ts
 # Expected: 2 occurrences (interface + class)
 
 # Check requirements in auth-providers.ts
-grep "@requirement:A2A-AUTH-001\|@requirement:A2A-AUTH-002" packages/core/src/agents/auth-providers.ts
+grep "@requirement A2A-AUTH-001\|@requirement A2A-AUTH-002" packages/core/src/agents/auth-providers.ts
 # Expected: 2 occurrences
 
 # Check Config modifications
-grep -c "@plan:PLAN-20260302-A2A.P09" packages/core/src/config/config.ts
+grep -c "@plan PLAN-20260302-A2A.P09" packages/core/src/config/config.ts
 # Expected: 3 occurrences (field + 2 methods)
 
 # Check Config requirements
-grep "@requirement:A2A-CFG-001" packages/core/src/config/config.ts
+grep "@requirement A2A-CFG-001" packages/core/src/config/config.ts
 # Expected: 3 occurrences
 
 # Check exports
@@ -266,7 +266,7 @@ npx tsc --noEmit packages/core/src/config/config.ts
 grep -E "(TODO|FIXME|HACK|STUB)" packages/core/src/agents/auth-providers.ts | grep -v "NOTE:"
 # Expected: No matches in function bodies
 
-grep -E "(TODO|FIXME|HACK|STUB)" packages/core/src/config/config.ts | grep "@plan:PLAN-20260302-A2A.P09" -A 5 -B 5
+grep -E "(TODO|FIXME|HACK|STUB)" packages/core/src/config/config.ts | grep "@plan PLAN-20260302-A2A.P09" -A 5 -B 5
 # Expected: No TODO in new methods
 ```
 

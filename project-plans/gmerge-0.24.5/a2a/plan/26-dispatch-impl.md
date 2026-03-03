@@ -161,7 +161,7 @@ npm run typecheck
 # Expected: Success (0 errors)
 
 # Check plan marker updated
-grep -c "@plan:PLAN-20260302-A2A.P26" packages/core/src/agents/registry.ts
+grep -c "@plan PLAN-20260302-A2A.P26" packages/core/src/agents/registry.ts
 # Expected: 1 (updated from P24)
 ```
 

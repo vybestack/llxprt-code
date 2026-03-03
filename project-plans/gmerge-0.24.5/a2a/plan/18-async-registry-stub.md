@@ -241,7 +241,7 @@ grep "registerRemoteAgent" packages/core/src/agents/registry.ts
 # Expected: method defined
 
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P18" packages/core/src/agents/registry.ts
+grep -c "@plan PLAN-20260302-A2A.P18" packages/core/src/agents/registry.ts
 # Expected: 2+ occurrences
 
 # TypeScript compiles

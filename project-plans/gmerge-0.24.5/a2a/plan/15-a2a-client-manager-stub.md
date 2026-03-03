@@ -86,7 +86,7 @@ export class A2AClientManager {
   }
   
   /**
-   * Load an agent by fetching its agent card and creating an A2A client.
+   * Load an agent by fetching its agent card.
    * @plan PLAN-20260302-A2A.P15
    * @requirement A2A-DISC-001
    */
@@ -103,7 +103,7 @@ export class A2AClientManager {
   /**
    * Send a message to a remote agent.
    * @plan PLAN-20260302-A2A.P15
-   * @requirement A2A-EXEC-001
+   * @requirement A2A-DISC-001
    */
   async sendMessage(
     agentName: string,
@@ -142,7 +142,7 @@ export class A2AClientManager {
   /**
    * Cancel a task.
    * @plan PLAN-20260302-A2A.P15
-   * @requirement A2A-EXEC-005
+   * @requirement A2A-DISC-002
    */
   async cancelTask(agentName: string, taskId: string): Promise<Task> {
     // Stub: return cancelled Task
@@ -190,9 +190,12 @@ function createAdapterFetch(): typeof fetch {
  * @plan PLAN-20260302-A2A.P15
  * @requirement A2A-EXEC-012
  */
-function mapTaskState(protoState: string): 'submitted' | 'working' | 'completed' | 'failed' | 'canceled' | 'input-required' {
-  // Stub: pass through
-  return protoState as any;
+function mapTaskState(protoState: unknown): 'submitted' | 'working' | 'completed' | 'failed' | 'canceled' | 'input-required' {
+  // Stub: default to submitted
+  if (typeof protoState === 'string' && ['submitted', 'working', 'completed', 'failed', 'canceled', 'input-required'].includes(protoState)) {
+    return protoState as 'submitted' | 'working' | 'completed' | 'failed' | 'canceled' | 'input-required';
+  }
+  return 'submitted';
 }
 ```
 

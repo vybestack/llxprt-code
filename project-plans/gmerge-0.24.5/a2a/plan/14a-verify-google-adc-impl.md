@@ -41,7 +41,7 @@ grep '"google-auth-library"' packages/core/package.json
 # MUST return: 1 match
 
 # JSDoc updated
-grep "@plan:PLAN-20260302-A2A.P14" packages/core/src/agents/auth-providers.ts
+grep "@plan PLAN-20260302-A2A.P14" packages/core/src/agents/auth-providers.ts
 # MUST return: 1 match
 ```
 
@@ -49,7 +49,7 @@ grep "@plan:PLAN-20260302-A2A.P14" packages/core/src/agents/auth-providers.ts
 
 ```bash
 # No TODO in implementation
-grep "@plan:PLAN-20260302-A2A.P14" packages/core/src/agents/auth-providers.ts -A 25 | grep -E "(TODO|FIXME|HACK|STUB)"
+grep "@plan PLAN-20260302-A2A.P14" packages/core/src/agents/auth-providers.ts -A 25 | grep -E "(TODO|FIXME|HACK|STUB)"
 # MUST return: Empty
 ```
 

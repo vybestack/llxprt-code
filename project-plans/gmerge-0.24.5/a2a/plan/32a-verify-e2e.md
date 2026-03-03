@@ -51,7 +51,7 @@ grep "HTTPS" packages/core/src/agents/__tests__/e2e-remote-agent.test.ts
 ### 4. Plan Markers
 
 ```bash
-grep -c "@plan:PLAN-20260302-A2A.P32" packages/core/src/agents/__tests__/e2e-remote-agent.test.ts
+grep -c "@plan PLAN-20260302-A2A.P32" packages/core/src/agents/__tests__/e2e-remote-agent.test.ts
 ```
 
 **Expected**: 4+ markers.

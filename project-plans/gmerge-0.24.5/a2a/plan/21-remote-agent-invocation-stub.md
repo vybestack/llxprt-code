@@ -56,6 +56,10 @@
 
 ### Stub Implementation
 
+**CRITICAL**: The actual file is `packages/core/src/agents/invocation.ts` with class `SubagentInvocation` (not `local-invocation.ts`). The new `RemoteAgentInvocation` follows the same constructor pattern.
+
+**Reference**: See `packages/core/src/agents/invocation.ts` for the actual `SubagentInvocation` constructor signature.
+
 ```typescript
 /**
  * @plan PLAN-20260302-A2A.P21
@@ -71,35 +75,29 @@ import type { ToolCallConfirmationDetails } from '../tools/tool-confirmation-typ
 
 /**
  * Executes a remote agent via the A2A protocol.
+ * Follows the same pattern as SubagentInvocation in invocation.ts.
  * @plan PLAN-20260302-A2A.P21
  */
 export class RemoteAgentInvocation extends BaseToolInvocation<AgentInputs, ToolResult> {
-  private readonly definition: RemoteAgentDefinition;
-  private readonly sessionState: Map<string, { contextId?: string; taskId?: string }>;
-  
   /**
    * @param params The validated input parameters for the agent.
    * @param definition The remote agent definition.
    * @param sessionState Session-scoped state map for contextId/taskId persistence.
    * @param messageBus Optional message bus for policy enforcement.
-   * @param displayName Optional display name for logging.
    */
   constructor(
     params: AgentInputs,
-    definition: RemoteAgentDefinition,
-    sessionState: Map<string, { contextId?: string; taskId?: string }>,
+    private readonly definition: RemoteAgentDefinition,
+    private readonly sessionState: Map<string, { contextId?: string; taskId?: string }>,
     messageBus?: MessageBus,
-    displayName?: string
   ) {
-    super(params, messageBus, definition.name, displayName);
+    // PATTERN: Match SubagentInvocation - super(params, messageBus) only
+    super(params, messageBus);
     
     // Stub: basic validation
     if (!params.query || typeof params.query !== 'string' || params.query.trim() === '') {
       // In stub, just store invalid state (will throw in implementation)
     }
-    
-    this.definition = definition;
-    this.sessionState = sessionState;
   }
   
   /**
@@ -179,20 +177,41 @@ CONTEXT: You are implementing Phase 21 of 33 for A2A Remote Agent support.
 
 PREREQUISITE CHECK:
 Verify phases 03-20 completed:
-- grep "@plan:PLAN-20260302-A2A.P17" packages/core/src/agents/a2a-client-manager.ts
-- grep "@plan:PLAN-20260302-A2A.P20" packages/core/src/agents/registry.ts
+- grep "@plan PLAN-20260302-A2A.P17" packages/core/src/agents/a2a-client-manager.ts
+- grep "@plan PLAN-20260302-A2A.P20" packages/core/src/agents/registry.ts
+
+REFERENCE PATTERN:
+Read packages/core/src/agents/invocation.ts to understand the SubagentInvocation constructor pattern:
+- SubagentInvocation extends BaseToolInvocation<AgentInputs, ToolResult>
+- Constructor: params, definition, config, messageBus
+- super(params, messageBus) — NO name or displayName parameters
+- Private readonly fields stored in constructor signature
 
 YOUR TASK:
-Create packages/core/src/agents/remote-invocation.ts as a STUB.
+Create packages/core/src/agents/remote-invocation.ts as a STUB following the SubagentInvocation pattern.
 
 CLASS STRUCTURE:
 - RemoteAgentInvocation extends BaseToolInvocation<AgentInputs, ToolResult>
-- Constructor: params, definition (RemoteAgentDefinition), sessionState (Map), messageBus, displayName
+- Constructor signature: params, definition (RemoteAgentDefinition), sessionState (Map), messageBus
+- Constructor: super(params, messageBus) — matching SubagentInvocation pattern
+- Private readonly fields: definition, sessionState (declared in constructor signature)
 - Methods: getDescription(), execute(), getConfirmationDetails()
-- Private fields: definition, sessionState
+
+CRITICAL CONSTRUCTOR PATTERN (from invocation.ts):
+```typescript
+constructor(
+  params: AgentInputs,
+  private readonly definition: RemoteAgentDefinition,
+  private readonly sessionState: Map<string, { contextId?: string; taskId?: string }>,
+  messageBus?: MessageBus,
+) {
+  super(params, messageBus);  // NOT super(params, messageBus, name, displayName)
+  // validation here
+}
+```
 
 STUB RULES:
-1. Constructor: Accept all parameters, store them, no validation throws
+1. Constructor: Accept parameters matching SubagentInvocation pattern, call super(params, messageBus)
 2. getDescription(): Return string describing agent and query
 3. execute(): Return empty ToolResult { llmContent: [{ text: '' }], returnDisplay: '' }
 4. getConfirmationDetails(): Return info-type confirmation with agent name and URL
@@ -205,9 +224,11 @@ DELIVERABLES:
 - All methods have @plan and @requirement markers
 - Compiles with no errors
 - Extends BaseToolInvocation correctly
+- Constructor matches SubagentInvocation pattern
 
 DO NOT:
 - Implement actual A2A sendMessage calls (that's P23)
 - Add session state retrieval logic (that's P23)
 - Handle abort signals (that's P23)
 - Throw errors on validation failure (store invalid state)
+- Use displayName parameter in constructor (not in SubagentInvocation pattern)

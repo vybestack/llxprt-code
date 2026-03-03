@@ -22,11 +22,11 @@ grep -c "^[[:space:]]*it('should" packages/core/src/agents/__tests__/registry-di
 # Expected: 10
 
 # Plan markers
-grep -c "@plan:PLAN-20260302-A2A.P25" packages/core/src/agents/__tests__/registry-dispatch.test.ts
+grep -c "@plan PLAN-20260302-A2A.P25" packages/core/src/agents/__tests__/registry-dispatch.test.ts
 # Expected: 10+
 
 # Requirement markers
-grep -c "@requirement:A2A-EXEC-011" packages/core/src/agents/__tests__/registry-dispatch.test.ts
+grep -c "@requirement A2A-EXEC-011" packages/core/src/agents/__tests__/registry-dispatch.test.ts
 # Expected: 10+
 ```
 

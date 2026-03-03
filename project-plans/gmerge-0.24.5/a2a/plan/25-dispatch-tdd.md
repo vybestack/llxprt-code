@@ -17,11 +17,11 @@
 
 **Full EARS Text**: The agent invocation dispatch point shall support both local and remote agents via type-based routing.
 
-**Test Scenarios**:
-1. Local agent → returns SubagentInvocation
-2. Remote agent → returns RemoteAgentInvocation
-3. Unknown agent → throws error
-4. Type narrowing works (TypeScript compile-time checks)
+**Test Scenarios** (9 tests total):
+1. Local agent → returns SubagentInvocation (2 tests)
+2. Remote agent → returns RemoteAgentInvocation (3 tests)
+3. Error handling → throws on unknown agent (2 tests)
+4. Type narrowing works (2 tests)
 
 **Why This Matters**: Tests verify the factory method correctly dispatches based on agent kind, ensuring type safety and proper invocation routing. These tests will FAIL against the P24 stub (which always returns SubagentInvocation) and PASS after P26 implementation.
 
@@ -73,7 +73,7 @@ describe('AgentRegistry.createInvocation()', () => {
         runConfig: { max_time_minutes: 5 }
       };
       
-      await (registry as any).registerAgent(localDef);
+      await registry['registerAgent'](localDef);
       
       // Create invocation
       const invocation = registry.createInvocation(
@@ -96,7 +96,7 @@ describe('AgentRegistry.createInvocation()', () => {
         runConfig: { max_time_minutes: 5 }
       };
       
-      await (registry as any).registerAgent(localDef);
+      await registry['registerAgent'](localDef);
       
       const params = { query: 'test query', data: { foo: 'bar' } };
       const invocation = registry.createInvocation('test-local', params);
@@ -124,7 +124,9 @@ describe('AgentRegistry.createInvocation()', () => {
       };
       
       // Bypass registerAgent to avoid network call
-      (registry as any).agents.set('test-remote', remoteDef);
+      // Use getAllDefinitions to access internal agents map via reflection
+      const agentsMap = (registry as { agents: Map<string, RemoteAgentDefinition> }).agents;
+      agentsMap.set('test-remote', remoteDef);
       
       // Create invocation
       const sessionState = new Map();
@@ -148,7 +150,8 @@ describe('AgentRegistry.createInvocation()', () => {
         agentCardUrl: 'https://example.com/card'
       };
       
-      (registry as any).agents.set('test-remote', remoteDef);
+      const agentsMap = (registry as { agents: Map<string, RemoteAgentDefinition> }).agents;
+      agentsMap.set('test-remote', remoteDef);
       
       const sessionState = new Map();
       const invocation = registry.createInvocation(
@@ -171,7 +174,8 @@ describe('AgentRegistry.createInvocation()', () => {
         agentCardUrl: 'https://example.com/card'
       };
       
-      (registry as any).agents.set('test-remote', remoteDef);
+      const agentsMap = (registry as { agents: Map<string, RemoteAgentDefinition> }).agents;
+      agentsMap.set('test-remote', remoteDef);
       
       // Call without sessionState parameter
       const invocation = registry.createInvocation(
@@ -220,7 +224,7 @@ describe('AgentRegistry.createInvocation()', () => {
         runConfig: { max_time_minutes: 5 }
       };
       
-      await (registry as any).registerAgent(localDef);
+      await registry['registerAgent'](localDef);
       
       const invocation = registry.createInvocation('test-local', { query: 'test' });
       
@@ -237,7 +241,8 @@ describe('AgentRegistry.createInvocation()', () => {
         agentCardUrl: 'https://example.com/card'
       };
       
-      (registry as any).agents.set('test-remote', remoteDef);
+      const agentsMap = (registry as { agents: Map<string, RemoteAgentDefinition> }).agents;
+      agentsMap.set('test-remote', remoteDef);
       
       const invocation = registry.createInvocation('test-remote', { query: 'test' });
       
@@ -279,14 +284,15 @@ TEST SCENARIOS (10 tests total):
 2. Narrows to RemoteAgentDefinition for remote agents
 
 KEY NOTES:
-- Tests should FAIL against P24 stub (always returns SubagentInvocation)
+- Tests should FAIL against P24 stub (throws on remote agents)
 - Tests will PASS after P26 implementation
-- Use `(registry as any).agents.set()` to bypass registerRemoteAgent for remote agents
+- Use type assertion `(registry as { agents: Map<...> }).agents.set()` to bypass registerRemoteAgent
+- Use bracket notation `registry['registerAgent']()` to access protected method
 - All tests have @plan PLAN-20260302-A2A.P25 and @requirement A2A-EXEC-011 markers
 
 DELIVERABLES:
 - registry-dispatch.test.ts created (~150 lines)
-- 10 tests total
+- 9 tests total
 - Tests FAIL against stub (expected)
 
 DO NOT:
@@ -303,12 +309,12 @@ DO NOT:
 test -f packages/core/src/agents/__tests__/registry-dispatch.test.ts && echo "FOUND" || echo "MISSING"
 
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P25" packages/core/src/agents/__tests__/registry-dispatch.test.ts
-# Expected: 10+ (one per test scenario)
+grep -c "@plan PLAN-20260302-A2A.P25" packages/core/src/agents/__tests__/registry-dispatch.test.ts
+# Expected: 9+ (one per test scenario)
 
 # Check requirement markers
-grep -c "@requirement:A2A-EXEC-011" packages/core/src/agents/__tests__/registry-dispatch.test.ts
-# Expected: 10+
+grep -c "@requirement A2A-EXEC-011" packages/core/src/agents/__tests__/registry-dispatch.test.ts
+# Expected: 9+
 
 # Run tests (SHOULD FAIL against stub)
 npm test -- packages/core/src/agents/__tests__/registry-dispatch.test.ts
@@ -319,18 +325,19 @@ npm test -- packages/core/src/agents/__tests__/registry-dispatch.test.ts
 
 **Against P24 stub:**
 - Local agent tests: PASS (2/2)
-- Remote agent tests: FAIL (3/3) — stub returns SubagentInvocation, not RemoteAgentInvocation
+- Remote agent tests: FAIL (3/3) — stub throws on remote agents
 - Error handling: PASS (2/2)
-- Type narrowing: FAIL (1-2 tests) — stub doesn't dispatch correctly
+- Type narrowing: FAIL (1/2 tests) — stub throws on remote agents
 
-**Total: ~5 PASS, ~5 FAIL (expected for TDD phase)**
+**Total: ~4 PASS, ~5 FAIL (expected for TDD phase)**
 
 ## Success Criteria
 
-- Test file created with 10 tests
+- Test file created with 9 tests
 - All tests have @plan and @requirement markers
 - Tests compile and run (some fail against stub)
 - No syntax errors
+- No implementation-coupled test code (`as any` on internal registry map replaced with type assertion)
 
 ## Failure Recovery
 
@@ -351,13 +358,13 @@ Phase: P25
 Completed: [YYYY-MM-DD HH:MM timestamp]
 Files Created: packages/core/src/agents/__tests__/registry-dispatch.test.ts (~150 lines)
 
-Tests Added: 10
+Tests Added: 9
   - Local agent dispatch: 2 tests
   - Remote agent dispatch: 3 tests
   - Error handling: 2 tests
   - Type narrowing: 2 tests
 
-Test Results Against Stub: ~5 PASS, ~5 FAIL (expected)
+Test Results Against Stub: ~4 PASS, ~5 FAIL (expected)
 
 Next Phase: P25a (Verification of P25)
 ```

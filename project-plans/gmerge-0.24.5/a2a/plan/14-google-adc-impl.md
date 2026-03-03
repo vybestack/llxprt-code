@@ -86,7 +86,7 @@ CONTEXT: You are implementing Phase 14 of 27 for A2A Remote Agent support.
 
 PREREQUISITE CHECK:
 Verify Phase 13 completed by checking:
-- `grep -c "@plan:PLAN-20260302-A2A.P13" packages/core/src/agents/__tests__/auth-providers.test.ts` returns 5+
+- `grep -c "@plan PLAN-20260302-A2A.P13" packages/core/src/agents/__tests__/auth-providers.test.ts` returns 5+
 - File `project-plans/gmerge-0.24.5/a2a/plan/.verified/P13a-report.md` exists
 
 YOUR TASK:
@@ -187,11 +187,11 @@ grep '"google-auth-library"' packages/core/package.json
 # Expected: 1 occurrence
 
 # JSDoc updated
-grep "@plan:PLAN-20260302-A2A.P14" packages/core/src/agents/auth-providers.ts
+grep "@plan PLAN-20260302-A2A.P14" packages/core/src/agents/auth-providers.ts
 # Expected: 1 occurrence (GoogleADCAuthProvider class)
 
 # No TODO in implementation
-grep "@plan:PLAN-20260302-A2A.P14" packages/core/src/agents/auth-providers.ts -A 25 | grep -E "(TODO|FIXME|HACK|STUB)"
+grep "@plan PLAN-20260302-A2A.P14" packages/core/src/agents/auth-providers.ts -A 25 | grep -E "(TODO|FIXME|HACK|STUB)"
 # Expected: Empty
 ```
 

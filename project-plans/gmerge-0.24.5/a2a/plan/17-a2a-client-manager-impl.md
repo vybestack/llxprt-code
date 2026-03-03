@@ -280,7 +280,8 @@ function mapTaskState(protoState: string): 'submitted' | 'working' | 'completed'
     'TASK_STATE_INPUT_REQUIRED': 'input-required',
   };
   
-  return mapping[protoState] || protoState as any;
+  // Fallback: if unknown state, cast to 'working' as safe default
+  return mapping[protoState] || ('working' as const);
 }
 ```
 
@@ -417,11 +418,11 @@ DO NOT:
 
 ```bash
 # Check plan markers updated to P17
-grep -c "@plan:PLAN-20260302-A2A.P17" packages/core/src/agents/a2a-client-manager.ts
+grep -c "@plan PLAN-20260302-A2A.P17" packages/core/src/agents/a2a-client-manager.ts
 # Expected: 7+ (all methods + helpers)
 
 # Check requirements still present
-grep -c "@requirement:A2A-" packages/core/src/agents/a2a-client-manager.ts
+grep -c "@requirement A2A-" packages/core/src/agents/a2a-client-manager.ts
 # Expected: 4+ (unchanged from stub)
 
 # Run ALL tests (MUST PASS)

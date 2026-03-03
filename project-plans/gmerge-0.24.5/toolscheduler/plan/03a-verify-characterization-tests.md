@@ -52,7 +52,7 @@ git diff packages/core/src/core/coreToolScheduler.ts | grep -E "^[+-]" | grep -v
 
 ```bash
 # Check plan markers
-grep "@plan:PLAN-20260302-TOOLSCHEDULER.P03" packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts || {
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P03" packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts || {
   echo "FAIL: Plan markers missing"
   exit 1
 }
@@ -85,6 +85,31 @@ fi
 echo "[OK] No stub behavior testing detected"
 ```
 
+## Semantic Verification Checklist
+
+**Go beyond markers. Actually verify the behavior exists.**
+
+#### Behavioral Verification Questions
+
+1. **Do tests verify REAL behavior?**
+   - [ ] I read several test cases
+   - [ ] Tests call actual scheduler.schedule() method
+   - [ ] Tests verify actual state transitions occur
+   - [ ] Tests don't just check mocks were called
+
+2. **Are all requirements covered?**
+   - [ ] TS-EXEC-001: State transitions verified
+   - [ ] TS-EXEC-002: PID tracking verified
+   - [ ] TS-EXEC-003: Output streaming verified
+   - [ ] TS-EXEC-005: Error handling verified
+   - [ ] TS-EXEC-006: Cancellation verified
+   - [ ] TS-EXEC-007: Hook invocation verified
+
+3. **Will these tests catch regressions?**
+   - [ ] Tests would fail if behavior changes during extraction
+   - [ ] Tests verify end-to-end behavior, not implementation details
+   - [ ] Tests use realistic mock tools
+
 ## Success Criteria
 
 - [ ] All characterization tests pass
@@ -94,17 +119,43 @@ echo "[OK] No stub behavior testing detected"
 - [ ] At least 7 test cases
 - [ ] No stub behavior testing
 
+## Failure Recovery
+
+If this phase fails:
+
+1. **Tests fail:** Debug why tests don't pass against current code
+2. **Missing requirements:** Add tests for uncovered requirements
+3. **Stub behavior:** Rewrite tests to exercise real behavior
+4. Return to Phase 03 and fix issues
+
 ## Pass/Fail Decision
 
 **PASS** if all verification commands exit 0 and all checkboxes checked.
 
 **FAIL** if any verification command fails. If FAIL, return to Phase 03 for remediation.
 
+## Phase Completion Marker
+
+If PASS, create: `project-plans/gmerge-0.24.5/toolscheduler/.completed/P03a.md`
+
+Contents:
+```markdown
+Phase: P03a
+Completed: [TIMESTAMP]
+Verification Results:
+  - Tests pass: PASS
+  - Requirements covered: All 7
+  - Code not modified: PASS
+  - Real behavior tested: PASS
+Next Phase: 04 (Extract tool executor)
+```
+
 ## Phase Completion
 
 If PASS:
-1. Update execution-tracker.md: Mark P03 and P03a complete
-2. Proceed to Phase 04
+1. Create completion marker above
+2. Update execution-tracker.md: Mark P03 and P03a complete
+3. Proceed to Phase 04
 
 If FAIL:
 1. Document failures in execution-tracker.md

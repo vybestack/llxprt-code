@@ -17,13 +17,13 @@
 # Run registry tests
 npm test -- packages/core/src/agents/__tests__/registry.test.ts
 
-# Expected: 12+ tests all PASS
+# Expected: 11 tests all PASS
 ```
 
 ### Verification Checklist
 
 - [ ] Test file exists at correct path
-- [ ] 12+ tests present
+- [ ] 11 tests present (3 async, 2 parallel, 3 error, 3 regression)
 - [ ] All tests PASS against P18 stub
 - [ ] Tests cover async registration (local + remote)
 - [ ] Tests cover parallel registration
@@ -49,7 +49,7 @@ Verified: [YYYY-MM-DD HH:MM timestamp]
 Status: PASS
 
 Test Results:
-[paste npm test output showing 12+ PASS]
+[paste npm test output showing 11 PASS]
 
 Next Phase: P20 (Async AgentRegistry Implementation)
 ```

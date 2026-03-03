@@ -23,11 +23,11 @@ ls packages/core/src/agents/__tests__/a2a-utils.test.ts
 # Expected: File exists
 
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P07" packages/core/src/agents/__tests__/a2a-utils.test.ts
+grep -c "@plan PLAN-20260302-A2A.P07" packages/core/src/agents/__tests__/a2a-utils.test.ts
 # Expected: 21+ (one per test)
 
 # Check requirement markers
-grep -c "@requirement:A2A-EXEC" packages/core/src/agents/__tests__/a2a-utils.test.ts
+grep -c "@requirement A2A-EXEC" packages/core/src/agents/__tests__/a2a-utils.test.ts
 # Expected: 21+ (each test has requirement marker)
 
 # Check for mocks (should be NONE)

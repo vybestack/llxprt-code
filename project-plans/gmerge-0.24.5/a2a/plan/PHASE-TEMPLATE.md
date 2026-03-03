@@ -216,10 +216,10 @@ Every implementation phase has a verification phase:
 ### Structural Verification
 ```bash
 # Check plan markers
-grep -r "@plan:PLAN-20260302-A2A.P{N}" . | wc -l
+grep -r "@plan PLAN-20260302-A2A.P{N}" . | wc -l
 
 # Check requirements
-grep -r "@requirement:{REQ-ID}" . | wc -l
+grep -r "@requirement {REQ-ID}" . | wc -l
 
 # Run tests
 npm test -- {test-file}

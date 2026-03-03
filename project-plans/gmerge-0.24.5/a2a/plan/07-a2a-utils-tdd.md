@@ -469,7 +469,7 @@ CONTEXT: You are implementing Phase 07 of 27 for A2A Remote Agent support.
 PREREQUISITE CHECK:
 Verify Phase 06 completed by checking:
 - `ls packages/core/src/agents/a2a-utils.ts` file exists
-- `grep -c "@plan:PLAN-20260302-A2A.P06" packages/core/src/agents/a2a-utils.ts` returns 3
+- `grep -c "@plan PLAN-20260302-A2A.P06" packages/core/src/agents/a2a-utils.ts` returns 3
 - File `project-plans/gmerge-0.24.5/a2a/plan/.verified/P06a-report.md` exists
 
 YOUR TASK:
@@ -543,11 +543,11 @@ DO NOT:
 
 ```bash
 # Check plan markers exist
-grep -c "@plan:PLAN-20260302-A2A.P07" packages/core/src/agents/__tests__/a2a-utils.test.ts
+grep -c "@plan PLAN-20260302-A2A.P07" packages/core/src/agents/__tests__/a2a-utils.test.ts
 # Expected: 21+ occurrences (one per test)
 
 # Check requirements covered
-grep -c "@requirement:A2A-EXEC" packages/core/src/agents/__tests__/a2a-utils.test.ts
+grep -c "@requirement A2A-EXEC" packages/core/src/agents/__tests__/a2a-utils.test.ts
 # Expected: 21+ occurrences (each test has requirement marker)
 
 # Run tests (they SHOULD FAIL against stubs, proving behavioral testing)
@@ -625,7 +625,7 @@ Tests Added:
   - extractMessageText tests (6 tests)
   - extractTaskText tests (6 tests)
   - extractIdsFromResponse tests (9 tests)
-Total Tests: 21
+Total Tests: 20
 Test Results: All FAIL against stubs (expected - proves behavioral testing)
 Verification: [paste npm test output showing failures]
 

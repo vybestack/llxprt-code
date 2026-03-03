@@ -7,7 +7,7 @@
 ## Prerequisites
 
 - Required: Phase 01 and 01a completed successfully
-- Verification: `grep "@plan:PLAN-20260302-TOOLSCHEDULER.P01" packages/core/src/scheduler/types.ts`
+- Verification: `grep "@plan PLAN-20260302-TOOLSCHEDULER.P01" packages/core/src/scheduler/types.ts`
 - Expected: scheduler/types.ts exists and compiles
 
 ## Requirements Implemented
@@ -128,7 +128,7 @@ grep "export type {" packages/core/src/core/coreToolScheduler.ts | grep -q "from
 }
 
 # Plan markers present
-grep "@plan:PLAN-20260302-TOOLSCHEDULER.P02" packages/core/src/core/coreToolScheduler.ts || {
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P02" packages/core/src/core/coreToolScheduler.ts || {
   echo "FAIL: Plan markers missing"
   exit 1
 }
@@ -186,6 +186,63 @@ npx tsc --noEmit /tmp/test-import.ts || {
 echo "[OK] Backward compatible imports work"
 ```
 
+## Verification Commands
+
+### Automated Checks
+
+```bash
+# Re-exports added
+grep "export type {" packages/core/src/core/coreToolScheduler.ts | grep -q "from '../scheduler/types.js'" || {
+  echo "FAIL: Re-exports not added"
+  exit 1
+}
+
+# Plan markers present
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P02" packages/core/src/core/coreToolScheduler.ts || {
+  echo "FAIL: Plan markers missing"
+  exit 1
+}
+
+# Original type definitions removed
+if grep "^export type ValidatingToolCall = {" packages/core/src/core/coreToolScheduler.ts; then
+  echo "FAIL: Original type definitions not removed"
+  exit 1
+fi
+
+# TypeScript compilation
+npm run typecheck || {
+  echo "FAIL: TypeScript compilation failed"
+  exit 1
+}
+
+# File size reduced
+original_size=$(git show HEAD:packages/core/src/core/coreToolScheduler.ts | wc -l)
+current_size=$(wc -l < packages/core/src/core/coreToolScheduler.ts)
+reduction=$((original_size - current_size))
+
+if [ "$reduction" -lt 100 ]; then
+  echo "FAIL: File size not reduced enough (only $reduction lines removed, expected ~130)"
+  exit 1
+fi
+
+echo "[OK] File size reduced by $reduction lines"
+```
+
+### Structural Verification Checklist
+
+- [ ] Re-export block present in coreToolScheduler.ts
+- [ ] All type names listed in re-export (ValidatingToolCall through QueuedRequest)
+- [ ] Original type definitions removed
+- [ ] Plan markers present
+- [ ] Import path uses '../scheduler/types.js'
+
+### Semantic Verification Checklist
+
+- [ ] TypeScript compilation succeeds (types resolve correctly)
+- [ ] Existing imports from coreToolScheduler.ts work (backward compatibility)
+- [ ] New imports from scheduler/types.ts work (forward compatibility)
+- [ ] No runtime behavior changes (types only)
+
 ## Success Criteria
 
 - [ ] Re-export block added to coreToolScheduler.ts
@@ -195,6 +252,15 @@ echo "[OK] Backward compatible imports work"
 - [ ] Existing imports from coreToolScheduler.ts work
 - [ ] New imports from scheduler/types.ts work
 - [ ] Plan markers present
+
+## Failure Recovery
+
+If this phase fails:
+
+1. `git checkout -- packages/core/src/core/coreToolScheduler.ts`
+2. Re-run Phase 02 with corrected re-export block
+3. Verify all type names are included in re-export
+4. Ensure no non-type code was deleted
 
 ## Phase Completion Marker
 

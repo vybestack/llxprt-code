@@ -86,7 +86,7 @@ private async launchToolExecution(
 
 #### 1. `packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts`
 
-**MUST include: `@plan:PLAN-20260302-TOOLSCHEDULER.P03`**
+**MUST include: `@plan PLAN-20260302-TOOLSCHEDULER.P03`**
 
 **Test Structure:**
 
@@ -388,7 +388,7 @@ FORBIDDEN:
 test -f packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts || exit 1
 
 # Check plan markers
-grep "@plan:PLAN-20260302-TOOLSCHEDULER.P03" packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts || exit 1
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P03" packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts || exit 1
 
 # Run tests against UNMODIFIED coreToolScheduler
 npm test -- coreToolScheduler.toolExecutor.characterization.test.ts || exit 1
@@ -402,6 +402,49 @@ for req in TS-EXEC-001 TS-EXEC-002 TS-EXEC-003 TS-EXEC-004 TS-EXEC-005 TS-EXEC-0
 done
 ```
 
+## Verification Commands
+
+### Automated Checks
+
+```bash
+# Check file was created
+test -f packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts || exit 1
+
+# Check plan markers
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P03" packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts || exit 1
+
+# Run tests against UNMODIFIED coreToolScheduler
+npm test -- coreToolScheduler.toolExecutor.characterization.test.ts || exit 1
+
+# Check coverage of TS-EXEC requirements
+for req in TS-EXEC-001 TS-EXEC-002 TS-EXEC-003 TS-EXEC-004 TS-EXEC-005 TS-EXEC-006 TS-EXEC-007; do
+  grep "$req" packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts || {
+    echo "FAIL: $req not covered"
+    exit 1
+  }
+done
+```
+
+### Structural Verification Checklist
+
+- [ ] Test file created
+- [ ] Plan markers present (@plan PLAN-20260302-TOOLSCHEDULER.P03)
+- [ ] Requirement markers present (TS-EXEC-001 through TS-EXEC-007)
+- [ ] At least 7 test cases (one per requirement)
+- [ ] Tests use describe/it structure
+- [ ] No modifications to coreToolScheduler.ts
+
+### Semantic Verification Checklist
+
+- [ ] Tests pass against UNMODIFIED coreToolScheduler.ts
+- [ ] Tests exercise real behavior (not stub checking)
+- [ ] Tests verify state transitions (scheduled → executing → terminal)
+- [ ] Tests verify PID tracking works
+- [ ] Tests verify output streaming works
+- [ ] Tests verify error handling works
+- [ ] Tests verify cancellation works
+- [ ] Tests verify hook invocation works
+
 ## Success Criteria
 
 - [ ] Test file created with characterization tests
@@ -410,6 +453,16 @@ done
 - [ ] Tests use realistic mocks (not dummy stubs)
 - [ ] Plan markers present
 - [ ] No modifications to coreToolScheduler.ts
+
+## Failure Recovery
+
+If this phase fails:
+
+1. Delete characterization test file if created incorrectly
+2. Review existing coreToolScheduler.test.ts for patterns
+3. Ensure tests exercise public API (schedule method)
+4. Do not stub internal behavior - test end-to-end
+5. Re-run Phase 03
 
 ## Phase Completion Marker
 

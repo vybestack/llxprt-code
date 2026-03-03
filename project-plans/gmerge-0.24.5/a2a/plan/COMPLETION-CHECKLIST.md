@@ -275,11 +275,11 @@ grep -r "TODO\|NotYetImplemented\|console\.log" packages/core/src/agents/
 # Expected: no matches (or only in comments)
 
 # All plan markers present
-grep -r "@plan:PLAN-20260302-A2A" packages/core/src/agents/ | wc -l
+grep -r "@plan PLAN-20260302-A2A" packages/core/src/agents/ | wc -l
 # Expected: 100+ occurrences
 
 # All requirements covered
-grep -r "@requirement:A2A-" packages/core/src/agents/ | wc -l
+grep -r "@requirement A2A-" packages/core/src/agents/ | wc -l
 # Expected: 62+ occurrences
 
 # Mutation tests

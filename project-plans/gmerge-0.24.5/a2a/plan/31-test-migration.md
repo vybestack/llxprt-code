@@ -192,7 +192,7 @@ it('test description', async () => {  // Add async
 
 **Add plan markers**:
 ```typescript
-it('test description @plan:PLAN-20260302-A2A.P31', async () => {
+it('test description @plan PLAN-20260302-A2A.P31', async () => {
   // ...
 });
 ```

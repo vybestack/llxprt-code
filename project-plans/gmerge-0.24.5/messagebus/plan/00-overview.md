@@ -1,7 +1,7 @@
 # MessageBus DI Refactoring Plan
 
 Plan ID: PLAN-20260303-MESSAGEBUS
-Total Phases: 8 (00a preflight + 3 implementation + 3 verification + 01-characterize)
+Total Phases: 7 (1 preflight + 3 implementation + 3 verification)
 
 ## START HERE
 
@@ -30,12 +30,13 @@ This is a **mechanical refactoring** — changing how MessageBus is passed (serv
 ### Phase 00a: Preflight Verification
 Verify MessageBus interface, Config.getMessageBus(), setMessageBus() exist where expected.
 
-### Phase 01 / 01a: Characterize + Phase 1 (Optional Parameters)
-- Write characterization tests for MessageBus flow through tools and scheduler
-- Add `messageBus?: MessageBus` as optional constructor param to CoreToolScheduler, ToolRegistry
-- Fall back to `config.getMessageBus()` when not provided
+### Phase 01 / 01a: Phase 1 (Optional Parameters)
+- Add `messageBus?: MessageBus` as optional constructor param to ToolRegistry
+- Fall back to `config.getMessageBus()` when not provided (backward compatible)
 - Update test setup to pass MessageBus explicitly
+- Create `createMockMessageBus()` test helper
 - **~16 files changed** (matches upstream Phase 1 scope)
+- **Backward compatible**: Existing code continues to work via fallback
 
 ### Phase 02 / 02a: Phase 2 (Standardize Constructors)
 - Add MessageBus parameter to ALL `createInvocation()` methods
@@ -68,6 +69,11 @@ grep -rn "config.getMessageBus\|config\.setMessageBus" packages/core/src/ --incl
 
 # No setMessageBus shim
 grep -rn "setMessageBus" packages/core/src/ --include="*.ts" | grep -v test | grep -v "\.d\.ts" && echo "FAIL: setMessageBus still exists" || echo "PASS"
+
+# Full test suite
+npm run typecheck && npm run test && npm run lint
+```
+Bus still exists" || echo "PASS"
 
 # Full test suite
 npm run typecheck && npm run test && npm run lint

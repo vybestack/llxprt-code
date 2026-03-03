@@ -330,11 +330,11 @@ DO NOT:
 
 ```bash
 # Check plan markers in implementation
-grep -c "@plan:PLAN-20260302-A2A.P05" packages/core/src/agents/types.ts
+grep -c "@plan PLAN-20260302-A2A.P05" packages/core/src/agents/types.ts
 # Expected: 5 (isLocalAgent, isRemoteAgent, validateLocal, validateRemote, validateAgent)
 
 # Check requirement markers
-grep -c "@requirement:A2A-REG-001" packages/core/src/agents/types.ts
+grep -c "@requirement A2A-REG-001" packages/core/src/agents/types.ts
 # Expected: 5+ (existing 4 from P03 + new 5 from P05 = 9 total)
 
 # Check exports

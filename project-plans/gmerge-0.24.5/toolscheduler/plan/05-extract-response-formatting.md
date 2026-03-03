@@ -318,7 +318,7 @@ FORBIDDEN:
 ```bash
 # Check functions added to generateContentResponseUtilities
 grep "convertToFunctionResponse" packages/core/src/utils/generateContentResponseUtilities.ts || exit 1
-grep "@plan:PLAN-20260302-TOOLSCHEDULER.P05" packages/core/src/utils/generateContentResponseUtilities.ts || exit 1
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P05" packages/core/src/utils/generateContentResponseUtilities.ts || exit 1
 
 # Check functions removed from coreToolScheduler
 if grep -E "^function (createFunctionResponsePart|limitStringOutput|limitFunctionResponsePart|toParts)" packages/core/src/core/coreToolScheduler.ts; then
@@ -339,6 +339,50 @@ npm run typecheck || exit 1
 npm test -- coreToolScheduler || exit 1
 ```
 
+## Verification Commands
+
+### Automated Checks
+
+```bash
+# Check functions added to generateContentResponseUtilities
+grep "convertToFunctionResponse" packages/core/src/utils/generateContentResponseUtilities.ts || exit 1
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P05" packages/core/src/utils/generateContentResponseUtilities.ts || exit 1
+
+# Check functions removed from coreToolScheduler
+if grep -E "^function (createFunctionResponsePart|limitStringOutput|limitFunctionResponsePart|toParts)" packages/core/src/core/coreToolScheduler.ts; then
+  echo "FAIL: Functions not removed from coreToolScheduler.ts"
+  exit 1
+fi
+
+# Check import added
+grep "import.*convertToFunctionResponse.*from.*generateContentResponseUtilities" packages/core/src/core/coreToolScheduler.ts || exit 1
+
+# Check extractAgentIdFromMetadata KEPT (it's state-related)
+grep "function extractAgentIdFromMetadata" packages/core/src/core/coreToolScheduler.ts || exit 1
+
+# TypeScript compilation
+npm run typecheck || exit 1
+
+# Run ALL tests
+npm test -- coreToolScheduler || exit 1
+```
+
+### Structural Verification Checklist
+
+- [ ] convertToFunctionResponse added to generateContentResponseUtilities.ts
+- [ ] Helper functions added (createFunctionResponsePart, limitStringOutput, etc.)
+- [ ] Functions removed from coreToolScheduler.ts
+- [ ] extractAgentIdFromMetadata kept (state-related)
+- [ ] Import added correctly
+- [ ] Plan markers present
+
+### Semantic Verification Checklist
+
+- [ ] All tests pass (behavior preserved)
+- [ ] TypeScript compilation succeeds
+- [ ] Response formatting logic unchanged (cut/paste)
+- [ ] No TODO/HACK in extracted code
+
 ## Success Criteria
 
 - [ ] Functions added to generateContentResponseUtilities.ts
@@ -348,6 +392,16 @@ npm test -- coreToolScheduler || exit 1
 - [ ] TypeScript compilation succeeds
 - [ ] All tests pass
 - [ ] Plan markers present
+
+## Failure Recovery
+
+If this phase fails:
+
+1. **Compilation errors:** Check imports and function signatures
+2. **Tests fail:** Verify functions were copied exactly (no modifications)
+3. **Wrong functions removed:** Ensure extractAgentIdFromMetadata kept
+4. Rollback: `git checkout -- packages/core/src/core/coreToolScheduler.ts packages/core/src/utils/generateContentResponseUtilities.ts`
+5. Re-run Phase 05
 
 ## Phase Completion Marker
 

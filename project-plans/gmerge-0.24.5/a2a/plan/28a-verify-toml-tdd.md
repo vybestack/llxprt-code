@@ -22,11 +22,11 @@ grep -c "^[[:space:]]*it('should" packages/core/src/agents/__tests__/agent-toml-
 # Expected: 12
 
 # Plan markers
-grep -c "@plan:PLAN-20260302-A2A.P28" packages/core/src/agents/__tests__/agent-toml-loader.test.ts
+grep -c "@plan PLAN-20260302-A2A.P28" packages/core/src/agents/__tests__/agent-toml-loader.test.ts
 # Expected: 12+
 
 # Requirement markers
-grep -c "@requirement:A2A-" packages/core/src/agents/__tests__/agent-toml-loader.test.ts
+grep -c "@requirement A2A-" packages/core/src/agents/__tests__/agent-toml-loader.test.ts
 # Expected: 12+
 ```
 

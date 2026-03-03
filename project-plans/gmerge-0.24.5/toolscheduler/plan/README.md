@@ -2,7 +2,7 @@
 
 **Plan ID:** PLAN-20260302-TOOLSCHEDULER  
 **Status:** Ready for execution  
-**Total Phases:** 21 main phases + 21 verification phases = 42 total
+**Total Phases:** 6 implementation phases + 6 verification phases = 12 total
 
 ## Quick Start
 
@@ -29,42 +29,22 @@
 
 ### Phase Groupings
 
+**Preflight (Phase 00a)**
+- 00a: Verify all assumptions, file existence, type availability
+
 **Type Extraction (Phases 01-02)**
-- 01: Extract type definitions to scheduler/types.ts
-- 02: Add re-exports to coreToolScheduler.ts for backward compatibility
+- 01: Extract type definitions to `scheduler/types.ts`
+- 01a: Verify type extraction
+- 02: Add re-exports to `coreToolScheduler.ts` for backward compatibility
+- 02a: Verify re-exports
 
 **Tool Executor Extraction (Phases 03-05)**
-- 03: Create ToolExecutor stub
-- 04: Write ToolExecutor TDD tests (behavioral, not mocks)
-- 05: Implement ToolExecutor.execute() method
-
-**Response Utilities (Phases 06-08)**
-- 06: Create response utility stubs
-- 07: Write response utility TDD tests
-- 08: Implement convertToFunctionResponse and helpers
-
-**File Utilities (Phases 09-11)**
-- 09: Create file truncation stub
-- 10: Write file truncation TDD tests
-- 11: Implement saveTruncatedContent function
-
-**Tool Utilities (Phases 12-14)**
-- 12: Create tool utility stubs
-- 13: Write tool utility TDD tests
-- 14: Implement getToolSuggestion and createErrorResponse
-
-**Integration (Phases 15-17)**
-- 15: Integrate ToolExecutor into scheduler
-- 16: Integrate response utilities into scheduler
-- 17: Integrate file/tool utilities into scheduler
-
-**Testing (Phases 18-20)**
-- 18: Write parallel batch integration tests
-- 19: Write reentrancy stress tests
-- 20: Verify coverage and performance
-
-**Cleanup (Phase 21)**
-- 21: Remove dead code, update docs, final verification
+- 03: Write characterization tests for tool execution behavior
+- 03a: Verify characterization tests
+- 04: Extract `ToolExecutor` from coreToolScheduler.ts (cut-paste, not rewrite)
+- 04a: Verify extraction preserves behavior
+- 05: Extract response formatting utilities
+- 05a: Verify response extraction
 
 ## Critical Rules
 
@@ -99,32 +79,22 @@
   ↓
 01 (types) → 01a (verify) → 02 (re-exports) → 02a (verify)
   ↓
-03 (executor stub) → 03a → 04 (executor TDD) → 04a → 05 (executor impl) → 05a
-  ↓
-06 (response stub) → 06a → 07 (response TDD) → 07a → 08 (response impl) → 08a
-  ↓
-09 (file stub) → 09a → 10 (file TDD) → 10a → 11 (file impl) → 11a
-  ↓
-12 (tool stub) → 12a → 13 (tool TDD) → 13a → 14 (tool impl) → 14a
-  ↓
-15 (executor integration) → 15a → 16 (response integration) → 16a → 17 (util integration) → 17a
-  ↓
-18 (batch tests) → 18a → 19 (reentrancy tests) → 19a → 20 (coverage) → 20a
-  ↓
-21 (cleanup) → 21a
+03 (characterize) → 03a (verify) → 04 (extract executor) → 04a (verify) → 05 (extract response) → 05a (verify)
 ```
 
 ## Success Criteria
 
 This refactoring succeeds when:
 
-1. All 42 phases complete in order
+1. All 12 phases complete in order
 2. All existing tests pass without modification
-3. New modules have 90%+ line coverage, 85%+ branch coverage
-4. coreToolScheduler.ts reduced from 2,139 to ~1,559 lines (27%)
-5. No circular dependencies
-6. Parallel batching behavior preserved
-7. All requirements from requirements.md satisfied
+3. New modules have characterization test coverage
+4. Types extracted to `scheduler/types.ts` with backward-compatible re-exports
+5. `ToolExecutor` extracted with identical behavior
+6. Response formatting extracted to utilities
+7. No circular dependencies
+8. Parallel batching behavior preserved
+9. All requirements from requirements.md satisfied
 
 ## Common Pitfalls
 
@@ -159,13 +129,7 @@ This refactoring succeeds when:
 Every phase maps to specific requirements from requirements.md:
 
 - Phases 01-02 → TS-TYPE-001 through TS-TYPE-004
-- Phases 03-05 → TS-EXEC-001 through TS-EXEC-007
-- Phases 06-08 → TS-RESP-001 through TS-RESP-002
-- Phases 09-11 → TS-UTIL-001 (file truncation)
-- Phases 12-14 → TS-UTIL-001 through TS-UTIL-002
-- Phases 15-17 → TS-STATE-*, TS-CONFIRM-*, TS-LIFE-*, TS-COMPAT-*
-- Phases 18-20 → TS-BATCH-001 through TS-BATCH-005, TS-TEST-*
-- Phase 21 → TS-NFR-003 through TS-NFR-004
+- Phases 03-05 → TS-EXEC-001 through TS-EXEC-007, TS-RESP-001, TS-RESP-002, TS-COMPAT-*
 
 ## Notes for Coordinator
 

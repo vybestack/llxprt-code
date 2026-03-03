@@ -19,11 +19,11 @@ Verify that Phase 05 correctly implemented validation utilities and type guards 
 
 ```bash
 # Check plan markers in implementation
-grep -c "@plan:PLAN-20260302-A2A.P05" packages/core/src/agents/types.ts
+grep -c "@plan PLAN-20260302-A2A.P05" packages/core/src/agents/types.ts
 # Expected: 5 (isLocalAgent, isRemoteAgent, 3 validate functions)
 
 # Check requirement markers (total including P03)
-grep -c "@requirement:A2A-REG-001" packages/core/src/agents/types.ts
+grep -c "@requirement A2A-REG-001" packages/core/src/agents/types.ts
 # Expected: 9+ (4 from P03 + 5 from P05)
 
 # Check exports exist
@@ -39,7 +39,7 @@ npm test -- packages/core/src/agents/__tests__/types.test.ts
 # Expected: 19+ tests, all PASS
 
 # Check test markers
-grep -c "@plan:PLAN-20260302-A2A.P05" packages/core/src/agents/__tests__/types.test.ts
+grep -c "@plan PLAN-20260302-A2A.P05" packages/core/src/agents/__tests__/types.test.ts
 # Expected: 7+ (new describe block with validation tests)
 
 # Check for TODO/FIXME

@@ -19,11 +19,11 @@ Verify that Phase 03 correctly implemented the discriminated union type system f
 
 ```bash
 # Check plan markers exist
-grep -c "@plan:PLAN-20260302-A2A.P03" packages/core/src/agents/types.ts
+grep -c "@plan PLAN-20260302-A2A.P03" packages/core/src/agents/types.ts
 # Expected: 4 (BaseAgentDefinition, LocalAgentDefinition, RemoteAgentDefinition, union type)
 
 # Check requirements covered
-grep -c "@requirement:A2A-REG-001" packages/core/src/agents/types.ts
+grep -c "@requirement A2A-REG-001" packages/core/src/agents/types.ts
 # Expected: 4
 
 # Verify all type exports

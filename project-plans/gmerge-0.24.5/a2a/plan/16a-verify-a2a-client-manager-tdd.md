@@ -24,14 +24,14 @@ ls packages/core/src/agents/__tests__/a2a-client-manager.test.ts
 # Expected: File exists
 
 # Check plan markers exist
-grep -c "@plan:PLAN-20260302-A2A.P16" packages/core/src/agents/__tests__/a2a-client-manager.test.ts
+grep -c "@plan PLAN-20260302-A2A.P16" packages/core/src/agents/__tests__/a2a-client-manager.test.ts
 # Expected: 8+ occurrences (describe blocks)
 
 # Check requirements covered
-grep -E "@requirement:A2A-DISC-001|@requirement:A2A-DISC-002|@requirement:A2A-DISC-003" packages/core/src/agents/__tests__/a2a-client-manager.test.ts
+grep -E "@requirement A2A-DISC-001|@requirement A2A-DISC-002|@requirement A2A-DISC-003" packages/core/src/agents/__tests__/a2a-client-manager.test.ts
 # Expected: 3+ occurrences
 
-grep -E "@requirement:A2A-EXEC-001|@requirement:A2A-EXEC-005|@requirement:A2A-EXEC-012" packages/core/src/agents/__tests__/a2a-client-manager.test.ts
+grep -E "@requirement A2A-EXEC-001|@requirement A2A-EXEC-005|@requirement A2A-EXEC-012" packages/core/src/agents/__tests__/a2a-client-manager.test.ts
 # Expected: 3+ occurrences
 
 # Check test count

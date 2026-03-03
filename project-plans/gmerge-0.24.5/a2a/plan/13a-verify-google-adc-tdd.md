@@ -18,11 +18,11 @@ Run ALL checks from Phase 13 "Verification Commands" section:
 
 ```bash
 # Plan markers
-grep -c "@plan:PLAN-20260302-A2A.P13" packages/core/src/agents/__tests__/auth-providers.test.ts
+grep -c "@plan PLAN-20260302-A2A.P13" packages/core/src/agents/__tests__/auth-providers.test.ts
 # MUST return: 5+
 
 # Requirements
-grep -c "@requirement:A2A-AUTH-003" packages/core/src/agents/__tests__/auth-providers.test.ts
+grep -c "@requirement A2A-AUTH-003" packages/core/src/agents/__tests__/auth-providers.test.ts
 # MUST return: 5+
 
 # Mocking used

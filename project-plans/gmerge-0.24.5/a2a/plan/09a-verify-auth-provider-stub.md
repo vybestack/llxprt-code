@@ -22,19 +22,19 @@ Run ALL checks from Phase 09 "Verification Commands" section:
 ls packages/core/src/agents/auth-providers.ts
 
 # Plan markers in auth-providers.ts
-grep -c "@plan:PLAN-20260302-A2A.P09" packages/core/src/agents/auth-providers.ts
+grep -c "@plan PLAN-20260302-A2A.P09" packages/core/src/agents/auth-providers.ts
 # MUST return: 2
 
 # Requirements in auth-providers.ts
-grep "@requirement:A2A-AUTH-001\|@requirement:A2A-AUTH-002" packages/core/src/agents/auth-providers.ts | wc -l
+grep "@requirement A2A-AUTH-001\|@requirement A2A-AUTH-002" packages/core/src/agents/auth-providers.ts | wc -l
 # MUST return: 2
 
 # Plan markers in config.ts
-grep -c "@plan:PLAN-20260302-A2A.P09" packages/core/src/config/config.ts
+grep -c "@plan PLAN-20260302-A2A.P09" packages/core/src/config/config.ts
 # MUST return: 3
 
 # Requirements in config.ts
-grep "@requirement:A2A-CFG-001" packages/core/src/config/config.ts | wc -l
+grep "@requirement A2A-CFG-001" packages/core/src/config/config.ts | wc -l
 # MUST return: 3
 
 # Exports
@@ -62,7 +62,7 @@ grep -E "(TODO|FIXME|HACK|STUB)" packages/core/src/agents/auth-providers.ts | gr
 # MUST return: Empty (no matches)
 
 # No TODO in new Config methods
-grep "@plan:PLAN-20260302-A2A.P09" packages/core/src/config/config.ts -A 5 | grep -E "(TODO|FIXME|HACK|STUB)"
+grep "@plan PLAN-20260302-A2A.P09" packages/core/src/config/config.ts -A 5 | grep -E "(TODO|FIXME|HACK|STUB)"
 # MUST return: Empty
 ```
 

@@ -20,11 +20,11 @@ Verify that Phase 17 implementation is complete, all tests pass, and code is pro
 
 ```bash
 # Check plan markers updated to P17
-grep -c "@plan:PLAN-20260302-A2A.P17" packages/core/src/agents/a2a-client-manager.ts
+grep -c "@plan PLAN-20260302-A2A.P17" packages/core/src/agents/a2a-client-manager.ts
 # Expected: 7+ occurrences (all methods + helpers)
 
 # Check requirements still present
-grep -E "@requirement:A2A-DISC-001|@requirement:A2A-DISC-002|@requirement:A2A-DISC-003|@requirement:A2A-EXEC-001|@requirement:A2A-EXEC-005|@requirement:A2A-EXEC-012" packages/core/src/agents/a2a-client-manager.ts
+grep -E "@requirement A2A-DISC-001|@requirement A2A-DISC-002|@requirement A2A-DISC-003|@requirement A2A-EXEC-001|@requirement A2A-EXEC-005|@requirement A2A-EXEC-012" packages/core/src/agents/a2a-client-manager.ts
 # Expected: 4+ occurrences
 
 # Run ALL tests (MUST PASS)

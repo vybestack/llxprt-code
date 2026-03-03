@@ -65,7 +65,7 @@ The system shall prevent circular dependency errors when `scheduler/types.ts` is
 
 Extract ALL ToolCall state types and handler types from coreToolScheduler.ts.
 
-**MUST include: `@plan:PLAN-20260302-TOOLSCHEDULER.P01`**
+**MUST include: `@plan PLAN-20260302-TOOLSCHEDULER.P01`**
 
 **What to Extract:**
 
@@ -303,7 +303,7 @@ test -f packages/core/src/scheduler/types.ts || exit 1
 echo "[OK] scheduler/types.ts created"
 
 # Check plan markers exist
-grep -r "@plan:PLAN-20260302-TOOLSCHEDULER.P01" packages/core/src/scheduler/types.ts
+grep -r "@plan PLAN-20260302-TOOLSCHEDULER.P01" packages/core/src/scheduler/types.ts
 echo "[OK] Plan markers present"
 
 # Check no imports from index.js (circular dependency)
@@ -341,8 +341,8 @@ echo "[OK] Types still in coreToolScheduler.ts (correct for Phase 01)"
 - [ ] QueuedRequest interface extracted
 - [ ] No imports from index.js or barrel exports
 - [ ] All imports use "import type" syntax
-- [ ] Plan markers (@plan:PLAN-20260302-TOOLSCHEDULER.P01) present
-- [ ] Requirement markers (@requirement:TS-TYPE-001) present
+- [ ] Plan markers (@plan PLAN-20260302-TOOLSCHEDULER.P01) present
+- [ ] Requirement markers (@requirement TS-TYPE-001) present
 - [ ] TypeScript compilation succeeds
 - [ ] Types NOT removed from coreToolScheduler.ts yet
 

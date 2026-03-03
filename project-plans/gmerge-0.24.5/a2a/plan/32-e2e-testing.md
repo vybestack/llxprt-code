@@ -409,7 +409,7 @@ npm test -- packages/core/src/agents/__tests__/e2e-remote-agent.test.ts
 # Expected: 4/4 tests PASS
 
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P32" packages/core/src/agents/__tests__/e2e-remote-agent.test.ts
+grep -c "@plan PLAN-20260302-A2A.P32" packages/core/src/agents/__tests__/e2e-remote-agent.test.ts
 # Expected: 4+ (one per test)
 
 # Verify file exists

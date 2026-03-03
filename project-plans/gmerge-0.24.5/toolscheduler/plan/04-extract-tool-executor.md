@@ -33,7 +33,7 @@
 
 #### 1. `packages/core/src/scheduler/tool-executor.ts`
 
-**MUST include: `@plan:PLAN-20260302-TOOLSCHEDULER.P04`**
+**MUST include: `@plan PLAN-20260302-TOOLSCHEDULER.P04`**
 
 **What to Extract:**
 
@@ -333,7 +333,7 @@ FORBIDDEN:
 test -f packages/core/src/scheduler/tool-executor.ts || exit 1
 
 # Check plan markers
-grep "@plan:PLAN-20260302-TOOLSCHEDULER.P04" packages/core/src/scheduler/tool-executor.ts || exit 1
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P04" packages/core/src/scheduler/tool-executor.ts || exit 1
 
 # Check launchToolExecution delegates to ToolExecutor
 grep "new ToolExecutor" packages/core/src/core/coreToolScheduler.ts || exit 1
@@ -352,6 +352,52 @@ if [ "$current_size" -gt 2000 ]; then
 fi
 ```
 
+## Verification Commands
+
+### Automated Checks
+
+```bash
+# Check file was created
+test -f packages/core/src/scheduler/tool-executor.ts || exit 1
+
+# Check plan markers
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P04" packages/core/src/scheduler/tool-executor.ts || exit 1
+
+# Check launchToolExecution delegates to ToolExecutor
+grep "new ToolExecutor" packages/core/src/core/coreToolScheduler.ts || exit 1
+grep "toolExecutor.execute" packages/core/src/core/coreToolScheduler.ts || exit 1
+
+# TypeScript compilation
+npm run typecheck || exit 1
+
+# Run ALL tests (existing + characterization)
+npm test -- coreToolScheduler || exit 1
+
+# Check file size reduction
+current_size=$(wc -l < packages/core/src/core/coreToolScheduler.ts)
+if [ "$current_size" -gt 2000 ]; then
+  echo "WARN: File size is $current_size, expected < 2000 after extraction"
+fi
+```
+
+### Structural Verification Checklist
+
+- [ ] tool-executor.ts file created
+- [ ] ToolExecutor class exported
+- [ ] execute() method present
+- [ ] Plan markers present
+- [ ] launchToolExecution modified to delegate
+- [ ] Import added to coreToolScheduler.ts
+- [ ] File size reduced
+
+### Semantic Verification Checklist
+
+- [ ] All existing tests pass (behavior preserved)
+- [ ] All characterization tests pass (extraction correct)
+- [ ] TypeScript compilation succeeds
+- [ ] No TODO/HACK/STUB in extracted code
+- [ ] Code is CUT/PASTE, not rewritten
+
 ## Success Criteria
 
 - [ ] tool-executor.ts created with extracted code
@@ -361,6 +407,17 @@ fi
 - [ ] TypeScript compilation succeeds
 - [ ] File size reduced by ~130 lines
 - [ ] Plan markers present
+
+## Failure Recovery
+
+If this phase fails:
+
+1. **Compilation errors:** Check imports and type definitions
+2. **Tests fail:** Verify behavior was not changed during extraction
+3. **Missing delegation:** Ensure launchToolExecution calls ToolExecutor.execute()
+4. Rollback: `git checkout -- packages/core/src/core/coreToolScheduler.ts`
+5. Delete: `rm packages/core/src/scheduler/tool-executor.ts`
+6. Re-run Phase 04
 
 ## Phase Completion Marker
 

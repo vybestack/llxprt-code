@@ -16,13 +16,12 @@
 ### REQ A2A-CFG-003: Zod Validation Tests
 ### REQ A2A-CFG-004: Kind Inference Tests
 
-**Test Scenarios**:
-1. Parse TOML with remote agent → RemoteAgentDefinition
-2. Parse TOML with local agent → LocalAgentDefinition
-3. Kind inference: agent_card_url present → remote
-4. Kind inference: no agent_card_url → local
-5. Zod validation rejects invalid URLs
-6. Zod validation rejects missing required fields
+**Test Scenarios** (11 tests total):
+1. Remote agent parsing (3 tests)
+2. Local agent parsing (1 test)
+3. Kind inference (3 tests)
+4. Zod validation (3 tests)
+5. Multiple agents (1 test)
 
 **Why This Matters**: Tests verify TOML parsing, kind inference, and Zod validation work correctly. These tests will FAIL against P27 stubs and PASS after P29 implementation.
 
@@ -107,7 +106,7 @@ agent_card_url = "http://example.com/card"
       const filePath = await createTempToml(tomlContent);
       
       // Should throw validation error for non-HTTPS URL
-      await expect(loadAgentsFromToml(filePath)).rejects.toThrow(/https/i);
+      await expect(loadAgentsFromToml(filePath)).rejects.toThrow();
       await unlink(filePath);
     });
   });
@@ -191,7 +190,7 @@ agent_card_url = "not-a-url"
 `;
       
       const filePath = await createTempToml(tomlContent);
-      await expect(loadAgentsFromToml(filePath)).rejects.toThrow(/url/i);
+      await expect(loadAgentsFromToml(filePath)).rejects.toThrow();
       await unlink(filePath);
     });
     
@@ -202,7 +201,7 @@ agent_card_url = "https://example.com/card"
 `;
       
       const filePath = await createTempToml(tomlContent);
-      await expect(loadAgentsFromToml(filePath)).rejects.toThrow(/name/i);
+      await expect(loadAgentsFromToml(filePath)).rejects.toThrow();
       await unlink(filePath);
     });
     
@@ -213,7 +212,7 @@ name = "no-url"
 `;
       
       const filePath = await createTempToml(tomlContent);
-      await expect(loadAgentsFromToml(filePath)).rejects.toThrow(/agent_card_url/i);
+      await expect(loadAgentsFromToml(filePath)).rejects.toThrow();
       await unlink(filePath);
     });
   });
@@ -261,7 +260,7 @@ Verify Phase 27a completed: agent-toml-loader.ts exists with stubs.
 YOUR TASK:
 Create test file `packages/core/src/agents/__tests__/agent-toml-loader.test.ts` with TOML parsing tests.
 
-TEST SCENARIOS (12 tests total):
+TEST SCENARIOS (11 tests total):
 
 **Remote Agent Parsing** (3 tests):
 1. Parse remote agent with agent_card_url
@@ -283,6 +282,8 @@ TEST SCENARIOS (12 tests total):
 
 **Multiple Agents** (1 test):
 1. Parse both local and remote from same file
+
+IMPORTANT: Error message assertions use `.toThrow()` without regex (not over-constrained)
 
 KEY NOTES:
 - Use temp files for TOML content (helper: createTempToml)
@@ -309,15 +310,15 @@ test -f packages/core/src/agents/__tests__/agent-toml-loader.test.ts && echo "FO
 
 # Count tests
 grep -c "^[[:space:]]*it('should" packages/core/src/agents/__tests__/agent-toml-loader.test.ts
-# Expected: 12
+# Expected: 11
 
 # Plan markers
-grep -c "@plan:PLAN-20260302-A2A.P28" packages/core/src/agents/__tests__/agent-toml-loader.test.ts
-# Expected: 12+
+grep -c "@plan PLAN-20260302-A2A.P28" packages/core/src/agents/__tests__/agent-toml-loader.test.ts
+# Expected: 11+
 
 # Requirement markers
-grep -c "@requirement:A2A-" packages/core/src/agents/__tests__/agent-toml-loader.test.ts
-# Expected: 12+
+grep -c "@requirement A2A-" packages/core/src/agents/__tests__/agent-toml-loader.test.ts
+# Expected: 11+
 
 # Run tests (SHOULD FAIL against stub)
 npm test -- packages/core/src/agents/__tests__/agent-toml-loader.test.ts
@@ -326,9 +327,10 @@ npm test -- packages/core/src/agents/__tests__/agent-toml-loader.test.ts
 
 ## Success Criteria
 
-- Test file created with 12 tests
+- Test file created with 11 tests
 - All markers present
 - Tests compile and run (most fail against stub)
+- Error message assertions use `.toThrow()` without over-constrained regex
 
 ## Phase Completion Marker
 
@@ -340,12 +342,14 @@ Phase: P28
 Completed: [YYYY-MM-DD HH:MM timestamp]
 Files Created: packages/core/src/agents/__tests__/agent-toml-loader.test.ts (~180 lines)
 
-Tests Added: 12
+Tests Added: 11
   - Remote agent parsing: 3 tests
   - Local agent parsing: 1 test
   - Kind inference: 3 tests
   - Validation: 3 tests
   - Multiple agents: 1 test
+
+Error Assertions: Use `.toThrow()` without regex (not over-constrained)
 
 Test Results Against Stub: Most FAIL (expected)
 

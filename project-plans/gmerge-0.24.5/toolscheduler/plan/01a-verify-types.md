@@ -11,7 +11,7 @@
 - Expected: TypeScript compilation succeeds
 - Expected files from previous phase:
   - `packages/core/src/scheduler/types.ts` with all type definitions
-  - Plan markers `@plan:PLAN-20260302-TOOLSCHEDULER.P01` in types.ts
+  - Plan markers `@plan PLAN-20260302-TOOLSCHEDULER.P01` in types.ts
 
 ## Verification Commands
 
@@ -46,7 +46,7 @@ test -f packages/core/src/scheduler/types.ts || {
 }
 
 # Plan markers present
-grep -q "@plan:PLAN-20260302-TOOLSCHEDULER.P01" packages/core/src/scheduler/types.ts || {
+grep -q "@plan PLAN-20260302-TOOLSCHEDULER.P01" packages/core/src/scheduler/types.ts || {
   echo "FAIL: Plan markers missing"
   exit 1
 }
@@ -231,6 +231,17 @@ Verification Results:
   - Semantic verification: PASS (types usable in code)
 Next Phase: 02 (Add re-exports)
 ```
+
+## Failure Recovery
+
+If this phase fails:
+
+1. **If types.ts not created:** Return to Phase 01, verify file creation step
+2. **If circular dependencies:** Return to Phase 01, fix imports to use leaf modules only
+3. **If types missing:** Return to Phase 01, ensure all types copied from coreToolScheduler.ts
+4. **If compilation fails:** Return to Phase 01, check for syntax errors in type definitions
+
+Do not proceed to Phase 02 until all verification checks pass.
 
 ## Phase Completion
 

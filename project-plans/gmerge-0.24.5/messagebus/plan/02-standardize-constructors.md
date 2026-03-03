@@ -85,8 +85,165 @@ npm run test
 ## Failure Recovery
 If a tool's `createInvocation()` signature doesn't match expected pattern, read the actual file first. Some tools have non-standard invocation creation. Adapt the pattern to match.
 
-## Phase Completion Marker
+## Required Code Markers (@plan Strategy)
+
+Every modified `createInvocation()` method and agent constructor MUST include:
+
+```typescript
+/**
+ * @plan PLAN-20260303-MESSAGEBUS.P02
+ * Standardized MessageBus parameter in createInvocation/constructor (Phase 2)
+ */
+```
+
+**Marker Placement**:
+- Above every `createInvocation()` method that adds `messageBus` parameter
+- Above agent invocation constructors (LocalInvocation, RemoteInvocation, SubagentInvocation)
+- Above agent wrapper constructors (DelegateToAgentTool, SubagentToolWrapper)
+
+**Example**:
+```typescript
+/**
+ * @plan PLAN-20260303-MESSAGEBUS.P02
+ * Standardized MessageBus parameter in createInvocation (Phase 2)
+ */
+createInvocation(params: ToolContext, messageBus?: MessageBus): SomeInvocation {
+  return new SomeInvocation(this, params, messageBus);
+}
+```
+
+## Structural Verification Checklist
+
+- [ ] ALL `createInvocation()` methods accept `messageBus?: MessageBus` parameter
+- [ ] Agent invocations (LocalInvocation, RemoteInvocation) accept `messageBus` in constructor
+- [ ] Agent wrappers (DelegateToAgentTool, SubagentToolWrapper) accept `messageBus` in constructor
+- [ ] ToolRegistry passes MessageBus when calling `createInvocation()`
+- [ ] Test files updated to pass MessageBus (~8 test files)
+- [ ] All @plan:PLAN-20260303-MESSAGEBUS.P02 markers present
+- [ ] TypeScript compiles
+- [ ] All tests pass
+
+**Tool Coverage** (verify each has messageBus parameter):
+- [ ] get-internal-docs.ts
+- [ ] glob.ts
+- [ ] grep.ts / ripGrep.ts
+- [ ] ls.ts
+- [ ] mcp-tool.ts
+- [ ] read-file.ts
+- [ ] read-many-files.ts
+- [ ] shell.ts
+- [ ] web-fetch.ts
+- [ ] web-search.ts
+- [ ] write-todos.ts
+- [ ] LLxprt-specific tools (ast-grep, structural-analysis, etc.)
+
+## Semantic Verification Checklist
+
+**Behavioral Verification Questions**:
+
+1. **Does the code DO what the requirement says?**
+   - [ ] All tools accept and pass MessageBus to invocations
+   - [ ] All agent invocations receive MessageBus
+   - [ ] MessageBus flows through: ToolRegistry → Tool → Invocation
+
+2. **Is this REAL implementation, not placeholder?**
+   - [ ] No TODO/HACK/STUB markers
+   - [ ] Actual parameter passing implemented
+   - [ ] Tests verify MessageBus propagation
+
+3. **Would the test FAIL if implementation was removed?**
+   - [ ] Tests create MessageBus and pass to createInvocation
+   - [ ] Tests verify invocations receive MessageBus
+   - [ ] Mock verification would fail if parameter removed
+
+4. **Is the feature REACHABLE by users?**
+   - [ ] ToolRegistry calls createInvocation with MessageBus
+   - [ ] Agent execution paths pass MessageBus
+   - [ ] All code paths tested
+
+5. **What's MISSING?** (list gaps that need fixing before proceeding)
+   - [ ] N/A or [list any gaps]
+
+**Integration Points Verified**:
+- [ ] ToolRegistry → Tool.createInvocation() → Invocation (MessageBus flows through)
+- [ ] AgentExecutor → Agent Invocation (MessageBus propagates)
+- [ ] Tests mock MessageBus correctly
+
+## Verification Commands
 ```bash
-echo "PLAN-20260303-MESSAGEBUS.P02 COMPLETE"
-npm run typecheck && npm run test && echo "VERIFIED"
+npm run typecheck
+npm run test
+npm run lint
+
+# Verify all createInvocation methods have messageBus parameter
+grep -rn "createInvocation" packages/core/src/tools/ --include="*.ts" | grep -v test | grep -v ".d.ts"
+# Manually verify each has messageBus parameter
+
+# Verify @plan markers
+grep -r "@plan:PLAN-20260303-MESSAGEBUS.P02" packages/core/src/ | wc -l
+# Expected: At least 20 occurrences (all tools + agents)
+```
+
+## Phase Completion Marker
+
+**Create**: `project-plans/gmerge-0.24.5/messagebus/.completed/P02.md`
+
+**Contents**:
+```markdown
+# Phase 02: Standardize Constructors — COMPLETED
+
+**Completed**: YYYY-MM-DD HH:MM
+**Files Modified**: ~23 files (matching upstream Phase 2 scope)
+
+## Files Changed
+
+### Production Code
+**Tools** (~12 files):
+[List each tool file modified]
+
+**Agents** (~4 files):
+- packages/core/src/agents/delegate-to-agent-tool.ts
+- packages/core/src/agents/subagent-tool-wrapper.ts
+- packages/core/src/agents/local-invocation.ts
+- packages/core/src/agents/remote-invocation.ts
+
+**Registry**:
+- packages/core/src/tools/tool-registry.ts (passes MessageBus to createInvocation)
+
+### Test Files (~8 files)
+[List test files modified]
+
+## Verification Results
+
+### createInvocation Coverage
+```bash
+# All createInvocation methods accept messageBus
+grep -rn "createInvocation.*messageBus" packages/core/src/tools/ | wc -l
+# Result: [N] matches
+```
+
+### Agent Constructor Coverage
+```bash
+grep -rn "constructor.*messageBus" packages/core/src/agents/ | wc -l
+# Result: [N] matches
+```
+
+### Test Suite
+```
+[Paste npm run test summary — all pass]
+```
+
+### @plan Marker Check
+```bash
+grep -r "@plan:PLAN-20260303-MESSAGEBUS.P02" packages/core/src/ | wc -l
+# Result: [N] occurrences
+```
+
+## Diff Stats
+```
+[Paste git diff --stat output]
+```
+
+## Proceed to Phase 02a
+Ready for verification phase.
 ```

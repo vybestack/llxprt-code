@@ -7,7 +7,7 @@
 ## Prerequisites
 
 - Required: Phase 03 completed and verified
-- Verification: `grep -c "@plan:PLAN-20260302-A2A.P03" packages/core/src/agents/types.ts` returns 4
+- Verification: `grep -c "@plan PLAN-20260302-A2A.P03" packages/core/src/agents/types.ts` returns 4
 - Expected: Discriminated union types exist in types.ts (BaseAgentDefinition, LocalAgentDefinition, RemoteAgentDefinition, union type AgentDefinition)
 
 ## Requirements Implemented
@@ -83,11 +83,8 @@ describe('AgentDefinition Types', () => {
       
       // Type narrowing allows access to local-specific fields
       if (def.kind === 'local') {
-        expect(def.promptConfig).toBeDefined();
         expect(def.promptConfig.systemPrompt).toBe('Test system prompt');
-        expect(def.modelConfig).toBeDefined();
         expect(def.modelConfig.model).toBe('gemini-2.0-flash-exp');
-        expect(def.runConfig).toBeDefined();
         expect(def.runConfig.max_time_minutes).toBe(5);
       } else {
         throw new Error('Type narrowing failed for local agent');
@@ -107,10 +104,10 @@ describe('AgentDefinition Types', () => {
       // Verify all required fields are present and have correct types
       expect(def.kind).toBe('local');
       expect(def.name).toBe('test-agent');
-      expect(def.promptConfig).toBeDefined();
-      expect(def.modelConfig).toBeDefined();
-      expect(def.runConfig).toBeDefined();
-      expect(def.inputConfig).toBeDefined();
+      expect(def.promptConfig.systemPrompt).toBe('Test');
+      expect(def.modelConfig.model).toBe('gemini-2.0-flash-exp');
+      expect(def.runConfig.max_time_minutes).toBe(5);
+      expect(def.inputConfig.inputs).toEqual({});
     });
     
     it('should allow optional fields on local agents', () => {
@@ -128,7 +125,7 @@ describe('AgentDefinition Types', () => {
       
       expect(def.displayName).toBe('Test Agent Display');
       expect(def.description).toBe('Test agent description');
-      expect(def.toolConfig).toBeDefined();
+      expect(def.toolConfig?.tools).toEqual([]);
     });
   });
   
@@ -171,7 +168,7 @@ describe('AgentDefinition Types', () => {
       expect(def.kind).toBe('remote');
       expect(def.name).toBe('test-remote');
       expect(def.agentCardUrl).toBe('https://agent.example.com/card');
-      expect(def.inputConfig).toBeDefined();
+      expect(def.inputConfig.inputs).toEqual({});
       
       // Remote agents don't have promptConfig, modelConfig, or runConfig
     });
@@ -214,13 +211,13 @@ describe('AgentDefinition Types', () => {
       
       // Type narrowing works correctly for local
       if (localDef.kind === 'local') {
-        expect(localDef.promptConfig).toBeDefined();
-        expect(localDef.modelConfig).toBeDefined();
+        expect(localDef.promptConfig.systemPrompt).toBe('Test');
+        expect(localDef.modelConfig.model).toBe('gemini-2.0-flash-exp');
       }
       
       // Type narrowing works correctly for remote
       if (remoteDef.kind === 'remote') {
-        expect(remoteDef.agentCardUrl).toBeDefined();
+        expect(remoteDef.agentCardUrl).toBe('https://example.com/card');
       }
     });
     
@@ -256,11 +253,11 @@ describe('AgentDefinition Types', () => {
       
       // After type guard, TypeScript knows the specific type
       if (isLocalAgent(localDef)) {
-        expect(localDef.promptConfig).toBeDefined();
+        expect(localDef.promptConfig.systemPrompt).toBe('Test');
       }
       
       if (isRemoteAgent(remoteDef)) {
-        expect(remoteDef.agentCardUrl).toBeDefined();
+        expect(remoteDef.agentCardUrl).toBe('https://example.com/card');
       }
     });
   });
@@ -356,10 +353,8 @@ describe('AgentDefinition Types', () => {
         agentCardUrl: 'https://example.com/card'
       };
       
-      expect(localDef.inputConfig).toBeDefined();
-      expect(remoteDef.inputConfig).toBeDefined();
-      expect(localDef.inputConfig.inputs.query).toBeDefined();
-      expect(remoteDef.inputConfig.inputs.query).toBeDefined();
+      expect(localDef.inputConfig.inputs.query).toEqual({ description: 'Test query', type: 'string', required: true });
+      expect(remoteDef.inputConfig.inputs.query).toEqual({ description: 'Test query', type: 'string', required: true });
     });
   });
 });
@@ -372,7 +367,7 @@ CONTEXT: You are implementing Phase 04 of 27 for A2A Remote Agent support.
 
 PREREQUISITE CHECK:
 Verify Phase 03 completed by checking:
-- `grep -c "@plan:PLAN-20260302-A2A.P03" packages/core/src/agents/types.ts` returns 4
+- `grep -c "@plan PLAN-20260302-A2A.P03" packages/core/src/agents/types.ts` returns 4
 - LocalAgentDefinition, RemoteAgentDefinition, and discriminated union AgentDefinition exist in types.ts
 - File `project-plans/gmerge-0.24.5/a2a/plan/.completed/P03.md` exists
 
@@ -422,11 +417,11 @@ DO NOT:
 
 ```bash
 # Check plan markers exist
-grep -c "@plan:PLAN-20260302-A2A.P04" packages/core/src/agents/__tests__/types.test.ts
+grep -c "@plan PLAN-20260302-A2A.P04" packages/core/src/agents/__tests__/types.test.ts
 # Expected: 10+ occurrences (one per test)
 
 # Check requirements covered
-grep -c "@requirement:A2A-REG-001" packages/core/src/agents/__tests__/types.test.ts
+grep -c "@requirement A2A-REG-001" packages/core/src/agents/__tests__/types.test.ts
 # Expected: 10+ occurrences
 
 # Run tests (they should ALL PASS since types exist from P03)

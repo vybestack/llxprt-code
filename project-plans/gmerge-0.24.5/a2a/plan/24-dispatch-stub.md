@@ -58,9 +58,14 @@
     
     // STUB: Always return SubagentInvocation for now
     // P26 will implement discriminated union dispatch
+    // Type guard to narrow to LocalAgentDefinition (stub assumes all agents are local)
+    if (definition.kind !== 'local') {
+      throw new Error(`Agent '${agentName}' has kind '${definition.kind}', but only local agents are supported in P24 stub`);
+    }
+    
     return new SubagentInvocation(
       params,
-      definition as any, // Cast to bypass type check (will be fixed in P26)
+      definition, // TypeScript infers LocalAgentDefinition after kind check
       this.config,
       messageBus,
     );
@@ -131,8 +136,9 @@ SPECIFIC CHANGES:
    ```
 
 STUB CHARACTERISTICS:
-- Returns SubagentInvocation for ALL agents (no remote agent support yet)
-- Uses `as any` cast to bypass type check
+- Returns SubagentInvocation for local agents only
+- Uses type guard (definition.kind !== 'local') to narrow type safely
+- Throws error if remote agent encountered (stub limitation)
 - sessionState parameter ignored (for future use)
 
 DELIVERABLES:
@@ -156,11 +162,11 @@ grep -n "createInvocation" packages/core/src/agents/registry.ts
 # Expected: Method definition found
 
 # Check plan marker
-grep -c "@plan:PLAN-20260302-A2A.P24" packages/core/src/agents/registry.ts
+grep -c "@plan PLAN-20260302-A2A.P24" packages/core/src/agents/registry.ts
 # Expected: 1
 
 # Check requirement marker
-grep -c "@requirement:A2A-EXEC-011" packages/core/src/agents/registry.ts
+grep -c "@requirement A2A-EXEC-011" packages/core/src/agents/registry.ts
 # Expected: 1
 
 # Check imports added
@@ -172,9 +178,13 @@ grep "import.*BaseToolInvocation" packages/core/src/agents/registry.ts
 npm run typecheck
 # Expected: No errors
 
-# Check stub behavior (always SubagentInvocation)
-grep -A 10 "createInvocation" packages/core/src/agents/registry.ts | grep "new SubagentInvocation"
-# Expected: Stub returns SubagentInvocation
+# Check stub behavior (local agents only, type guard present)
+grep -A 15 "createInvocation" packages/core/src/agents/registry.ts | grep "definition.kind !== 'local'"
+# Expected: Type guard check found
+
+# Check no type casts
+grep -A 15 "createInvocation" packages/core/src/agents/registry.ts | grep "as any"
+# Expected: NO MATCHES (type guard provides safety, no casts needed)
 ```
 
 ### Semantic Verification Checklist
@@ -186,9 +196,11 @@ grep -A 10 "createInvocation" packages/core/src/agents/registry.ts | grep "new S
 - [ ] Imports added for SubagentInvocation, BaseToolInvocation, etc.
 
 **Is this a valid stub?**
-- [ ] Returns SubagentInvocation for all agents (no dispatch yet)
-- [ ] Uses `as any` cast (temporary)
+- [ ] Returns SubagentInvocation for local agents
+- [ ] Uses type guard `definition.kind !== 'local'` to narrow type
 - [ ] Throws error if agent not found
+- [ ] Throws error if remote agent encountered (stub limitation)
+- [ ] No type casts (type guard provides safety)
 - [ ] Compiles successfully
 
 ## Success Criteria
@@ -222,7 +234,9 @@ Files Modified: packages/core/src/agents/registry.ts (+25 lines)
 
 Stub Added:
   - AgentRegistry.createInvocation() - Factory method stub
-  - Returns SubagentInvocation for all agents (no remote dispatch yet)
+  - Returns SubagentInvocation for local agents
+  - Type guard narrows to LocalAgentDefinition (no type casts)
+  - Throws on remote agents (stub limitation)
   - sessionState parameter included but unused
 
 Verification: Compiles successfully

@@ -28,11 +28,11 @@ npm ls @a2a-js/sdk
 # Expected: @a2a-js/sdk@<version> installed
 
 # Check plan markers exist
-grep -c "@plan:PLAN-20260302-A2A.P15" packages/core/src/agents/a2a-client-manager.ts
+grep -c "@plan PLAN-20260302-A2A.P15" packages/core/src/agents/a2a-client-manager.ts
 # Expected: 7+ occurrences (class + 6 methods + helper functions)
 
 # Check requirements covered
-grep -E "@requirement:A2A-DISC-001|@requirement:A2A-DISC-002|@requirement:A2A-DISC-003|@requirement:A2A-EXEC-012" packages/core/src/agents/a2a-client-manager.ts
+grep -E "@requirement A2A-DISC-001|@requirement A2A-DISC-002|@requirement A2A-DISC-003|@requirement A2A-EXEC-012" packages/core/src/agents/a2a-client-manager.ts
 # Expected: 4+ occurrences
 
 # Check class export

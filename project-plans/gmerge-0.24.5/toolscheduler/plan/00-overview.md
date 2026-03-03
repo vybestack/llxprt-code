@@ -60,7 +60,7 @@ If you're starting mid-plan and don't remember what's been done:
 
 1. **Check execution tracker:** `project-plans/gmerge-0.24.5/toolscheduler/plan/execution-tracker.md`
 2. **Check completed phases:** Look for `.completed/P##.md` files
-3. **Check git:** `git log --oneline --grep="@plan:PLAN-20260302-TOOLSCHEDULER"` to see what's been committed
+3. **Check git:** `git log --oneline --grep="@plan PLAN-20260302-TOOLSCHEDULER"` to see what's been committed
 4. **Read the last completed phase file** to understand what came before
 5. **Run verification:** Execute the verification commands from your current phase to see what's missing
 
@@ -122,17 +122,17 @@ The following responsibilities remain in coreToolScheduler.ts because they're ti
 13. **Helper Methods** — setArgsInternal, setPidInternal (lines 730-785)
 
 **Expected Outcome:**
-- Current: 2,140 lines (actual count from file)
+- Current: 2,140 lines (actual)
 - Types extracted: -130 lines (Phase 01-02)
-- Tool executor extracted: -180 lines (Phase 04, core execution logic)
+- Tool executor extracted: NOT EXTRACTED (kept inline to preserve parallelism)
 - Response formatting extracted: -150 lines (Phase 05, convertToFunctionResponse + helpers)
-- **After extraction: ~1,680 lines (21.5% reduction)**
+- **After extraction: ~1,860 lines (13% reduction)**
 
-**Why Fewer Extracted Lines Than Design Doc Estimated:**
-- Design doc assumed `saveTruncatedContent` and `getToolSuggestion` would be extracted separately
-- In reality, truncation logic is integrated into launchToolExecution (not a separate function to extract)
-- getToolSuggestion is only ~25 lines, not worth separate phase
-- We're focusing on the HIGH-VALUE extractions that reduce complexity the most
+**Why This Differs from Design Doc:**
+- Design doc proposed extracting ToolExecutor (~300 lines)
+- After analysis, ToolExecutor extraction was deemed too risky for parallel batching
+- Focus on safe, high-value extractions: types and pure utilities
+- Tool execution logic stays inline to maintain scheduling control
 
 ## Requirements Coverage
 

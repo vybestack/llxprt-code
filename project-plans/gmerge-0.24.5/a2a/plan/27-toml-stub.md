@@ -104,9 +104,10 @@ export async function loadAgentsFromToml(
  * @plan PLAN-20260302-A2A.P27
  * @requirement A2A-CFG-004
  */
-export function inferAgentKind(entry: any): 'local' | 'remote' {
+export function inferAgentKind(entry: unknown): 'local' | 'remote' {
   // STUB: Always return 'local'
-  // P29 will implement: return entry.agent_card_url ? 'remote' : 'local';
+  // P29 will implement proper type narrowing and check:
+  // if (typeof entry === 'object' && entry !== null && 'agent_card_url' in entry) return 'remote';
   return 'local';
 }
 ```
@@ -144,7 +145,7 @@ STRUCTURE:
 
 3. **Functions** (stubs):
    - loadAgentsFromToml(filePath): return { local: [], remote: [] }
-   - inferAgentKind(entry): return 'local'
+   - inferAgentKind(entry: unknown): return 'local' (uses unknown + type narrowing)
 
 DELIVERABLES:
 - agent-toml-loader.ts created (~50 lines)
@@ -176,12 +177,16 @@ grep "export.*loadAgentsFromToml" packages/core/src/agents/agent-toml-loader.ts
 grep "export.*inferAgentKind" packages/core/src/agents/agent-toml-loader.ts
 # Expected: Both exported
 
+# Check inferAgentKind uses unknown (not any)
+grep "inferAgentKind(entry: unknown)" packages/core/src/agents/agent-toml-loader.ts
+# Expected: Found (type-safe parameter)
+
 # Plan markers
-grep -c "@plan:PLAN-20260302-A2A.P27" packages/core/src/agents/agent-toml-loader.ts
+grep -c "@plan PLAN-20260302-A2A.P27" packages/core/src/agents/agent-toml-loader.ts
 # Expected: 6+ (schemas + functions)
 
 # Requirement markers
-grep -c "@requirement:A2A-" packages/core/src/agents/agent-toml-loader.ts
+grep -c "@requirement A2A-" packages/core/src/agents/agent-toml-loader.ts
 # Expected: 3+ (A2A-REG-006, A2A-CFG-003, A2A-CFG-004)
 
 # Type check

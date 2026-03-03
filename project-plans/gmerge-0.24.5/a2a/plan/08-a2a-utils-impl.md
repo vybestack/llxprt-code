@@ -244,11 +244,11 @@ DO NOT:
 
 ```bash
 # Check plan markers updated to P08
-grep -c "@plan:PLAN-20260302-A2A.P08" packages/core/src/agents/a2a-utils.ts
+grep -c "@plan PLAN-20260302-A2A.P08" packages/core/src/agents/a2a-utils.ts
 # Expected: 3 (all functions updated)
 
 # Check requirements still present
-grep -c "@requirement:A2A-EXEC" packages/core/src/agents/a2a-utils.ts
+grep -c "@requirement A2A-EXEC" packages/core/src/agents/a2a-utils.ts
 # Expected: 4+ (unchanged from stub)
 
 # Run ALL tests (MUST PASS)

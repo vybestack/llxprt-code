@@ -19,11 +19,11 @@ Verify that Phase 04 correctly implemented behavioral tests for the discriminate
 
 ```bash
 # Check plan markers exist
-grep -c "@plan:PLAN-20260302-A2A.P04" packages/core/src/agents/__tests__/types.test.ts
+grep -c "@plan PLAN-20260302-A2A.P04" packages/core/src/agents/__tests__/types.test.ts
 # Expected: 10+ occurrences (one per test)
 
 # Check requirements covered
-grep -c "@requirement:A2A-REG-001" packages/core/src/agents/__tests__/types.test.ts
+grep -c "@requirement A2A-REG-001" packages/core/src/agents/__tests__/types.test.ts
 # Expected: 10+ occurrences
 
 # Check for @scenario markers

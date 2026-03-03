@@ -358,11 +358,11 @@ ls packages/core/src/agents/__tests__/a2a-client-manager.test.ts
 # Expected: File exists
 
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P16" packages/core/src/agents/__tests__/a2a-client-manager.test.ts
+grep -c "@plan PLAN-20260302-A2A.P16" packages/core/src/agents/__tests__/a2a-client-manager.test.ts
 # Expected: 8+ occurrences (describe blocks)
 
 # Check requirements covered
-grep -E "@requirement:A2A-DISC|@requirement:A2A-EXEC" packages/core/src/agents/__tests__/a2a-client-manager.test.ts | wc -l
+grep -E "@requirement A2A-DISC|@requirement A2A-EXEC" packages/core/src/agents/__tests__/a2a-client-manager.test.ts | wc -l
 # Expected: 6+ occurrences
 
 # Run tests (SHOULD FAIL against stubs)

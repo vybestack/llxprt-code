@@ -22,7 +22,7 @@ grep "export function convertToFunctionResponse" packages/core/src/utils/generat
 }
 
 # Check plan markers
-grep "@plan:PLAN-20260302-TOOLSCHEDULER.P05" packages/core/src/utils/generateContentResponseUtilities.ts || {
+grep "@plan PLAN-20260302-TOOLSCHEDULER.P05" packages/core/src/utils/generateContentResponseUtilities.ts || {
   echo "FAIL: Plan markers missing"
   exit 1
 }
@@ -250,6 +250,36 @@ If FAIL:
 1. Document failures in execution-tracker.md
 2. Remediate Phase 05
 3. Re-run Phase 05a
+
+## Semantic Verification Checklist
+
+**Go beyond markers. Actually verify the behavior exists.**
+
+#### Behavioral Verification Questions
+
+1. **Were functions EXTRACTED, not rewritten?**
+   - [ ] I compared functions in generateContentResponseUtilities.ts with original
+   - [ ] Code is identical (cut/paste)
+   - [ ] No logic changes
+
+2. **Do all tests still pass?**
+   - [ ] All 8 test suites pass
+   - [ ] No tests needed modification
+   - [ ] Response formatting behavior unchanged
+
+3. **Is the refactoring complete?**
+   - [ ] coreToolScheduler.ts reduced by ~460 lines total (21.5%)
+   - [ ] 3 modules created (types, tool-executor, response utilities)
+   - [ ] All functionality preserved
+
+## Failure Recovery
+
+If this phase fails:
+
+1. **Missing functions:** Add missing functions to generateContentResponseUtilities.ts
+2. **Tests fail:** Verify functions were copied exactly
+3. **Wrong functions removed:** Check extractAgentIdFromMetadata kept
+4. Return to Phase 05 and fix issues
 
 ## Notes
 

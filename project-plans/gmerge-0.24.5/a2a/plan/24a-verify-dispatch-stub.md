@@ -19,11 +19,11 @@ grep -n "createInvocation" packages/core/src/agents/registry.ts
 # Expected: Line number showing method definition
 
 # Plan marker
-grep "@plan:PLAN-20260302-A2A.P24" packages/core/src/agents/registry.ts
+grep "@plan PLAN-20260302-A2A.P24" packages/core/src/agents/registry.ts
 # Expected: 1 occurrence
 
 # Requirement marker
-grep "@requirement:A2A-EXEC-011" packages/core/src/agents/registry.ts
+grep "@requirement A2A-EXEC-011" packages/core/src/agents/registry.ts
 # Expected: 1 occurrence
 
 # Imports added
@@ -74,8 +74,8 @@ createInvocation(
 
 **Structural:**
 - [ ] createInvocation method exists
-- [ ] Has @plan:PLAN-20260302-A2A.P24 marker
-- [ ] Has @requirement:A2A-EXEC-011 marker
+- [ ] Has @plan PLAN-20260302-A2A.P24 marker
+- [ ] Has @requirement A2A-EXEC-011 marker
 - [ ] All required imports added
 
 **Compilation:**

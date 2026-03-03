@@ -13,38 +13,30 @@
 
 ## Requirements Implemented
 
-### REQ A2A-REG-002: Async Migration (Caller Updates)
+### REQ A2A-EXEC-011: Type Narrowing Only (NO Async Migration)
 
-**Full EARS Text**: All callers of registerAgent() shall await the Promise.
-
-**Behavior Specification**:
-- GIVEN: registerAgent() is now async (changed in P18-P20)
-- WHEN: Code calls registerAgent() or loadBuiltInAgents()
-- THEN: All call sites must use `await` keyword
-- AND: All containing functions must be async
-
-**Why This Matters**: Phase 18-20 made registerAgent() async (breaking change). This phase fixes ALL callers affected by that change. Failure to await will cause:
-- Type errors (Promise<void> assigned to void)
-- Runtime issues (registration may not complete before use)
-- Test failures (agents not registered when expected)
-
-### REQ A2A-EXEC-011: Type Narrowing Migration
+**CRITICAL CLARIFICATION**: This phase is ONLY about type narrowing for the discriminated union. The async migration mentioned in earlier drafts was already completed in P18-P20. This phase does NOT involve async/await changes.
 
 **Full EARS Text**: AgentExecutor and SubagentInvocation shall accept only LocalAgentDefinition (not the union type).
 
+**Scope**: Type signature changes ONLY. No behavioral changes. No async changes.
+
 **Behavior Specification**:
 - GIVEN: AgentDefinition is now a discriminated union (LocalAgentDefinition | RemoteAgentDefinition)
-- WHEN: Code accesses local-only fields (promptConfig, modelConfig, runConfig)
-- THEN: Code must narrow the type to LocalAgentDefinition first
-- AND: Type guards or dispatch logic must be used
+- WHEN: AgentExecutor or SubagentInvocation is instantiated
+- THEN: They must accept ONLY LocalAgentDefinition (narrow type via signature)
+- AND: codebase-investigator.ts must add `kind: 'local'` field
+- AND: Type annotations must be updated to LocalAgentDefinition
 
-**Why This Matters**: Direct property access on AgentDefinition<TOutput> no longer compiles because remote agents don't have promptConfig/modelConfig/runConfig. Code must use type narrowing.
+**Why This Matters**: After P05, AgentDefinition became a discriminated union. AgentExecutor and SubagentInvocation are LOCAL-only components (remote agents use RemoteAgentInvocation). By narrowing their signatures to LocalAgentDefinition, all property access (promptConfig, modelConfig, runConfig) becomes type-safe without explicit type guards.
 
 ## Implementation Tasks
 
+**NOTE**: This phase is TYPE ANNOTATIONS ONLY. No runtime behavior changes. No async/await changes. The async migration was already done in P18-P20.
+
 ### Files to Modify
 
-Based on grep analysis, the following files need updates:
+Based on grep analysis, the following files need type signature updates:
 
 #### 1. **`packages/core/src/agents/executor.ts`** — Type narrowing for local-only fields
 
@@ -145,11 +137,11 @@ export const CodebaseInvestigatorAgent: LocalAgentDefinition<  // CHANGED: was A
 import type { LocalAgentDefinition } from './types.js';  // CHANGED: was AgentDefinition
 ```
 
-#### 4. **`packages/core/src/agents/registry.ts`** — Already async, verify await usage
+#### 4. **`packages/core/src/agents/registry.ts`** — No changes needed
 
-**Status**: Already fixed in P18-P20 (initialize awaits loadBuiltInAgents).
+**Status**: Already async from P18-P20. No type changes needed in this phase.
 
-**Verification only**: Confirm line 31 has `await this.loadBuiltInAgents();`
+**Verification only**: Confirm no type regressions (file already uses correct types)
 
 ### Summary of File Changes
 
@@ -173,12 +165,16 @@ Verify Phase 29a completed:
 - All previous phases (00a-29a) completed
 
 YOUR TASK:
-Update callers affected by breaking changes (discriminated union types, async registerAgent).
+Update type signatures to narrow from AgentDefinition union to LocalAgentDefinition for local-only components.
 
-BREAKING CHANGES TO FIX:
-1. AgentDefinition is now LocalAgentDefinition | RemoteAgentDefinition (P05)
-2. registerAgent() is now async (P18-P20)
-3. AgentExecutor/SubagentInvocation should accept ONLY LocalAgentDefinition
+CRITICAL: This is TYPE SIGNATURES ONLY. No async changes. No behavioral changes.
+
+TYPE CHANGES TO MAKE:
+1. AgentExecutor.create() and constructor: accept LocalAgentDefinition (not union)
+2. SubagentInvocation constructor: accept LocalAgentDefinition (not union)
+3. CodebaseInvestigatorAgent: annotate as LocalAgentDefinition + add kind field
+
+THE ASYNC MIGRATION (registerAgent) WAS ALREADY DONE IN P18-P20. DO NOT MODIFY ASYNC/AWAIT.
 
 SPECIFIC FILE CHANGES:
 
@@ -264,11 +260,13 @@ import type { LocalAgentDefinition } from './types.js';  // CHANGED from AgentDe
 
 **Add marker**: Add `@plan PLAN-20260302-A2A.P30` to export JSDoc.
 
-### 4. packages/core/src/agents/registry.ts (verification only)
+### 4. packages/core/src/agents/registry.ts (no changes)
 
-**Check**: Line 31 should have `await this.loadBuiltInAgents();` (already fixed in P18-P20).
+**Skip**: Async changes already done in P18-P20. No type changes needed.
 
 IMPLEMENTATION REQUIREMENTS:
+- TYPE SIGNATURES ONLY - no runtime changes
+- NO ASYNC CHANGES (already done in P18-P20)
 - All signature changes use LocalAgentDefinition (not AgentDefinition union)
 - codebase-investigator.ts adds `kind: 'local'` field
 - All imports updated
@@ -279,11 +277,13 @@ DELIVERABLES:
 - 3 files modified (~10 lines total)
 - TypeScript compiles with no errors
 - All existing tests still pass (type narrowing doesn't change behavior)
+- NO async/await modifications
 
 DO NOT:
 - Change test files (that's P31)
 - Modify any agent definitions other than codebase-investigator.ts
 - Change runtime behavior (only type annotations)
+- Add async/await (already done in P18-P20)
 ```
 
 ## Verification Commands
@@ -316,7 +316,7 @@ npm test -- packages/core/src/agents/__tests__/
 # Expected: All tests PASS (behavior unchanged, only types narrowed)
 
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P30" packages/core/src/agents/executor.ts packages/core/src/agents/invocation.ts packages/core/src/agents/codebase-investigator.ts
+grep -c "@plan PLAN-20260302-A2A.P30" packages/core/src/agents/executor.ts packages/core/src/agents/invocation.ts packages/core/src/agents/codebase-investigator.ts
 # Expected: 3+ (one per modified file)
 ```
 
@@ -382,7 +382,7 @@ Files Modified:
   - packages/core/src/agents/invocation.ts (~2 lines)
   - packages/core/src/agents/codebase-investigator.ts (~3 lines)
 
-Type Narrowing Changes:
+Type Narrowing Changes (TYPE SIGNATURES ONLY):
   - AgentExecutor.create(): AgentDefinition → LocalAgentDefinition
   - AgentExecutor.definition field: AgentDefinition → LocalAgentDefinition
   - AgentExecutor constructor: AgentDefinition → LocalAgentDefinition
@@ -394,6 +394,10 @@ Verification: [paste typecheck and test output]
 Breaking Changes Fixed:
 - Discriminated union type narrowing complete
 - All local-only property access now type-safe
+
+What Was NOT Changed (Already Fixed in P18-P20):
+- Async/await - registerAgent() already async
+- Registry initialization - already awaits loadBuiltInAgents()
 
 Next Phase: P30a (Verification of P30)
 ```

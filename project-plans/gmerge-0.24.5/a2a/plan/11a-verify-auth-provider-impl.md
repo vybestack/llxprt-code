@@ -28,7 +28,7 @@ npm test -- packages/core/src/agents/__tests__/auth-providers.test.ts
 grep -E "(TODO|FIXME|HACK|STUB)" packages/core/src/agents/auth-providers.ts | grep -v "NOTE:"
 # MUST return: Empty
 
-grep "@plan:PLAN-20260302-A2A.P09" packages/core/src/config/config.ts -A 5 | grep -E "(TODO|FIXME|HACK|STUB)"
+grep "@plan PLAN-20260302-A2A.P09" packages/core/src/config/config.ts -A 5 | grep -E "(TODO|FIXME|HACK|STUB)"
 # MUST return: Empty
 
 # JSDoc complete

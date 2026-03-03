@@ -103,19 +103,27 @@ export async function loadAgentsFromToml(
     displayName: entry.display_name,
     description: entry.description,
     agentCardUrl: entry.agent_card_url,
-    inputConfig: { inputs: {} } as AgentInputs, // Default empty inputs
+    inputConfig: { inputs: {} }, // Default empty inputs (type inferred from RemoteAgentDefinition)
   }));
   
-  // Transform local agents
+  // Transform local agents (minimal for MVP - full TOML support is future work)
   const localAgents: LocalAgentDefinition[] = (validated.local_agents || []).map(entry => ({
     kind: 'local' as const,
     name: entry.name,
     displayName: entry.display_name,
     description: entry.description,
-    inputConfig: { inputs: {} } as AgentInputs,
-    // These would come from TOML in full implementation:
+    inputConfig: { inputs: {} },
+    // MVP limitation: Local agents from TOML get minimal config
+    // Full promptConfig/modelConfig/runConfig from TOML is post-MVP
+    // Use reasonable defaults from existing patterns (no hardcoded models)
     promptConfig: { systemPrompt: '' },
-    modelConfig: { model: 'gemini-2.0-flash-exp', temp: 0.7, top_p: 1.0 },
+    modelConfig: { 
+      // Model should come from Config or environment, not hardcoded
+      // For MVP stub, use empty string to force explicit configuration
+      model: '', 
+      temp: 0.7, 
+      top_p: 1.0 
+    },
     runConfig: { max_time_minutes: 5 },
   }));
   
@@ -128,8 +136,12 @@ export async function loadAgentsFromToml(
  * @plan PLAN-20260302-A2A.P29
  * @requirement A2A-CFG-004
  */
-export function inferAgentKind(entry: any): 'local' | 'remote' {
-  return entry.agent_card_url ? 'remote' : 'local';
+export function inferAgentKind(entry: unknown): 'local' | 'remote' {
+  // Type narrowing: check if entry is object with agent_card_url property
+  if (typeof entry === 'object' && entry !== null && 'agent_card_url' in entry) {
+    return 'remote';
+  }
+  return 'local';
 }
 ```
 
@@ -179,17 +191,24 @@ KEY IMPLEMENTATIONS:
    - Return { local, remote }
 
 3. **inferAgentKind** (replace stub):
-   - Return: `entry.agent_card_url ? 'remote' : 'local'`
+   - Parameter: `entry: unknown` (use type narrowing, not `any`)
+   - Type guard: `typeof entry === 'object' && entry !== null && 'agent_card_url' in entry`
+   - Return: `'remote'` if agent_card_url present, else `'local'`
 
 DELIVERABLES:
 - agent-toml-loader.ts fully implemented (~120 lines)
-- All 12 tests PASS
+- All 11 tests PASS
 - @plan markers updated to P29
 - No TODO comments
+- No type assertions (`as AgentInputs` removed)
+- No hardcoded model names (use empty string for MVP)
+- inferAgentKind uses `unknown` parameter with type narrowing
 
 DO NOT:
 - Change test file (tests already written)
 - Implement full local agent TOML parsing (future work)
+- Use type assertions or `any` types
+- Hardcode specific model names
 ```
 
 ## Verification Commands
@@ -199,7 +218,7 @@ DO NOT:
 ```bash
 # Run ALL tests (MUST PASS)
 npm test -- packages/core/src/agents/__tests__/agent-toml-loader.test.ts
-# Expected: 12/12 PASS
+# Expected: 11/11 PASS
 
 # Check HTTPS enforcement
 grep -A 3 "agent_card_url.*z.string().url()" packages/core/src/agents/agent-toml-loader.ts | grep "refine.*https://"
@@ -213,16 +232,24 @@ grep "toml.parse" packages/core/src/agents/agent-toml-loader.ts
 grep "AgentFileSchema.parse" packages/core/src/agents/agent-toml-loader.ts
 # Expected: Validation call present
 
-# Check kind inference implementation
-grep -A 2 "export function inferAgentKind" packages/core/src/agents/agent-toml-loader.ts | grep "agent_card_url.*remote"
-# Expected: Inference logic present
+# Check kind inference implementation with type narrowing
+grep -A 5 "export function inferAgentKind" packages/core/src/agents/agent-toml-loader.ts | grep "typeof entry === 'object'"
+# Expected: Type guard present (not `any` type)
+
+# Check no hardcoded models
+grep "gemini-2.0-flash-exp" packages/core/src/agents/agent-toml-loader.ts
+# Expected: NO MATCHES (no hardcoded models)
+
+# Check no type assertions on inputConfig
+grep "as AgentInputs" packages/core/src/agents/agent-toml-loader.ts
+# Expected: NO MATCHES (type inferred from definition type)
 
 # Type check
 npm run typecheck
 # Expected: Success
 
 # Check plan marker updated
-grep -c "@plan:PLAN-20260302-A2A.P29" packages/core/src/agents/agent-toml-loader.ts
+grep -c "@plan PLAN-20260302-A2A.P29" packages/core/src/agents/agent-toml-loader.ts
 # Expected: 6+ (updated from P27)
 
 # No TODO
@@ -232,12 +259,15 @@ grep -E "(TODO|FIXME|HACK|STUB)" packages/core/src/agents/agent-toml-loader.ts
 
 ## Success Criteria
 
-- All 12 tests PASS (0 FAIL)
+- All 11 tests PASS (0 FAIL)
 - HTTPS enforcement works (http:// URLs rejected)
-- Kind inference correct (agent_card_url → remote)
+- Kind inference correct with type narrowing (`unknown` parameter)
 - TOML parsing + Zod validation works
 - @plan markers updated to P29
 - No TODO comments
+- No type assertions (`as AgentInputs` removed)
+- No hardcoded model names
+- inferAgentKind uses proper type narrowing (not `any`)
 
 ## Failure Recovery
 
@@ -266,12 +296,13 @@ Files Modified: packages/core/src/agents/agent-toml-loader.ts (~120 lines total)
 Implementation:
   - Full TOML parsing (toml.parse + Zod validation)
   - HTTPS enforcement via .refine()
-  - Kind inference from agent_card_url
+  - Kind inference with type narrowing (unknown → type guard)
   - Field mapping: snake_case → camelCase
   - Remote agent transformation complete
-  - Local agent transformation minimal (MVP)
+  - Local agent transformation minimal (MVP, no hardcoded models)
+  - No type assertions (inputConfig type inferred)
 
-Test Results: All 12 tests PASS
+Test Results: All 11 tests PASS
 
 Verification: [paste npm test output]
 

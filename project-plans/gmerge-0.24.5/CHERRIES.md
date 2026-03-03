@@ -1,7 +1,7 @@
 # Cherry-Pick Decisions: v0.23.0 → v0.24.5
 
 **Total commits in range:** 121  
-**Decision counts:** PICK 34 (28%) · SKIP 42 (35%) · REIMPLEMENT 34 (28%) · NO_OP 11 (9%)
+**Decision counts:** PICK 34 (28%) · SKIP 41 (34%) · REIMPLEMENT 34 (28%) · NO_OP 12 (10%)
 
 ---
 
@@ -49,7 +49,7 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 
 ---
 
-## PICK Table (44 commits, chronological)
+## PICK Table (34 commits, chronological)
 
 | # | Upstream SHA | Date | Areas | Rationale | Subject |
 |---|-------------|------|-------|-----------|---------|
@@ -95,7 +95,7 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 
 ---
 
-## SKIP Table (42 commits, chronological)
+## SKIP Table (41 commits, chronological)
 
 | # | Upstream SHA | Date | Areas | Rationale | Subject |
 |---|-------------|------|-------|-----------|---------|
@@ -115,33 +115,31 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 | 14 | `c29a8c12b3d9` | 2026-01-01 | build | Year-specific linter fix. Build infra specific to upstream. | Fix build issues caused by year-specific linter rule (#15780) |
 | 15 | `788bb04f5c5e` | 2026-01-02 | core | Touches useQuotaAndFallback.ts (removed) and flashFallback.test.ts. | log fallback mode (#15817) |
 | 16 | `c0ccb22460516` | 2026-01-02 | core | Cleanup old smart edit settings. Touches clearcut-logger. LLxprt already removed both. | chore: cleanup old smart edit settings (#15832) |
-| 17 | `eec5d5ebf839` | 2026-01-04 | core | **MessageBus Phase 1.** Reclassified — see REIMPLEMENT table. | feat(core): restore MessageBus optionality (Phase 1) (#15774) |
-| 18 | `90be9c35876d` | 2026-01-04 | core, agents | **MessageBus Phase 2.** Reclassified — see REIMPLEMENT table. | feat(core): Standardize Tool and Agent Invocation constructors (Phase 2) (#15775) |
-| 19 | `12c7c9cc426b` | 2026-01-04 | core, cli | **MessageBus Phase 3.** Reclassified — see REIMPLEMENT table. | feat(core,cli): enforce mandatory MessageBus injection (Phase 3) (#15776) |
-| 20 | `f3625aab1396` | 2026-01-04 | core | Consolidates EditTool and SmartEditTool. LLxprt already removed SmartEdit. | refactor: consolidate EditTool and SmartEditTool (#15857) |
-| 21 | `b13c6b57ae99` | 2026-01-05 | core | Rename smart-edit to edit. Touches clearcut-logger. SmartEdit removed. | chore: rename smart-edit to edit (#15923) |
-| 22 | `cce4574143a2` | 2026-01-07 | core | Google-specific OnboardUser polling. | Use GetOperation to poll for OnboardUser completion (#15827) |
-| 23 | `86b5995f1266` | 2026-01-06 | ci | GitHub workflow — label child issues. Gemini-specific. | Add workflow to label child issues for rollup (#16002) |
-| 24 | `4b5c044272d2` | 2026-01-06 | ci | Gemini-specific workflow fix. | Fix label-backlog-child-issues workflow logic |
-| 25 | `d4b4aede2fc8` | 2026-01-06 | ci | Gemini-specific workflow. | Add debugging logs for issue parent checks |
-| 26 | `2122604b3268` | 2026-01-06 | ci | Gemini-specific workflow. | Refactor parent issue check to use URLs |
-| 27 | `7feb2f8f42be` | 2026-01-06 | ci | Gemini-specific workflow. | Add 'reopened' type to issue labeling workflow |
-| 28 | `1e31427da8b7` | 2026-01-06 | ci | Gemini-specific workflow. | Remove trailing whitespace in yaml (#16036) |
-| 29 | `7eeb7bd74c89` | 2026-01-06 | ci | Gemini-specific issue triage. | fix: limit scheduled issue triage queries (#16021) |
-| 30 | `8f5bf33eacc0` | 2026-01-06 | ci | Gemini-specific issue triage. | ci(github-actions): triage all new issues automatically (#16018) |
-| 31 | `4086abf37505` | 2026-01-06 | tests | Fixes oauth2.test.ts — Google code_assist auth, not applicable. | Fix test. (#16011) |
-| 32 | `fd7b6bf40a9c` | 2026-01-05 | tests | Fixes oauth2.test.ts — same as above. | Fix failing unit tests (#15940) |
-| 33 | `ed8bad8c26ef` | 2026-01-05 | build | Package.json preflight order. Build infra only. | Fix order of preflight (#15941) |
-| 34 | `c31f05356ae3` | 2026-01-06 | core | **Image token estimation.** Issue #1648 covers this with provider-aware approach. Upstream uses flat 3000 (Gemini-specific). Also imports availability/policyHelpers (missing). | fix: image token estimation (#16004) |
-| 35 | `3441b88375b6` | 2026-01-19 | core | LLxprt's client.ts doesn't emit ModelInfo events — completely different model routing. | fix(core): deduplicate ModelInfo emission in GeminiClient (#17075) |
-| 36 | `cb15a238fe42` | 2026-01-07 | release | Version bump. | chore(release): v0.24.0-preview.0 |
-| 37 | `0f0d1d8fc0c6` | 2026-01-12 | release | Ink version patch + version bump. | fix(patch): cherry-pick b54e688 (#16466) |
-| 38 | `314f67a326c4` | 2026-01-13 | release | Version bump. | chore(release): v0.24.0-preview.1 |
-| 39 | `df72e3af3d02` | 2026-01-13 | release | Version bump. | chore(release): v0.24.0-preview.2 |
-| 40 | `48ee9bb308e2` | 2026-01-14 | release | Version bump. | chore(release): v0.24.0-preview.3 |
-| 41 | `b56a1115949d` | 2026-01-14 | release | Version bump. | chore(release): v0.24.0 |
-| 42 | `bd84dbcf2d21` | 2026-01-19 | release | Version bump. | chore(release): v0.24.4 |
-|    | `d6bb149a7e81` | 2026-01-20 | release | Version bump. | chore(release): v0.24.5 |
+| 17 | `f3625aab1396` | 2026-01-04 | core | Consolidates EditTool and SmartEditTool. LLxprt already removed SmartEdit. | refactor: consolidate EditTool and SmartEditTool (#15857) |
+| 18 | `b13c6b57ae99` | 2026-01-05 | core | Rename smart-edit to edit. Touches clearcut-logger. SmartEdit removed. | chore: rename smart-edit to edit (#15923) |
+| 19 | `cce4574143a2` | 2026-01-07 | core | Google-specific OnboardUser polling. | Use GetOperation to poll for OnboardUser completion (#15827) |
+| 20 | `86b5995f1266` | 2026-01-06 | ci | GitHub workflow — label child issues. Gemini-specific. | Add workflow to label child issues for rollup (#16002) |
+| 21 | `4b5c044272d2` | 2026-01-06 | ci | Gemini-specific workflow fix. | Fix label-backlog-child-issues workflow logic |
+| 22 | `d4b4aede2fc8` | 2026-01-06 | ci | Gemini-specific workflow. | Add debugging logs for issue parent checks |
+| 23 | `2122604b3268` | 2026-01-06 | ci | Gemini-specific workflow. | Refactor parent issue check to use URLs |
+| 24 | `7feb2f8f42be` | 2026-01-06 | ci | Gemini-specific workflow. | Add 'reopened' type to issue labeling workflow |
+| 25 | `1e31427da8b7` | 2026-01-06 | ci | Gemini-specific workflow. | Remove trailing whitespace in yaml (#16036) |
+| 26 | `7eeb7bd74c89` | 2026-01-06 | ci | Gemini-specific issue triage. | fix: limit scheduled issue triage queries (#16021) |
+| 27 | `8f5bf33eacc0` | 2026-01-06 | ci | Gemini-specific issue triage. | ci(github-actions): triage all new issues automatically (#16018) |
+| 28 | `4086abf37505` | 2026-01-06 | tests | Fixes oauth2.test.ts — Google code_assist auth, not applicable. | Fix test. (#16011) |
+| 29 | `fd7b6bf40a9c` | 2026-01-05 | tests | Fixes oauth2.test.ts — same as above. | Fix failing unit tests (#15940) |
+| 30 | `ed8bad8c26ef` | 2026-01-05 | build | Package.json preflight order. Build infra only. | Fix order of preflight (#15941) |
+| 31 | `c31f05356ae3` | 2026-01-06 | core | **Image token estimation.** Issue #1648 covers this with provider-aware approach. Upstream uses flat 3000 (Gemini-specific). Also imports availability/policyHelpers (missing). | fix: image token estimation (#16004) |
+| 32 | `3441b88375b6` | 2026-01-19 | core | LLxprt's client.ts doesn't emit ModelInfo events — completely different model routing. | fix(core): deduplicate ModelInfo emission in GeminiClient (#17075) |
+| 33 | `cb15a238fe42` | 2026-01-07 | release | Version bump. | chore(release): v0.24.0-preview.0 |
+| 34 | `0f0d1d8fc0c6` | 2026-01-12 | release | Ink version patch + version bump. | fix(patch): cherry-pick b54e688 (#16466) |
+| 35 | `314f67a326c4` | 2026-01-13 | release | Version bump. | chore(release): v0.24.0-preview.1 |
+| 36 | `df72e3af3d02` | 2026-01-13 | release | Version bump. | chore(release): v0.24.0-preview.2 |
+| 37 | `48ee9bb308e2` | 2026-01-14 | release | Version bump. | chore(release): v0.24.0-preview.3 |
+| 38 | `b56a1115949d` | 2026-01-14 | release | Version bump. | chore(release): v0.24.0 |
+| 39 | `bd84dbcf2d21` | 2026-01-19 | release | Version bump. | chore(release): v0.24.4 |
+| 40 | `4b2701195a5e` | 2026-01-13 | core | Scheduler finalization fix. Race condition doesn't exist in LLxprt's different completion tracking. | fix(patch): cherry-pick eda47f5 [CONFLICTS] (#16577) |
+| 41 | `d6bb149a7e81` | 2026-01-20 | release | Version bump. | chore(release): v0.24.5 |
 
 ---
 
@@ -193,7 +191,7 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 
 ---
 
-## NO_OP Table (11 commits, chronological)
+## NO_OP Table (12 commits, chronological)
 
 | # | Upstream SHA | Date | Areas | Rationale | Subject |
 |---|-------------|------|-------|-----------|---------|
@@ -208,10 +206,10 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 | 9 | `9a3ff6510ffe` | 2026-01-06 | policy | **Already have this.** LLxprt's toml-loader has NO tier-based restriction on `modes`. | feat(policy): allow 'modes' in user and admin policies (#15977) |
 | 10 | `7d4f97de7a16` | 2026-01-06 | core | LLxprt uses `interactionMode` parameter approach, not `config.isInteractiveShellEnabled()`. Bug doesn't apply. | fix(core): use correct interactive check for system prompt (#15020) |
 | 11 | `def09778db93` | 2026-01-19 | cli | **Already removed.** LLxprt already removed bracketedPaste detection/bufferFastReturn logic. | fix(patch): terminal capability fix (#16783) |
+| 12 | `334b813d8102` | 2026-01-13 | cli, policy | **Already done.** Settings bulk migration already applied. 1-line `yolo.toml` change (`allow_redirection = true`) needed as manual add. | fix(patch): cherry-pick 356f76e (#16552) |
 
 ### NO_OP Notes:
-- `334b813d8102` (settings refactor) is also NO_OP for the bulk migration deletion (already done), BUT has a 1-line `yolo.toml` change (`allow_redirection = true`) that should be manually added.
-- `4b2701195a5e` (scheduler finalization fix) is effectively SKIP — the specific race condition doesn't exist in LLxprt's different completion tracking pattern.
+- Row 12 (`334b813d8102`) is NO_OP for the bulk settings migration (already done), BUT has a 1-line `yolo.toml` change (`allow_redirection = true`) that should be manually added during execution.
 
 ---
 

@@ -92,8 +92,142 @@ npm run lint
 ## Failure Recovery
 If tests fail, compare failing tests against upstream changes. The most common issue is test mocks not providing MessageBus where now expected. Fix by adding `createMockMessageBus()` to test setup.
 
-## Phase Completion Marker
+## Required Code Markers (@plan Strategy)
+
+Every modified function/class/constructor in this phase MUST include:
+
+```typescript
+/**
+ * @plan PLAN-20260303-MESSAGEBUS.P01
+ * MessageBus optional parameter added (Phase 1)
+ */
+```
+
+**Marker Placement**:
+- Add above constructor that receives `messageBus?: MessageBus`
+- Add above `createInvocation()` methods that now accept optional messageBus
+- Add to test helper functions (e.g., `createMockMessageBus()`)
+
+**Example**:
+```typescript
+/**
+ * @plan PLAN-20260303-MESSAGEBUS.P01
+ * MessageBus optional parameter added (Phase 1)
+ */
+constructor(
+  private readonly config: Config,
+  private readonly messageBus?: MessageBus,
+) {
+  this.messageBus = messageBus ?? this.config.getMessageBus();
+}
+```
+
+## Structural Verification Checklist
+
+- [ ] `ToolRegistry` accepts `messageBus?: MessageBus` in constructor
+- [ ] `ToolRegistry` uses `this.messageBus ?? this.config.getMessageBus()` pattern
+- [ ] `DeclarativeTool.createInvocation()` signature includes `messageBus?: MessageBus`
+- [ ] `createMockMessageBus()` helper exists in test-utils/mock-tool.ts
+- [ ] Test files updated to pass MessageBus explicitly (~12 test files)
+- [ ] `config.getMessageBus()` STILL EXISTS (backward compatibility)
+- [ ] All @plan markers present in modified code
+- [ ] TypeScript compiles
+- [ ] All tests pass
+
+## Semantic Verification Checklist
+
+**Behavioral Verification Questions**:
+
+1. **Does the code DO what the requirement says?**
+   - [ ] When MessageBus is provided to constructor, it uses the provided instance
+   - [ ] When MessageBus is NOT provided, it falls back to `config.getMessageBus()`
+   - [ ] Both code paths work correctly
+
+2. **Is this REAL implementation, not placeholder?**
+   - [ ] No TODO/HACK/STUB markers in implementation
+   - [ ] Actual fallback logic implemented (`?? this.config.getMessageBus()`)
+   - [ ] Tests verify both code paths (with and without MessageBus)
+
+3. **Would the test FAIL if implementation was removed?**
+   - [ ] Tests explicitly create and pass MessageBus
+   - [ ] Tests verify MessageBus is used for tool invocations
+   - [ ] Mock verification would fail if MessageBus not passed
+
+4. **Is the feature REACHABLE by users?**
+   - [ ] Constructors are called from production code
+   - [ ] `createInvocation()` is called by ToolRegistry
+   - [ ] Backward compatibility maintained (existing code still works)
+
+5. **What's MISSING?** (list gaps that need fixing before proceeding)
+   - [ ] N/A or [list any gaps]
+
+**Backward Compatibility Test**:
 ```bash
-echo "PLAN-20260303-MESSAGEBUS.P01 COMPLETE: Optional params added, backward-compatible"
-npm run typecheck && npm run test && echo "VERIFIED"
+# Verify config.getMessageBus() still works
+grep -n "config.getMessageBus()" packages/core/src/tools/tool-registry.ts
+# Expected: Should find at least one reference (fallback)
+```
+
+## Verification Commands
+```bash
+npm run typecheck
+npm run test
+npm run lint
+
+# Verify @plan markers
+grep -r "@plan:PLAN-20260303-MESSAGEBUS.P01" packages/core/src/ | wc -l
+# Expected: At least 10 occurrences (ToolRegistry, test-utils, tool createInvocation methods)
+```
+
+## Phase Completion Marker
+
+**Create**: `project-plans/gmerge-0.24.5/messagebus/.completed/P01.md`
+
+**Contents**:
+```markdown
+# Phase 01: Optional MessageBus Parameters — COMPLETED
+
+**Completed**: YYYY-MM-DD HH:MM
+**Files Modified**: ~16 files (matching upstream Phase 1 scope)
+
+## Files Changed
+
+### Production Code
+- packages/core/src/tools/tool-registry.ts (added optional messageBus constructor param)
+- packages/core/src/tools/tools.ts (updated createInvocation signatures)
+- packages/core/src/test-utils/mock-tool.ts (added createMockMessageBus helper)
+
+### Test Files (~12 files)
+[List actual test files modified with line counts]
+
+## Verification Results
+
+### TypeScript Compilation
+```
+[Paste npm run typecheck output]
+```
+
+### Test Suite
+```
+[Paste npm run test summary — all pass]
+```
+
+### @plan Marker Check
+```bash
+grep -r "@plan:PLAN-20260303-MESSAGEBUS.P01" packages/core/src/ | wc -l
+# Result: [N] occurrences
+```
+
+### Backward Compatibility Verified
+- config.getMessageBus() still exists: YES
+- Fallback logic works: YES (tested)
+- Existing code unmodified: YES
+
+## Diff Stats
+```
+[Paste git diff --stat output]
+```
+
+## Proceed to Phase 01a
+Ready for verification phase.
 ```

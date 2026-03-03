@@ -248,6 +248,33 @@ This phase passes when:
 4. Test infrastructure is ready
 5. No blocking issues remain
 
+## Failure Recovery
+
+If this phase fails:
+
+1. Document blocking issues in the "Blocking Issues Found" section
+2. Update affected phase files based on discrepancies found
+3. Do not proceed to Phase 01 until all verification gates pass
+4. If critical dependencies are missing, install them before proceeding
+
+## Phase Completion Marker
+
+Create: `project-plans/gmerge-0.24.5/toolscheduler/.completed/P00a.md`
+
+Contents:
+```markdown
+Phase: P00a
+Completed: [TIMESTAMP]
+Verification Results:
+  - Dependencies: [PASS/FAIL]
+  - Types: [PASS/FAIL]
+  - Call Paths: [PASS/FAIL]
+  - Test Infrastructure: [PASS/FAIL]
+  - File Structure: [PASS/FAIL]
+Blocking Issues: [List any issues found]
+Gate Status: [PASSED/FAILED]
+```
+
 ## Notes for Coordinator
 
 This is a verification-only phase. No implementation is performed. The output is a report of what exists and what needs to be created. Use this report to validate the plan before starting Phase 01.

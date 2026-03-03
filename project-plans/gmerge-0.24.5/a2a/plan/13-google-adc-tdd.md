@@ -74,7 +74,6 @@ describe('GoogleADCAuthProvider', () => {
     const provider = new GoogleADCAuthProvider();
     
     const handler = await provider.getAuthHandler('https://agent.googleapis.com/card');
-    expect(handler).toBeDefined();
     
     const headers = await handler!.headers();
     expect(headers.Authorization).toBe('Bearer mock-adc-token-12345');
@@ -142,12 +141,11 @@ describe('GoogleADCAuthProvider', () => {
     expect(retryHeaders!.Authorization).toBe('Bearer refreshed-token');
   });
   
-  it('should implement RemoteAgentAuthProvider interface', () => {
-    const { GoogleADCAuthProvider } = require('../auth-providers.js');
+  it('should implement RemoteAgentAuthProvider interface', async () => {
+    const { GoogleADCAuthProvider } = await import('../auth-providers.js');
     const provider = new GoogleADCAuthProvider();
     
     const interfaceProvider: RemoteAgentAuthProvider = provider;
-    expect(interfaceProvider).toBeDefined();
     expect(typeof interfaceProvider.getAuthHandler).toBe('function');
   });
 });
@@ -219,11 +217,11 @@ DO NOT:
 
 ```bash
 # Check plan markers
-grep -c "@plan:PLAN-20260302-A2A.P13" packages/core/src/agents/__tests__/auth-providers.test.ts
+grep -c "@plan PLAN-20260302-A2A.P13" packages/core/src/agents/__tests__/auth-providers.test.ts
 # Expected: 5+ occurrences
 
 # Check requirements
-grep -c "@requirement:A2A-AUTH-003" packages/core/src/agents/__tests__/auth-providers.test.ts
+grep -c "@requirement A2A-AUTH-003" packages/core/src/agents/__tests__/auth-providers.test.ts
 # Expected: 5+ occurrences
 
 # Run tests (they should FAIL against stubs)

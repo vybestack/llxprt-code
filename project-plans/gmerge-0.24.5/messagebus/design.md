@@ -6,11 +6,23 @@ Refactor MessageBus from a hybrid service-locator/constructor-injection pattern 
 
 ### Upstream Commits Being Reimplemented
 
-| SHA | Phase | Subject |
-|-----|-------|---------|
-| `eec5d5ebf839` | Phase 1 | Restore MessageBus optionality — make it optional constructor param |
-| `90be9c35876d` | Phase 2 | Standardize tool and agent invocation constructors |
-| `12c7c9cc426b` | Phase 3 | Enforce mandatory MessageBus injection everywhere |
+| SHA | Phase | Subject | Files Changed |
+|-----|-------|---------|---------------|
+| `eec5d5ebf839` | Phase 1 | Restore MessageBus optionality — make it optional constructor param | 16 files changed, 105 insertions(+), 82 deletions(-) |
+| `90be9c35876d` | Phase 2 | Standardize tool and agent invocation constructors | 23 files changed, 140 insertions(+), 44 deletions(-) |
+| `12c7c9cc426b` | Phase 3 | Enforce mandatory MessageBus injection everywhere | 57 files changed, 440 insertions(+), 276 deletions(-) |
+
+**Verified upstream stats** (via `git show --stat <SHA>`):
+- Total upstream changes: 96 files, 685 insertions, 402 deletions
+- Upstream includes `smart-edit.ts` which LLxprt removed
+- LLxprt has `ripGrep.ts` as primary grep tool (upstream uses `grep.ts`)
+- LLxprt has additional tools (ast-grep, structural-analysis, etc.) not in upstream
+
+**LLxprt-Specific Considerations**:
+- Skip `smart-edit.ts` (removed from LLxprt)
+- Apply pattern to `ripGrep.ts` (LLxprt's grep implementation)
+- Include LLxprt-only tools: ast-grep, structural-analysis, delete-line-range, insert-at-line, read-line-range, apply-patch, code-search, direct-web-fetch, todo-write/read/pause, check-async-tasks, activate-skill
+- Subagent and agent invocation patterns match upstream
 
 ### Current State (LLxprt)
 
@@ -21,7 +33,27 @@ MessageBus usage in LLxprt is inconsistent:
 3. **setMessageBus() shim**: ToolRegistry has a dead `setMessageBus()` no-op stub, and iterates tools calling `setMessageBus()` on any tool that has the method
 4. **Config storage**: `Config` class stores MessageBus and provides `getMessageBus()` / `setMessageBus()`
 
-**Scope**: 33 production files, 28 test files, ~206 references.
+**Scope**: 33 production files, 24 test files, 717 total references (verified via grep).
+
+**Verification** (as of plan creation):
+```bash
+# Production files referencing MessageBus (33 files)
+grep -rln "messageBus\|MessageBus\|getMessageBus\|setMessageBus" packages/core/src/ --include="*.ts" | grep -v test | grep -v ".d.ts" | wc -l
+# Result: 33
+
+# Test files referencing MessageBus (24 files)
+grep -rln "messageBus\|MessageBus\|getMessageBus\|setMessageBus" packages/core/src/ --include="*.ts" | grep test | wc -l
+# Result: 24
+
+# Total line references (717 lines)
+grep -rn "messageBus\|MessageBus\|getMessageBus\|setMessageBus" packages/core/src/ --include="*.ts" | wc -l
+# Result: 717
+```
+
+**Current service locator usage**:
+- `config.getMessageBus()`: 5 production call sites (coreToolScheduler, subagent, tool-registry)
+- `setMessageBus()` shim: 1 location (ToolRegistry) — dead code calling it on tools
+- `Config` storage: 1 `getMessageBus()` method implementation
 
 ### Target State
 
@@ -132,12 +164,27 @@ All corresponding test files need MessageBus in test setup/mocks.
 
 ## 5. Risk Assessment
 
-**Risk: LOW** — This is a mechanical signature refactoring. No behavior changes. No new logic.
+**Risk: MODERATE implementation risk, LOW behavioral-change risk**
 
-- Pattern is well-understood (constructor DI is standard)
-- Each phase is independently deployable (fallback in Phase 1-2)
-- Upstream already did this exact migration — we can reference their diffs
+**Why Moderate Implementation Risk**:
+- High blast radius: 57 files changed in total (Phase 1: 16, Phase 2: 23, Phase 3: 57)
+- 717 total line references to MessageBus across codebase
+- Mechanical changes but requires careful tracking across many files
+- TypeScript signature changes can cascade to tests and mocks
+
+**Why Low Behavioral-Change Risk**:
+- Pure structural refactoring — no MessageBus API changes
+- No new features or logic added
+- Upstream completed identical migration successfully (commits eec5d5ebf839, 90be9c35876d, 12c7c9cc426b)
+- Each phase is backward-compatible until Phase 3
 - All existing tests verify behavior is preserved
+
+**Mitigation Strategy**:
+1. Follow upstream diffs exactly (adapt for LLxprt structure)
+2. Maintain backward compatibility through Phase 1-2 (optional params with fallback)
+3. Run full test suite after each phase
+4. Use git to review changes file-by-file
+5. Verify zero `config.getMessageBus()` references before completing Phase 3
 
 ## 6. Success Criteria
 

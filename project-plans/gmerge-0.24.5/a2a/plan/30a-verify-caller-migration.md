@@ -55,7 +55,7 @@ grep "kind: 'local'" packages/core/src/agents/codebase-investigator.ts
 ### 4. Plan Markers
 
 ```bash
-grep "@plan:PLAN-20260302-A2A.P30" packages/core/src/agents/executor.ts packages/core/src/agents/invocation.ts packages/core/src/agents/codebase-investigator.ts | wc -l
+grep "@plan PLAN-20260302-A2A.P30" packages/core/src/agents/executor.ts packages/core/src/agents/invocation.ts packages/core/src/agents/codebase-investigator.ts | wc -l
 ```
 
 **Expected**: 3+ markers (one per file).
