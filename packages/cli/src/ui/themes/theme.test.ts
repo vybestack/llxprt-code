@@ -328,4 +328,22 @@ describe('pickDefaultThemeName', () => {
       pickDefaultThemeName('#000000', themes, 'Missing Theme', 'Default Light'),
     ).toBe('Dracula');
   });
+
+  it('should ignore fallback name when its type does not match terminal type', () => {
+    const themes = [
+      {
+        name: 'Green Screen',
+        type: 'light' as const,
+        colors: { Background: '#ffffff' },
+      },
+      {
+        name: 'Dracula',
+        type: 'dark' as const,
+        colors: { Background: '#282a36' },
+      },
+    ];
+    expect(
+      pickDefaultThemeName('#000000', themes, 'Green Screen', 'Default Light'),
+    ).toBe('Dracula');
+  });
 });

@@ -533,6 +533,9 @@ export const Footer = React.memo<FooterProps>(
     prevProps.vimMode === nextProps.vimMode &&
     prevProps.contextLimit === nextProps.contextLimit &&
     prevProps.isTrustedFolder === nextProps.isTrustedFolder &&
+    prevProps.hideCWD === nextProps.hideCWD &&
+    prevProps.hideSandboxStatus === nextProps.hideSandboxStatus &&
+    prevProps.hideModelInfo === nextProps.hideModelInfo &&
     prevProps.themeName === nextProps.themeName,
   // Ignore rapidly changing values - TPM, wait time, and session tokens
 );
