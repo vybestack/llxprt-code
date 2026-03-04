@@ -225,11 +225,8 @@ describe('gemini.tsx main function', () => {
     });
 
     try {
-      await main();
-    } catch (e) {
-      // process.exit(0) is mocked to throw
-      expect(e).toBeInstanceOf(MockProcessExitError);
-      expect((e as MockProcessExitError).code).toBe(0);
+      await expect(main()).rejects.toThrow(MockProcessExitError);
+      expect(exitSpy).toHaveBeenCalledWith(0);
     } finally {
       process.argv = originalArgv;
       exitSpy.mockRestore();
@@ -255,10 +252,8 @@ describe('gemini.tsx main function', () => {
     });
 
     try {
-      await main();
-    } catch (e) {
-      expect(e).toBeInstanceOf(MockProcessExitError);
-      expect((e as MockProcessExitError).code).toBe(0);
+      await expect(main()).rejects.toThrow(MockProcessExitError);
+      expect(exitSpy).toHaveBeenCalledWith(0);
     } finally {
       process.argv = originalArgv;
       exitSpy.mockRestore();
