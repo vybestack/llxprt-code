@@ -12,8 +12,8 @@ Syncing LLxprt Code from upstream gemini-cli v0.23.0 → v0.24.5 (121 commits).
 | Decision | Count | % |
 |----------|------:|--:|
 | PICK | 34 | 28% |
-| SKIP | 41 | 34% |
-| REIMPLEMENT | 34 | 28% |
+| SKIP | 45 | 37% |
+| REIMPLEMENT | 30 | 25% |
 | NO_OP | 12 | 10% |
 | **Total** | **121** | |
 
@@ -21,7 +21,7 @@ Syncing LLxprt Code from upstream gemini-cli v0.23.0 → v0.24.5 (121 commits).
 
 1. **Agent Skills → PICK** (11 commits). Cherry-pickable with branding changes.
 2. **MessageBus → REIMPLEMENT** (3 commits). DI migration: service locator → constructor injection. ~57 files, mechanical refactoring. Design + plan in `messagebus/`.
-3. **Remote Agents → REIMPLEMENT** (4 commits). Incompatible agent architecture. Design + plan in `a2a/`.
+3. **Remote Agents → SKIP (deferred)** (4 commits). Descoped from this sync — incompatible agent architecture needs ~1500-2000 LoC. Design/plan moved to `project-plans/a2a/`, tracked via GitHub issue.
 4. **Tool Scheduler → REIMPLEMENT our own way** (2 commits). Extract-not-rewrite. Design + plan in `toolscheduler/`.
 5. **Deferred items resolved**: 7 items previously "deferred" reclassified to REIMPLEMENT (hooks, settings, coreEvents migration). 2 minor items subsumed or trivial.
 
@@ -52,7 +52,6 @@ Complete Agent Skills system: SkillManager, activate_skill tool, system prompt i
 
 | System | Commits | Magnitude | Priority |
 |--------|---------|-----------|----------|
-| Remote Agents | 4 | ~1500-2000 LoC new | High |
 | Tool Scheduler Refactor | 2 | ~800-1200 LoC moved | Medium |
 | Console → coreEvents | 1 (66 files) | ~1000 LoC changes | Medium |
 | Hooks enhancements | 6 | ~800 LoC | High |
@@ -64,11 +63,12 @@ Complete Agent Skills system: SkillManager, activate_skill tool, system prompt i
 ## Deferred Items
 
 All previously deferred items have been resolved:
-- 7 items reclassified to REIMPLEMENT (hooks, settings, coreEvents migration) — now in REIMPLEMENT table rows 29-34 + row 28.
+- 7 items reclassified to REIMPLEMENT (hooks, settings, coreEvents migration) — now in REIMPLEMENT table rows 25-30.
+- 4 Remote Agent/A2A commits descoped to separate issue — design/plan moved to `project-plans/a2a/`.
 - 2 minor items resolved: yolo.toml `allow_redirection = true` (manual add during execution), dead `setMessageBus()` stubs (subsumed by MessageBus DI refactor).
 
 ## Risk Areas
 
 1. **Skills cherry-pick** — 11 commits, linear chain. Verify `getAgentRegistry().getDirectoryContext()` exists.
 2. **Race condition fix** — Touches useGeminiStream.ts which is a hot file. Minor conflicts expected.
-3. **REIMPLEMENT volume** — 34 commits across A2A, ToolScheduler, MessageBus, hooks, settings, and coreEvents. Full PLANs created for A2A, ToolScheduler, and MessageBus.
+3. **REIMPLEMENT volume** — 30 commits across ToolScheduler, MessageBus, hooks, settings, and coreEvents. Full PLANs created for ToolScheduler and MessageBus.

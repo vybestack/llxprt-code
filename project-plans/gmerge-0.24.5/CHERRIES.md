@@ -1,7 +1,7 @@
 # Cherry-Pick Decisions: v0.23.0 → v0.24.5
 
 **Total commits in range:** 121  
-**Decision counts:** PICK 34 (28%) · SKIP 41 (34%) · REIMPLEMENT 34 (28%) · NO_OP 12 (10%)
+**Decision counts:** PICK 34 (28%) · SKIP 45 (37%) · REIMPLEMENT 30 (25%) · NO_OP 12 (10%)
 
 ---
 
@@ -27,8 +27,8 @@ One verification needed: `config.getAgentRegistry().getDirectoryContext()` in pr
 ### 2. MessageBus Phase 1-3 (3 commits → REIMPLEMENT)
 LLxprt currently uses a service locator pattern (`config.getMessageBus()`) which hides the dependency. Upstream's 3-phase migration makes MessageBus an explicit constructor parameter — proper dependency injection. This is better practice: more testable, more honest about coupling, standard DI. LLxprt should adopt the DI pattern, adapted to our codebase. Touches 50+ files but the pattern is mechanical. Needs a design spec and requirements.
 
-### 3. Remote Agents / A2A (4 commits → REIMPLEMENT)
-Incompatible agent architecture. LLxprt has SubagentOrchestrator, not upstream's agent framework. The A2A protocol support is valuable. Needs a phased PLAN: Phase 1 types+client (~500 LoC), Phase 2 registry (~300 LoC), Phase 3 execution (~700 LoC). Total ~1500-2000 LoC new.
+### 3. Remote Agents / A2A (4 commits → SKIP, deferred to separate issue)
+Descoped from this sync. Incompatible agent architecture requires ~1500-2000 LoC new code with its own phased plan. Design specs and requirements already written — moved to `project-plans/a2a/`. Tracked via GitHub issue for future implementation.
 
 ### 4. Tool Scheduler Refactor (2 commits → REIMPLEMENT our own way)
 Refactoring concepts are valuable (extract types, utilities, ToolExecutor) but LLxprt's scheduler is 2139 lines and heavily diverged with parallel batching. Do our own extraction: types → `scheduler/types.ts`, utilities → `fileUtils.ts`/`generateContentResponseUtilities.ts`, ToolExecutor → `scheduler/tool-executor.ts`. Expected to reduce file from 2139 to ~1500 lines. Needs a PLAN.
@@ -95,7 +95,7 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 
 ---
 
-## SKIP Table (41 commits, chronological)
+## SKIP Table (45 commits, chronological)
 
 | # | Upstream SHA | Date | Areas | Rationale | Subject |
 |---|-------------|------|-------|-----------|---------|
@@ -140,10 +140,14 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 | 39 | `bd84dbcf2d21` | 2026-01-19 | release | Version bump. | chore(release): v0.24.4 |
 | 40 | `4b2701195a5e` | 2026-01-13 | core | Scheduler finalization fix. Race condition doesn't exist in LLxprt's different completion tracking. | fix(patch): cherry-pick eda47f5 [CONFLICTS] (#16577) |
 | 41 | `d6bb149a7e81` | 2026-01-20 | release | Version bump. | chore(release): v0.24.5 |
+| 42 | `848e8485cd0f` | 2025-12-29 | agents | **Remote Agents: Multi-agent TOML.** Deferred — A2A descoped to separate issue. Design/plan in `project-plans/a2a/`. | feat(agents): add support for remote agents and multi-agent TOML files (#15437) |
+| 43 | `3ebe4e6a8ffc` | 2025-12-30 | agents | **Remote Agents: Registry.** Deferred — same. | feat(agents): Add remote agents to agent registry (#15711) |
+| 44 | `02a36afc3892` | 2025-12-23 | agents, a2a | **Remote Agents: A2A Client Manager.** Deferred — same. | feat: Add A2A Client Manager and tests (#15485) |
+| 45 | `96b9be3ec439` | 2026-01-06 | agents | **Remote Agents: Support.** Deferred — same. | feat(agents): add support for remote agents (#16013) |
 
 ---
 
-## REIMPLEMENT Table (34 commits, chronological)
+## REIMPLEMENT Table (30 commits, chronological)
 
 | # | Upstream SHA | Date | Areas | Rationale | Subject |
 |---|-------------|------|-------|-----------|---------|
@@ -163,31 +167,28 @@ Issue #1648 already covers this with a superior provider-aware approach. Upstrea
 | 14 | `d3c206c6770d` | 2026-01-04 | policy, shell | Unify shell security policy. Touches policy-engine, toml-loader, shell, config. Diverged. | Unify shell security policy and remove legacy logic (#15770) |
 | 15 | `5566292cc83f` | 2025-12-26 | core | **Tool Scheduler: Extract types/utilities.** Concepts valuable for our 2139-line file. Do our own extraction. | refactor(core): extract static concerns from CoreToolScheduler (#15589) |
 | 16 | `b4b49e7029d3` | 2026-01-05 | core | **Tool Scheduler: Extract ToolExecutor.** Same — do our own. | refactor(core): Extract and integrate ToolExecutor (#15900) |
-| 17 | `848e8485cd0f` | 2025-12-29 | agents | **Remote Agents: Multi-agent TOML.** Incompatible agent architecture. Port via PLAN. | feat(agents): add support for remote agents and multi-agent TOML files (#15437) |
-| 18 | `3ebe4e6a8ffc` | 2025-12-30 | agents | **Remote Agents: Registry.** Same. | feat(agents): Add remote agents to agent registry (#15711) |
-| 19 | `02a36afc3892` | 2025-12-23 | agents, a2a | **Remote Agents: A2A Client Manager.** Same. | feat: Add A2A Client Manager and tests (#15485) |
-| 20 | `96b9be3ec439` | 2026-01-06 | agents | **Remote Agents: Support.** Same. | feat(agents): add support for remote agents (#16013) |
-| 21 | `4c67eef0f299` | 2026-01-06 | extensions | Missing settings on extension update. LLxprt extensions reimplemented. | Inform user of missing settings on extensions update (#15944) |
-| 22 | `7edd8030344e` | 2026-01-06 | extensions | Settings command fallback. LLxprt extensions reimplemented. | Fix settings command fallback (#15926) |
-| 23 | `6f4b2ad0b95a` | 2026-01-05 | config, security | Default folder trust to untrusted. Both cli and core config diverged. Security improvement. | fix: default folder trust to untrusted for enhanced security (#15943) |
-| 24 | `881b026f2454` | 2026-01-15 | core | Circular dependency tsconfig paths. Trivial 1-line reimpl: add `@vybestack/llxprt-code-core` path. | fix(core): resolve circular dependency via tsconfig paths (#16730) |
-| 25 | `006de1dd318d` | 2026-01-02 | docs | Security docs for hooks. Gemini branding/paths throughout — needs LLxprt rewrite. Content themes valuable. | Add security docs (#15739) |
-| 26 | `eec5d5ebf839` | 2026-01-04 | core | **MessageBus Phase 1: Restore Optionality.** Adopt DI pattern instead of service locator (`config.getMessageBus()`). Make MessageBus optional constructor param on ToolRegistry, tools, MockTool. | feat(core): restore MessageBus optionality (Phase 1) (#15774) |
-| 27 | `90be9c35876d` | 2026-01-04 | core, agents | **MessageBus Phase 2: Standardize Constructors.** Add MessageBus fallback to all tool `createInvocation()` methods, agent invocation constructors. | feat(core): Standardize Tool and Agent Invocation constructors (Phase 2) (#15775) |
-| 28 | `12c7c9cc426b` | 2026-01-04 | core, cli | **MessageBus Phase 3: Mandatory Injection.** Make MessageBus required everywhere. Remove `setMessageBus()` shims. ~57 files. | feat(core,cli): enforce mandatory MessageBus injection (Phase 3) (#15776) |
-| 29 | `dd84c2fb837a` | 2026-01-04 | hooks | Granular stop/block for agent hooks. New event types in streaming protocol. LLxprt hooks reimplemented. | feat(hooks): implement granular stop and block behavior for agent hooks (#15824) |
-| 30 | `6d1e27633a32` | 2026-01-05 | hooks | Context injection via SessionStart hook. Needs sessionHookTriggers.ts adapted to LLxprt hook infra. | Support context injection via SessionStart hook. (#15746) |
-| 31 | `61dbab03e0d5` | 2026-01-06 | hooks, ui | Visual indicators for hook execution. LLxprt hooks architecture exists. Adapt to our hook system. | feat(ui): add visual indicators for hook execution (#15408) |
-| 32 | `56092bd78205` | 2026-01-06 | hooks, settings | Add `hooks.enabled` setting. Settings structure exists, reorganize from `tools.enableHooks`. | feat(hooks): Add a hooks.enabled setting. (#15933) |
-| 33 | `9172e2831542` | 2026-01-06 | settings, ui | Add descriptions for each settings item. Adapt to LLxprt's SettingsDialog. | Add description for each settings item in /settings (#15936) |
-| 34 | `2fe45834dde6` | 2026-01-06 | settings, security | Remote admin settings + secureModeEnabled/mcpEnabled. Enterprise feature, adapt to LLxprt config. | feat(admin): Introduce remote admin settings & implement secureModeEnabled/mcpEnabled (#15935) |
+| 17 | `4c67eef0f299` | 2026-01-06 | extensions | Missing settings on extension update. LLxprt extensions reimplemented. | Inform user of missing settings on extensions update (#15944) |
+| 18 | `7edd8030344e` | 2026-01-06 | extensions | Settings command fallback. LLxprt extensions reimplemented. | Fix settings command fallback (#15926) |
+| 19 | `6f4b2ad0b95a` | 2026-01-05 | config, security | Default folder trust to untrusted. Both cli and core config diverged. Security improvement. | fix: default folder trust to untrusted for enhanced security (#15943) |
+| 20 | `881b026f2454` | 2026-01-15 | core | Circular dependency tsconfig paths. Trivial 1-line reimpl: add `@vybestack/llxprt-code-core` path. | fix(core): resolve circular dependency via tsconfig paths (#16730) |
+| 21 | `006de1dd318d` | 2026-01-02 | docs | Security docs for hooks. Gemini branding/paths throughout — needs LLxprt rewrite. Content themes valuable. | Add security docs (#15739) |
+| 22 | `eec5d5ebf839` | 2026-01-04 | core | **MessageBus Phase 1: Restore Optionality.** Adopt DI pattern instead of service locator (`config.getMessageBus()`). Make MessageBus optional constructor param on ToolRegistry, tools, MockTool. | feat(core): restore MessageBus optionality (Phase 1) (#15774) |
+| 23 | `90be9c35876d` | 2026-01-04 | core, agents | **MessageBus Phase 2: Standardize Constructors.** Add MessageBus fallback to all tool `createInvocation()` methods, agent invocation constructors. | feat(core): Standardize Tool and Agent Invocation constructors (Phase 2) (#15775) |
+| 24 | `12c7c9cc426b` | 2026-01-04 | core, cli | **MessageBus Phase 3: Mandatory Injection.** Make MessageBus required everywhere. Remove `setMessageBus()` shims. ~57 files. | feat(core,cli): enforce mandatory MessageBus injection (Phase 3) (#15776) |
+| 25 | `dd84c2fb837a` | 2026-01-04 | hooks | Granular stop/block for agent hooks. New event types in streaming protocol. LLxprt hooks reimplemented. | feat(hooks): implement granular stop and block behavior for agent hooks (#15824) |
+| 26 | `6d1e27633a32` | 2026-01-05 | hooks | Context injection via SessionStart hook. Needs sessionHookTriggers.ts adapted to LLxprt hook infra. | Support context injection via SessionStart hook. (#15746) |
+| 27 | `61dbab03e0d5` | 2026-01-06 | hooks, ui | Visual indicators for hook execution. LLxprt hooks architecture exists. Adapt to our hook system. | feat(ui): add visual indicators for hook execution (#15408) |
+| 28 | `56092bd78205` | 2026-01-06 | hooks, settings | Add `hooks.enabled` setting. Settings structure exists, reorganize from `tools.enableHooks`. | feat(hooks): Add a hooks.enabled setting. (#15933) |
+| 29 | `9172e2831542` | 2026-01-06 | settings, ui | Add descriptions for each settings item. Adapt to LLxprt's SettingsDialog. | Add description for each settings item in /settings (#15936) |
+| 30 | `2fe45834dde6` | 2026-01-06 | settings, security | Remote admin settings + secureModeEnabled/mcpEnabled. Enterprise feature, adapt to LLxprt config. | feat(admin): Introduce remote admin settings & implement secureModeEnabled/mcpEnabled (#15935) |
 
 ### REIMPLEMENT Notes — Needs Separate PLANs:
-- **Remote Agents (#17-20)**: Need a multi-phase PLAN per `dev-docs/PLAN-TEMPLATE.md`. ~1500-2000 LoC.
-- **Tool Scheduler (#15-16)**: Need a PLAN. ~800-1200 LoC moved (not new). Reduces main file from 2139→~1500 lines.
+- **Tool Scheduler (#15-16)**: PLAN created (`project-plans/gmerge-0.24.5/toolscheduler/plan/`). ~800-1200 LoC moved (not new). Reduces main file from 2139→~1500 lines.
+- **MessageBus (#22-24)**: PLAN created (`project-plans/gmerge-0.24.5/messagebus/plan/`). 3-phase DI migration, ~57 files.
 - **Console Migration (#8)**: 66-file migration. Needs its own PLAN. Most labor-intensive.
-- **Hooks group (#1,2,4,9,12,13)**: Should be done as a cohesive batch since they all touch reimplemented hooks.
+- **Hooks group (#1,2,4,9,12,13,25-28)**: Should be done as a cohesive batch since they all touch reimplemented hooks.
 - **Policy group (#6,7,14)**: Should be batched together.
+- **Remote Agents / A2A**: Descoped to separate issue. Design/plan in `project-plans/a2a/`.
 
 ---
 
