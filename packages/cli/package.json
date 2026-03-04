@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code",
-  "version": "0.10.0",
+  "version": "0.9.1",
   "description": "LLxprt Code",
   "license": "Apache-2.0",
   "repository": {
@@ -34,7 +34,7 @@
     "dist"
   ],
   "config": {
-    "sandboxImageUri": "ghcr.io/vybestack/llxprt-code/sandbox:0.10.0"
+    "sandboxImageUri": "ghcr.io/vybestack/llxprt-code/sandbox:0.9.1"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.14.1",
