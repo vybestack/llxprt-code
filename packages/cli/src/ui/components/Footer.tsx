@@ -48,6 +48,8 @@ interface FooterProps {
   tokensPerMinute?: number;
   throttleWaitTimeMs?: number;
   sessionTokenTotal?: number;
+  // Theme tracking for memo invalidation
+  themeName?: string;
   // Footer visibility settings
   hideCWD?: boolean;
   hideSandboxStatus?: boolean;
@@ -146,8 +148,10 @@ const ResponsiveContextDisplay = React.memo<{
 ResponsiveContextDisplay.displayName = 'ResponsiveContextDisplay';
 
 // Debounced TPM Display - Updates less frequently to reduce flicker
-const DebouncedTPMDisplay = React.memo<{ tokensPerMinute?: number }>(
-  ({ tokensPerMinute }) => {
+const DebouncedTPMDisplay = React.memo<{
+  tokensPerMinute?: number;
+  themeName?: string;
+}>(({ tokensPerMinute }) => {
     const [displayTPM, setDisplayTPM] = useState<number | undefined>(
       tokensPerMinute,
     );
@@ -175,8 +179,10 @@ const DebouncedTPMDisplay = React.memo<{ tokensPerMinute?: number }>(
 DebouncedTPMDisplay.displayName = 'DebouncedTPMDisplay';
 
 // Debounced Wait Time Display
-const DebouncedWaitDisplay = React.memo<{ throttleWaitTimeMs?: number }>(
-  ({ throttleWaitTimeMs }) => {
+const DebouncedWaitDisplay = React.memo<{
+  throttleWaitTimeMs?: number;
+  themeName?: string;
+}>(({ throttleWaitTimeMs }) => {
     const [displayWait, setDisplayWait] = useState<number | undefined>(
       throttleWaitTimeMs,
     );
@@ -245,6 +251,7 @@ export const Footer = React.memo<FooterProps>(
     tokensPerMinute,
     throttleWaitTimeMs,
     sessionTokenTotal,
+    themeName,
     hideCWD = false,
     hideSandboxStatus = false,
     hideModelInfo = false,
@@ -338,7 +345,7 @@ export const Footer = React.memo<FooterProps>(
               {tokensPerMinute !== undefined && (
                 <>
                   <Text color={SemanticColors.text.secondary}> | </Text>
-                  <DebouncedTPMDisplay tokensPerMinute={tokensPerMinute} />
+                  <DebouncedTPMDisplay tokensPerMinute={tokensPerMinute} themeName={themeName} />
                 </>
               )}
 
@@ -347,6 +354,7 @@ export const Footer = React.memo<FooterProps>(
                   <Text color={SemanticColors.text.secondary}> | </Text>
                   <DebouncedWaitDisplay
                     throttleWaitTimeMs={throttleWaitTimeMs}
+                    themeName={themeName}
                   />
                 </>
               )}
@@ -523,7 +531,8 @@ export const Footer = React.memo<FooterProps>(
     prevProps.nightly === nextProps.nightly &&
     prevProps.vimMode === nextProps.vimMode &&
     prevProps.contextLimit === nextProps.contextLimit &&
-    prevProps.isTrustedFolder === nextProps.isTrustedFolder,
+    prevProps.isTrustedFolder === nextProps.isTrustedFolder &&
+    prevProps.themeName === nextProps.themeName,
   // Ignore rapidly changing values - TPM, wait time, and session tokens
 );
 Footer.displayName = 'Footer';

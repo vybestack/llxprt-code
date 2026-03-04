@@ -256,7 +256,7 @@ describe('pickDefaultThemeName', () => {
   it('should pick light theme for light terminal background', () => {
     expect(
       pickDefaultThemeName('#FFFFFF', mockThemes, 'Ayu', 'Default Light'),
-    ).toBe('Ayu Light');
+    ).toBe('Default Light');
   });
 
   it('should return fallback when terminalBackgroundColor is undefined', () => {
@@ -280,9 +280,32 @@ describe('pickDefaultThemeName', () => {
     ).toBe('Ayu');
   });
 
-  it('should pick first matching theme when multiple exist', () => {
+  it('should prefer fallback dark theme over first matching dark theme', () => {
+    const themes = [
+      { name: 'Dracula', type: 'dark' as const, colors: { Background: '#282a36' } },
+      { name: 'Green Screen', type: 'dark' as const, colors: { Background: '#000000' } },
+    ];
     expect(
-      pickDefaultThemeName('#000000', mockThemes, 'Ayu', 'Default Light'),
-    ).toBe('Ayu'); // First dark theme
+      pickDefaultThemeName('#000000', themes, 'Green Screen', 'Default Light'),
+    ).toBe('Green Screen');
+  });
+
+  it('should prefer fallback light theme over first matching light theme', () => {
+    const themes = [
+      { name: 'Ayu Light', type: 'light' as const, colors: { Background: '#fafafa' } },
+      { name: 'Default Light', type: 'light' as const, colors: { Background: '#ffffff' } },
+    ];
+    expect(
+      pickDefaultThemeName('#FFFFFF', themes, 'Ayu', 'Default Light'),
+    ).toBe('Default Light');
+  });
+
+  it('should fall back to first matching theme when fallback is not in list', () => {
+    const themes = [
+      { name: 'Dracula', type: 'dark' as const, colors: { Background: '#282a36' } },
+    ];
+    expect(
+      pickDefaultThemeName('#000000', themes, 'Missing Theme', 'Default Light'),
+    ).toBe('Dracula');
   });
 });
