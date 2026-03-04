@@ -820,8 +820,10 @@ describe('setupSshAgentDockerLinux', () => {
 
   it('falls back to TCP bridge when host uid differs from container uid', async () => {
     process.getuid = () => 501;
-    // shouldUseCurrentUserInSandbox returns false on non-Debian
-    vi.spyOn(fs, 'readFile' as never).mockRejectedValue(new Error('not found'));
+    // shouldUseCurrentUserInSandbox returns false when os-release is unavailable
+    const { readFile } = await import('node:fs/promises');
+    vi.mocked(readFile).mockRejectedValue(new Error('not found'));
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
     const args: string[] = [];
     const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
 
@@ -842,12 +844,15 @@ describe('setupSshAgentDockerLinux', () => {
       ) as never,
     );
     vi.spyOn(os, 'platform').mockReturnValue('linux');
-    // Suppress the console.error from shouldUseCurrentUserInSandbox
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // shouldUseCurrentUserInSandbox logs an INFO message via console.error on Debian/Ubuntu
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const args: string[] = [];
     const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
 
     expect(result).toEqual({});
     expect(args).toContain('SSH_AUTH_SOCK=/ssh-agent');
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Defaulting to use current user UID/GID'),
+    );
   });
 });
