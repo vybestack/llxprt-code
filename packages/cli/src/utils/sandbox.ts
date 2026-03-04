@@ -194,6 +194,9 @@ export async function setupSshAgentForwarding(
   const platform = os.platform();
 
   if (platform === 'linux') {
+    if (config.command === 'docker') {
+      return setupSshAgentDockerLinux(args, sshAuthSock);
+    }
     setupSshAgentLinux(config, args, sshAuthSock);
     return {};
   }
@@ -278,73 +281,89 @@ export async function createTcpToUdsBridge(
 }
 
 /**
- * Sets up SSH agent forwarding for Docker on macOS using the Docker Desktop
- * magic socket (/run/host-services/ssh-auth.sock).
+ * Sets up SSH agent forwarding for Docker on macOS via a TCP-to-UDS bridge.
  *
- * Falls back gracefully if Docker Desktop is not detected (R6.2).
+ * Docker Desktop's magic socket (/run/host-services/ssh-auth.sock) is mounted
+ * as root:root 0660 inside the VM, which is inaccessible to the non-root
+ * container user (uid 1000 'node'). Instead, we use the same TCP bridge
+ * approach that works for Podman: a host-side Node.js TCP server proxies
+ * connections to the host SSH_AUTH_SOCK, and socat inside the container
+ * connects back via host.docker.internal.
  */
 export async function setupSshAgentDockerMacOS(
   args: string[],
   sshAuthSock?: string,
 ): Promise<SshAgentResult> {
-  try {
-    const info = execSync('docker info --format "{{.OperatingSystem}}"', {
-      timeout: 5000,
-    })
-      .toString()
-      .trim();
-    const isDesktop = /docker desktop/i.test(info);
-
-    if (isDesktop) {
-      const magicSocket = '/run/host-services/ssh-auth.sock';
-      args.push('--volume', `${magicSocket}:${CONTAINER_SSH_AGENT_SOCK}`);
-      args.push('--env', `SSH_AUTH_SOCK=${CONTAINER_SSH_AGENT_SOCK}`);
-      return {};
-    }
-
-    if (!sshAuthSock) {
-      console.warn(
-        'Docker Desktop not detected and no SSH_AUTH_SOCK available. ' +
-          'SSH agent forwarding disabled.',
-      );
-      return {};
-    }
-
-    const { port, server } = await createTcpToUdsBridge(sshAuthSock);
-
-    const containerSshAgentSock = '/tmp/ssh-agent';
-    const entrypointPrefix =
-      `command -v socat >/dev/null 2>&1 || { echo "ERROR: socat not found — SSH agent forwarding requires socat in the sandbox image" >&2; }; ` +
-      `rm -f ${containerSshAgentSock}; ` +
-      `socat UNIX-LISTEN:${containerSshAgentSock},fork TCP4:host.docker.internal:${port} &`;
-
-    args.push('--env', `SSH_AUTH_SOCK=${containerSshAgentSock}`);
-
-    let cleanedUp = false;
-    const cleanup = () => {
-      if (cleanedUp) {
-        return;
-      }
-      cleanedUp = true;
-
-      try {
-        server.close();
-      } catch {
-        // ignore
-      }
-    };
-
-    return {
-      cleanup,
-      entrypointPrefix,
-    };
-  } catch {
-    console.warn(
-      'Failed to detect Docker Desktop. SSH agent forwarding disabled. ' +
-        'Set LLXPRT_SANDBOX_SSH_AGENT=off to suppress this warning.',
-    );
+  if (!sshAuthSock) {
+    console.warn('No SSH_AUTH_SOCK available. SSH agent forwarding disabled.');
     return {};
   }
+
+  return setupSshAgentDockerBridge(args, sshAuthSock);
+}
+
+/**
+ * Sets up SSH agent forwarding for Docker on Linux.
+ *
+ * Tries direct socket bind-mount first (works when container uid matches the
+ * socket owner). Falls back to the TCP bridge when the socket permissions
+ * would prevent the container user from connecting.
+ */
+export async function setupSshAgentDockerLinux(
+  args: string[],
+  sshAuthSock: string,
+): Promise<SshAgentResult> {
+  const willMatchHostUser = await shouldUseCurrentUserInSandbox();
+  const hostUid = process.getuid?.() ?? -1;
+
+  if (willMatchHostUser || hostUid === 1000) {
+    // Container uid will match the socket owner — direct mount works
+    setupSshAgentLinux({ command: 'docker' }, args, sshAuthSock);
+    return {};
+  }
+
+  // Container runs as uid 1000 but host uid differs — TCP bridge fallback
+  args.push('--add-host=host.docker.internal:host-gateway');
+  return setupSshAgentDockerBridge(args, sshAuthSock);
+}
+
+/**
+ * Shared TCP bridge setup for Docker SSH agent forwarding (macOS and Linux
+ * fallback). Creates a host-side TCP server that proxies to SSH_AUTH_SOCK,
+ * and injects a socat relay into the container entrypoint.
+ */
+async function setupSshAgentDockerBridge(
+  args: string[],
+  sshAuthSock: string,
+): Promise<SshAgentResult> {
+  const { port, server } = await createTcpToUdsBridge(sshAuthSock);
+
+  const containerSshAgentSock = '/tmp/ssh-agent';
+  const entrypointPrefix =
+    `command -v socat >/dev/null 2>&1 || { echo "ERROR: socat not found — SSH agent forwarding requires socat in the sandbox image" >&2; }; ` +
+    `rm -f ${containerSshAgentSock}; ` +
+    `socat UNIX-LISTEN:${containerSshAgentSock},fork TCP4:host.docker.internal:${port} &`;
+
+  args.push('--env', `SSH_AUTH_SOCK=${containerSshAgentSock}`);
+
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+
+    try {
+      server.close();
+    } catch {
+      // ignore
+    }
+  };
+
+  return {
+    cleanup,
+    entrypointPrefix,
+  };
 }
 
 /**

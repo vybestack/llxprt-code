@@ -7,12 +7,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as child_process from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 
 vi.mock('node:child_process');
+vi.mock('node:fs/promises');
 
 import {
   setupSshAgentForwarding,
   setupSshAgentDockerMacOS,
+  setupSshAgentDockerLinux,
   getPodmanMachineConnection,
   setupSshAgentPodmanMacOS,
   setupCredentialProxyPodmanMacOS,
@@ -29,41 +32,38 @@ describe('setupSshAgentDockerMacOS', () => {
     vi.restoreAllMocks();
   });
 
-  it('mounts magic socket when Docker Desktop detected (R6.1)', async () => {
-    vi.mocked(child_process.execSync).mockReturnValue(
-      Buffer.from('Docker Desktop'),
-    );
+  it('uses TCP bridge and returns cleanup and entrypointPrefix', async () => {
     const args: string[] = [];
-    await setupSshAgentDockerMacOS(args);
-    const vol = args.find((a) =>
-      a.includes('/run/host-services/ssh-auth.sock'),
-    );
-    expect(vol).toBeDefined();
-    expect(args).toContain('SSH_AUTH_SOCK=/ssh-agent');
+    const result = await setupSshAgentDockerMacOS(args, '/tmp/auth.sock');
+
+    expect(result.cleanup).toBeDefined();
+    expect(result.entrypointPrefix).toBeDefined();
+    expect(result.entrypointPrefix).toContain('TCP4:host.docker.internal:');
+    expect(args).toContain('SSH_AUTH_SOCK=/tmp/ssh-agent');
+
+    result.cleanup!();
   });
 
-  it('warns and skips when Docker Desktop not detected (R6.2)', async () => {
-    vi.mocked(child_process.execSync).mockReturnValue(
-      Buffer.from('Alpine Linux'),
-    );
+  it('warns and returns empty when no sshAuthSock provided', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const args: string[] = [];
-    await setupSshAgentDockerMacOS(args);
+    const result = await setupSshAgentDockerMacOS(args);
+    expect(result).toEqual({});
     expect(args).toHaveLength(0);
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Docker Desktop not detected'),
+      expect.stringContaining('SSH agent forwarding disabled'),
     );
   });
 
-  it('warns gracefully on docker info failure (R6.2)', async () => {
-    vi.mocked(child_process.execSync).mockImplementation(() => {
-      throw new Error('docker not available');
-    });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const args: string[] = [];
-    await setupSshAgentDockerMacOS(args);
-    expect(args).toHaveLength(0);
-    expect(warnSpy).toHaveBeenCalled();
+  it('does not call docker info', async () => {
+    await setupSshAgentDockerMacOS([], '/tmp/auth.sock').then((r) =>
+      r.cleanup?.(),
+    );
+    const execCalls = vi.mocked(child_process.execSync).mock.calls;
+    const dockerInfoCalls = execCalls.filter((c) =>
+      String(c[0]).includes('docker info'),
+    );
+    expect(dockerInfoCalls).toHaveLength(0);
   });
 });
 
@@ -757,7 +757,7 @@ describe('setupCredentialProxyDockerMacOS', () => {
   });
 });
 
-describe('setupSshAgentDockerMacOS - fallback', () => {
+describe('setupSshAgentDockerMacOS - TCP bridge', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -766,47 +766,7 @@ describe('setupSshAgentDockerMacOS - fallback', () => {
     vi.restoreAllMocks();
   });
 
-  it('uses magic socket when Docker Desktop detected', async () => {
-    vi.mocked(child_process.execSync).mockReturnValue(
-      Buffer.from('Docker Desktop'),
-    );
-    const args: string[] = [];
-    const result = await setupSshAgentDockerMacOS(args, '/tmp/auth.sock');
-
-    const vol = args.find((a) =>
-      a.includes('/run/host-services/ssh-auth.sock'),
-    );
-    expect(vol).toBeDefined();
-    expect(args).toContain('SSH_AUTH_SOCK=/ssh-agent');
-    expect(result).toEqual({});
-  });
-
-  it('falls back to TCP bridge when Docker Desktop not detected', async () => {
-    vi.mocked(child_process.execSync).mockReturnValue(
-      Buffer.from('Alpine Linux'),
-    );
-    const args: string[] = [];
-    const result = await setupSshAgentDockerMacOS(args, '/tmp/auth.sock');
-
-    expect(result.cleanup).toBeDefined();
-    expect(result.entrypointPrefix).toBeDefined();
-    expect(args).toContain('SSH_AUTH_SOCK=/tmp/ssh-agent');
-
-    result.cleanup!();
-  });
-
-  it('returns SshAgentResult with cleanup and entrypointPrefix on fallback', async () => {
-    vi.mocked(child_process.execSync).mockReturnValue(Buffer.from('OrbStack'));
-    const result = await setupSshAgentDockerMacOS([], '/tmp/auth.sock');
-
-    expect(result.cleanup).toBeDefined();
-    expect(result.entrypointPrefix).toBeDefined();
-
-    result.cleanup!();
-  });
-
-  it('fallback socat command uses host.docker.internal', async () => {
-    vi.mocked(child_process.execSync).mockReturnValue(Buffer.from('colima'));
+  it('socat command uses host.docker.internal', async () => {
     const result = await setupSshAgentDockerMacOS([], '/tmp/auth.sock');
 
     expect(result.entrypointPrefix).toContain('command -v socat');
@@ -819,12 +779,75 @@ describe('setupSshAgentDockerMacOS - fallback', () => {
     result.cleanup!();
   });
 
-  it('fallback does NOT add --network host', async () => {
-    vi.mocked(child_process.execSync).mockReturnValue(Buffer.from('colima'));
+  it('does NOT add --network host', async () => {
     const args: string[] = [];
     const result = await setupSshAgentDockerMacOS(args, '/tmp/auth.sock');
 
     expect(args).not.toContain('--network');
     result.cleanup?.();
+  });
+
+  it('cleanup is idempotent', async () => {
+    const result = await setupSshAgentDockerMacOS([], '/tmp/auth.sock');
+
+    result.cleanup!();
+    result.cleanup!();
+  });
+});
+
+describe('setupSshAgentDockerLinux', () => {
+  const origGetuid = process.getuid;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    process.getuid = origGetuid;
+    vi.restoreAllMocks();
+  });
+
+  it('uses direct bind-mount when host uid is 1000', async () => {
+    process.getuid = () => 1000;
+    const args: string[] = [];
+    const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
+
+    expect(result).toEqual({});
+    expect(args).toContain('SSH_AUTH_SOCK=/ssh-agent');
+    const vol = args.find((a) => a.includes('/tmp/auth.sock:/ssh-agent'));
+    expect(vol).toBeDefined();
+  });
+
+  it('falls back to TCP bridge when host uid differs from container uid', async () => {
+    process.getuid = () => 501;
+    // shouldUseCurrentUserInSandbox returns false on non-Debian
+    vi.spyOn(fs, 'readFile' as never).mockRejectedValue(new Error('not found'));
+    const args: string[] = [];
+    const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
+
+    expect(result.cleanup).toBeDefined();
+    expect(result.entrypointPrefix).toContain('TCP4:host.docker.internal:');
+    expect(args).toContain('--add-host=host.docker.internal:host-gateway');
+    expect(args).toContain('SSH_AUTH_SOCK=/tmp/ssh-agent');
+
+    result.cleanup!();
+  });
+
+  it('uses direct bind-mount on Debian/Ubuntu (shouldUseCurrentUserInSandbox)', async () => {
+    process.getuid = () => 501;
+    const { readFile } = await import('node:fs/promises');
+    vi.mocked(readFile).mockResolvedValue(
+      Buffer.from(
+        'ID=ubuntu' + String.fromCharCode(10) + 'VERSION_ID="22.04"',
+      ) as never,
+    );
+    vi.spyOn(os, 'platform').mockReturnValue('linux');
+    // Suppress the console.error from shouldUseCurrentUserInSandbox
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const args: string[] = [];
+    const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
+
+    expect(result).toEqual({});
+    expect(args).toContain('SSH_AUTH_SOCK=/ssh-agent');
   });
 });
