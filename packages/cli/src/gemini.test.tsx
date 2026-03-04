@@ -220,11 +220,9 @@ describe('gemini.tsx main function', () => {
     });
 
     const parseArgumentsMock = vi.mocked(parseArguments);
-    const exitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code) => {
-        throw new MockProcessExitError(code);
-      });
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
 
     try {
       await main();
@@ -252,11 +250,9 @@ describe('gemini.tsx main function', () => {
     });
 
     const parseArgumentsMock = vi.mocked(parseArguments);
-    const exitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code) => {
-        throw new MockProcessExitError(code);
-      });
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
 
     try {
       await main();
