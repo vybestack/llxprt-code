@@ -210,6 +210,59 @@ describe('gemini.tsx main function', () => {
     await expect(main()).rejects.toThrow(FatalConfigError);
   });
 
+  it('should show help even when settings have config errors (--help)', async () => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'llxprt', '--help'];
+
+    // Make loadSettings throw to simulate invalid config
+    loadSettingsMock.mockImplementation(() => {
+      throw new FatalConfigError('Invalid config');
+    });
+
+    const parseArgumentsMock = vi.mocked(parseArguments);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
+
+    try {
+      await expect(main()).rejects.toThrow(MockProcessExitError);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      process.argv = originalArgv;
+      exitSpy.mockRestore();
+    }
+
+    // parseArguments should have been called with empty settings (bypassing loadSettings)
+    expect(parseArgumentsMock).toHaveBeenCalledWith({});
+    // loadSettings should NOT have been called for --help
+    expect(loadSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('should show help even when settings have config errors (-h)', async () => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'llxprt', '-h'];
+
+    loadSettingsMock.mockImplementation(() => {
+      throw new FatalConfigError('Invalid config');
+    });
+
+    const parseArgumentsMock = vi.mocked(parseArguments);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
+
+    try {
+      await expect(main()).rejects.toThrow(MockProcessExitError);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      process.argv = originalArgv;
+      exitSpy.mockRestore();
+    }
+
+    expect(parseArgumentsMock).toHaveBeenCalledWith({});
+    expect(loadSettingsMock).not.toHaveBeenCalled();
+  });
+
   it('should log unhandled promise rejections and open debug console on first error', async () => {
     const appEventsMock = vi.mocked(appEvents);
     const rejectionError = new Error('Test unhandled rejection');

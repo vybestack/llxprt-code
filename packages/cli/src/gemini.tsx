@@ -349,9 +349,9 @@ export async function main() {
     process.exit(0);
   }
   if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
-    const workspaceRoot = process.cwd();
-    const settings = loadSettings(workspaceRoot);
-    await parseArguments(settings.merged);
+    // Show help without loading settings — help should always work even if
+    // the user's configuration file is invalid (fixes #1667).
+    await parseArguments({});
     process.exit(0);
   }
 
