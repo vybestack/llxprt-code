@@ -663,7 +663,17 @@ export function pickDefaultThemeName(
     return fallbackTheme;
   }
 
-  // Find first theme matching terminal type
+  // Prefer the designated fallback themes when they match the terminal type
+  const fallbackForType =
+    terminalThemeType === 'light' ? fallbackLightTheme : fallbackTheme;
+  const preferredFallback = availableThemes.find(
+    (t) => t.name === fallbackForType && t.type === terminalThemeType,
+  );
+  if (preferredFallback) {
+    return preferredFallback.name;
+  }
+
+  // Otherwise pick the first theme matching terminal type
   const matchingTheme = availableThemes.find(
     (t) => t.type === terminalThemeType,
   );

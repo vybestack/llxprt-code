@@ -48,6 +48,8 @@ interface FooterProps {
   tokensPerMinute?: number;
   throttleWaitTimeMs?: number;
   sessionTokenTotal?: number;
+  // Theme tracking for memo invalidation
+  themeName?: string;
   // Footer visibility settings
   hideCWD?: boolean;
   hideSandboxStatus?: boolean;
@@ -146,63 +148,65 @@ const ResponsiveContextDisplay = React.memo<{
 ResponsiveContextDisplay.displayName = 'ResponsiveContextDisplay';
 
 // Debounced TPM Display - Updates less frequently to reduce flicker
-const DebouncedTPMDisplay = React.memo<{ tokensPerMinute?: number }>(
-  ({ tokensPerMinute }) => {
-    const [displayTPM, setDisplayTPM] = useState<number | undefined>(
-      tokensPerMinute,
-    );
+const DebouncedTPMDisplay = React.memo<{
+  tokensPerMinute?: number;
+  themeName?: string;
+}>(({ tokensPerMinute }) => {
+  const [displayTPM, setDisplayTPM] = useState<number | undefined>(
+    tokensPerMinute,
+  );
 
-    useEffect(() => {
-      // Debounce TPM updates to reduce flicker
-      const timeoutId = setTimeout(() => {
-        setDisplayTPM(tokensPerMinute);
-      }, 500); // 500ms debounce
+  useEffect(() => {
+    // Debounce TPM updates to reduce flicker
+    const timeoutId = setTimeout(() => {
+      setDisplayTPM(tokensPerMinute);
+    }, 500); // 500ms debounce
 
-      return () => clearTimeout(timeoutId);
-    }, [tokensPerMinute]);
+    return () => clearTimeout(timeoutId);
+  }, [tokensPerMinute]);
 
-    if (displayTPM === undefined) return null;
+  if (displayTPM === undefined) return null;
 
-    return (
-      <Text color={SemanticColors.text.accent}>
-        {displayTPM < 1000
-          ? `TPM: ${displayTPM.toFixed(2)}`
-          : `TPM: ${(displayTPM / 1000).toFixed(2)}k`}
-      </Text>
-    );
-  },
-);
+  return (
+    <Text color={SemanticColors.text.accent}>
+      {displayTPM < 1000
+        ? `TPM: ${displayTPM.toFixed(2)}`
+        : `TPM: ${(displayTPM / 1000).toFixed(2)}k`}
+    </Text>
+  );
+});
 DebouncedTPMDisplay.displayName = 'DebouncedTPMDisplay';
 
 // Debounced Wait Time Display
-const DebouncedWaitDisplay = React.memo<{ throttleWaitTimeMs?: number }>(
-  ({ throttleWaitTimeMs }) => {
-    const [displayWait, setDisplayWait] = useState<number | undefined>(
-      throttleWaitTimeMs,
-    );
+const DebouncedWaitDisplay = React.memo<{
+  throttleWaitTimeMs?: number;
+  themeName?: string;
+}>(({ throttleWaitTimeMs }) => {
+  const [displayWait, setDisplayWait] = useState<number | undefined>(
+    throttleWaitTimeMs,
+  );
 
-    useEffect(() => {
-      // Debounce wait time updates
-      const timeoutId = setTimeout(() => {
-        setDisplayWait(throttleWaitTimeMs);
-      }, 300); // 300ms debounce
+  useEffect(() => {
+    // Debounce wait time updates
+    const timeoutId = setTimeout(() => {
+      setDisplayWait(throttleWaitTimeMs);
+    }, 300); // 300ms debounce
 
-      return () => clearTimeout(timeoutId);
-    }, [throttleWaitTimeMs]);
+    return () => clearTimeout(timeoutId);
+  }, [throttleWaitTimeMs]);
 
-    if (displayWait === undefined) return null;
+  if (displayWait === undefined) return null;
 
-    return (
-      <Text color={SemanticColors.status.warning}>
-        {displayWait < 1000
-          ? `Wait: ${displayWait}ms`
-          : displayWait < 60000
-            ? `Wait: ${(displayWait / 1000).toFixed(1)}s`
-            : `Wait: ${(displayWait / 60000).toFixed(1)}m`}
-      </Text>
-    );
-  },
-);
+  return (
+    <Text color={SemanticColors.status.warning}>
+      {displayWait < 1000
+        ? `Wait: ${displayWait}ms`
+        : displayWait < 60000
+          ? `Wait: ${(displayWait / 1000).toFixed(1)}s`
+          : `Wait: ${(displayWait / 60000).toFixed(1)}m`}
+    </Text>
+  );
+});
 DebouncedWaitDisplay.displayName = 'DebouncedWaitDisplay';
 
 // Responsive Timestamp Display - Isolated component for clock updates
@@ -245,6 +249,7 @@ export const Footer = React.memo<FooterProps>(
     tokensPerMinute,
     throttleWaitTimeMs,
     sessionTokenTotal,
+    themeName,
     hideCWD = false,
     hideSandboxStatus = false,
     hideModelInfo = false,
@@ -338,7 +343,10 @@ export const Footer = React.memo<FooterProps>(
               {tokensPerMinute !== undefined && (
                 <>
                   <Text color={SemanticColors.text.secondary}> | </Text>
-                  <DebouncedTPMDisplay tokensPerMinute={tokensPerMinute} />
+                  <DebouncedTPMDisplay
+                    tokensPerMinute={tokensPerMinute}
+                    themeName={themeName}
+                  />
                 </>
               )}
 
@@ -347,6 +355,7 @@ export const Footer = React.memo<FooterProps>(
                   <Text color={SemanticColors.text.secondary}> | </Text>
                   <DebouncedWaitDisplay
                     throttleWaitTimeMs={throttleWaitTimeMs}
+                    themeName={themeName}
                   />
                 </>
               )}
@@ -523,7 +532,11 @@ export const Footer = React.memo<FooterProps>(
     prevProps.nightly === nextProps.nightly &&
     prevProps.vimMode === nextProps.vimMode &&
     prevProps.contextLimit === nextProps.contextLimit &&
-    prevProps.isTrustedFolder === nextProps.isTrustedFolder,
+    prevProps.isTrustedFolder === nextProps.isTrustedFolder &&
+    prevProps.hideCWD === nextProps.hideCWD &&
+    prevProps.hideSandboxStatus === nextProps.hideSandboxStatus &&
+    prevProps.hideModelInfo === nextProps.hideModelInfo &&
+    prevProps.themeName === nextProps.themeName,
   // Ignore rapidly changing values - TPM, wait time, and session tokens
 );
 Footer.displayName = 'Footer';
