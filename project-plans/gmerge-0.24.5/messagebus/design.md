@@ -159,7 +159,7 @@ This is a **3-phase mechanical refactoring** matching upstream's approach:
 - `cli/src/zed-integration/zedIntegration.ts`
 - `packages/core/src/index.ts` (export cleanup)
 
-### Test Code (28 files)
+### Test Code (24 files)
 All corresponding test files need MessageBus in test setup/mocks.
 
 ## 5. Risk Assessment

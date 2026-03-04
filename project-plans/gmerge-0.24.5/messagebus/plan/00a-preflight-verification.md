@@ -45,6 +45,16 @@ grep -rln "getMessageBus\|setMessageBus\|messageBus" packages/core/src/ --includ
 ```
 Confirm: ~33 production files reference MessageBus.
 
+## Subagent Prompt
+
+```markdown
+CONTEXT: You are running preflight verification for the MessageBus DI migration (PLAN-20260303-MESSAGEBUS.P00a).
+
+Run the verification commands listed below. Report PASS/FAIL for each check.
+If any check fails, report the failure details and stop.
+```
+
+
 ## Verification Commands
 ```bash
 npm run typecheck

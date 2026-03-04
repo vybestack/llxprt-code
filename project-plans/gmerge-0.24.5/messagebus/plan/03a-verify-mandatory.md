@@ -44,6 +44,17 @@ npm run build
 ## Failure Recovery
 If structural checks fail, find remaining references and fix them. If tests fail, check that all test constructors provide MessageBus via `createMockMessageBus()`.
 
+## Subagent Prompt
+
+```markdown
+CONTEXT: You are verifying Phase 03 of the MessageBus DI migration (PLAN-20260303-MESSAGEBUS.P03a).
+This is the FINAL verification phase. All service locator patterns must be eliminated.
+
+Run all structural and semantic verification checks below. Report PASS/FAIL for each.
+Verify zero config.getMessageBus() references, zero setMessageBus() methods, mandatory injection everywhere.
+```
+
+
 ## Structural Verification Checklist
 
 - [ ] No `config.getMessageBus()` references (verified = 0)

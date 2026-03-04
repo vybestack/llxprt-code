@@ -70,6 +70,28 @@ createInvocation(params: ToolContext, messageBus?: MessageBus): SomeInvocation {
 - Tool names may differ from upstream — check actual file names
 - Some LLxprt tools have additional parameters (e.g., `apply-patch.ts`) — preserve them
 
+## Subagent Prompt
+
+```markdown
+CONTEXT: You are implementing Phase 02 of the MessageBus DI migration (PLAN-20260303-MESSAGEBUS.P02).
+
+READ FIRST:
+1. project-plans/gmerge-0.24.5/messagebus/design.md
+2. This phase file (project-plans/gmerge-0.24.5/messagebus/plan/02-standardize-constructors.md)
+3. packages/core/src/agents/invocation.ts — SubagentInvocation constructor
+4. packages/core/src/agents/executor.ts — agent execution flow
+5. packages/core/src/core/coreToolScheduler.ts — how MessageBus flows through tool scheduling
+
+TASK: Standardize constructors so MessageBus flows through the call chain:
+1. Update createInvocation() methods to accept and forward optional messageBus
+2. Update agent invocation constructors to thread messageBus through
+3. Ensure all ~23 intermediate classes pass messageBus down rather than re-fetching from config
+
+This is STILL BACKWARD COMPATIBLE — all parameters remain optional with config.getMessageBus() fallback.
+
+VERIFY: npm run typecheck && npm run test
+```
+
 ## Verification Commands
 ```bash
 npm run typecheck

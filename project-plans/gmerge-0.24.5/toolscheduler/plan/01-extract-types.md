@@ -346,6 +346,34 @@ echo "[OK] Types still in coreToolScheduler.ts (correct for Phase 01)"
 - [ ] TypeScript compilation succeeds
 - [ ] Types NOT removed from coreToolScheduler.ts yet
 
+## Structural Verification Checklist
+
+- [ ] File exists: `packages/core/src/scheduler/types.ts`
+- [ ] Directory exists: `packages/core/src/scheduler/`
+- [ ] All 9 ToolCall state types exported: ValidatingToolCall, ScheduledToolCall, ExecutingToolCall, SuccessfulToolCall, ErroredToolCall, CancelledToolCall, WaitingToolCall, ToolCall (union), CompletedToolCall (union)
+- [ ] All 4 handler types exported: ConfirmHandler, OutputUpdateHandler, AllToolCallsCompleteHandler, ToolCallsUpdateHandler
+- [ ] Status type exported (discriminant union)
+- [ ] QueuedRequest interface exported
+- [ ] File header includes JSDoc with @plan marker
+- [ ] All imports use `import type { ... }` syntax (verified by grep)
+- [ ] No imports from `index.js` or barrel exports (verified by grep)
+- [ ] TypeScript compilation succeeds (`npm run typecheck` passes)
+- [ ] Types still present in coreToolScheduler.ts (backward compatibility preserved)
+- [ ] File size approximately 130 lines
+
+## Semantic Verification Checklist
+
+- [ ] Type definitions are exact copies from coreToolScheduler.ts (no modifications)
+- [ ] Discriminated union works correctly (ToolCall type has proper status discriminant)
+- [ ] All imported types resolve correctly (no "cannot find module" errors)
+- [ ] Handler function signatures are complete (not using `any` types)
+- [ ] Type-only imports prevent runtime circular dependencies
+- [ ] Imports are from leaf modules only (tool.js, tools.js, turn.js - not re-exporting modules)
+- [ ] No circular dependency warnings from TypeScript compiler
+- [ ] Types can be successfully imported by other modules (verified by test import)
+- [ ] Union types maintain structural compatibility with original definitions
+- [ ] No breaking changes to existing code using these types
+
 ## Success Criteria
 
 This phase passes when:

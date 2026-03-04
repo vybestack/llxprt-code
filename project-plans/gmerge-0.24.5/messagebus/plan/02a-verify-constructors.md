@@ -38,6 +38,16 @@ npm run lint
 ## Failure Recovery
 Compare against upstream `90be9c35876d` diff if tests fail.
 
+## Subagent Prompt
+
+```markdown
+CONTEXT: You are verifying Phase 02 of the MessageBus DI migration (PLAN-20260303-MESSAGEBUS.P02a).
+
+Run all structural and semantic verification checks below. Report PASS/FAIL for each.
+Verify that constructor standardization was done correctly and messageBus flows through the call chain.
+```
+
+
 ## Structural Verification Checklist
 
 - [ ] Every `createInvocation()` method accepts `messageBus` parameter

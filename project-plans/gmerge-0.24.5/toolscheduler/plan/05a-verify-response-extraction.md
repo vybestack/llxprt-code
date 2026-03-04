@@ -221,6 +221,43 @@ echo "  - Completion detection"
 echo "=================================="
 ```
 
+## Structural Verification Checklist
+
+- [ ] File exists: `packages/core/src/utils/generateContentResponseUtilities.ts`
+- [ ] Phase 05 completion marker exists: `.completed/P05.md`
+- [ ] Plan markers `@plan PLAN-20260302-TOOLSCHEDULER.P05` present
+- [ ] convertToFunctionResponse exported from generateContentResponseUtilities.ts
+- [ ] Helper functions present (createFunctionResponsePart, limitStringOutput, limitFunctionResponsePart, toParts)
+- [ ] Helper functions NOT exported (internal only)
+- [ ] Functions removed from coreToolScheduler.ts (no standalone function declarations)
+- [ ] State functions preserved in coreToolScheduler.ts (extractAgentIdFromMetadata, createErrorResponse)
+- [ ] Import added to coreToolScheduler.ts
+- [ ] TypeScript compilation passes
+- [ ] All 8 test suites pass
+- [ ] File size reduced by at least 250 lines total (cumulative reduction ~300-460 lines)
+- [ ] No circular dependencies detected by madge
+
+## Semantic Verification Checklist
+
+**Go beyond markers. Actually verify the behavior exists.**
+
+#### Behavioral Verification Questions
+
+1. **Were functions EXTRACTED, not rewritten?**
+   - [ ] I compared functions in generateContentResponseUtilities.ts with original
+   - [ ] Code is identical (cut/paste)
+   - [ ] No logic changes
+
+2. **Do all tests still pass?**
+   - [ ] All 8 test suites pass
+   - [ ] No tests needed modification
+   - [ ] Response formatting behavior unchanged
+
+3. **Is the refactoring complete?**
+   - [ ] coreToolScheduler.ts reduced by ~460 lines total (21.5%)
+   - [ ] 3 modules created (types, tool-executor, response utilities)
+   - [ ] All functionality preserved
+
 ## Success Criteria
 
 - [ ] Functions added to generateContentResponseUtilities.ts
@@ -275,6 +312,19 @@ If FAIL:
 ## Failure Recovery
 
 If this phase fails:
+
+
+## Phase Completion Marker
+
+Create: `project-plans/gmerge-0.24.5/toolscheduler/.completed/P05a.md`
+
+Contents:
+```markdown
+Phase: P05a
+Completed: [TIMESTAMP]
+Verification: All 3 extraction modules verified, coreToolScheduler.ts reduced ~21.5%, all tests pass
+```
+
 
 1. **Missing functions:** Add missing functions to generateContentResponseUtilities.ts
 2. **Tests fail:** Verify functions were copied exactly

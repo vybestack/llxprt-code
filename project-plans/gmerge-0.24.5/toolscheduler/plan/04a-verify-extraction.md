@@ -161,6 +161,21 @@ fi
 echo "[OK] No circular dependencies"
 ```
 
+## Structural Verification Checklist
+
+- [ ] File exists: `packages/core/src/scheduler/tool-executor.ts`
+- [ ] Phase 04 completion marker exists: `.completed/P04.md`
+- [ ] Plan markers `@plan PLAN-20260302-TOOLSCHEDULER.P04` present in tool-executor.ts
+- [ ] ToolExecutor class exported from tool-executor.ts
+- [ ] Import added to coreToolScheduler.ts: `import { ToolExecutor } from '../scheduler/tool-executor.js'`
+- [ ] ToolExecutor instantiated in coreToolScheduler.ts (grep found `new ToolExecutor`)
+- [ ] execute() method called (grep found `toolExecutor.execute`)
+- [ ] TypeScript compilation passes (`npm run typecheck`)
+- [ ] File size reduced by at least 100 lines (expected ~130 lines)
+- [ ] No circular dependencies detected by madge
+- [ ] All 7 existing test suites exist and run
+- [ ] No test files modified (git diff check passed)
+
 ## Semantic Verification Checklist
 
 **Go beyond markers. Actually verify the behavior exists.**

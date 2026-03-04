@@ -187,6 +187,22 @@ rm -f /tmp/test-types-import.ts
 - [ ] Other modules can import from types.ts (verified by test import above)
 - [ ] No breaking changes to existing imports (types still in coreToolScheduler.ts)
 
+## Structural Verification Checklist
+
+- [ ] File exists: `packages/core/src/scheduler/types.ts`
+- [ ] Phase 01 completion marker exists: `.completed/P01.md`
+- [ ] All 9 ToolCall state types present (grep verification passed)
+- [ ] All 4 handler types present (grep verification passed)
+- [ ] QueuedRequest interface present
+- [ ] Status discriminant type present
+- [ ] Plan markers `@plan PLAN-20260302-TOOLSCHEDULER.P01` found
+- [ ] At least 5 type-only imports present
+- [ ] No imports from `index.js` (grep returned no matches)
+- [ ] File compiles with TypeScript (`npm run typecheck` passed)
+- [ ] Types still in coreToolScheduler.ts (backward compatibility check passed)
+- [ ] No circular dependencies detected by madge
+- [ ] File size approximately 130 lines
+
 ## Success Criteria
 
 - [ ] types.ts file created with ~130 lines

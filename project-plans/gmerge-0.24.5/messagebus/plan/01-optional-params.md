@@ -76,6 +76,28 @@ Files:
 - LLxprt tool names differ (e.g., `ripGrep.ts` for grep)
 - Keep changes backward-compatible: `messageBus?:` (optional), with fallback
 
+## Subagent Prompt
+
+```markdown
+CONTEXT: You are implementing Phase 01 of the MessageBus DI migration (PLAN-20260303-MESSAGEBUS.P01).
+
+READ FIRST:
+1. project-plans/gmerge-0.24.5/messagebus/design.md — full design spec
+2. This phase file (project-plans/gmerge-0.24.5/messagebus/plan/01-optional-params.md)
+3. packages/core/src/config/config.ts — find getMessageBus()
+4. packages/core/src/confirmation-bus/message-bus.ts — MessageBus class
+
+TASK: Add optional `messageBus?: MessageBus` constructor parameter to ~16 classes that currently call config.getMessageBus(). Each class should:
+1. Accept optional messageBus in constructor
+2. Store as `this.messageBus = messageBus ?? config.getMessageBus()`
+3. Use this.messageBus instead of calling config.getMessageBus() repeatedly
+
+This is BACKWARD COMPATIBLE — the parameter is optional with fallback.
+
+VERIFY: npm run typecheck && npm run test && npm run lint
+All must pass with zero changes to existing tests.
+```
+
 ## Verification Commands
 ```bash
 npm run typecheck

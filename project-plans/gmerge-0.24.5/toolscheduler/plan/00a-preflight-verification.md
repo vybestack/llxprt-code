@@ -238,6 +238,30 @@ After completing verification:
 3. Create completion marker: `project-plans/gmerge-0.24.5/toolscheduler/.completed/P00a.md`
 4. Update execution-tracker.md with completion status
 
+## Structural Verification Checklist
+
+- [ ] All dependency commands (`npm ls`) completed without errors
+- [ ] All type/interface grep searches found expected declarations
+- [ ] All call path searches found expected method signatures
+- [ ] All test infrastructure files exist
+- [ ] All core directories exist
+- [ ] File line counts match expected ranges (coreToolScheduler.ts ~2000-2200 lines, test file >500 lines)
+- [ ] All grep patterns returned results (no empty output for required searches)
+- [ ] No "UNMET PEER DEPENDENCY" or missing package errors
+- [ ] scheduler/ directory does NOT exist yet
+
+## Semantic Verification Checklist
+
+- [ ] Dependencies are installed and functional (not just listed in package.json)
+- [ ] Type interfaces include all required properties (e.g., Config has policyEngine, messageBus, toolRegistry)
+- [ ] Method signatures match expected behavior (e.g., schedule(), executeToolWithHooks())
+- [ ] Test file contains actual test cases (not just empty describe blocks)
+- [ ] Vitest configuration is complete and valid
+- [ ] Tests can actually execute (npm test runs without configuration errors)
+- [ ] Import paths for types are correct (@google/genai package exports Part type)
+- [ ] No version conflicts between dependencies
+- [ ] Build tooling is correctly configured
+
 ## Success Criteria
 
 This phase passes when:

@@ -2,7 +2,7 @@
 
 **Plan ID:** PLAN-20260302-TOOLSCHEDULER  
 **Status:** Ready for execution  
-**Total Phases:** 6 implementation phases + 6 verification phases = 12 total
+**Total Phases:** 5 implementation + 5 verification + 1 preflight = 11 total
 
 ## Quick Start
 
@@ -86,7 +86,7 @@
 
 This refactoring succeeds when:
 
-1. All 12 phases complete in order
+1. All 11 phases complete in order
 2. All existing tests pass without modification
 3. New modules have characterization test coverage
 4. Types extracted to `scheduler/types.ts` with backward-compatible re-exports

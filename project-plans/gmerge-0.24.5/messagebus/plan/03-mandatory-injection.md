@@ -79,6 +79,31 @@ grep -rn "setMessageBus" packages/core/src/tools/tool-registry.ts
 grep -n "getMessageBus\|setMessageBus\|messageBus" packages/core/src/config/config.ts
 ```
 
+## Subagent Prompt
+
+```markdown
+CONTEXT: You are implementing Phase 03 of the MessageBus DI migration (PLAN-20260303-MESSAGEBUS.P03).
+This is the BREAKING CHANGE phase — after this, MessageBus is mandatory everywhere.
+
+READ FIRST:
+1. project-plans/gmerge-0.24.5/messagebus/design.md
+2. This phase file (project-plans/gmerge-0.24.5/messagebus/plan/03-mandatory-injection.md)
+3. packages/core/src/config/config.ts — remove getMessageBus() and setMessageBus()
+4. All files modified in Phase 01 and 02 (check git log for recent commits)
+
+TASK:
+1. Change all `messageBus?:` (optional) to `messageBus:` (required) in constructors
+2. Remove `?? config.getMessageBus()` fallbacks
+3. Remove getMessageBus() and setMessageBus() from Config class
+4. Update ALL test files to explicitly provide a MessageBus instance
+5. Remove dead setMessageBus() stubs from ToolRegistry and DeclarativeTool
+
+CRITICAL: This touches ~57 files (33 prod + 24 test). Work methodically.
+
+VERIFY: npm run typecheck && npm run test && npm run lint && npm run build
+ALL must pass.
+```
+
 ## Verification Commands
 ```bash
 npm run typecheck

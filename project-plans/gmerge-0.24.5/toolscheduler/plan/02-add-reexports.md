@@ -167,11 +167,12 @@ Test that existing imports still work:
 cat > /tmp/test-import.ts << 'EOF'
 import { ToolCall, ScheduledToolCall } from './packages/core/src/core/coreToolScheduler.js';
 
+// Verification-only: as unknown used to test type import works (not production code)
 const testCall: ToolCall = {
   status: 'scheduled',
-  request: {} as any,
-  tool: {} as any,
-  invocation: {} as any,
+  request: {} as unknown as ToolCall['request'],
+  tool: {} as unknown as ToolCall['tool'],
+  invocation: {} as unknown as ToolCall['invocation'],
 };
 
 console.log('Import test passed');
@@ -184,48 +185,6 @@ npx tsc --noEmit /tmp/test-import.ts || {
 }
 
 echo "[OK] Backward compatible imports work"
-```
-
-## Verification Commands
-
-### Automated Checks
-
-```bash
-# Re-exports added
-grep "export type {" packages/core/src/core/coreToolScheduler.ts | grep -q "from '../scheduler/types.js'" || {
-  echo "FAIL: Re-exports not added"
-  exit 1
-}
-
-# Plan markers present
-grep "@plan PLAN-20260302-TOOLSCHEDULER.P02" packages/core/src/core/coreToolScheduler.ts || {
-  echo "FAIL: Plan markers missing"
-  exit 1
-}
-
-# Original type definitions removed
-if grep "^export type ValidatingToolCall = {" packages/core/src/core/coreToolScheduler.ts; then
-  echo "FAIL: Original type definitions not removed"
-  exit 1
-fi
-
-# TypeScript compilation
-npm run typecheck || {
-  echo "FAIL: TypeScript compilation failed"
-  exit 1
-}
-
-# File size reduced
-original_size=$(git show HEAD:packages/core/src/core/coreToolScheduler.ts | wc -l)
-current_size=$(wc -l < packages/core/src/core/coreToolScheduler.ts)
-reduction=$((original_size - current_size))
-
-if [ "$reduction" -lt 100 ]; then
-  echo "FAIL: File size not reduced enough (only $reduction lines removed, expected ~130)"
-  exit 1
-fi
-
-echo "[OK] File size reduced by $reduction lines"
 ```
 
 ### Structural Verification Checklist

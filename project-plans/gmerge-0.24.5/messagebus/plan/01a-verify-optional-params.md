@@ -48,6 +48,16 @@ npm run lint
 ## Failure Recovery
 If tests fail, compare with upstream `eec5d5ebf839` diff to identify missed changes.
 
+## Subagent Prompt
+
+```markdown
+CONTEXT: You are verifying Phase 01 of the MessageBus DI migration (PLAN-20260303-MESSAGEBUS.P01a).
+
+Run all structural and semantic verification checks below. Report PASS/FAIL for each.
+Verify that optional messageBus parameters were added correctly and backward compatibility is maintained.
+```
+
+
 ## Structural Verification Checklist
 
 - [ ] `CoreToolScheduler` accepts optional `messageBus` parameter

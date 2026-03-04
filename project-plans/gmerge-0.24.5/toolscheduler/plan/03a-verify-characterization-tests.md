@@ -85,6 +85,21 @@ fi
 echo "[OK] No stub behavior testing detected"
 ```
 
+## Structural Verification Checklist
+
+- [ ] File exists: `packages/core/src/core/coreToolScheduler.toolExecutor.characterization.test.ts`
+- [ ] Phase 03 completion marker exists: `.completed/P03.md`
+- [ ] Plan markers `@plan PLAN-20260302-TOOLSCHEDULER.P03` present
+- [ ] All 7 requirement markers present (TS-EXEC-001 through TS-EXEC-007)
+- [ ] At least 7 test cases defined (one per requirement minimum)
+- [ ] Tests follow describe/it pattern
+- [ ] No TODO or stub markers in test code
+- [ ] Tests import from coreToolScheduler module
+- [ ] Tests use proper test framework syntax (Vitest)
+- [ ] File passes linting rules
+- [ ] coreToolScheduler.ts has no git diff changes (not modified)
+- [ ] All tests pass (`npm test` succeeds)
+
 ## Semantic Verification Checklist
 
 **Go beyond markers. Actually verify the behavior exists.**
