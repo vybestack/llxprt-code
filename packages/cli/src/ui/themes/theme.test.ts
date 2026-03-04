@@ -282,8 +282,16 @@ describe('pickDefaultThemeName', () => {
 
   it('should prefer fallback dark theme over first matching dark theme', () => {
     const themes = [
-      { name: 'Dracula', type: 'dark' as const, colors: { Background: '#282a36' } },
-      { name: 'Green Screen', type: 'dark' as const, colors: { Background: '#000000' } },
+      {
+        name: 'Dracula',
+        type: 'dark' as const,
+        colors: { Background: '#282a36' },
+      },
+      {
+        name: 'Green Screen',
+        type: 'dark' as const,
+        colors: { Background: '#000000' },
+      },
     ];
     expect(
       pickDefaultThemeName('#000000', themes, 'Green Screen', 'Default Light'),
@@ -292,8 +300,16 @@ describe('pickDefaultThemeName', () => {
 
   it('should prefer fallback light theme over first matching light theme', () => {
     const themes = [
-      { name: 'Ayu Light', type: 'light' as const, colors: { Background: '#fafafa' } },
-      { name: 'Default Light', type: 'light' as const, colors: { Background: '#ffffff' } },
+      {
+        name: 'Ayu Light',
+        type: 'light' as const,
+        colors: { Background: '#fafafa' },
+      },
+      {
+        name: 'Default Light',
+        type: 'light' as const,
+        colors: { Background: '#ffffff' },
+      },
     ];
     expect(
       pickDefaultThemeName('#FFFFFF', themes, 'Ayu', 'Default Light'),
@@ -302,7 +318,11 @@ describe('pickDefaultThemeName', () => {
 
   it('should fall back to first matching theme when fallback is not in list', () => {
     const themes = [
-      { name: 'Dracula', type: 'dark' as const, colors: { Background: '#282a36' } },
+      {
+        name: 'Dracula',
+        type: 'dark' as const,
+        colors: { Background: '#282a36' },
+      },
     ];
     expect(
       pickDefaultThemeName('#000000', themes, 'Missing Theme', 'Default Light'),
