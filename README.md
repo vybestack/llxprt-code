@@ -56,8 +56,15 @@ Get started immediately with powerful LLM options:
 - **Zed Integration**: Native Zed editor integration for seamless workflow
 
 ```bash
-# Install and get started
+# macOS (Homebrew)
+brew tap vybestack/homebrew-tap
+brew update
+brew install llxprt-code
+
+# npm
 npm install -g @vybestack/llxprt-code
+
+# Start coding
 llxprt
 
 # Try without installing
@@ -78,13 +85,21 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 
 ## Quick Start
 
-1. **Prerequisites:** Node.js 20+ installed
+1. **Prerequisites:** Node.js 20+ installed (not required for Homebrew)
 2. **Install:**
+
    ```bash
+   # macOS (Homebrew)
+   brew tap vybestack/homebrew-tap
+   brew update
+   brew install llxprt-code
+
+   # npm
    npm install -g @vybestack/llxprt-code
    # Or try without installing:
    npx @vybestack/llxprt-code
    ```
+
 3. **Run:** `llxprt`
 4. **Choose provider:** Use `/provider` to select your preferred LLM service
 5. **Start coding:** Ask questions, generate code, or analyze projects
