@@ -1586,10 +1586,8 @@ describe('ensureBucketsAuthenticated', () => {
     await ensurePromise;
 
     await expect(failoverPromise).resolves.toBe(true);
-    expect(oauthManager.authenticate).not.toHaveBeenCalledWith(
-      'anthropic',
-      'bucket-a',
-    );
+    expect(getOAuthTokenCalls).toBe(2);
+    expect(oauthManager.authenticate).not.toHaveBeenCalled();
     expect(handler.getCurrentBucket()).toBe('bucket-a');
   });
 
