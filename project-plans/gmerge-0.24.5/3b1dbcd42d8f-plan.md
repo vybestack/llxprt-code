@@ -11,7 +11,7 @@ Introduces a comprehensive **environment variable sanitization system** to preve
 1. **Creates `environmentSanitization.ts`** with pattern-based redaction:
    - Blocks env vars by name (`TOKEN`, `SECRET`, `PASSWORD`, `KEY`, `AUTH`, etc.)
    - Blocks by value pattern (private keys, API tokens, URLs with credentials)
-   - Maintains allowlists (`PATH`, `HOME`, `GEMINI_CLI_*`, GitHub Actions vars)
+   - Maintains allowlists (`PATH`, `HOME`, `LLXPRT_CLI_*`, GitHub Actions vars)
    - Supports custom allowed/blocked lists via settings
 
 2. **Adds settings schema:**
@@ -22,157 +22,281 @@ Introduces a comprehensive **environment variable sanitization system** to preve
 3. **Integrates sanitization:**
    - `Config` class stores `sanitizationConfig`
    - `hookRunner.ts` sanitizes env before spawning hooks
-   - `createTransport()` in MCP passes sanitization config
-   - `shellExecutionService` (not in this diff but implied by `ShellExecutionConfig`)
+   - MCP transport creation passes sanitization config
+   - Shell execution service uses sanitization
 
-4. **Documents the feature** in `docs/get-started/configuration.md` (52 lines of user-facing docs)
+4. **Documents the feature** in configuration docs
 
-## LLxprt Adaptation Strategy
+## LLxprt File Existence Map
 
-LLxprt **already has basic sanitization** in `packages/core/src/utils/sanitization.ts` and `packages/core/src/auth/token-sanitization.ts`, but these are limited to token detection in text. This upstream commit provides a **comprehensive environment variable redaction system** that should be adopted wholesale.
+**VERIFIED paths:**
+- [OK] `packages/core/src/hooks/hookRunner.ts` (EXISTS, needs sanitization integration)
+- [OK] `packages/core/src/config/config.ts` (EXISTS, needs sanitizationConfig field)
+- [OK] `packages/cli/src/config/config.ts` (EXISTS, needs to pass settings to core config)
+- [OK] `packages/cli/src/config/settingsSchema.ts` (EXISTS, needs security settings)
+- [ERROR] `packages/core/src/services/environmentSanitization.ts` (NEEDS CREATION)
 
-### Approach
+**Actions required:**
+1. CREATE: `packages/core/src/services/environmentSanitization.ts` (309 lines of implementation + tests)
+2. MODIFY: `packages/core/src/config/config.ts` (add sanitizationConfig)
+3. MODIFY: `packages/cli/src/config/config.ts` (pass settings to core)
+4. MODIFY: `packages/cli/src/config/settingsSchema.ts` (add security settings)
+5. MODIFY: `packages/core/src/hooks/hookRunner.ts` (sanitize env)
+6. MODIFY: `packages/core/src/hooks/hookRunner.test.ts` (add mock config)
+7. MODIFY: `packages/core/src/core/coreToolScheduler.test.ts` (add mock config)
+8. MODIFY: `packages/cli/src/ui/AppContainer.tsx` (pass sanitizationConfig if exists)
+9. UPDATE: `docs/get-started/configuration.md` (add env redaction section)
 
-1. **Create new file:** `packages/core/src/services/environmentSanitization.ts` (copy from upstream, 309 lines of implementation + tests)
-2. **Update Config:** Add `sanitizationConfig` getter and fields to `ConfigParameters`
-3. **Update settings schema:** Add the three new security settings
-4. **Integrate into execution points:**
-   - `hookRunner.ts`: Sanitize env before spawning hooks
-   - Shell tool (if not already done)
-   - MCP transport creation
-5. **Update docs:** Add the environment variable redaction section to LLxprt docs
+## LLxprt Adaptations
 
-### Key Differences from Upstream
-
-- LLxprt uses `@vybestack/llxprt-code-core` instead of `@google/gemini-cli-core`
-- LLxprt has `packages/core/src/utils/sanitization.ts` already — **do not remove it**, as it's used for text sanitization (different use case)
-- No A2A server in LLxprt, so skip `packages/a2a-server/` changes
-- MCP integration may differ — check if `createTransport` exists in LLxprt
+**Replace Gemini branding:**
+- `GEMINI_CLI_*` → `LLXPRT_CLI_*`
+- `GEMINI_API_KEY` → `LLXPRT_API_KEY`
+- `GEMINI_PROJECT_DIR` → `LLXPRT_PROJECT_DIR`
+- `@google/gemini-cli-core` → `@vybestack/llxprt-code-core`
 
 ## Files to Create/Modify
 
-### 1. Create New File
+### 1. Create Environment Sanitization Module
 **File:** `packages/core/src/services/environmentSanitization.ts`
-- Copy the entire implementation from upstream (lines 1-309 of the diff)
-- Includes:
-  - `ALWAYS_ALLOWED_ENVIRONMENT_VARIABLES` (23 safe vars)
-  - `NEVER_ALLOWED_ENVIRONMENT_VARIABLES` (4 specific blocklist)
-  - `NEVER_ALLOWED_NAME_PATTERNS` (10 regex patterns for var names)
-  - `NEVER_ALLOWED_VALUE_PATTERNS` (15+ regex for secrets in values)
-  - `sanitizeEnvironment(env, config)` main function
-  - Full test suite (8 describe blocks, 20+ test cases)
 
-### 2. Create Test File
-**File:** `packages/core/src/services/environmentSanitization.test.ts`
-- Already included in the file above (vitest tests inline)
-- Covers all edge cases: private keys, tokens, URLs with creds, false positives, custom lists
+**Content:** (Copy from upstream, 309 lines)
+```typescript
+// Full implementation including:
+// - ALWAYS_ALLOWED_ENVIRONMENT_VARIABLES (23 safe vars)
+// - NEVER_ALLOWED_ENVIRONMENT_VARIABLES (4 specific blocklist)
+// - NEVER_ALLOWED_NAME_PATTERNS (10 regex patterns for var names)
+// - NEVER_ALLOWED_VALUE_PATTERNS (15+ regex for secrets in values)
+// - sanitizeEnvironment(env, config) main function
+// - Full test suite (8 describe blocks, 20+ test cases)
+```
 
-### 3. Update Config Class
+**Key changes from upstream:**
+- Replace `GEMINI_CLI_` with `LLXPRT_CLI_` in allowlist
+- Update JSDoc to mention LLxprt instead of Gemini CLI
+
+### 2. Update Core Config Class
 **File:** `packages/core/src/config/config.ts`
-- Add to `ConfigParameters` interface:
-  ```typescript
-  allowedEnvironmentVariables?: string[];
-  blockedEnvironmentVariables?: string[];
-  enableEnvironmentVariableRedaction?: boolean;
-  ```
-- Add fields to `Config` class:
-  ```typescript
-  private allowedEnvironmentVariables: string[];
-  private blockedEnvironmentVariables: string[];
-  private readonly enableEnvironmentVariableRedaction: boolean;
-  ```
-- Add getter (around line 1081 in upstream):
-  ```typescript
-  get sanitizationConfig(): EnvironmentSanitizationConfig {
-    return {
-      allowedEnvironmentVariables: this.allowedEnvironmentVariables,
-      blockedEnvironmentVariables: this.blockedEnvironmentVariables,
-      enableEnvironmentVariableRedaction: this.enableEnvironmentVariableRedaction,
-    };
-  }
-  ```
-- Initialize in constructor (lines ~486-491 upstream)
-- Update `shellExecutionConfig` to include `sanitizationConfig`
 
-### 4. Update CLI Config Loader
-**File:** `packages/cli/src/config/config.ts` (the CLI-specific loader)
-- In `loadCliConfig()`, pass the new fields from settings:
-  ```typescript
-  blockedEnvironmentVariables: settings.security?.environmentVariableRedaction?.blocked,
-  enableEnvironmentVariableRedaction: settings.security?.environmentVariableRedaction?.enabled,
-  ```
-- Also update MCP blocked servers logic (upstream lines 658-662)
+**Add to `ConfigParameters` interface:**
+```typescript
+allowedEnvironmentVariables?: string[];
+blockedEnvironmentVariables?: string[];
+enableEnvironmentVariableRedaction?: boolean;
+```
 
-### 5. Update Settings Schema
-**File:** `packages/cli/src/config/settingsSchema.ts`
-- Add new object under `security`:
-  ```typescript
-  environmentVariableRedaction: {
-    type: 'object',
-    label: 'Environment Variable Redaction',
-    category: 'Security',
-    default: {},
-    properties: {
-      allowed: { type: 'array', default: [], items: { type: 'string' } },
-      blocked: { type: 'array', default: [], items: { type: 'string' } },
-      enabled: { type: 'boolean', default: false },
-    },
-  }
-  ```
-- Update settings docs table in `docs/cli/settings.md`
+**Add fields to `Config` class:**
+```typescript
+private allowedEnvironmentVariables: string[];
+private blockedEnvironmentVariables: string[];
+private readonly enableEnvironmentVariableRedaction: boolean;
+```
 
-### 6. Integrate into Hook Runner
-**File:** `packages/core/src/hooks/hookRunner.ts`
-- Import: `import { sanitizeEnvironment } from '../services/environmentSanitization.js';`
-- Change line ~242 (where env is set for spawn):
-  ```typescript
-  const env = {
-    ...sanitizeEnvironment(process.env, this.config.sanitizationConfig),
-    GEMINI_PROJECT_DIR: input.cwd,
-    CLAUDE_PROJECT_DIR: input.cwd, // Compat
+**Add getter:**
+```typescript
+get sanitizationConfig(): EnvironmentSanitizationConfig {
+  return {
+    allowedEnvironmentVariables: this.allowedEnvironmentVariables,
+    blockedEnvironmentVariables: this.blockedEnvironmentVariables,
+    enableEnvironmentVariableRedaction: this.enableEnvironmentVariableRedaction,
   };
-  ```
+}
+```
 
-### 7. Update Hook Runner Tests
-**File:** `packages/core/src/hooks/hookRunner.test.ts`
-- Add `sanitizationConfig` to mock config (line ~72 upstream):
-  ```typescript
-  mockConfig = {
-    isTrustedFolder: vi.fn().mockReturnValue(true),
-    sanitizationConfig: {
-      enableEnvironmentVariableRedaction: true,
+**Initialize in constructor:**
+```typescript
+this.allowedEnvironmentVariables = params.allowedEnvironmentVariables ?? [];
+this.blockedEnvironmentVariables = params.blockedEnvironmentVariables ?? [];
+this.enableEnvironmentVariableRedaction = params.enableEnvironmentVariableRedaction ?? false;
+```
+
+**Update `shellExecutionConfig`:**
+```typescript
+get shellExecutionConfig(): ShellExecutionConfig {
+  return {
+    // ... existing fields
+    sanitizationConfig: this.sanitizationConfig,
+  };
+}
+```
+
+### 3. Update CLI Config Loader
+**File:** `packages/cli/src/config/config.ts`
+
+**In `loadCliConfig()` function:**
+```typescript
+return new Config({
+  // ... existing params
+  allowedEnvironmentVariables: settings.security?.environmentVariableRedaction?.allowed,
+  blockedEnvironmentVariables: settings.security?.environmentVariableRedaction?.blocked,
+  enableEnvironmentVariableRedaction: settings.security?.environmentVariableRedaction?.enabled ?? false,
+  // ... rest of params
+});
+```
+
+### 4. Update Settings Schema
+**File:** `packages/cli/src/config/settingsSchema.ts`
+
+**Add under `security` object:**
+```typescript
+security: {
+  type: 'object',
+  properties: {
+    // ... existing security settings
+    environmentVariableRedaction: {
+      type: 'object',
+      label: 'Environment Variable Redaction',
+      category: 'Security',
+      default: {},
+      description: 'Configure environment variable sanitization for shell commands, hooks, and MCP servers.',
+      properties: {
+        allowed: {
+          type: 'array',
+          label: 'Allowed Variables',
+          category: 'Security',
+          default: [],
+          items: { type: 'string' },
+          description: 'Environment variables to allow in addition to the default allowlist.',
+        },
+        blocked: {
+          type: 'array',
+          label: 'Blocked Variables',
+          category: 'Security',
+          default: [],
+          items: { type: 'string' },
+          description: 'Environment variables to block in addition to the default blocklist.',
+        },
+        enabled: {
+          type: 'boolean',
+          label: 'Enable Redaction',
+          category: 'Security',
+          default: false,
+          description: 'Enable environment variable redaction (disabled by default).',
+        },
+      },
     },
-  } as unknown as Config;
-  ```
+  },
+}
+```
 
-### 8. Update Core Tool Scheduler Tests
+### 5. Integrate into Hook Runner
+**File:** `packages/core/src/hooks/hookRunner.ts`
+
+**Add import:**
+```typescript
+import { sanitizeEnvironment } from '../services/environmentSanitization.js';
+```
+
+**Update spawn env (around line 242):**
+```typescript
+const env = {
+  ...sanitizeEnvironment(process.env, this.config.sanitizationConfig),
+  LLXPRT_PROJECT_DIR: input.cwd,
+  CLAUDE_PROJECT_DIR: input.cwd, // Backwards compatibility
+};
+```
+
+### 6. Update Hook Runner Tests
+**File:** `packages/core/src/hooks/hookRunner.test.ts`
+
+**Add to mock config:**
+```typescript
+mockConfig = {
+  isTrustedFolder: vi.fn().mockReturnValue(true),
+  sanitizationConfig: {
+    enableEnvironmentVariableRedaction: true,
+    allowedEnvironmentVariables: [],
+    blockedEnvironmentVariables: [],
+  },
+} as unknown as Config;
+```
+
+### 7. Update Core Tool Scheduler Tests
 **File:** `packages/core/src/core/coreToolScheduler.test.ts`
-- Add `sanitizationConfig` to mock `getShellExecutionConfig()` returns (3 places in upstream diff)
 
-### 9. Update MCP List Command (CLI)
-**File:** `packages/cli/src/commands/mcp/list.ts` (if exists)
-- Pass sanitization config to `createTransport()` (lines 62-77 upstream)
-- **Check if LLxprt has this file** — if not, skip
+**Add to mock `getShellExecutionConfig()` returns:**
+```typescript
+mockConfig.getShellExecutionConfig.mockReturnValue({
+  // ... existing fields
+  sanitizationConfig: {
+    enableEnvironmentVariableRedaction: false,
+    allowedEnvironmentVariables: [],
+    blockedEnvironmentVariables: [],
+  },
+});
+```
 
-### 10. Update Documentation
-**File:** `docs/get-started/configuration.md` (or LLxprt equivalent)
-- Add the "Environment variable redaction" section (52 lines, upstream lines 1187-1239)
-- Documents default rules, allowlist, configuration examples
-
-**File:** `docs/cli/settings.md`
-- Update the security settings table to include the 3 new settings
-
-### 11. Update UI (AppContainer)
+### 8. Update UI Shell Config
 **File:** `packages/cli/src/ui/AppContainer.tsx`
-- Pass `sanitizationConfig` to shell tool config (line ~902 upstream):
-  ```typescript
-  sanitizationConfig: config.sanitizationConfig,
-  ```
+
+**Pass sanitizationConfig to shell tool (if ShellTool config exists):**
+```typescript
+sanitizationConfig: config.sanitizationConfig,
+```
+
+### 9. Update Documentation
+**File:** `docs/get-started/configuration.md`
+
+**Add new section under security settings:**
+```markdown
+#### Environment Variable Redaction
+
+LLxprt can sanitize environment variables passed to hooks, shell commands, and MCP servers to prevent accidental secret leakage.
+
+**Configuration:**
+```json
+{
+  "security": {
+    "environmentVariableRedaction": {
+      "enabled": true,
+      "allowed": ["CUSTOM_VAR"],
+      "blocked": ["MY_SECRET"]
+    }
+  }
+}
+```
+
+**Default Behavior:**
+- Disabled by default (opt-in for security)
+- When enabled, blocks variables matching patterns: `TOKEN`, `SECRET`, `KEY`, `PASSWORD`, `AUTH`, etc.
+- Always allows: `PATH`, `HOME`, `USER`, `SHELL`, `TERM`, `LLXPRT_CLI_*`, and other safe system vars
+- Detects secrets in values: private keys, API tokens, URLs with credentials
+
+**Custom Lists:**
+- `allowed`: Additional variables to allow (beyond default allowlist)
+- `blocked`: Additional variables to block (beyond default blocklist)
+
+**Use Cases:**
+- Prevent hooks from accessing your API keys
+- Protect credentials when running untrusted project-level hooks
+- Audit what environment variables are exposed to subprocesses
+
+For the complete default allowlist and blocklist patterns, see [environmentSanitization.ts](../../packages/core/src/services/environmentSanitization.ts).
+```
+
+## Preflight Checks
+
+**VERIFIED:**
+- [OK] Hook runner exists and can be modified
+- [OK] Config class exists and can be extended
+- [OK] Settings schema exists and can be extended
+- [OK] CLI config loader exists and can be modified
+
+**Dependencies:**
+- None (self-contained feature)
+
+**Verification Commands:**
+```bash
+npm run typecheck   # Must pass
+npm run lint        # Must pass
+npm run test        # All tests must pass (including new sanitization tests)
+```
 
 ## Implementation Steps
 
-1. **Create the sanitization module:**
-   - Copy `environmentSanitization.ts` from upstream diff (all 309 lines)
+1. **Create sanitization module:**
+   - Copy `environmentSanitization.ts` from upstream (309 lines)
+   - Replace `GEMINI_CLI_*` with `LLXPRT_CLI_*`
    - Place in `packages/core/src/services/`
    - Run tests: `npm test environmentSanitization`
 
@@ -184,34 +308,40 @@ LLxprt **already has basic sanitization** in `packages/core/src/utils/sanitizati
 
 3. **Update settings schema:**
    - Add `security.environmentVariableRedaction` object with 3 properties
-   - Run `npm run build` to regenerate schema if auto-generated
+   - Verify schema generates correctly
 
 4. **Update CLI config loader:**
-   - In `loadCliConfig()`, map settings to config parameters
-   - Handle `blockedEnvironmentVariables` and `enableEnvironmentVariableRedaction`
+   - Map settings to config parameters in `loadCliConfig()`
 
-5. **Integrate into execution points:**
-   - `hookRunner.ts`: Import and call `sanitizeEnvironment(process.env, config.sanitizationConfig)`
+5. **Integrate into hook runner:**
+   - Import and call `sanitizeEnvironment(process.env, config.sanitizationConfig)`
    - Update tests to include mock `sanitizationConfig`
 
-6. **Update UI shell config:**
-   - `AppContainer.tsx`: Pass `config.sanitizationConfig` to shell tool
+6. **Update test files:**
+   - Add `sanitizationConfig` to all mock configs
+   - Ensure tests pass
 
-7. **Documentation:**
-   - Add the 52-line "Environment variable redaction" section to docs
-   - Update settings table
+7. **Update documentation:**
+   - Add environment variable redaction section to docs
 
-8. **Verification:**
-   - Run full test suite: `npm test`
-   - Test manually: Set `GITHUB_TOKEN=ghp_xxx` and run a shell command — should be redacted
-   - Check that allowed vars like `PATH` still work
+8. **Manual testing:**
+   - Set `GITHUB_TOKEN=ghp_xxx` and run a shell command
+   - Verify token is redacted when `enabled: true`
+   - Verify allowed vars like `PATH` still work
+
+9. **Verification:**
+   ```bash
+   npm run typecheck && npm run lint && npm run test
+   ```
 
 ## Execution Notes
 
-- **Batch group:** Secrets
+- **Batch group:** Secrets-Sanitization
 - **Dependencies:** None
 - **Verification:** `npm run typecheck && npm run lint && npm run test`
-- **Estimated magnitude:** Medium — 1 new file (309 lines), 10+ file updates, mostly additive
-- **Risk:** Low-medium — could break shell commands if sanitization is too aggressive, but well-tested upstream
+- **Risk:** Low-medium — Could break shell commands if sanitization too aggressive, but well-tested upstream
 - **Critical gotcha:** Default is `enabled: false` — users must opt-in. Document this clearly.
-- **LLxprt-specific:** Check if MCP `createTransport` exists; if not, skip that integration point
+- **Testing priority:** High — Must verify that:
+  - Legitimate env vars (PATH, HOME) are NOT redacted
+  - Secrets (API keys, tokens) ARE redacted when enabled
+  - Disabled mode passes all vars through unchanged

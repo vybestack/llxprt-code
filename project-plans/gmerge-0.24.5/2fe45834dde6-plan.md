@@ -6,46 +6,51 @@
 
 ## What Upstream Does
 
-Introduces a new **`admin` settings category** designed for **enterprise administrators** to enforce policies remotely. This commit implements two admin controls:
+Introduces a new **`admin` settings category** for **enterprise administrators** to enforce policies remotely. This commit implements two admin controls:
 
 1. **`admin.secureModeEnabled`** (boolean, default false):
-   - If `true`, **disallows YOLO mode** from being used (similar to existing `security.disableYoloMode`, but takes precedence)
-   - Error message changes to "disabled by your admin" to clarify the source of the restriction
+   - If `true`, **disallows YOLO mode**
+   - Error message: "disabled by your admin"
 
 2. **`admin.mcp.enabled`** (boolean, default true):
-   - If `false`, **disables all MCP servers** (Model Context Protocol)
-   - Clears `mcpServers`, `allowedMcpServers`, `blockedMcpServers`, and `mcpServerCommand`
-   - Replaces `/mcp` command with a stub that shows "MCP disabled by your admin"
+   - If `false`, **disables all MCP servers**
+   - Clears MCP config and stubs `/mcp` command
 
 3. **`admin.extensions.enabled`** (boolean, default true):
-   - Defined in schema but **not implemented yet** in this commit
-   - Reserved for future use to disable extensions
+   - Defined in schema but **NOT implemented yet** (reserved for future)
 
-The `admin` settings are designed to be **merged with REPLACE strategy** (not concatenated), allowing system-level configs to override user configs.
+The `admin` settings use **REPLACE merge strategy** (system overrides user settings).
 
-## LLxprt Adaptation Strategy
+## LLxprt File Existence Map
 
-LLxprt **has YOLO mode, MCP support, and extensions**, so this feature is directly applicable. The upstream logic is:
+**VERIFIED paths:**
+- [OK] `packages/cli/src/config/settingsSchema.ts` (EXISTS, needs admin settings)
+- [OK] `packages/cli/src/config/config.ts` (EXISTS, needs enforcement logic)
+- [OK] `packages/core/src/config/config.ts` (EXISTS, needs mcpEnabled field)
+- [OK] `packages/cli/src/services/BuiltinCommandLoader.ts` (EXISTS, needs MCP stub)
+- [OK] `packages/cli/src/config/config.test.ts` (EXISTS, needs admin tests)
+- [OK] `packages/cli/src/services/BuiltinCommandLoader.test.ts` (EXISTS, needs mock update)
 
-1. **Add `admin` settings schema** with 3 nested properties
-2. **Enforce `secureModeEnabled`** in config loading (override `disableYoloMode`)
-3. **Enforce `mcpEnabled`** by clearing MCP config and stubbing the `/mcp` command
-4. **Add config methods** to store/retrieve remote admin settings
-5. **Update tests** to verify the new enforcement logic
+**Actions required:**
+1. MODIFY: `packages/cli/src/config/settingsSchema.ts` (add admin settings)
+2. MODIFY: `packages/core/src/config/config.ts` (add mcpEnabled field)
+3. MODIFY: `packages/cli/src/config/config.ts` (enforce admin settings)
+4. MODIFY: `packages/cli/src/services/BuiltinCommandLoader.ts` (stub /mcp if disabled)
+5. ADD TESTS: `packages/cli/src/config/config.test.ts` (secureModeEnabled & mcpEnabled suites)
+6. UPDATE TESTS: `packages/cli/src/services/BuiltinCommandLoader.test.ts` (add mock)
+7. UPDATE DOCS: `docs/get-started/configuration.md` (add admin settings)
 
-### Key Differences
+**Scope reduction from upstream:**
+- [ERROR] SKIP: `GeminiCodeAssistSetting` types (don't exist in LLxprt, not needed for MVP)
+- [ERROR] SKIP: `remoteAdminSettings` storage (future remote fetching, out of scope)
+- [OK] KEEP: Admin settings schema and enforcement logic
 
-- LLxprt may have different MCP command structure — check if `/mcp` command exists
-- LLxprt uses `@vybestack/llxprt-code-core` instead of `@google/gemini-cli-core`
-- Settings paths may differ (`.llxprt/` vs `.gemini/`)
-
-## Files to Create/Modify
+## Files to Modify
 
 ### 1. Update Settings Schema
 **File:** `packages/cli/src/config/settingsSchema.ts`
 
-**Add new top-level `admin` object (after `hooks` or at end of schema):**
-
+**Add new top-level `admin` object:**
 ```typescript
 admin: {
   type: 'object',
@@ -83,7 +88,7 @@ admin: {
           category: 'Admin',
           requiresRestart: false,
           default: true,
-          description: 'If false, disallows extensions from being installed or used.',
+          description: 'If false, disallows extensions from being installed or used. (Not enforced yet)',
           showInDialog: false,
           mergeStrategy: MergeStrategy.REPLACE,
         },
@@ -115,19 +120,37 @@ admin: {
 },
 ```
 
-**Notes:**
-- `showInDialog: false` — these settings are NOT shown in the `/settings` UI (admin-only)
-- `mergeStrategy: MergeStrategy.REPLACE` — system settings override user settings
-- `extensions.enabled` is defined but not enforced yet (future work)
+### 2. Update Core Config Class
+**File:** `packages/core/src/config/config.ts`
 
-### 2. Update CLI Config Loader
-**File:** `packages/cli/src/config/config.ts` (the CLI-specific loader)
-
-#### a) Enforce `secureModeEnabled` (lines 508-520):
-
-**OLD:**
+**Add to `ConfigParameters` interface:**
 ```typescript
-// Override approval mode if disableYoloMode is set.
+mcpEnabled?: boolean;
+```
+
+**Add field to `Config` class:**
+```typescript
+private readonly mcpEnabled: boolean;
+```
+
+**Initialize in constructor:**
+```typescript
+this.mcpEnabled = params.mcpEnabled ?? true;
+```
+
+**Add getter:**
+```typescript
+getMcpEnabled(): boolean {
+  return this.mcpEnabled;
+}
+```
+
+### 3. Update CLI Config Loader
+**File:** `packages/cli/src/config/config.ts`
+
+**Enforce `secureModeEnabled` (find YOLO mode check, around line 508-520):**
+```typescript
+// OLD:
 if (settings.security?.disableYoloMode) {
   if (approvalMode === ApprovalMode.YOLO) {
     debugLogger.error('YOLO mode is disabled by the "disableYolo" setting.');
@@ -137,11 +160,8 @@ if (settings.security?.disableYoloMode) {
   }
   approvalMode = ApprovalMode.DEFAULT;
 }
-```
 
-**NEW:**
-```typescript
-// Override approval mode if disableYoloMode or secureModeEnabled is set.
+// NEW:
 if (settings.security?.disableYoloMode || settings.admin?.secureModeEnabled) {
   if (approvalMode === ApprovalMode.YOLO) {
     if (settings.admin?.secureModeEnabled) {
@@ -157,14 +177,12 @@ if (settings.security?.disableYoloMode || settings.admin?.secureModeEnabled) {
 }
 ```
 
-#### b) Enforce `mcpEnabled` (lines 639-669):
-
-**Add before the `return new Config()` statement:**
+**Enforce `mcpEnabled` (before `return new Config()`):**
 ```typescript
 const mcpEnabled = settings.admin?.mcp?.enabled ?? true;
 ```
 
-**Then update the Config constructor call:**
+**Update Config constructor call:**
 ```typescript
 return new Config({
   // ... existing params ...
@@ -179,115 +197,24 @@ return new Config({
       ? undefined
       : settings.mcp?.excluded
     : undefined,
-  // ... existing params ...
+  // ... rest of params ...
   disableYoloMode: settings.security?.disableYoloMode || settings.admin?.secureModeEnabled,
   // ... rest of params ...
 });
 ```
 
-**Explanation:** If `mcpEnabled` is false, clear all MCP config and set `allowedMcpServers`/`blockedMcpServers` to `undefined` (not empty arrays).
-
-### 3. Update Core Config Class
-**File:** `packages/core/src/config/config.ts`
-
-#### a) Add to `ConfigParameters` interface (line ~359):
-```typescript
-mcpEnabled?: boolean;
-```
-
-#### b) Add field to `Config` class (line ~394):
-```typescript
-private readonly mcpEnabled: boolean;
-```
-
-#### c) Initialize in constructor (line ~519):
-```typescript
-this.mcpEnabled = params.mcpEnabled ?? true;
-```
-
-#### d) Add getter (line ~1141):
-```typescript
-getMcpEnabled(): boolean {
-  return this.mcpEnabled;
-}
-```
-
-#### e) Add remote admin settings storage (lines ~494, ~902):
-
-**Add fields:**
-```typescript
-private remoteAdminSettings: GeminiCodeAssistSetting | undefined;
-```
-
-**Add getters/setters:**
-```typescript
-getRemoteAdminSettings(): GeminiCodeAssistSetting | undefined {
-  return this.remoteAdminSettings;
-}
-
-setRemoteAdminSettings(settings: GeminiCodeAssistSetting): void {
-  this.remoteAdminSettings = settings;
-}
-```
-
-**Note:** `GeminiCodeAssistSetting` is a type imported from `code_assist/types.ts` — check if this type exists in LLxprt.
-
-### 4. Add Code Assist Types (if missing)
-**File:** `packages/core/src/code_assist/types.ts`
-
-**Add at the end:**
-```typescript
-export interface GeminiCodeAssistSetting {
-  secureModeEnabled?: boolean;
-  mcpSetting?: McpSetting;
-  cliFeatureSetting?: CliFeatureSetting;
-}
-
-export interface McpSetting {
-  mcpEnabled?: boolean;
-  allowedMcpConfigs?: McpConfig[];
-}
-
-export interface McpConfig {
-  mcpServer?: string;
-}
-
-export interface CliFeatureSetting {
-  extensionsSetting?: ExtensionsSetting;
-}
-
-export interface ExtensionsSetting {
-  extensionsEnabled?: boolean;
-}
-```
-
-**Note:** These types are for **future remote admin settings** fetched from a server. Not used yet in this commit.
-
-### 5. Update Builtin Command Loader
+### 4. Update Builtin Command Loader
 **File:** `packages/cli/src/services/BuiltinCommandLoader.ts`
 
-#### a) Add imports (lines 9-12):
+**Replace `/mcp` command conditionally (in command list):**
 ```typescript
-import {
-  CommandKind,
-  type SlashCommand,
-  type CommandContext,
-} from '../ui/commands/types.js';
-import type { MessageActionReturn, Config } from '@vybestack/llxprt-code-core';
-```
-
-#### b) Replace `/mcp` command conditionally (lines 84-100):
-
-**OLD:**
-```typescript
+// OLD:
 await ideCommand(),
 initCommand,
 mcpCommand,
 memoryCommand,
-```
 
-**NEW:**
-```typescript
+// NEW:
 await ideCommand(),
 initCommand,
 ...(this.config?.getMcpEnabled() === false
@@ -311,22 +238,17 @@ initCommand,
 memoryCommand,
 ```
 
-**Explanation:** If MCP is disabled, replace the real `mcpCommand` with a stub that returns an error message.
-
-### 6. Update Config Tests
+### 5. Add Config Tests
 **File:** `packages/cli/src/config/config.test.ts`
 
-#### a) Update existing test (line ~1072):
-
-**Change error message expectation:**
+**Update existing test error message (find YOLO mode test):**
 ```typescript
 await expect(loadCliConfig(settings, 'test-session', argv)).rejects.toThrow(
   'Cannot start in YOLO mode since it is disabled by your admin',
 );
 ```
 
-#### b) Add new test suite for `secureModeEnabled` (lines 2415-2471):
-
+**Add new test suite for `secureModeEnabled`:**
 ```typescript
 describe('loadCliConfig secureModeEnabled', () => {
   beforeEach(() => {
@@ -359,20 +281,6 @@ describe('loadCliConfig secureModeEnabled', () => {
     );
   });
 
-  it('should throw an error if approval-mode=yolo is attempted when secureModeEnabled is true', async () => {
-    process.argv = ['node', 'script.js', '--approval-mode=yolo'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = {
-      admin: {
-        secureModeEnabled: true,
-      },
-    };
-
-    await expect(loadCliConfig(settings, 'test-session', argv)).rejects.toThrow(
-      'Cannot start in YOLO mode since it is disabled by your admin',
-    );
-  });
-
   it('should set disableYoloMode to true when secureModeEnabled is true', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
@@ -387,8 +295,7 @@ describe('loadCliConfig secureModeEnabled', () => {
 });
 ```
 
-#### c) Add new test suite for `mcpEnabled` (lines 2473-2604):
-
+**Add new test suite for `mcpEnabled`:**
 ```typescript
 describe('loadCliConfig mcpEnabled', () => {
   beforeEach(() => {
@@ -418,10 +325,6 @@ describe('loadCliConfig mcpEnabled', () => {
     const settings: Settings = { ...mcpSettings };
     const config = await loadCliConfig(settings, 'test-session', argv);
     expect(config.getMcpEnabled()).toBe(true);
-    expect(config.getMcpServerCommand()).toBe('mcp-server');
-    expect(config.getMcpServers()).toEqual({ serverA: { url: 'http://a' } });
-    expect(config.getAllowedMcpServers()).toEqual(['serverA']);
-    expect(config.getBlockedMcpServers()).toEqual(['serverB']);
   });
 
   it('should disable MCP when mcpEnabled is false', async () => {
@@ -439,8 +342,6 @@ describe('loadCliConfig mcpEnabled', () => {
     expect(config.getMcpEnabled()).toBe(false);
     expect(config.getMcpServerCommand()).toBeUndefined();
     expect(config.getMcpServers()).toEqual({});
-    expect(config.getAllowedMcpServers()).toEqual([]);
-    expect(config.getBlockedMcpServers()).toEqual([]);
   });
 
   it('should enable MCP when mcpEnabled is true', async () => {
@@ -456,97 +357,122 @@ describe('loadCliConfig mcpEnabled', () => {
     };
     const config = await loadCliConfig(settings, 'test-session', argv);
     expect(config.getMcpEnabled()).toBe(true);
-    expect(config.getMcpServerCommand()).toBe('mcp-server');
-    expect(config.getMcpServers()).toEqual({ serverA: { url: 'http://a' } });
-    expect(config.getAllowedMcpServers()).toEqual(['serverA']);
-    expect(config.getBlockedMcpServers()).toEqual(['serverB']);
   });
 });
 ```
 
-### 7. Update Builtin Command Loader Tests
+### 6. Update Builtin Command Loader Tests
 **File:** `packages/cli/src/services/BuiltinCommandLoader.test.ts`
 
-**Add to all mock configs (3 places):**
+**Add to all mock configs (find mockConfig objects):**
 ```typescript
 getMcpEnabled: vi.fn().mockReturnValue(true),
 ```
 
-**Lines affected:**
-- Line ~105 (basic mock config)
-- Line ~182 (config with message bus)
-- Line ~203 (profile config)
-
-### 8. Update Documentation
+### 7. Update Documentation
 **File:** `docs/get-started/configuration.md`
 
-**Add new section under settings (line ~936):**
+**Add new section under settings:**
 ```markdown
 #### `admin`
 
-- **`admin.secureModeEnabled`** (boolean):
-  - **Description:** If true, disallows yolo mode from being used.
-  - **Default:** `false`
+Settings configured by system administrators to enforce security policies. These settings use REPLACE merge strategy (system overrides user settings).
 
-- **`admin.extensions.enabled`** (boolean):
-  - **Description:** If false, disallows extensions from being installed or used.
-  - **Default:** `true`
+- **`admin.secureModeEnabled`** (boolean):
+  - **Description:** If true, disallows YOLO mode from being used.
+  - **Default:** `false`
+  - **When enabled:** Users cannot use `--yolo` flag or `--approval-mode=yolo`.
 
 - **`admin.mcp.enabled`** (boolean):
   - **Description:** If false, disallows MCP servers from being used.
   - **Default:** `true`
+  - **When disabled:** All MCP configuration is ignored, `/mcp` command shows "disabled by admin".
+
+- **`admin.extensions.enabled`** (boolean):
+  - **Description:** If false, disallows extensions from being installed or used.
+  - **Default:** `true`
+  - **Status:** Defined but not enforced yet (reserved for future implementation).
+
+**Example system-level configuration (`/etc/llxprt/settings.json`):**
+```json
+{
+  "admin": {
+    "secureModeEnabled": true,
+    "mcp": {
+      "enabled": false
+    }
+  }
+}
+```
 ```
 
-### 9. Update Schema JSON (if auto-generated)
-**File:** `schemas/settings.schema.json`
+## Preflight Checks
 
-This file is **binary** in the upstream diff, so it's likely auto-generated. If LLxprt has a schema generation script, run it after updating `settingsSchema.ts`.
+**VERIFIED:**
+- [OK] Settings schema exists and can be extended
+- [OK] Core config exists and supports new fields
+- [OK] CLI config loader exists
+- [OK] Builtin command loader exists
+- [OK] Test files exist
+
+**Dependencies:**
+- None (self-contained feature)
+
+**Verification Commands:**
+```bash
+npm run typecheck   # Must pass
+npm run lint        # Must pass
+npm run test        # All tests must pass
+```
 
 ## Implementation Steps
 
-1. **Add settings schema:**
+1. **Add admin settings schema:**
    - Edit `settingsSchema.ts`
    - Add `admin` object with 3 nested properties
-   - Verify `mergeStrategy: MergeStrategy.REPLACE` is set
+   - Set `mergeStrategy: MergeStrategy.REPLACE`
 
 2. **Update core config:**
-   - Add `mcpEnabled` field, getter, and constructor logic
-   - Add `remoteAdminSettings` field and getters/setters (optional)
-   - Add types to `code_assist/types.ts` if missing
+   - Add `mcpEnabled` field, getter, constructor logic
 
 3. **Update CLI config loader:**
-   - Enforce `secureModeEnabled` in YOLO mode check
-   - Enforce `mcpEnabled` by conditionally clearing MCP config
+   - Enforce `secureModeEnabled` in YOLO check
+   - Calculate `mcpEnabled` and conditionally clear MCP config
    - Update `disableYoloMode` to consider `secureModeEnabled`
 
 4. **Update builtin command loader:**
    - Replace `/mcp` command with stub if `getMcpEnabled() === false`
-   - Add necessary imports
 
 5. **Add tests:**
-   - Create `secureModeEnabled` test suite (3 tests)
+   - Create `secureModeEnabled` test suite (2 tests)
    - Create `mcpEnabled` test suite (3 tests)
-   - Update existing test error message
+   - Update existing YOLO test error message
    - Add mock `getMcpEnabled()` to command loader tests
 
 6. **Update docs:**
-   - Add `admin` settings section to configuration docs
+   - Add `admin` settings section
 
-7. **Regenerate schema (if applicable):**
-   - Run schema generation script if it exists
+7. **Manual testing:**
+   - Set `admin.secureModeEnabled: true` → try `--yolo` → should error
+   - Set `admin.mcp.enabled: false` → run `/mcp` → should show "disabled"
+   - Verify system-level admin settings override user settings
 
-8. **Manual testing:**
-   - Set `admin.secureModeEnabled: true` and try `--yolo` → should error
-   - Set `admin.mcp.enabled: false` and run `/mcp` → should show "disabled by admin"
-   - Verify that system-level `admin` settings override user settings
+8. **Verification:**
+   ```bash
+   npm run typecheck && npm run lint && npm run test
+   ```
 
 ## Execution Notes
 
-- **Batch group:** Settings
-- **Dependencies:** None (but assumes MCP and YOLO mode exist)
-- **Verification:** `npm run typecheck && npm run lint && npm test`
-- **Estimated magnitude:** Medium — 9 files, 309 lines, mostly additive
-- **Risk:** Low-medium — policy enforcement, but well-tested upstream
-- **Critical gotcha:** `admin.extensions.enabled` is defined but NOT enforced yet. Document this clearly.
-- **LLxprt-specific:** Replace `GEMINI_API_KEY` with `LLXPRT_API_KEY` in tests. Check if `/mcp` command exists; if not, skip command loader changes.
-- **Enterprise impact:** This is the foundation for remote admin settings. Future work will add server-side fetching of `GeminiCodeAssistSetting`.
+- **Batch group:** Admin-Settings
+- **Dependencies:** None
+- **Verification:** `npm run typecheck && npm run lint && npm run test`
+- **Risk:** Low-medium — Policy enforcement, well-tested upstream
+- **Scope reduction:** Skipped `GeminiCodeAssistSetting` types and remote fetching logic (not needed for MVP)
+- **Critical gotcha:** `admin.extensions.enabled` is defined but NOT enforced. Document as "reserved for future".
+- **Enterprise impact:** Foundation for remote admin settings. Future work will add server-side policy fetching.
+- **Testing priority:** High — Must verify:
+  - YOLO mode correctly blocked when `secureModeEnabled: true`
+  - MCP disabled when `admin.mcp.enabled: false`
+  - System settings override user settings (merge strategy)
+  - Default behavior unchanged (all defaults allow everything)

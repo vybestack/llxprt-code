@@ -9,59 +9,42 @@
 Adds comprehensive **security documentation** to the hooks feature, focusing on threat modeling and best practices. This commit:
 
 1. **Reorganizes `docs/hooks/best-practices.md`:**
-   - Moves the "Security considerations" section (128 lines) to a new section called "Using Hooks Securely"
-   - Adds a detailed **threat model** table explaining hook sources (System, User, Extensions, Project)
+   - Moves existing "Security considerations" section to a new "Using Hooks Securely" section
+   - Adds detailed **threat model** table explaining hook sources (System, User, Extensions, Project)
    - Documents **risks** (arbitrary code execution, data exfiltration, prompt injection)
    - Provides **mitigation strategies** (verify sources, sanitize env vars, use timeouts, limit permissions)
-   - Clarifies that "Authoring Secure Hooks" is for hook developers, while "Using Hooks Securely" is for end users
+   - Separates "Authoring Secure Hooks" (for hook developers) from "Using Hooks Securely" (for end users)
 
 2. **Updates `docs/hooks/index.md`:**
-   - Adds a **Security and Risks** warning section (22 lines) with a clear callout about arbitrary code execution
-   - Links to the detailed threat model in best-practices.md
+   - Adds **Security and Risks** warning section with clear callout about arbitrary code execution
+   - Links to detailed threat model in best-practices.md
 
-The documentation emphasizes that **project-level hooks** are particularly risky when opening third-party repos, and that Gemini CLI warns about new hooks but cannot fully protect users.
+The documentation emphasizes that **project-level hooks** are particularly risky when opening third-party repos.
 
-## LLxprt Adaptation Strategy
+## LLxprt File Existence Map
 
-LLxprt **has hooks** (confirmed by docs structure), so this security documentation is directly applicable. The changes are:
+**VERIFIED paths:**
+- [OK] `docs/hooks/best-practices.md` (EXISTS, needs security sections)
+- [OK] `docs/hooks/index.md` (EXISTS, needs security warning)
 
-1. **Pure documentation** — no code changes
-2. **Content is platform-agnostic** — just replace "Gemini CLI" with "LLxprt" and `GEMINI_*` env vars with `LLXPRT_*`
-3. **Check if LLxprt docs structure matches upstream** — if not, adapt section placement
+**Actions required:**
+1. MODIFY: `docs/hooks/best-practices.md` (add ~150 lines of security content)
+2. MODIFY: `docs/hooks/index.md` (add ~22 lines of security warning)
 
-### Key Adaptations
+**LLxprt path differences:**
+- `.gemini/settings.json` → `.llxprt/settings.json`
+- `/etc/gemini-cli/` → `/etc/llxprt/` (or equivalent system config path)
+- `GEMINI_API_KEY` → `LLXPRT_API_KEY`
+- `GEMINI_PROJECT_DIR` → `LLXPRT_PROJECT_DIR`
+- `Gemini CLI` → `LLxprt`
 
-- Replace `GEMINI_CLI_` with `LLXPRT_`
-- Replace `GEMINI_API_KEY` with `LLXPRT_API_KEY` (or whatever LLxprt uses)
-- Replace `GEMINI_PROJECT_DIR` with the equivalent LLxprt env var
-- Update references to settings paths (`/etc/gemini-cli/` → `/etc/llxprt/` or similar)
-- Keep all threat model tables and security warnings verbatim
+## Files to Modify
 
-## Files to Create/Modify
+### 1. Update Hook Best Practices Doc
+**File:** `docs/hooks/best-practices.md`
 
-### 1. Reorganize Hook Best Practices Doc
-**File:** `docs/hooks/best-practices.md` (or LLxprt equivalent)
+**Add new section after introduction (before existing sections):**
 
-**Changes:**
-- **Move** the existing "Security considerations" section (if it exists) to a new location
-- **Add** new section: "Using Hooks Securely" (150+ lines)
-  - Subsections:
-    - **Threat Model** (table explaining hook sources)
-    - **Project Hook Security** (how detection works, identity tracking)
-    - **Risks** (table of attack vectors)
-    - **Mitigation Strategies** (verify sources, sanitize env, etc.)
-- **Add** new section: "Authoring Secure Hooks" (50 lines)
-  - Subsections:
-    - Validate all inputs
-    - Use timeouts
-    - Limit permissions
-    - Example: Secret Scanner
-- **Keep** existing sections:
-  - Performance
-  - Debugging
-  - Privacy considerations
-
-**Upstream content (lines 7-202 of diff):**
 ```markdown
 ## Using Hooks Securely
 
@@ -71,23 +54,23 @@ Understanding where hooks come from and what they can do is critical for secure 
 
 | Hook Source                   | Description                                                                                                                |
 | :---------------------------- | :------------------------------------------------------------------------------------------------------------------------- |
-| **System**                    | Configured by system administrators (e.g., `/etc/gemini-cli/settings.json`, `/Library/...`). Assumed to be the **safest**. |
-| **User** (`~/.gemini/...`)    | Configured by you. You are responsible for ensuring they are safe.                                                         |
+| **System**                    | Configured by system administrators (e.g., `/etc/llxprt/settings.json`). Assumed to be the **safest**. |
+| **User** (`~/.llxprt/...`)    | Configured by you. You are responsible for ensuring they are safe.                                                         |
 | **Extensions**                | You explicitly approve and install these. Security depends on the extension source (integrity).                            |
-| **Project** (`./.gemini/...`) | **Untrusted by default.** Safest in trusted internal repos; higher risk in third-party/public repos.                       |
+| **Project** (`./.llxprt/...`) | **Untrusted by default.** Safest in trusted internal repos; higher risk in third-party/public repos.                       |
 
 #### Project Hook Security
 
-When you open a project with hooks defined in `.gemini/settings.json`:
+When you open a project with hooks defined in `.llxprt/settings.json`:
 
-1. **Detection**: Gemini CLI detects the hooks.
+1. **Detection**: LLxprt detects the hooks.
 2. **Identification**: A unique identity is generated for each hook based on its `name` and `command`.
 3. **Warning**: If this specific hook identity has not been seen before, a **warning** is displayed.
 4. **Execution**: The hook is executed (unless specific security settings block it).
 5. **Trust**: The hook is marked as "trusted" for this project.
 
-> [!IMPORTANT] **Modification Detection**: If the `command` string of a project
-> hook is changed (e.g., by a `git pull`), its identity changes. Gemini CLI will
+> **IMPORTANT: Modification Detection** — If the `command` string of a project
+> hook is changed (e.g., by a `git pull`), its identity changes. LLxprt will
 > treat it as a **new, untrusted hook** and warn you again. This prevents
 > malicious actors from silently swapping a verified command for a malicious
 > one.
@@ -97,7 +80,7 @@ When you open a project with hooks defined in `.gemini/settings.json`:
 | Risk                         | Description                                                                                                                          |
 | :--------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
 | **Arbitrary Code Execution** | Hooks run as your user. They can do anything you can do (delete files, install software).                                            |
-| **Data Exfiltration**        | A hook could read your input (prompts), output (code), or environment variables (`GEMINI_API_KEY`) and send them to a remote server. |
+| **Data Exfiltration**        | A hook could read your input (prompts), output (code), or environment variables (`LLXPRT_API_KEY`) and send them to a remote server. |
 | **Prompt Injection**         | Malicious content in a file or web page could trick an LLM into running a tool that triggers a hook in an unexpected way.            |
 
 ### Mitigation Strategies
@@ -113,8 +96,8 @@ When you open a project with hooks defined in `.gemini/settings.json`:
 
 #### Sanitize Environment
 
-Hooks inherit the environment of the Gemini CLI process, which may include
-sensitive API keys. Gemini CLI attempts to sanitize sensitive variables, but you
+Hooks inherit the environment of the LLxprt process, which may include
+sensitive API keys. LLxprt attempts to sanitize sensitive variables, but you
 should be cautious.
 
 - **Avoid printing environment variables** to stdout/stderr unless necessary.
@@ -122,7 +105,7 @@ should be cautious.
   excluded from version control.
 
 **System Administrators:** You can enforce environment variable redaction by
-default in the system configuration (e.g., `/etc/gemini-cli/settings.json`):
+default in the system configuration (e.g., `/etc/llxprt/settings.json`):
 
 ```json
 {
@@ -166,7 +149,7 @@ fi
 
 ### Use timeouts
 
-Prevent denial-of-service (hanging agents) by enforcing timeouts. Gemini CLI
+Prevent denial-of-service (hanging agents) by enforcing timeouts. LLxprt
 defaults to 60 seconds, but you should set stricter limits for fast hooks.
 
 ```json
@@ -179,7 +162,7 @@ defaults to 60 seconds, but you should set stricter limits for fast hooks.
           {
             "name": "fast-validator",
             "command": "./hooks/validate.sh",
-            "timeout": 5000 // 5 seconds
+            "timeout": 5000
           }
         ]
       }
@@ -230,26 +213,17 @@ function containsSecret(content) {
 ```
 ```
 
-**LLxprt adaptation:**
-- Replace `Gemini CLI` → `LLxprt`
-- Replace `/etc/gemini-cli/settings.json` → `/etc/llxprt/settings.json` (or whatever)
-- Replace `GEMINI_API_KEY` → `LLXPRT_API_KEY` (or equivalent)
-- Keep all tables and code examples verbatim
-
 ### 2. Add Security Warning to Hooks Index
-**File:** `docs/hooks/index.md` (or LLxprt equivalent)
+**File:** `docs/hooks/index.md`
 
-**Changes:**
-- **Add** new section after the introductory paragraphs (before "Core concepts")
-- Insert 22 lines of security warnings
+**Insert after introductory paragraphs, before "Core concepts" section:**
 
-**Upstream content (lines 30-51 of diff):**
 ```markdown
 ## Security and Risks
 
-> [!WARNING] **Hooks execute arbitrary code with your user privileges.**
+> **WARNING: Hooks execute arbitrary code with your user privileges.**
 
-By configuring hooks, you are explicitly allowing Gemini CLI to run shell
+By configuring hooks, you are explicitly allowing LLxprt to run shell
 commands on your machine. Malicious or poorly configured hooks can:
 
 - **Exfiltrate data**: Read sensitive files (`.env`, ssh keys) and send them to
@@ -257,9 +231,9 @@ commands on your machine. Malicious or poorly configured hooks can:
 - **Modify system**: Delete files, install malware, or change system settings.
 - **Consume resources**: Run infinite loops or crash your system.
 
-**Project-level hooks** (in `.gemini/settings.json`) and **Extension hooks** are
+**Project-level hooks** (in `.llxprt/settings.json`) and **Extension hooks** are
 particularly risky when opening third-party projects or extensions from
-untrusted authors. Gemini CLI will **warn you** the first time it detects a new
+untrusted authors. LLxprt will **warn you** the first time it detects a new
 project hook (identified by its name and command), but it is **your
 responsibility** to review these hooks (and any installed extensions) before
 trusting them.
@@ -268,47 +242,56 @@ See [Security Considerations](best-practices.md#using-hooks-securely) for a
 detailed threat model and mitigation strategies.
 ```
 
-**LLxprt adaptation:**
-- Replace `Gemini CLI` → `LLxprt`
-- Replace `.gemini/settings.json` → `.llxprt/settings.json` (or whatever LLxprt uses)
-- Keep all risk descriptions verbatim
+## Preflight Checks
+
+**VERIFIED:**
+- [OK] `docs/hooks/best-practices.md` exists
+- [OK] `docs/hooks/index.md` exists
+
+**Dependencies:**
+- None (pure documentation)
+
+**Verification Commands:**
+```bash
+# No build commands needed for docs
+# Just verify no broken links:
+grep -r "best-practices.md#using-hooks-securely" docs/hooks/
+```
 
 ## Implementation Steps
 
-1. **Check LLxprt hooks docs structure:**
-   - Verify that `docs/hooks/best-practices.md` and `docs/hooks/index.md` exist
-   - If they don't, this commit may need to be deferred until hooks docs are added
-
-2. **Update `docs/hooks/best-practices.md`:**
-   - **Remove** old "Security considerations" section (if it exists)
-   - **Add** new section "Using Hooks Securely" (150 lines) after the intro
-   - **Add** new section "Authoring Secure Hooks" (50 lines) before "Privacy considerations"
+1. **Update `docs/hooks/best-practices.md`:**
+   - Insert "Using Hooks Securely" section (~150 lines)
+   - Insert "Authoring Secure Hooks" section (~50 lines)
    - Replace all `Gemini CLI` → `LLxprt`
-   - Replace all `GEMINI_*` env vars with `LLXPRT_*` equivalents
-   - Replace `/etc/gemini-cli/` → `/etc/llxprt/` (or system config path)
+   - Replace all `.gemini/` → `.llxprt/`
+   - Replace all `GEMINI_*` → `LLXPRT_*`
+   - Replace all `/etc/gemini-cli/` → `/etc/llxprt/`
 
-3. **Update `docs/hooks/index.md`:**
-   - **Insert** "Security and Risks" section (22 lines) after intro, before "Core concepts"
+2. **Update `docs/hooks/index.md`:**
+   - Insert "Security and Risks" section (~22 lines) after intro
    - Replace `Gemini CLI` → `LLxprt`
-   - Replace `.gemini/` → `.llxprt/` (or project config path)
-   - Update link: `best-practices.md#using-hooks-securely`
+   - Replace `.gemini/` → `.llxprt/`
+   - Verify link to `best-practices.md#using-hooks-securely` works
 
-4. **Review and adapt examples:**
-   - The bash and JavaScript examples are platform-agnostic — no changes needed
-   - The JSON config examples are also generic
+3. **Manual review:**
+   - Read through both docs to ensure coherence
+   - Check that all cross-references work
+   - Verify all code examples are valid
 
-5. **Manual review:**
-   - Read through the entire security section to ensure it makes sense for LLxprt
-   - Check that all cross-references work (e.g., links to other doc sections)
-
-6. **No code changes, no tests** — this is pure documentation
+4. **No code changes, no tests** — documentation only
 
 ## Execution Notes
 
-- **Batch group:** Security
+- **Batch group:** Hooks-Security-Docs
 - **Dependencies:** None (but assumes hooks feature exists)
-- **Verification:** `npm run docs:build` (if applicable) — ensure no broken links
-- **Estimated magnitude:** Small — 2 files, 199 lines of docs
+- **Verification:** Manual review of docs, check for broken links
 - **Risk:** Very low — documentation only
-- **Critical gotcha:** Must replace all `Gemini CLI` and `GEMINI_*` references with LLxprt equivalents. Do NOT copy-paste verbatim.
-- **User impact:** High value — users will have clear guidance on hook security. This is especially important given the arbitrary code execution risk.
+- **Critical gotcha:** Must replace ALL Gemini branding with LLxprt equivalents:
+  - `Gemini CLI` → `LLxprt`
+  - `.gemini/` → `.llxprt/`
+  - `GEMINI_API_KEY` → `LLXPRT_API_KEY`
+  - `GEMINI_PROJECT_DIR` → `LLXPRT_PROJECT_DIR`
+  - `/etc/gemini-cli/` → `/etc/llxprt/` (or system config path)
+- **User impact:** High value — users get clear guidance on hook security, especially important given arbitrary code execution risk
+- **Scope:** Pure documentation, ~199 lines added across 2 files
