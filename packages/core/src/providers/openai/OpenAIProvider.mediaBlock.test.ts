@@ -200,14 +200,35 @@ describe('OpenAIProvider - MediaBlock support', () => {
 
     expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
     const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+
+    // Tool message should NOT contain image placeholder (images go to synthetic user message)
     const toolMessage = callArgs.messages.find(
       (m: { role: string }) => m.role === 'tool',
     );
     expect(toolMessage).toBeDefined();
     expect(typeof toolMessage.content).toBe('string');
     expect(toolMessage.content).toContain('Screenshot taken');
-    expect(toolMessage.content).toContain('Unsupported');
-    expect(toolMessage.content).toContain('image/png');
+    expect(toolMessage.content).not.toContain('Unsupported');
+    expect(toolMessage.content).not.toContain('image/png');
+
+    // Synthetic user message should contain the image
+    const syntheticUserMessage = callArgs.messages.find(
+      (m: { role: string; content?: unknown }) =>
+        m.role === 'user' &&
+        Array.isArray(m.content) &&
+        m.content.some(
+          (c: { type: string; text?: string }) =>
+            c.type === 'text' && c.text?.includes('Images from tool response'),
+        ),
+    );
+    expect(syntheticUserMessage).toBeDefined();
+    expect(syntheticUserMessage.content).toHaveLength(2);
+    expect(syntheticUserMessage.content[1]).toEqual({
+      type: 'image_url',
+      image_url: {
+        url: 'data:image/png;base64,screenshotdata',
+      },
+    });
   });
 
   it('handles user message with only MediaBlocks (no text)', async () => {
@@ -475,5 +496,297 @@ describe('OpenAIProvider - MediaBlock support', () => {
     expect(userMessage.content[2].type).toBe('file');
     expect(userMessage.content[3].type).toBe('text');
     expect(userMessage.content[3].text).toContain('video/mp4');
+  });
+
+  describe('tool response image injection', () => {
+    it('injects images as synthetic user message', async () => {
+      const fakeStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            choices: [
+              {
+                delta: {
+                  content: 'I see the screenshot',
+                },
+              },
+            ],
+          };
+        },
+      };
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Take a screenshot' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_123',
+              name: 'screenshot',
+              parameters: {},
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_123',
+              toolName: 'screenshot',
+              result: 'Screenshot taken',
+            },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'screenshotdata',
+              encoding: 'base64',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents,
+        }),
+      );
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+
+      // Find tool message and synthetic user message
+      const toolMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'tool',
+      );
+      const syntheticUserMessage = callArgs.messages.find(
+        (m: { role: string; content?: unknown }) =>
+          m.role === 'user' &&
+          Array.isArray(m.content) &&
+          m.content.some(
+            (c: { type: string; text?: string }) =>
+              c.type === 'text' &&
+              c.text?.includes('Images from tool response'),
+          ),
+      );
+
+      // Tool message should NOT contain image placeholder
+      expect(toolMessage).toBeDefined();
+      expect(typeof toolMessage.content).toBe('string');
+      expect(toolMessage.content).toContain('Screenshot taken');
+      expect(toolMessage.content).not.toContain('Unsupported');
+      expect(toolMessage.content).not.toContain('image/png');
+
+      // Synthetic user message should contain the image
+      expect(syntheticUserMessage).toBeDefined();
+      expect(syntheticUserMessage.content).toHaveLength(2);
+      expect(syntheticUserMessage.content[0]).toEqual({
+        type: 'text',
+        text: '[Images from tool response]',
+      });
+      expect(syntheticUserMessage.content[1]).toEqual({
+        type: 'image_url',
+        image_url: {
+          url: 'data:image/png;base64,screenshotdata',
+        },
+      });
+    });
+
+    it('does not inject synthetic message when no images in tool response', async () => {
+      const fakeStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            choices: [
+              {
+                delta: {
+                  content: 'Done',
+                },
+              },
+            ],
+          };
+        },
+      };
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Run command' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_123',
+              name: 'execute_command',
+              parameters: { command: 'ls' },
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_123',
+              toolName: 'execute_command',
+              result: 'file1.txt file2.txt',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents,
+        }),
+      );
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+
+      // Count user messages (excluding the original human message)
+      const userMessages = callArgs.messages.filter(
+        (m: { role: string }) => m.role === 'user',
+      );
+
+      // Should only have the original human message, no synthetic image message
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages[0].content).toBe('Run command');
+    });
+
+    it('handles mixed media types', async () => {
+      const fakeStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            choices: [
+              {
+                delta: {
+                  content: 'I see the files',
+                },
+              },
+            ],
+          };
+        },
+      };
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Process files' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_123',
+              name: 'process_files',
+              parameters: {},
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_123',
+              toolName: 'process_files',
+              result: 'Files processed',
+            },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'imagedata',
+              encoding: 'base64',
+            },
+            {
+              type: 'media',
+              mimeType: 'video/mp4',
+              data: 'videodata',
+              encoding: 'base64',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents,
+        }),
+      );
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+
+      const toolMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'tool',
+      );
+      const syntheticUserMessage = callArgs.messages.find(
+        (m: { role: string; content?: unknown }) =>
+          m.role === 'user' &&
+          Array.isArray(m.content) &&
+          m.content.some(
+            (c: { type: string; text?: string }) =>
+              c.type === 'text' &&
+              c.text?.includes('Images from tool response'),
+          ),
+      );
+
+      // Tool message should only contain video placeholder (non-image media)
+      expect(toolMessage).toBeDefined();
+      expect(typeof toolMessage.content).toBe('string');
+      expect(toolMessage.content).toContain('Files processed');
+      expect(toolMessage.content).toContain('video/mp4'); // Non-image placeholder
+      expect(toolMessage.content).not.toContain('image/png'); // Image not in tool message
+
+      // Synthetic user message should only contain the image
+      expect(syntheticUserMessage).toBeDefined();
+      expect(syntheticUserMessage.content).toHaveLength(2);
+      expect(syntheticUserMessage.content[0]).toEqual({
+        type: 'text',
+        text: '[Images from tool response]',
+      });
+      expect(syntheticUserMessage.content[1]).toEqual({
+        type: 'image_url',
+        image_url: {
+          url: 'data:image/png;base64,imagedata',
+        },
+      });
+    });
   });
 });
