@@ -1358,4 +1358,174 @@ describe('ensureBucketsAuthenticated', () => {
     // Assert
     expect(oauthManager.authenticateMultipleBuckets).not.toHaveBeenCalled();
   });
+
+  it('coalesces concurrent ensureBucketsAuthenticated calls into one in-flight auth run', async () => {
+    // Arrange
+    const tokenStore = new MemoryTokenStore();
+
+    let resolveAuthRun: (() => void) | undefined;
+    const authRunPromise = new Promise<void>((resolve) => {
+      resolveAuthRun = resolve;
+    });
+
+    const oauthManager = {
+      getOAuthToken: vi.fn(async () => null),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => undefined),
+      authenticate: vi.fn(async () => {}),
+      authenticateMultipleBuckets: vi.fn(async () => authRunPromise),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b', 'bucket-c'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+    );
+
+    // Act
+    const first = handler.ensureBucketsAuthenticated();
+    const second = handler.ensureBucketsAuthenticated();
+
+    // Assert (before completion): only one underlying auth run started
+    expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledTimes(1);
+
+    // Complete in-flight run and verify both callers resolve
+    resolveAuthRun?.();
+    await Promise.all([first, second]);
+    expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears in-flight state after failure so a later call can retry', async () => {
+    // Arrange
+    const tokenStore = new MemoryTokenStore();
+
+    const oauthManager = {
+      getOAuthToken: vi.fn(async () => null),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => undefined),
+      authenticate: vi.fn(async () => {}),
+      authenticateMultipleBuckets: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('first auth attempt failed'))
+        .mockResolvedValueOnce(undefined),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+    );
+
+    // Act / Assert
+    await expect(handler.ensureBucketsAuthenticated()).rejects.toThrow(
+      'first auth attempt failed',
+    );
+
+    await expect(handler.ensureBucketsAuthenticated()).resolves.toBeUndefined();
+    expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses token from in-flight eager auth in tryFailover pass 3 without duplicate authenticate call', async () => {
+    // Arrange
+    const tokenStore = new MemoryTokenStore();
+
+    let releaseEagerAuth: (() => void) | undefined;
+    const eagerAuthPromise = new Promise<void>((resolve) => {
+      releaseEagerAuth = resolve;
+    });
+
+    const oauthManager = {
+      getOAuthToken: vi.fn(
+        async (_provider: string, bucket?: string) =>
+          tokenStore.getToken('anthropic', bucket),
+      ),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => 'bucket-a'),
+      authenticate: vi.fn(async () => {
+        throw new Error('pass-3 authenticate should not be called');
+      }),
+      authenticateMultipleBuckets: vi.fn(async () => {
+        await eagerAuthPromise;
+        await tokenStore.saveToken('anthropic', makeToken('eager-token'), 'bucket-b');
+      }),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+    );
+
+    // Start eager auth and leave it in-flight while failover starts
+    const ensurePromise = handler.ensureBucketsAuthenticated();
+    const failoverPromise = handler.tryFailover({ triggeringStatus: 401 });
+
+    releaseEagerAuth?.();
+    await ensurePromise;
+
+    // Assert
+    await expect(failoverPromise).resolves.toBe(true);
+    expect(handler.getCurrentBucket()).toBe('bucket-b');
+    expect(oauthManager.authenticate).not.toHaveBeenCalled();
+    expect(oauthManager.setSessionBucket).toHaveBeenCalledWith(
+      'anthropic',
+      'bucket-b',
+    );
+  });
+
+  it('coalesces concurrent pass-3 foreground reauth for the same bucket', async () => {
+    // Arrange
+    const tokenStore = new MemoryTokenStore();
+
+    // Current bucket starts with no token to force pass-3 foreground auth.
+
+    let releaseForegroundAuth: (() => void) | undefined;
+    const foregroundAuthGate = new Promise<void>((resolve) => {
+      releaseForegroundAuth = resolve;
+    });
+
+    const oauthManager = {
+      getOAuthToken: vi.fn(
+        async (_provider: string, bucket?: string) =>
+          tokenStore.getToken('anthropic', bucket),
+      ),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => 'bucket-a'),
+      authenticate: vi.fn(async (_provider: string, bucket?: string) => {
+        await foregroundAuthGate;
+        await tokenStore.saveToken(
+          'anthropic',
+          makeToken('pass3-token'),
+          bucket ?? 'default',
+        );
+      }),
+      authenticateMultipleBuckets: vi.fn(async () => undefined),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+    );
+
+    // Act: Launch two failovers concurrently that both need pass-3 reauth.
+    const first = handler.tryFailover({ triggeringStatus: 401 });
+    const second = handler.tryFailover({ triggeringStatus: 401 });
+
+    // Allow the shared pass-3 authenticate call to complete.
+    releaseForegroundAuth?.();
+
+    // Assert: both calls succeed but only one foreground authenticate occurs.
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(true);
+    expect(oauthManager.authenticate).toHaveBeenCalledTimes(1);
+    expect(oauthManager.authenticate).toHaveBeenCalledWith('anthropic', 'bucket-a');
+  });
+
+
+
 });
