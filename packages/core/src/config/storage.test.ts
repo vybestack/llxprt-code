@@ -50,7 +50,6 @@ describe('Storage – additional helpers', () => {
   });
 
   it('getMcpOAuthTokensPath returns ~/.llxprt/mcp-oauth-tokens.json', () => {
->>>>>>> de1233b8c (Agent Skills: Implement Core Skill Infrastructure & Tiered Discovery (#15698))
     const expected = path.join(
       os.homedir(),
       '.llxprt',

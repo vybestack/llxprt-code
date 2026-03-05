@@ -41,7 +41,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     openFileCount === 0 &&
     skillCount === 0
   ) {
-    return <Text> </Text>; // Render an empty space to reserve height
+    return <Text color={theme.colors.foreground}> </Text>; // Render an empty space to reserve height
   }
 
   const openFilesText = (() => {

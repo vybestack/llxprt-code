@@ -778,7 +778,7 @@ export class Config {
     // Reset availability status when switching auth (e.g. from limited key to OAuth)
     this.modelAvailabilityService.reset();
 
-    const newContentGeneratorConfig = await createContentGeneratorConfig(
+    const newContentGeneratorConfig = createContentGeneratorConfig(
       this,
       authMethod,
     );
