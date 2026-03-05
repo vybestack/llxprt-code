@@ -144,6 +144,11 @@ export interface CredentialProxyBridgeResult {
   containerSocketPath: string;
 }
 
+export interface PortForwardingResult {
+  tunnelProcess?: ChildProcess;
+  cleanup?: () => void;
+}
+
 const CONTAINER_SSH_AGENT_SOCK = '/ssh-agent';
 const CONTAINER_CREDENTIAL_PROXY_SOCK = '/tmp/llxprt-credential.sock';
 
@@ -741,6 +746,140 @@ export async function setupCredentialProxyPodmanMacOS(
   };
 }
 
+/**
+ * Sets up port forwarding SSH local tunnels (-L) from macOS host to the Podman VM.
+ * This enables the host to reach ports inside the container when --network=host is active,
+ * since --publish flags don't work with the Podman VM network model on macOS.
+ *
+ * Follows the same architectural pattern as setupSshAgentPodmanMacOS and
+ * setupCredentialProxyPodmanMacOS for consistency.
+ */
+export async function setupPortForwardingPodmanMacOS(
+  portsToForward: string[],
+  pollTimeoutMs: number = SSH_TUNNEL_POLL_TIMEOUT_MS,
+): Promise<PortForwardingResult> {
+  const conn = getPodmanMachineConnection();
+
+  // Build SSH command with -L flags for each port
+  const sshArgs: string[] = [
+    '-o',
+    'StrictHostKeyChecking=no',
+    '-o',
+    'UserKnownHostsFile=/dev/null',
+    '-o',
+    'LogLevel=ERROR',
+    '-o',
+    'ExitOnForwardFailure=yes',
+    '-i',
+    conn.identityPath,
+    '-p',
+    String(conn.port),
+  ];
+
+  // Add -L flag for each port: forward local port to VM's loopback
+  for (const port of portsToForward) {
+    sshArgs.push('-L', `127.0.0.1:${port}:127.0.0.1:${port}`);
+  }
+
+  sshArgs.push('-N', `${conn.user}@${conn.host}`);
+
+  const tunnelProcess = spawn('ssh', sshArgs, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  // Handle tunnel spawn failure
+  const tunnelStarted = await new Promise<boolean>((resolve) => {
+    const errorHandler = () => resolve(false);
+    tunnelProcess.on('error', errorHandler);
+    setTimeout(() => {
+      tunnelProcess.removeListener('error', errorHandler);
+      if (tunnelProcess.exitCode !== null) {
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    }, 500);
+  });
+
+  if (!tunnelStarted) {
+    throw new FatalSandboxError(
+      'Port forwarding SSH tunnel failed to start for Podman macOS. ' +
+        'Ensure Podman machine is running: `podman machine start`. ' +
+        'Check SSH connectivity: `podman machine ssh`.',
+    );
+  }
+
+  // Poll for local port readiness using net.createConnection
+  const pollPromises = portsToForward.map(
+    (port) =>
+      new Promise<void>((resolve, reject) => {
+        const pollStart = Date.now();
+        let timedOut = false;
+        let currentSocket: net.Socket | undefined;
+
+        const tryConnect = () => {
+          if (Date.now() - pollStart > pollTimeoutMs) {
+            timedOut = true;
+            currentSocket?.destroy();
+            reject(
+              new FatalSandboxError(
+                `Port forwarding timed out waiting for port ${port} to be ready.`,
+              ),
+            );
+            return;
+          }
+
+          currentSocket = net.createConnection({
+            host: '127.0.0.1',
+            port: parseInt(port, 10),
+          });
+          const socket = currentSocket;
+          socket.on('connect', () => {
+            socket.destroy();
+            if (!timedOut) {
+              resolve();
+            }
+          });
+          socket.on('error', () => {
+            if (!timedOut) {
+              setTimeout(tryConnect, SSH_TUNNEL_POLL_INTERVAL_MS);
+            }
+          });
+        };
+
+        tryConnect();
+      }),
+  );
+
+  try {
+    await Promise.all(pollPromises);
+  } catch (error) {
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch {
+      // ignore
+    }
+    throw error;
+  }
+
+  // Create idempotent cleanup function
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch {
+      // ignore — process may already be dead
+    }
+  };
+
+  return { tunnelProcess, cleanup };
+}
+
 export async function setupCredentialProxyDockerMacOS(
   args: string[],
   hostCredentialSocketPath: string,
@@ -872,7 +1011,11 @@ export function shouldAllocateSandboxTty(
   return typeof term === 'string' && term.length > 0 && term !== 'dumb';
 }
 
-function entrypoint(workdir: string, cliArgs: string[]): string[] {
+function entrypoint(
+  workdir: string,
+  cliArgs: string[],
+  skipPortRelays?: Set<string>,
+): string[] {
   const isWindows = os.platform() === 'win32';
   const containerWorkdir = getContainerPath(workdir);
   const shellCmds = [];
@@ -918,11 +1061,15 @@ function entrypoint(workdir: string, cliArgs: string[]): string[] {
     shellCmds.push(`source ${getContainerPath(projectSandboxBashrc)};`);
   }
 
-  ports().forEach((p) =>
+  for (const p of ports()) {
+    // Skip socat relay for ports handled by SSH tunnels (Podman macOS)
+    if (skipPortRelays?.has(p)) {
+      continue;
+    }
     shellCmds.push(
       `socat TCP4-LISTEN:${p},bind=$(hostname -i),fork,reuseaddr TCP4:127.0.0.1:${p} 2> /dev/null &`,
-    ),
-  );
+    );
+  }
 
   const quotedCliArgs = cliArgs.slice(2).map((arg) => quote([arg]));
   const isDebugMode = isSandboxDebugModeEnabled(process.env.DEBUG);
@@ -946,6 +1093,7 @@ export async function start_sandbox(
   cliArgs: string[] = [],
 ): Promise<number> {
   let credentialProxyBridgeCleanup: (() => void) | undefined;
+  let portForwardingResult: PortForwardingResult | undefined;
   const normalizeExitCode = (
     code: number | null,
     signal: NodeJS.Signals | null,
@@ -1400,11 +1548,50 @@ export async function start_sandbox(
       excludedTunnelPorts: reservedTunnelPorts,
     });
 
-    // expose env-specified ports on the sandbox
-    ports().forEach((p) => args.push('--publish', `${p}:${p}`));
+    // Set up port forwarding SSH tunnels for Podman on macOS
+    // This is needed because --publish flags don't work with --network=host
+    const podmanMacOSPortsForwarded = new Set<string>();
+    const isPodmanMacOS =
+      config.command === 'podman' && os.platform() === 'darwin';
 
-    // if DEBUG is enabled, expose debugging port
-    if (isSandboxDebugModeEnabled(process.env.DEBUG)) {
+    if (isPodmanMacOS) {
+      const portsToForwardSet = new Set<string>(ports());
+
+      if (isSandboxDebugModeEnabled(process.env.DEBUG)) {
+        portsToForwardSet.add(process.env.DEBUG_PORT || '9229');
+      }
+      const portsToForward: string[] = [...portsToForwardSet];
+
+      if (portsToForward.length > 0) {
+        console.error(
+          `Setting up SSH port forwarding for: ${portsToForward.join(', ')}`,
+        );
+        portForwardingResult = await setupPortForwardingPodmanMacOS(
+          portsToForward,
+          SSH_TUNNEL_POLL_TIMEOUT_MS,
+        );
+        // Register process-level signal handlers immediately to prevent
+        // orphaned tunnels if a signal arrives before sandboxProcess spawns.
+        if (portForwardingResult.cleanup) {
+          process.on('exit', portForwardingResult.cleanup);
+          process.on('SIGINT', portForwardingResult.cleanup);
+          process.on('SIGTERM', portForwardingResult.cleanup);
+        }
+        for (const p of portsToForward) {
+          podmanMacOSPortsForwarded.add(p);
+        }
+      }
+    }
+
+    // expose env-specified ports on the sandbox (skip if using SSH tunnels on Podman macOS)
+    if (!isPodmanMacOS) {
+      for (const p of ports()) {
+        args.push('--publish', `${p}:${p}`);
+      }
+    }
+
+    // if DEBUG is enabled, expose debugging port (skip if using SSH tunnels on Podman macOS)
+    if (isSandboxDebugModeEnabled(process.env.DEBUG) && !isPodmanMacOS) {
       const debugPort = process.env.DEBUG_PORT || '9229';
       args.push(`--publish`, `${debugPort}:${debugPort}`);
     }
@@ -1587,7 +1774,13 @@ export async function start_sandbox(
     // Determine if the current user's UID/GID should be passed to the sandbox.
     // See shouldUseCurrentUserInSandbox for more details.
     let userFlag = '';
-    const finalEntrypoint = entrypoint(workdir, cliArgs);
+    const finalEntrypoint = entrypoint(
+      workdir,
+      cliArgs,
+      podmanMacOSPortsForwarded.size > 0
+        ? podmanMacOSPortsForwarded
+        : undefined,
+    );
     const entrypointPrefixes: string[] = [];
 
     // If SSH agent forwarding provided an entrypoint prefix (e.g. socat relay
@@ -1825,6 +2018,13 @@ export async function start_sandbox(
       sandboxProcess.on('close', stopTunnel);
     }
 
+    // Wire port forwarding tunnel cleanup into sandbox close.
+    // Process-level signal handlers (exit/SIGINT/SIGTERM) are registered
+    // immediately after tunnel creation to prevent orphaned tunnels.
+    if (portForwardingResult?.cleanup) {
+      sandboxProcess.on('close', portForwardingResult.cleanup);
+    }
+
     // Wire credential proxy bridge tunnel cleanup into sandbox lifecycle.
     if (credentialProxyBridgeResult?.cleanup) {
       const stopCredentialBridgeTunnel = credentialProxyBridgeResult.cleanup;
@@ -1865,6 +2065,7 @@ export async function start_sandbox(
     console.error('Sandbox error:', error);
     throw error;
   } finally {
+    portForwardingResult?.cleanup?.();
     credentialProxyBridgeCleanup?.();
     patcher.cleanup();
   }
