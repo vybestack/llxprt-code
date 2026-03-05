@@ -413,6 +413,58 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
           return true;
         }
 
+        const lateEagerAuthInFlight = this.ensureBucketsAuthInFlight;
+        if (lateEagerAuthInFlight) {
+          logger.debug(
+            `Foreground reauth detected late in-flight eager auth (provider=${this.provider}, bucket=${candidateBucket})`,
+          );
+          try {
+            await lateEagerAuthInFlight;
+          } catch (error) {
+            logger.debug(
+              `Late in-flight eager auth failed before pass-3 reauth for ${candidateBucket}:`,
+              error,
+            );
+          }
+        }
+
+        // Final TOCTOU guard: token state may have changed after the initial
+        // snapshot/re-checks, including when eager auth started and completed
+        // between checks. Re-check one last time before interactive auth.
+        let tokenBeforeForegroundAuth: OAuthToken | null = null;
+        try {
+          tokenBeforeForegroundAuth = await this.oauthManager.getOAuthToken(
+            this.provider,
+            candidateBucket,
+          );
+        } catch (error) {
+          logger.debug(
+            `Final token re-check failed before pass-3 reauth for ${candidateBucket}:`,
+            error,
+          );
+        }
+
+        if (tokenBeforeForegroundAuth !== null) {
+          const bucketIndex = this.buckets.indexOf(candidateBucket);
+          if (bucketIndex >= 0) {
+            this.currentBucketIndex = bucketIndex;
+          }
+          this.triedBucketsThisSession.add(candidateBucket);
+          try {
+            this.oauthManager.setSessionBucket(this.provider, candidateBucket);
+          } catch (setError) {
+            logger.warn(
+              `Failed to set session bucket during final pass-3 token re-check switch: ${setError}`,
+            );
+            // Continue anyway
+          }
+          logger.warn(
+            () =>
+              `Bucket failover: switched from ${currentBucket} to ${candidateBucket} after final token re-check`,
+          );
+          return true;
+        }
+
         try {
           logger.debug(
             `Attempting foreground reauth for bucket: ${candidateBucket}`,
