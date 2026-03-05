@@ -40,7 +40,8 @@ describe('readStdin', () => {
       (event: string, handler: (...args: unknown[]) => void) => {
         if (event === 'readable') onReadableHandler = handler as () => void;
         if (event === 'end') onEndHandler = handler as () => void;
-        if (event === 'error') _onErrorHandler = handler as (err: Error) => void;
+        if (event === 'error')
+          _onErrorHandler = handler as (err: Error) => void;
       },
     );
     mockStdin.listeners.mockReturnValue([]);

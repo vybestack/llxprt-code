@@ -131,10 +131,7 @@ export class CoreEventEmitter extends EventEmitter {
     event: CoreEvent.Output,
     listener: (payload: OutputPayload) => void,
   ): this;
-  override on(
-    event: CoreEvent.SettingsChanged,
-    listener: () => void,
-  ): this;
+  override on(event: CoreEvent.SettingsChanged, listener: () => void): this;
   override on(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -163,10 +160,7 @@ export class CoreEventEmitter extends EventEmitter {
     event: CoreEvent.Output,
     listener: (payload: OutputPayload) => void,
   ): this;
-  override off(
-    event: CoreEvent.SettingsChanged,
-    listener: () => void,
-  ): this;
+  override off(event: CoreEvent.SettingsChanged, listener: () => void): this;
   override off(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

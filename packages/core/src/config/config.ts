@@ -654,7 +654,6 @@ export class Config {
     }
 
     if (this.telemetrySettings.enabled) {
-       
       initializeTelemetry(this);
     }
 

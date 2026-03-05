@@ -527,7 +527,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       const refreshedToken = await this.deviceFlow.refreshToken(refreshToken);
       const merged: CodexOAuthToken & Record<string, unknown> = {
         ...(currentToken as CodexOAuthToken & Record<string, unknown>),
-        ...(refreshedToken),
+        ...refreshedToken,
         refresh_token: refreshedToken.refresh_token ?? refreshToken,
       };
 
