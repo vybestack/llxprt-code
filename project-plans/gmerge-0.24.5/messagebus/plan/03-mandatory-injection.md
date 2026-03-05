@@ -53,19 +53,44 @@
   - Replace ALL `this.config.getMessageBus()` with `this.messageBus`
   - Remove fallback logic
 
-**All tools — make messageBus required (~20 files):**
-Change `messageBus?: MessageBus` to `messageBus: MessageBus` in every `createInvocation()` method.
+**Production files to make messageBus required (11 files):**
+1. `packages/core/src/config/config.ts` — Remove `getMessageBus()` and `setMessageBus()` methods entirely
+2. `packages/core/src/core/coreToolScheduler.ts` — Change `messageBus?:` → `messageBus:`, remove `config.getMessageBus()` fallback
+3. `packages/core/src/core/subagent.ts` — Make messageBus required in constructor
+4. `packages/core/src/tools/tools.ts` — Make messageBus required in `createInvocation()` base
+5. `packages/core/src/tools/tool-registry.ts` — Remove `setMessageBus()` shim, make required
+6. `packages/core/src/tools/edit.ts` — Make messageBus required in `createInvocation()`
+7. `packages/core/src/tools/google-web-fetch.ts` — Make messageBus required in `createInvocation()`
+8. `packages/cli/src/auth/oauth-manager.ts` — Remove `config.getMessageBus()` call
+9. `packages/cli/src/providers/providerManagerInstance.ts` — Pass messageBus explicitly
+10. `packages/cli/src/runtime/runtimeSettings.ts` — Pass messageBus explicitly
+11. `packages/cli/src/ui/components/BucketAuthConfirmation.tsx` — Pass messageBus explicitly
 
-**All agent invocations — make messageBus required (~5 files):**
-Same pattern for agent constructors.
+**Test files to update (20 files):**
+Every test that constructs these classes must provide MessageBus. Use the `createMockMessageBus()` helper from Phase 1.
 
-**CLI/hooks (~3 files):**
-- `cli/src/ui/hooks/atCommandProcessor.ts`
-- `cli/src/zed-integration/zedIntegration.ts`
-- `hooks/hookEventHandler.ts`
+1. `packages/core/src/core/coreToolScheduler.test.ts`
+2. `packages/core/src/core/coreToolScheduler.cancellation.test.ts`
+3. `packages/core/src/core/coreToolScheduler.contextBudget.test.ts`
+4. `packages/core/src/core/coreToolScheduler.duplication.test.ts`
+5. `packages/core/src/core/coreToolScheduler.interactiveMode.test.ts`
+6. `packages/core/src/core/coreToolScheduler.publishingError.test.ts`
+7. `packages/core/src/core/coreToolScheduler.raceCondition.test.ts`
+8. `packages/core/src/core/nonInteractiveToolExecutor.test.ts`
+9. `packages/core/src/core/toolExecutorUnification.integration.test.ts`
+10. `packages/core/src/tools/base-tool-invocation.test.ts`
+11. `packages/core/src/tools/confirmation-policy.test.ts`
+12. `packages/core/src/tools/mcp-client.test.ts`
+13. `packages/core/src/hooks/hooks-caller-application.test.ts`
+14. `packages/cli/src/auth/__tests__/oauth-manager.issue913.spec.ts`
+15. `packages/cli/src/auth/__tests__/oauth-manager.user-declined.spec.ts`
+16. `packages/cli/src/runtime/anthropic-oauth-defaults.test.ts`
+17. `packages/cli/src/runtime/provider-alias-defaults.test.ts`
+18. `packages/cli/src/ui/hooks/atCommandProcessor.test.ts`
+19. `packages/cli/src/ui/hooks/useGeminiStream.dedup.test.tsx`
+20. `packages/cli/src/ui/hooks/useToolScheduler.test.ts`
 
-**Test files (~28 files):**
-Every test that constructs these classes must provide MessageBus. The `createMockMessageBus()` helper from Phase 1 handles this.
+**Total: 31 files** (11 production + 20 test).
 
 ### Key Verification Searches (Post-Implementation)
 ```bash
