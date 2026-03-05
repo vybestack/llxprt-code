@@ -428,7 +428,7 @@ export function useReactToolScheduler(
         // when the user presses ESC to cancel queued tool calls
       });
     },
-    [scheduler, setToolCallsForDisplay],
+    [scheduler],
   );
 
   const markToolsAsSubmitted: MarkToolsAsSubmittedFn = useCallback(
