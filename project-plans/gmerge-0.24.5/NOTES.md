@@ -46,4 +46,53 @@ Reclassified:
 
 Full verify: lint PASS, typecheck PASS, test 106 failures -- ALL PRE-EXISTING (confirmed same failures on main branch, caused by ajv-formats + ProviderRuntimeContext issues, not by cherry-picks).
 
+## PICK-B3 (Batch 3)
+
+**Result: 5/5 committed**
+
+Cherry-picked via subagent. All 5 Skills core commits applied:
+- `de1233b8` (as `4989cded7`) — Skills core infra (skillLoader, skillManager, types)
+- `958284dc` (as `50b5e9cfd`) — Skills activation tool
+- `764b1959` (as `aa7c0b456`) — Skills system prompt integration
+- `e78c3fe4` (as `6015c7e60`) — Skills status bar display
+- `f0a039f7` (as `fe31e61c3`) — Skills code refactor
+
+Branding changes applied in fix commit `d94355b84`:
+- `.gemini/skills/` → `.llxprt/skills/` paths
+- `@google/gemini-cli-core` → `@vybestack/llxprt-code-core` imports
+- `gemini skills` → `llxprt skills` in CLI text
+- `GEMINI.md` → `LLXPRT.md` references
+
+Additional lint fix `1e6c23f84` — type assertion cascading from upstream's type widening in tool-names.ts.
+
+Quick verify: lint PASS, typecheck PASS.
+
+## PICK-B4 (Batch 4 — FULL VERIFY)
+
+**Result: 4/4 committed**
+
+- `bdb349e7` (as `bfc4670ac`) — Skills extension support + security disclosure. HEAVY conflict:
+  - `extension-manager.ts` was deleted (LLxprt split into separate modules under extensions/)
+  - `consent.ts` completely rewritten: merged LLxprt's hook consent functions (requestConsentNonInteractive, requestConsentInteractive, maybeRequestConsentOrFail) with upstream's new general consent + SKILLS_WARNING_MESSAGE
+  - `consent.test.ts` rewritten to merge both test suites
+  
+- `d3563e2f` (as `464c9db2c`) — Skills CLI management command (/skills list/enable/disable). Config import conflict + settings.ts conflict (kept LEGACY_UI_KEYS, dropped MIGRATION_MAP which isn't wired in).
+
+- `2cb33b2f` (as `a04ab3e11`) — Skills /reload command. 6-file conflict:
+  - `config.ts` (cli): kept LLxprt hooks handling + added onReload callback for skills refresh
+  - `AppContainer.tsx`: added settingsNonce state + settings changed event handler, kept LLxprt's UIState structure (much more detailed than upstream), dropped upstream's useMemo UIState
+  - `UIStateContext.tsx`: kept LLxprt's detailed UIState type, added settingsNonce field
+  - `config.test.ts` (core): added ACTIVATE_SKILL_TOOL_NAME + SkillDefinition imports, added stripThoughtsFromHistory mock
+  - `events.ts`: kept LLxprt's method overload approach, added SettingsChanged on/off overloads
+  - `skillsCommand.test.ts`: fixed import branding
+
+- `0c541362` (as `3dcc9871e`) — Skills directory in WorkspaceContext. Applied cleanly.
+
+Fix commit `65621d379`:
+- Created `packages/core/src/utils/debugLogger.ts` compat shim wrapping LLxprt's DebugLogger class — upstream Skills code imports a singleton `debugLogger` from `utils/debugLogger` which doesn't exist in LLxprt
+- Added on/off overloads for CoreEvent.SettingsChanged
+- Format fixes
+
+Full verify: lint PASS, typecheck PASS, test 181 failures (down from 183 — 2 files fixed by debugLogger shim) — all remaining failures are PRE-EXISTING ajv-formats/ProviderRuntimeContext issues confirmed on main.
+
 <!-- Append batch notes below this line -->
