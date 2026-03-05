@@ -4,7 +4,7 @@ _Note: This is an experimental feature enabled via `experimental.skills`. You
 can also search for "Skills" within the `/settings` interactive UI to toggle
 this and manage other skill-related settings._
 
-Agent Skills allow you to extend Gemini CLI with specialized expertise,
+Agent Skills allow you to extend LLxprt Code with specialized expertise,
 procedural workflows, and task-specific resources. Based on the
 [Agent Skills](https://agentskills.io) open standard, a "skill" is a
 self-contained directory that packages instructions and assets into a
@@ -12,13 +12,13 @@ discoverable capability.
 
 ## Overview
 
-Unlike general context files ([`GEMINI.md`](./gemini-md.md)), which provide
+Unlike general context files ([`LLXPRT.md`](./llxprt-md.md)), which provide
 persistent project-wide background, Skills represent **on-demand expertise**.
-This allows Gemini to maintain a vast library of specialized capabilities—such
+This allows LLxprt to maintain a vast library of specialized capabilities—such
 as security auditing, cloud deployments, or codebase migrations—without
 cluttering the model's immediate context window.
 
-Gemini autonomously decides when to employ a skill based on your request and the
+LLxprt autonomously decides when to employ a skill based on your request and the
 skill's description. When a relevant skill is identified, the model "pulls in"
 the full instructions and resources required to complete the task using the
 `activate_skill` tool.
@@ -37,11 +37,11 @@ the full instructions and resources required to complete the task using the
 
 ## Skill Discovery Tiers
 
-Gemini CLI discovers skills from three primary locations:
+LLxprt Code discovers skills from three primary locations:
 
-1.  **Project Skills** (`.gemini/skills/`): Project-specific skills that are
+1.  **Project Skills** (`.llxprt/skills/`): Project-specific skills that are
     typically committed to version control and shared with the team.
-2.  **User Skills** (`~/.gemini/skills/`): Personal skills available across all
+2.  **User Skills** (`~/.llxprt/skills/`): Personal skills available across all
     your projects.
 3.  **Extension Skills**: Skills bundled within installed
     [extensions](../extensions/index.md).
@@ -65,15 +65,15 @@ _Note: `/skills disable` and `/skills enable` default to the `user` scope. Use
 
 ### From the Terminal
 
-The `gemini skills` command provides management utilities:
+The `llxprt skills` command provides management utilities:
 
 ```bash
 # List all discovered skills
-gemini skills list
+llxprt skills list
 
 # Enable/disable skills. Can use --scope to specify project or user
-gemini skills enable my-expertise
-gemini skills disable my-expertise
+llxprt skills enable my-expertise
+llxprt skills disable my-expertise
 ```
 
 ## Creating a Skill
@@ -86,14 +86,14 @@ YAML frontmatter for metadata and Markdown for instructions.
 ```markdown
 ---
 name: <unique-name>
-description: <what the skill does and when Gemini should use it>
+description: <what the skill does and when LLxprt should use it>
 ---
 
 <your instructions for how the agent should behave / use the skill>
 ```
 
 - **`name`**: A unique identifier (lowercase, alphanumeric, and dashes).
-- **`description`**: The most critical field. Gemini uses this to decide when
+- **`description`**: The most critical field. LLxprt uses this to decide when
   the skill is relevant. Be specific about the expertise provided.
 - **Body**: Everything below the second `---` is injected as expert procedural
   guidance for the model.
@@ -116,7 +116,7 @@ You are an expert code reviewer. When reviewing code, follow this workflow:
     that the changes are scoped properly and represent minimal changes required
     to address the issue.
 2.  **Style**: Ensure code follows the project's conventions and idiomatic
-    patterns as described in the `GEMINI.md` file.
+    patterns as described in the `LLXPRT.md` file.
 3.  **Security**: Flag any potential security vulnerabilities.
 4.  **Tests**: Verify that new logic has corresponding test coverage and that
     the test coverage adequately validates the changes.
@@ -135,15 +135,15 @@ standard encourages these conventions:
   agent to consult.
 - **`assets/`**: Code templates, boilerplate, or binary resources.
 
-When a skill is activated, Gemini CLI provides the model with a tree view of the
+When a skill is activated, LLxprt Code provides the model with a tree view of the
 entire skill directory, allowing it to discover and utilize these assets.
 
 ## How it Works (Security & Privacy)
 
-1.  **Discovery**: At the start of a session, Gemini CLI scans the discovery
+1.  **Discovery**: At the start of a session, LLxprt Code scans the discovery
     tiers and injects the name and description of all enabled skills into the
     system prompt.
-2.  **Activation**: When Gemini identifies a task matching a skill's
+2.  **Activation**: When LLxprt identifies a task matching a skill's
     description, it calls the `activate_skill` tool.
 3.  **Consent**: You will see a confirmation prompt in the UI detailing the
     skill's name, purpose, and the directory path it will gain access to.

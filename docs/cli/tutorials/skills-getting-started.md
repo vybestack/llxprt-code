@@ -1,6 +1,6 @@
 # Getting Started with Agent Skills
 
-Agent Skills allow you to extend Gemini CLI with specialized expertise. This
+Agent Skills allow you to extend LLxprt Code with specialized expertise. This
 tutorial will guide you through creating your first skill, enabling it, and
 using it in a session.
 
@@ -11,7 +11,7 @@ settings.
 
 ### Via the interactive UI
 
-1.  Start a Gemini CLI session by running `gemini`.
+1.  Start a LLxprt Code session by running `llxprt`.
 2.  Type `/settings` to open the interactive settings dialog.
 3.  Search for "Skills".
 4.  Toggle **Agent Skills** to `true`.
@@ -21,7 +21,7 @@ settings.
 ### Via `settings.json`
 
 Alternatively, you can manually edit your global settings file at
-`~/.gemini/settings.json` (create it if it doesn't exist):
+`~/.llxprt/settings.json` (create it if it doesn't exist):
 
 ```json
 {
@@ -40,11 +40,11 @@ responding correctly.
 1.  **Create the skill directory structure:**
 
     ```bash
-    mkdir -p .gemini/skills/api-auditor/scripts
+    mkdir -p .llxprt/skills/api-auditor/scripts
     ```
 
 2.  **Create the `SKILL.md` file:** Create a file at
-    `.gemini/skills/api-auditor/SKILL.md` with the following content:
+    `.llxprt/skills/api-auditor/SKILL.md` with the following content:
 
     ```markdown
     ---
@@ -68,11 +68,11 @@ responding correctly.
     ```
 
 3.  **Create the bundled Node.js script:** Create a file at
-    `.gemini/skills/api-auditor/scripts/audit.js`. This script will be used by
+    `.llxprt/skills/api-auditor/scripts/audit.js`. This script will be used by
     the agent to perform the actual check:
 
     ```javascript
-    // .gemini/skills/api-auditor/scripts/audit.js
+    // .llxprt/skills/api-auditor/scripts/audit.js
     const url = process.argv[2];
 
     if (!url) {
@@ -88,10 +88,10 @@ responding correctly.
 
 ## 3. Verify the Skill is Discovered
 
-Use the `/skills` slash command (or `gemini skills list` from your terminal) to
-see if Gemini CLI has found your new skill.
+Use the `/skills` slash command (or `llxprt skills list` from your terminal) to
+see if LLxprt Code has found your new skill.
 
-In a Gemini CLI session:
+In a LLxprt Code session:
 
 ```
 /skills list
@@ -106,16 +106,16 @@ an endpoint.
 
 **User:** "Can you audit http://geminili.com"
 
-Gemini will recognize the request matches the `api-auditor` description and will
+LLxprt will recognize the request matches the `api-auditor` description and will
 ask for your permission to activate it.
 
 **Model:** (After calling `activate_skill`) "I've activated the **api-auditor**
 skill. I'll run the audit script now..."
 
-Gemini will then use the `run_shell_command` tool to execute your bundled Node
+LLxprt will then use the `run_shell_command` tool to execute your bundled Node
 script:
 
-`node .gemini/skills/api-auditor/scripts/audit.js http://geminili.com`
+`node .llxprt/skills/api-auditor/scripts/audit.js http://geminili.com`
 
 ## Next Steps
 
