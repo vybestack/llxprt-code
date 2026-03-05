@@ -553,7 +553,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         const newRecording = context.recordingCallbacks.getCurrentRecording();
         expect(newRecording).not.toBeNull();
         expect(newRecording!.isActive()).toBe(true);
-        recordingsToDispose.push(newRecording!);
+        recordingsToDispose.push(newRecording);
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
         if (newLock) lockHandles.push(newLock);
@@ -629,7 +629,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         // Get the new recording from callbacks
         const newRecording = context.recordingCallbacks.getCurrentRecording();
         expect(newRecording).not.toBeNull();
-        recordingsToDispose.push(newRecording!);
+        recordingsToDispose.push(newRecording);
 
         // Record new event
         newRecording!.recordContent(makeContent('new event after resume'));
@@ -665,7 +665,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       if (result.ok) {
         const newRecording = context.recordingCallbacks.getCurrentRecording();
         expect(newRecording).not.toBeNull();
-        recordingsToDispose.push(newRecording!);
+        recordingsToDispose.push(newRecording);
 
         // Write multiple events to verify no write errors
         for (let i = 0; i < 5; i++) {
@@ -1229,7 +1229,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         expect(newLock).not.toBeNull();
         expect(newLock!.lockPath).toContain(chatsDir);
 
-        lockHandles.push(newLock!);
+        lockHandles.push(newLock);
       }
     });
   });

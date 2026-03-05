@@ -663,7 +663,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
         // Get the new recording from callbacks
         const newRecording = context.recordingCallbacks.getCurrentRecording();
         expect(newRecording).not.toBeNull();
-        recordingsToDispose.push(newRecording!);
+        recordingsToDispose.push(newRecording);
 
         const eventCountBefore = await countFileEvents(targetFilePath);
 
@@ -839,7 +839,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
         const newRecording = context.recordingCallbacks.getCurrentRecording();
         expect(newRecording).not.toBeNull();
         expect(newRecording!.isActive()).toBe(true);
-        recordingsToDispose.push(newRecording!);
+        recordingsToDispose.push(newRecording);
       }
 
       // Track new lock for cleanup
@@ -1158,7 +1158,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       if (result.ok) {
         const newRecording = context.recordingCallbacks.getCurrentRecording();
         expect(newRecording).not.toBeNull();
-        recordingsToDispose.push(newRecording!);
+        recordingsToDispose.push(newRecording);
 
         // Write and flush
         newRecording!.recordContent(makeContent('new content via result'));
@@ -1218,7 +1218,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
           .catch(() => false);
         expect(lockFileExists).toBe(true);
 
-        lockHandles.push(newLock!);
+        lockHandles.push(newLock);
       }
     });
   });

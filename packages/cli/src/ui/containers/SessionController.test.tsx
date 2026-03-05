@@ -255,7 +255,7 @@ describe('SessionController', () => {
           name: 'gemini',
           getCurrentModel: () => 'gemini-model',
           isPaidMode: () => true,
-        }) as Partial<IProvider> as IProvider,
+        }) as Partial<IProvider>,
     } as ReturnType<typeof providerModule.getProviderManager>);
 
     // Call checkPaymentModeChange
@@ -475,7 +475,7 @@ describe('SessionController', () => {
           name: 'new-provider',
           getCurrentModel: () => 'new-model',
           isPaidMode: () => false,
-        }) as Partial<IProvider> as IProvider,
+        }) as Partial<IProvider>,
     } as ReturnType<typeof providerModule.getProviderManager>);
 
     // Advance timer to trigger the interval

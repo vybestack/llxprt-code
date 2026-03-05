@@ -9,7 +9,7 @@ import { skillsCommand } from './skillsCommand.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext } from './types.js';
-import type { Config } from '@google/gemini-cli-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import { SettingScope, type LoadedSettings } from '../../config/settings.js';
 
 describe('skillsCommand', () => {
