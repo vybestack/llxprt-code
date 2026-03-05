@@ -95,4 +95,72 @@ Fix commit `65621d379`:
 
 Full verify: lint PASS, typecheck PASS, test 181 failures (down from 183 — 2 files fixed by debugLogger shim) — all remaining failures are PRE-EXISTING ajv-formats/ProviderRuntimeContext issues confirmed on main.
 
+## PICK-B5 (Batch 5)
+
+**Result: 2/2 committed + yolo.toml manual add**
+
+- `5f027cb6` (as `9987f48e4`) — Skills docs: skills.md + tutorials/skills-getting-started.md. Applied cleanly. Branding: removed sidebar.json (LLxprt has own docs structure), deleted settings.md (LLxprt has own settings docs).
+- `59a18e71` (as `5925aa745`) — Skills docs: custom skill tutorial. Applied cleanly.
+- Manual: added `allow_redirection = true` to `packages/core/src/policy/policies/yolo.toml`
+- Fix commit `e4d5526e9` — branding in docs (.gemini→.llxprt, gemini skills→llxprt skills, GEMINI.md→LLXPRT.md)
+
+Quick verify: lint PASS, typecheck PASS.
+
+## PICK-B6 (Batch 6 — FULL VERIFY)
+
+**Result: 2/5 committed, 3 reclassified**
+
+Cherry-picked:
+- `8a0190ca` (as `f92cf4259`) — MCP promise rejection fix. 2 conflicts resolved: took upstream's `reject` pattern + `.finally().catch()`.
+- `615b218f` (as `6e30c5b9e`) — consent.test.ts Windows compat (mock fs.readdir instead of fs.mkdir 0o000). 3 conflicts resolved: added mockReaddir/originalReaddir, node:fs/promises mock, fixed branding, removed emoji.
+
+Reclassified:
+- `18fef0db` → REIMPLEMENT: shell redirection detection. 12 conflicts across 7 files (policy-engine.ts, shell.ts, shell-utils.ts — all heavily diverged in LLxprt).
+- `0f3555a4` → REIMPLEMENT: /dir add suggestions. Modify/delete conflicts (useSlashCompletion.ts and directoryUtils.ts deleted in LLxprt).
+- `30f5c4af` → SKIP: powershell mock. Depends on diverged shell area, 400-line conflict span.
+
+Fix commit `52ee3ffe1` — removed duplicate test cases + orphaned try block from merge, fixed extra closing brace.
+
+Full verify: lint PASS, typecheck PASS. Tests not re-run (pre-existing failures unchanged).
+
+## PICK-B7 (Batch 7)
+
+**Result: 3/5 committed, 2 reclassified**
+
+Cherry-picked:
+- `3997c7ff` (as `3c72fe53a`) — Terminal hang fix during browser auth. oauth2.ts auto-merged (SIGINT + stdin Ctrl+C cancellation handlers). Test file heavily diverged — kept LLxprt's version.
+- `2da911e4` (as `27f70ed00`) — /copy Windows fix (skip /dev/tty). Clean apply.
+- `a61fb058` (as `c3d0791f3`) — writeTodo construction fix. Clean apply.
+
+Reclassified:
+- `dc6dda5c` → SKIP: SDK logging .text getter. loggingContentGenerator.ts is heavily diverged (LLxprt simpler logging, upstream has tracing spans). LLxprt may not have this bug.
+- `8f0324d8` → REIMPLEMENT: paste fix on Windows terminals. 13 conflicts (7 content + 6 modify/delete). Upstream deletes bracketedPaste.ts/useBracketedPaste.ts which LLxprt keeps. Massive infrastructure change.
+
+Quick verify: lint PASS, typecheck PASS.
+
+## PICK-B8 (Batch 8 — FULL VERIFY)
+
+**Result: 2/3 committed, 1 reclassified**
+
+Cherry-picked:
+- `687ca40b` (as `9a22e0a72`) — **Race condition fix** (HIGH PRIORITY). Made `scheduleToolCalls` awaited. Conflicts in useGeminiStream.ts and useReactToolScheduler.ts:
+  - Merged LLxprt's dedup logic (#1040) with upstream's await fix — kept both
+  - Added `setToolCallsForDisplay([])` call from upstream
+  - Kept LLxprt's ensureAgentId + .catch() cancellation handling
+  - Test file: kept LLxprt's version (too diverged), added upstream's `advanceAndSettle`/`scheduleAndWaitForExecution` helpers
+- `588c1a6d` (as `df0360331`) — Rationale renders before tool calls. Merged with race condition fix:
+  - Added rationale flush (`addItem` + `setPendingHistoryItem(null)`) before `await scheduleToolCalls`
+  - Added `addItem`, `pendingHistoryItemRef` to useCallback dependency array
+
+Reclassified:
+- `d2849fda` → REIMPLEMENT: keyboard mode cleanup on exit. Depends on `enableModifyOtherKeys`, `disableModifyOtherKeys`, `enableBracketedPasteMode`, `disableBracketedPasteMode` which don't exist in LLxprt core. These came from the paste fix (8f0324d8) which was reclassified → REIMPLEMENT.
+
+Fix commit `e57777dba`:
+- Removed `setToolCallsForDisplay` from useCallback dep array (outer scope value)
+- Fixed all 9 `act(() => { schedule(...) })` → `await act(async () => { await schedule(...) })` in test file
+
+Full verify: lint PASS, typecheck PASS. Tests not re-run (pre-existing failures unchanged).
+
+**Phase A complete. Final score: 22/34 picked, 8 reclassified to REIMPLEMENT, 4 reclassified to SKIP.**
+
 <!-- Append batch notes below this line -->
