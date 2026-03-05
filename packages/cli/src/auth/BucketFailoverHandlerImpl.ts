@@ -35,6 +35,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private readonly provider: string;
   private readonly oauthManager: OAuthManager;
   private triedBucketsThisSession: Set<string>;
+  private ensureBucketsAuthInFlight: Promise<void> | null = null;
+  private foregroundReauthInFlightByBucket = new Map<
+    string,
+    Promise<boolean>
+  >();
 
   /**
    * @plan PLAN-20260223-ISSUE1598.P05
@@ -352,24 +357,136 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     }
 
     if (candidateBucket !== undefined) {
-      try {
-        logger.debug(
-          `Attempting foreground reauth for bucket: ${candidateBucket}`,
-        );
-        await this.oauthManager.authenticate(this.provider, candidateBucket);
+      const existingForegroundReauth =
+        this.foregroundReauthInFlightByBucket.get(candidateBucket);
+      if (existingForegroundReauth) {
+        return existingForegroundReauth;
+      }
 
-        // Verify token exists after reauth (REQ-1598-FL08)
-        const token = await this.oauthManager.getOAuthToken(
-          this.provider,
-          candidateBucket,
-        );
-        if (token === null) {
-          logger.warn(
-            `Foreground reauth succeeded but token is null for bucket: ${candidateBucket}`,
+      const pass3Promise = (async (): Promise<boolean> => {
+        const eagerAuthInFlight = this.ensureBucketsAuthInFlight;
+        if (eagerAuthInFlight) {
+          logger.debug(
+            `Foreground reauth waiting for in-flight eager auth (provider=${this.provider}, bucket=${candidateBucket})`,
           );
-          this.lastFailoverReasons[candidateBucket] = 'reauth-failed';
+          try {
+            await eagerAuthInFlight;
+          } catch (error) {
+            logger.debug(
+              `In-flight eager auth failed before pass-3 reauth for ${candidateBucket}:`,
+              error,
+            );
+          }
+        }
+
+        // Re-check whether token became available while this failover attempt was
+        // evaluating candidates (e.g. concurrent turn-boundary eager auth).
+        let existingToken: OAuthToken | null = null;
+        try {
+          existingToken = await this.oauthManager.getOAuthToken(
+            this.provider,
+            candidateBucket,
+          );
+        } catch (error) {
+          logger.debug(
+            `Token re-check failed before pass-3 reauth for ${candidateBucket}:`,
+            error,
+          );
+        }
+
+        if (existingToken !== null) {
+          const bucketIndex = this.buckets.indexOf(candidateBucket);
+          if (bucketIndex >= 0) {
+            this.currentBucketIndex = bucketIndex;
+          }
           this.triedBucketsThisSession.add(candidateBucket);
-        } else {
+          try {
+            this.oauthManager.setSessionBucket(this.provider, candidateBucket);
+          } catch (setError) {
+            logger.warn(
+              `Failed to set session bucket during pass-3 token re-check switch: ${setError}`,
+            );
+            // Continue anyway
+          }
+          logger.warn(
+            () =>
+              `Bucket failover: switched from ${currentBucket} to ${candidateBucket} after token became available`,
+          );
+          return true;
+        }
+
+        const lateEagerAuthInFlight = this.ensureBucketsAuthInFlight;
+        if (lateEagerAuthInFlight) {
+          logger.debug(
+            `Foreground reauth detected late in-flight eager auth (provider=${this.provider}, bucket=${candidateBucket})`,
+          );
+          try {
+            await lateEagerAuthInFlight;
+          } catch (error) {
+            logger.debug(
+              `Late in-flight eager auth failed before pass-3 reauth for ${candidateBucket}:`,
+              error,
+            );
+          }
+        }
+
+        // Final TOCTOU guard: token state may have changed after the initial
+        // snapshot/re-checks, including when eager auth started and completed
+        // between checks. Re-check one last time before interactive auth.
+        let tokenBeforeForegroundAuth: OAuthToken | null = null;
+        try {
+          tokenBeforeForegroundAuth = await this.oauthManager.getOAuthToken(
+            this.provider,
+            candidateBucket,
+          );
+        } catch (error) {
+          logger.debug(
+            `Final token re-check failed before pass-3 reauth for ${candidateBucket}:`,
+            error,
+          );
+        }
+
+        if (tokenBeforeForegroundAuth !== null) {
+          const bucketIndex = this.buckets.indexOf(candidateBucket);
+          if (bucketIndex >= 0) {
+            this.currentBucketIndex = bucketIndex;
+          }
+          this.triedBucketsThisSession.add(candidateBucket);
+          try {
+            this.oauthManager.setSessionBucket(this.provider, candidateBucket);
+          } catch (setError) {
+            logger.warn(
+              `Failed to set session bucket during final pass-3 token re-check switch: ${setError}`,
+            );
+            // Continue anyway
+          }
+          logger.warn(
+            () =>
+              `Bucket failover: switched from ${currentBucket} to ${candidateBucket} after final token re-check`,
+          );
+          return true;
+        }
+
+        try {
+          logger.debug(
+            `Attempting foreground reauth for bucket: ${candidateBucket}`,
+          );
+          await this.oauthManager.authenticate(this.provider, candidateBucket);
+
+          // Verify token exists after reauth (REQ-1598-FL08)
+          const token = await this.oauthManager.getOAuthToken(
+            this.provider,
+            candidateBucket,
+          );
+          if (token === null) {
+            logger.warn(
+              `Foreground reauth succeeded but token is null for bucket: ${candidateBucket}`,
+            );
+            this.lastFailoverReasons[candidateBucket] = 'reauth-failed';
+            this.triedBucketsThisSession.add(candidateBucket);
+            return false;
+          }
+
           // Reauth succeeded — switch bucket
           const bucketIndex = this.buckets.indexOf(candidateBucket);
           if (bucketIndex >= 0) {
@@ -389,14 +506,26 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
               `Bucket failover: switched from ${currentBucket} to ${candidateBucket} after reauth`,
           );
           return true;
+        } catch (reauthError) {
+          logger.warn(
+            `Foreground reauth failed for bucket ${candidateBucket}:`,
+            reauthError,
+          );
+          this.lastFailoverReasons[candidateBucket] = 'reauth-failed';
+          this.triedBucketsThisSession.add(candidateBucket);
+          return false;
         }
-      } catch (reauthError) {
-        logger.warn(
-          `Foreground reauth failed for bucket ${candidateBucket}:`,
-          reauthError,
-        );
-        this.lastFailoverReasons[candidateBucket] = 'reauth-failed';
-        this.triedBucketsThisSession.add(candidateBucket);
+      })();
+
+      this.foregroundReauthInFlightByBucket.set(candidateBucket, pass3Promise);
+      try {
+        return await pass3Promise;
+      } finally {
+        const current =
+          this.foregroundReauthInFlightByBucket.get(candidateBucket);
+        if (current === pass3Promise) {
+          this.foregroundReauthInFlightByBucket.delete(candidateBucket);
+        }
       }
     }
 
@@ -432,10 +561,22 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     if (this.buckets.length <= 1) {
       return;
     }
-    await this.oauthManager.authenticateMultipleBuckets(
-      this.provider,
-      this.buckets,
-    );
+
+    if (this.ensureBucketsAuthInFlight) {
+      await this.ensureBucketsAuthInFlight;
+      return;
+    }
+
+    const authPromise = this.oauthManager
+      .authenticateMultipleBuckets(this.provider, this.buckets)
+      .finally(() => {
+        if (this.ensureBucketsAuthInFlight === authPromise) {
+          this.ensureBucketsAuthInFlight = null;
+        }
+      });
+
+    this.ensureBucketsAuthInFlight = authPromise;
+    await authPromise;
   }
 
   /**
