@@ -1437,9 +1437,8 @@ describe('ensureBucketsAuthenticated', () => {
     });
 
     const oauthManager = {
-      getOAuthToken: vi.fn(
-        async (_provider: string, bucket?: string) =>
-          tokenStore.getToken('anthropic', bucket),
+      getOAuthToken: vi.fn(async (_provider: string, bucket?: string) =>
+        tokenStore.getToken('anthropic', bucket),
       ),
       getTokenStore: vi.fn(() => tokenStore),
       setSessionBucket: vi.fn(),
@@ -1449,7 +1448,11 @@ describe('ensureBucketsAuthenticated', () => {
       }),
       authenticateMultipleBuckets: vi.fn(async () => {
         await eagerAuthPromise;
-        await tokenStore.saveToken('anthropic', makeToken('eager-token'), 'bucket-b');
+        await tokenStore.saveToken(
+          'anthropic',
+          makeToken('eager-token'),
+          'bucket-b',
+        );
       }),
     };
 
@@ -1488,9 +1491,8 @@ describe('ensureBucketsAuthenticated', () => {
     });
 
     const oauthManager = {
-      getOAuthToken: vi.fn(
-        async (_provider: string, bucket?: string) =>
-          tokenStore.getToken('anthropic', bucket),
+      getOAuthToken: vi.fn(async (_provider: string, bucket?: string) =>
+        tokenStore.getToken('anthropic', bucket),
       ),
       getTokenStore: vi.fn(() => tokenStore),
       setSessionBucket: vi.fn(),
@@ -1523,7 +1525,10 @@ describe('ensureBucketsAuthenticated', () => {
     await expect(first).resolves.toBe(true);
     await expect(second).resolves.toBe(true);
     expect(oauthManager.authenticate).toHaveBeenCalledTimes(1);
-    expect(oauthManager.authenticate).toHaveBeenCalledWith('anthropic', 'bucket-a');
+    expect(oauthManager.authenticate).toHaveBeenCalledWith(
+      'anthropic',
+      'bucket-a',
+    );
   });
 
   it('re-checks late-started eager auth before pass-3 foreground reauth', async () => {
@@ -1562,7 +1567,11 @@ describe('ensureBucketsAuthenticated', () => {
       }),
       authenticateMultipleBuckets: vi.fn(async () => {
         await eagerAuthGate;
-        await tokenStore.saveToken('anthropic', makeToken('late-eager-token'), 'bucket-a');
+        await tokenStore.saveToken(
+          'anthropic',
+          makeToken('late-eager-token'),
+          'bucket-a',
+        );
       }),
     };
 
@@ -1590,8 +1599,4 @@ describe('ensureBucketsAuthenticated', () => {
     expect(oauthManager.authenticate).not.toHaveBeenCalled();
     expect(handler.getCurrentBucket()).toBe('bucket-a');
   });
-
-
-
-
 });

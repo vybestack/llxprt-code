@@ -36,7 +36,10 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private readonly oauthManager: OAuthManager;
   private triedBucketsThisSession: Set<string>;
   private ensureBucketsAuthInFlight: Promise<void> | null = null;
-  private foregroundReauthInFlightByBucket = new Map<string, Promise<boolean>>();
+  private foregroundReauthInFlightByBucket = new Map<
+    string,
+    Promise<boolean>
+  >();
 
   /**
    * @plan PLAN-20260223-ISSUE1598.P05
@@ -354,9 +357,8 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     }
 
     if (candidateBucket !== undefined) {
-      const existingForegroundReauth = this.foregroundReauthInFlightByBucket.get(
-        candidateBucket,
-      );
+      const existingForegroundReauth =
+        this.foregroundReauthInFlightByBucket.get(candidateBucket);
       if (existingForegroundReauth) {
         return existingForegroundReauth;
       }
@@ -519,7 +521,8 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       try {
         return await pass3Promise;
       } finally {
-        const current = this.foregroundReauthInFlightByBucket.get(candidateBucket);
+        const current =
+          this.foregroundReauthInFlightByBucket.get(candidateBucket);
         if (current === pass3Promise) {
           this.foregroundReauthInFlightByBucket.delete(candidateBucket);
         }
