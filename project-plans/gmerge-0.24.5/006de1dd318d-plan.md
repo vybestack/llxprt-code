@@ -24,16 +24,16 @@ The documentation emphasizes that **project-level hooks** are particularly risky
 ## LLxprt File Existence Map
 
 **VERIFIED paths:**
-- [OK] `docs/hooks/best-practices.md` (EXISTS, needs security sections)
-- [OK] `docs/hooks/index.md` (EXISTS, needs security warning)
+- `docs/hooks/best-practices.md` (EXISTS)
+- `docs/hooks/index.md` (EXISTS)
 
 **Actions required:**
-1. MODIFY: `docs/hooks/best-practices.md` (add ~150 lines of security content)
-2. MODIFY: `docs/hooks/index.md` (add ~22 lines of security warning)
+1. MODIFY: `docs/hooks/best-practices.md` (add 150+ lines of security content)
+2. MODIFY: `docs/hooks/index.md` (add 22 lines of security warning)
 
-**LLxprt path differences:**
+**LLxprt path substitutions:**
 - `.gemini/settings.json` → `.llxprt/settings.json`
-- `/etc/gemini-cli/` → `/etc/llxprt/` (or equivalent system config path)
+- `/etc/gemini-cli/` → `/etc/llxprt/`
 - `GEMINI_API_KEY` → `LLXPRT_API_KEY`
 - `GEMINI_PROJECT_DIR` → `LLXPRT_PROJECT_DIR`
 - `Gemini CLI` → `LLxprt`
@@ -244,32 +244,30 @@ detailed threat model and mitigation strategies.
 
 ## Preflight Checks
 
-**VERIFIED:**
-- [OK] `docs/hooks/best-practices.md` exists
-- [OK] `docs/hooks/index.md` exists
+```bash
+# Verify documentation files exist
+test -f docs/hooks/best-practices.md && echo "OK: best-practices.md"
+test -f docs/hooks/index.md && echo "OK: index.md"
+
+# Verify no broken links after changes
+grep -r "best-practices.md#using-hooks-securely" docs/hooks/
+```
 
 **Dependencies:**
 - None (pure documentation)
 
-**Verification Commands:**
-```bash
-# No build commands needed for docs
-# Just verify no broken links:
-grep -r "best-practices.md#using-hooks-securely" docs/hooks/
-```
-
 ## Implementation Steps
 
 1. **Update `docs/hooks/best-practices.md`:**
-   - Insert "Using Hooks Securely" section (~150 lines)
-   - Insert "Authoring Secure Hooks" section (~50 lines)
+   - Insert "Using Hooks Securely" section (150 lines)
+   - Insert "Authoring Secure Hooks" section (50 lines)
    - Replace all `Gemini CLI` → `LLxprt`
    - Replace all `.gemini/` → `.llxprt/`
    - Replace all `GEMINI_*` → `LLXPRT_*`
    - Replace all `/etc/gemini-cli/` → `/etc/llxprt/`
 
 2. **Update `docs/hooks/index.md`:**
-   - Insert "Security and Risks" section (~22 lines) after intro
+   - Insert "Security and Risks" section (22 lines) after intro
    - Replace `Gemini CLI` → `LLxprt`
    - Replace `.gemini/` → `.llxprt/`
    - Verify link to `best-practices.md#using-hooks-securely` works
@@ -284,14 +282,14 @@ grep -r "best-practices.md#using-hooks-securely" docs/hooks/
 ## Execution Notes
 
 - **Batch group:** Hooks-Security-Docs
-- **Dependencies:** None (but assumes hooks feature exists)
+- **Dependencies:** None (assumes hooks feature exists)
 - **Verification:** Manual review of docs, check for broken links
 - **Risk:** Very low — documentation only
-- **Critical gotcha:** Must replace ALL Gemini branding with LLxprt equivalents:
+- **Critical requirements:** Replace ALL Gemini branding with LLxprt equivalents:
   - `Gemini CLI` → `LLxprt`
   - `.gemini/` → `.llxprt/`
   - `GEMINI_API_KEY` → `LLXPRT_API_KEY`
   - `GEMINI_PROJECT_DIR` → `LLXPRT_PROJECT_DIR`
-  - `/etc/gemini-cli/` → `/etc/llxprt/` (or system config path)
-- **User impact:** High value — users get clear guidance on hook security, especially important given arbitrary code execution risk
-- **Scope:** Pure documentation, ~199 lines added across 2 files
+  - `/etc/gemini-cli/` → `/etc/llxprt/`
+- **User impact:** High value — users get clear guidance on hook security, important given arbitrary code execution risk
+- **Scope:** Pure documentation, 199 lines added across 2 files

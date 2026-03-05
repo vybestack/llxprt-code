@@ -31,19 +31,19 @@ LLxprt uses `GeminiCLIExtension` interface (legacy upstream naming, verified at 
 | Component | LLxprt Path | Status | Action |
 |-----------|-------------|--------|---------|
 | Extension loading logic | `packages/cli/src/config/extension.ts` | EXISTS | Modify - Resolve settings when loading extensions |
-| Extension loader utility | Search needed | TBD | Modify - Update formatExtensionInfo if exists |
 
 **UI Component Files:**
 
 | Component | LLxprt Path | Status | Action |
 |-----------|-------------|--------|---------|
-| Extensions list component | Search for `ExtensionsList` | TBD | Modify - Display settings in UI |
-| Extensions list tests | Search for test file | TBD | Modify - Test settings display |
+| Extensions list component | `packages/cli/src/ui/components/views/ExtensionsList.tsx` | EXISTS | Modify - Display settings in UI |
+| Extensions list tests | `packages/cli/src/ui/components/views/ExtensionsList.test.tsx` | EXISTS | Modify - Test settings display |
 
 **Dependencies verified:**
 - `GeminiCLIExtension` interface exists at `packages/core/src/config/config.ts`
 - Extension settings system exists at `packages/cli/src/config/extensions/extensionSettings.ts`
-- `resolveEnvVarsInObject` likely exists for custom environment resolution
+- `resolveEnvVarsInObject` exists for custom environment resolution
+- `formatExtensionInfo` function does not exist in LLxprt codebase
 
 ## Preflight Checks
 
@@ -51,14 +51,14 @@ LLxprt uses `GeminiCLIExtension` interface (legacy upstream naming, verified at 
 # Verify core config
 grep -q "interface GeminiCLIExtension" packages/core/src/config/config.ts && echo "OK: GeminiCLIExtension exists"
 
-# Find extension loading
+# Verify extension loading
 grep -q "loadExtension\|resolveEnvVarsInObject" packages/cli/src/config/extension.ts && echo "OK: extension loading"
 
-# Find ExtensionsList component
-find packages/cli/src/ui -name "*ExtensionsList*" -type f | head -1
+# Verify ExtensionsList component exists
+test -f packages/cli/src/ui/components/views/ExtensionsList.tsx && echo "OK: ExtensionsList.tsx"
 
-# Find formatExtensionInfo
-grep -rn "formatExtensionInfo" packages/cli/src --include="*.ts" --include="*.tsx" | head -5
+# Verify ExtensionsList tests exist
+test -f packages/cli/src/ui/components/views/ExtensionsList.test.tsx && echo "OK: ExtensionsList.test.tsx"
 
 # Verify settings infrastructure
 test -f packages/cli/src/config/extensions/extensionSettings.ts && echo "OK: extensionSettings.ts"
@@ -82,8 +82,8 @@ test -f packages/cli/src/config/extensions/extensionSettings.ts && echo "OK: ext
 **Modify:**
 1. `packages/core/src/config/config.ts` - Add ExtensionSetting and ResolvedExtensionSetting interfaces, update GeminiCLIExtension
 2. `packages/cli/src/config/extension.ts` - Resolve settings when loading extensions
-3. UI component file (path TBD from search) - Display settings in extension list
-4. UI test file (path TBD from search) - Test settings display
+3. `packages/cli/src/ui/components/views/ExtensionsList.tsx` - Display settings in extension list
+4. `packages/cli/src/ui/components/views/ExtensionsList.test.tsx` - Test settings display
 
 ## Implementation Steps
 
@@ -127,7 +127,7 @@ export interface GeminiCLIExtension {
 }
 ```
 
-Also export these types from the index if needed:
+Also export these types from the config index:
 ```typescript
 export type { ExtensionSetting, ResolvedExtensionSetting };
 ```
@@ -136,7 +136,7 @@ export type { ExtensionSetting, ResolvedExtensionSetting };
 
 **File:** `packages/cli/src/config/extension.ts`
 
-Find the extension loading function (likely `loadExtension` or similar). Look for where `resolveEnvVarsInObject` is called with `customEnv`.
+Find the extension loading function (`loadExtension` or the main extension loading logic). Look for where `resolveEnvVarsInObject` is called with `customEnv`.
 
 After resolving env vars, add settings resolution:
 
@@ -189,48 +189,13 @@ import type {
 } from '@vybestack/llxprt-code-core';
 ```
 
-### 3. Update formatExtensionInfo (if exists)
+### 3. Skip formatExtensionInfo (does not exist)
 
-**Action:** First, search for `formatExtensionInfo`:
-
-```bash
-grep -rn "formatExtensionInfo" packages/cli/src --include="*.ts"
-```
-
-If found in `packages/cli/src/config/extension.ts` or similar, update it:
-
-```typescript
-export function formatExtensionInfo(extension: GeminiCLIExtension): string {
-  let output = '';
-  
-  // ... existing formatting for name, version, status, tools, etc.
-  
-  // NEW: Add settings section
-  const resolvedSettings = extension.resolvedSettings;
-  if (resolvedSettings && resolvedSettings.length > 0) {
-    output += `\n Settings:`;
-    resolvedSettings.forEach((setting) => {
-      output += `\n  ${setting.name}: ${setting.value}`;
-    });
-  }
-  
-  return output;
-}
-```
-
-If `formatExtensionInfo` doesn't exist, skip this step - the UI component will handle display.
+The `formatExtensionInfo` function does not exist in the LLxprt codebase. Extension formatting is handled directly in the UI components. Proceed to update the ExtensionsList component.
 
 ### 4. Update ExtensionsList component
 
-**Action:** First, find the component:
-
-```bash
-find packages/cli/src/ui -name "*ExtensionsList*" -type f
-```
-
-Expected location: `packages/cli/src/ui/components/views/ExtensionsList.tsx` or similar.
-
-**File:** `packages/cli/src/ui/components/views/ExtensionsList.tsx` (or found path)
+**File:** `packages/cli/src/ui/components/views/ExtensionsList.tsx`
 
 Find the extension item rendering (look for `Box` with `ext.name`, `ext.version`).
 
@@ -268,15 +233,7 @@ import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 
 ### 5. Add test for settings display
 
-**Action:** Find the test file:
-
-```bash
-find packages/cli/src/ui -name "*ExtensionsList*.test.*" -type f
-```
-
-Expected location: `packages/cli/src/ui/components/views/ExtensionsList.test.tsx` or similar.
-
-**File:** `packages/cli/src/ui/components/views/ExtensionsList.test.tsx` (or found path)
+**File:** `packages/cli/src/ui/components/views/ExtensionsList.test.tsx`
 
 Add test case:
 
@@ -316,16 +273,16 @@ it('should render resolved settings for an extension', () => {
 });
 ```
 
-Add import if needed:
+Add import:
 ```typescript
 import type { GeminiCLIExtension, ResolvedExtensionSetting } from '@vybestack/llxprt-code-core';
 ```
 
 ### 6. Verify extension config structure
 
-**File:** Check extension config schema (if exists)
+**File:** `packages/cli/src/config/extension.ts`
 
-Look for `ExtensionConfig` interface in `packages/cli/src/config/extension.ts`:
+Look for the `ExtensionConfig` interface:
 
 ```typescript
 interface ExtensionConfig {
@@ -347,8 +304,7 @@ Ensure `settings` field is present and matches the `ExtensionSetting[]` type.
 # 1. Type checking
 npm run typecheck
 
-# 2. Find and test UI components
-find packages/cli/src/ui/components -name "*ExtensionsList*" -type f
+# 2. Test ExtensionsList component
 npm run test -- packages/cli/src/ui/components/views/ExtensionsList
 
 # 3. Test extension loading
@@ -363,15 +319,13 @@ npm run test -- packages/cli/src/config/extensions/
 # 6. Full UI test suite
 npm run test -- packages/cli/src/ui/
 
-# 7. Visual verification (if possible)
+# 7. Visual verification
 # Run CLI in interactive mode with an extension that has settings
 # Execute /extensions list
 # Verify settings appear with correct values
 ```
 
 ## Manual Verification Steps
-
-After implementation, test manually:
 
 1. Create a test extension with settings defined in `llxprt-extension.json`:
 ```json
@@ -414,4 +368,4 @@ After implementation, test manually:
   - Verify non-sensitive settings show actual values
   - Ensure UI formatting is readable in terminal
 - **Visual change:** Extension list output now includes settings section
-- **Note:** Search-based file discovery needed for exact UI component paths
+- **Note:** All file paths verified and confirmed to exist

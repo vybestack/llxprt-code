@@ -24,12 +24,12 @@ The `admin` settings use **REPLACE merge strategy** (system overrides user setti
 ## LLxprt File Existence Map
 
 **VERIFIED paths:**
-- [OK] `packages/cli/src/config/settingsSchema.ts` (EXISTS, needs admin settings)
-- [OK] `packages/cli/src/config/config.ts` (EXISTS, needs enforcement logic)
-- [OK] `packages/core/src/config/config.ts` (EXISTS, needs mcpEnabled field)
-- [OK] `packages/cli/src/services/BuiltinCommandLoader.ts` (EXISTS, needs MCP stub)
-- [OK] `packages/cli/src/config/config.test.ts` (EXISTS, needs admin tests)
-- [OK] `packages/cli/src/services/BuiltinCommandLoader.test.ts` (EXISTS, needs mock update)
+- `packages/cli/src/config/settingsSchema.ts` - EXISTS, add admin settings schema
+- `packages/cli/src/config/config.ts` - EXISTS, add enforcement logic for secureModeEnabled and mcpEnabled
+- `packages/core/src/config/config.ts` - EXISTS, add mcpEnabled field and getter
+- `packages/cli/src/services/BuiltinCommandLoader.ts` - EXISTS, add conditional MCP stub
+- `packages/cli/src/config/config.test.ts` - EXISTS, add admin settings test suites
+- `packages/cli/src/services/BuiltinCommandLoader.test.ts` - EXISTS, add getMcpEnabled mock
 
 **Actions required:**
 1. MODIFY: `packages/cli/src/config/settingsSchema.ts` (add admin settings)
@@ -41,9 +41,9 @@ The `admin` settings use **REPLACE merge strategy** (system overrides user setti
 7. UPDATE DOCS: `docs/get-started/configuration.md` (add admin settings)
 
 **Scope reduction from upstream:**
-- [ERROR] SKIP: `GeminiCodeAssistSetting` types (don't exist in LLxprt, not needed for MVP)
-- [ERROR] SKIP: `remoteAdminSettings` storage (future remote fetching, out of scope)
-- [OK] KEEP: Admin settings schema and enforcement logic
+- SKIP: `GeminiCodeAssistSetting` types (don't exist in LLxprt, not needed for MVP)
+- SKIP: `remoteAdminSettings` storage (future remote fetching, out of scope)
+- KEEP: Admin settings schema and enforcement logic
 
 ## Files to Modify
 
@@ -409,19 +409,19 @@ Settings configured by system administrators to enforce security policies. These
 ## Preflight Checks
 
 **VERIFIED:**
-- [OK] Settings schema exists and can be extended
-- [OK] Core config exists and supports new fields
-- [OK] CLI config loader exists
-- [OK] Builtin command loader exists
-- [OK] Test files exist
+- Settings schema exists at packages/cli/src/config/settingsSchema.ts
+- Core config exists at packages/core/src/config/config.ts
+- CLI config loader exists at packages/cli/src/config/config.ts
+- Builtin command loader exists at packages/cli/src/services/BuiltinCommandLoader.ts
+- Test files exist for config and builtin command loader
 
 **Dependencies:**
 - None (self-contained feature)
 
 **Verification Commands:**
 ```bash
-npm run typecheck   # Must pass
-npm run lint        # Must pass
+npm run typecheck   # Type checking must pass
+npm run lint        # Linting must pass
 npm run test        # All tests must pass
 ```
 

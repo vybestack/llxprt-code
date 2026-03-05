@@ -17,7 +17,7 @@ Introduces `ToolErrorType.STOP_EXECUTION` to distinguish between "stop agent exe
 | `packages/core/src/core/coreToolHookTriggers.ts` | `packages/core/src/core/coreToolHookTriggers.ts` | EXISTS | PORT — Reorder checks |
 | `packages/cli/src/nonInteractiveCli.ts` | `packages/cli/src/nonInteractiveCli.ts` | EXISTS | PORT — Handle STOP_EXECUTION |
 | `packages/cli/src/ui/hooks/useGeminiStream.ts` | `packages/cli/src/ui/hooks/useGeminiStream.ts` | EXISTS | PORT — Handle STOP_EXECUTION |
-| Test files | Multiple | EXISTS | MODIFY — Add precedence tests |
+| Test files | `packages/core/src/core/coreToolHookTriggers.test.ts`, `packages/cli/src/nonInteractiveCli.test.ts`, `packages/cli/src/ui/hooks/useGeminiStream.test.tsx` | EXISTS | MODIFY — Add precedence tests |
 
 ## Preflight Checks
 
@@ -154,7 +154,7 @@ const stopExecutionTool = completedToolCalls.find(
 if (stopExecutionTool) {
   writeToStderr(`\nExecution stopped by hook: ${stopExecutionTool.response.llmContent}\n`);
   
-  // Emit final result event if needed
+  // Emit final result event for JSON output format
   if (config.getOutputFormat() === OutputFormat.JSON) {
     const formatter = new JsonFormatter();
     writeToStdout(formatter.formatFinalResult(historyItems, prompt_id, false) + '\n');

@@ -301,9 +301,10 @@ test -f packages/cli/src/ui/constants.ts || echo "MISSING"
 
 - **Batch group:** Hooks Phase 4 - UX & Configuration
 - **Dependencies:** 6d1e27633a32 (SessionStart context injection), all hook infrastructure
-- **Enables:** 56092bd78205 (hooks.enabled setting — visual indicators work before canonical toggle)
-- **SKIP:** All hooks list command changes (not in LLxprt)
-- **Scope:** Adds visual feedback for executing hooks, controlled by `hooks.notifications` setting
+- **Enables:** 56092bd78205 (hooks.enabled setting)
+- **Scope:** Adds visual feedback for executing hooks, controlled by `hooks.notifications` setting (default: true)
+- **Files modified:** 8 files (settingsSchema, 3 new components, 3 existing files, constants)
+- **Testing:** Unit tests for HookStatusDisplay, StatusDisplay; integration tests for AppContainer hook tracking
 
 ## Post-Implementation Checklist
 
@@ -314,6 +315,12 @@ test -f packages/cli/src/ui/constants.ts || echo "MISSING"
 - [ ] StatusDisplay component coordinates status priority
 - [ ] Composer uses StatusDisplay instead of inline ContextSummaryDisplay
 - [ ] AppContainer passes activeHooks to UIState
+- [ ] constants.ts exports timing constants
+- [ ] Snapshot tests added for new components
+- [ ] Hooks list command changes SKIPPED (documented in commit)
+- [ ] npm run typecheck passes
+- [ ] All UI tests pass
+tate
 - [ ] constants.ts exports timing constants
 - [ ] Snapshot tests added for new components
 - [ ] Hooks list command changes SKIPPED (documented in commit)

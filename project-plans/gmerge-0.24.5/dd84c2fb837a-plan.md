@@ -16,9 +16,9 @@ Adds two new event types (`AgentExecutionStopped`, `AgentExecutionBlocked`) to h
 | `packages/core/src/core/client.ts` | `packages/core/src/core/client.ts` | EXISTS | PORT — Emit events based on decisions |
 | `packages/cli/src/nonInteractiveCli.ts` | `packages/cli/src/nonInteractiveCli.ts` | EXISTS | PORT — Handle both events |
 | `packages/cli/src/ui/hooks/useGeminiStream.ts` | `packages/cli/src/ui/hooks/useGeminiStream.ts` | EXISTS | PORT — Handle both events |
-| Test files | Multiple | EXISTS | PORT — Add stop/block tests |
+| Test files | `packages/core/src/core/client.test.ts`, `packages/cli/src/nonInteractiveCli.test.ts`, `packages/cli/src/ui/hooks/useGeminiStream.test.tsx` | EXISTS | PORT — Add stop/block tests |
 
-**Verified:** GeminiClient at packages/core/src/core/client.ts:193, sendMessageStream method handles agent turns
+**Verified:** GeminiClient exists at packages/core/src/core/client.ts:193, sendMessageStream method handles agent turns
 
 ## Preflight Checks
 
@@ -154,7 +154,7 @@ private async *fireAfterAgentHookSafe(
 ```typescript
 case GeminiEventType.AgentExecutionStopped:
   writeToStderr(`\n[STOPPED] ${event.reason}\n`);
-  // Emit final result event if needed
+  // Emit final result event for JSON output format
   if (config.getOutputFormat() === OutputFormat.JSON) {
     const formatter = new JsonFormatter();
     writeToStdout(formatter.formatFinalResult(historyItems, prompt_id, false) + '\n');

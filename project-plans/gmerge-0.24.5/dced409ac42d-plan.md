@@ -29,9 +29,9 @@ LLxprt's `ConfigSource` enum is already in `packages/core/src/hooks/hookRegistry
 | `packages/core/src/hooks/hookRunner.ts` | `packages/core/src/hooks/hookRunner.ts` | [OK] EXISTS | PORT — Add Config parameter, secondary security check |
 | `packages/core/src/hooks/hookSystem.ts` | `packages/core/src/hooks/hookSystem.ts` | [OK] EXISTS | PORT — Pass config to HookRunner |
 | `packages/core/src/hooks/index.ts` | `packages/core/src/hooks/index.ts` | [OK] EXISTS | VERIFY — ConfigSource export (already exported) |
-| `packages/core/src/hooks/__tests__/hookRegistry.test.ts` | N/A (different path) | [ERROR] | PORT to `packages/core/src/hooks/hookRegistry.test.ts` |
-| `packages/core/src/hooks/__tests__/hookRunner.test.ts` | N/A (different path) | [ERROR] | PORT to `packages/core/src/hooks/hookRunner.test.ts` |
-| `packages/core/src/hooks/__tests__/hookPlanner.test.ts` | N/A (different path) | [ERROR] | PORT to `packages/core/src/hooks/hookPlanner.test.ts` |
+| `packages/core/src/hooks/__tests__/hookRegistry.test.ts` | `packages/core/src/hooks/hookRegistry.test.ts` | EXISTS | PORT to `packages/core/src/hooks/hookRegistry.test.ts` |
+| `packages/core/src/hooks/__tests__/hookRunner.test.ts` | `packages/core/src/hooks/hookRunner.test.ts` | EXISTS | PORT to `packages/core/src/hooks/hookRunner.test.ts` |
+| `packages/core/src/hooks/__tests__/hookPlanner.test.ts` | `packages/core/src/hooks/hookPlanner.test.ts` | EXISTS | PORT to `packages/core/src/hooks/hookPlanner.test.ts` |
 | `packages/cli/src/config/trustedFolders.ts` | `packages/cli/src/config/trustedFolders.ts` | [OK] EXISTS | SKIP — Minor whitespace only |
 
 **Note:** LLxprt test files are at `packages/core/src/hooks/*.test.ts` (root level), not in `__tests__/` subdirectory.
@@ -95,7 +95,7 @@ grep -n "getFolderTrust" packages/core/src/config/config.ts || echo "MISSING: Co
 - **VERIFY** `packages/core/src/hooks/index.ts` — ConfigSource export (should already exist)
 - **MODIFY** `packages/core/src/hooks/hookRegistry.test.ts` — Update tests for new behavior
 - **MODIFY** `packages/core/src/hooks/hookRunner.test.ts` — Update tests with Config parameter
-- **MODIFY** `packages/core/src/hooks/hookPlanner.test.ts` — Update test mocks if needed
+- **MODIFY** `packages/core/src/hooks/hookPlanner.test.ts` — Update test mocks to include Config parameter
 
 ## Implementation Steps
 

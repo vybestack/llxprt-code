@@ -16,7 +16,7 @@ LLxprt's hook system already has `BeforeToolHookOutput` in `types.ts` (verified 
 2. Modify `executeToolWithHooks()` in `coreToolHookTriggers.ts` to apply modified input, rebuild invocation
 3. Update `hookAggregator.ts` to merge `hookSpecificOutput` objects when aggregating
 4. Support sequential input modification in `hookRunner.ts` for BeforeTool events
-5. Add `tool_input?: Record<string, unknown>` to `BeforeToolOutput` interface (check if exists)
+5. Add `tool_input?: Record<string, unknown>` to `BeforeToolOutput` interface (field does not currently exist, adding it)
 6. Pass `tool` parameter to `executeToolWithHooks()` from `coreToolScheduler.ts`
 7. Add tests for input modification scenarios
 
@@ -24,19 +24,20 @@ LLxprt's hook system already has `BeforeToolHookOutput` in `types.ts` (verified 
 
 | Upstream Path | LLxprt Equivalent | Status | Action |
 |--------------|-------------------|--------|--------|
-| `packages/core/src/hooks/types.ts` | `packages/core/src/hooks/types.ts` | EXISTS | VERIFY — getModifiedToolInput may already exist |
+| `packages/core/src/hooks/types.ts` | `packages/core/src/hooks/types.ts` | EXISTS | MODIFY — getModifiedToolInput exists at line 260 |
 | `packages/core/src/core/coreToolHookTriggers.ts` | `packages/core/src/core/coreToolHookTriggers.ts` | EXISTS | PORT — Add input modification logic |
 | `packages/core/src/hooks/hookAggregator.ts` | `packages/core/src/hooks/hookAggregator.ts` | EXISTS | PORT — Merge hookSpecificOutput |
 | `packages/core/src/hooks/hookRunner.ts` | `packages/core/src/hooks/hookRunner.ts` | EXISTS | PORT — Handle BeforeTool input chaining |
 | `packages/core/src/core/coreToolScheduler.ts` | `packages/core/src/core/coreToolScheduler.ts` | EXISTS | PORT — Pass tool parameter |
 | `packages/core/src/core/coreToolHookTriggers.test.ts` | `packages/core/src/core/coreToolHookTriggers.test.ts` | CHECK | CREATE/MODIFY — Tests |
 | `packages/core/src/hooks/types.test.ts` | `packages/core/src/hooks/types.test.ts` | EXISTS | MODIFY — Add BeforeToolHookOutput test |
-| Integration tests | `integration-tests/hooks/` directory | CHECK | CONDITIONAL — Only if exists |
+| Integration tests | `integration-tests/hooks/` directory | EXISTS | MODIFY — Add tool input modification integration tests |
 
 **LLxprt-specific paths verified:**
-- BeforeToolHookOutput class at packages/core/src/hooks/types.ts:210
-- executeToolWithHooks at packages/core/src/core/coreToolHookTriggers.ts (verified via search)
-- Tool scheduler at packages/core/src/core/coreToolScheduler.ts
+- BeforeToolHookOutput class at packages/core/src/hooks/types.ts:219
+- getModifiedToolInput method at packages/core/src/hooks/types.ts:260
+- executeToolWithHooks at packages/core/src/core/coreToolHookTriggers.ts
+- Tool scheduler at packages/core/src/core/coreToolScheduler.ts:1784
 
 ## Preflight Checks
 
@@ -60,7 +61,7 @@ test -f packages/core/src/core/coreToolScheduler.ts || echo "MISSING: coreToolSc
 test -f packages/core/src/core/coreToolHookTriggers.test.ts && echo "EXISTS" || echo "CREATE NEEDED"
 ```
 
-**Expected Output:** BeforeToolHookOutput found, getModifiedToolInput may already exist (check line 237-246), executeToolWithHooks exists, all core files exist.
+**Expected Output:** BeforeToolHookOutput found at line 219, getModifiedToolInput exists at line 260, executeToolWithHooks exists, all core files exist.
 
 ## Inter-Playbook Dependencies
 
@@ -83,7 +84,7 @@ test -f packages/core/src/core/coreToolHookTriggers.test.ts && echo "EXISTS" || 
 
 ## Files to Create/Modify
 
-- **VERIFY** `packages/core/src/hooks/types.ts` — Check if getModifiedToolInput exists, add if missing
+- **VERIFY** `packages/core/src/hooks/types.ts` — getModifiedToolInput exists at line 260, verify implementation
 - **MODIFY** `packages/core/src/hooks/types.ts` — Update BeforeToolOutput interface with tool_input field
 - **MODIFY** `packages/core/src/core/coreToolHookTriggers.ts` — Apply input modifications in executeToolWithHooks
 - **MODIFY** `packages/core/src/hooks/hookAggregator.ts` — Merge hookSpecificOutput objects
@@ -91,7 +92,7 @@ test -f packages/core/src/core/coreToolHookTriggers.test.ts && echo "EXISTS" || 
 - **MODIFY** `packages/core/src/core/coreToolScheduler.ts` — Pass tool parameter to executeToolWithHooks
 - **CREATE/MODIFY** `packages/core/src/core/coreToolHookTriggers.test.ts` — Tests for input modification
 - **MODIFY** `packages/core/src/hooks/types.test.ts` — Test createHookOutput returns BeforeToolHookOutput
-- **CONDITIONAL** Integration tests — Only if LLxprt has compatible test infrastructure
+- **MODIFY** Integration tests in `integration-tests/hooks/` — Add tool input modification tests
 
 ## Implementation Steps
 
@@ -104,7 +105,7 @@ test -f packages/core/src/core/coreToolHookTriggers.test.ts && echo "EXISTS" || 
 grep -A 15 "class BeforeToolHookOutput" packages/core/src/hooks/types.ts | grep -A 10 "getModifiedToolInput"
 ```
 
-**If missing, add** (around line 240):
+**Confirmed:** getModifiedToolInput exists at line 260. Verify the implementation matches the required signature:
 ```typescript
 /**
  * Get modified tool input if provided by hook
@@ -395,20 +396,19 @@ it('should return BeforeToolHookOutput for BeforeTool event', () => {
 });
 ```
 
-### Step 8: Integration Tests (CONDITIONAL)
+### Step 8: Integration Tests
 
-**Decision logic:**
-```bash
-if [ -d "integration-tests/hooks" ]; then
-  echo "IMPLEMENT: Add tool input modification integration tests"
-else
-  echo "SKIP: No integration test infrastructure"
-fi
-```
+**Directory confirmed:** `integration-tests/hooks/` exists
 
-**If implementing:** Add test to verify BeforeTool hook can modify parameters and tool receives modified values.
+**Implementation:** Add test to verify BeforeTool hook can modify parameters and tool receives modified values.
 
-**If skipping:** Document in commit message: "Integration tests skipped - LLxprt uses different test infrastructure. Tool input modification verified via unit tests in coreToolHookTriggers.test.ts."
+**Test file:** `integration-tests/hooks/tool-input-modification.test.ts`
+
+**Test scenarios:**
+1. BeforeTool hook modifies single parameter
+2. BeforeTool hook adds new parameter
+3. Multiple BeforeTool hooks chain modifications
+4. Tool validation fails with invalid modified input
 
 ## Deterministic Verification Commands
 

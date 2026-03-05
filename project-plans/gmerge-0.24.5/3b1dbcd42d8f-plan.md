@@ -30,11 +30,11 @@ Introduces a comprehensive **environment variable sanitization system** to preve
 ## LLxprt File Existence Map
 
 **VERIFIED paths:**
-- [OK] `packages/core/src/hooks/hookRunner.ts` (EXISTS, needs sanitization integration)
-- [OK] `packages/core/src/config/config.ts` (EXISTS, needs sanitizationConfig field)
-- [OK] `packages/cli/src/config/config.ts` (EXISTS, needs to pass settings to core config)
-- [OK] `packages/cli/src/config/settingsSchema.ts` (EXISTS, needs security settings)
-- [ERROR] `packages/core/src/services/environmentSanitization.ts` (NEEDS CREATION)
+- `packages/core/src/hooks/hookRunner.ts` (EXISTS, needs sanitization integration)
+- `packages/core/src/config/config.ts` (EXISTS, needs sanitizationConfig field)
+- `packages/cli/src/config/config.ts` (EXISTS, needs to pass settings to core config)
+- `packages/cli/src/config/settingsSchema.ts` (EXISTS, needs security settings)
+- `packages/core/src/services/environmentSanitization.ts` (NEEDS CREATION)
 
 **Actions required:**
 1. CREATE: `packages/core/src/services/environmentSanitization.ts` (309 lines of implementation + tests)
@@ -44,12 +44,12 @@ Introduces a comprehensive **environment variable sanitization system** to preve
 5. MODIFY: `packages/core/src/hooks/hookRunner.ts` (sanitize env)
 6. MODIFY: `packages/core/src/hooks/hookRunner.test.ts` (add mock config)
 7. MODIFY: `packages/core/src/core/coreToolScheduler.test.ts` (add mock config)
-8. MODIFY: `packages/cli/src/ui/AppContainer.tsx` (pass sanitizationConfig if exists)
+8. MODIFY: `packages/cli/src/ui/AppContainer.tsx` (pass sanitizationConfig to shell tool)
 9. UPDATE: `docs/get-started/configuration.md` (add env redaction section)
 
 ## LLxprt Adaptations
 
-**Replace Gemini branding:**
+**Replace branding:**
 - `GEMINI_CLI_*` → `LLXPRT_CLI_*`
 - `GEMINI_API_KEY` → `LLXPRT_API_KEY`
 - `GEMINI_PROJECT_DIR` → `LLXPRT_PROJECT_DIR`
@@ -60,7 +60,7 @@ Introduces a comprehensive **environment variable sanitization system** to preve
 ### 1. Create Environment Sanitization Module
 **File:** `packages/core/src/services/environmentSanitization.ts`
 
-**Content:** (Copy from upstream, 309 lines)
+**Content:** (Implement 309-line module based on upstream commit `3b1dbcd42d8f`; adapt all branding references)
 ```typescript
 // Full implementation including:
 // - ALWAYS_ALLOWED_ENVIRONMENT_VARIABLES (23 safe vars)

@@ -94,7 +94,7 @@ Files to check that may differ from upstream paths:
      - Add `setMessageBus` mock to ToolRegistry mock if missing
      - Update DelegateToAgentTool creation expectations to always expect messageBus
 
-9. **Update settings repro test** (if exists):
+9. **Update settings repro test** (`packages/cli/src/__tests__/settings-repro.test.ts`):
    - In `packages/cli/src/config/settings_repro.test.ts`:
      - Replace `enableMessageBusIntegration: true` with another tools setting
 
@@ -102,8 +102,8 @@ Files to check that may differ from upstream paths:
     - In `docs/cli/settings.md`, remove enableMessageBusIntegration row from table
     - In `docs/get-started/configuration.md`, remove enableMessageBusIntegration section
 
-11. **Update settings schema binary** (if needed):
-    - May need to regenerate `schemas/settings.schema.json` after schema changes
+11. **Regenerate settings schema binary**:
+    - Regenerate `schemas/settings.schema.json` after schema changes: `npm run generate:schema`
 
 ## Execution Notes
 

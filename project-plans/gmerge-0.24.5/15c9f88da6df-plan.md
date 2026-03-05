@@ -22,7 +22,7 @@ LLxprt has `GeminiClient` class in `packages/core/src/core/client.ts` (verified 
 |--------------|-------------------|--------|--------|
 | `packages/core/src/core/client.ts` | `packages/core/src/core/client.ts` | EXISTS | PORT — Add hookStateMap, safe hook methods |
 | `packages/core/src/core/client.test.ts` | `packages/core/src/core/client.test.ts` | EXISTS | PORT — Add deduplication tests |
-| Integration test files | `integration-tests/hooks/` directory | CHECK | CONDITIONAL — Only if directory exists |
+| Integration test files | `integration-tests/hooks/` directory | EXISTS | PORT — Add agent hook deduplication tests |
 
 **LLxprt-specific paths verified:**
 - `GeminiClient` class at packages/core/src/core/client.ts:193
@@ -36,21 +36,24 @@ LLxprt has `GeminiClient` class in `packages/core/src/core/client.ts` (verified 
 grep -n "export class GeminiClient" packages/core/src/core/client.ts
 
 # Verify test file exists
-test -f packages/core/src/core/client.test.ts || echo "MISSING: client.test.ts"
+test -f packages/core/src/core/client.test.ts && echo "OK: client.test.ts"
 
 # Verify hook triggers module
-test -f packages/core/src/core/lifecycleHookTriggers.ts || echo "MISSING: lifecycleHookTriggers.ts"
+test -f packages/core/src/core/lifecycleHookTriggers.ts && echo "OK: lifecycleHookTriggers.ts"
 grep -n "fireBeforeAgentHook" packages/core/src/core/lifecycleHookTriggers.ts
 grep -n "fireAfterAgentHook" packages/core/src/core/lifecycleHookTriggers.ts
 
-# Check if integration tests directory exists
-test -d integration-tests/hooks && echo "HAS integration tests" || echo "NO integration tests"
+# Verify integration tests directory exists
+test -d integration-tests/hooks && echo "OK: integration-tests/hooks/"
 
 # Verify sendMessageStream exists
 grep -n "sendMessageStream" packages/core/src/core/client.ts | head -5
+
+# Verify hookStateMap does not exist yet
+grep -q "hookStateMap" packages/core/src/core/client.ts && echo "UNEXPECTED: already exists" || echo "OK: needs to be added"
 ```
 
-**Expected Output:** GeminiClient found at line 193, test file exists, hook triggers exist, integration tests directory status determined.
+**Expected Output:** GeminiClient at line 193, all files exist, hookStateMap not yet present.
 
 ## Inter-Playbook Dependencies
 
@@ -74,7 +77,7 @@ grep -n "sendMessageStream" packages/core/src/core/client.ts | head -5
 
 - **MODIFY** `packages/core/src/core/client.ts` — Add hookStateMap, safe hook methods, refactor sendMessageStream
 - **MODIFY** `packages/core/src/core/client.test.ts` — Add hook deduplication tests
-- **CONDITIONAL** Integration test files — Only if LLxprt has equivalent test infrastructure
+- **MODIFY** `integration-tests/hooks/hooks-e2e.integration.test.ts` — Add agent hook deduplication tests
 
 ## Implementation Steps
 
@@ -300,23 +303,16 @@ describe('Agent Hook Deduplication', () => {
 });
 ```
 
-### Step 6: Integration Tests (CONDITIONAL)
+### Step 6: Add Integration Tests
 
-**Decision Logic:**
-```bash
-if [ -d "integration-tests/hooks" ]; then
-  echo "IMPLEMENT: Add agent hook integration tests"
-else
-  echo "SKIP: No integration test infrastructure"
-fi
-```
+**File:** `integration-tests/hooks/hooks-e2e.integration.test.ts`
 
-**If implementing:** Create `integration-tests/hooks/agent-hook-deduplication.integration.test.ts` with tests for:
+Add test cases for agent hook deduplication:
 - BeforeAgent fires once in recursive scenario
 - AfterAgent fires once with cumulative response
 - Hook state cleanup on prompt_id change
 
-**If skipping:** Document in commit message: "Integration tests skipped - LLxprt uses different test infrastructure. Agent hook deduplication verified via unit tests in client.test.ts."
+These tests verify the deduplication logic works in real-world scenarios with actual LLxprt CLI execution.
 
 ## Deterministic Verification Commands
 
@@ -337,13 +333,11 @@ grep -n "fireAfterAgentHookSafe" packages/core/src/core/client.ts
 # Verify cleanup logic exists
 grep -n "hookStateMap.delete" packages/core/src/core/client.ts
 
-# Verify tests exist
+# Verify unit tests exist
 grep -n "Agent Hook Deduplication" packages/core/src/core/client.test.ts
 
-# Check integration tests (conditional)
-test -d integration-tests/hooks && \
-  npm run test -- integration-tests/hooks/ || \
-  echo "SKIPPED: No integration tests"
+# Run integration tests
+npm run test -- integration-tests/hooks/
 ```
 
 **Success Criteria:**
@@ -357,7 +351,7 @@ test -d integration-tests/hooks && \
 - **Batch group:** Hooks Phase 2 - Core Hook Enhancements
 - **Dependencies:** e6344a8c2478 (project hooks — indirect), earlier hook infrastructure
 - **Enables:** 90eb1e0281bf (tool input modification), all subsequent hook commits
-- **Test coverage:** Unit tests for deduplication logic, integration tests conditional on infrastructure
+- **Test coverage:** Unit tests for deduplication logic, integration tests in integration-tests/hooks/
 - **Breaking change:** NONE (internal refactoring only)
 
 ## Risk Assessment
@@ -366,8 +360,8 @@ test -d integration-tests/hooks && \
 - **Mitigation:** prompt_id generation has fallback (Math.random().toString(16).slice(2))
 - **Risk:** Hook state accumulation could grow unbounded
 - **Mitigation:** Cleanup on prompt_id change prevents memory leak
-- **Risk:** Integration tests may not exist in LLxprt
-- **Mitigation:** Unit tests provide full coverage, integration tests are conditional
+- **Risk:** Integration test infrastructure exists but may need adaptation
+- **Mitigation:** Unit tests provide full coverage, integration tests verify real-world scenarios
 
 ## Post-Implementation Checklist
 
@@ -379,7 +373,7 @@ test -d integration-tests/hooks && \
 - [ ] Existing hook calls replaced with safe methods
 - [ ] Response accumulation logic added
 - [ ] Unit tests for deduplication added
-- [ ] Integration tests added (if infrastructure exists) or SKIP documented
+- [ ] Integration tests added to integration-tests/hooks/
 - [ ] npm run typecheck passes
 - [ ] npm run test -- packages/core/src/core/client.test.ts passes
 - [ ] No direct fireBeforeAgentHook/fireAfterAgentHook calls in sendMessageStream remain

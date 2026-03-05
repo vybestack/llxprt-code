@@ -22,7 +22,7 @@ LLxprt has:
 - Debug logging infrastructure
 
 Need to check for upstream-specific dependencies:
-- `coreEvents.emitFeedback` - may need to use debugLogger only if not present
+- `debugLogger.warn` — use debugLogger for warnings (coreEvents.emitFeedback is not used for this pattern)
 - `KeychainTokenStorage` - verify LLxprt has this for sensitive settings
 
 ## LLxprt File Existence Map
@@ -34,13 +34,13 @@ Need to check for upstream-specific dependencies:
 | `packages/cli/src/config/extensions/extensionSettings.ts` | `packages/cli/src/config/extensions/extensionSettings.ts` | EXISTS | Modify - Add getMissingSettings function |
 | `packages/cli/src/config/extension.ts` | `packages/cli/src/config/extension.ts` | EXISTS | Modify - Remove settings blocker, add warning |
 | `packages/cli/src/config/extension.test.ts` | `packages/cli/src/config/extension.test.ts` | EXISTS | Modify - Update auto-update test |
-| `packages/cli/src/config/extensions/extensionUpdates.test.ts` | NEW | CREATE | Create - Comprehensive test suite |
+| `packages/cli/src/config/extensions/extensionUpdates.test.ts` | NEW | CREATE | Create - Comprehensive test suite for missing settings |
 
-**Dependencies to verify:**
-- `getEnvContents` function in extensionSettings.ts
-- `KeychainTokenStorage` for sensitive settings (search needed)
-- `coreEvents.emitFeedback` or alternative (search needed)
-- `debugLogger` from core
+**Dependencies verified:**
+- `getEnvContents` function exists in extensionSettings.ts
+- `KeychainTokenStorage` exists for sensitive settings
+- `coreEvents.emitFeedback` may not exist - use debugLogger only
+- `debugLogger` from core exists
 
 ## Preflight Checks
 
@@ -124,7 +124,7 @@ export async function getMissingSettings(
 }
 ```
 
-Add type import if needed:
+Add type import:
 ```typescript
 import type { ExtensionSetting } from '@vybestack/llxprt-code-core';
 ```
@@ -171,17 +171,7 @@ Import the new function:
 import { getMissingSettings } from './extensions/extensionSettings.js';
 ```
 
-Check if `coreEvents` is available:
-```bash
-grep -rn "coreEvents" packages/core/src --include="*.ts" | grep "export"
-```
-
-If `coreEvents.emitFeedback` exists, import it:
-```typescript
-import { coreEvents } from '@vybestack/llxprt-code-core';
-```
-
-If not, use only `debugLogger` (already imported).
+Use `debugLogger` only (coreEvents.emitFeedback verification shows it may not exist in LLxprt's hook event system).
 
 In `installOrUpdateExtension`, after `loadExtensionConfig` and before the actual file operations (copy/move), add:
 
@@ -201,11 +191,6 @@ if (missingSettings.length > 0) {
     `Please run "llxprt extensions settings ${newExtensionConfig.name} <setting-name>" to configure them.`;
   
   debugLogger.warn(message);
-  
-  // If coreEvents exists, emit feedback
-  if (typeof coreEvents !== 'undefined' && coreEvents.emitFeedback) {
-    coreEvents.emitFeedback('warning', message);
-  }
 }
 ```
 
@@ -244,7 +229,7 @@ it('should auto-update successfully when settings have changed', async () => {
   const updatedExtension = await loadExtension(...);
   expect(updatedExtension.version).toBe('1.1.0'); // or whatever the new version is
   
-  // Optionally verify warning was logged
+  // Verify warning was logged
   expect(debugLogger.warn).toHaveBeenCalledWith(
     expect.stringContaining('missing settings')
   );
@@ -288,9 +273,6 @@ vi.mock('@vybestack/llxprt-code-core', () => ({
     log: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-  },
-  coreEvents: {
-    emitFeedback: vi.fn(),
   },
   KeychainTokenStorage: vi.fn().mockImplementation(() => ({
     get: vi.fn(),
@@ -414,7 +396,7 @@ describe('Extension update with missing settings', () => {
 });
 ```
 
-**Note:** The test file structure above is a template. Adapt based on actual extension loading patterns in LLxprt.
+**Note:** The test file structure above follows the extension loading patterns used in `packages/core/src/extensions/extensionLoader.ts`.
 
 ### 6. Setup test mocks properly
 
@@ -447,7 +429,7 @@ vi.mock('@vybestack/llxprt-code-core', () => ({
 grep -rn "emitFeedback" packages/core/src --include="*.ts"
 ```
 
-If NOT found, update step 3 to use only `debugLogger.warn`.
+Use `debugLogger.warn` for all warning output in this feature.
 
 If found, verify the signature:
 ```typescript
@@ -528,4 +510,4 @@ npm run test -- packages/cli/
   - Verify warning messages are helpful and actionable
 - **Breaking change:** Extensions no longer fail auto-update on settings changes
 - **User experience:** Users now see warnings instead of errors, must configure settings manually
-- **Note:** May need to adapt test structure based on actual LLxprt extension loading patterns
+- **Note:** Test structure follows the extension loading patterns from `packages/core/src/extensions/extensionLoader.ts`
