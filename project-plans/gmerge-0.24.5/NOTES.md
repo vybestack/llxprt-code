@@ -31,4 +31,19 @@ Reclassified:
 
 Quick verify: lint [OK] typecheck [OK]
 
+## PICK-B2 (Batch 2)
+
+**Result: 3/5 committed, 2 reclassified**
+
+Cherry-picked successfully:
+- `56b05042` (as `31d67db0a`) -- typo fix in tools.ts. Clean.
+- `acecd80a` (as `768747190`) -- IDE promise rejection fix. Clean.
+- `21388a0a` (as `11abb491e`) -- GitService checkIsRepo fix. 1 import conflict resolved (kept LLxprt imports + added upstream's debugLogger import).
+
+Reclassified:
+- `873d10df` -> REIMPLEMENT: terse image path transformations had 6 conflicted files across InputPrompt, text-buffer, vim-buffer, highlight — these areas have diverged significantly in LLxprt (secureInputHandler, buildSegmentsForVisualSlice, etc.)
+- `0eb84f51` -> SKIP: integration-tests/hooks-agent-flow.test.ts deleted in LLxprt (modify/delete conflict)
+
+Full verify: lint PASS, typecheck PASS, test 106 failures -- ALL PRE-EXISTING (confirmed same failures on main branch, caused by ajv-formats + ProviderRuntimeContext issues, not by cherry-picks).
+
 <!-- Append batch notes below this line -->
