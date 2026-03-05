@@ -22,7 +22,7 @@ describe('readStdin', () => {
   let originalStdin: typeof process.stdin;
   let onReadableHandler: () => void;
   let onEndHandler: () => void;
-  let onErrorHandler: (err: Error) => void;
+  let _onErrorHandler: (err: Error) => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,11 +40,13 @@ describe('readStdin', () => {
       (event: string, handler: (...args: unknown[]) => void) => {
         if (event === 'readable') onReadableHandler = handler as () => void;
         if (event === 'end') onEndHandler = handler as () => void;
-        if (event === 'error') onErrorHandler = handler as (err: Error) => void;
+        if (event === 'error') _onErrorHandler = handler as (err: Error) => void;
       },
     );
     mockStdin.listeners.mockReturnValue([]);
     mockStdin.listenerCount.mockReturnValue(0);
+    // Suppress TS6133: _onErrorHandler is captured but not used in current tests
+    void _onErrorHandler;
   });
 
   afterEach(() => {
