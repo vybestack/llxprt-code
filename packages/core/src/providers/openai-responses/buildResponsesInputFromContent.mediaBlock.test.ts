@@ -98,7 +98,7 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     });
   });
 
-  it('converts MediaBlock in tool responses to multipart output array', () => {
+  it('converts MediaBlock in tool responses to function_call_output + synthetic user message with image', () => {
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -136,15 +136,15 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
 
     const result = buildResponsesInputFromContent(contents);
 
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(4);
     expect(result[2]).toEqual({
       type: 'function_call_output',
       call_id: 'call_123',
-      output: [
-        {
-          type: 'input_text',
-          text: 'Screenshot taken',
-        },
+      output: 'Screenshot taken',
+    });
+    expect(result[3]).toEqual({
+      role: 'user',
+      content: [
         {
           type: 'input_image',
           image_url: 'data:image/png;base64,screenshotdata',
@@ -216,11 +216,15 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
 
     const result = buildResponsesInputFromContent(contents);
 
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(3);
     expect(result[1]).toEqual({
       type: 'function_call_output',
       call_id: 'call_456',
-      output: [
+      output: '',
+    });
+    expect(result[2]).toEqual({
+      role: 'user',
+      content: [
         {
           type: 'input_image',
           image_url: 'data:image/png;base64,imagedata',
@@ -345,7 +349,7 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     });
   });
 
-  it('converts PDF MediaBlock in tool response to input_file', () => {
+  it('converts PDF MediaBlock in tool response to function_call_output + synthetic user message with file', () => {
     const contents: IContent[] = [
       {
         speaker: 'ai',
@@ -380,16 +384,21 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
 
     const result = buildResponsesInputFromContent(contents);
 
-    const toolOutput = result[1] as {
-      type: string;
-      output: unknown[];
-    };
-    expect(toolOutput.type).toBe('function_call_output');
-    expect(toolOutput.output).toHaveLength(2);
-    expect(toolOutput.output[1]).toEqual({
-      type: 'input_file',
-      file_data: 'data:application/pdf;base64,JVBERi0xLjQ=',
-      filename: 'doc.pdf',
+    expect(result).toHaveLength(3);
+    expect(result[1]).toEqual({
+      type: 'function_call_output',
+      call_id: 'call_pdf1',
+      output: 'PDF content',
+    });
+    expect(result[2]).toEqual({
+      role: 'user',
+      content: [
+        {
+          type: 'input_file',
+          file_data: 'data:application/pdf;base64,JVBERi0xLjQ=',
+          filename: 'doc.pdf',
+        },
+      ],
     });
   });
 
