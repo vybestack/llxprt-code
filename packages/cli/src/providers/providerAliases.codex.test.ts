@@ -68,13 +68,13 @@ describe('Codex provider alias', () => {
     expect(codexAlias?.config.description?.toLowerCase()).toContain('codex');
   });
 
-  it('should include staticModels with gpt-5.3-codex first', () => {
+  it('should include staticModels with gpt-5.4 first', () => {
     const aliases = loadProviderAliasEntries();
     const codexAlias = aliases.find((a) => a.alias === 'codex');
 
     expect(codexAlias?.config.staticModels).toBeDefined();
     expect(Array.isArray(codexAlias?.config.staticModels)).toBe(true);
-    expect(codexAlias?.config.staticModels?.[0]?.id).toBe('gpt-5.3-codex');
+    expect(codexAlias?.config.staticModels?.[0]?.id).toBe('gpt-5.4');
     expect(
       codexAlias?.config.staticModels?.some((m) => m.id === 'gpt-5.2-codex'),
     ).toBe(true);
