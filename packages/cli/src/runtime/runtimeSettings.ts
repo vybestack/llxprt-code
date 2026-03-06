@@ -2063,6 +2063,31 @@ export async function switchActiveProvider(
     }
   }
 
+  // @fix issue1683 - Clear conversation history on provider switch to prevent
+  // cross-provider format mismatches (e.g. tool call ID formats, thinking blocks)
+  // that cause API errors like "Missing required parameter".
+  try {
+    const geminiClient = config.getGeminiClient?.();
+    const historyService = geminiClient?.getHistoryService?.();
+    if (historyService) {
+      historyService.clear();
+      infoMessages.push(
+        'Conversation history cleared for provider compatibility.',
+      );
+      logger.debug(
+        () =>
+          `[cli-runtime] Cleared HistoryService on provider switch from ${currentProvider ?? 'none'} to ${name}`,
+      );
+    }
+  } catch (error) {
+    logger.debug(
+      () =>
+        `[cli-runtime] Failed to clear history on provider switch: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+  }
+
   return {
     changed: true,
     previousProvider: currentProvider,

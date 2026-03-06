@@ -242,6 +242,42 @@ describe('Runtime Provider Switching Integration', () => {
     expect(config.getModel()).toBe('custom-default-model');
     expect(providerB.getModels).not.toHaveBeenCalled();
   });
+  it('clears conversation history when switching providers', async () => {
+    const providerA = createMockProvider('providerA');
+    const providerB = createMockProvider('providerB');
+    providerManager.registerProvider(providerA);
+    providerManager.registerProvider(providerB);
+
+    providerManager.setActiveProvider('providerA');
+
+    // Add some conversation history via the GeminiClient's HistoryService
+    const historyService = config.getGeminiClient()?.getHistoryService?.();
+    if (historyService) {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello from providerA' }],
+      });
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Response from providerA' }],
+      });
+      expect(historyService.getAll().length).toBeGreaterThan(0);
+    }
+
+    const result = await switchActiveProvider('providerB');
+
+    expect(result.changed).toBe(true);
+    // History should be cleared after switch
+    if (historyService) {
+      expect(historyService.getAll()).toHaveLength(0);
+    }
+    // Info message about clearing should be present
+    expect(
+      result.infoMessages.some((msg) =>
+        msg.includes('Conversation history cleared'),
+      ),
+    ).toBe(true);
+  });
 });
 function createMockProvider(name: string): IProvider & {
   apiKey?: string;
