@@ -8,6 +8,8 @@ import type { Config } from '../config/config.js';
 import type { HookDefinition, HookConfig } from './types.js';
 import { HookEventName } from './types.js';
 import { DebugLogger } from '../debug/index.js';
+import { TrustedHooksManager } from './trustedHooks.js';
+import { coreEvents, CoreEvent } from '../utils/events.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:registry');
 
@@ -112,16 +114,74 @@ export class HookRegistry {
   }
 
   /**
+   * Check if project hooks are trusted, warn and auto-trust if not
+   */
+  private checkProjectHooksTrust(): void {
+    const projectHooks = this.config.getProjectHooks();
+    
+    // Collect all hook configs from project settings
+    const allProjectHooks: HookConfig[] = [];
+    if (projectHooks) {
+      for (const [key, eventDefinitions] of Object.entries(projectHooks)) {
+        // Skip the 'disabled' key
+        if (key === 'disabled') continue;
+        
+        if (Array.isArray(eventDefinitions)) {
+          for (const definition of eventDefinitions) {
+            if (definition && typeof definition === 'object' && 'hooks' in definition) {
+              const hookDef = definition;
+              if (hookDef.hooks) {
+                allProjectHooks.push(...hookDef.hooks);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (allProjectHooks.length === 0) {
+      return;
+    }
+
+    const trustManager = new TrustedHooksManager();
+    trustManager.load();
+
+    const untrusted = trustManager.getUntrustedHooks(allProjectHooks);
+    
+    if (untrusted.length > 0) {
+      const hookNames = untrusted.map(h => h.name || h.command).join(', ');
+      const warning = `WARNING: Project defines ${untrusted.length} untrusted hook(s): ${hookNames}. Auto-trusting to prevent future warnings.
+`;
+      
+      coreEvents.emit(CoreEvent.Output, {
+        chunk: warning,
+        isStderr: true,
+      });
+
+      trustManager.trustHooks(untrusted);
+    }
+  }
+
+  /**
    * Process hooks from the config that was already loaded by the CLI
    */
   private processHooksFromConfig(): void {
+    // Check project hooks trust if folder is trusted
+    if (this.config.isTrustedFolder()) {
+      this.checkProjectHooksTrust();
+    }
+
     // Get hooks from the main config (this comes from the merged settings)
     const configHooks = this.config.getHooks();
-    if (configHooks) {
+    
+    // Skip project hooks if folder is not trusted
+    if (!this.config.isTrustedFolder()) {
+      debugLogger.log('Skipping project hooks - folder not trusted');
+    } else if (configHooks) {
       this.processHooksConfiguration(configHooks, ConfigSource.Project);
     }
 
-    // Get hooks from extensions
+    // Get hooks from extensions (always allowed)
     const extensions = this.config.getExtensions() || [];
     for (const extension of extensions) {
       if (extension.isActive && extension.hooks) {
@@ -189,6 +249,9 @@ export class HookRegistry {
         typeof hookConfig === 'object' &&
         this.validateHookConfig(hookConfig, eventName, source)
       ) {
+        // Set source on the hook config for secondary security check
+        (hookConfig as { source?: ConfigSource }).source = source;
+        
         const hookName = this.getHookName({
           config: hookConfig,
         } as HookRegistryEntry);

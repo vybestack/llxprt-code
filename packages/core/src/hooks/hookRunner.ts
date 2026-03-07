@@ -199,6 +199,20 @@ export class HookRunner {
     input: HookInput,
     startTime: number,
   ): Promise<HookExecutionResult> {
+    // Secondary security check - block project hooks in untrusted folders
+    const { ConfigSource } = await import('./hookRegistry.js');
+    if (hookConfig.source === ConfigSource.Project && !this.config.isTrustedFolder()) {
+      const errorMessage = 'Project hook blocked - folder not trusted';
+      debugLogger.warn(errorMessage);
+      return {
+        hookConfig,
+        eventName,
+        success: false,
+        error: new Error(errorMessage),
+        duration: Date.now() - startTime,
+      };
+    }
+
     const timeout = hookConfig.timeout ?? DEFAULT_HOOK_TIMEOUT;
 
     return new Promise((resolve) => {

@@ -18,6 +18,16 @@ import type {
 import { defaultHookTranslator } from './hookTranslator.js';
 
 /**
+ * Generate a unique key for a hook configuration
+ * Used for deduplication and trust tracking
+ */
+export function getHookKey(hook: HookConfig): string {
+  const name = hook.name || '';
+  const command = hook.command || '';
+  return `${name}:${command}`;
+}
+
+/**
  * Event names for the hook system
  */
 export enum HookEventName {
@@ -43,6 +53,7 @@ export interface CommandHookConfig {
   name?: string;
   description?: string;
   timeout?: number;
+  source?: import('./hookRegistry.js').ConfigSource;
 }
 
 export type HookConfig = CommandHookConfig;
