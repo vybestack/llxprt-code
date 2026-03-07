@@ -91,7 +91,7 @@ export class ToolExecutor {
     if (beforeResult?.isBlockingDecision()) {
       const blockReason =
         beforeResult.getEffectiveReason() || 'Blocked by BeforeTool hook';
-      // Return error result instead of throwing
+      // Throw to signal blocking — caller converts to bufferError
       throw new Error(blockReason);
     }
 
