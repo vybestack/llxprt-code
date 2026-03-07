@@ -7,9 +7,10 @@
 .gemini/
 !gemini/config.yaml
 
-# llxprt-code settings (ignore contents except commands)
+# llxprt-code settings (ignore contents except shared config)
 .llxprt/*
 !.llxprt/commands/
+!.llxprt/LLXPRT.md
 
 # Note: .gemini-clipboard/ is NOT in gitignore so Gemini can access pasted images
 
