@@ -67,8 +67,8 @@ export function AuthModal(props: {
         Select an OAuth provider to authenticate:
       </text>
       <text fg={props.theme?.colors.text.muted}>
-        Note: You can also use API keys via /key, /keyfile, --key, --keyfile, or
-        environment variables
+        Note: You can also use API keys via /key, /keyfile, --key, --keyfile,
+        --key-name, or environment variables
       </text>
       <box flexDirection="column" style={{ gap: 0 }}>
         {renderAuthOptions(options, selectedIndex, props.theme)}

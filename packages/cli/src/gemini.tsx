@@ -661,6 +661,7 @@ export async function main() {
         _bootstrapArgs?: {
           keyOverride?: string | null;
           keyfileOverride?: string | null;
+          keyNameOverride?: string | null;
           setOverrides?: string[] | null;
           baseurlOverride?: string | null;
         };
