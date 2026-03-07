@@ -168,6 +168,17 @@ export const diagnosticsCommand: SlashCommand = {
       if (Object.keys(ephemeralSettings).length === 0) {
         diagnostics.push('- No ephemeral settings configured');
       } else {
+        const sensitiveKeys = new Set(['auth-key', 'apiKey', 'api-key']);
+
+        const formatSettingValue = (key: string, value: unknown): string => {
+          if (typeof value === 'string' && sensitiveKeys.has(key)) {
+            return maskSensitive(value);
+          }
+          return typeof value === 'object'
+            ? JSON.stringify(value)
+            : String(value);
+        };
+
         const authSettings: Array<[string, unknown]> = [];
         const toolSettings: Array<[string, unknown]> = [];
         const compressionSettings: Array<[string, unknown]> = [];
@@ -178,7 +189,11 @@ export const diagnosticsCommand: SlashCommand = {
             continue;
           }
 
-          if (key.startsWith('auth-')) {
+          if (
+            key.startsWith('auth-') ||
+            key === 'apiKey' ||
+            key === 'api-key'
+          ) {
             authSettings.push([key, value]);
           } else if (
             key.startsWith('tool-output-') ||
@@ -196,15 +211,9 @@ export const diagnosticsCommand: SlashCommand = {
         }
 
         if (authSettings.length > 0) {
-          if (authSettings.length > 0) {
-            diagnostics.push('- Authentication:');
-            for (const [key, value] of authSettings) {
-              diagnostics.push(
-                `  - ${key}: ${
-                  typeof value === 'string' ? maskSensitive(value) : value
-                }`,
-              );
-            }
+          diagnostics.push('- Authentication:');
+          for (const [key, value] of authSettings) {
+            diagnostics.push(`  - ${key}: ${formatSettingValue(key, value)}`);
           }
         }
 
@@ -225,7 +234,7 @@ export const diagnosticsCommand: SlashCommand = {
         if (otherSettings.length > 0) {
           diagnostics.push('- Other Settings:');
           for (const [key, value] of otherSettings) {
-            diagnostics.push(`  - ${key}: ${JSON.stringify(value)}`);
+            diagnostics.push(`  - ${key}: ${formatSettingValue(key, value)}`);
           }
         }
       }
