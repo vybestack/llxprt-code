@@ -1118,5 +1118,18 @@ describe('diagnosticsCommand OAuth token display', () => {
       expect(content).toContain('auth-key-name: work-anthropic');
       expect(content).not.toContain('supersecretapikey123');
     });
+
+    it('masks apiKey values and groups them under Authentication', async () => {
+      setupRuntimeMockWithEphemeral({
+        apiKey: 'sk-secretapikeyvalue1234',
+      });
+
+      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const content = (result as MessageActionReturn).content;
+
+      expect(content).toContain('Authentication:');
+      expect(content).toContain('apiKey:');
+      expect(content).not.toContain('sk-secretapikeyvalue1234');
+    });
   });
 });
