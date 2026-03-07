@@ -213,9 +213,7 @@ export const diagnosticsCommand: SlashCommand = {
         if (authSettings.length > 0) {
           diagnostics.push('- Authentication:');
           for (const [key, value] of authSettings) {
-            diagnostics.push(
-              `  - ${key}: ${formatSettingValue(key, value)}`,
-            );
+            diagnostics.push(`  - ${key}: ${formatSettingValue(key, value)}`);
           }
         }
 
@@ -236,9 +234,7 @@ export const diagnosticsCommand: SlashCommand = {
         if (otherSettings.length > 0) {
           diagnostics.push('- Other Settings:');
           for (const [key, value] of otherSettings) {
-            diagnostics.push(
-              `  - ${key}: ${formatSettingValue(key, value)}`,
-            );
+            diagnostics.push(`  - ${key}: ${formatSettingValue(key, value)}`);
           }
         }
       }
