@@ -39,6 +39,13 @@ export interface PolicyRule {
    * Default is 0.
    */
   priority?: number;
+
+  /**
+   * Allow shell redirections (>, |, etc.) in this rule.
+   * Only applies to shell tools.
+   * Default is false.
+   */
+  allowRedirection?: boolean;
 }
 
 export interface PolicyEngineConfig {

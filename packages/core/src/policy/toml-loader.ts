@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import toml from '@iarna/toml';
 import { z, type ZodError } from 'zod';
+import { buildArgsPatterns } from './utils.js';
 
 /**
  * Schema for a single policy rule in the TOML file (before transformation).
@@ -38,6 +39,7 @@ const PolicyRuleSchema = z.object({
         'priority must be <= 999 to prevent tier overflow. Priorities >= 1000 would jump to the next tier.',
     }),
   modes: z.array(z.string()).optional(),
+  allowRedirection: z.boolean().optional(),
 });
 
 /**
@@ -295,29 +297,54 @@ export async function loadPoliciesFromToml(
             return rule.modes.includes(approvalMode);
           })
           .flatMap((rule) => {
-            // Transform commandPrefix/commandRegex to argsPattern
-            let effectiveArgsPattern = rule.argsPattern;
-            const commandPrefixes: string[] = [];
-
-            if (rule.commandPrefix) {
-              const prefixes = Array.isArray(rule.commandPrefix)
-                ? rule.commandPrefix
-                : [rule.commandPrefix];
-              commandPrefixes.push(...prefixes);
-            } else if (rule.commandRegex) {
-              effectiveArgsPattern = `"command":"${rule.commandRegex}`;
+            // Build argsPatterns using utility function, with error handling
+            let argsPatternRegex: RegExp | undefined;
+            if (rule.argsPattern) {
+              try {
+                argsPatternRegex = new RegExp(rule.argsPattern);
+              } catch (e) {
+                const error = e as Error;
+                errors.push({
+                  filePath,
+                  fileName: file,
+                  tier: tierName,
+                  errorType: 'regex_compilation',
+                  message: 'Invalid regex pattern',
+                  details: `Pattern: ${rule.argsPattern}\nError: ${error.message}`,
+                  suggestion:
+                    'Check regex syntax for errors like unmatched brackets or invalid escape sequences',
+                });
+                return [];
+              }
             }
 
-            // Expand command prefixes to multiple patterns
-            const argsPatterns: Array<string | undefined> =
-              commandPrefixes.length > 0
-                ? commandPrefixes.map(
-                    (prefix) =>
-                      '"command":"' +
-                      escapeRegex(prefix) +
-                      String.raw`(?:[\s"]|$)`,
-                  )
-                : [effectiveArgsPattern];
+            let patterns: RegExp[];
+            try {
+              patterns = buildArgsPatterns(
+                argsPatternRegex,
+                rule.commandPrefix,
+                rule.commandRegex,
+              );
+            } catch (e) {
+              const error = e as Error;
+              const patternStr =
+                rule.commandRegex || rule.commandPrefix || 'unknown';
+              errors.push({
+                filePath,
+                fileName: file,
+                tier: tierName,
+                errorType: 'regex_compilation',
+                message: 'Invalid regex pattern',
+                details: `Pattern: ${patternStr}\nError: ${error.message}`,
+                suggestion:
+                  'Check regex syntax for errors like unmatched brackets or invalid escape sequences',
+              });
+              return [];
+            }
+
+            // If no patterns, use undefined (wildcard)
+            const argsPatterns: Array<RegExp | undefined> =
+              patterns.length > 0 ? patterns : [undefined];
 
             // For each argsPattern, expand toolName arrays
             return argsPatterns.flatMap((argsPattern) => {
@@ -343,28 +370,9 @@ export async function loadPoliciesFromToml(
                   toolName: effectiveToolName,
                   decision: rule.decision,
                   priority: transformPriority(rule.priority, tier),
+                  argsPattern,
+                  allowRedirection: rule.allowRedirection,
                 };
-
-                // Compile regex pattern
-                if (argsPattern) {
-                  try {
-                    policyRule.argsPattern = new RegExp(argsPattern);
-                  } catch (e) {
-                    const error = e as Error;
-                    errors.push({
-                      filePath,
-                      fileName: file,
-                      tier: tierName,
-                      errorType: 'regex_compilation',
-                      message: 'Invalid regex pattern',
-                      details: `Pattern: ${argsPattern}\nError: ${error.message}`,
-                      suggestion:
-                        'Check regex syntax for errors like unmatched brackets or invalid escape sequences',
-                    });
-                    // Skip this rule if regex compilation fails
-                    return null;
-                  }
-                }
 
                 return policyRule;
               });
