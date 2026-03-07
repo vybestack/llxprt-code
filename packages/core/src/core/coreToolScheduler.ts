@@ -34,7 +34,6 @@ import { PolicyDecision } from '../policy/types.js';
 import { DEFAULT_AGENT_ID } from './turn.js';
 import {
   type Part,
-  type PartListUnion,
   type FunctionCall,
 } from '@google/genai';
 import {
@@ -46,10 +45,14 @@ import * as Diff from 'diff';
 import levenshtein from 'fast-levenshtein';
 import { doesToolInvocationMatch } from '../utils/tool-utils.js';
 import {
-  limitOutputTokens,
   DEFAULT_MAX_TOKENS,
   type ToolOutputSettingsProvider,
 } from '../utils/toolOutputLimiter.js';
+import {
+  convertToFunctionResponse,
+  extractAgentIdFromMetadata,
+  createErrorResponse,
+} from '../utils/generateContentResponseUtilities.js';
 import { DebugLogger } from '../debug/index.js';
 import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
 import { triggerToolNotificationHook } from './coreToolHookTriggers.js';
@@ -104,198 +107,6 @@ export type {
 /**
  * Formats tool output for a Gemini FunctionResponse.
  */
-function createFunctionResponsePart(
-  callId: string,
-  toolName: string,
-  output: string,
-): Part {
-  return {
-    functionResponse: {
-      id: callId,
-      name: toolName,
-      response: { output },
-    },
-  };
-}
-
-function limitStringOutput(
-  text: string,
-  toolName: string,
-  config?: ToolOutputSettingsProvider,
-): string {
-  if (!config || typeof config.getEphemeralSettings !== 'function') {
-    return text;
-  }
-  const limited = limitOutputTokens(text, config, toolName);
-  if (!limited.wasTruncated) {
-    return limited.content;
-  }
-  if (limited.content && limited.content.length > 0) {
-    return limited.content;
-  }
-  return limited.message ?? '';
-}
-
-function limitFunctionResponsePart(
-  part: Part,
-  toolName: string,
-  config?: ToolOutputSettingsProvider,
-): Part {
-  if (!config || !part.functionResponse) {
-    return part;
-  }
-  const response = part.functionResponse.response;
-  if (!response || typeof response !== 'object') {
-    return part;
-  }
-  const existingOutput = response['output'];
-  if (typeof existingOutput !== 'string') {
-    return part;
-  }
-  const limitedOutput = limitStringOutput(existingOutput, toolName, config);
-  if (limitedOutput === existingOutput) {
-    return part;
-  }
-  return {
-    ...part,
-    functionResponse: {
-      ...part.functionResponse,
-      response: {
-        ...response,
-        output: limitedOutput,
-      },
-    },
-  };
-}
-
-export function convertToFunctionResponse(
-  toolName: string,
-  callId: string,
-  llmContent: PartListUnion,
-  config?: ToolOutputSettingsProvider,
-): Part[] {
-  // Handle simple string case
-  if (typeof llmContent === 'string') {
-    const limitedOutput = limitStringOutput(llmContent, toolName, config);
-    return [createFunctionResponsePart(callId, toolName, limitedOutput)];
-  }
-
-  const parts = toParts(llmContent);
-
-  // Separate text from binary types
-  const textParts: string[] = [];
-  const inlineDataParts: Part[] = [];
-  const fileDataParts: Part[] = [];
-
-  for (const part of parts) {
-    if (part.text !== undefined) {
-      textParts.push(part.text);
-    } else if (part.inlineData) {
-      inlineDataParts.push(part);
-    } else if (part.fileData) {
-      fileDataParts.push(part);
-    } else if (part.functionResponse) {
-      // Passthrough case - preserve existing response
-      if (parts.length > 1) {
-        toolSchedulerLogger.warn(
-          'convertToFunctionResponse received multiple parts with a functionResponse. ' +
-            'Only the functionResponse will be used, other parts will be ignored',
-        );
-      }
-      const passthroughPart = {
-        functionResponse: {
-          id: callId,
-          name: toolName,
-          response: part.functionResponse.response,
-        },
-      };
-      // Apply output limits to the passthrough case as well
-      return [limitFunctionResponsePart(passthroughPart, toolName, config)];
-    }
-    // Ignore other part types (e.g., functionCall)
-  }
-
-  // Build the primary response part
-  const part: Part = {
-    functionResponse: {
-      id: callId,
-      name: toolName,
-      response: textParts.length > 0 ? { output: textParts.join('\n') } : {},
-    },
-  };
-
-  // Handle binary content - use sibling format for all providers
-  const siblingParts: Part[] = [...fileDataParts, ...inlineDataParts];
-
-  // Add descriptive text if response object is empty but we have binary content
-  if (
-    textParts.length === 0 &&
-    (inlineDataParts.length > 0 || fileDataParts.length > 0)
-  ) {
-    const totalBinaryItems = inlineDataParts.length + fileDataParts.length;
-    part.functionResponse!.response = {
-      output: `Binary content provided (${totalBinaryItems} item(s)).`,
-    };
-  }
-
-  // Apply output limits to the functionResponse
-  const limitedPart = limitFunctionResponsePart(part, toolName, config);
-
-  if (siblingParts.length > 0) {
-    return [limitedPart, ...siblingParts];
-  }
-
-  return [limitedPart];
-}
-
-function extractAgentIdFromMetadata(
-  metadata: Record<string, unknown> | undefined,
-): string | undefined {
-  if (!metadata) {
-    return undefined;
-  }
-  const candidate = metadata['agentId'];
-  if (typeof candidate === 'string' && candidate.trim().length > 0) {
-    return candidate;
-  }
-  return undefined;
-}
-
-function toParts(input: PartListUnion): Part[] {
-  const parts: Part[] = [];
-  for (const part of Array.isArray(input) ? input : [input]) {
-    if (typeof part === 'string') {
-      parts.push({ text: part });
-    } else if (part) {
-      parts.push(part);
-    }
-  }
-  return parts;
-}
-
-const createErrorResponse = (
-  request: ToolCallRequestInfo,
-  error: Error,
-  errorType: ToolErrorType | undefined,
-): ToolCallResponseInfo => ({
-  callId: request.callId,
-  error,
-  responseParts: [
-    // Only functionResponse — the functionCall is already recorded in history
-    // from the model's assistant message. Re-emitting it here would create
-    // orphan tool_use blocks for Anthropic (Issue #244).
-    {
-      functionResponse: {
-        id: request.callId,
-        name: request.name,
-        response: { error: error.message },
-      },
-    },
-  ],
-  resultDisplay: error.message,
-  errorType,
-  agentId: request.agentId ?? DEFAULT_AGENT_ID,
-});
 
 export interface CoreToolSchedulerOptions {
   config: Config;
