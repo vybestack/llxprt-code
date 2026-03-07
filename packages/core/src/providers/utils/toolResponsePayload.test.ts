@@ -173,6 +173,23 @@ warn`);
       expect(() => JSON.stringify({ content: payload.result })).not.toThrow();
     });
 
+    it('should sanitize unpaired surrogates in error field', () => {
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'test_tool',
+        result: 'some result',
+        error: 'Error with\uD800unpaired surrogate in error',
+      };
+
+      const payload = buildToolResponsePayload(block);
+
+      expect(payload.error).toBeDefined();
+      expect(payload.error).not.toContain('\uD800');
+      expect(payload.error).toContain('Error with');
+      expect(() => JSON.stringify({ error: payload.error })).not.toThrow();
+    });
+
     it('should preserve valid surrogate pairs (emoji)', () => {
       const block: ToolResponseBlock = {
         type: 'tool_response',

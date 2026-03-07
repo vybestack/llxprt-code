@@ -257,7 +257,7 @@ export function buildToolResponsePayload(
   }
 
   if (block.error) {
-    payload.error = coerceToString(block.error, humanizeJson);
+    payload.error = sanitizeUnicode(coerceToString(block.error, humanizeJson));
   }
 
   return payload;
