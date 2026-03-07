@@ -1439,6 +1439,13 @@ export async function loadCliConfig(
     enableExtensionReloading:
       effectiveSettings.experimental?.extensionReloading,
     blockedMcpServers,
+    allowedEnvironmentVariables:
+      effectiveSettings.security?.environmentVariableRedaction?.allowed,
+    blockedEnvironmentVariables:
+      effectiveSettings.security?.environmentVariableRedaction?.blocked,
+    enableEnvironmentVariableRedaction:
+      effectiveSettings.security?.environmentVariableRedaction?.enabled ?? false,
+
     skillsSupport: effectiveSettings.experimental?.skills,
     disabledSkills: effectiveSettings.skills?.disabled,
     noBrowser: !!process.env.NO_BROWSER,

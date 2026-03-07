@@ -23,6 +23,8 @@ import type {
 } from './types.js';
 import type { LLMRequest } from './hookTranslator.js';
 import { DebugLogger } from '../debug/index.js';
+import type { Config } from '../config/config.js';
+import { sanitizeEnvironment } from '../services/environmentSanitization.js';
 import {
   escapeShellArg,
   getShellConfiguration,
@@ -47,7 +49,11 @@ const EXIT_CODE_NON_BLOCKING_ERROR = 1;
  * Hook runner that executes command hooks
  */
 export class HookRunner {
-  constructor() {}
+  private readonly config: Config;
+
+  constructor(config: Config) {
+    this.config = config;
+  }
 
   /**
    * Execute a single hook
@@ -227,7 +233,7 @@ export class HookRunner {
 
       // Set up environment variables
       const env = {
-        ...process.env,
+        ...sanitizeEnvironment(process.env, this.config.sanitizationConfig),
         LLXPRT_PROJECT_DIR: input.cwd,
       };
 

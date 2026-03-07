@@ -1247,6 +1247,51 @@ export const SETTINGS_SCHEMA = {
           },
         },
       },
+      environmentVariableRedaction: {
+        type: 'object',
+        label: 'Environment Variable Redaction',
+        category: 'Security',
+        requiresRestart: false,
+        default: {},
+        description:
+          'Configure environment variable sanitization for shell commands, hooks, and MCP servers.',
+        showInDialog: false,
+        properties: {
+          allowed: {
+            type: 'array',
+            label: 'Allowed Variables',
+            category: 'Security',
+            requiresRestart: false,
+            default: [],
+            items: { type: 'string' },
+            description:
+              'Environment variables to allow in addition to the default allowlist.',
+            showInDialog: true,
+          },
+          blocked: {
+            type: 'array',
+            label: 'Blocked Variables',
+            category: 'Security',
+            requiresRestart: false,
+            default: [],
+            items: { type: 'string' },
+            description:
+              'Environment variables to block in addition to the default blocklist.',
+            showInDialog: true,
+          },
+          enabled: {
+            type: 'boolean',
+            label: 'Enable Redaction',
+            category: 'Security',
+            requiresRestart: false,
+            default: false,
+            description:
+              'Enable environment variable redaction (disabled by default).',
+            showInDialog: true,
+          },
+        },
+      },
+
     },
   },
 
