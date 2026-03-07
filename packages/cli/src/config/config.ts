@@ -43,6 +43,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import { Settings } from './settings.js';
+import { getEnableHooks } from './settingsSchema.js';
 import { createPolicyEngineConfig } from './policy.js';
 
 import { annotateActiveExtensions } from './extension.js';
@@ -1477,7 +1478,7 @@ export async function loadCliConfig(
         : argv.continue || false,
     // TODO: loading of hooks based on workspace trust
     jitContextEnabled,
-    enableHooks: effectiveSettings.tools?.enableHooks ?? false,
+    enableHooks: getEnableHooks(effectiveSettings),
     hooks: (() => {
       const hooksConfig = effectiveSettings.hooks || {};
       // Filter out the 'disabled' property from hooks config as it's handled separately

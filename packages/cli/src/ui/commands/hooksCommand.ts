@@ -33,7 +33,7 @@ async function listHooks(context: CommandContext): Promise<void> {
     context.ui.addItem(
       {
         type: MessageType.INFO,
-        text: 'Hooks system is not enabled. Enable it in settings with tools.enableHooks.',
+        text: 'Hooks system is not enabled. Enable it in settings with hooks.enabled.',
       },
       Date.now(),
     );

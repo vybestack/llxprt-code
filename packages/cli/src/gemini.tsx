@@ -1243,11 +1243,23 @@ export async function main() {
 
   initializeOutputListenersAndFlush();
 
-  // Fire SessionStart hook for non-interactive mode
-  await triggerSessionStartHook(
+  // Fire SessionStart hook for non-interactive mode and inject context
+  const sessionStartOutput = await triggerSessionStartHook(
     nonInteractiveConfig,
     SessionStartSource.Startup,
   );
+  if (sessionStartOutput) {
+    // Display system message
+    if (sessionStartOutput.systemMessage) {
+      writeToStderr(`${sessionStartOutput.systemMessage}\n`);
+    }
+    
+    // Prepend additional context to input
+    const additionalContext = sessionStartOutput.getAdditionalContext();
+    if (additionalContext) {
+      input = `${additionalContext}\n\n${input}`;
+    }
+  }
 
   try {
     await runNonInteractive({

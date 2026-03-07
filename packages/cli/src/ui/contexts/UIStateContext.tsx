@@ -154,6 +154,7 @@ export interface UIState {
   llxprtMdFileCount: number;
   branchName: string | undefined;
   errorCount: number;
+  activeHooks?: Array<import('../types.js').ActiveHook>;
 
   // Console and messages
   consoleMessages: ConsoleMessageItem[];

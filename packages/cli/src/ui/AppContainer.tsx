@@ -28,6 +28,7 @@ import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useFolderTrust } from './hooks/useFolderTrust.js';
+import { useHookDisplayState } from './hooks/useHookDisplayState.js';
 import { useWelcomeOnboarding } from './hooks/useWelcomeOnboarding.js';
 import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
@@ -81,6 +82,8 @@ import {
   type UserFeedbackPayload,
   ShellExecutionService,
   type RecordingIntegration,
+  triggerSessionStartHook,
+  SessionStartSource,
   triggerSessionEndHook,
   SessionEndReason,
   type SessionRecordingService,
@@ -233,6 +236,47 @@ export const AppContainer = (props: AppContainerProps) => {
 
     hasSeededResumedHistory.current = true;
   }, [loadHistory, resumedHistory]);
+  
+  // Trigger SessionStart hook on initialization
+  const hasTriggeredSessionStart = useRef(false);
+  useEffect(() => {
+    if (hasTriggeredSessionStart.current) {
+      return;
+    }
+    hasTriggeredSessionStart.current = true;
+    
+    const initializeSession = async () => {
+      const sessionStartOutput = await triggerSessionStartHook(
+        config,
+        SessionStartSource.Startup,
+      );
+      
+      if (sessionStartOutput) {
+        // Display system message
+        if (sessionStartOutput.systemMessage) {
+          addItem({
+            type: 'info',
+            text: sessionStartOutput.systemMessage,
+          });
+        }
+        
+        // Add additional context to history
+        const additionalContext = sessionStartOutput.getAdditionalContext();
+        if (additionalContext) {
+          const geminiClient = config.getGeminiClient();
+          if (geminiClient) {
+            await geminiClient.addHistory({
+              role: 'user',
+              parts: [{ text: additionalContext }],
+            });
+          }
+        }
+      }
+    };
+    
+    void initializeSession();
+  }, [config, addItem]);
+  
   useMemoryMonitor({ addItem });
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
@@ -2037,6 +2081,9 @@ export const AppContainer = (props: AppContainerProps) => {
     config.setPtyTerminalSize(mainAreaWidth, terminalHeight);
   }, [config, mainAreaWidth, terminalHeight]);
 
+  // Track actively executing hooks for visual indicators
+  const activeHooks = useHookDisplayState(config);
+
   // Build UIState object
   const uiState: UIState = {
     // Core app context
@@ -2138,6 +2185,7 @@ export const AppContainer = (props: AppContainerProps) => {
     llxprtMdFileCount,
     branchName,
     errorCount,
+    activeHooks,
 
     // Console and messages
     consoleMessages: filteredConsoleMessages,

@@ -418,3 +418,13 @@ export interface ConfirmationRequest {
 export interface LoopDetectionConfirmationRequest {
   onComplete: (result: { userSelection: 'disable' | 'keep' }) => void;
 }
+
+/**
+ * Represents an actively executing hook for UI display
+ */
+export interface ActiveHook {
+  name: string;
+  eventName: string;
+  index?: number;
+  total?: number;
+}

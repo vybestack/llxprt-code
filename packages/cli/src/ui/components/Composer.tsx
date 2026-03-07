@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import { Box, Text, useIsScreenReaderEnabled } from 'ink';
 import { LoadingIndicator } from './LoadingIndicator.js';
-import { ContextSummaryDisplay } from './ContextSummaryDisplay.js';
+import { StatusDisplay } from './StatusDisplay.js';
 import { AutoAcceptIndicator } from './AutoAcceptIndicator.js';
 import { ShellModeIndicator } from './ShellModeIndicator.js';
 import { DetailedMessagesDisplay } from './DetailedMessagesDisplay.js';
@@ -112,7 +112,8 @@ export const Composer = () => {
           ) : (
             !settings.merged.ui?.hideContextSummary &&
             !hideContextSummary && (
-              <ContextSummaryDisplay
+              <StatusDisplay
+                activeHooks={uiState.activeHooks ?? []}
                 ideContext={uiState.ideContextState}
                 geminiMdFileCount={uiState.geminiMdFileCount}
                 contextFileNames={contextFileNames}

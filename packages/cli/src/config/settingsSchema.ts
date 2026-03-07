@@ -1080,12 +1080,12 @@ export const SETTINGS_SCHEMA = {
       },
       enableHooks: {
         type: 'boolean',
-        label: 'Enable Hooks System',
+        label: 'Enable Hooks System (Experimental)',
         category: 'Advanced',
         requiresRestart: true,
-        default: false,
+        default: true,
         description:
-          'Enable the hooks system for intercepting and customizing LLxprt CLI behavior. When enabled, hooks configured in settings will execute at appropriate lifecycle events (BeforeTool, AfterTool, BeforeModel, etc.). Requires MessageBus integration.',
+          'Enables the hooks system experiment. When disabled, the hooks system is completely deactivated regardless of other settings.',
         showInDialog: false,
       },
     },
@@ -1827,6 +1827,25 @@ export const SETTINGS_SCHEMA = {
     showInDialog: false,
     mergeStrategy: MergeStrategy.SHALLOW_MERGE,
     properties: {
+      enabled: {
+        type: 'boolean',
+        label: 'Enable Hooks',
+        category: 'Advanced',
+        requiresRestart: false,
+        default: false,
+        description:
+          'Canonical toggle for the hooks system. When disabled, no hooks will be executed.',
+        showInDialog: false,
+      },
+      notifications: {
+        type: 'boolean',
+        label: 'Hook Notifications',
+        default: true,
+        category: 'Advanced',
+        description:
+          'Show visual indicators when hooks are executing.',
+        showInDialog: false,
+      },
       disabled: {
         type: 'array',
         label: 'Disabled Hooks',
@@ -2175,6 +2194,16 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
 
 export function getSettingsSchema(): SettingsSchemaType {
   return SETTINGS_SCHEMA;
+}
+
+/**
+ * Determines if hooks should be enabled based on both experimental flag and user setting.
+ * Both tools.enableHooks (experimental gate) and hooks.enabled (user toggle) must be true.
+ */
+export function getEnableHooks(settings: Settings): boolean {
+  const experimentalGate = settings.tools?.enableHooks ?? true;
+  const userToggle = settings.hooks?.enabled ?? false;
+  return experimentalGate && userToggle;
 }
 
 type InferSettings<T extends SettingsSchema> = {
