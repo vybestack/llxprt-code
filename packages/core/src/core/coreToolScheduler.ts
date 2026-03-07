@@ -71,7 +71,6 @@ import type {
   ToolCall,
   CompletedToolCall,
   Status,
-  ConfirmHandler,
   OutputUpdateHandler,
   AllToolCallsCompleteHandler,
   ToolCallsUpdateHandler,
