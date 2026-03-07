@@ -214,10 +214,8 @@ describe('TerminalCapabilityManager', () => {
     expect(enableKittyKeyboardProtocol).toHaveBeenCalled();
   });
 
-  it('should disable Kitty protocol', async () => {
-    const { disableKittyKeyboardProtocol } = await import(
-      '@vybestack/llxprt-code-core'
-    );
+  it('should disable Kitty protocol synchronously on TTY', async () => {
+    const { writeSync } = await import('node:fs');
     const manager = TerminalCapabilityManager.getInstance();
     const promise = manager.detectCapabilities();
 
@@ -229,7 +227,11 @@ describe('TerminalCapabilityManager', () => {
 
     manager.disableKittyProtocol();
     expect(manager.isKittyProtocolEnabled()).toBe(false);
-    expect(disableKittyKeyboardProtocol).toHaveBeenCalled();
+
+    expect(vi.mocked(writeSync)).toHaveBeenCalledWith(stdout.fd, '\x1b[<u');
+    expect(vi.mocked(writeSync)).toHaveBeenCalledWith(stdout.fd, '\x1b[?1049l');
+    expect(vi.mocked(writeSync)).toHaveBeenCalledWith(stdout.fd, '\x1b[=0;1u');
+    expect(vi.mocked(writeSync)).toHaveBeenCalledWith(stdout.fd, '\x1b[?1006l');
   });
 
   it('should re-enable Kitty protocol after disable', async () => {
