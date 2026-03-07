@@ -5,9 +5,11 @@
  */
 
 import { isDevelopment } from '../utils/installationInfo.js';
-import type { SlashCommand } from '../ui/commands/types.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { SlashCommand, CommandContext } from '../ui/commands/types.js';
+import type { Config, MessageActionReturn } from '@vybestack/llxprt-code-core';
+import { CommandKind } from '@vybestack/llxprt-code-core';
 import type { ICommandLoader } from './types.js';
+
 import type { ExtensionEnablementManager } from '../config/extensions/extensionEnablement.js';
 import { aboutCommand } from '../ui/commands/aboutCommand.js';
 import { authCommand } from '../ui/commands/authCommand.js';
@@ -139,6 +141,26 @@ export class BuiltinCommandLoader implements ICommandLoader {
       helpCommand,
       ideCommand(this.config),
       initCommand,
+      ...(this.config?.getMcpEnabled() === false
+        ? [
+            {
+              name: 'mcp',
+              description:
+                'Manage configured Model Context Protocol (MCP) servers',
+              kind: CommandKind.BUILT_IN,
+              autoExecute: false,
+              subCommands: [],
+              action: async (
+                _context: CommandContext,
+              ): Promise<MessageActionReturn> => ({
+                type: 'message',
+                messageType: 'error',
+                content: 'MCP disabled by your admin.',
+              }),
+            } as SlashCommand,
+          ]
+        : [mcpCommand]),
+
       mcpCommand,
       memoryCommand,
       privacyCommand,

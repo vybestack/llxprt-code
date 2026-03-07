@@ -275,6 +275,8 @@ export interface ConfigParameters {
   mcpServerCommand?: string;
   mcpServers?: Record<string, MCPServerConfig>;
   userMemory?: string;
+  mcpEnabled?: boolean;
+
   geminiMdFileCount?: number;
   geminiMdFilePaths?: string[];
   approvalMode?: ApprovalMode;
@@ -360,6 +362,8 @@ export interface ConfigParameters {
 }
 
 export class Config {
+  private readonly mcpEnabled: boolean;
+
   private toolRegistry!: ToolRegistry;
   private mcpClientManager?: McpClientManager;
   private allowedMcpServers: string[];
@@ -514,6 +518,8 @@ export class Config {
     this.mcpServers = params.mcpServers;
     this.allowedMcpServers = params.allowedMcpServers ?? [];
     this.blockedMcpServers = params.blockedMcpServers ?? [];
+    this.mcpEnabled = params.mcpEnabled ?? true;
+
     this.allowedEnvironmentVariables = params.allowedEnvironmentVariables ?? [];
     this.blockedEnvironmentVariables = params.blockedEnvironmentVariables ?? [];
     this.enableEnvironmentVariableRedaction =
@@ -1134,6 +1140,11 @@ export class Config {
 
   getBlockedMcpServers(): string[] | undefined {
     return this.blockedMcpServers;
+  }
+
+
+  getMcpEnabled(): boolean {
+    return this.mcpEnabled;
   }
 
   get sanitizationConfig(): EnvironmentSanitizationConfig {

@@ -1156,17 +1156,25 @@ export async function loadCliConfig(
       argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
   }
 
-  // Override approval mode if disableYoloMode is set.
-  if (effectiveSettings.security?.disableYoloMode) {
+  // Override approval mode if disableYoloMode or secureModeEnabled is set.
+  if (
+    effectiveSettings.security?.disableYoloMode ||
+    effectiveSettings.admin?.secureModeEnabled
+  ) {
     if (approvalMode === ApprovalMode.YOLO) {
-      logger.error('YOLO mode is disabled by the "disableYoloMode" setting.');
+      if (effectiveSettings.admin?.secureModeEnabled) {
+        logger.error('YOLO mode is disabled by "secureModeEnabled" setting.');
+      } else {
+        logger.error('YOLO mode is disabled by the "disableYoloMode" setting.');
+      }
       throw new Error(
-        'Cannot start in YOLO mode when it is disabled by settings',
+        'Cannot start in YOLO mode since it is disabled by your admin',
       );
     }
     // Note: We only block YOLO mode here. AUTO_EDIT and other modes are still
     // allowed since disableYoloMode specifically targets YOLO mode only.
   }
+
 
   if (approvalMode === ApprovalMode.YOLO) {
     logger.warn(
@@ -1359,6 +1367,10 @@ export async function loadCliConfig(
     );
   }
 
+  // Calculate mcpEnabled based on admin settings
+  const mcpEnabled = effectiveSettings.admin?.mcp?.enabled ?? true;
+
+
   const config = new Config({
     sessionId,
     embeddingModel: undefined, // No embedding model configured for llxprt-code
@@ -1376,15 +1388,19 @@ export async function loadCliConfig(
     excludeTools,
     toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
     toolCallCommand: effectiveSettings.toolCallCommand,
-    mcpServerCommand: effectiveSettings.mcpServerCommand,
-    mcpServers,
+    mcpServerCommand: mcpEnabled ? effectiveSettings.mcpServerCommand : undefined,
+    mcpServers: mcpEnabled ? mcpServers : {},
+    mcpEnabled,
+
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
     llxprtMdFilePaths: filePaths,
     approvalMode,
     showMemoryUsage:
       argv.showMemoryUsage || effectiveSettings.ui?.showMemoryUsage || false,
-    disableYoloMode: effectiveSettings.security?.disableYoloMode,
+    disableYoloMode:
+      effectiveSettings.security?.disableYoloMode ||
+      effectiveSettings.admin?.secureModeEnabled,
     accessibility: {
       ...effectiveSettings.accessibility,
       screenReader,
@@ -1439,7 +1455,15 @@ export async function loadCliConfig(
     extensions: allExtensions,
     enableExtensionReloading:
       effectiveSettings.experimental?.extensionReloading,
-    blockedMcpServers,
+    allowedMcpServers: mcpEnabled
+      ? argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed
+      : undefined,
+    blockedMcpServers: mcpEnabled
+      ? argv.allowedMcpServerNames
+        ? undefined
+        : effectiveSettings.mcp?.excluded
+      : undefined,
+
     allowedEnvironmentVariables:
       effectiveSettings.security?.environmentVariableRedaction?.allowed,
     blockedEnvironmentVariables:
