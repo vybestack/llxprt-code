@@ -17,9 +17,9 @@
 
 | Batch | Phases | Status | LLxprt Commit | Notes |
 |------:|--------|--------|---------------|-------|
-| TS-B1 | 00a, 01, 01a | TODO | | Preflight + extract types |
-| TS-B2 | 02, 02a | TODO | | Re-exports |
-| TS-B3 | 03, 03a | TODO | | Characterize tool execution |
+| TS-B1 | 00a, 01, 01a | DONE | `bd634d166` | Preflight + extract types |
+| TS-B2 | 02, 02a | DONE | `327699504` | Re-exports |
+| TS-B3 | 03, 03a | DONE | `9fe274491` | Characterize tool execution |
 | TS-B4 | 04, 04a | TODO | | Extract ToolExecutor |
 | TS-B5 | 05, 05a | TODO | | Extract response formatting |
 
