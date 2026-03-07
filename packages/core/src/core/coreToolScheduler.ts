@@ -66,6 +66,11 @@ import {
 } from './coreToolHookTriggers.js';
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
+// NOTE: These types are being migrated to packages/core/src/scheduler/types.ts
+// @plan PLAN-20260302-TOOLSCHEDULER.P01
+// They will be removed in Phase 02 after re-exports are added for backward compatibility.
+
+
 export type ValidatingToolCall = {
   status: 'validating';
   request: ToolCallRequestInfo;
