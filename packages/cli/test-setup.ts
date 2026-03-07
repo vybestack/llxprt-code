@@ -118,6 +118,20 @@ vi.mock('./src/providers/providerAliases.js', () => ({
       filePath: '/mock/aliases/codex.config',
       source: 'builtin',
     },
+    {
+      alias: 'deepseek',
+      config: {
+        name: 'deepseek',
+        modelsDevProviderId: 'deepseek',
+        baseProvider: 'openai',
+        'base-url': 'https://api.deepseek.com/v1',
+        defaultModel: 'deepseek-chat',
+        description: 'DeepSeek OpenAI-compatible endpoint',
+        apiKeyEnv: 'DEEPSEEK_API_KEY',
+      },
+      filePath: '/mock/aliases/deepseek.config',
+      source: 'builtin',
+    },
   ],
   getUserAliasDir: () => '/mock/home/.llxprt/providers',
   getAliasFilePath: (alias: string) =>

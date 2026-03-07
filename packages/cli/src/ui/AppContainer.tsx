@@ -180,7 +180,7 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
 }
 
 export const AppContainer = (props: AppContainerProps) => {
-  debug.log('AppContainer architecture active (v2)');
+  debug.debug('AppContainer architecture active (v2)');
   const {
     config,
     settings,
