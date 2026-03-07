@@ -17,7 +17,7 @@
 
 import type { ScheduledToolCall } from './types.js';
 import type { ToolResult } from '../tools/tools.js';
-import type { Config } from '../config/Config.js';
+import type { Config } from '../config/config.js';
 import {
   triggerBeforeToolHook,
   triggerAfterToolHook,
@@ -39,7 +39,7 @@ export interface ToolExecutionContext {
  */
 export interface ToolExecutionResult {
   result: ToolResult;
-  invocation: typeof ScheduledToolCall.prototype.invocation;
+  invocation: ScheduledToolCall['invocation'];
   effectiveArgs: Record<string, unknown>;
 }
 
