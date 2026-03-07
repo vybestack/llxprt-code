@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-lsp",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "LLxprt Code LSP service",
   "type": "module",
   "main": "dist/main.js",
