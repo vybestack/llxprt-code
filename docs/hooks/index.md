@@ -32,6 +32,28 @@ If you're used to Claude Code's permission system:
 - Hooks can modify inputs, not just approve/deny them
 - Multiple hooks can run for the same event with aggregated results
 
+## Security and Risks
+
+> [!WARNING] **Hooks execute arbitrary code with your user privileges.**
+
+By configuring hooks, you are explicitly allowing LLxprt Code to run shell
+commands on your machine. Malicious or poorly configured hooks can:
+
+- **Exfiltrate data**: Read sensitive files (`.env`, ssh keys) and send them to
+  remote servers.
+- **Modify system**: Delete files, install malware, or change system settings.
+- **Consume resources**: Run infinite loops or crash your system.
+
+**Project-level hooks** (in `.llxprt/settings.json`) and **Extension hooks** are
+particularly risky when opening third-party projects or extensions from
+untrusted authors. LLxprt Code will **warn you** the first time it detects a new
+project hook (identified by its name and command), but it is **your
+responsibility** to review these hooks (and any installed extensions) before
+trusting them.
+
+See [Security Considerations](best-practices.md#using-hooks-securely) for a
+detailed threat model and mitigation strategies.
+
 ## Quick Start
 
 ### 1. Enable Hooks
