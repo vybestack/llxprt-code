@@ -1044,4 +1044,79 @@ describe('diagnosticsCommand OAuth token display', () => {
       );
     });
   });
+
+  describe('auth setting masking', () => {
+    function setupRuntimeMockWithEphemeral(
+      ephemeralSettings: Record<string, unknown>,
+    ) {
+      runtimeMocks.getRuntimeApiMock.mockReturnValue({
+        getRuntimeDiagnosticsSnapshot: vi.fn(() => ({
+          providerName: 'test-provider',
+          modelName: 'test-model',
+          profileName: 'test-profile',
+          modelParams: {},
+          ephemeralSettings,
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
+        getCliOAuthManager: vi.fn(() => null),
+      });
+    }
+
+    it('does not mask auth-key-name value', async () => {
+      setupRuntimeMockWithEphemeral({
+        'auth-key-name': 'my-production-key',
+      });
+
+      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const content = (result as MessageActionReturn).content;
+
+      expect(content).toContain('auth-key-name: my-production-key');
+      expect(content).not.toContain('****');
+    });
+
+    it('masks auth-key value', async () => {
+      setupRuntimeMockWithEphemeral({
+        'auth-key': 'sk-abcdefghijklmnop',
+      });
+
+      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const content = (result as MessageActionReturn).content;
+
+      expect(content).toContain('auth-key:');
+      expect(content).not.toContain('sk-abcdefghijklmnop');
+      // Should show first 4 + masked middle + last 4
+      expect(content).toContain('sk-a***********mnop');
+    });
+
+    it('does not mask auth-keyfile value (just a file path)', async () => {
+      setupRuntimeMockWithEphemeral({
+        'auth-keyfile': '/home/user/.secrets/api-key.txt',
+      });
+
+      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const content = (result as MessageActionReturn).content;
+
+      expect(content).toContain(
+        'auth-keyfile: /home/user/.secrets/api-key.txt',
+      );
+    });
+
+    it('masks auth-key but not auth-key-name when both are present', async () => {
+      setupRuntimeMockWithEphemeral({
+        'auth-key': 'supersecretapikey123',
+        'auth-key-name': 'work-anthropic',
+      });
+
+      const result = await diagnosticsCommand.action?.(mockContext, '');
+      const content = (result as MessageActionReturn).content;
+
+      expect(content).toContain('auth-key-name: work-anthropic');
+      expect(content).not.toContain('supersecretapikey123');
+    });
+  });
 });

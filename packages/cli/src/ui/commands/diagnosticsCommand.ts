@@ -196,15 +196,16 @@ export const diagnosticsCommand: SlashCommand = {
         }
 
         if (authSettings.length > 0) {
-          if (authSettings.length > 0) {
-            diagnostics.push('- Authentication:');
-            for (const [key, value] of authSettings) {
-              diagnostics.push(
-                `  - ${key}: ${
-                  typeof value === 'string' ? maskSensitive(value) : value
-                }`,
-              );
-            }
+          diagnostics.push('- Authentication:');
+          for (const [key, value] of authSettings) {
+            const sensitiveAuthKeys = new Set(['auth-key']);
+            const displayValue =
+              typeof value === 'string' && sensitiveAuthKeys.has(key)
+                ? maskSensitive(value)
+                : typeof value === 'object'
+                  ? JSON.stringify(value)
+                  : value;
+            diagnostics.push(`  - ${key}: ${displayValue}`);
           }
         }
 
