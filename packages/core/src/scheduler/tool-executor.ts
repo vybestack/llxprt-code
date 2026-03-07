@@ -87,6 +87,16 @@ export class ToolExecutor {
       args,
     );
 
+    // Check if hook wants to stop execution (higher priority per upstream 05049b5a)
+    if (beforeResult?.shouldStopExecution()) {
+      const stopReason =
+        beforeResult.getEffectiveReason() || 'Stopped by BeforeTool hook';
+      // Throw with special error that caller can recognize as STOP_EXECUTION
+      const stopError = new Error(stopReason);
+      (stopError as Error & { isStopExecution?: boolean }).isStopExecution = true;
+      throw stopError;
+    }
+
     // Check if hook wants to block execution
     if (beforeResult?.isBlockingDecision()) {
       const blockReason =
@@ -95,12 +105,19 @@ export class ToolExecutor {
       throw new Error(blockReason);
     }
 
-    // Check if hook wants to modify tool input
+    // Check if hook wants to modify tool input (per upstream 90eb1e02)
     const modifiedInput = beforeResult?.getModifiedToolInput();
     if (modifiedInput) {
       effectiveArgs = modifiedInput;
-      // Re-create invocation with modified args
-      invocation = scheduledCall.tool.build(modifiedInput);
+      // Re-create invocation with modified args to ensure validation
+      try {
+        invocation = scheduledCall.tool.build(modifiedInput);
+      } catch (error) {
+        // If rebuild fails, log and continue with original invocation
+        // This matches upstream behavior of graceful degradation
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`Failed to rebuild tool invocation after input modification: ${errorMessage}`);
+      }
     }
 
     const liveOutputCallback = scheduledCall.tool.canUpdateOutput
@@ -134,6 +151,20 @@ export class ToolExecutor {
           effectiveArgs,
           toolResult,
         );
+
+        // Check if AfterTool hook wants to stop execution (per upstream 05049b5a)
+        if (afterResult?.shouldStopExecution()) {
+          const stopReason = afterResult.getEffectiveReason() || 'Stopped by AfterTool hook';
+          const stopError = new Error(stopReason);
+          (stopError as Error & { isStopExecution?: boolean }).isStopExecution = true;
+          throw stopError;
+        }
+
+        // Check if AfterTool hook wants to block/deny (per upstream 05049b5a)
+        if (afterResult?.isBlockingDecision()) {
+          const blockReason = afterResult.getEffectiveReason() || 'Blocked by AfterTool hook';
+          throw new Error(blockReason);
+        }
 
         // Apply hook modifications to tool result
         let finalResult = toolResult;

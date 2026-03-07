@@ -1579,14 +1579,39 @@ export class CoreToolScheduler {
         );
         this.bufferCancelled(callId, scheduledCall, executionIndex);
       } else {
-        this.bufferError(
-          callId,
+        // Check if this is a STOP_EXECUTION error (per upstream 05049b5a)
+        const error =
           executionError instanceof Error
             ? executionError
-            : new Error(String(executionError)),
-          scheduledCall,
-          executionIndex,
-        );
+            : new Error(String(executionError));
+        
+        const isStopExecution = (error as Error & { isStopExecution?: boolean }).isStopExecution;
+        
+        if (isStopExecution) {
+          // Create error result with STOP_EXECUTION type
+          const stopResult: ToolResult = {
+            error: {
+              message: error.message,
+              type: ToolErrorType.STOP_EXECUTION,
+            },
+            llmContent: error.message,
+            returnDisplay: error.message,
+          };
+          this.pendingResults.set(callId, {
+            result: stopResult,
+            callId,
+            toolName: scheduledCall.request.name,
+            scheduledCall,
+            executionIndex,
+          });
+        } else {
+          this.bufferError(
+            callId,
+            error,
+            scheduledCall,
+            executionIndex,
+          );
+        }
       }
       await this.publishBufferedResults(signal).catch((publishError: Error) => {
         // Issue #957: Final catch handler to ensure tool always reaches

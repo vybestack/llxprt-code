@@ -167,9 +167,10 @@ export class DefaultHookOutput implements HookOutput {
 
   /**
    * Get the effective reason for blocking or stopping
+   * Prioritizes stopReason over reason per upstream 05049b5a
    */
   getEffectiveReason(): string {
-    return this.reason || this.stopReason || 'No reason provided';
+    return this.stopReason || this.reason || 'No reason provided';
   }
 
   /**
@@ -480,6 +481,7 @@ export interface BeforeToolOutput extends HookOutput {
     hookEventName: 'BeforeTool';
     permissionDecision?: HookDecision;
     permissionDecisionReason?: string;
+    tool_input?: Record<string, unknown>;
   };
 }
 

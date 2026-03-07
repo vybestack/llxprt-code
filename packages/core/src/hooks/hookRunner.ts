@@ -181,6 +181,25 @@ export class HookRunner {
           }
           break;
 
+        case HookEventName.BeforeTool:
+          if ('tool_input' in hookOutput.hookSpecificOutput) {
+            // For BeforeTool, we update the tool_input
+            const modifiedToolInput = hookOutput.hookSpecificOutput['tool_input'];
+            if (
+              modifiedToolInput &&
+              typeof modifiedToolInput === 'object' &&
+              !Array.isArray(modifiedToolInput) &&
+              'tool_input' in modifiedInput
+            ) {
+              // Merge modified input with existing tool_input
+              (modifiedInput as import('./types.js').BeforeToolInput).tool_input = {
+                ...(modifiedInput as import('./types.js').BeforeToolInput).tool_input,
+                ...(modifiedToolInput as Record<string, unknown>),
+              };
+            }
+          }
+          break;
+
         default:
           // For other events, no special input modification is needed
           break;
