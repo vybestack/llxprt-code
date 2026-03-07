@@ -1039,7 +1039,7 @@ export async function loadCliConfig(
 
   // Folder trust feature flag removed - now using settings directly
   const folderTrust = settings.folderTrust ?? false;
-  const trustedFolder = isWorkspaceTrusted(settings) ?? true;
+  const trustedFolder = isWorkspaceTrusted(settings) ?? false;
 
   const allExtensions = annotateActiveExtensions(
     extensions,

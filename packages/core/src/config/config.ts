@@ -1442,7 +1442,7 @@ export class Config {
       return context.workspaceState.isTrusted;
     }
 
-    return this.trustedFolder ?? true;
+    return this.trustedFolder ?? false;
   }
 
   setIdeMode(value: boolean): void {
