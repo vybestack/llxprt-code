@@ -17,6 +17,7 @@ import {
   type SchedulerCallbacks,
   type SchedulerOptions,
 } from '../config/config.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
@@ -463,6 +464,10 @@ export class SubAgentScope {
    * @param outputConfig - Optional configuration for the subagent's expected outputs.
    * @param settingsSnapshot - Runtime settings snapshot containing emojifilter setting.
    */
+  /**
+   * @plan PLAN-20260303-MESSAGEBUS.P01
+   * MessageBus optional parameter added (Phase 1)
+   */
   private constructor(
     readonly name: string,
     readonly runtimeContext: AgentRuntimeContext,
@@ -473,6 +478,7 @@ export class SubAgentScope {
     private readonly toolExecutorContext: ToolExecutionConfigShim,
     private readonly environmentContextLoader: EnvironmentContextLoader,
     private readonly config: Config,
+    private readonly messageBus: MessageBus,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
     settingsSnapshot?: ReadonlySettingsSnapshot,
@@ -584,6 +590,8 @@ export class SubAgentScope {
     const environmentContextLoader =
       overrides.environmentContextLoader ?? defaultEnvironmentContextLoader;
 
+    const messageBus = foregroundConfig.getMessageBus();
+
     return new SubAgentScope(
       name,
       runtimeBundle.runtimeContext,
@@ -594,6 +602,7 @@ export class SubAgentScope {
       toolExecutorContext,
       environmentContextLoader,
       foregroundConfig,
+      messageBus,
       toolConfig,
       outputConfig,
       settingsSnapshot,
@@ -1518,7 +1527,7 @@ export class SubAgentScope {
         typeof this.config.getApprovalMode === 'function'
           ? this.config.getApprovalMode()
           : ApprovalMode.DEFAULT,
-      getMessageBus: () => this.config.getMessageBus(),
+      getMessageBus: () => this.messageBus,
       getPolicyEngine: () => this.config.getPolicyEngine(),
       getOrCreateScheduler: (
         sessionId: string,

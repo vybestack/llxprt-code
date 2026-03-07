@@ -23,6 +23,7 @@ import {
   type AnyToolInvocation,
   type ContextAwareTool,
   BaseToolInvocation,
+  type MessageBus,
 } from '../index.js';
 import { randomUUID } from 'node:crypto';
 import {
@@ -110,6 +111,7 @@ export type {
 
 export interface CoreToolSchedulerOptions {
   config: Config;
+  messageBus?: MessageBus;
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
@@ -158,16 +160,25 @@ export class CoreToolScheduler {
   // When a parallel batch would exceed the context budget, this is set to a
   // tighter per-tool output config so each result is truncated to fit.
   private batchOutputConfig?: ToolOutputSettingsProvider;
+  /**
+   * @plan PLAN-20260303-MESSAGEBUS.P01
+   * MessageBus optional parameter added (Phase 1)
+   */
+  private readonly messageBus: MessageBus;
 
+  /**
+   * @plan PLAN-20260303-MESSAGEBUS.P01
+   * MessageBus optional parameter added (Phase 1)
+   */
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
+    this.messageBus = options.messageBus ?? options.config.getMessageBus();
     this.toolRegistry = options.config.getToolRegistry();
     this.setCallbacks(options);
     this.toolContextInteractiveMode =
       options.toolContextInteractiveMode ?? true;
 
-    const messageBus = this.config.getMessageBus();
-    this.messageBusUnsubscribe = messageBus.subscribe<ToolConfirmationResponse>(
+    this.messageBusUnsubscribe = this.messageBus.subscribe<ToolConfirmationResponse>(
       MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       this.handleMessageBusResponse.bind(this),
     );
@@ -1023,7 +1034,7 @@ export class CoreToolScheduler {
           outcome !== ToolConfirmationOutcome.Cancel &&
           outcome !== ToolConfirmationOutcome.ModifyWithEditor &&
           outcome !== ToolConfirmationOutcome.SuggestEdit;
-        this.config.getMessageBus().publish({
+        this.messageBus.publish({
           type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
           correlationId,
           outcome,
@@ -1091,7 +1102,7 @@ export class CoreToolScheduler {
       name: context.toolName,
       args: context.args,
     };
-    this.config.getMessageBus().publish({
+    this.messageBus.publish({
       type: MessageBusType.TOOL_POLICY_REJECTION,
       toolCall,
       correlationId: randomUUID(),
@@ -1108,7 +1119,7 @@ export class CoreToolScheduler {
       name: context.toolName,
       args: context.args,
     };
-    this.config.getMessageBus().publish({
+    this.messageBus.publish({
       type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
       toolCall,
       correlationId,

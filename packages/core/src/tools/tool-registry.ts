@@ -190,9 +190,19 @@ export class ToolRegistry {
   private config: Config;
   private logger = new DebugLogger('llxprt:tool-registry');
   private discoveryLock: Promise<void> | null = null;
+  /**
+   * @plan PLAN-20260303-MESSAGEBUS.P01
+   * MessageBus optional parameter added (Phase 1)
+   */
+  private readonly messageBus: MessageBus;
 
-  constructor(config: Config) {
+  /**
+   * @plan PLAN-20260303-MESSAGEBUS.P01
+   * MessageBus optional parameter added (Phase 1)
+   */
+  constructor(config: Config, messageBus?: MessageBus) {
     this.config = config;
+    this.messageBus = messageBus ?? config.getMessageBus();
   }
 
   /**
@@ -655,7 +665,7 @@ export class ToolRegistry {
         .setMessageBus === 'function'
     ) {
       (tool as { setMessageBus: (bus: MessageBus) => void }).setMessageBus(
-        this.config.getMessageBus(),
+        this.messageBus,
       );
     }
     // Normalize the tool name for consistent storage and lookup
