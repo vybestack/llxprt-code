@@ -202,6 +202,29 @@ warn`);
 
       expect(payload.result).toContain('😀');
     });
+
+    it('should sanitize replacement chars and control chars with config path', () => {
+      const configWithLimits = {
+        getEphemeralSettings: vi.fn().mockReturnValue({
+          'tool-output-max-tokens': 50000,
+          'tool-output-truncate-mode': 'warn',
+        }),
+      } as unknown as Config;
+
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'test_tool',
+        result: 'Content with \uFFFD replacement and \x00 control and 😀 emoji',
+      };
+
+      const payload = buildToolResponsePayload(block, configWithLimits);
+
+      expect(payload.result).not.toContain('\uFFFD');
+      expect(payload.result).not.toContain('\x00');
+      expect(payload.result).toContain('😀');
+      expect(() => JSON.stringify({ content: payload.result })).not.toThrow();
+    });
   });
 
   describe('edge cases', () => {
