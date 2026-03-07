@@ -36,6 +36,43 @@ export function hasUnicodeReplacements(text: string): boolean {
 }
 
 /**
+ * Checks if a string contains characters that are unsafe for JSON serialization.
+ * This includes:
+ * - Unicode replacement characters (U+FFFD)
+ * - Unpaired surrogates (high surrogate without low, or low without high)
+ * - Control characters (except tab, newline, carriage return)
+ *
+ * @param text The text to check
+ * @returns True if the text contains JSON-unsafe characters
+ */
+export function hasJsonUnsafeCharacters(text: string): boolean {
+  // Check for replacement chars, unpaired surrogates, and control chars in one pass
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+
+    // U+FFFD replacement character
+    if (code === 0xfffd) return true;
+
+    // Control characters (except tab, newline, carriage return)
+    if (code <= 0x1f && code !== 0x09 && code !== 0x0a && code !== 0x0d)
+      return true;
+    if (code === 0x7f) return true;
+
+    // High surrogate without matching low surrogate
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
+      if (next < 0xdc00 || next > 0xdfff) return true;
+      i++; // skip the valid low surrogate
+    }
+    // Low surrogate without preceding high surrogate
+    else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Ensures a string is safe for JSON serialization and API transmission.
  * This handles various edge cases including:
  * - Unicode replacement characters

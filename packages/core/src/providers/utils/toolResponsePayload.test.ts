@@ -141,6 +141,92 @@ warn`);
     });
   });
 
+  describe('unicode sanitization', () => {
+    it('should sanitize unpaired surrogates in tool results', () => {
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'exa_web_search',
+        result: 'Search result with\uD800unpaired surrogate',
+      };
+
+      const payload = buildToolResponsePayload(block);
+
+      expect(payload.result).not.toContain('\uD800');
+      expect(payload.result).toContain('Search result with');
+      expect(payload.result).toContain('unpaired surrogate');
+      // Verify the result is valid JSON
+      expect(() => JSON.stringify({ content: payload.result })).not.toThrow();
+    });
+
+    it('should sanitize unpaired low surrogates in tool results', () => {
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'exa_web_search',
+        result: 'Content with\uDC00orphan low surrogate',
+      };
+
+      const payload = buildToolResponsePayload(block);
+
+      expect(payload.result).not.toContain('\uDC00');
+      expect(() => JSON.stringify({ content: payload.result })).not.toThrow();
+    });
+
+    it('should sanitize unpaired surrogates in error field', () => {
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'test_tool',
+        result: 'some result',
+        error: 'Error with\uD800unpaired surrogate in error',
+      };
+
+      const payload = buildToolResponsePayload(block);
+
+      expect(payload.error).toBeDefined();
+      expect(payload.error).not.toContain('\uD800');
+      expect(payload.error).toContain('Error with');
+      expect(() => JSON.stringify({ error: payload.error })).not.toThrow();
+    });
+
+    it('should preserve valid surrogate pairs (emoji)', () => {
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'test_tool',
+        result: 'Result with emoji 😀 preserved',
+      };
+
+      const payload = buildToolResponsePayload(block);
+
+      expect(payload.result).toContain('😀');
+    });
+
+    it('should sanitize replacement chars and control chars with config path', () => {
+      const configWithLimits = {
+        getEphemeralSettings: vi.fn().mockReturnValue({
+          'tool-output-max-tokens': 50000,
+          'tool-output-truncate-mode': 'warn',
+        }),
+      } as unknown as Config;
+
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'test_tool',
+        result: 'Content with \uFFFD replacement and \x00 control and 😀 emoji',
+      };
+
+      const payload = buildToolResponsePayload(block, configWithLimits);
+
+      expect(payload.result).not.toContain('\uFFFD');
+      expect(payload.result).not.toContain('\x00');
+      expect(payload.result).toContain('😀');
+      expect(() => JSON.stringify({ content: payload.result })).not.toThrow();
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty results', () => {
       const block: ToolResponseBlock = {
