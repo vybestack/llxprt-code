@@ -31,12 +31,6 @@ import {
 } from '../confirmation-bus/types.js';
 import { PolicyDecision } from '../policy/types.js';
 
-interface QueuedRequest {
-  request: ToolCallRequestInfo | ToolCallRequestInfo[];
-  signal: AbortSignal;
-  resolve: () => void;
-  reject: (reason?: Error) => void;
-}
 import { DEFAULT_AGENT_ID } from './turn.js';
 import {
   type Part,
@@ -64,117 +58,51 @@ import {
   triggerAfterToolHook,
   triggerToolNotificationHook,
 } from './coreToolHookTriggers.js';
+import type {
+  PolicyContext,
+  QueuedRequest,
+  ValidatingToolCall,
+  ScheduledToolCall,
+  ExecutingToolCall,
+  SuccessfulToolCall,
+  ErroredToolCall,
+  CancelledToolCall,
+  WaitingToolCall,
+  ToolCall,
+  CompletedToolCall,
+  Status,
+  ConfirmHandler,
+  OutputUpdateHandler,
+  AllToolCallsCompleteHandler,
+  ToolCallsUpdateHandler,
+} from '../scheduler/types.js';
+
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
-// NOTE: These types are being migrated to packages/core/src/scheduler/types.ts
-// @plan PLAN-20260302-TOOLSCHEDULER.P01
-// They will be removed in Phase 02 after re-exports are added for backward compatibility.
-
-
-export type ValidatingToolCall = {
-  status: 'validating';
-  request: ToolCallRequestInfo;
-  tool: AnyDeclarativeTool;
-  invocation: AnyToolInvocation;
-  startTime?: number;
-  outcome?: ToolConfirmationOutcome;
-};
-
-export type ScheduledToolCall = {
-  status: 'scheduled';
-  request: ToolCallRequestInfo;
-  tool: AnyDeclarativeTool;
-  invocation: AnyToolInvocation;
-  startTime?: number;
-  outcome?: ToolConfirmationOutcome;
-};
-
-export type ErroredToolCall = {
-  status: 'error';
-  request: ToolCallRequestInfo;
-  response: ToolCallResponseInfo;
-  tool?: AnyDeclarativeTool;
-  durationMs?: number;
-  outcome?: ToolConfirmationOutcome;
-};
-
-export type SuccessfulToolCall = {
-  status: 'success';
-  request: ToolCallRequestInfo;
-  tool: AnyDeclarativeTool;
-  response: ToolCallResponseInfo;
-  invocation: AnyToolInvocation;
-  durationMs?: number;
-  outcome?: ToolConfirmationOutcome;
-};
-
-export type ExecutingToolCall = {
-  status: 'executing';
-  request: ToolCallRequestInfo;
-  tool: AnyDeclarativeTool;
-  invocation: AnyToolInvocation;
-  liveOutput?: string | AnsiOutput;
-  startTime?: number;
-  outcome?: ToolConfirmationOutcome;
-  pid?: number;
-};
-
-export type CancelledToolCall = {
-  status: 'cancelled';
-  request: ToolCallRequestInfo;
-  response: ToolCallResponseInfo;
-  tool: AnyDeclarativeTool;
-  invocation: AnyToolInvocation;
-  durationMs?: number;
-  outcome?: ToolConfirmationOutcome;
-};
-
-export type WaitingToolCall = {
-  status: 'awaiting_approval';
-  request: ToolCallRequestInfo;
-  tool: AnyDeclarativeTool;
-  invocation: AnyToolInvocation;
-  confirmationDetails: ToolCallConfirmationDetails;
-  startTime?: number;
-  outcome?: ToolConfirmationOutcome;
-};
-
-type PolicyContext = {
-  toolName: string;
-  args: Record<string, unknown>;
-  serverName?: string;
-};
-
-export type Status = ToolCall['status'];
-
-export type ToolCall =
-  | ValidatingToolCall
-  | ScheduledToolCall
-  | ErroredToolCall
-  | SuccessfulToolCall
-  | ExecutingToolCall
-  | CancelledToolCall
-  | WaitingToolCall;
-
-export type CompletedToolCall =
-  | SuccessfulToolCall
-  | CancelledToolCall
-  | ErroredToolCall;
-
-export type ConfirmHandler = (
-  toolCall: WaitingToolCall,
-) => Promise<ToolConfirmationOutcome>;
-
-export type OutputUpdateHandler = (
-  toolCallId: string,
-  outputChunk: string | AnsiOutput,
-) => void;
-
-export type AllToolCallsCompleteHandler = (
-  completedToolCalls: CompletedToolCall[],
-) => Promise<void>;
-
-export type ToolCallsUpdateHandler = (toolCalls: ToolCall[]) => void;
+/**
+ * @plan PLAN-20260302-TOOLSCHEDULER.P02
+ * @requirement TS-COMPAT-001
+ * 
+ * Re-export types from scheduler/types.ts for backward compatibility.
+ * Existing code can continue importing these types from coreToolScheduler.
+ */
+export type {
+  ValidatingToolCall,
+  ScheduledToolCall,
+  ExecutingToolCall,
+  SuccessfulToolCall,
+  ErroredToolCall,
+  CancelledToolCall,
+  WaitingToolCall,
+  ToolCall,
+  CompletedToolCall,
+  Status,
+  ConfirmHandler,
+  OutputUpdateHandler,
+  AllToolCallsCompleteHandler,
+  ToolCallsUpdateHandler,
+  QueuedRequest,
+} from '../scheduler/types.js';
 
 /**
  * Formats tool output for a Gemini FunctionResponse.
