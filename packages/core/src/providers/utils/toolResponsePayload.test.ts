@@ -141,6 +141,52 @@ warn`);
     });
   });
 
+  describe('unicode sanitization', () => {
+    it('should sanitize unpaired surrogates in tool results', () => {
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'exa_web_search',
+        result: 'Search result with\uD800unpaired surrogate',
+      };
+
+      const payload = buildToolResponsePayload(block);
+
+      expect(payload.result).not.toContain('\uD800');
+      expect(payload.result).toContain('Search result with');
+      expect(payload.result).toContain('unpaired surrogate');
+      // Verify the result is valid JSON
+      expect(() => JSON.stringify({ content: payload.result })).not.toThrow();
+    });
+
+    it('should sanitize unpaired low surrogates in tool results', () => {
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'exa_web_search',
+        result: 'Content with\uDC00orphan low surrogate',
+      };
+
+      const payload = buildToolResponsePayload(block);
+
+      expect(payload.result).not.toContain('\uDC00');
+      expect(() => JSON.stringify({ content: payload.result })).not.toThrow();
+    });
+
+    it('should preserve valid surrogate pairs (emoji)', () => {
+      const block: ToolResponseBlock = {
+        type: 'tool_response',
+        toolUseId: 'test-id',
+        toolName: 'test_tool',
+        result: 'Result with emoji 😀 preserved',
+      };
+
+      const payload = buildToolResponsePayload(block);
+
+      expect(payload.result).toContain('😀');
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty results', () => {
       const block: ToolResponseBlock = {

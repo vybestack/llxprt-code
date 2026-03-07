@@ -9,7 +9,7 @@ import type { ToolResponseBlock } from '../../services/history/IContent.js';
 import { limitOutputTokens } from '../../utils/toolOutputLimiter.js';
 import {
   ensureJsonSafe,
-  hasUnicodeReplacements,
+  hasJsonUnsafeCharacters,
 } from '../../utils/unicodeUtils.js';
 
 export function formatToolResponseText(params: {
@@ -148,7 +148,7 @@ function coerceToString(value: unknown, humanizeJson?: boolean): string {
 }
 
 function sanitizeUnicode(result: string): string {
-  return hasUnicodeReplacements(result) ? ensureJsonSafe(result) : result;
+  return hasJsonUnsafeCharacters(result) ? ensureJsonSafe(result) : result;
 }
 
 function formatToolResultValue(text: string): {
