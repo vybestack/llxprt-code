@@ -111,6 +111,7 @@ async function handleList(args: ListArgs): Promise<void> {
   const { extension, extensionConfig } = await getExtensionAndConfig(args.name);
 
   if (!extension || !extensionConfig) {
+    await exitCli();
     return;
   }
 
@@ -130,6 +131,7 @@ async function handleList(args: ListArgs): Promise<void> {
 
   if (contents.length === 0) {
     console.log(`Extension "${args.name}" has no settings.`);
+    await exitCli();
     return;
   }
 

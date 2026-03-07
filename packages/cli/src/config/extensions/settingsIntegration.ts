@@ -330,6 +330,40 @@ export async function getEnvContents(
 }
 
 /**
+ * Returns a list of settings that are defined but not configured.
+ * Checks both .env files and keychain for sensitive settings.
+ */
+export async function getMissingSettings(
+  extensionName: string,
+  extensionDir: string,
+): Promise<
+  Array<import('@vybestack/llxprt-code-core').ExtensionSetting>
+> {
+  const settings = loadExtensionSettingsFromManifest(extensionDir);
+
+  if (settings.length === 0) {
+    return [];
+  }
+
+  // Get existing settings from both scopes
+  const existingSettings = await getExtensionEnvironment(extensionDir);
+  const missingSettings: Array<
+    import('@vybestack/llxprt-code-core').ExtensionSetting
+  > = [];
+
+  for (const setting of settings) {
+    if (
+      existingSettings[setting.envVar] === undefined ||
+      existingSettings[setting.envVar] === ''
+    ) {
+      missingSettings.push(setting);
+    }
+  }
+
+  return missingSettings;
+}
+
+/**
  * Updates a single extension setting.
  *
  * @param extensionName - Extension name

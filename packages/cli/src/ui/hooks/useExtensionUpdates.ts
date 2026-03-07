@@ -125,10 +125,7 @@ export const useExtensionUpdates = (
       }
     }
 
-    let extensionsWithUpdatesCount = 0;
-    // We only notify if we have unprocessed extensions in the UPDATE_AVAILABLE
-    // state.
-    let shouldNotifyOfUpdates = false;
+    const pendingUpdates: string[] = [];
     const updatePromises: Array<Promise<ExtensionUpdateInfo | undefined>> = [];
     for (const extension of extensions) {
       const currentState = extensionsUpdateState.extensionStatuses.get(
@@ -142,14 +139,13 @@ export const useExtensionUpdates = (
       }
       const shouldUpdate = shouldDoUpdate(extension);
       if (!shouldUpdate) {
-        extensionsWithUpdatesCount++;
+        pendingUpdates.push(extension.name);
         if (!currentState.notified) {
           // Mark as processed immediately to avoid re-triggering.
           dispatchExtensionStateUpdate({
             type: 'SET_NOTIFIED',
             payload: { name: extension.name, notified: true },
           });
-          shouldNotifyOfUpdates = true;
         }
       } else {
         const updatePromise = updateExtension(
@@ -186,12 +182,12 @@ export const useExtensionUpdates = (
           });
       }
     }
-    if (shouldNotifyOfUpdates) {
-      const s = extensionsWithUpdatesCount > 1 ? 's' : '';
+    if (pendingUpdates.length > 0) {
+      const s = pendingUpdates.length > 1 ? 's' : '';
       addItem(
         {
           type: MessageType.INFO,
-          text: `You have ${extensionsWithUpdatesCount} extension${s} with an update available, run "/extensions list" for more information.`,
+          text: `You have ${pendingUpdates.length} extension${s} with an update available. Run "/extensions update ${pendingUpdates.join(' ')}".`,
         },
         Date.now(),
       );

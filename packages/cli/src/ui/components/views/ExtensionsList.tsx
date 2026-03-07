@@ -63,7 +63,7 @@ export const ExtensionsList: React.FC<ExtensionsListProps> = ({
           }
 
           return (
-            <Box key={ext.name}>
+            <Box key={ext.name} flexDirection="column" marginBottom={1}>
               <Text color={Colors.Foreground}>
                 <Text
                   color={Colors.AccentCyan}
@@ -71,6 +71,17 @@ export const ExtensionsList: React.FC<ExtensionsListProps> = ({
                 <Text color={activeColor}>{` - ${activeString}`}</Text>
                 {<Text color={stateColor}>{` (${stateText})`}</Text>}
               </Text>
+
+              {ext.resolvedSettings && ext.resolvedSettings.length > 0 && (
+                <Box flexDirection="column" paddingLeft={2}>
+                  <Text color={Colors.DimComment}>settings:</Text>
+                  {ext.resolvedSettings.map((setting) => (
+                    <Text key={setting.name} color={Colors.DimComment}>
+                      - {setting.name}: {setting.value}
+                    </Text>
+                  ))}
+                </Box>
+              )}
             </Box>
           );
         })}

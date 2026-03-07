@@ -58,6 +58,7 @@ interface ExtensionConfig {
   contextFileName?: string | string[];
   excludeTools?: string[];
   hooks?: Hooks;
+  settings?: Array<import('@vybestack/llxprt-code-core').ExtensionSetting>;
 }
 
 export interface ExtensionInstallMetadata {
@@ -287,6 +288,32 @@ export function loadExtension(
       )
       .filter((contextFilePath) => fs.existsSync(contextFilePath));
 
+    // Resolve settings if present
+    const resolvedSettings: Array<
+      import('@vybestack/llxprt-code-core').ResolvedExtensionSetting
+    > = [];
+    if (config.settings && config.settings.length > 0) {
+      const { getExtensionEnvironment } = await import(
+        './extensions/settingsIntegration.js'
+      );
+      const customEnv = await getExtensionEnvironment(effectiveExtensionPath);
+
+      for (const setting of config.settings) {
+        const value = customEnv[setting.envVar];
+        resolvedSettings.push({
+          name: setting.name,
+          envVar: setting.envVar,
+          value:
+            value === undefined
+              ? '[not set]'
+              : setting.sensitive
+                ? '***'
+                : value,
+          sensitive: setting.sensitive ?? false,
+        });
+      }
+    }
+
     return {
       name: config.name,
       version: config.version,
@@ -296,6 +323,8 @@ export function loadExtension(
       mcpServers: config.mcpServers,
       excludeTools: config.excludeTools,
       isActive: true, // Barring any other signals extensions should be considered Active.
+      settings: config.settings,
+      resolvedSettings,
     };
   } catch (e) {
     console.error(
@@ -473,6 +502,55 @@ async function promptForConsentInteractive(
   });
 }
 
+/**
+ * Infers installation metadata from a source string.
+ * Validates the source and determines whether it's a git URL or local path.
+ */
+export async function inferInstallMetadata(
+  source: string,
+  args: {
+    ref?: string;
+    autoUpdate?: boolean;
+    allowPreRelease?: boolean;
+  } = {},
+): Promise<ExtensionInstallMetadata> {
+  const { ref, autoUpdate } = args;
+
+  // Check if source is a URL (git, http, https, sso)
+  const isUrl =
+    source.startsWith('http://') ||
+    source.startsWith('https://') ||
+    source.startsWith('git@') ||
+    source.startsWith('sso://');
+
+  if (isUrl) {
+    // Git-based installation
+    return {
+      source,
+      type: 'git',
+      ref,
+      autoUpdate,
+    };
+  }
+
+  // Local path - verify it exists
+  if (ref || autoUpdate) {
+    throw new Error(
+      'The --ref and --autoUpdate flags are only applicable for git-based installations.',
+    );
+  }
+
+  try {
+    await fs.promises.stat(source);
+    return {
+      source,
+      type: 'local',
+    };
+  } catch (_error) {
+    throw new Error(`Install source not found: ${source}`);
+  }
+}
+
 export async function installOrUpdateExtension(
   installMetadata: ExtensionInstallMetadata,
   requestConsent: (consent: string) => Promise<boolean>,
@@ -557,6 +635,23 @@ export async function installOrUpdateExtension(
     newExtensionName = newExtensionConfig.name;
     const extensionStorage = new ExtensionStorage(newExtensionName);
     const destinationPath = extensionStorage.getExtensionDir();
+
+    // Check for missing settings and warn user
+    if (newExtensionConfig.settings && newExtensionConfig.settings.length > 0) {
+      const { getMissingSettings } = await import(
+        './extensions/settingsIntegration.js'
+      );
+      const missingSettings = await getMissingSettings(
+        newExtensionName,
+        destinationPath,
+      );
+
+      if (missingSettings.length > 0) {
+        const settingNames = missingSettings.map((s) => s.name).join(', ');
+        const message = `Extension "${newExtensionConfig.name}" has missing settings: ${settingNames}. Please run "llxprt extensions settings ${newExtensionConfig.name} <setting-name>" to configure them.`;
+        console.warn(message);
+      }
+    }
 
     if (!isUpdate) {
       const installedExtensions = loadUserExtensions();
