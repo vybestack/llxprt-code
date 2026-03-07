@@ -947,7 +947,37 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return normalizeToOpenAIToolId(tr.callId);
     };
 
+    // Collect images from tool responses to inject as a single synthetic user message
+    // This prevents interleaving user messages between tool messages in multi-tool turns
+    const pendingToolImages: MediaBlock[] = [];
+
+    const flushPendingToolImages = () => {
+      if (pendingToolImages.length === 0) return;
+
+      const imageParts: Array<
+        | { type: 'text'; text: string }
+        | { type: 'image_url'; image_url: { url: string } }
+      > = [
+        { type: 'text', text: '[Images from tool response]' },
+        ...pendingToolImages.map((mb) => ({
+          type: 'image_url' as const,
+          image_url: { url: normalizeMediaToDataUri(mb) },
+        })),
+      ];
+      messages.push({
+        role: 'user',
+        content: imageParts as unknown as string,
+      });
+      pendingToolImages.length = 0;
+    };
+
     for (const content of filteredContents) {
+      // Flush pending tool images when we hit a non-tool speaker
+      // This ensures all tool images are grouped in one synthetic user message
+      if (content.speaker !== 'tool') {
+        flushPendingToolImages();
+      }
+
       if (content.speaker === 'human') {
         // Convert human messages to user messages, preserving block order
         const hasMedia = content.blocks.some((b) => b.type === 'media');
@@ -1088,7 +1118,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         const mediaBlocks = content.blocks.filter(
           (b): b is MediaBlock => b.type === 'media',
         );
-        const mediaFallback = mediaBlocks
+
+        // Separate image blocks from non-image media blocks
+        // Images will be injected as a synthetic user message after all tool responses
+        // This works around the OpenAI API limitation that tool messages cannot contain images
+
+        // Separate image blocks from non-image media blocks
+        const imageBlocks = mediaBlocks.filter(
+          (mb) => classifyMediaBlock(mb) === 'image',
+        );
+        const nonImageMediaBlocks = mediaBlocks.filter(
+          (mb) => classifyMediaBlock(mb) !== 'image',
+        );
+
+        // Queue images to be injected as a single synthetic user message
+        // after all contiguous tool responses are processed
+        if (imageBlocks.length > 0) {
+          pendingToolImages.push(...imageBlocks);
+        }
+
+        // Build fallback text for non-image media (images go to the synthetic message)
+        const mediaFallback = nonImageMediaBlocks
           .map((mb) =>
             buildUnsupportedMediaPlaceholder(mb, 'OpenAI Chat Completions'),
           )
@@ -1119,6 +1169,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           );
         }
       }
+
+      // Flush any remaining tool images after processing all content
+      flushPendingToolImages();
     }
 
     // Validate tool message sequence to prevent API errors

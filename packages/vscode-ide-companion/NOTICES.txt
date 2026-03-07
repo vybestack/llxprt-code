@@ -54,12 +54,12 @@ SOFTWARE.
 
 
 ============================================================
-@hono/node-server@1.19.9
+@hono/node-server@1.19.11
 (https://github.com/honojs/node-server.git)
 
 MIT License
 
-Copyright (c) 2023-2026 Yusuke Wada <yusuke@kamawada.com> (https://github.com/yusukebe)
+Copyright (c) 2022 - present, Yusuke Wada and Hono contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -78,6 +78,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 
 ============================================================
 ajv@6.14.0
@@ -2341,7 +2342,7 @@ THE SOFTWARE.
 
 
 ============================================================
-hono@4.12.2
+hono@4.12.5
 (git+https://github.com/honojs/hono.git)
 
 MIT License

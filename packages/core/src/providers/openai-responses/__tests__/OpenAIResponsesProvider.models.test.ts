@@ -59,6 +59,7 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
 
       // Verify all expected Codex models are present (based on codex-rs list_models.rs + #1308 update + #1433 gpt-5.3-codex-spark)
       const modelIds = models.map((m) => m.id);
+      expect(modelIds).toContain('gpt-5.4');
       expect(modelIds).toContain('gpt-5.3-codex');
       expect(modelIds).toContain('gpt-5.3-codex-spark');
       expect(modelIds).toContain('gpt-5.2-codex');
@@ -68,8 +69,8 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       expect(modelIds).toContain('gpt-5.2');
       expect(modelIds).toContain('gpt-5.1');
 
-      // Verify gpt-5.3-codex is first (highest priority)
-      expect(models[0].id).toBe('gpt-5.3-codex');
+      // Verify gpt-5.4 is first (highest priority)
+      expect(models[0].id).toBe('gpt-5.4');
 
       // Verify all models have correct provider and tool format
       for (const model of models) {
@@ -103,8 +104,9 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       );
       const models = await provider.getModels();
 
-      // Expected models in priority order (with #1308 gpt-5.3-codex addition + #1433 gpt-5.3-codex-spark)
+      // Expected models in priority order (with #1308 gpt-5.3-codex addition + #1433 gpt-5.3-codex-spark + #1684 gpt-5.4)
       const expectedModelIds = [
+        'gpt-5.4',
         'gpt-5.3-codex',
         'gpt-5.3-codex-spark',
         'gpt-5.2-codex',
