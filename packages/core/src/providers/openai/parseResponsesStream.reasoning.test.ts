@@ -162,7 +162,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     });
   });
 
-  it('should handle reasoning_summary_text events separately from reasoning_text', async () => {
+  it('should emit only one ThinkingBlock when both reasoning_text and reasoning_summary_text are present', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Raw reasoning."}\n\n',
       'data: {"type":"response.reasoning_text.done","sequence_number":2}\n\n',
@@ -180,7 +180,12 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     const thinkingMessages = messages.filter((m) =>
       m.blocks.some((block) => block.type === 'thinking'),
     );
-    expect(thinkingMessages).toHaveLength(2);
+    expect(thinkingMessages).toHaveLength(1);
+
+    const thinkingBlock = thinkingMessages[0].blocks.find(
+      (block) => block.type === 'thinking',
+    );
+    expect(thinkingBlock?.thought).toBe('Raw reasoning.');
   });
 
   it('should NOT emit pyramid-style repeated prefixes', async () => {
@@ -307,5 +312,114 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     const usageIndex = messages.findIndex((m) => m.metadata?.usage);
     expect(usageIndex).toBeGreaterThanOrEqual(0);
     expect(thinkingIndex).toBeLessThan(usageIndex);
+  });
+
+  it('should emit only the summary ThinkingBlock when reasoning_summary_text arrives first (no reasoning_text)', async () => {
+    const chunks = [
+      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":1,"delta":"Summary only."}\n\n',
+      'data: {"type":"response.reasoning_summary_text.done","sequence_number":2,"text":"Summary only."}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages = [...messages, message];
+    }
+
+    const thinkingMessages = messages.filter((m) =>
+      m.blocks.some((block) => block.type === 'thinking'),
+    );
+    expect(thinkingMessages).toHaveLength(1);
+
+    const thinkingBlock = thinkingMessages[0].blocks.find(
+      (block) => block.type === 'thinking',
+    );
+    expect(thinkingBlock?.thought).toBe('Summary only.');
+  });
+
+  it('should suppress reasoning_summary_text when reasoning_text was already emitted', async () => {
+    const chunks = [
+      'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Full reasoning text"}\n\n',
+      'data: {"type":"response.reasoning_text.done","sequence_number":2}\n\n',
+      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":3,"delta":"Condensed summary"}\n\n',
+      'data: {"type":"response.reasoning_summary_text.done","sequence_number":4,"text":"Condensed summary"}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages = [...messages, message];
+    }
+
+    const thinkingMessages = messages.filter((m) =>
+      m.blocks.some((block) => block.type === 'thinking'),
+    );
+    expect(thinkingMessages).toHaveLength(1);
+
+    const thinkingBlock = thinkingMessages[0].blocks.find(
+      (block) => block.type === 'thinking',
+    );
+    expect(thinkingBlock?.thought).toBe('Full reasoning text');
+  });
+
+  it('should suppress reasoning_text when reasoning_summary_text was already emitted', async () => {
+    const chunks = [
+      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":1,"delta":"Summary first"}\n\n',
+      'data: {"type":"response.reasoning_summary_text.done","sequence_number":2,"text":"Summary first"}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":3,"delta":"Full text second"}\n\n',
+      'data: {"type":"response.reasoning_text.done","sequence_number":4}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages = [...messages, message];
+    }
+
+    const thinkingMessages = messages.filter((m) =>
+      m.blocks.some((block) => block.type === 'thinking'),
+    );
+    expect(thinkingMessages).toHaveLength(1);
+
+    const thinkingBlock = thinkingMessages[0].blocks.find(
+      (block) => block.type === 'thinking',
+    );
+    expect(thinkingBlock?.thought).toBe('Summary first');
+  });
+
+  it('should re-emit hidden ThinkingBlock with encrypted_content after visible emission', async () => {
+    const chunks = [
+      'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Thinking about this"}\n\n',
+      'data: {"type":"response.reasoning_text.done","sequence_number":2}\n\n',
+      'data: {"type":"response.output_item.done","item":{"type":"reasoning","id":"reasoning_1","summary":[{"type":"summary_text","text":"Thinking about this"}],"encrypted_content":"encrypted_data_here"}}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages = [...messages, message];
+    }
+
+    const thinkingMessages = messages.filter((m) =>
+      m.blocks.some((block) => block.type === 'thinking'),
+    );
+    expect(thinkingMessages).toHaveLength(2);
+
+    const firstThinkingBlock = thinkingMessages[0].blocks.find(
+      (block) => block.type === 'thinking',
+    );
+    expect(firstThinkingBlock?.isHidden).toBe(false);
+    expect(firstThinkingBlock?.thought).toBe('Thinking about this');
+
+    const secondThinkingBlock = thinkingMessages[1].blocks.find(
+      (block) => block.type === 'thinking',
+    );
+    expect(secondThinkingBlock?.isHidden).toBe(true);
+    expect(secondThinkingBlock?.thought).toBe('Thinking about this');
+    expect(secondThinkingBlock?.encryptedContent).toBe('encrypted_data_here');
   });
 });
