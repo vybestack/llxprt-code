@@ -75,6 +75,13 @@ export async function ensureDirForFile(filePath: string): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
 }
 
+async function writeFileExclusive(
+  filePath: string,
+  content: string,
+): Promise<void> {
+  await fs.writeFile(filePath, content, { encoding: 'utf-8', flag: 'wx' });
+}
+
 export async function writeBackupPair(params: {
   projectRoot: string;
   relativeFilePath: string;
@@ -104,8 +111,8 @@ export async function writeBackupPair(params: {
     createdAtIso: new Date().toISOString(),
   };
 
-  await fs.writeFile(backupFilePath, params.content, 'utf-8');
-  await fs.writeFile(metadataFilePath, JSON.stringify(meta, null, 2), 'utf-8');
+  await writeFileExclusive(backupFilePath, params.content);
+  await writeFileExclusive(metadataFilePath, JSON.stringify(meta, null, 2));
 
   return { backupFilePath, metadataFilePath };
 }
@@ -127,8 +134,7 @@ export async function ensureBaselineBackup(params: {
   const backupFilePath = basePath;
   const metadataFilePath = `${basePath}.json`;
 
-  const exists =
-    (await fileExists(backupFilePath)) && (await fileExists(metadataFilePath));
+  const exists = await fileExists(backupFilePath);
   if (exists) {
     return { created: false, backupFilePath, metadataFilePath };
   }

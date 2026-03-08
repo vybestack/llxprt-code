@@ -1646,6 +1646,11 @@ export class ASTEditTool
   protected override validateToolParamValues(
     params: ASTEditToolParams,
   ): string | null {
+    if (typeof params.title === 'string') {
+      const trimmed = params.title.trim();
+      params.title = trimmed.length > 0 ? trimmed : undefined;
+    }
+
     if (!params.file_path) {
       return "The 'file_path' parameter must be non-empty.";
     }
@@ -2126,16 +2131,36 @@ class ASTEditToolInvocation
 
       if (backupsEnabled) {
         try {
-          const tsKey = formatTimestampKey(new Date());
-          await writeBackupPair({
-            projectRoot,
-            relativeFilePath,
-            originalFilePath: this.params.file_path,
-            timestampKey: tsKey,
-            kind: 'revision',
-            title: this.params.title?.trim() || undefined,
-            content: editData.newContent,
-          });
+          const maxAttempts = 3;
+          let attempt = 0;
+
+          while (attempt < maxAttempts) {
+            attempt++;
+            const tsKey = formatTimestampKey(new Date());
+            try {
+              await writeBackupPair({
+                projectRoot,
+                relativeFilePath,
+                originalFilePath: this.params.file_path,
+                timestampKey: tsKey,
+                kind: 'revision',
+                title: this.params.title,
+                content: editData.newContent,
+              });
+              break;
+            } catch (e: unknown) {
+              const code =
+                typeof e === 'object' && e !== null && 'code' in e
+                  ? (e as { code?: unknown }).code
+                  : undefined;
+
+              if (code === 'EEXIST' && attempt < maxAttempts) {
+                // Retry with a regenerated timestamp key.
+                continue;
+              }
+              throw e;
+            }
+          }
         } catch (_e) {
           backupWarning =
             backupWarning ??

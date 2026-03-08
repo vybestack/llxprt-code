@@ -746,16 +746,36 @@ class EditToolInvocation extends BaseToolInvocation<
 
       if (backupsEnabled) {
         try {
-          const tsKey = formatTimestampKey(new Date());
-          await writeBackupPair({
-            projectRoot,
-            relativeFilePath,
-            originalFilePath: filePath,
-            timestampKey: tsKey,
-            kind: 'revision',
-            title: this.params.title,
-            content: editData.newContent,
-          });
+          const maxAttempts = 3;
+          let attempt = 0;
+
+          while (attempt < maxAttempts) {
+            attempt++;
+            const tsKey = formatTimestampKey(new Date());
+            try {
+              await writeBackupPair({
+                projectRoot,
+                relativeFilePath,
+                originalFilePath: filePath,
+                timestampKey: tsKey,
+                kind: 'revision',
+                title: this.params.title,
+                content: editData.newContent,
+              });
+              break;
+            } catch (e: unknown) {
+              const code =
+                typeof e === 'object' && e !== null && 'code' in e
+                  ? (e as { code?: unknown }).code
+                  : undefined;
+
+              if (code === 'EEXIST' && attempt < maxAttempts) {
+                // Retry with a regenerated timestamp key.
+                continue;
+              }
+              throw e;
+            }
+          }
         } catch {
           backupWarning =
             backupWarning ??
@@ -951,6 +971,17 @@ Expectation for required parameters:
             description:
               'Optional 1-based line number where the replacement should begin. Strongly recommended to always set this to guard against misinterpreting the file structure, especially when similar text appears multiple times.',
             minimum: 1,
+          },
+          backups: {
+            description:
+              "If true (default), writes backups under .backups/ in the project root using a parallel directory structure. A backup is a point-in-time snapshot of the file content that allows you to restore previous versions without relying on git commits. Baseline is the file state before the first successful edit made via this tool. Naming: '<relativeFilePath>_baseline' for the baseline snapshot, and '<relativeFilePath>_YYYYMMDD_HHMMSS_mmm' (UTC) after each successful edit. Next to each backup file, a '<sameName>.json' metadata file is written containing at least the edit 'title'.",
+            type: 'boolean',
+            default: true,
+          },
+          title: {
+            description:
+              'Optional title used for backup metadata (useful for future undo UX).',
+            type: 'string',
           },
         },
         required: ['old_string', 'new_string'],
