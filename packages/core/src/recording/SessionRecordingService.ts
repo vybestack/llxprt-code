@@ -26,7 +26,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync, watch, type FSWatcher } from 'node:fs';
 import { type IContent } from '../services/history/IContent.js';
 import {
   type SessionRecordingServiceConfig,
@@ -53,6 +53,7 @@ export class SessionRecordingService {
   private readonly sessionId: string;
   private readonly chatsDir: string;
   private preContentBuffer: SessionRecordLine[] = [];
+  private chatsDirWatcher: FSWatcher | null = null;
 
   /**
    * @plan PLAN-20260211-SESSIONRECORDING.P05
@@ -144,6 +145,7 @@ export class SessionRecordingService {
     const fileName = `session-${timestamp}-${prefix}.jsonl`;
     this.filePath = path.join(this.chatsDir, fileName);
     mkdirSync(this.chatsDir, { recursive: true });
+    this.startChatsDirWatcher();
   }
 
   /**
@@ -156,7 +158,37 @@ export class SessionRecordingService {
   private scheduleDrain(): void {
     if (this.draining) return;
     this.draining = true;
-    this.drainPromise = this.drain();
+    this.drainPromise = this.drain().catch((error: unknown) => {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
+        const diag = this.diagnoseMissingPath();
+        console.error(
+          `[SessionRecording] ENOENT writing session file — recording stopped.
+` +
+            `  filePath: ${this.filePath}
+` +
+            `  chatsDir exists: ${diag.chatsDirExists}
+` +
+            `  parentDir exists: ${diag.parentDirExists} (${diag.parentDir})
+` +
+            `  grandparentDir exists: ${diag.grandparentDirExists} (${diag.grandparentDir})
+` +
+            `  This directory was removed mid-session by an external process or AI shell command.`,
+        );
+      } else {
+        console.error(
+          `[SessionRecording] Unexpected error writing session file — recording stopped.
+` +
+            `  filePath: ${this.filePath}
+` +
+            `  error: ${error}`,
+        );
+      }
+      this.queue = [];
+      this.chatsDirWatcher?.close();
+      this.chatsDirWatcher = null;
+      this.active = false;
+    });
   }
 
   /**
@@ -180,6 +212,9 @@ export class SessionRecordingService {
         } catch (error: unknown) {
           const code = (error as NodeJS.ErrnoException).code;
           if (code === 'ENOSPC' || code === 'EACCES') {
+            this.queue = [];
+            this.chatsDirWatcher?.close();
+            this.chatsDirWatcher = null;
             this.active = false;
             return;
           }
@@ -259,6 +294,7 @@ export class SessionRecordingService {
     this.seq = lastSeq;
     this.materialized = true;
     this.preContentBuffer = [];
+    this.startChatsDirWatcher();
   }
 
   /**
@@ -275,6 +311,70 @@ export class SessionRecordingService {
     this.active = false;
     this.queue = [];
     this.preContentBuffer = [];
+    if (this.chatsDirWatcher) {
+      this.chatsDirWatcher.close();
+      this.chatsDirWatcher = null;
+    }
+  }
+
+  /**
+   * Diagnose which directory level is missing when ENOENT occurs.
+   */
+  private diagnoseMissingPath(): {
+    chatsDirExists: boolean;
+    parentDir: string;
+    parentDirExists: boolean;
+    grandparentDir: string;
+    grandparentDirExists: boolean;
+  } {
+    const parentDir = path.dirname(this.chatsDir);
+    const grandparentDir = path.dirname(parentDir);
+    return {
+      chatsDirExists: existsSync(this.chatsDir),
+      parentDir,
+      parentDirExists: existsSync(parentDir),
+      grandparentDir,
+      grandparentDirExists: existsSync(grandparentDir),
+    };
+  }
+
+  /**
+   * Watch the chatsDir for rename/deletion events.
+   * When the directory is removed mid-session, this fires and logs the
+   * exact timestamp so it can be correlated with the shell command log.
+   */
+  private startChatsDirWatcher(): void {
+    if (this.chatsDirWatcher) return;
+    try {
+      this.chatsDirWatcher = watch(
+        this.chatsDir,
+        { persistent: false },
+        (eventType) => {
+          if (eventType === 'rename' && !existsSync(this.chatsDir)) {
+            console.error(
+              `[SessionRecording] chatsDir was removed at ${new Date().toISOString()}!
+` +
+                `  path: ${this.chatsDir}
+` +
+                `  sessionId: ${this.sessionId}
+` +
+                `  filePath: ${this.filePath}
+` +
+                `  Check the preceding shell command for the culprit.`,
+            );
+            this.chatsDirWatcher?.close();
+            this.chatsDirWatcher = null;
+          }
+        },
+      );
+      this.chatsDirWatcher.on('error', () => {
+        // Watcher error is expected if the directory was removed
+        this.chatsDirWatcher?.close();
+        this.chatsDirWatcher = null;
+      });
+    } catch {
+      // If watch fails (e.g. directory already gone), silently skip
+    }
   }
 
   // -------------------------------------------------------------------------

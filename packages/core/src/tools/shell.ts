@@ -401,7 +401,8 @@ export class ShellToolInvocation extends BaseToolInvocation<
             .filter(Boolean);
           for (const line of pgrepLines) {
             if (!/^\d+$/.test(line)) {
-              console.error(`pgrep: ${line}`);
+              this.logger.debug(() => `pgrep: ${line}`);
+              continue;
             }
             const pid = Number(line);
             if (result.pid && pid !== result.pid) {
@@ -410,7 +411,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
           }
         } else {
           if (!signal.aborted) {
-            console.error('missing pgrep output');
+            this.logger.debug(() => 'missing pgrep output');
           }
         }
 
@@ -427,7 +428,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
           }
         } catch (error) {
           // If we can't get the PGID, that's okay
-          console.error('Failed to get PGID:', error);
+          this.logger.debug(() => `Failed to get PGID: ${error}`);
         }
       }
 
