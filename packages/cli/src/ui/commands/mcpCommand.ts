@@ -36,6 +36,8 @@ const COLOR_CYAN = '\u001b[36m';
 const COLOR_GREY = '\u001b[90m';
 const RESET_COLOR = '\u001b[0m';
 
+const MAX_MCP_RESOURCES_TO_SHOW = 10;
+
 const mcpAuthSchema: CommandArgumentSchema = [
   {
     kind: 'value',
@@ -265,7 +267,8 @@ const getMcpStatus = async (
 
     if (serverTools.length > 0) {
       message += `  ${COLOR_CYAN}Tools:${RESET_COLOR}\n`;
-      serverTools.forEach((tool) => {
+      const toolsToShow = serverTools.slice(0, MAX_MCP_RESOURCES_TO_SHOW);
+      toolsToShow.forEach((tool) => {
         const toolName = tool.serverToolName;
 
         if (showDescriptions && tool.description) {
@@ -303,13 +306,18 @@ const getMcpStatus = async (
           }
         }
       });
+      if (serverTools.length > MAX_MCP_RESOURCES_TO_SHOW) {
+        const remaining = serverTools.length - MAX_MCP_RESOURCES_TO_SHOW;
+        message += `  ${COLOR_GREY}... and ${remaining} more ${remaining === 1 ? 'tool' : 'tools'}${RESET_COLOR}\n`;
+      }
     }
     if (serverPrompts.length > 0) {
       if (serverTools.length > 0) {
         message += '\n';
       }
       message += `  ${COLOR_CYAN}Prompts:${RESET_COLOR}\n`;
-      serverPrompts.forEach((prompt: DiscoveredMCPPrompt) => {
+      const promptsToShow = serverPrompts.slice(0, MAX_MCP_RESOURCES_TO_SHOW);
+      promptsToShow.forEach((prompt: DiscoveredMCPPrompt) => {
         if (showDescriptions && prompt.description) {
           message += `  - ${COLOR_CYAN}${prompt.name}${RESET_COLOR}`;
           const descLines = prompt.description.trim().split('\n');
@@ -325,13 +333,18 @@ const getMcpStatus = async (
           message += `  - ${COLOR_CYAN}${prompt.name}${RESET_COLOR}\n`;
         }
       });
+      if (serverPrompts.length > MAX_MCP_RESOURCES_TO_SHOW) {
+        const remaining = serverPrompts.length - MAX_MCP_RESOURCES_TO_SHOW;
+        message += `  ${COLOR_GREY}... and ${remaining} more ${remaining === 1 ? 'prompt' : 'prompts'}${RESET_COLOR}\n`;
+      }
     }
     if (serverResources.length > 0) {
       if (serverTools.length > 0 || serverPrompts.length > 0) {
         message += '\n';
       }
       message += `  ${COLOR_CYAN}Resources:${RESET_COLOR}\n`;
-      serverResources.forEach((resource) => {
+      const resourcesToShow = serverResources.slice(0, MAX_MCP_RESOURCES_TO_SHOW);
+      resourcesToShow.forEach((resource) => {
         const resourceName = resource.name ?? resource.uri;
         const resourceUri = resource.uri;
 
@@ -345,6 +358,10 @@ const getMcpStatus = async (
           message += `  - ${COLOR_CYAN}${resourceName}${RESET_COLOR} (${resourceUri})\n`;
         }
       });
+      if (serverResources.length > MAX_MCP_RESOURCES_TO_SHOW) {
+        const remaining = serverResources.length - MAX_MCP_RESOURCES_TO_SHOW;
+        message += `  ${COLOR_GREY}... and ${remaining} more ${remaining === 1 ? 'resource' : 'resources'}${RESET_COLOR}\n`;
+      }
     }
 
     if (
