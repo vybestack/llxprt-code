@@ -139,15 +139,93 @@ export async function ensureBaselineBackup(params: {
     return { created: false, backupFilePath, metadataFilePath };
   }
 
-  const { backupFilePath: b, metadataFilePath: m } = await writeBackupPair({
-    projectRoot: params.projectRoot,
-    relativeFilePath: params.relativeFilePath,
-    originalFilePath: params.originalFilePath,
-    timestampKey: BASELINE_KEY,
-    kind: 'baseline',
-    title: 'baseline',
-    content: params.baselineContent,
-  });
+  try {
+    const { backupFilePath: b, metadataFilePath: m } = await writeBackupPair({
+      projectRoot: params.projectRoot,
+      relativeFilePath: params.relativeFilePath,
+      originalFilePath: params.originalFilePath,
+      timestampKey: BASELINE_KEY,
+      kind: 'baseline',
+      title: 'baseline',
+      content: params.baselineContent,
+    });
 
-  return { created: true, backupFilePath: b, metadataFilePath: m };
+    return { created: true, backupFilePath: b, metadataFilePath: m };
+  } catch (e: unknown) {
+    const code =
+      typeof e === 'object' && e !== null && 'code' in e
+        ? (e as { code?: unknown }).code
+        : undefined;
+
+    if (code === 'EEXIST') {
+      return { created: false, backupFilePath, metadataFilePath };
+    }
+
+    throw e;
+  }
+}
+
+export async function createEditBackups(params: {
+  projectRoot: string;
+  relativeFilePath: string;
+  originalFilePath: string;
+  currentContent: string;
+  newContent: string;
+  isNewFile: boolean;
+  title?: string;
+}): Promise<{ backupWarning: string | null }> {
+  let backupWarning: string | null = null;
+
+  if (!params.isNewFile) {
+    try {
+      await ensureBaselineBackup({
+        projectRoot: params.projectRoot,
+        relativeFilePath: params.relativeFilePath,
+        originalFilePath: params.originalFilePath,
+        baselineContent: params.currentContent,
+      });
+    } catch (_e) {
+      backupWarning =
+        'Failed to create baseline backup (pre-first-edit). File was edited without a backup.';
+    }
+  }
+
+  try {
+    const maxAttempts = 3;
+    let attempt = 0;
+
+    while (attempt < maxAttempts) {
+      attempt++;
+      const tsKey = formatTimestampKey(new Date());
+      try {
+        await writeBackupPair({
+          projectRoot: params.projectRoot,
+          relativeFilePath: params.relativeFilePath,
+          originalFilePath: params.originalFilePath,
+          timestampKey: tsKey,
+          kind: 'revision',
+          title: params.title,
+          content: params.newContent,
+        });
+        break;
+      } catch (e: unknown) {
+        const code =
+          typeof e === 'object' && e !== null && 'code' in e
+            ? (e as { code?: unknown }).code
+            : undefined;
+
+        if (code === 'EEXIST' && attempt < maxAttempts) {
+          // Retry with a regenerated timestamp key.
+          continue;
+        }
+        throw e;
+      }
+    }
+  } catch (_e) {
+    backupWarning =
+      backupWarning ??
+      'Failed to create backup revision. File was edited without a backup.';
+  }
+
+  return { backupWarning };
 }

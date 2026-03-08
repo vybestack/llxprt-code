@@ -39,11 +39,7 @@ import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
-import {
-  ensureBaselineBackup,
-  formatTimestampKey,
-  writeBackupPair,
-} from './edit-backups.js';
+import { createEditBackups } from './edit-backups.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -726,61 +722,20 @@ class EditToolInvocation extends BaseToolInvocation<
 
       let backupWarning: string | null = null;
 
-      if (backupsEnabled && !editData.isNewFile) {
-        try {
-          await ensureBaselineBackup({
-            projectRoot,
-            relativeFilePath,
-            originalFilePath: filePath,
-            baselineContent: editData.currentContent ?? '',
-          });
-        } catch {
-          backupWarning =
-            'Failed to create baseline backup (pre-first-edit). File was edited without a backup.';
-        }
-      }
-
       await this.config
         .getFileSystemService()
         .writeTextFile(filePath, editData.newContent);
 
       if (backupsEnabled) {
-        try {
-          const maxAttempts = 3;
-          let attempt = 0;
-
-          while (attempt < maxAttempts) {
-            attempt++;
-            const tsKey = formatTimestampKey(new Date());
-            try {
-              await writeBackupPair({
-                projectRoot,
-                relativeFilePath,
-                originalFilePath: filePath,
-                timestampKey: tsKey,
-                kind: 'revision',
-                title: this.params.title,
-                content: editData.newContent,
-              });
-              break;
-            } catch (e: unknown) {
-              const code =
-                typeof e === 'object' && e !== null && 'code' in e
-                  ? (e as { code?: unknown }).code
-                  : undefined;
-
-              if (code === 'EEXIST' && attempt < maxAttempts) {
-                // Retry with a regenerated timestamp key.
-                continue;
-              }
-              throw e;
-            }
-          }
-        } catch {
-          backupWarning =
-            backupWarning ??
-            'Failed to create backup revision. File was edited without a backup.';
-        }
+        ({ backupWarning } = await createEditBackups({
+          projectRoot,
+          relativeFilePath,
+          originalFilePath: filePath,
+          currentContent: editData.currentContent ?? '',
+          newContent: editData.newContent,
+          isNewFile: editData.isNewFile,
+          title: this.params.title,
+        }));
       }
 
       // Track git stats if logging is enabled and service is available

@@ -35,11 +35,7 @@ import { Config, ApprovalMode } from '../config/config.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
-import {
-  ensureBaselineBackup,
-  formatTimestampKey,
-  writeBackupPair,
-} from './edit-backups.js';
+import { createEditBackups } from './edit-backups.js';
 import { spawnSync } from 'child_process';
 import FastGlob from 'fast-glob';
 import { DebugLogger } from '../debug/index.js';
@@ -2111,61 +2107,20 @@ class ASTEditToolInvocation
 
       let backupWarning: string | null = null;
 
-      if (backupsEnabled && !editData.isNewFile) {
-        try {
-          await ensureBaselineBackup({
-            projectRoot,
-            relativeFilePath,
-            originalFilePath: this.params.file_path,
-            baselineContent: editData.currentContent ?? '',
-          });
-        } catch (_e) {
-          backupWarning =
-            'Failed to create baseline backup (before first edit). File edit applied without backups.';
-        }
-      }
-
       await this.config
         .getFileSystemService()
         .writeTextFile(this.params.file_path, editData.newContent);
 
       if (backupsEnabled) {
-        try {
-          const maxAttempts = 3;
-          let attempt = 0;
-
-          while (attempt < maxAttempts) {
-            attempt++;
-            const tsKey = formatTimestampKey(new Date());
-            try {
-              await writeBackupPair({
-                projectRoot,
-                relativeFilePath,
-                originalFilePath: this.params.file_path,
-                timestampKey: tsKey,
-                kind: 'revision',
-                title: this.params.title,
-                content: editData.newContent,
-              });
-              break;
-            } catch (e: unknown) {
-              const code =
-                typeof e === 'object' && e !== null && 'code' in e
-                  ? (e as { code?: unknown }).code
-                  : undefined;
-
-              if (code === 'EEXIST' && attempt < maxAttempts) {
-                // Retry with a regenerated timestamp key.
-                continue;
-              }
-              throw e;
-            }
-          }
-        } catch (_e) {
-          backupWarning =
-            backupWarning ??
-            'Failed to create backup revision. File edit applied without backups.';
-        }
+        ({ backupWarning } = await createEditBackups({
+          projectRoot,
+          relativeFilePath,
+          originalFilePath: this.params.file_path,
+          currentContent: editData.currentContent ?? '',
+          newContent: editData.newContent,
+          isNewFile: editData.isNewFile,
+          title: this.params.title,
+        }));
       }
 
       // Return execution result
