@@ -961,6 +961,50 @@ describe('RetryOrchestrator', () => {
       expect(capturedContext?.triggeringStatus).toBeUndefined();
     });
 
+    it('should throw AllBucketsExhaustedError when all buckets exhausted due to network errors', async () => {
+      const networkError = createNetworkError('ECONNRESET');
+      let bucketIndex = 0;
+      const buckets = ['bucket1', 'bucket2'];
+
+      const provider = createTestProvider({
+        responses: [
+          { error: networkError },
+          { error: networkError }, // Failover to bucket2
+          { error: networkError },
+          { error: networkError }, // All buckets exhausted
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => buckets,
+        getCurrentBucket: () =>
+          buckets[Math.min(bucketIndex, buckets.length - 1)],
+        tryFailover: async () => {
+          bucketIndex++;
+          return bucketIndex < buckets.length;
+        },
+        isEnabled: () => true,
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 10,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      await expect(
+        consumeStream(orchestrator.generateChatCompletion(options)),
+      ).rejects.toThrow(/bucket/i);
+    });
+
     it('should reset network error counter when a different error type occurs', async () => {
       const networkError = createNetworkError('ECONNRESET');
       const rateLimitError = createRateLimitError();
