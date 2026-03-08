@@ -13,6 +13,7 @@ import {
   loadGlobalMemory,
   loadEnvironmentMemory,
   loadJitSubdirectoryMemory,
+  loadCoreMemory,
 } from './memoryDiscovery.js';
 import {
   setLlxprtMdFilename,
@@ -1058,7 +1059,7 @@ included directory memory
       const globalFileOccurrences = result.files.filter(
         (f) => f.path === globalFile,
       );
-      expect(globalFileOccurrences.length).toBeLessThanOrEqual(1);
+      expect(globalFileOccurrences.length).toBe(0);
     });
   });
 
@@ -1256,7 +1257,6 @@ included directory memory
         'Global core memory',
       );
 
-      const { loadCoreMemory } = await import('./memoryDiscovery.js');
       const result = await loadCoreMemory([]);
 
       expect(result.files).toHaveLength(1);
@@ -1274,7 +1274,6 @@ included directory memory
         'Project core memory',
       );
 
-      const { loadCoreMemory } = await import('./memoryDiscovery.js');
       const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(1);
@@ -1297,7 +1296,6 @@ included directory memory
         'Project core memory',
       );
 
-      const { loadCoreMemory } = await import('./memoryDiscovery.js');
       const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(2);
@@ -1311,7 +1309,6 @@ included directory memory
         path.join(testRootDir, 'core_root'),
       );
 
-      const { loadCoreMemory } = await import('./memoryDiscovery.js');
       const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(0);
