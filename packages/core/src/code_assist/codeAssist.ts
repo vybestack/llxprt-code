@@ -10,7 +10,6 @@ import { setupUser } from './setup.js';
 import type { HttpOptions } from './server.js';
 import { CodeAssistServer } from './server.js';
 import type { Config } from '../config/config.js';
-import { LoggingContentGenerator } from '../core/loggingContentGenerator.js';
 import { DebugLogger } from '../debug/index.js';
 
 export async function createCodeAssistContentGenerator(
@@ -64,12 +63,7 @@ export async function createCodeAssistContentGenerator(
 export function getCodeAssistServer(
   config: Config,
 ): CodeAssistServer | undefined {
-  let server = config.getGeminiClient().getContentGenerator();
-
-  // Unwrap LoggingContentGenerator if present
-  if (server instanceof LoggingContentGenerator) {
-    server = server.getWrapped();
-  }
+  const server = config.getGeminiClient().getContentGenerator();
 
   if (!(server instanceof CodeAssistServer)) {
     return undefined;

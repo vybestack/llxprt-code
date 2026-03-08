@@ -43,8 +43,10 @@ import {
   modifyWithEditor,
 } from '../tools/modifiable-tool.js';
 import * as Diff from 'diff';
-import levenshtein from 'fast-levenshtein';
-import { doesToolInvocationMatch } from '../utils/tool-utils.js';
+import {
+  doesToolInvocationMatch,
+  getToolSuggestion,
+} from '../utils/tool-utils.js';
 import {
   DEFAULT_MAX_TOKENS,
   type ToolOutputSettingsProvider,
@@ -560,32 +562,7 @@ export class CoreToolScheduler {
     }
   }
 
-  /**
-   * Build a friendly suggestion message when a tool can't be found.
-   */
-  private getToolSuggestion(unknownToolName: string, topN = 3): string {
-    const allToolNames = this.toolRegistry.getAllToolNames();
-    if (!allToolNames.length) {
-      return '';
-    }
 
-    const matches = allToolNames
-      .map((toolName) => ({
-        name: toolName,
-        distance: levenshtein.get(unknownToolName, toolName),
-      }))
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, topN);
-
-    if (!matches.length || matches[0].distance === Infinity) {
-      return '';
-    }
-
-    const suggestedNames = matches.map((match) => `"${match.name}"`).join(', ');
-    return matches.length > 1
-      ? ` Did you mean one of: ${suggestedNames}?`
-      : ` Did you mean ${suggestedNames}?`;
-  }
 
   schedule(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
@@ -677,7 +654,10 @@ export class CoreToolScheduler {
 
           const toolInstance = this.toolRegistry.getTool(reqInfo.name);
           if (!toolInstance) {
-            const suggestion = this.getToolSuggestion(reqInfo.name);
+            const suggestion = getToolSuggestion(
+              reqInfo.name,
+              this.toolRegistry.getAllToolNames(),
+            );
             const errorMessage = `Tool "${reqInfo.name}" could not be loaded.${suggestion}`;
             return {
               status: 'error',
