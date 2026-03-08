@@ -1299,9 +1299,10 @@ included directory memory
       const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(2);
-      expect(result.files.map((f) => f.path).sort()).toEqual(
-        [globalCoreFile, projectCoreFile].sort(),
-      );
+      expect(result.files.map((f) => f.path)).toEqual([
+        projectCoreFile,
+        globalCoreFile,
+      ]);
     });
 
     it('should return empty if no .LLXPRT_SYSTEM files exist', async () => {
