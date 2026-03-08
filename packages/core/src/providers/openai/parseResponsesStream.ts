@@ -333,6 +333,10 @@ export async function* parseResponsesStream(
                     const shouldHide =
                       !includeThinkingInResponse || Boolean(prior);
 
+                    if (!shouldHide) {
+                      hasEmittedVisibleThinking = true;
+                    }
+
                     const baseReasoningBlock: ContentBlock = {
                       type: 'thinking',
                       thought: finalThought,

@@ -422,4 +422,32 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     expect(secondThinkingBlock?.thought).toBe('Thinking about this');
     expect(secondThinkingBlock?.encryptedContent).toBe('encrypted_data_here');
   });
+
+  it('should suppress reasoning_text.done when output_item.done already emitted visible block', async () => {
+    const outputItemData =
+      '{"type":"response.output_item.done","item":{"type":"reasoning","id":"reasoning_1","summary":[{"type":"summary_text","text":"Visible from output_item"}]}}';
+    const chunks = [
+      `data: ${outputItemData}\n\n`,
+      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"Different reasoning text"}\n\n',
+      'data: {"type":"response.reasoning_text.done","sequence_number":3}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages = [...messages, message];
+    }
+
+    const thinkingMessages = messages.filter((m) =>
+      m.blocks.some((block) => block.type === 'thinking'),
+    );
+    expect(thinkingMessages).toHaveLength(1);
+
+    const thinkingBlock = thinkingMessages[0].blocks.find(
+      (block) => block.type === 'thinking',
+    );
+    expect(thinkingBlock?.thought).toBe('Visible from output_item');
+    expect(thinkingBlock?.isHidden).toBe(false);
+  });
 });
