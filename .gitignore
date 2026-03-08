@@ -69,6 +69,9 @@ research/
 packages/vscode-ide-companion/*.vsix
 tmp/
 
+# Edit tool backups
+.backups/
+
 #Luther directory
 luther/
 

@@ -39,6 +39,11 @@ import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
+import {
+  ensureBaselineBackup,
+  formatTimestampKey,
+  writeBackupPair,
+} from './edit-backups.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -214,6 +219,16 @@ export interface EditToolParams {
    * Initially proposed content.
    */
   ai_proposed_content?: string;
+
+  /**
+   * If true (default), writes backups under .backups/ in the project root.
+   */
+  backups?: boolean;
+
+  /**
+   * Optional title used for backup metadata.
+   */
+  title?: string;
 }
 
 interface CalculatedEdit {
@@ -704,9 +719,49 @@ class EditToolInvocation extends BaseToolInvocation<
     const filePath = this.getFilePath();
     try {
       await this.ensureParentDirectoriesExist(filePath);
+
+      const backupsEnabled = this.params.backups !== false;
+      const projectRoot = this.config.getTargetDir();
+      const relativeFilePath = makeRelative(filePath, projectRoot);
+
+      let backupWarning: string | null = null;
+
+      if (backupsEnabled && !editData.isNewFile) {
+        try {
+          await ensureBaselineBackup({
+            projectRoot,
+            relativeFilePath,
+            originalFilePath: filePath,
+            baselineContent: editData.currentContent ?? '',
+          });
+        } catch {
+          backupWarning =
+            'Failed to create baseline backup (pre-first-edit). File was edited without a backup.';
+        }
+      }
+
       await this.config
         .getFileSystemService()
         .writeTextFile(filePath, editData.newContent);
+
+      if (backupsEnabled) {
+        try {
+          const tsKey = formatTimestampKey(new Date());
+          await writeBackupPair({
+            projectRoot,
+            relativeFilePath,
+            originalFilePath: filePath,
+            timestampKey: tsKey,
+            kind: 'revision',
+            title: this.params.title,
+            content: editData.newContent,
+          });
+        } catch {
+          backupWarning =
+            backupWarning ??
+            'Failed to create backup revision. File was edited without a backup.';
+        }
+      }
 
       // Track git stats if logging is enabled and service is available
       let gitStats = null;
@@ -768,6 +823,12 @@ class EditToolInvocation extends BaseToolInvocation<
       if (editData.filterResult?.systemFeedback) {
         llmSuccessMessageParts.push(
           `\n\n<system-reminder>\n${editData.filterResult.systemFeedback}\n</system-reminder>`,
+        );
+      }
+
+      if (backupWarning) {
+        llmSuccessMessageParts.push(
+          `\n\n<system-reminder>\n${backupWarning}\n</system-reminder>`,
         );
       }
 
@@ -909,6 +970,11 @@ Expectation for required parameters:
   protected override validateToolParamValues(
     params: EditToolParams,
   ): string | null {
+    if (typeof params.title === 'string') {
+      const trimmed = params.title.trim();
+      params.title = trimmed.length > 0 ? trimmed : undefined;
+    }
+
     // Accept either absolute_path or file_path
     const filePath = params.absolute_path || params.file_path || '';
 
