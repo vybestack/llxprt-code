@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -48,6 +48,21 @@ export function getBackupBasePath(
 ): string {
   const backupsRoot = getBackupsRootDir(projectRoot);
 
+  // Defensive: ensure the provided path can't escape the backups root.
+  // (e.g. "../other/file" would otherwise be allowed by path.join)
+  if (path.isAbsolute(relativeFilePath)) {
+    throw new Error(
+      `relativeFilePath must not be absolute: ${relativeFilePath}`,
+    );
+  }
+
+  const normalized = path.normalize(relativeFilePath);
+  if (normalized === '..' || normalized.startsWith(`..${path.sep}`)) {
+    throw new Error(
+      `relativeFilePath must not traverse outside the project root: ${relativeFilePath}`,
+    );
+  }
+
   // Important: we append the key to the base file name with an underscore.
   // Examples:
   // - baseline:  .backups/src/foo.ts_baseline
@@ -80,6 +95,29 @@ async function writeFileExclusive(
   content: string,
 ): Promise<void> {
   await fs.writeFile(filePath, content, { encoding: 'utf-8', flag: 'wx' });
+}
+
+async function writeMetadataSidecarExclusive(params: {
+  metadataFilePath: string;
+  kind: BackupKind;
+  timestampKey: string;
+  title?: string;
+  relativeFilePath: string;
+  originalFilePath: string;
+}): Promise<void> {
+  const meta: BackupMetadata = {
+    kind: params.kind,
+    timestampKey: params.timestampKey,
+    title: params.title,
+    relativeFilePath: params.relativeFilePath,
+    originalFilePath: params.originalFilePath,
+    createdAtIso: new Date().toISOString(),
+  };
+
+  await writeFileExclusive(
+    params.metadataFilePath,
+    JSON.stringify(meta, null, 2),
+  );
 }
 
 export async function writeBackupPair(params: {
@@ -136,6 +174,33 @@ export async function ensureBaselineBackup(params: {
 
   const exists = await fileExists(backupFilePath);
   if (exists) {
+    const metadataExists = await fileExists(metadataFilePath);
+    if (metadataExists) {
+      return { created: false, backupFilePath, metadataFilePath };
+    }
+
+    // Baseline blob exists but sidecar metadata is missing.
+    // Recreate the metadata sidecar without touching the baseline snapshot.
+    try {
+      await writeMetadataSidecarExclusive({
+        metadataFilePath,
+        kind: 'baseline',
+        timestampKey: BASELINE_KEY,
+        title: 'baseline',
+        relativeFilePath: params.relativeFilePath,
+        originalFilePath: params.originalFilePath,
+      });
+    } catch (e: unknown) {
+      const code =
+        typeof e === 'object' && e !== null && 'code' in e
+          ? (e as { code?: unknown }).code
+          : undefined;
+
+      if (code !== 'EEXIST') {
+        throw e;
+      }
+    }
+
     return { created: false, backupFilePath, metadataFilePath };
   }
 

@@ -929,7 +929,7 @@ Expectation for required parameters:
           },
           backups: {
             description:
-              "If true (default), writes backups under .backups/ in the project root using a parallel directory structure. A backup is a point-in-time snapshot of the file content that allows you to restore previous versions without relying on git commits. Baseline is the file state before the first successful edit made via this tool. Naming: '<relativeFilePath>_baseline' for the baseline snapshot, and '<relativeFilePath>_YYYYMMDD_HHMMSS_mmm' (UTC) after each successful edit. Next to each backup file, a '<sameName>.json' metadata file is written containing at least the edit 'title'.",
+              "If true (default), writes backups under .backups/ in the project root using a parallel directory structure. A backup is a point-in-time snapshot of the file content that allows you to restore previous versions without relying on git commits. Baseline is the file state before the first successful edit made via this tool. Naming: '<relativeFilePath>_baseline' for the baseline snapshot, and '<relativeFilePath>_YYYYMMDD_HHMMSS_mmm' (UTC) after each successful edit. Next to each backup file, a '<sameName>.json' metadata file is written which may include metadata such as the optional edit 'title' (when provided).",
             type: 'boolean',
             default: true,
           },

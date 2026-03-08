@@ -30,6 +30,12 @@ describe('edit backups', () => {
     expect(formatTimestampKey(d)).toBe('20251224_101112_123');
   });
 
+  it('getBackupBasePath rejects unsafe relativeFilePath that would escape backups root', () => {
+    expect(() =>
+      getBackupBasePath(projectRoot, '../other/file.txt', 'baseline'),
+    ).toThrow(/traverse|escape|relativeFilePath/i);
+  });
+
   it('ensureBaselineBackup writes baseline only once', async () => {
     const relativeFilePath = 'src/foo.ts';
     const originalFilePath = path.join(projectRoot, relativeFilePath);
@@ -57,6 +63,45 @@ describe('edit backups', () => {
 
     const baselineText = await fs.readFile(first.backupFilePath, 'utf-8');
     expect(baselineText).toBe('v1');
+  });
+
+  it('ensureBaselineBackup recreates missing baseline sidecar metadata without overwriting the baseline', async () => {
+    const relativeFilePath = 'src/with-sidecar.txt';
+    const originalFilePath = path.join(projectRoot, relativeFilePath);
+
+    const first = await ensureBaselineBackup({
+      projectRoot,
+      relativeFilePath,
+      originalFilePath,
+      baselineContent: 'baseline-v1',
+    });
+    expect(first.created).toBe(true);
+
+    // Simulate partial failure where the baseline content was created but the sidecar was lost.
+    await fs.unlink(first.metadataFilePath);
+
+    const second = await ensureBaselineBackup({
+      projectRoot,
+      relativeFilePath,
+      originalFilePath,
+      baselineContent: 'baseline-v2-should-not-overwrite',
+    });
+
+    expect(second.created).toBe(false);
+
+    // Baseline blob must remain authoritative.
+    const baselineText = await fs.readFile(first.backupFilePath, 'utf-8');
+    expect(baselineText).toBe('baseline-v1');
+
+    // Sidecar should be recreated.
+    const meta = JSON.parse(
+      await fs.readFile(first.metadataFilePath, 'utf-8'),
+    ) as {
+      kind: string;
+      timestampKey: string;
+    };
+    expect(meta.kind).toBe('baseline');
+    expect(meta.timestampKey).toBe('baseline');
   });
 
   it('writeBackupPair writes both content and metadata JSON next to it', async () => {
