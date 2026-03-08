@@ -124,7 +124,7 @@ export function getToolCurrentState(
     // Tool is enabled if not in excludeTools
     return excludeTools.includes(toolName) ? 'disabled' : 'enabled';
   } catch (error) {
-    console.error('Error getting tool state:', error);
+    debugLogger.error('Error getting tool state:', error);
     return 'enabled'; // Default to enabled on error
   }
 }
@@ -160,7 +160,7 @@ export function updateToolExclusion(
       newExcludeTools as Settings['excludeTools'],
     );
   } catch (error) {
-    console.error('Error updating tool exclusion:', error);
+    debugLogger.error('Error updating tool exclusion:', error);
   }
 }
 
@@ -510,7 +510,7 @@ export function SettingsDialog({
           );
 
           if (!requiresRestart(key)) {
-            console.log(
+            debugLogger.log(
               `[DEBUG SettingsDialog] Saving ${key} immediately with value:`,
               newValue,
             );
@@ -520,7 +520,7 @@ export function SettingsDialog({
             if (key === 'vimMode' && newValue !== vimEnabled) {
               // Call toggleVimEnabled to sync the VimModeContext local state
               toggleVimEnabled().catch((error) => {
-                console.error('Failed to toggle vim mode:', error);
+                debugLogger.error('Failed to toggle vim mode:', error);
               });
             }
 
@@ -555,7 +555,7 @@ export function SettingsDialog({
             setModifiedSettings((prev) => {
               const updated = new Set(prev).add(key);
               const needsRestart = hasRestartRequiredSettings(updated);
-              console.log(
+              debugLogger.log(
                 `[DEBUG SettingsDialog] Modified settings:`,
                 Array.from(updated),
                 'Needs restart:',
@@ -638,7 +638,7 @@ export function SettingsDialog({
     setPendingSettings((prev) => setPendingSettingValueAny(key, parsed, prev));
 
     if (!requiresRestart(key)) {
-      console.log(
+      debugLogger.log(
         `[DEBUG SettingsDialog] Saving ${key} immediately with value:`,
         parsed,
       );

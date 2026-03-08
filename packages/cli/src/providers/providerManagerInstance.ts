@@ -48,7 +48,7 @@ function sanitizeApiKey(key: string): string {
   const sanitized = sanitizeForByteString(key);
 
   if (needsSanitization(key)) {
-    console.warn(
+    debugLogger.warn(
       '[ProviderManager] API key contained non-ASCII or control characters that were removed. ' +
         'Please check your API key file encoding (should be UTF-8 without BOM).',
     );
@@ -344,7 +344,7 @@ export function createProviderManager(
         ? providerBaseUrl
         : process.env.OPENAI_BASE_URL;
 
-  // Debug logging removed - was using console.log which violates project guidelines
+  // Debug logging removed - was using debugLogger.log which violates project guidelines
   // Use DebugLogger if detailed logging is needed here
 
   const openaiProviderConfig: ProviderConfigWithToolMode = {
@@ -554,7 +554,7 @@ function registerAliasProviders(
         break;
       }
       default: {
-        console.warn(
+        debugLogger.warn(
           `[ProviderManager] Unsupported base provider '${entry.config.baseProvider}' for alias '${entry.alias}', skipping.`,
         );
       }
@@ -615,7 +615,7 @@ function createOpenAIAliasProvider(
 ): OpenAIProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    console.warn(
+    debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
     );
     return null;
@@ -688,7 +688,7 @@ function createOpenAIResponsesAliasProvider(
 ): OpenAIResponsesProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    console.warn(
+    debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
     );
     return null;
@@ -766,7 +766,7 @@ function createOpenAIVercelAliasProvider(
 ): OpenAIVercelProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    console.warn(
+    debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
     );
     return null;

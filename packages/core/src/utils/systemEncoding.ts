@@ -7,6 +7,7 @@
 import { execSync } from 'child_process';
 import os from 'os';
 import { detect as chardetDetect } from 'chardet';
+import { debugLogger } from './debugLogger.js';
 
 // Cache for system encoding to avoid repeated detection
 // Use undefined to indicate "not yet checked" vs null meaning "checked but failed"
@@ -68,7 +69,7 @@ export function getSystemEncoding(): string | null {
         `Unable to parse Windows code page from 'chcp' output "${output.trim()}". `,
       );
     } catch (error) {
-      console.warn(
+      debugLogger.warn(
         `Failed to get Windows code page using 'chcp' command: ${error instanceof Error ? error.message : String(error)}. ` +
           `Will attempt to detect encoding from command output instead.`,
       );
@@ -90,7 +91,7 @@ export function getSystemEncoding(): string | null {
         .toString()
         .trim();
     } catch (_e) {
-      console.warn('Failed to get locale charmap.');
+      debugLogger.warn('Failed to get locale charmap.');
       return null;
     }
   }
@@ -143,7 +144,7 @@ export function windowsCodePageToEncoding(cp: number): string | null {
     return map[cp];
   }
 
-  console.warn(`Unable to determine encoding for windows code page ${cp}.`);
+  debugLogger.warn(`Unable to determine encoding for windows code page ${cp}.`);
   return null; // Return null if no mapping found
 }
 
@@ -166,7 +167,7 @@ export function detectEncodingFromBuffer(buffer: Buffer): string | null {
       return detected.toLowerCase();
     }
   } catch (error) {
-    console.warn('Failed to detect encoding with chardet:', error);
+    debugLogger.warn('Failed to detect encoding with chardet:', error);
   }
 
   return null;

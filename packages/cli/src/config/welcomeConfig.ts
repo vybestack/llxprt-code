@@ -7,6 +7,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { USER_SETTINGS_DIR } from './paths.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 export const WELCOME_CONFIG_FILENAME = 'welcomeConfig.json';
 
@@ -65,7 +66,7 @@ export function saveWelcomeConfig(config: WelcomeConfig): void {
     });
     cachedConfig = config;
   } catch (error) {
-    console.error('Error saving welcome config:', error);
+    debugLogger.error('Error saving welcome config:', error);
   }
 }
 

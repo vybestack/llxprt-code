@@ -1,3 +1,4 @@
+import { debugLogger } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -30,7 +31,7 @@ export async function readStdin(): Promise<string> {
         if (totalSize + chunk.length > MAX_STDIN_SIZE) {
           const remainingSize = MAX_STDIN_SIZE - totalSize;
           data += chunk.slice(0, remainingSize);
-          console.warn(
+          debugLogger.warn(
             `Warning: stdin input truncated to ${MAX_STDIN_SIZE} bytes.`,
           );
           process.stdin.destroy(); // Stop reading further

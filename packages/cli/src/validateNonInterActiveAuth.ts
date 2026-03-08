@@ -38,7 +38,7 @@ function reportNonInteractiveAuthError(config: Config, message: string): void {
     return;
   }
 
-  console.error(message);
+  debugLogger.error(message);
 }
 
 /**

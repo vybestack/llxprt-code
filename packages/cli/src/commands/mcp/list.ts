@@ -90,11 +90,11 @@ export async function listMcpServers(): Promise<void> {
   const serverNames = Object.keys(mcpServers);
 
   if (serverNames.length === 0) {
-    console.log('No MCP servers configured.');
+    debugLogger.log('No MCP servers configured.');
     return;
   }
 
-  console.log('Configured MCP servers:\n');
+  debugLogger.log('Configured MCP servers:\n');
 
   for (const serverName of serverNames) {
     const server = mcpServers[serverName];
@@ -124,7 +124,7 @@ export async function listMcpServers(): Promise<void> {
       serverInfo += `${server.httpUrl} (http)`;
       // Deprecation warning when both httpUrl and url are present
       if (server.url) {
-        console.warn(
+        debugLogger.warn(
           `WARNING:  Warning: Server '${serverName}' has both 'httpUrl' (deprecated) and 'url'. ` +
             `Using 'httpUrl'. Please migrate to 'url' with 'type: "http"'.`,
         );
@@ -137,7 +137,7 @@ export async function listMcpServers(): Promise<void> {
       serverInfo += `${server.command} ${server.args?.join(' ') || ''} (stdio)`;
     }
 
-    console.log(`${statusIndicator} ${serverInfo} - ${statusText}`);
+    debugLogger.log(`${statusIndicator} ${serverInfo} - ${statusText}`);
   }
 }
 

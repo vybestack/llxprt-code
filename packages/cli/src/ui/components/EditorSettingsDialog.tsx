@@ -57,7 +57,7 @@ export function EditorSettingsDialog({
       )
     : 0;
   if (editorIndex === -1) {
-    console.error(`Editor is not supported: ${currentPreference}`);
+    debugLogger.error(`Editor is not supported: ${currentPreference}`);
     editorIndex = 0;
   }
 

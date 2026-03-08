@@ -80,7 +80,7 @@ export class QwenOAuthProvider implements OAuthProvider {
      * Deprecation warning for missing TokenStore
      */
     if (!tokenStore) {
-      console.warn(
+      debugLogger.warn(
         `DEPRECATION: ${this.name} OAuth provider created without TokenStore. ` +
           `Token persistence will not work. Please update your code.`,
       );
@@ -209,11 +209,11 @@ export class QwenOAuthProvider implements OAuthProvider {
           addItem(historyItem, Date.now());
         } else {
           // Lines 37-38: PRINT
-          console.log('\nQwen OAuth Authentication');
-          console.log('─'.repeat(40));
+          debugLogger.log('\nQwen OAuth Authentication');
+          debugLogger.log('─'.repeat(40));
 
-          console.log('Please visit the following URL to authorize:');
-          console.log(authUrl);
+          debugLogger.log('Please visit the following URL to authorize:');
+          debugLogger.log(authUrl);
         }
 
         // Copy URL to clipboard with error handling
@@ -248,7 +248,7 @@ export class QwenOAuthProvider implements OAuthProvider {
               Date.now(),
             );
           } else {
-            console.log('Opening browser for authentication...');
+            debugLogger.log('Opening browser for authentication...');
           }
 
           // Lines 42-46: TRY
@@ -265,7 +265,7 @@ export class QwenOAuthProvider implements OAuthProvider {
                 Date.now(),
               );
             } else {
-              console.log('Failed to open browser automatically.');
+              debugLogger.log('Failed to open browser automatically.');
             }
             this.logger.debug(
               () =>
@@ -283,9 +283,9 @@ export class QwenOAuthProvider implements OAuthProvider {
             Date.now(),
           );
         } else {
-          console.log('─'.repeat(40));
+          debugLogger.log('─'.repeat(40));
           // Line 52: PRINT
-          console.log('Waiting for authorization...\n');
+          debugLogger.log('Waiting for authorization...\n');
         }
 
         // Line 54: SET token = AWAIT this.deviceFlow.pollForToken
@@ -315,7 +315,7 @@ export class QwenOAuthProvider implements OAuthProvider {
             Date.now(),
           );
         } else {
-          console.log('Authentication successful!');
+          debugLogger.log('Authentication successful!');
         }
       },
       this.name,
@@ -533,7 +533,7 @@ export class QwenOAuthProvider implements OAuthProvider {
               Date.now(),
             );
           } else {
-            console.log('Successfully logged out from Qwen');
+            debugLogger.log('Successfully logged out from Qwen');
           }
         }
       },

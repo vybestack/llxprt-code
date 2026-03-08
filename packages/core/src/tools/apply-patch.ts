@@ -30,6 +30,7 @@ import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { APPLY_PATCH_TOOL } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Type representing a parsed patch operation
@@ -320,7 +321,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
             );
           } catch (error) {
             // Don't fail the patch if git stats tracking fails
-            console.warn('Failed to track git stats:', error);
+            debugLogger.warn('Failed to track git stats:', error);
           }
         }
       }

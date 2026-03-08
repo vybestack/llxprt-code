@@ -214,7 +214,7 @@ export async function checkForExtensionUpdate(
         workspaceDir: cwd,
       });
       if (!newExtension) {
-        console.warn(
+        debugLogger.warn(
           `Failed to check for update for local extension "${extension.name}". Could not load extension from source path: ${installMetadata.source}`,
         );
         setExtensionUpdateState(ExtensionUpdateState.NOT_UPDATABLE);
@@ -227,7 +227,7 @@ export async function checkForExtensionUpdate(
       setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
       return;
     } catch (error) {
-      console.error(
+      debugLogger.error(
         `Error checking for update for local extension "${extension.name}": ${getErrorMessage(error)}`,
       );
       setExtensionUpdateState(ExtensionUpdateState.ERROR);
@@ -247,13 +247,13 @@ export async function checkForExtensionUpdate(
       const git = simpleGit(extension.path);
       const remotes = await git.getRemotes(true);
       if (remotes.length === 0) {
-        console.error('No git remotes found.');
+        debugLogger.error('No git remotes found.');
         setExtensionUpdateState(ExtensionUpdateState.ERROR);
         return;
       }
       const remoteUrl = remotes[0].refs.fetch;
       if (!remoteUrl) {
-        console.error(`No fetch URL found for git remote ${remotes[0].name}.`);
+        debugLogger.error(`No fetch URL found for git remote ${remotes[0].name}.`);
         setExtensionUpdateState(ExtensionUpdateState.ERROR);
         return;
       }
@@ -264,7 +264,7 @@ export async function checkForExtensionUpdate(
       const lsRemoteOutput = await git.listRemote([remoteUrl, refToCheck]);
 
       if (typeof lsRemoteOutput !== 'string' || lsRemoteOutput.trim() === '') {
-        console.error(`Git ref ${refToCheck} not found.`);
+        debugLogger.error(`Git ref ${refToCheck} not found.`);
         setExtensionUpdateState(ExtensionUpdateState.ERROR);
         return;
       }
@@ -273,7 +273,7 @@ export async function checkForExtensionUpdate(
       const localHash = await git.revparse(['HEAD']);
 
       if (!remoteHash) {
-        console.error(
+        debugLogger.error(
           `Unable to parse hash from git ls-remote output "${lsRemoteOutput}"`,
         );
         setExtensionUpdateState(ExtensionUpdateState.ERROR);
@@ -288,7 +288,7 @@ export async function checkForExtensionUpdate(
     } else {
       const { source, releaseTag } = installMetadata;
       if (!source) {
-        console.error(`No "source" provided for extension.`);
+        debugLogger.error(`No "source" provided for extension.`);
         setExtensionUpdateState(ExtensionUpdateState.ERROR);
         return;
       }
@@ -307,7 +307,7 @@ export async function checkForExtensionUpdate(
       return;
     }
   } catch (error) {
-    console.error(
+    debugLogger.error(
       `Failed to check for updates for extension "${installMetadata.source}": ${getErrorMessage(error)}`,
     );
     setExtensionUpdateState(ExtensionUpdateState.ERROR);
@@ -529,7 +529,7 @@ export async function downloadFile(
       fs.unlink(dest, (unlinkErr) => {
         if (unlinkErr && unlinkErr.code !== 'ENOENT') {
           // Log cleanup failure but still reject with original error
-          console.error(`Failed to clean up partial file ${dest}:`, unlinkErr);
+          debugLogger.error(`Failed to clean up partial file ${dest}:`, unlinkErr);
         }
         reject(error);
       });

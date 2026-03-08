@@ -72,7 +72,7 @@ export const Notifications = ({
           });
           await fs.writeFile(screenReaderNudgeFilePath, 'true');
         } catch (error) {
-          console.error('Error storing screen reader nudge', error);
+          debugLogger.error('Error storing screen reader nudge', error);
         }
       }
     };

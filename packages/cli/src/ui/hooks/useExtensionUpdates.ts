@@ -206,7 +206,7 @@ export const useExtensionUpdates = (
           try {
             callback(nonNullResults);
           } catch (e) {
-            console.error(getErrorMessage(e));
+            debugLogger.error(getErrorMessage(e));
           }
         });
       });

@@ -1,3 +1,4 @@
+import { debugLogger } from '../utils/debugLogger.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -479,7 +480,7 @@ function invokeSubscribers(
             subscription.callback(event);
           } catch (error) {
             // Error handling to prevent cascade failures (line 315)
-            console.error('Error in async runtime state callback:', error);
+            debugLogger.error('Error in async runtime state callback:', error);
           }
         });
       } else {
@@ -488,7 +489,7 @@ function invokeSubscribers(
       }
     } catch (error) {
       // Error handling to prevent cascade failures (line 315)
-      console.error('Error in runtime state callback:', error);
+      debugLogger.error('Error in runtime state callback:', error);
     }
   }
 }

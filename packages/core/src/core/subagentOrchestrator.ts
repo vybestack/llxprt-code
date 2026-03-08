@@ -39,6 +39,7 @@ import { SettingsService } from '../settings/SettingsService.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 type RuntimeLoader = (
   options: AgentRuntimeLoaderOptions,
@@ -413,7 +414,7 @@ export class SubagentOrchestrator {
             }
           }
         } catch (error) {
-          console.warn(
+          debugLogger.warn(
             `SubagentOrchestrator: unable to read auth key file '${authKeyfile}': ${
               error instanceof Error ? error.message : String(error)
             }`,

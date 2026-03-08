@@ -207,7 +207,7 @@ export async function saveClipboardImage(
     // No format worked
     return null;
   } catch (error) {
-    console.error('Error saving clipboard image:', error);
+    debugLogger.error('Error saving clipboard image:', error);
     return null;
   }
 }

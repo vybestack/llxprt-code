@@ -54,6 +54,7 @@ import {
 } from '../utils/shell-utils.js';
 import { isShellInvocationAllowlisted } from '../utils/tool-utils.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // Throttle interval for shell output updates to avoid excessive UI updates.
 // Using 100ms provides responsive feedback without overwhelming the system.
@@ -401,7 +402,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
             .filter(Boolean);
           for (const line of pgrepLines) {
             if (!/^\d+$/.test(line)) {
-              console.error(`pgrep: ${line}`);
+              debugLogger.error(`pgrep: ${line}`);
             }
             const pid = Number(line);
             if (result.pid && pid !== result.pid) {
@@ -410,7 +411,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
           }
         } else {
           if (!signal.aborted) {
-            console.error('missing pgrep output');
+            debugLogger.error('missing pgrep output');
           }
         }
 
@@ -427,7 +428,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
           }
         } catch (error) {
           // If we can't get the PGID, that's okay
-          console.error('Failed to get PGID:', error);
+          debugLogger.error('Failed to get PGID:', error);
         }
       }
 
@@ -830,7 +831,7 @@ export class ShellTool extends BaseDeclarativeTool<
     const commandCheck = isCommandAllowed(params.command, this.config);
     if (!commandCheck.allowed) {
       if (!commandCheck.reason) {
-        console.error(
+        debugLogger.error(
           'Unexpected: isCommandAllowed returned false without a reason',
         );
         return `Command is not allowed: ${params.command}`;

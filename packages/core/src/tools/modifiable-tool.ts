@@ -17,6 +17,7 @@ import {
   type ToolResult,
 } from './tools.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:tools:modifiable-tool');
 
@@ -152,19 +153,19 @@ function deleteTempFiles(
   try {
     fs.unlinkSync(oldPath);
   } catch {
-    console.error(`Error deleting temp diff file: ${oldPath}`);
+    debugLogger.error(`Error deleting temp diff file: ${oldPath}`);
   }
 
   try {
     fs.unlinkSync(newPath);
   } catch {
-    console.error(`Error deleting temp diff file: ${newPath}`);
+    debugLogger.error(`Error deleting temp diff file: ${newPath}`);
   }
 
   try {
     fs.rmdirSync(dirPath);
   } catch {
-    console.error(`Error deleting temp diff directory: ${dirPath}`);
+    debugLogger.error(`Error deleting temp diff directory: ${dirPath}`);
   }
 }
 
@@ -205,7 +206,7 @@ export async function modifyWithEditor<ToolParams>(
       try {
         onEditorOpen();
       } catch (error) {
-        console.error('Error in onEditorOpen callback:', error);
+        debugLogger.error('Error in onEditorOpen callback:', error);
       }
     }
 

@@ -39,6 +39,7 @@ import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -567,7 +568,7 @@ class EditToolInvocation extends BaseToolInvocation<
         throw error;
       }
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.log(`Error preparing edit: ${errorMsg}`);
+      debugLogger.log(`Error preparing edit: ${errorMsg}`);
       return false;
     }
 
@@ -721,7 +722,7 @@ class EditToolInvocation extends BaseToolInvocation<
             );
           } catch (error) {
             // Don't fail the edit if git stats tracking fails
-            console.warn('Failed to track git stats:', error);
+            debugLogger.warn('Failed to track git stats:', error);
           }
         }
       }

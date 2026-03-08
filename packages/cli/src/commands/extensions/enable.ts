@@ -23,11 +23,11 @@ export async function handleEnable(args: EnableArgs) {
       enableExtension(args.name, SettingScope.User);
     }
     if (args.scope) {
-      console.log(
+      debugLogger.log(
         `Extension "${args.name}" successfully enabled for scope "${args.scope}".`,
       );
     } else {
-      console.log(
+      debugLogger.log(
         `Extension "${args.name}" successfully enabled in all scopes.`,
       );
     }

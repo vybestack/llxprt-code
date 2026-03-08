@@ -190,7 +190,7 @@ export function getInstallationInfo(
         : 'Installed with npm. Attempting to automatically update now...',
     };
   } catch (error) {
-    console.log(error);
+    debugLogger.log(error);
     return { packageManager: PackageManager.UNKNOWN, isGlobal: false };
   }
 }

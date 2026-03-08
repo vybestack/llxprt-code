@@ -5,6 +5,7 @@ import {
   type TemplateProcessingOptions,
   type PromptContext,
 } from './types.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * TemplateEngine - Handles variable substitution in prompt templates
@@ -350,7 +351,7 @@ export class TemplateEngine {
     const debugEnabled = process.env.DEBUG === '1' || options?.debug === true;
 
     if (debugEnabled) {
-      console.log(`Template substitution: ${variable} -> ${value}`);
+      debugLogger.log(`Template substitution: ${variable} -> ${value}`);
     }
   }
 }

@@ -5,6 +5,7 @@
  */
 
 import { useRef, useEffect } from 'react';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface RenderInfo {
   count: number;
@@ -73,7 +74,7 @@ export function useRenderLoopDetector(
     ).length;
 
     if (rapidRenders > RAPID_RENDER_THRESHOLD) {
-      console.error(
+      debugLogger.error(
         `CRITICAL: RENDER LOOP DETECTED: ${componentName} rendered ${rapidRenders} times in ${RAPID_TIME_WINDOW}ms!`,
         '\nProps:',
         props,
@@ -86,7 +87,7 @@ export function useRenderLoopDetector(
         '\n- Inline object/array creation',
       );
     } else if (recentRenders > RENDER_THRESHOLD) {
-      console.warn(
+      debugLogger.warn(
         `WARNING: High render count: ${componentName} rendered ${recentRenders} times in ${TIME_WINDOW}ms`,
         '\nProps:',
         props,
@@ -154,7 +155,7 @@ export function useWhyDidYouRender(
       }
 
       if (Object.keys(changedProps).length > 0) {
-        console.log(
+        debugLogger.log(
           `DEBUG: ${componentName} re-rendered due to prop changes:`,
           changedProps,
         );

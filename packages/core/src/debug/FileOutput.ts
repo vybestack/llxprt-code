@@ -7,6 +7,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { LLXPRT_DIR } from '../utils/paths.js';
 import type { LogEntry } from './types.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 interface QueuedEntry {
   entry: LogEntry;
@@ -140,7 +141,7 @@ export class FileOutput {
       });
     } catch (error) {
       // Gracefully handle errors - don't crash the application
-      console.error('FileOutput: Failed to write log entries:', error);
+      debugLogger.error('FileOutput: Failed to write log entries:', error);
 
       // Put entries back in queue for retry (but limit retries)
       if (this.writeQueue.length < this.maxQueueSize / 2) {

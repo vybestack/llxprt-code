@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { debugLogger } from '../utils/debugLogger.js';
 
 export class ConversationFileWriter {
   private logPath: string;
@@ -37,7 +38,7 @@ export class ConversationFileWriter {
       const line = JSON.stringify(logEntry) + '\n';
       fs.appendFileSync(this.currentLogFile, line);
     } catch (error) {
-      console.error('Failed to write log entry:', error);
+      debugLogger.error('Failed to write log entry:', error);
     }
   }
 

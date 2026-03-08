@@ -29,7 +29,7 @@ export function useWorkspaceMigration(settings: LoadedSettings) {
     ) {
       setWorkspaceExtensions(extensions);
       setShowWorkspaceMigrationDialog(true);
-      console.log(settings.merged.extensions);
+      debugLogger.log(settings.merged.extensions);
     }
   }, [settings.merged.extensions, settings.merged.extensionManagement]);
 

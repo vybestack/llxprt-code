@@ -240,7 +240,7 @@ export async function createApp() {
         ): CommandResponse | undefined => {
           const commandName = command.name;
           if (visited.includes(commandName)) {
-            console.warn(
+            debugLogger.warn(
               `Command ${commandName} already inserted in the response, skipping`,
             );
             return undefined;

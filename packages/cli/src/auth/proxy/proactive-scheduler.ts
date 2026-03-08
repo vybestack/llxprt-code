@@ -1,3 +1,4 @@
+import { debugLogger } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -52,7 +53,7 @@ export class ProactiveScheduler {
       this.timers.delete(key);
       this.refreshFn(provider, bucket).catch((err) => {
         // Log error to prevent unhandled rejection; refresh will be retried on next schedule
-        console.error(
+        debugLogger.error(
           `Proactive refresh failed for ${provider}:${bucket}:`,
           err,
         );

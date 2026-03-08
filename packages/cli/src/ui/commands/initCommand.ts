@@ -32,13 +32,13 @@ async function getInitCommandPrompt(): Promise<string> {
     try {
       return await promptService.loadPrompt('commands/init-command.md');
     } catch (error) {
-      console.warn(
+      debugLogger.warn(
         'Failed to load init command prompt from file, using fallback:',
         error,
       );
     }
   } catch (error) {
-    console.warn('Failed to initialize prompt service, using fallback:', error);
+    debugLogger.warn('Failed to initialize prompt service, using fallback:', error);
   }
 
   // Fallback to hardcoded prompt

@@ -591,7 +591,7 @@ export const AppContainer = (props: AppContainerProps) => {
       try {
         setRawMode(true);
       } catch (error) {
-        console.error('Failed to re-enable raw mode:', error);
+        debugLogger.error('Failed to re-enable raw mode:', error);
       }
     }
 
@@ -651,7 +651,7 @@ export const AppContainer = (props: AppContainerProps) => {
         setRawMode(false);
         externalEditorStateRef.current.rawModeManaged = true;
       } catch (error) {
-        console.error('Failed to disable raw mode:', error);
+        debugLogger.error('Failed to disable raw mode:', error);
       }
     }
 
@@ -1033,7 +1033,7 @@ export const AppContainer = (props: AppContainerProps) => {
           : configModel;
 
       if (effectiveModel !== currentModel) {
-        console.debug(
+        debugLogger.debug(
           `[Model Update] Updating footer from ${currentModel} to ${effectiveModel}`,
         );
         setCurrentModel(effectiveModel);
@@ -1165,7 +1165,7 @@ export const AppContainer = (props: AppContainerProps) => {
         Date.now(),
       );
       if (config.getDebugMode()) {
-        console.log(
+        debugLogger.log(
           `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
         );
       }
@@ -1178,7 +1178,7 @@ export const AppContainer = (props: AppContainerProps) => {
         },
         Date.now(),
       );
-      console.error('Error refreshing memory:', error);
+      debugLogger.error('Error refreshing memory:', error);
     }
   }, [config, addItem, settings.merged]);
 
@@ -1823,6 +1823,7 @@ export const AppContainer = (props: AppContainerProps) => {
     clearItems();
     clearConsoleMessagesState();
     if (!useAlternateBuffer) {
+      // eslint-disable-next-line no-console
       console.clear();
     }
     refreshStatic();

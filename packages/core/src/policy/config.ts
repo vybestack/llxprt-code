@@ -31,6 +31,7 @@ import {
 } from '../confirmation-bus/types.js';
 import { type MessageBus } from '../confirmation-bus/message-bus.js';
 import { coreEvents } from '../utils/events.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -534,7 +535,7 @@ export function createPolicyUpdater(
             existingData = toml.parse(fileContent) as { rule?: TomlRule[] };
           } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-              console.warn(
+              debugLogger.warn(
                 `Failed to parse ${policyFile}, overwriting with new policy.`,
                 error,
               );

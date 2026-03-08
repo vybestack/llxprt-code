@@ -22,7 +22,7 @@ function sanitizeApiKey(key: string): string {
   const sanitized = sanitizeForByteString(key);
 
   if (needsSanitization(key)) {
-    console.warn(
+    debugLogger.warn(
       '[ProviderConfig] API key contained non-ASCII or control characters that were removed. ' +
         'Please check your API key file encoding (should be UTF-8 without BOM).',
     );

@@ -968,7 +968,7 @@ export async function loadCliConfig(
       profileBaseUrl = prepared.profileBaseUrl;
       effectiveSettings = prepared.effectiveSettings;
 
-      // Additional console.debug logging for file-based profiles (for backward compatibility)
+      // Additional debugLogger.debug logging for file-based profiles (for backward compatibility)
       const tempDebugMode =
         argv.debug ||
         [process.env.DEBUG, process.env.DEBUG_MODE].some(
@@ -977,11 +977,11 @@ export async function loadCliConfig(
         false;
 
       if (tempDebugMode) {
-        console.debug(
+        debugLogger.debug(
           `Loaded profile '${profileToLoad}': provider=${profile.provider}, model=${profile.model}`,
         );
         if (profileProvider && profileModel) {
-          console.debug(
+          debugLogger.debug(
             `Applied profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
           );
         }
@@ -994,7 +994,7 @@ export async function loadCliConfig(
         }
         return failureSummary;
       });
-      console.error(failureSummary);
+      debugLogger.error(failureSummary);
 
       // If profile was explicitly specified via --profile-load, error out
       if (profileExplicitlySpecified) {
@@ -1029,7 +1029,7 @@ export async function loadCliConfig(
   }
 
   if (debugMode) {
-    console.debug('[DEBUG] IDE mode configuration:', {
+    debugLogger.debug('[DEBUG] IDE mode configuration:', {
       'argv.ideMode': argv.ideMode,
       'effectiveSettings.ui.ideMode': effectiveSettings.ui?.ideMode,
       'final ideMode': ideMode,

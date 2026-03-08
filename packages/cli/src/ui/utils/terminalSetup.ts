@@ -30,6 +30,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { terminalCapabilityManager } from './terminalCapabilityManager.js';
 import { VSCODE_SHIFT_ENTER_SEQUENCE } from './platformConstants.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 const execAsync = promisify(exec);
 
@@ -86,7 +87,7 @@ async function detectTerminal(): Promise<SupportedTerminal | null> {
         return 'vscode';
     } catch (error) {
       // Continue detection even if process check fails
-      console.debug('Parent process detection failed:', error);
+      debugLogger.debug('Parent process detection failed:', error);
     }
   }
 
@@ -101,7 +102,7 @@ async function backupFile(filePath: string): Promise<void> {
     await fs.copyFile(filePath, backupPath);
   } catch (error) {
     // Log backup errors but continue with operation
-    console.warn(`Failed to create backup of ${filePath}:`, error);
+    debugLogger.warn(`Failed to create backup of ${filePath}:`, error);
   }
 }
 
@@ -298,9 +299,9 @@ async function configureWindsurf(): Promise<TerminalSetupResult> {
  * @example
  * const result = await terminalSetup();
  * if (result.success) {
- *   console.log(result.message);
+ *   debugLogger.log(result.message);
  *   if (result.requiresRestart) {
- *     console.log('Please restart your terminal');
+ *     debugLogger.log('Please restart your terminal');
  *   }
  * }
  */

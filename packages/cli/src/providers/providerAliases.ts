@@ -98,7 +98,7 @@ function readAliasFile(
     const raw = fs.readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(stripJsonComments(raw)) as ProviderAliasConfig;
     if (!parsed || typeof parsed !== 'object') {
-      console.warn(`[ProviderAliases] Ignoring invalid alias file ${filePath}`);
+      debugLogger.warn(`[ProviderAliases] Ignoring invalid alias file ${filePath}`);
       return null;
     }
 
@@ -108,14 +108,14 @@ function readAliasFile(
         : path.basename(filePath, path.extname(filePath))) || '';
 
     if (!alias) {
-      console.warn(
+      debugLogger.warn(
         `[ProviderAliases] Alias file ${filePath} does not specify a valid alias name`,
       );
       return null;
     }
 
     if (!parsed.baseProvider) {
-      console.warn(
+      debugLogger.warn(
         `[ProviderAliases] Alias '${alias}' is missing required baseProvider`,
       );
       return null;
@@ -124,7 +124,7 @@ function readAliasFile(
     // Validate modelDefaults if present
     if ('modelDefaults' in parsed) {
       if (!Array.isArray(parsed.modelDefaults)) {
-        console.warn(
+        debugLogger.warn(
           `[ProviderAliases] Ignoring non-array modelDefaults in ${filePath}`,
         );
         parsed.modelDefaults = undefined;
@@ -132,7 +132,7 @@ function readAliasFile(
         parsed.modelDefaults = parsed.modelDefaults.filter(
           (entry: unknown): entry is ModelDefaultRule => {
             if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-              console.warn(
+              debugLogger.warn(
                 `[ProviderAliases] Skipping non-object modelDefaults entry in ${filePath}`,
               );
               return false;
@@ -141,14 +141,14 @@ function readAliasFile(
             const rule = entry as Record<string, unknown>;
 
             if (typeof rule.pattern !== 'string') {
-              console.warn(
+              debugLogger.warn(
                 `[ProviderAliases] Skipping modelDefaults entry with non-string pattern in ${filePath}`,
               );
               return false;
             }
 
             if (rule.pattern === '') {
-              console.warn(
+              debugLogger.warn(
                 `[ProviderAliases] Skipping modelDefaults entry with empty pattern in ${filePath}`,
               );
               return false;
@@ -159,7 +159,7 @@ function readAliasFile(
               typeof rule.ephemeralSettings !== 'object' ||
               Array.isArray(rule.ephemeralSettings)
             ) {
-              console.warn(
+              debugLogger.warn(
                 `[ProviderAliases] Skipping modelDefaults entry with invalid ephemeralSettings in ${filePath}`,
               );
               return false;
@@ -168,7 +168,7 @@ function readAliasFile(
             try {
               new RegExp(rule.pattern);
             } catch {
-              console.warn(
+              debugLogger.warn(
                 `[ProviderAliases] Skipping modelDefaults entry with invalid regex pattern "${rule.pattern}" in ${filePath}`,
               );
               return false;
@@ -187,7 +187,7 @@ function readAliasFile(
       source,
     };
   } catch (error) {
-    console.warn(
+    debugLogger.warn(
       `[ProviderAliases] Failed to load alias from ${filePath}: ${
         error instanceof Error ? error.message : String(error)
       }`,
@@ -208,7 +208,7 @@ export function loadProviderAliasEntries(): ProviderAliasEntry[] {
     try {
       files = fs.readdirSync(directory.path);
     } catch (error) {
-      console.warn(
+      debugLogger.warn(
         `[ProviderAliases] Failed to read directory ${directory.path}: ${
           error instanceof Error ? error.message : String(error)
         }`,

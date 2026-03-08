@@ -22,6 +22,7 @@ import { checkForExtensionUpdate } from '../../config/extensions/github.js';
 import { getErrorMessage } from '../../utils/errors.js';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface UpdateArgs {
   name?: string;
@@ -51,11 +52,11 @@ export async function handleUpdate(args: UpdateArgs) {
         (extension) => extension.name === args.name,
       );
       if (!extension) {
-        console.log(`Extension "${args.name}" not found.`);
+        debugLogger.log(`Extension "${args.name}" not found.`);
         return;
       }
       if (!extension.installMetadata) {
-        console.log(
+        debugLogger.log(
           `Unable to install extension "${args.name}" due to missing install metadata`,
         );
         return;
@@ -65,7 +66,7 @@ export async function handleUpdate(args: UpdateArgs) {
         updateState = state;
       });
       if (updateState !== ExtensionUpdateState.UPDATE_AVAILABLE) {
-        console.log(`Extension "${args.name}" is already up to date.`);
+        debugLogger.log(`Extension "${args.name}" is already up to date.`);
         return;
       }
       // TODO(chrstnb): we should list extensions if the requested extension is not installed.
@@ -85,14 +86,14 @@ export async function handleUpdate(args: UpdateArgs) {
         updatedExtensionInfo.originalVersion !==
         updatedExtensionInfo.updatedVersion
       ) {
-        console.log(
+        debugLogger.log(
           `Extension "${args.name}" successfully updated: ${updatedExtensionInfo.originalVersion} → ${updatedExtensionInfo.updatedVersion}.`,
         );
       } else {
-        console.log(`Extension "${args.name}" is already up to date.`);
+        debugLogger.log(`Extension "${args.name}" is already up to date.`);
       }
     } catch (error) {
-      console.error(getErrorMessage(error));
+      debugLogger.error(getErrorMessage(error));
     }
   }
   if (args.all) {
@@ -126,12 +127,12 @@ export async function handleUpdate(args: UpdateArgs) {
         (info) => info.originalVersion !== info.updatedVersion,
       );
       if (updateInfos.length === 0) {
-        console.log('No extensions to update.');
+        debugLogger.log('No extensions to update.');
         return;
       }
-      console.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
+      debugLogger.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
     } catch (error) {
-      console.error(getErrorMessage(error));
+      debugLogger.error(getErrorMessage(error));
     }
   }
 }

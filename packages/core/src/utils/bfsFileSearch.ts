@@ -9,6 +9,7 @@ import * as path from 'path';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { FileFilteringOptions } from '../config/constants.js';
 import { DebugLogger } from '../debug/index.js';
+import { debugLogger } from './debugLogger.js';
 
 const logger = new DebugLogger('llxprt:core:bfsFileSearch');
 
@@ -85,7 +86,7 @@ export async function bfsFileSearch(
       } catch (error) {
         // Warn user that a directory could not be read, as this affects search results.
         const message = (error as Error)?.message ?? 'Unknown error';
-        console.warn(
+        debugLogger.warn(
           `[WARN] Skipping unreadable directory: ${dir} (${message})`,
         );
         if (debug) {

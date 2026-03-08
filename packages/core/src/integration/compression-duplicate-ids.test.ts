@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Test to reproduce duplicate tool call IDs during compression
  */

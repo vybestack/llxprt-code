@@ -150,7 +150,7 @@ export function generateDynamicToolSettings(
 
     return toolSettings;
   } catch (error) {
-    console.error('[generateDynamicToolSettings] Error:', error);
+    debugLogger.error('[generateDynamicToolSettings] Error:', error);
     return {};
   }
 }

@@ -14,6 +14,7 @@ import {
 
 import { getErrorMessage } from '../../utils/errors.js';
 import { exitCli } from '../utils.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface InstallArgs {
   path: string;
@@ -36,11 +37,11 @@ export async function handleLink(args: InstallArgs) {
       workspaceDir,
     );
     const extension = loadExtensionByName(extensionName, workspaceDir);
-    console.log(
+    debugLogger.log(
       `Extension "${extension?.name ?? extensionName}" linked successfully and enabled.`,
     );
   } catch (error) {
-    console.error(getErrorMessage(error));
+    debugLogger.error(getErrorMessage(error));
     await exitCli(1);
   }
 }

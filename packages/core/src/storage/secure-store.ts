@@ -20,6 +20,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import envPaths from 'env-paths';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // Platform-standard paths for llxprt-code app data (no suffix to match documented paths)
 const platformPaths = envPaths('llxprt-code', { suffix: '' });
@@ -208,7 +209,7 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
       err?.code === 'ERR_DLOPEN_FAILED' ||
       err?.message?.includes('@napi-rs/keyring');
     if (!isModuleMissing && process.env.DEBUG) {
-      console.warn(
+      debugLogger.warn(
         `[SecureStore] Unexpected error loading @napi-rs/keyring: ${err?.message}`,
       );
     }

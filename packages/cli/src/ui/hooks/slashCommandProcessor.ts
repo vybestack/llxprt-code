@@ -308,6 +308,7 @@ export const useSlashCommandProcessor = (
         clear: () => {
           clearItems();
           if (!alternateBuffer) {
+            // eslint-disable-next-line no-console
             console.clear();
           }
           refreshStatic();

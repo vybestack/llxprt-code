@@ -17,6 +17,7 @@ import {
 import { ExtensionSettingsStorage } from './settingsStorage.js';
 import { maybePromptForSettings } from './settingsPrompt.js';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 /**
  * Scope for extension settings storage.
@@ -69,7 +70,7 @@ export function loadExtensionSettingsFromManifest(
 
     if (!validationResult.success) {
       // Invalid settings schema
-      console.error(
+      debugLogger.error(
         `Invalid settings schema in ${manifestPath}:`,
         validationResult.error,
       );
@@ -79,7 +80,7 @@ export function loadExtensionSettingsFromManifest(
     return validationResult.data;
   } catch (error) {
     // Handle JSON parse errors or file read errors
-    console.error(
+    debugLogger.error(
       `Failed to read or parse manifest at ${manifestPath}:`,
       error,
     );
@@ -157,7 +158,7 @@ export async function getExtensionEnvironment(
       const manifest = JSON.parse(manifestContent) as { name?: string };
       extensionName = manifest.name ?? null;
     } catch (error) {
-      console.error(`Failed to read extension name from manifest:`, error);
+      debugLogger.error(`Failed to read extension name from manifest:`, error);
     }
   }
 
@@ -390,12 +391,12 @@ export async function updateSetting(
   );
 
   if (!setting) {
-    console.error(
+    debugLogger.error(
       `Setting "${settingKey}" not found in extension "${extensionName}".`,
     );
-    console.error('Available settings:');
+    debugLogger.error('Available settings:');
     settings.forEach((s) => {
-      console.error(`  - ${s.name} (${s.envVar})`);
+      debugLogger.error(`  - ${s.name} (${s.envVar})`);
     });
     return false;
   }
@@ -407,7 +408,7 @@ export async function updateSetting(
   const newValue = await requestSetting(prompt, setting.sensitive);
 
   if (newValue === '') {
-    console.log('Update cancelled.');
+    debugLogger.log('Update cancelled.');
     return false;
   }
 
@@ -439,7 +440,7 @@ export async function updateSetting(
   // Save all settings
   await storage.saveSettings(settings, updatedValues);
 
-  console.log(
+  debugLogger.log(
     `Setting "${setting.name}" updated successfully in ${scope} scope.`,
   );
   return true;

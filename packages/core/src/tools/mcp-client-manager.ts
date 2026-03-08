@@ -19,6 +19,7 @@ import { getErrorMessage, isAuthenticationError } from '../utils/errors.js';
 import type { EventEmitter } from 'node:events';
 import { coreEvents } from '../utils/events.js';
 import { DebugLogger } from '../debug/index.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const logger = new DebugLogger('llxprt:mcp-client-manager');
 
@@ -310,7 +311,7 @@ export class McpClientManager {
         try {
           await client.disconnect();
         } catch (error) {
-          console.error(
+          debugLogger.error(
             `Error stopping client '${name}': ${getErrorMessage(error)}`,
           );
         }

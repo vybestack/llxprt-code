@@ -23,6 +23,7 @@ import {
   triggerAfterToolHook,
 } from '../core/coreToolHookTriggers.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Execution context for a single tool call.
@@ -116,7 +117,7 @@ export class ToolExecutor {
         // If rebuild fails, log and continue with original invocation
         // This matches upstream behavior of graceful degradation
         const errorMessage = error instanceof Error ? error.message : String(error);
-        console.warn(`Failed to rebuild tool invocation after input modification: ${errorMessage}`);
+        debugLogger.warn(`Failed to rebuild tool invocation after input modification: ${errorMessage}`);
       }
     }
 

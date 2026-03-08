@@ -185,6 +185,7 @@ export default tseslint.config(
       'one-var': ['error', 'never'],
       'prefer-arrow-callback': 'error',
       'prefer-const': ['error', { destructuring: 'all' }],
+      'no-console': 'error',
       radix: 'error',
       'default-case': 'error',
       '@typescript-eslint/await-thenable': ['error'],

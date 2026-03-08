@@ -6,6 +6,7 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { existsSync } from 'fs';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // Types for file loading results
 export interface LoadFileResult {
@@ -241,7 +242,7 @@ export class PromptLoader {
         fileContents.set(relativePath, result.content);
       } else {
         // Log warning but continue processing other files
-        console.warn(`Failed to load ${relativePath}: ${result.error}`);
+        debugLogger.warn(`Failed to load ${relativePath}: ${result.error}`);
       }
     }
 

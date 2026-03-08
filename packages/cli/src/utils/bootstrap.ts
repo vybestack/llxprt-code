@@ -13,6 +13,7 @@
 
 import v8 from 'node:v8';
 import os from 'node:os';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 /**
  * Exit code used to signal that the child process wants a relaunch.
@@ -53,7 +54,7 @@ export function shouldRelaunchForMemory(debugMode: boolean): string[] {
   );
 
   if (debugMode) {
-    console.debug(
+    debugLogger.debug(
       `Current heap size ${currentMaxOldSpaceSizeMb.toFixed(2)} MB`,
     );
   }
@@ -65,7 +66,7 @@ export function shouldRelaunchForMemory(debugMode: boolean): string[] {
 
   if (targetMaxOldSpaceSizeInMB > currentMaxOldSpaceSizeMb) {
     if (debugMode) {
-      console.debug(
+      debugLogger.debug(
         `Need to relaunch with more memory: ${targetMaxOldSpaceSizeInMB.toFixed(2)} MB`,
       );
     }
@@ -129,7 +130,7 @@ export function computeSandboxMemoryArgs(
   );
 
   if (debugMode) {
-    console.debug(
+    debugLogger.debug(
       `Sandbox memory: total=${totalMemoryMB.toFixed(2)} MB, target heap=${targetMaxOldSpaceSizeInMB} MB`,
     );
   }

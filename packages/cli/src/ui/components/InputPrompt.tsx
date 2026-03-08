@@ -379,7 +379,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         // Silent no-op: clipboard read can fail on Wayland, SSH, headless, etc.
       }
     } catch (error) {
-      console.error('Error handling clipboard paste:', error);
+      debugLogger.error('Error handling clipboard paste:', error);
     }
   }, [buffer, config]);
 

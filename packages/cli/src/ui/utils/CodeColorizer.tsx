@@ -21,6 +21,7 @@ import {
   MINIMUM_MAX_HEIGHT,
 } from '../components/shared/MaxSizedBox.js';
 import { LoadedSettings } from '../../config/settings.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 // Configure theming and parsing utilities.
 const lowlight = createLowlight(common);
@@ -202,7 +203,7 @@ export function colorizeCode(
       </MaxSizedBox>
     );
   } catch (error) {
-    console.error(
+    debugLogger.error(
       `[colorizeCode] Error highlighting code for language "${language}":`,
       error,
     );

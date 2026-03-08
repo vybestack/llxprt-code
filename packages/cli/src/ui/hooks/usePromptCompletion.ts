@@ -151,7 +151,7 @@ export function usePromptCompletion({
           (error instanceof Error && error.name === 'AbortError')
         )
       ) {
-        console.error('prompt completion error:', error);
+        debugLogger.error('prompt completion error:', error);
       }
       clearGhostText();
     } finally {

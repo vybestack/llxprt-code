@@ -217,7 +217,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       );
 
       if (config.getDebugMode()) {
-        console.log(
+        debugLogger.log(
           `Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
         );
       }
@@ -230,7 +230,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         },
         Date.now(),
       );
-      console.error('Error refreshing memory:', error);
+      debugLogger.error('Error refreshing memory:', error);
     }
   }, [config, addItem]);
 

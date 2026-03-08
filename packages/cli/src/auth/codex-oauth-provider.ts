@@ -216,8 +216,8 @@ export class CodexOAuthProvider implements OAuthProvider {
     );
 
     // Display URL in TUI (clickable) if available
-    console.log('\nCodex OAuth Authentication');
-    console.log('─'.repeat(40));
+    debugLogger.log('\nCodex OAuth Authentication');
+    debugLogger.log('─'.repeat(40));
 
     const historyItem: HistoryItemOAuthURL = {
       type: 'oauth_url',
@@ -230,8 +230,8 @@ export class CodexOAuthProvider implements OAuthProvider {
     }
 
     // Also show plain URL for copying (pastable)
-    console.log('Please visit the following URL to authenticate:');
-    console.log(authUrl);
+    debugLogger.log('Please visit the following URL to authenticate:');
+    debugLogger.log(authUrl);
 
     // Copy URL to clipboard with error handling
     try {

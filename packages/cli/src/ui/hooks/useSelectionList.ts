@@ -201,7 +201,7 @@ function selectionListReducer(
 
     default: {
       const exhaustiveCheck: never = action;
-      console.error(`Unknown selection list action: ${exhaustiveCheck}`);
+      debugLogger.error(`Unknown selection list action: ${exhaustiveCheck}`);
       return state;
     }
   }

@@ -133,7 +133,7 @@ export async function requestHookConsent(
     );
   }
 
-  console.log(consentPrompt);
+  debugLogger.log(consentPrompt);
 
   const readline = await import('node:readline');
   const rl = readline.createInterface({
@@ -148,15 +148,15 @@ export async function requestHookConsent(
       rl.close();
       const consent = answer.trim().toLowerCase() === 'y';
       if (consent) {
-        console.log(
+        debugLogger.log(
           `[OK] Hooks enabled for extension "${sanitizedExtensionName}".`,
         );
       } else {
-        console.log(
+        debugLogger.log(
           ` Hooks not enabled for extension "${sanitizedExtensionName}".`,
         );
       }
-      console.log('');
+      debugLogger.log('');
       resolve(consent);
     });
   });

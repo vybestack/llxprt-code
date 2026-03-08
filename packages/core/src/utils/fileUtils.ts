@@ -12,6 +12,7 @@ import mime from 'mime-types';
 import { type FileSystemService } from '../services/fileSystemService.js';
 import { ToolErrorType } from '../tools/tool-error.js';
 import { BINARY_EXTENSIONS } from './ignorePatterns.js';
+import { debugLogger } from './debugLogger.js';
 
 // Constants for text file processing
 export const DEFAULT_MAX_LINES_TEXT_FILE = 2000;
@@ -222,7 +223,7 @@ export async function isBinaryFile(filePath: string): Promise<boolean> {
     // If >30% non-printable characters, consider it binary
     return nonPrintableCount / bytesRead > 0.3;
   } catch (error) {
-    console.warn(
+    debugLogger.warn(
       `Failed to check if file is binary: ${filePath}`,
       error instanceof Error ? error.message : String(error),
     );
@@ -232,7 +233,7 @@ export async function isBinaryFile(filePath: string): Promise<boolean> {
       try {
         await fh.close();
       } catch (closeError) {
-        console.warn(
+        debugLogger.warn(
           `Failed to close file handle for: ${filePath}`,
           closeError instanceof Error ? closeError.message : String(closeError),
         );

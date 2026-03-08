@@ -8,6 +8,7 @@ import { ExtensionsCommand } from './extensions.js';
 import { RestoreCommand } from './restore.js';
 import { InitCommand } from './init.js';
 import type { Command } from './types.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 class CommandRegistry {
   private readonly commands = new Map<string, Command>();
@@ -20,7 +21,7 @@ class CommandRegistry {
 
   register(command: Command) {
     if (this.commands.has(command.name)) {
-      console.warn(`Command ${command.name} already registered. Skipping.`);
+      debugLogger.warn(`Command ${command.name} already registered. Skipping.`);
       return;
     }
 

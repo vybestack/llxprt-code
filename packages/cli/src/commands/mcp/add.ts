@@ -42,7 +42,7 @@ async function addMcpServer(
   const inHome = settings.workspace.path === settings.user.path;
 
   if (scope === 'project' && inHome) {
-    console.error(
+    debugLogger.error(
       'Error: Please use --scope user to edit settings in the home directory.',
     );
     await exitCli(1);
@@ -119,7 +119,7 @@ async function addMcpServer(
 
   const isExistingServer = !!mcpServers[name];
   if (isExistingServer) {
-    console.log(
+    debugLogger.log(
       `MCP server "${name}" is already configured within ${scope} settings.`,
     );
   }
@@ -129,9 +129,9 @@ async function addMcpServer(
   settings.setValue(settingsScope, 'mcpServers', mcpServers);
 
   if (isExistingServer) {
-    console.log(`MCP server "${name}" updated in ${scope} settings.`);
+    debugLogger.log(`MCP server "${name}" updated in ${scope} settings.`);
   } else {
-    console.log(
+    debugLogger.log(
       `MCP server "${name}" added to ${scope} settings. (${transport})`,
     );
   }

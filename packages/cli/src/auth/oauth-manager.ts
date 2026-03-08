@@ -2195,7 +2195,7 @@ export class OAuthManager {
       total: number,
     ): Promise<void> => {
       // Show visible console output for user
-      console.log(`\n=== Bucket ${index} of ${total}: ${bucket} ===\n`);
+      debugLogger.log(`\n=== Bucket ${index} of ${total}: ${bucket} ===\n`);
 
       logger.debug(`Authenticating bucket ${index} of ${total}: ${bucket}`);
       await this.authenticate(provider, bucket);
@@ -2290,8 +2290,8 @@ export class OAuthManager {
       });
       if (showPrompt && process.stdin.isTTY) {
         // Interactive terminal - wait for keypress
-        console.log(`\nReady to authenticate bucket: ${bucket}`);
-        console.log('Press ENTER to continue, or Ctrl+C to cancel...\n');
+        debugLogger.log(`\nReady to authenticate bucket: ${bucket}`);
+        debugLogger.log('Press ENTER to continue, or Ctrl+C to cancel...\n');
 
         const stdinWasPaused = process.stdin.isPaused();
         const stdinHadRawMode =
@@ -2387,8 +2387,8 @@ export class OAuthManager {
 
       // Fall back to delay-based prompting (no TTY or prompt disabled)
       const delay = getEphemeralSetting<number>('auth-bucket-delay') ?? 5000;
-      console.log(`\nReady to authenticate bucket: ${bucket}`);
-      console.log(
+      debugLogger.log(`\nReady to authenticate bucket: ${bucket}`);
+      debugLogger.log(
         `(waiting ${delay / 1000} seconds - switch browser window if needed...)\n`,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
@@ -2398,7 +2398,7 @@ export class OAuthManager {
     // Callback for delay with visible console output
     const onDelay = async (ms: number, bucket: string): Promise<void> => {
       // Show visible console output for user
-      console.log(`(waiting ${ms / 1000} seconds before opening browser...)\n`);
+      debugLogger.log(`(waiting ${ms / 1000} seconds before opening browser...)\n`);
 
       logger.debug(`Waiting ${ms}ms before authenticating bucket: ${bucket}`);
       await new Promise((resolve) => setTimeout(resolve, ms));

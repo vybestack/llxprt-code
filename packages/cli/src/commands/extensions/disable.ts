@@ -22,7 +22,7 @@ export async function handleDisable(args: DisableArgs) {
         ? SettingScope.Workspace
         : SettingScope.User;
     disableExtension(args.name, scope);
-    console.log(
+    debugLogger.log(
       `Extension "${args.name}" successfully disabled for scope "${scope}".`,
     );
   } catch (error) {

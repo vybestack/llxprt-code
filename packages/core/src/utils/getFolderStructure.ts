@@ -11,6 +11,7 @@ import { getErrorMessage, isNodeError } from './errors.js';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { FileFilteringOptions } from '../config/constants.js';
 import { DEFAULT_FILE_FILTERING_OPTIONS } from '../config/constants.js';
+import { debugLogger } from './debugLogger.js';
 
 const MAX_ITEMS = 200;
 const TRUNCATION_INDICATOR = '...';
@@ -109,7 +110,7 @@ async function readFullStructure(
         isNodeError(error) &&
         (error.code === 'EACCES' || error.code === 'ENOENT')
       ) {
-        console.warn(
+        debugLogger.warn(
           `Warning: Could not read directory ${currentPath}: ${error.message}`,
         );
         if (currentPath === rootPath && error.code === 'ENOENT') {
@@ -347,7 +348,7 @@ export async function getFolderStructure(
 
     return `${summary}\n\n${resolvedPath}${path.sep}\n${structureLines.join('\n')}`;
   } catch (error: unknown) {
-    console.error(`Error getting folder structure for ${resolvedPath}:`, error);
+    debugLogger.error(`Error getting folder structure for ${resolvedPath}:`, error);
     return `Error processing directory "${resolvedPath}": ${getErrorMessage(error)}`;
   }
 }

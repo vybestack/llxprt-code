@@ -43,6 +43,7 @@ import { templateString } from './utils.js';
 import { parseThought } from '../utils/thoughtUtils.js';
 import { type z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /** A callback function to report on agent activity. */
 export type ActivityCallback = (activity: SubagentActivityEvent) => void;
@@ -555,7 +556,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       if (!allowedToolNames.has(functionCall.name as string)) {
         const error = `Unauthorized tool call: '${functionCall.name}' is not available to this agent.`;
 
-        console.warn(`[AgentExecutor] Blocked call: ${error}`);
+        debugLogger.warn(`[AgentExecutor] Blocked call: ${error}`);
 
         syncResponseParts.push({
           functionResponse: {

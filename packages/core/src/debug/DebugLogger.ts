@@ -8,20 +8,21 @@ import type { Debugger } from 'debug';
 import { ConfigurationManager } from './ConfigurationManager.js';
 import { FileOutput } from './FileOutput.js';
 import type { LogEntry } from './types.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
-// Configure debug to use console.log instead of stderr for React UI compatibility
+// Configure debug to use debugLogger.log instead of stderr for React UI compatibility
 // This ensures debug output goes to the Ctrl+O debug console in the UI
 if (typeof window === 'undefined') {
   // Disable colors to respect theme settings
   (createDebug as unknown as { useColors: () => boolean }).useColors = () =>
     false;
 
-  // Use a wrapper function that calls the CURRENT console.log
-  // This works even if console.log is patched later by the UI
+  // Use a wrapper function that calls the CURRENT debugLogger.log
+  // This works even if debugLogger.log is patched later by the UI
   createDebug.log = (...args: unknown[]) => {
-    // Call whatever console.log is at the time of logging
+    // Call whatever debugLogger.log is at the time of logging
     // This allows the UI's ConsolePatcher to intercept it
-    console.log(...args);
+    debugLogger.log(...args);
   };
 }
 

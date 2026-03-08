@@ -422,7 +422,7 @@ export const useGeminiStream = (
               completedToolCallsFromScheduler,
             );
         } catch (error) {
-          console.error(
+          debugLogger.error(
             `Error recording completed tool call information: ${error}`,
           );
         }

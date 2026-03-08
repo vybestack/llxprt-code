@@ -5,6 +5,7 @@
  */
 
 import tinygradient from 'tinygradient';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 // Mapping from common CSS color names (lowercase) to hex codes (lowercase)
 // Excludes names directly supported by Ink
@@ -226,7 +227,7 @@ export function resolveColor(colorValue: string): string | undefined {
   }
 
   // 4. Could not resolve
-  console.warn(
+  debugLogger.warn(
     `[ColorUtils] Could not resolve color "${colorValue}" to an Ink-compatible format.`,
   );
   return undefined;

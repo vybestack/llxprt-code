@@ -30,6 +30,7 @@ import {
   FileMetricExporter,
   FileSpanExporter,
 } from './file-exporters.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // For troubleshooting, set the log level to DiagLogLevel.DEBUG
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
@@ -47,7 +48,7 @@ export function initializeTelemetry(config: Config): void {
   if (telemetryInitialized || !config.getTelemetryEnabled()) {
     // Only output verbose logs when telemetry is enabled to avoid stdout spam
     if (process.env.VERBOSE === 'true' && config.getTelemetryEnabled()) {
-      console.error(
+      debugLogger.error(
         `[TELEMETRY] Skipping initialization: initialized=${telemetryInitialized}, enabled=${config.getTelemetryEnabled()}`,
       );
     }
@@ -55,7 +56,7 @@ export function initializeTelemetry(config: Config): void {
   }
 
   if (process.env.VERBOSE === 'true') {
-    console.error(
+    debugLogger.error(
       `[TELEMETRY] Initializing with outfile: ${config.getTelemetryOutfile()}`,
     );
   }
@@ -113,12 +114,12 @@ export function initializeTelemetry(config: Config): void {
   try {
     sdk.start();
     if (config.getDebugMode()) {
-      console.log('OpenTelemetry SDK started successfully.');
+      debugLogger.log('OpenTelemetry SDK started successfully.');
     }
     telemetryInitialized = true;
     initializeMetrics(config);
   } catch (error) {
-    console.error('Error starting OpenTelemetry SDK:', error);
+    debugLogger.error('Error starting OpenTelemetry SDK:', error);
   }
 
   process.on('SIGTERM', () => {
@@ -162,10 +163,10 @@ export async function shutdownTelemetry(config: Config): Promise<void> {
   try {
     await sdk.shutdown();
     if (config.getDebugMode()) {
-      console.log('OpenTelemetry SDK shut down successfully.');
+      debugLogger.log('OpenTelemetry SDK shut down successfully.');
     }
   } catch (error) {
-    console.error('Error shutting down SDK:', error);
+    debugLogger.error('Error shutting down SDK:', error);
   } finally {
     telemetryInitialized = false;
   }

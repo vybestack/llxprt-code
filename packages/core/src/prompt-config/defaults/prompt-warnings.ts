@@ -1,3 +1,4 @@
+import { debugLogger } from '../../utils/debugLogger.js';
 /**
  * Shared helpers for emitting high-visibility warnings when bundled defaults fail to load.
  */
@@ -35,5 +36,5 @@ export function reportMissingPrompt(
     lines.push(detailLine);
   }
 
-  console.error(lines.join('\n'));
+  debugLogger.error(lines.join('\n'));
 }

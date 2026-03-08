@@ -56,6 +56,7 @@ import {
 } from './coreToolScheduler.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -1417,7 +1418,7 @@ export class SubAgentScope {
       }
 
       if (toolResponse.error) {
-        console.error(
+        debugLogger.error(
           `Error executing tool ${functionCall.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
         );
       }
@@ -1944,7 +1945,7 @@ export class SubAgentScope {
         allowedNames.size > 0 &&
         !allowedNames.has(normalizeToolName(entry))
       ) {
-        console.warn(
+        debugLogger.warn(
           `Tool "${entry}" is not permitted by the runtime view and will be skipped.`,
         );
         continue;
@@ -1952,7 +1953,7 @@ export class SubAgentScope {
 
       const metadata = toolsView.getToolMetadata(entry);
       if (!metadata) {
-        console.warn(
+        debugLogger.warn(
           `Tool "${entry}" is not available in the runtime view and will be skipped.`,
         );
         continue;

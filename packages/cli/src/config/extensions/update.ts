@@ -105,7 +105,7 @@ export async function updateExtension(
       updatedVersion,
     };
   } catch (e) {
-    console.error(
+    debugLogger.error(
       `Error updating extension, rolling back. ${getErrorMessage(e)}`,
     );
     dispatchExtensionStateUpdate({

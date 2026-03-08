@@ -26,7 +26,7 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
   const userHooks = settings.merged.hooks;
 
   if (!userHooks || Object.keys(userHooks).length === 0) {
-    console.log('No hooks found in user settings. Nothing to migrate.');
+    debugLogger.log('No hooks found in user settings. Nothing to migrate.');
     return;
   }
 
@@ -45,8 +45,8 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
   }
 
   if (!projectRoot) {
-    console.error('Error: Could not find .llxprt directory in current path.');
-    console.error('Please run this command from within a project directory.');
+    debugLogger.error('Error: Could not find .llxprt directory in current path.');
+    debugLogger.error('Please run this command from within a project directory.');
     process.exit(1);
   }
 
@@ -65,7 +65,7 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
       const content = fs.readFileSync(projectSettingsPath, 'utf-8');
       projectSettings = JSON.parse(content);
     } catch (error) {
-      console.error(`Error reading ${projectSettingsPath}:`, error);
+      debugLogger.error(`Error reading ${projectSettingsPath}:`, error);
       process.exit(1);
     }
   }
@@ -102,26 +102,26 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
   }
 
   if (!changesMade) {
-    console.log(
+    debugLogger.log(
       'All hooks from user settings already exist in project settings.',
     );
     return;
   }
 
   if (dryRun) {
-    console.log('DRY RUN - Changes that would be made:');
-    console.log('\nProject settings path:', projectSettingsPath);
-    console.log('\nMerged hooks configuration:');
-    console.log(JSON.stringify({ hooks: mergedHooks }, null, 2));
+    debugLogger.log('DRY RUN - Changes that would be made:');
+    debugLogger.log('\nProject settings path:', projectSettingsPath);
+    debugLogger.log('\nMerged hooks configuration:');
+    debugLogger.log(JSON.stringify({ hooks: mergedHooks }, null, 2));
     return;
   }
 
   if (!confirm) {
-    console.log('Migration preview:');
-    console.log('\nProject settings path:', projectSettingsPath);
-    console.log('\nMerged hooks configuration:');
-    console.log(JSON.stringify({ hooks: mergedHooks }, null, 2));
-    console.log('\nRe-run with --confirm to apply these changes.');
+    debugLogger.log('Migration preview:');
+    debugLogger.log('\nProject settings path:', projectSettingsPath);
+    debugLogger.log('\nMerged hooks configuration:');
+    debugLogger.log(JSON.stringify({ hooks: mergedHooks }, null, 2));
+    debugLogger.log('\nRe-run with --confirm to apply these changes.');
     return;
   }
 
@@ -141,9 +141,9 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
       JSON.stringify(projectSettings, null, 2) + '\n',
       'utf-8',
     );
-    console.log(`Successfully migrated hooks to ${projectSettingsPath}`);
+    debugLogger.log(`Successfully migrated hooks to ${projectSettingsPath}`);
   } catch (error) {
-    console.error(`Error writing ${projectSettingsPath}:`, error);
+    debugLogger.error(`Error writing ${projectSettingsPath}:`, error);
     process.exit(1);
   }
 }

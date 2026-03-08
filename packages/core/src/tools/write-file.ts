@@ -37,6 +37,7 @@ import {
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -378,7 +379,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
             );
           } catch (error) {
             // Don't fail the write if git stats tracking fails
-            console.warn('Failed to track git stats:', error);
+            debugLogger.warn('Failed to track git stats:', error);
           }
         }
       }
@@ -605,7 +606,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
 
         // Include stack trace in debug mode for better troubleshooting
         if (this.config.getDebugMode() && error.stack) {
-          console.error('Write file error stack:', error.stack);
+          debugLogger.error('Write file error stack:', error.stack);
         }
       } else if (error instanceof Error) {
         errorMsg = `Error writing to file: ${error.message}`;

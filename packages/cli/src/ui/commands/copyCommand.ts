@@ -11,6 +11,7 @@ import {
   SlashCommandActionReturn,
 } from './types.js';
 import { Part, Content } from '@google/genai';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 export const copyCommand: SlashCommand = {
   name: 'copy',
@@ -61,7 +62,7 @@ export const copyCommand: SlashCommand = {
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.debug(message);
+        debugLogger.debug(message);
 
         return {
           type: 'message',
