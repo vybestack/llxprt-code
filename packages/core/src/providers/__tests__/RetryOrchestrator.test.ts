@@ -828,6 +828,187 @@ describe('RetryOrchestrator', () => {
       expect(currentBucket).toBe('bucket2');
     });
 
+    it('should failover on persistent network/connection errors', async () => {
+      const networkError = createNetworkError('ECONNRESET');
+      let currentBucket = 'bucket1';
+      const buckets = ['bucket1', 'bucket2'];
+      let bucketIndex = 0;
+
+      const provider = createTestProvider({
+        responses: [
+          { error: networkError },
+          { error: networkError }, // Trigger failover after 2 consecutive network errors
+          'success',
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => buckets,
+        getCurrentBucket: () => currentBucket,
+        tryFailover: async () => {
+          bucketIndex++;
+          if (bucketIndex >= buckets.length) return false;
+          currentBucket = buckets[bucketIndex];
+          return true;
+        },
+        isEnabled: () => true,
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      const result = await consumeStream(
+        orchestrator.generateChatCompletion(options),
+      );
+
+      expect(result).toHaveLength(1);
+      expect(currentBucket).toBe('bucket2'); // Should have failed over once
+    });
+
+    it('should NOT failover on single network error (retries first)', async () => {
+      const networkError = createNetworkError('ECONNRESET');
+      let failoverAttempted = false;
+
+      const provider = createTestProvider({
+        responses: [
+          { error: networkError }, // Single network error, then succeed
+          'success',
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => {
+          failoverAttempted = true;
+          return true;
+        },
+        isEnabled: () => true,
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      const result = await consumeStream(
+        orchestrator.generateChatCompletion(options),
+      );
+
+      expect(result).toHaveLength(1);
+      expect(failoverAttempted).toBe(false); // Should NOT have attempted failover
+    });
+
+    it('should pass FailoverContext with undefined triggeringStatus for network errors', async () => {
+      const networkError = createNetworkError('ECONNRESET');
+      let capturedContext: { triggeringStatus?: number } | undefined;
+
+      const provider = createTestProvider({
+        responses: [
+          { error: networkError },
+          { error: networkError },
+          'success',
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async (context?: { triggeringStatus?: number }) => {
+          capturedContext = context;
+          return true;
+        },
+        isEnabled: () => true,
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 5,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      await consumeStream(orchestrator.generateChatCompletion(options));
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext?.triggeringStatus).toBeUndefined();
+    });
+
+    it('should reset network error counter when a different error type occurs', async () => {
+      const networkError = createNetworkError('ECONNRESET');
+      const rateLimitError = createRateLimitError();
+      let failoverAttempted = false;
+
+      // Network error, then 429 (resets network counter), then network error (counter starts fresh)
+      const provider = createTestProvider({
+        responses: [
+          { error: networkError },
+          { error: rateLimitError }, // Resets consecutiveNetworkErrors
+          { error: networkError }, // Only 1 consecutive network error, no failover
+          'success',
+        ],
+      });
+
+      const failoverHandler = {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => {
+          failoverAttempted = true;
+          return true;
+        },
+        isEnabled: () => true,
+      };
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 6,
+        initialDelayMs: 10,
+      });
+
+      const options: GenerateChatOptions = {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        runtime: {
+          config: {
+            getBucketFailoverHandler: () => failoverHandler,
+          } as unknown as GenerateChatOptions['runtime'],
+        } as unknown as GenerateChatOptions['runtime'],
+      };
+
+      const result = await consumeStream(
+        orchestrator.generateChatCompletion(options),
+      );
+
+      expect(result).toHaveLength(1);
+      // The 429 between network errors resets the counter, so no failover triggered
+      expect(failoverAttempted).toBe(false);
+    });
+
     it('should work with no buckets configured (legacy mode)', async () => {
       const rateLimitError = createRateLimitError();
 
