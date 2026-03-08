@@ -12,6 +12,7 @@ import {
   loadGlobalMemory,
   loadEnvironmentMemory,
   loadJitSubdirectoryMemory,
+  loadCoreMemory,
   concatenateInstructions,
 } from '../utils/memoryDiscovery.js';
 import type { Config } from '../config/config.js';
@@ -21,6 +22,7 @@ export class ContextManager {
   private readonly loadedPaths: Set<string> = new Set();
   private globalMemory = '';
   private environmentMemory = '';
+  private coreMemory = '';
 
   constructor(private readonly config: Config) {}
 
@@ -31,6 +33,7 @@ export class ContextManager {
     this.loadedPaths.clear();
     await this.loadGlobalMemory();
     await this.loadEnvironmentMemory();
+    await this.loadCoreMemory();
     this.emitMemoryChanged();
   }
 
@@ -92,6 +95,22 @@ export class ContextManager {
 
   getEnvironmentMemory(): string {
     return this.environmentMemory;
+  }
+
+  private async loadCoreMemory(): Promise<void> {
+    const result = await loadCoreMemory(
+      [...this.config.getWorkspaceContext().getDirectories()],
+      this.config.getDebugMode(),
+    );
+    this.markAsLoaded(result.files.map((f) => f.path));
+    this.coreMemory = concatenateInstructions(
+      result.files.map((f) => ({ filePath: f.path, content: f.content })),
+      this.config.getWorkingDir(),
+    );
+  }
+
+  getCoreMemory(): string {
+    return this.coreMemory;
   }
 
   private markAsLoaded(paths: string[]): void {
